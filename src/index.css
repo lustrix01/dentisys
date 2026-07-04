@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased;
+  }
+}
+
+/* Glassmorphism design system classes */
+.glass {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.dark .glass {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-accent {
+  background: linear-gradient(135deg, rgba(67, 160, 71, 0.1) 0%, rgba(155, 114, 207, 0.05) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(67, 160, 71, 0.2);
+}
+
+.dark .glass-accent {
+  background: linear-gradient(135deg, rgba(67, 160, 71, 0.05) 0%, rgba(155, 114, 207, 0.03) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(67, 160, 71, 0.1);
+}
+
+/* Reusable glow and animations */
+.glow-clinical {
+  box-shadow: 0 0 25px -5px rgba(67, 160, 71, 0.2);
+}
+
+.dark .glow-clinical {
+  box-shadow: 0 0 35px -5px rgba(67, 160, 71, 0.15);
+}
+
+.animate-pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .7;
+  }
+}
+
+/* Custom subtle scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full dark:bg-slate-800 hover:bg-slate-400 dark:hover:bg-slate-700;
+}
+
+/* Print Overrides */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  body {
+    background-color: white !important;
+    color: black !important;
+  }
+  .glass {
+    background: transparent !important;
+    border: 1px solid #cbd5e1 !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+  }
+}
