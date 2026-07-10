@@ -6,7 +6,7 @@ interface UserAccount {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'faculty' | 'student';
+  role: 'admin' | 'faculty' | 'secretary';
   status: 'active' | 'inactive';
   lastActive: string;
 }
@@ -16,7 +16,7 @@ export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<UserAccount[]>([
     { id: '1', name: 'Dr. Eleanor Vance', email: 'faculty@bicol-u.edu.ph', role: 'faculty', status: 'active', lastActive: '2026-07-04 18:34' },
     { id: '2', name: 'Dr. Marcus Aurelius', email: 'admin@bicol-u.edu.ph', role: 'admin', status: 'active', lastActive: '2026-07-04 21:12' },
-    { id: '3', name: 'Miss Clara Oswald', email: 'secretary@bicol-u.edu.ph', role: 'student', status: 'active', lastActive: '2026-07-04 20:45' },
+    { id: '3', name: 'Miss Clara Oswald', email: 'secretary@bicol-u.edu.ph', role: 'secretary', status: 'active', lastActive: '2026-07-04 20:45' },
     { id: '4', name: 'Dr. Sarah Ramos', email: 'sarah.ramos@dentisys.edu', role: 'faculty', status: 'active', lastActive: '2026-07-03 14:10' },
     { id: '5', name: 'Dr. Claire Lopez', email: 'claire.lopez@dentisys.edu', role: 'faculty', status: 'inactive', lastActive: '2026-06-28 09:15' },
   ]);
@@ -34,6 +34,7 @@ export const UserManagement: React.FC = () => {
     switch (role) {
       case 'admin': return <Shield className="w-3.5 h-3.5 text-violet-500" />;
       case 'faculty': return <GraduationCap className="w-3.5 h-3.5 text-emerald-500" />;
+      case 'secretary': return <User className="w-3.5 h-3.5 text-clinical-500" />;
       default: return <User className="w-3.5 h-3.5 text-blue-500" />;
     }
   };

@@ -29,12 +29,29 @@ export interface RemedialExam {
   notes?: string;
 }
 
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+
+export interface AttendanceOverrideAudit {
+  id: string;
+  previousStatus: AttendanceStatus;
+  newStatus: AttendanceStatus;
+  reason: string;
+  changedBy: string;
+  changedByName: string;
+  changedAt: string;
+}
+
 export interface AttendanceRecord {
   id: string;
   studentId: string;
   date: string;         // YYYY-MM-DD
   subjectCode: string;
-  status: 'present' | 'absent' | 'late' | 'excused';
+  status: AttendanceStatus;
+  overrideReason?: string;
+  overrideBy?: string;
+  overrideByName?: string;
+  overrideAt?: string;
+  auditTrail?: AttendanceOverrideAudit[];
 }
 
 export interface Student {
@@ -42,6 +59,8 @@ export interface Student {
   studentId: string;    // e.g. "DENT-2023-0142"
   name: string;
   email: string;
+  classId?: string;
+  className?: string;
   yearLevel: 1 | 2 | 3 | 4; // 1st to 4th Year (Clinicians)
   status: 'active' | 'warning' | 'critical' | 'remedial';
   enrolledSubjects: EnrolledSubject[];

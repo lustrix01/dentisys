@@ -16,6 +16,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/Card';
 
 export const Settings: React.FC = () => {
   const { settings, updateSettings } = useApp();
+  const userStr = localStorage.getItem('dentisys_user');
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const isSecretary = currentUser?.role === 'secretary';
 
   // Theme State
   const [theme, setTheme] = useState<'light' | 'dark'>(settings.theme);
@@ -37,6 +40,16 @@ export const Settings: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSecretary) {
+      updateSettings({
+        ...settings,
+        theme,
+      });
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+      return;
+    }
+
     if (!isWeightValid) {
       alert(`Weights must sum to exactly 100%. Currently they sum to ${totalWeight}%.`);
       return;
@@ -73,11 +86,91 @@ export const Settings: React.FC = () => {
       <div>
         <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
           <SettingsIcon className="w-6 h-6 text-clinical-500 animate-spin-slow" />
-          System Settings Configuration
+          {isSecretary ? 'Class Secretary Settings' : 'System Settings Configuration'}
         </h1>
-        <p className="text-xs text-slate-400">Configure theme, grading weight ratios, academic thresholds, and database states</p>
+        <p className="text-xs text-slate-400">
+          {isSecretary
+            ? 'Manage permitted interface preferences and review your assigned access scope'
+            : 'Configure theme, grading weight ratios, academic thresholds, and database states'}
+        </p>
       </div>
 
+      {isSecretary ? (
+        <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-clinical-500" />
+                  Interface Theme
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTheme('light')}
+                    className={`flex-1 py-3 px-4 rounded-2xl flex flex-col items-center gap-2 border font-semibold text-xs transition-all ${
+                      theme === 'light'
+                        ? 'bg-clinical-50/50 border-clinical-500 text-clinical-600 dark:bg-slate-900'
+                        : 'border-slate-200 dark:border-slate-850 text-slate-400 dark:text-slate-500'
+                    }`}
+                  >
+                    <Sun className="w-5 h-5" />
+                    <span>Light Mode</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTheme('dark')}
+                    className={`flex-1 py-3 px-4 rounded-2xl flex flex-col items-center gap-2 border font-semibold text-xs transition-all ${
+                      theme === 'dark'
+                        ? 'bg-clinical-950/20 border-clinical-500 text-clinical-400 dark:bg-slate-900'
+                        : 'border-slate-200 dark:border-slate-850 text-slate-400 dark:text-slate-500'
+                    }`}
+                  >
+                    <Moon className="w-5 h-5" />
+                    <span>Dark Mode</span>
+                  </button>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-sm rounded-2xl shadow-md transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isSaved ? 'Preference Saved' : 'Save Preference'}</span>
+                </button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="lg:col-span-2 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-clinical-500" />
+                  Role Permissions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  ['Role', currentUser?.title || 'Class Secretary'],
+                  ['Assigned Class', currentUser?.assignedClassName || 'Clinical Rotation A'],
+                  ['Classroom', currentUser?.classroomName || 'Dental Clinic B - Room 402'],
+                  ['CCTV Feed', currentUser?.cctvCameraId || 'CCTV-CLINIC-A-01'],
+                ].map(([label, value]) => (
+                  <div key={label} className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800/50">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{value}</p>
+                  </div>
+                ))}
+                <div className="md:col-span-2 p-4 rounded-2xl bg-clinical-500/10 border border-clinical-500/20 text-xs text-clinical-800 dark:text-clinical-300 leading-relaxed">
+                  Secretary settings follow least privilege: grading rules, retention thresholds, database reset, and account administration are restricted to authorized faculty or administrators.
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </form>
+      ) : (
       <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left Column: UI Options */}
@@ -282,6 +375,7 @@ export const Settings: React.FC = () => {
         </div>
 
       </form>
+      )}
     </div>
   );
 };

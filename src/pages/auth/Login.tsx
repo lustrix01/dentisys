@@ -41,9 +41,13 @@ export function Login() {
       } else if (email === 'secretary@bicol-u.edu.ph' && password === 'secretary123') {
         user = {
           email: 'secretary@bicol-u.edu.ph',
-          role: 'student',
+          role: 'secretary',
           name: 'Miss Clara Oswald',
-          title: 'Student Secretary'
+          title: 'Class Secretary',
+          assignedClassId: 'CLINIC-A',
+          assignedClassName: 'Clinical Rotation A',
+          classroomName: 'Dental Clinic B - Room 402',
+          cctvCameraId: 'CCTV-CLINIC-A-01'
         };
       }
       
@@ -53,7 +57,7 @@ export function Login() {
         navigate('/');
       } else {
         setIsLoading(false);
-        setError('Invalid email or password. Please use the credentials shown in the Demo box below.');
+        setError('Invalid email or password. Please check your credentials and try again.');
       }
     }, 1000);
   };
@@ -74,13 +78,29 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FB] dark:bg-slate-950 flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden transition-colors duration-300">
-      {/* Background Decorative Blur Blobs */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-accent-100/40 dark:bg-accent-950/20 rounded-full blur-3xl -z-10" />
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-clinical-100/30 dark:bg-clinical-950/10 rounded-full blur-3xl -z-10" />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 sm:p-6 md:p-8 relative overflow-hidden transition-colors duration-300">
+      <style>{`
+        @keyframes float-orb {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(-10px, 15px) scale(1.03); }
+        }
+        .floating-orb-1 {
+          animation: float-orb 18s ease-in-out infinite;
+        }
+        .floating-orb-2 {
+          animation: float-orb 22s ease-in-out infinite;
+        }
+      `}</style>
+
+      {/* Formal Technical Grid Overlay */}
+      <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-75 pointer-events-none -z-10" />
+
+      {/* Background Decorative Blur Blobs (Slow floating & Muted Formal Colors) */}
+      <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent-150/20 dark:bg-accent-950/10 rounded-full blur-[120px] floating-orb-1 pointer-events-none -z-20" />
+      <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-clinical-150/15 dark:bg-clinical-950/5 rounded-full blur-[120px] floating-orb-2 pointer-events-none -z-20" />
 
       {/* Main Login Card */}
-      <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-[32px] shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-800/80 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[540px] transition-all">
+      <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-[32px] shadow-xl shadow-slate-100 dark:shadow-none border border-slate-200/30 dark:border-slate-800/80 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[520px] transition-all relative z-10">
         
         {/* Left Side: Lavender/Purple Branding Sidebar */}
         <div className="md:col-span-5 bg-[#EAE5F8] dark:bg-accent-950/20 p-8 flex flex-col justify-center items-center text-center relative overflow-hidden">
@@ -260,28 +280,6 @@ export function Login() {
                 Contact support
               </a>
             </p>
-
-            {/* Demo Credentials Box */}
-            <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-850/30 rounded-2xl border border-slate-200/50 dark:border-slate-800/80 text-[11px] text-slate-550 dark:text-slate-400">
-              <p className="font-bold text-slate-700 dark:text-slate-350 mb-2.5 flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
-                <Key className="w-3.5 h-3.5 text-accent-500" />
-                Demo Accounts
-              </p>
-              <div className="space-y-2 font-semibold">
-                <div className="flex items-center justify-between">
-                  <span className="text-accent-700 dark:text-accent-400">Admin Portal:</span>
-                  <span>admin@bicol-u.edu.ph <span className="font-normal text-slate-400">/</span> admin123</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-accent-700 dark:text-accent-400">Faculty Member:</span>
-                  <span>faculty@bicol-u.edu.ph <span className="font-normal text-slate-400">/</span> faculty123</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-accent-700 dark:text-accent-400">Student Secretary:</span>
-                  <span>secretary@bicol-u.edu.ph <span className="font-normal text-slate-400">/</span> secretary123</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 

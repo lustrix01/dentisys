@@ -144,8 +144,6 @@ export const Dashboard: React.FC = () => {
           <h1 className="text-xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             {currentUser.role === 'admin' 
               ? 'System Administrator Dashboard' 
-              : currentUser.role === 'student' 
-              ? 'Student Secretary Dashboard' 
               : 'Faculty Dashboard'}
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500">
@@ -183,15 +181,6 @@ export const Dashboard: React.FC = () => {
             <p className="text-xs text-white/90 font-medium">You are in the control panel. All administrative logs, security keys, database edits, and system metrics are active.</p>
           </div>
           <span className="text-[10px] bg-white/20 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider">Root Admin</span>
-        </div>
-      )}
-      {currentUser.role === 'student' && (
-        <div className="bg-gradient-to-r from-blue-600 to-cyan-650 text-white p-5 rounded-2xl shadow-md border border-blue-500/20 flex items-center justify-between">
-          <div className="space-y-1">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-blue-200">Student Secretary Access</h3>
-            <p className="text-xs text-white/90 font-medium">Welcome to the student records desk. Use this view to coordinate attendance logs, schedule retention panels, and export reports.</p>
-          </div>
-          <span className="text-[10px] bg-white/20 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider">Secretary Desk</span>
         </div>
       )}
       {currentUser.role === 'faculty' && (

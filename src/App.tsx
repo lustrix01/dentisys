@@ -16,11 +16,11 @@ import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
 import { UserManagement } from './pages/admin/UserManagement';
 import { SystemAudit } from './pages/admin/SystemAudit';
 
-// Student Secretary Page Imports
-import { Dashboard as StudentDashboard } from './pages/student/Dashboard';
-import { AttendanceLogger } from './pages/student/AttendanceLogger';
-import { FacialEnrollment } from './pages/student/FacialEnrollment';
-import { CCTVMonitoring } from './pages/student/CCTVMonitoring';
+// Class Secretary Page Imports
+import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
+import { AttendanceList as SecretaryAttendanceList } from './pages/secretary/AttendanceList';
+import { ManualAttendanceOverride } from './pages/secretary/ManualAttendanceOverride';
+import { CCTVFeed as SecretaryCCTVFeed } from './pages/secretary/CCTVFeed';
 
 // Shared Page Imports
 import { Profile } from './pages/Profile';
@@ -44,26 +44,35 @@ const MainApp = () => {
         <Route path="/" element={
           currentUser.role === 'admin' 
             ? <AdminDashboard /> 
-            : currentUser.role === 'student' 
-            ? <StudentDashboard /> 
+            : currentUser.role === 'secretary'
+            ? <SecretaryDashboard />
             : <FacultyDashboard />
         } />
         
         {/* Faculty Routes */}
-        <Route path="/students" element={<StudentManagement />} />
-        <Route path="/grades" element={<GradeComputation />} />
-        <Route path="/retention" element={<RetentionMonitoring />} />
-        <Route path="/attendance" element={<AttendanceMonitoring />} />
-        <Route path="/reports" element={<Reports />} />
+        <Route path="/students" element={currentUser.role === 'faculty' ? <StudentManagement /> : <Navigate to="/" replace />} />
+        <Route path="/grades" element={currentUser.role === 'faculty' ? <GradeComputation /> : <Navigate to="/" replace />} />
+        <Route path="/retention" element={currentUser.role === 'faculty' ? <RetentionMonitoring /> : <Navigate to="/" replace />} />
+        <Route path="/attendance" element={currentUser.role === 'faculty' ? <AttendanceMonitoring /> : <Navigate to="/" replace />} />
+        <Route path="/reports" element={currentUser.role === 'faculty' ? <Reports /> : <Navigate to="/" replace />} />
         
         {/* Admin Routes */}
-        <Route path="/admin/users" element={<UserManagement />} />
-        <Route path="/admin/audit" element={<SystemAudit />} />
+        <Route path="/admin/users" element={currentUser.role === 'admin' ? <UserManagement /> : <Navigate to="/" replace />} />
+        <Route path="/admin/audit" element={currentUser.role === 'admin' ? <SystemAudit /> : <Navigate to="/" replace />} />
         
-        {/* Student Secretary Routes */}
-        <Route path="/student/attendance" element={<AttendanceLogger />} />
-        <Route path="/student/facial-enrollment" element={<FacialEnrollment />} />
-        <Route path="/student/cctv" element={<CCTVMonitoring />} />
+        {/* Class Secretary Routes */}
+        <Route
+          path="/secretary/attendance"
+          element={currentUser.role === 'secretary' ? <SecretaryAttendanceList /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="/secretary/override"
+          element={currentUser.role === 'secretary' ? <ManualAttendanceOverride /> : <Navigate to="/" replace />}
+        />
+        <Route
+          path="/secretary/cctv"
+          element={currentUser.role === 'secretary' ? <SecretaryCCTVFeed /> : <Navigate to="/" replace />}
+        />
         
         {/* Shared Routes */}
         <Route path="/profile" element={<Profile />} />

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Student, AttendanceRecord, SystemSettings, RemedialExam, GradeComponents, EnrolledSubject } from '../types';
+import { Student, AttendanceRecord, SystemSettings, RemedialExam, GradeComponents, EnrolledSubject, AttendanceStatus } from '../types';
 import { computeSubjectGrade, computeOverallGWA, percentageToGWA } from '../utils/gradeHelper';
 
 interface AppContextProps {
@@ -11,6 +11,17 @@ interface AppContextProps {
   deleteStudent: (id: string) => void;
   updateStudentGrade: (studentId: string, subjectCode: string, components: GradeComponents) => void;
   addAttendanceRecord: (record: Omit<AttendanceRecord, 'id'>) => void;
+  overrideAttendanceRecord: (params: {
+    recordId?: string;
+    studentId: string;
+    date: string;
+    subjectCode: string;
+    status: Exclude<AttendanceStatus, 'excused'>;
+    reason: string;
+    changedBy: string;
+    changedByName: string;
+    assignedClassId?: string;
+  }) => void;
   addRemedialExam: (remedial: Omit<RemedialExam, 'id' | 'status' | 'remedialScore' | 'remedialGrade'>) => void;
   updateRemedialExam: (remedialId: string, score: number, notes?: string) => void;
   deleteRemedialExam: (remedialId: string) => void;
@@ -36,6 +47,8 @@ const initialStudents: Student[] = [
     studentId: 'DENT-2022-0051',
     name: 'Sarah Jane V. Ramos',
     email: 'sarah.ramos@dentisys.edu',
+    classId: 'CLINIC-A',
+    className: 'Clinical Rotation A',
     yearLevel: 4,
     status: 'warning',
     clinicHoursCompleted: 280,
@@ -90,6 +103,8 @@ const initialStudents: Student[] = [
     studentId: 'DENT-2023-0104',
     name: 'Mark Jayson T. Santos',
     email: 'mark.santos@dentisys.edu',
+    classId: 'CLINIC-A',
+    className: 'Clinical Rotation A',
     yearLevel: 3,
     status: 'active',
     clinicHoursCompleted: 155,
@@ -130,6 +145,8 @@ const initialStudents: Student[] = [
     studentId: 'DENT-2024-0012',
     name: 'Patricia Claire M. Lopez',
     email: 'claire.lopez@dentisys.edu',
+    classId: 'DENT-2A',
+    className: 'Second Year Section A',
     yearLevel: 2,
     status: 'active',
     clinicHoursCompleted: 0,
@@ -161,6 +178,8 @@ const initialStudents: Student[] = [
     studentId: 'DENT-2025-0199',
     name: 'Jude Christian D. Reyes',
     email: 'jude.reyes@dentisys.edu',
+    classId: 'DENT-1A',
+    className: 'First Year Section A',
     yearLevel: 1,
     status: 'remedial',
     clinicHoursCompleted: 0,
@@ -424,6 +443,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAttendanceRecords(prev => [...prev, newRecord]);
   };
 
+  const overrideAttendanceRecord: AppContextProps['overrideAttendanceRecord'] = ({
+    recordId,
+    studentId,
+    date,
+    subjectCode,
+    status,
+    reason,
+    changedBy,
+    changedByName,
+    assignedClassId,
+  }) => {
+    const cleanedReason = reason.trim().replace(/\s+/g, ' ');
+    const allowedStatuses: AttendanceStatus[] = ['present', 'late', 'absent'];
+    const targetStudent = students.find(student => student.id === studentId);
+
+    if (!targetStudent) {
+      throw new Error('Attendance override rejected: student record was not found.');
+    }
+
+    if (assignedClassId && targetStudent.classId !== assignedClassId) {
+      throw new Error('Attendance override rejected: student is outside the assigned class.');
+    }
+
+    if (!allowedStatuses.includes(status)) {
+      throw new Error('Attendance override rejected: invalid attendance status.');
+    }
+
+    if (cleanedReason.length < 8 || cleanedReason.length > 240) {
+      throw new Error('Attendance override rejected: reason must be 8 to 240 characters.');
+    }
+
+    setAttendanceRecords(prev => {
+      const existingIndex = prev.findIndex(record =>
+        (recordId && record.id === recordId) ||
+        (!recordId && record.studentId === studentId && record.date === date && record.subjectCode === subjectCode)
+      );
+
+      if (existingIndex === -1) {
+        const createdAt = new Date().toISOString();
+        return [
+          ...prev,
+          {
+            id: `att-${Math.random().toString(36).substr(2, 9)}`,
+            studentId,
+            date,
+            subjectCode,
+            status,
+            overrideReason: cleanedReason,
+            overrideBy: changedBy,
+            overrideByName: changedByName,
+            overrideAt: createdAt,
+            auditTrail: [{
+              id: `audit-${Math.random().toString(36).substr(2, 9)}`,
+              previousStatus: 'absent',
+              newStatus: status,
+              reason: cleanedReason,
+              changedBy,
+              changedByName,
+              changedAt: createdAt,
+            }],
+          },
+        ];
+      }
+
+      const next = [...prev];
+      const existing = next[existingIndex];
+      const changedAt = new Date().toISOString();
+      next[existingIndex] = {
+        ...existing,
+        status,
+        overrideReason: cleanedReason,
+        overrideBy: changedBy,
+        overrideByName: changedByName,
+        overrideAt: changedAt,
+        auditTrail: [
+          ...(existing.auditTrail || []),
+          {
+            id: `audit-${Math.random().toString(36).substr(2, 9)}`,
+            previousStatus: existing.status,
+            newStatus: status,
+            reason: cleanedReason,
+            changedBy,
+            changedByName,
+            changedAt,
+          },
+        ],
+      };
+      return next;
+    });
+  };
+
   const addRemedialExam = (newRem: Omit<RemedialExam, 'id' | 'status' | 'remedialScore' | 'remedialGrade'>) => {
     const exam: RemedialExam = {
       ...newRem,
@@ -543,6 +653,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteStudent,
         updateStudentGrade,
         addAttendanceRecord,
+        overrideAttendanceRecord,
         addRemedialExam,
         updateRemedialExam,
         deleteRemedialExam,

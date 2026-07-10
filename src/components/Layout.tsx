@@ -18,13 +18,22 @@ import {
   ChevronRight,
   ChevronDown,
   LogOut,
-  User
+  User,
+  ClipboardPenLine,
+  Video
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
+
+type NavItem = {
+  name: string;
+  path: string;
+  icon: typeof LayoutDashboard;
+  badge?: string;
+};
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const userStr = localStorage.getItem('dentisys_user');
@@ -64,7 +73,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     navigate('/login');
   };
 
-  const getNavItems = () => {
+  const getNavItems = (): NavItem[] => {
     const common = [
       { name: 'My Profile', path: '/profile', icon: UserCircle },
       { name: 'Settings', path: '/settings', icon: SettingsIcon },
@@ -79,12 +88,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       ];
     }
     
-    if (currentUser.role === 'student') {
+    if (currentUser.role === 'secretary') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-        { name: 'Attendance Sheets', path: '/student/attendance', icon: CalendarDays },
-        { name: 'Facial Enrollment', path: '/student/facial-enrollment', icon: UserCircle },
-        { name: 'CCTV Scanner Feed', path: '/student/cctv', icon: FileSpreadsheet },
+        { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
+        { name: 'Manual Override', path: '/secretary/override', icon: ClipboardPenLine },
+        { name: 'Live CCTV Feed', path: '/secretary/cctv', icon: Video },
         ...common
       ];
     }
@@ -145,12 +154,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'User Management', path: '/admin/users' });
     } else if (path === '/admin/audit') {
       crumbs.push({ name: 'System Audit Logs', path: '/admin/audit' });
-    } else if (path === '/student/attendance') {
-      crumbs.push({ name: 'Attendance Sheets', path: '/student/attendance' });
-    } else if (path === '/student/facial-enrollment') {
-      crumbs.push({ name: 'Facial Enrollment', path: '/student/facial-enrollment' });
-    } else if (path === '/student/cctv') {
-      crumbs.push({ name: 'CCTV Scanner Feed', path: '/student/cctv' });
+    } else if (path === '/secretary/attendance') {
+      crumbs.push({ name: 'Attendance List', path: '/secretary/attendance' });
+    } else if (path === '/secretary/override') {
+      crumbs.push({ name: 'Manual Override', path: '/secretary/override' });
+    } else if (path === '/secretary/cctv') {
+      crumbs.push({ name: 'Live CCTV Feed', path: '/secretary/cctv' });
     } else if (path !== '/') {
       crumbs.push({ name: 'Dashboard', path: '/' });
     }
@@ -400,7 +409,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <User className="w-4 h-4 text-slate-400" />
-                      <span>My Faculty Profile</span>
+                      <span>{currentUser.role === 'secretary' ? 'My Secretary Profile' : 'My Faculty Profile'}</span>
                     </Link>
 
                     <Link

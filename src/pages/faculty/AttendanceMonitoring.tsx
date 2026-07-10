@@ -162,7 +162,7 @@ export const AttendanceMonitoring: React.FC = () => {
           <div className="space-y-1">
             <p className="text-[10px] font-bold uppercase tracking-wider text-clinical-100">Live Attendance Rate</p>
             <h3 className="text-3xl font-extrabold font-heading">{presentPercentage}%</h3>
-            <p className="text-[10px] text-clinical-150 font-medium">For {selectedDate}</p>
+            <p className="text-[10px] text-clinical-100 font-medium">For {selectedDate}</p>
           </div>
           <div className="text-right text-xs space-y-0.5">
             <div>Present: {presentsCount}</div>

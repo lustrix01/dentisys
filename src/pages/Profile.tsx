@@ -15,16 +15,17 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/Card';
 export const Profile: React.FC = () => {
   const userStr = localStorage.getItem('dentisys_user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
+  const isSecretary = currentUser?.role === 'secretary';
 
   const [name, setName] = useState(currentUser?.name || 'Dr. Eleanor Vance, DDM, MS');
   const [email, setEmail] = useState(currentUser?.email || 'eleanor.vance@dentisys.edu');
   const [phone, setPhone] = useState('+63 (917) 542-8910');
-  const [office, setOffice] = useState('Dental Clinic B, Room 402');
+  const [office, setOffice] = useState(currentUser?.classroomName || 'Dental Clinic B, Room 402');
   const [specialty, setSpecialty] = useState(
     currentUser?.role === 'admin' 
       ? 'System Administration & Database Systems' 
-      : currentUser?.role === 'student'
-      ? 'Student Affairs & Office Records'
+      : currentUser?.role === 'secretary'
+      ? 'Class Attendance & Room Monitoring'
       : 'Endodontics & Restorative Dentistry'
   );
 
@@ -47,19 +48,31 @@ export const Profile: React.FC = () => {
     setTimeout(() => setIsSaved(false), 3000);
   };
 
-  const teachingSchedules = [
-    { day: 'Mon & Wed', time: '8:00 AM - 11:00 AM', course: 'CLIN401 - Clinical Dentistry I' },
-    { day: 'Tue & Thu', time: '1:00 PM - 3:00 PM', course: 'ODON202 - Oral Histology & Embryology' },
-    { day: 'Fri', time: '9:00 AM - 12:00 PM', course: 'CLIN402 - Restorative Dentistry Clinic' },
-  ];
+  const teachingSchedules = currentUser?.role === 'secretary'
+    ? [
+        { day: 'Mon & Wed', time: '8:00 AM - 11:00 AM', course: 'CLIN401 - Clinical Dentistry I' },
+        { day: 'Tue & Thu', time: '1:00 PM - 4:00 PM', course: 'CLIN402 - Restorative Dentistry Clinic' },
+        { day: 'Fri', time: '9:00 AM - 12:00 PM', course: 'Attendance Review & CCTV Monitoring' },
+      ]
+    : [
+        { day: 'Mon & Wed', time: '8:00 AM - 11:00 AM', course: 'CLIN401 - Clinical Dentistry I' },
+        { day: 'Tue & Thu', time: '1:00 PM - 3:00 PM', course: 'ODON202 - Oral Histology & Embryology' },
+        { day: 'Fri', time: '9:00 AM - 12:00 PM', course: 'CLIN402 - Restorative Dentistry Clinic' },
+      ];
 
   return (
     <div className="space-y-6">
       
       {/* Page Header */}
       <div>
-        <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">My Faculty Profile</h1>
-        <p className="text-xs text-slate-400">View and update your academic details, specialties, and teaching schedules</p>
+        <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">
+          {isSecretary ? 'My Class Secretary Profile' : 'My Faculty Profile'}
+        </h1>
+        <p className="text-xs text-slate-400">
+          {isSecretary
+            ? 'View your secretary account, assigned class, and classroom access details'
+            : 'View and update your academic details, specialties, and teaching schedules'}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -87,8 +100,14 @@ export const Profile: React.FC = () => {
               </div>
               <div className="flex items-center space-x-3 text-slate-600 dark:text-slate-400">
                 <MapPin className="w-4 h-4 text-slate-400" />
-                <span>{office}</span>
+                <span>{isSecretary ? currentUser?.classroomName || office : office}</span>
               </div>
+              {isSecretary && (
+                <div className="flex items-center space-x-3 text-slate-600 dark:text-slate-400">
+                  <Briefcase className="w-4 h-4 text-slate-400" />
+                  <span>{currentUser?.assignedClassName || 'Clinical Rotation A'}</span>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -97,12 +116,15 @@ export const Profile: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Stethoscope className="w-5 h-5 text-clinical-500" />
-                Clinical Specialty Fields
+                {isSecretary ? 'Secretary Access Scope' : 'Clinical Specialty Fields'}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2.5">
-                {['Endodontics', 'Restorative Dentistry', 'Prosthodontics', 'Clinical Supervision', 'Oral Pathology'].map(spec => (
+                {(isSecretary
+                  ? [currentUser?.assignedClassName || 'Clinical Rotation A', currentUser?.classroomName || 'Dental Clinic B - Room 402', currentUser?.cctvCameraId || 'CCTV-CLINIC-A-01']
+                  : ['Endodontics', 'Restorative Dentistry', 'Prosthodontics', 'Clinical Supervision', 'Oral Pathology']
+                ).map(spec => (
                   <span key={spec} className="px-3 py-1 bg-slate-100 dark:bg-slate-900 font-semibold text-xs rounded-xl text-slate-600 dark:text-slate-450 border border-slate-200/20 dark:border-slate-800/20">
                     {spec}
                   </span>
@@ -114,16 +136,38 @@ export const Profile: React.FC = () => {
 
         {/* Right Columns: Forms and Schedules */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Edit Profile Form */}
+          {/* Profile details */}
           <Card>
             <CardHeader>
-              <CardTitle>Edit Contact Profile Information</CardTitle>
+              <CardTitle>{isSecretary ? 'Profile Information' : 'Edit Contact Profile Information'}</CardTitle>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSave} className="space-y-4">
+              {isSecretary ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    ['Full Name', name],
+                    ['Email Address', email],
+                    ['Role', currentUser?.title || 'Class Secretary'],
+                    ['Assigned Class', currentUser?.assignedClassName || 'Clinical Rotation A'],
+                    ['Assigned Classroom', currentUser?.classroomName || office],
+                    ['CCTV Camera', currentUser?.cctvCameraId || 'CCTV-CLINIC-A-01'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800/50">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{value}</p>
+                    </div>
+                  ))}
+                  <div className="md:col-span-2 p-4 rounded-2xl bg-clinical-500/10 border border-clinical-500/20 text-xs text-clinical-800 dark:text-clinical-300">
+                    This profile is read-only. Account, class, and access assignments are managed by authorized faculty or administrators.
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSave} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Full Faculty Name</label>
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                      Full Faculty Name
+                    </label>
                     <input
                       type="text"
                       required
@@ -155,7 +199,9 @@ export const Profile: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Dean Office Location</label>
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                      Dean Office Location
+                    </label>
                     <input
                       type="text"
                       value={office}
@@ -166,7 +212,9 @@ export const Profile: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Dentistry Specialty Title</label>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                    Dentistry Specialty Title
+                  </label>
                   <input
                     type="text"
                     value={specialty}
@@ -184,7 +232,8 @@ export const Profile: React.FC = () => {
                     <span>{isSaved ? 'Profile Updated!' : 'Save Profile Details'}</span>
                   </button>
                 </div>
-              </form>
+                </form>
+              )}
             </CardContent>
           </Card>
 
@@ -193,7 +242,7 @@ export const Profile: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-accent-500" />
-                Teaching & Clinic Supervision Schedules
+                {isSecretary ? 'Assigned Class Schedule' : 'Teaching & Clinic Supervision Schedules'}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
