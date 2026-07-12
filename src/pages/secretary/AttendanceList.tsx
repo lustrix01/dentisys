@@ -47,11 +47,11 @@ export const AttendanceList: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
-          <p className="text-xs font-bold text-clinical-600 dark:text-clinical-400 uppercase tracking-widest">Read-only Attendance Register</p>
+          <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Read-only Attendance Register</p>
           <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">{className} Attendance List</h1>
           <p className="text-xs text-slate-400">View attendance records for your assigned class only. Manual corrections are handled on the override page.</p>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-clinical-500/10 text-clinical-700 dark:text-clinical-400 text-xs font-bold border border-clinical-500/20">
+        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-500/10 text-blue-700 dark:text-blue-400 text-xs font-bold border border-blue-500/20">
           <ShieldCheck className="w-4 h-4" />
           Class-scoped view
         </div>
@@ -72,7 +72,7 @@ export const AttendanceList: React.FC = () => {
         </Card>
         <Card className="p-4">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Attendance Rate</span>
-          <p className="text-2xl font-extrabold text-clinical-600 dark:text-clinical-400 mt-1">{getAttendanceRate(filteredRecords)}%</p>
+          <p className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 mt-1">{getAttendanceRate(filteredRecords)}%</p>
         </Card>
       </div>
 
@@ -85,7 +85,7 @@ export const AttendanceList: React.FC = () => {
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search by student name or ID"
               maxLength={80}
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:text-slate-100"
+              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
             />
           </label>
           <label className="relative block">
@@ -93,7 +93,7 @@ export const AttendanceList: React.FC = () => {
             <select
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value)}
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:text-slate-100"
+              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
             >
               <option value="">All dates</option>
               {availableDates.map(date => (

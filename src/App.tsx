@@ -11,10 +11,10 @@ import { RetentionMonitoring } from './pages/faculty/RetentionMonitoring';
 import { AttendanceMonitoring } from './pages/faculty/AttendanceMonitoring';
 import { Reports } from './pages/faculty/Reports';
 
-// Admin Page Imports
-import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
-import { UserManagement } from './pages/admin/UserManagement';
-import { SystemAudit } from './pages/admin/SystemAudit';
+// Dean (Admin) Page Imports
+import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
+import { RetentionCriteria } from './pages/admin/RetentionCriteria';
+import { DeanReports } from './pages/admin/SystemAudit';
 
 // Class Secretary Page Imports
 import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
@@ -23,8 +23,8 @@ import { ManualAttendanceOverride } from './pages/secretary/ManualAttendanceOver
 import { CCTVFeed as SecretaryCCTVFeed } from './pages/secretary/CCTVFeed';
 
 // Shared Page Imports
-import { Profile } from './pages/Profile';
-import { Settings } from './pages/Settings';
+import { Profile } from './pages/shared/Profile';
+import { Settings } from './pages/shared/Settings';
 import { Login } from './pages/auth/Login';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
@@ -42,24 +42,27 @@ const MainApp = () => {
       <Routes>
         {/* Dynamic Root Dashboard Selection */}
         <Route path="/" element={
-          currentUser.role === 'admin' 
-            ? <AdminDashboard /> 
+          currentUser.role === 'admin'
+            ? <DeanDashboard />
             : currentUser.role === 'secretary'
             ? <SecretaryDashboard />
             : <FacultyDashboard />
         } />
-        
+
         {/* Faculty Routes */}
         <Route path="/students" element={currentUser.role === 'faculty' ? <StudentManagement /> : <Navigate to="/" replace />} />
         <Route path="/grades" element={currentUser.role === 'faculty' ? <GradeComputation /> : <Navigate to="/" replace />} />
         <Route path="/retention" element={currentUser.role === 'faculty' ? <RetentionMonitoring /> : <Navigate to="/" replace />} />
         <Route path="/attendance" element={currentUser.role === 'faculty' ? <AttendanceMonitoring /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={currentUser.role === 'faculty' ? <Reports /> : <Navigate to="/" replace />} />
-        
-        {/* Admin Routes */}
-        <Route path="/admin/users" element={currentUser.role === 'admin' ? <UserManagement /> : <Navigate to="/" replace />} />
-        <Route path="/admin/audit" element={currentUser.role === 'admin' ? <SystemAudit /> : <Navigate to="/" replace />} />
-        
+
+        {/* Dean Routes */}
+        <Route path="/admin/retention-criteria" element={currentUser.role === 'admin' ? <RetentionCriteria /> : <Navigate to="/" replace />} />
+        <Route path="/admin/reports" element={currentUser.role === 'admin' ? <DeanReports /> : <Navigate to="/" replace />} />
+        {/* Legacy routes: redirect to dashboard */}
+        <Route path="/admin/users" element={<Navigate to="/" replace />} />
+        <Route path="/admin/audit" element={<Navigate to="/admin/reports" replace />} />
+
         {/* Class Secretary Routes */}
         <Route
           path="/secretary/attendance"
@@ -73,11 +76,11 @@ const MainApp = () => {
           path="/secretary/cctv"
           element={currentUser.role === 'secretary' ? <SecretaryCCTVFeed /> : <Navigate to="/" replace />}
         />
-        
+
         {/* Shared Routes */}
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
-        
+
         {/* Fallback route */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

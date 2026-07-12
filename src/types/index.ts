@@ -54,6 +54,16 @@ export interface AttendanceRecord {
   auditTrail?: AttendanceOverrideAudit[];
 }
 
+export interface RetentionLog {
+  id: string;
+  studentId: string;
+  date: string;
+  previousStatus: 'active' | 'warning' | 'critical' | 'remedial';
+  newStatus: 'active' | 'warning' | 'critical' | 'remedial';
+  remarks: string;
+  changedBy: string;
+}
+
 export interface Student {
   id: string;
   studentId: string;    // e.g. "DENT-2023-0142"
@@ -68,6 +78,40 @@ export interface Student {
   clinicHoursCompleted: number; // For clinicians (3rd & 4th years)
   remedialExams: RemedialExam[];
   faceEnrolled?: boolean; // For facial recognition attendance tracking
+  faceEnrollmentDetails?: { images: string[]; status: string; enrolledAt: string };
+  retentionHistory?: RetentionLog[];
+}
+
+export interface Assessment {
+  id: string;
+  title: string;
+  type: 'Quiz' | 'Activity' | 'Assignment' | 'Laboratory' | 'Midterm Exam' | 'Final Exam' | 'Others';
+  subjectCode: string;
+  classId: string;
+  gradingPeriod: 'Midterm' | 'Final';
+  maxScore: number;
+  weight?: number; // Weight percentage (if applicable, e.g. 15 for 15%)
+  dueDate: string;
+  instructions?: string;
+  remarks?: string;
+  status: 'Active' | 'Closed' | 'Archived';
+  createdAt: string;
+}
+
+export interface AssessmentScore {
+  id: string;
+  assessmentId: string;
+  studentId: string;
+  score: number;
+  submittedAt: string;
+  remarks?: string;
+}
+
+export interface GradingComponentConfig {
+  subjectCode: string;
+  category: 'Quiz' | 'Activity' | 'Assignment' | 'Laboratory' | 'Midterm Exam' | 'Final Exam' | 'Attendance';
+  weight: number; // 0-100 percentage
+  maxScore: number;
 }
 
 export interface SystemSettings {

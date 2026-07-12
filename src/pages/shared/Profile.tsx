@@ -10,7 +10,7 @@ import {
   CheckCircle,
   Save
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/Card';
+import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 
 export const Profile: React.FC = () => {
   const userStr = localStorage.getItem('dentisys_user');

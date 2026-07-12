@@ -52,6 +52,55 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const initials = getInitials(currentUser.name);
 
+  const getRoleColors = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return {
+          bgGradient: 'from-accent-500/10 to-accent-600/10',
+          textActive: 'text-accent-600 dark:text-accent-400 font-semibold border-l-4 border-accent-500',
+          iconActive: 'text-accent-500',
+          iconHover: 'group-hover:text-accent-600 dark:group-hover:text-accent-300',
+          logoRing: 'shadow-accent-500/20',
+          avatarBg: 'from-accent-200 to-accent-300 dark:from-accent-850 dark:to-accent-950',
+          avatarText: 'text-accent-700 dark:text-accent-300 font-bold font-heading',
+          crumbHover: 'hover:text-accent-500',
+          roleLabelText: 'text-accent-500',
+          hoverBg: 'hover:bg-accent-50/50 dark:hover:bg-accent-900/50 hover:text-accent-850 dark:hover:text-slate-200',
+          sidebarGradient: 'from-accent-50/90 to-accent-100/70 dark:from-accent-955/80 dark:to-accent-950/70',
+        };
+      case 'secretary':
+        return {
+          bgGradient: 'from-blue-500/10 to-blue-600/10',
+          textActive: 'text-blue-600 dark:text-blue-400 font-semibold border-l-4 border-blue-500',
+          iconActive: 'text-blue-500',
+          iconHover: 'group-hover:text-blue-600 dark:group-hover:text-blue-300',
+          logoRing: 'shadow-blue-500/20',
+          avatarBg: 'from-blue-200 to-blue-300 dark:from-blue-800 dark:to-blue-900',
+          avatarText: 'text-blue-700 dark:text-blue-300 font-bold font-heading',
+          crumbHover: 'hover:text-blue-500',
+          roleLabelText: 'text-blue-500',
+          hoverBg: 'hover:bg-blue-50/50 dark:hover:bg-blue-900/50 hover:text-blue-850 dark:hover:text-slate-200',
+          sidebarGradient: 'from-blue-50/90 to-blue-100/70 dark:from-blue-955/80 dark:to-blue-950/70',
+        };
+      case 'faculty':
+      default:
+        return {
+          bgGradient: 'from-clinical-500/10 to-accent-500/10',
+          textActive: 'text-clinical-600 dark:text-clinical-400 font-semibold border-l-4 border-clinical-500',
+          iconActive: 'text-clinical-500',
+          iconHover: 'group-hover:text-slate-600 dark:group-hover:text-slate-300',
+          logoRing: 'shadow-clinical-500/20',
+          avatarBg: 'from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900',
+          avatarText: 'text-clinical-700 dark:text-clinical-300 font-bold font-heading',
+          crumbHover: 'hover:text-clinical-500',
+          roleLabelText: 'text-emerald-500',
+          hoverBg: 'hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-800 dark:hover:text-slate-200',
+          sidebarGradient: 'from-accent-50/90 to-clinical-50/70 dark:from-accent-955/80 dark:to-clinical-950/70',
+        };
+    }
+  };
+  const colors = getRoleColors(currentUser.role);
+
   const { settings, updateSettings, students } = useApp();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -82,8 +131,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-        { name: 'User Management', path: '/admin/users', icon: Users },
-        { name: 'System Audit Logs', path: '/admin/audit', icon: FileSpreadsheet },
+        { name: 'Retention Criteria', path: '/admin/retention-criteria', icon: AlertTriangle },
+        { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet },
         ...common
       ];
     }
@@ -150,10 +199,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'My Profile', path: '/profile' });
     } else if (path === '/settings') {
       crumbs.push({ name: 'Settings', path: '/settings' });
-    } else if (path === '/admin/users') {
-      crumbs.push({ name: 'User Management', path: '/admin/users' });
-    } else if (path === '/admin/audit') {
-      crumbs.push({ name: 'System Audit Logs', path: '/admin/audit' });
+    } else if (path === '/admin/retention-criteria') {
+      crumbs.push({ name: 'Retention Criteria', path: '/admin/retention-criteria' });
+    } else if (path === '/admin/reports') {
+      crumbs.push({ name: 'Reports & Analytics', path: '/admin/reports' });
     } else if (path === '/secretary/attendance') {
       crumbs.push({ name: 'Attendance List', path: '/secretary/attendance' });
     } else if (path === '/secretary/override') {
@@ -170,7 +219,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-gradient-to-br from-accent-50/80 via-white to-clinical-50/60 dark:from-slate-950 dark:via-accent-955/20 dark:to-clinical-950/20 transition-colors duration-200 relative overflow-hidden">
+    <div className="h-screen overflow-hidden flex flex-col md:flex-row bg-gradient-to-br from-accent-50/80 via-white to-clinical-50/60 dark:from-slate-950 dark:via-accent-955/20 dark:to-clinical-950/20 transition-colors duration-200 relative">
       
       {/* Ambient background glows */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] aspect-square rounded-full bg-accent-200/25 dark:bg-accent-950/30 blur-[120px] pointer-events-none z-0" />
@@ -200,17 +249,17 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </header>
 
-      {/* Sidebar Navigation */}
+      {/* Sidebar Navigation — fixed on desktop, drawer on mobile */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-gradient-to-b from-accent-50/90 to-clinical-50/70 dark:from-accent-955/80 dark:to-clinical-950/70 backdrop-blur-md border-r border-accent-200/30 dark:border-accent-900/20 p-5 flex flex-col transition-all duration-300 ease-out md:translate-x-0 md:static relative z-10 ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} backdrop-blur-md border-r border-accent-200/30 dark:border-accent-900/20 p-5 flex flex-col transition-all duration-300 ease-out ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } ${isSidebarCollapsed ? 'md:w-20' : 'md:w-72'}`}
       >
         
         {/* Brand Logo & Desktop Collapse Toggle */}
         <div className="flex items-center justify-between mb-8 px-1.5 relative">
           <div className="flex items-center space-x-3 min-w-0">
-            <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-10 h-10 rounded-full object-cover shadow-lg shadow-clinical-500/20 flex-shrink-0" />
+            <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className={`w-10 h-10 rounded-full object-cover shadow-lg ${colors.logoRing} flex-shrink-0`} />
             {!isSidebarCollapsed && (
               <div className="transition-opacity duration-300">
                 <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
@@ -247,14 +296,14 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 onClick={() => setIsSidebarOpen(false)}
                 className={`flex items-center justify-between px-3 py-3 rounded-2xl transition-all duration-300 group ${
                   isActive
-                    ? 'bg-gradient-to-r from-clinical-500/10 to-accent-500/10 text-clinical-600 dark:text-clinical-400 font-semibold border-l-4 border-clinical-500'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-800 dark:hover:text-slate-200'
+                    ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive}`
+                    : `text-slate-500 dark:text-slate-400 ${colors.hoverBg}`
                 }`}
                 title={isSidebarCollapsed ? item.name : undefined}
               >
                 <div className="flex items-center space-x-3 min-w-0">
                   <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${
-                    isActive ? 'text-clinical-500' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                    isActive ? colors.iconActive : `text-slate-400 dark:text-slate-500 ${colors.iconHover}`
                   }`} />
                   {!isSidebarCollapsed && (
                     <span className="text-sm font-medium truncate transition-opacity duration-300">{item.name}</span>
@@ -272,7 +321,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Sidebar Footer / User Profile Summary */}
         <div className="pt-5 border-t border-slate-100 dark:border-slate-800/80 flex items-center space-x-3 px-1.5 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900 flex items-center justify-center text-clinical-700 dark:text-clinical-300 font-bold font-heading flex-shrink-0">
+          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} flex-shrink-0`}>
             {initials}
           </div>
           {!isSidebarCollapsed && (
@@ -286,8 +335,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </aside>
 
-      {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
+      {/* Main Container — offset by sidebar width, fills remaining height, scrolls independently */}
+      <div className={`flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative z-10 transition-all duration-300 ${
+        isSidebarCollapsed ? 'md:ml-20' : 'md:ml-72'
+      }`}>
         
         {/* Desktop Header */}
         <header className="hidden md:flex items-center justify-between px-8 py-4 border-b border-slate-200/40 dark:border-slate-900/40 bg-white/30 dark:bg-slate-950/20 backdrop-blur-md sticky top-0 z-30">
@@ -301,7 +352,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   {idx === breadcrumbs.length - 1 ? (
                     <span className="text-slate-500 dark:text-slate-400 font-semibold">{crumb.name}</span>
                   ) : (
-                    <Link to={crumb.path} className="hover:text-clinical-500 transition-colors">
+                    <Link to={crumb.path} className={`${colors.crumbHover} transition-colors`}>
                       {crumb.name}
                     </Link>
                   )}
@@ -383,12 +434,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 }}
                 className="flex items-center space-x-3 pl-3 py-1.5 pr-2 rounded-xl hover:bg-slate-100/60 dark:hover:bg-slate-900/60 transition-colors border-l border-slate-200 dark:border-slate-850"
               >
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-clinical-500 to-accent-500 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} text-sm shadow-md`}>
                   {initials}
                 </div>
                 <div className="text-left hidden lg:block">
                   <div className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none">{currentUser.name}</div>
-                  <span className="text-[9px] font-semibold text-emerald-500">{currentUser.title}</span>
+                  <span className={`text-[9px] font-semibold ${colors.roleLabelText}`}>{currentUser.title}</span>
                 </div>
                 <ChevronDown className="w-4 h-4 text-slate-400" />
               </button>
