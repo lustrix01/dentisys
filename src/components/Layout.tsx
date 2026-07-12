@@ -82,6 +82,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Grade Management', path: '/grades', icon: Calculator },
         { name: 'User Management', path: '/admin/users', icon: Users },
         { name: 'System Audit Logs', path: '/admin/audit', icon: FileSpreadsheet },
         ...common

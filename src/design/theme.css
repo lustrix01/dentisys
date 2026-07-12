@@ -1,0 +1,52 @@
+:root {
+  /* Brand */
+  --color-primary: #4CAF50;
+  --color-secondary: #6A5ACD;
+  /* Status */
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-info: #3B82F6;
+  /* Neutral */
+  --color-background: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-border: #E5E7EB;
+  --color-text-primary: #111827;
+  --color-text-secondary: #6B7280;
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.1);
+  --shadow-modal: 0 4px 12px rgba(0,0,0,0.15);
+  --shadow-drawer: -2px 0 8px rgba(0,0,0,0.12);
+  --shadow-dropdown: 0 2px 6px rgba(0,0,0,0.1);
+  --shadow-hover: 0 2px 4px rgba(0,0,0,0.08);
+  /* Spacing (index based) */
+  --spacing-0: 4px;
+  --spacing-1: 8px;
+  --spacing-2: 12px;
+  --spacing-3: 16px;
+  --spacing-4: 20px;
+  --spacing-5: 24px;
+  --spacing-6: 32px;
+  --spacing-7: 40px;
+  --spacing-8: 48px;
+  --spacing-9: 64px;
+  /* Breakpoints */
+  --breakpoint-mobile: 640px;
+  --breakpoint-tablet: 768px;
+  --breakpoint-laptop: 1024px;
+  --breakpoint-desktop: 1280px;
+}
+
+.dark {
+  /* In dark mode, swap background and surface, adjust text colors */
+  --color-background: #111827;
+  --color-surface: #1F2937;
+  --color-text-primary: #F9FAFB;
+  --color-text-secondary: #D1D5DB;
+}

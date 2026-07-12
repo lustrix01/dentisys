@@ -29,7 +29,9 @@ export function Login() {
           email: 'faculty@bicol-u.edu.ph',
           role: 'faculty',
           name: 'Dr. Eleanor Vance',
-          title: 'Dental Faculty Member'
+          title: 'Dental Faculty Member',
+          assignedClasses: ['CLINIC-A'],
+          assignedSubjects: ['CLIN401', 'CLIN402', 'ODON401', 'CLIN301', 'CLIN302', 'ODON303']
         };
       } else if (email === 'admin@bicol-u.edu.ph' && password === 'admin123') {
         user = {
@@ -69,7 +71,9 @@ export function Login() {
         email: 'faculty@bicol-u.edu.ph',
         role: 'faculty',
         name: 'Dr. Eleanor Vance',
-        title: 'Dental Faculty Member'
+        title: 'Dental Faculty Member',
+        assignedClasses: ['CLINIC-A'],
+        assignedSubjects: ['CLIN401', 'CLIN402', 'ODON401', 'CLIN301', 'CLIN302', 'ODON303']
       };
       localStorage.setItem('dentisys_user', JSON.stringify(user));
       setIsLoading(false);

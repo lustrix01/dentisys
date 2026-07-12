@@ -1,0 +1,14 @@
+import React from 'react';
+import { GradeManagementProvider } from '../../contexts/GradeManagementContext';
+import { AssessmentDrawer } from '../../components/grade-management/AssessmentDrawer/AssessmentDrawer';
+import { ExportDialog } from '../../components/grade-management/ExportDialog/ExportDialog';
+import { HeaderControls } from '../../components/grade-management/HeaderControls/HeaderControls';
+import { PublishDialog } from '../../components/grade-management/PublishDialog/PublishDialog';
+import { ImportDialog } from '../../components/grade-management/ImportDialog/ImportDialog';
+import { Spreadsheet } from '../../components/grade-management/Spreadsheet/Spreadsheet';
+import { StudentSummaryDrawer } from '../../components/grade-management/StudentSummaryDrawer/StudentSummaryDrawer';
+import { Toolbar } from '../../components/grade-management/Toolbar/Toolbar';
+import { WeightDrawer } from '../../components/grade-management/WeightDrawer/WeightDrawer';
+const Workspace: React.FC = () => <main className="space-y-4 p-4 md:p-6"><header><h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Grade Management</h1><p className="text-sm text-slate-500">Dynamic class record with live category and weighted-grade computation.</p></header><HeaderControls/><Toolbar/><Spreadsheet/><AssessmentDrawer/><WeightDrawer/><StudentSummaryDrawer/><ImportDialog/><ExportDialog/><PublishDialog/></main>;
+export const GradeManagement: React.FC = () => <GradeManagementProvider><Workspace/></GradeManagementProvider>;
+export default GradeManagement;

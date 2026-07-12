@@ -1,0 +1,11 @@
+import React, { useState } from 'react';
+import { Modal } from '../../shared/Modal/Modal';
+import { useGradeManagementContext } from '../../../contexts/GradeManagementContext';
+export const AssessmentDrawer: React.FC = () => {
+  const { state, dispatch } = useGradeManagementContext();
+  const [name, setName] = useState(''); const [category, setCategory] = useState('Quiz'); const [maxScore, setMaxScore] = useState(100);
+  const close = () => dispatch({ type: 'TOGGLE_UI', payload: { key: 'showAssessmentDrawer', value: false } });
+  const add = () => { if (!name.trim() || !Number.isFinite(maxScore) || maxScore <= 0) return; dispatch({ type: 'SET_ASSESSMENTS', payload: [...state.assessments, { id: `local-${crypto.randomUUID()}`, name: name.trim(), category, maxScore, dueDate: new Date().toISOString(), status: 'active', displayOrder: state.assessments.length }] }); setName(''); };
+  const toggleArchive = (id: string) => dispatch({ type: 'SET_ASSESSMENTS', payload: state.assessments.map(item => item.id === id ? { ...item, status: item.status === 'archived' ? 'active' : 'archived' } : item) });
+  return <Modal open={state.showAssessmentDrawer} onClose={close} title="Assessment management"><div className="space-y-4"><div className="grid gap-2 sm:grid-cols-3"><input className="rounded border p-2" placeholder="Assessment name" value={name} onChange={event => setName(event.target.value)}/><input className="rounded border p-2" placeholder="Category" value={category} onChange={event => setCategory(event.target.value)}/><input className="rounded border p-2" type="number" min="1" value={maxScore} onChange={event => setMaxScore(Number(event.target.value))}/></div><button className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold text-white" onClick={add}>Add assessment</button><div className="max-h-64 space-y-2 overflow-auto">{state.assessments.map(item => <div className="flex items-center justify-between rounded border p-2" key={item.id}><span>{item.name} <small className="text-slate-500">{item.category} · /{item.maxScore}</small></span><button className="text-sm text-violet-700 underline" onClick={() => toggleArchive(item.id)}>{item.status === 'archived' ? 'Restore' : 'Archive'}</button></div>)}</div></div></Modal>;
+};

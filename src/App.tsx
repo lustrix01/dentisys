@@ -6,9 +6,9 @@ import { Layout } from './components/Layout';
 // Faculty Page Imports
 import { Dashboard as FacultyDashboard } from './pages/faculty/Dashboard';
 import { StudentManagement } from './pages/faculty/StudentManagement';
-import { GradeComputation } from './pages/faculty/GradeComputation';
+import { GradeManagement } from './pages/faculty/GradeManagement';
 import { RetentionMonitoring } from './pages/faculty/RetentionMonitoring';
-import { AttendanceMonitoring } from './pages/faculty/AttendanceMonitoring';
+import { AttendancePage } from './pages/faculty/Attendance';
 import { Reports } from './pages/faculty/Reports';
 
 // Admin Page Imports
@@ -51,9 +51,9 @@ const MainApp = () => {
         
         {/* Faculty Routes */}
         <Route path="/students" element={currentUser.role === 'faculty' ? <StudentManagement /> : <Navigate to="/" replace />} />
-        <Route path="/grades" element={currentUser.role === 'faculty' ? <GradeComputation /> : <Navigate to="/" replace />} />
+        <Route path="/grades" element={['faculty', 'admin', 'dean'].includes(currentUser.role) ? <GradeManagement /> : <Navigate to="/" replace />} />
         <Route path="/retention" element={currentUser.role === 'faculty' ? <RetentionMonitoring /> : <Navigate to="/" replace />} />
-        <Route path="/attendance" element={currentUser.role === 'faculty' ? <AttendanceMonitoring /> : <Navigate to="/" replace />} />
+        <Route path="/attendance" element={currentUser.role === 'faculty' ? <AttendancePage /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={currentUser.role === 'faculty' ? <Reports /> : <Navigate to="/" replace />} />
         
         {/* Admin Routes */}
