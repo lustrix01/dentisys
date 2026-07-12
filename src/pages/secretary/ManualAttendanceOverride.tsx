@@ -146,7 +146,7 @@ export const ManualAttendanceOverride: React.FC = () => {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search student name or ID"
                   maxLength={80}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:text-slate-100"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
                 />
               </label>
               <label className="relative block">
@@ -157,7 +157,7 @@ export const ManualAttendanceOverride: React.FC = () => {
                     setSelectedDate(event.target.value);
                     setSelectedRecordId('');
                   }}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:text-slate-100"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
                 >
                   <option value="">All dates</option>
                   {availableDates.map(date => (
@@ -196,7 +196,7 @@ export const ManualAttendanceOverride: React.FC = () => {
                       const student = classStudents.find(item => item.id === record.studentId);
                       const isSelected = selectedRecordId === record.id;
                       return (
-                        <tr key={record.id} className={isSelected ? 'bg-clinical-50/70 dark:bg-clinical-950/20' : 'hover:bg-slate-50/60 dark:hover:bg-slate-900/50'}>
+                        <tr key={record.id} className={isSelected ? 'bg-blue-50/70 dark:bg-blue-950/20' : 'hover:bg-slate-50/60 dark:hover:bg-slate-900/50'}>
                           <td className="px-5 py-4">
                             <p className="font-bold text-slate-800 dark:text-slate-100">{student?.name || 'Unknown student'}</p>
                             <p className="text-xs text-slate-400">{student?.studentId}</p>
@@ -210,13 +210,13 @@ export const ManualAttendanceOverride: React.FC = () => {
                           </td>
                           <td className="px-5 py-4 text-right">
                             <button
-                              type="button"
-                              onClick={() => selectRecord(record)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                isSelected
-                                  ? 'bg-clinical-600 text-white'
-                                  : 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
-                              }`}
+                               type="button"
+                               onClick={() => selectRecord(record)}
+                               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                 isSelected
+                                   ? 'bg-blue-600 text-white'
+                                   : 'bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                               }`}
                             >
                               {isSelected ? 'Selected' : 'Select'}
                             </button>
@@ -276,7 +276,7 @@ export const ManualAttendanceOverride: React.FC = () => {
                       disabled={!selectedRecord}
                       className={`min-h-20 rounded-xl border text-xs font-bold capitalize flex flex-col items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         status === nextStatus
-                          ? 'border-clinical-500 bg-clinical-500/10 text-clinical-700 dark:text-clinical-400'
+                          ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-400'
                           : 'border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900'
                       }`}
                     >
@@ -295,7 +295,7 @@ export const ManualAttendanceOverride: React.FC = () => {
                   rows={4}
                   maxLength={240}
                   placeholder="Example: Faculty verified the signed paper attendance sheet."
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-clinical-500 dark:text-slate-100 resize-none"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100 resize-none"
                 />
                 <p className="text-[10px] text-slate-400">{reason.trim().length}/240 characters</p>
               </div>
@@ -310,7 +310,7 @@ export const ManualAttendanceOverride: React.FC = () => {
               <button
                 type="submit"
                 disabled={!selectedRecord}
-                className="w-full px-5 py-3 bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-sm rounded-2xl shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full px-5 py-3 bg-gradient-to-r from-blue-600 to-accent-600 hover:from-blue-700 hover:to-accent-700 text-white font-semibold text-sm rounded-2xl shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Review and Apply Override
               </button>

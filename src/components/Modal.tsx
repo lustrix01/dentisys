@@ -20,19 +20,21 @@ export const Modal: React.FC<ModalProps> = ({
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    
+
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleEscape);
+      return () => {
+        document.body.style.overflow = '';
+        window.removeEventListener('keydown', handleEscape);
+      };
     }
-    
-    return () => {
-      document.body.style.overflow = 'unset';
-      window.removeEventListener('keydown', handleEscape);
-    };
+
+    // Not open — do nothing, return no cleanup so overflow is never wrongly cleared
+    return undefined;
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  // Early return is now handled above the JSX block
 
   const sizeClasses = {
     sm: 'max-w-md',
@@ -41,10 +43,12 @@ export const Modal: React.FC<ModalProps> = ({
     xl: 'max-w-5xl',
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300"
         onClick={onClose}
       />

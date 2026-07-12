@@ -29,14 +29,16 @@ export function Login() {
           email: 'faculty@bicol-u.edu.ph',
           role: 'faculty',
           name: 'Dr. Eleanor Vance',
-          title: 'Dental Faculty Member'
+          title: 'Dental Faculty Member',
+          assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
+          assignedClasses: ['CLINIC-A', 'CLINIC-B']
         };
       } else if (email === 'admin@bicol-u.edu.ph' && password === 'admin123') {
         user = {
           email: 'admin@bicol-u.edu.ph',
           role: 'admin',
           name: 'Dr. Marcus Aurelius',
-          title: 'System Administrator'
+          title: 'Office of the Dean'
         };
       } else if (email === 'secretary@bicol-u.edu.ph' && password === 'secretary123') {
         user = {
@@ -69,7 +71,9 @@ export function Login() {
         email: 'faculty@bicol-u.edu.ph',
         role: 'faculty',
         name: 'Dr. Eleanor Vance',
-        title: 'Dental Faculty Member'
+        title: 'Dental Faculty Member',
+        assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
+        assignedClasses: ['CLINIC-A', 'CLINIC-B']
       };
       localStorage.setItem('dentisys_user', JSON.stringify(user));
       setIsLoading(false);

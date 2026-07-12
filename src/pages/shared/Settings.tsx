@@ -11,8 +11,8 @@ import {
   Sliders,
   CheckCircle
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/Card';
+import { useApp } from '../../context/AppContext';
+import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 
 export const Settings: React.FC = () => {
   const { settings, updateSettings } = useApp();

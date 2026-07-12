@@ -68,7 +68,7 @@ export const CCTVFeed: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
-          <p className="text-xs font-bold text-clinical-600 dark:text-clinical-400 uppercase tracking-widest">Assigned Classroom CCTV</p>
+          <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Assigned Classroom CCTV</p>
           <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">{classroomName}</h1>
           <p className="text-xs text-slate-400">{className} - {cameraId}</p>
         </div>
@@ -83,7 +83,7 @@ export const CCTVFeed: React.FC = () => {
         ) : (
           <button
             onClick={startFeed}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
           >
             <Play className="w-4 h-4" />
             Start Feed
@@ -95,7 +95,7 @@ export const CCTVFeed: React.FC = () => {
         <Card className="lg:col-span-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Video className="w-5 h-5 text-clinical-500" />
+              <Video className="w-5 h-5 text-blue-500" />
               Live Stream
             </CardTitle>
             <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${
@@ -155,7 +155,7 @@ export const CCTVFeed: React.FC = () => {
               <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{className}</p>
               <p className="text-xs text-slate-400">{classroomName}</p>
             </div>
-            <div className="flex items-start gap-3 rounded-2xl bg-clinical-500/10 border border-clinical-500/20 p-4 text-xs text-clinical-800 dark:text-clinical-300">
+            <div className="flex items-start gap-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 p-4 text-xs text-blue-800 dark:text-blue-300">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <p>This page exposes only the CCTV camera assigned to the secretary's class.</p>
             </div>

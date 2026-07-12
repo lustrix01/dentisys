@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   FileSpreadsheet, 
   Printer, 
@@ -8,338 +8,410 @@ import {
   CalendarDays,
   FileCheck,
   CheckCircle,
-  HelpCircle
+  Download,
+  BookOpen,
+  Sparkles,
+  Clock,
+  TrendingUp,
+  Layers,
+  FileText
 } from 'lucide-react';
+import { 
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  Legend
+} from 'recharts';
 import { useApp } from '../../context/AppContext';
+import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { gwaToDescription } from '../../utils/gradeHelper';
 
 export const Reports: React.FC = () => {
-  const { students, attendanceRecords } = useApp();
+  const { students, attendanceRecords, assessments, assessmentScores, settings } = useApp();
   
-  // Selected Report states
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(
-    students.length > 0 ? students[0].id : ''
-  );
-  const [reportType, setReportType] = useState<'card' | 'standing' | 'attendance'>('card');
+  const userStr = localStorage.getItem('dentisys_user');
+  const currentUser = userStr ? JSON.parse(userStr) : { 
+    email: 'faculty@bicol-u.edu.ph',
+    role: 'faculty',
+    name: 'Dr. Eleanor Vance',
+    assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
+    assignedClasses: ['CLINIC-A']
+  };
 
-  const selectedStudent = students.find(s => s.id === selectedStudentId);
+  const assignedSubjects = currentUser.assignedSubjects || ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
+  const assignedClasses = currentUser.assignedClasses || ['CLINIC-A', 'CLINIC-B'];
+
+  // Selected class block state
+  const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
+
+  // Report Category State: 'academic' | 'retention' | 'attendance' | 'analytics'
+  const [reportTab, setReportTab] = useState<'academic' | 'retention' | 'attendance' | 'analytics'>('academic');
+
+  // Filter students based on selected class and subjects (RBAC)
+  const facultyStudents = useMemo(() => {
+    return students.filter(s =>
+      s.classId === selectedClassId &&
+      s.enrolledSubjects.some(sub => assignedSubjects.includes(sub.code))
+    );
+  }, [students, selectedClassId, assignedSubjects]);
+
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState(assignedSubjects[0] || 'CLIN401');
+
+  // Filter roster by course tab selector
+  const studentsInSelectedSubject = useMemo(() => {
+    return facultyStudents.filter(s =>
+      s.enrolledSubjects.some(sub => sub.code === selectedSubjectCode)
+    );
+  }, [facultyStudents, selectedSubjectCode]);
 
   const handlePrint = () => {
     window.print();
   };
 
-  // Calculations for Standing summary report
-  const activeCount = students.filter(s => s.status === 'active').length;
-  const warningCount = students.filter(s => s.status === 'warning').length;
-  const criticalCount = students.filter(s => s.status === 'critical').length;
-  const remedialCount = students.filter(s => s.status === 'remedial').length;
+  // CSV Exporter Utility
+  const handleExportCSV = (type: 'academic' | 'retention' | 'attendance') => {
+    let headers = '';
+    let rows = '';
+    let fileName = '';
 
-  // Attendance stats for selected student
-  const getStudentAttendanceStats = (studentId: string) => {
-    const studentRecords = attendanceRecords.filter(r => r.studentId === studentId);
-    const total = studentRecords.length;
-    if (total === 0) return { present: 96, absent: 4, rate: 96 };
-    
-    const presentOrLate = studentRecords.filter(r => r.status === 'present' || r.status === 'late').length;
-    const rate = Math.round((presentOrLate / total) * 100);
-    const absent = total - presentOrLate;
+    if (type === 'academic') {
+      headers = 'Student ID,Name,Course Code,Quizzes %,Exams %,Practicum %,Attendance %,GWA,Remarks\n';
+      rows = studentsInSelectedSubject.map(student => {
+        const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+        const q = subj ? subj.components.quizzes.toFixed(1) : '80.0';
+        const e = subj ? subj.components.exams.toFixed(1) : '80.0';
+        const p = subj ? subj.components.practicum.toFixed(1) : '80.0';
+        const a = subj ? subj.components.attendance.toFixed(1) : '90.0';
+        const g = subj ? subj.grade.toFixed(2) : '2.50';
+        const rem = subj && subj.grade > 2.5 && subj.isClinical ? 'FAILS RETENTION' : 'PASS';
+        return `${student.studentId},"${student.name}",${selectedSubjectCode},${q},${e},${p},${a},${g},${rem}`;
+      }).join('\n');
+      fileName = `${selectedSubjectCode}_Academic_Report.csv`;
+    } else if (type === 'retention') {
+      headers = 'Student ID,Name,Standing GWA,Warning Count,Risk Level,Remedial Status\n';
+      rows = facultyStudents.map(student => {
+        const warningCount = student.enrolledSubjects.filter(sub => assignedSubjects.includes(sub.code) && sub.grade > 2.5).length;
+        const riskLevel = warningCount > 0 ? 'HIGH' : 'LOW';
+        const remedialCount = student.remedialExams.filter(rem => rem.status === 'pending').length;
+        const remStatus = remedialCount > 0 ? 'PENDING EXAM' : 'STABLE';
+        return `${student.studentId},"${student.name}",${student.overallGWA.toFixed(2)},${warningCount},${riskLevel},${remStatus}`;
+      }).join('\n');
+      fileName = `Retention_Report.csv`;
+    } else {
+      headers = 'Date,Student ID,Name,Subject Code,Status\n';
+      rows = attendanceRecords
+        .filter(r => assignedSubjects.includes(r.subjectCode))
+        .map(record => {
+          const s = students.find(x => x.id === record.studentId);
+          return `${record.date},${s?.studentId || ''},"${s?.name || ''}",${record.subjectCode},${record.status.toUpperCase()}`;
+        }).join('\n');
+      fileName = `Attendance_Report.csv`;
+    }
 
-    return {
-      present: presentOrLate,
-      absent,
-      rate
-    };
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const attStats = selectedStudent ? getStudentAttendanceStats(selectedStudent.id) : { present: 0, absent: 0, rate: 0 };
+  // Recharts Stats: GWA Frequencies
+  const gwaData = useMemo(() => {
+    const buckets = [
+      { name: '1.0 - 1.5', count: 0 },
+      { name: '1.51 - 2.0', count: 0 },
+      { name: '2.01 - 2.5', count: 0 },
+      { name: '2.51 - 3.0', count: 0 },
+      { name: '3.1 - 5.0', count: 0 },
+    ];
+    facultyStudents.forEach(s => {
+      const gwa = s.overallGWA;
+      if (gwa <= 1.5) buckets[0].count++;
+      else if (gwa <= 2.0) buckets[1].count++;
+      else if (gwa <= 2.5) buckets[2].count++;
+      else if (gwa <= 3.0) buckets[3].count++;
+      else buckets[4].count++;
+    });
+    return buckets;
+  }, [facultyStudents]);
+
+  // Recharts Stats: Retention Distribution
+  const pieData = useMemo(() => {
+    const counts = { active: 0, warning: 0, critical: 0, remedial: 0 };
+    facultyStudents.forEach(s => {
+      counts[s.status] = (counts[s.status] || 0) + 1;
+    });
+    return [
+      { name: 'Active Standing', value: counts.active, color: '#10B981' },
+      { name: 'Warning Status', value: counts.warning, color: '#F59E0B' },
+      { name: 'Critical Watch', value: counts.critical, color: '#EF4444' },
+      { name: 'Remedial Programs', value: counts.remedial, color: '#8B5CF6' },
+    ].filter(item => item.value > 0);
+  }, [facultyStudents]);
+
+  // Recharts Stats: Assessment Success Rates
+  const assessmentStatsData = useMemo(() => {
+    const activeAss = assessments.filter(a => assignedSubjects.includes(a.subjectCode) && a.status !== 'Archived');
+    return activeAss.map(ass => {
+      const scores = assessmentScores.filter(s => s.assessmentId === ass.id);
+      const avg = scores.length > 0 
+        ? scores.reduce((acc, curr) => acc + curr.score, 0) / scores.length
+        : 80; // mock default GWA
+      const avgPct = Math.round((avg / ass.maxScore) * 100);
+      return {
+        name: ass.title.length > 15 ? ass.title.substring(0, 15) + '...' : ass.title,
+        average: avgPct
+      };
+    }).slice(0, 5);
+  }, [assessments, assessmentScores, assignedSubjects]);
 
   return (
     <div className="space-y-6">
       
       {/* Page Header - Hidden during print */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print border-b border-slate-205 dark:border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <FileSpreadsheet className="w-6 h-6 text-clinical-500" />
-            Academic Reports Ledger
+            <FileSpreadsheet className="w-6 h-6 text-clinical-550" />
+            Reports & Analytics
           </h1>
-          <p className="text-xs text-slate-400">Generate printable transcript cards, retention lists, and attendance metrics</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Generate GWA evaluation logs, print transcript records, and review analytics dashboards</p>
         </div>
-        <button
-          onClick={handlePrint}
-          className="flex items-center space-x-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-sm shadow-md transition-all active:scale-95"
-        >
-          <Printer className="w-4 h-4" />
-          <span>Print Report Sheet</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Class / Block Switcher */}
+          {assignedClasses.length > 1 && (
+            <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl gap-1">
+              {assignedClasses.map((clsId: string) => {
+                const cls = students.find(s => s.classId === clsId);
+                const label = cls?.className || clsId;
+                const isActive = selectedClassId === clsId;
+                return (
+                  <button
+                    key={clsId}
+                    onClick={() => setSelectedClassId(clsId)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      isActive
+                        ? 'bg-clinical-600 text-white shadow-md'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <button
+            onClick={handlePrint}
+            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 text-slate-650 hover:bg-slate-50 dark:text-slate-350 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 font-bold text-xs"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Report Sheet</span>
+          </button>
+        </div>
       </div>
 
       {/* Selector Controls Card - Hidden during print */}
       <Card className="p-4 flex flex-col md:flex-row gap-4 items-center no-print">
         <div className="w-full md:flex-1">
-          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5 block">Report Template</label>
-          <div className="flex space-x-2">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Report Template Category</label>
+          <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => setReportType('card')}
+              onClick={() => setReportTab('academic')}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                reportType === 'card' 
-                  ? 'bg-clinical-500 text-white' 
-                  : 'bg-slate-100 dark:bg-slate-900 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
+                reportTab === 'academic' 
+                  ? 'bg-clinical-500 text-white shadow-md shadow-clinical-500/10' 
+                  : 'bg-slate-100 dark:bg-slate-950 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
               }`}
             >
-              Academic Report Card
+              Academic GWAs Ledger
             </button>
             <button
-              onClick={() => setReportType('standing')}
+              onClick={() => setReportTab('retention')}
               className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                reportType === 'standing' 
-                  ? 'bg-clinical-500 text-white' 
-                  : 'bg-slate-100 dark:bg-slate-900 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
+                reportTab === 'retention' 
+                  ? 'bg-clinical-500 text-white shadow-md shadow-clinical-500/10' 
+                  : 'bg-slate-100 dark:bg-slate-950 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
               }`}
             >
-              Retention Standing Summary
+              Retention Watch Lists
+            </button>
+            <button
+              onClick={() => setReportTab('attendance')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                reportTab === 'attendance' 
+                  ? 'bg-clinical-500 text-white shadow-md shadow-clinical-500/10' 
+                  : 'bg-slate-100 dark:bg-slate-950 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
+              }`}
+            >
+              Attendance Registers
+            </button>
+            <button
+              onClick={() => setReportTab('analytics')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
+                reportTab === 'analytics' 
+                  ? 'bg-clinical-500 text-white shadow-md shadow-clinical-500/10' 
+                  : 'bg-slate-100 dark:bg-slate-950 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              Interactive Analytics
             </button>
           </div>
         </div>
 
-        {reportType === 'card' && (
-          <div className="w-full md:w-64">
-            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1.5 block">Student Name</label>
+        {reportTab === 'academic' && (
+          <div className="w-full md:w-56 self-end md:self-auto">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Select Subject</label>
             <select
-              value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-clinical-500"
+              value={selectedSubjectCode}
+              onChange={(e) => setSelectedSubjectCode(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-808 dark:text-slate-100 text-xs font-semibold focus:outline-none"
             >
-              {students.map(s => (
-                <option key={s.id} value={s.id}>{s.name} ({s.studentId})</option>
+              {assignedSubjects.map((subCode: string) => (
+                <option key={subCode} value={subCode}>{subCode}</option>
               ))}
             </select>
           </div>
         )}
       </Card>
 
-      {/* REPORT SHEETS PRINT AREA */}
-      <div className="print-area">
-        
-        {/* Template 1: Student Report Card */}
-        {reportType === 'card' && selectedStudent && (
-          <Card className="max-w-3xl mx-auto p-8 bg-white text-slate-800 border border-slate-200 dark:border-slate-800/80 shadow-md">
-            
-            {/* School Header */}
-            <div className="text-center space-y-1.5 border-b-2 border-clinical-500 pb-6 mb-6">
-              <span className="text-3xl">🦷</span>
-              <h2 className="font-heading font-extrabold text-2xl tracking-tight text-slate-800 uppercase">
-                DentiSys College of Dentistry
-              </h2>
-              <p className="text-xs uppercase tracking-widest text-slate-400 font-bold">Official Transcript of Student Grades</p>
-              <p className="text-[10px] text-slate-400">120 Medical Plaza, Taft Ave, Metro Manila</p>
-            </div>
+      {/* ----------------------------------------------------
+          TAB 1: ACADEMIC REPORTS LEDGER
+      ---------------------------------------------------- */}
+      {reportTab === 'academic' && (
+        <Card className="p-0 overflow-hidden no-print">
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
+            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Class Course Grade Reports</h3>
+            <button
+              onClick={() => handleExportCSV('academic')}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
+          </div>
 
-            {/* Profile Info Grid */}
-            <div className="grid grid-cols-2 gap-4 text-xs mb-6 p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
-              <div>
-                <p className="text-slate-400 uppercase font-bold tracking-wider text-[10px]">Student Name</p>
-                <p className="font-bold text-sm text-slate-800 dark:text-slate-200 mt-0.5">{selectedStudent.name}</p>
-                
-                <p className="text-slate-400 uppercase font-bold tracking-wider text-[10px] mt-3">Student ID</p>
-                <p className="font-medium mt-0.5 text-slate-700 dark:text-slate-300">{selectedStudent.studentId}</p>
-              </div>
-
-              <div>
-                <p className="text-slate-400 uppercase font-bold tracking-wider text-[10px]">Year Level</p>
-                <p className="font-semibold mt-0.5 text-slate-700 dark:text-slate-300">
-                  {selectedStudent.yearLevel}rd Year (Clinician)
-                </p>
-
-                <p className="text-slate-400 uppercase font-bold tracking-wider text-[10px] mt-3">Email Address</p>
-                <p className="font-medium mt-0.5 text-slate-700 dark:text-slate-300">{selectedStudent.email}</p>
-              </div>
-            </div>
-
-            {/* Grades Table */}
-            <div className="space-y-4">
-              <h3 className="font-bold text-xs uppercase text-clinical-650 tracking-wider">Academic Performance Ledger</h3>
-              
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 pb-2 text-[10px] text-slate-450 font-bold uppercase">
-                    <th className="py-2">Course Code</th>
-                    <th className="py-2">Subject Title</th>
-                    <th className="py-2 text-center">Units</th>
-                    <th className="py-2 text-center">Type</th>
-                    <th className="py-2 text-right">Grade (GWA)</th>
-                    <th className="py-2 text-right">Remarks</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium">
-                  {selectedStudent.enrolledSubjects.map(subj => (
-                    <tr key={subj.code}>
-                      <td className="py-3 font-bold text-slate-750 dark:text-slate-300 uppercase">{subj.code}</td>
-                      <td className="py-3 text-slate-800 dark:text-slate-200">{subj.name}</td>
-                      <td className="py-3 text-center text-slate-600">{subj.units}</td>
-                      <td className="py-3 text-center text-slate-500">{subj.isClinical ? 'Clinical' : 'Lecture'}</td>
-                      <td className="py-3 text-right font-extrabold text-slate-900 dark:text-slate-100">{subj.grade}</td>
-                      <td className={`py-3 text-right font-bold ${
-                        subj.grade > 2.5 && subj.isClinical 
-                          ? 'text-rose-500' 
-                          : subj.grade === 5.0 
-                          ? 'text-rose-600' 
-                          : 'text-emerald-500'
-                      }`}>
-                        {subj.grade > 2.5 && subj.isClinical 
-                          ? 'FAIL (Retention)' 
-                          : subj.grade === 5.0 
-                          ? 'FAIL' 
-                          : 'PASS'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Overall calculations panel */}
-            <div className="grid grid-cols-3 gap-4 border-t-2 border-slate-150 dark:border-slate-850 pt-6 mt-6 text-center">
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Overall GWA</p>
-                <p className="text-2xl font-extrabold font-heading mt-0.5 text-clinical-600 dark:text-clinical-400">
-                  {selectedStudent.overallGWA}
-                </p>
-                <p className="text-[9px] text-slate-450 italic mt-0.5">({gwaToDescription(selectedStudent.overallGWA)})</p>
-              </div>
-
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Attendance Rate</p>
-                <p className="text-2xl font-extrabold font-heading mt-0.5 text-accent-500">
-                  {attStats.rate}%
-                </p>
-                <p className="text-[9px] text-slate-450 mt-0.5">{attStats.present} present | {attStats.absent} absent</p>
-              </div>
-
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Retention standing</p>
-                <p className={`text-sm font-extrabold mt-2 uppercase tracking-wide ${
-                  selectedStudent.status === 'active' ? 'text-emerald-500' :
-                  selectedStudent.status === 'remedial' ? 'text-accent-500' : 'text-rose-500'
-                }`}>
-                  {selectedStudent.status}
-                </p>
-              </div>
-            </div>
-
-            {/* Remedial Record details in Card if any */}
-            {selectedStudent.remedialExams.length > 0 && (
-              <div className="mt-8 p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl space-y-2">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Remedial Exams Log</h4>
-                {selectedStudent.remedialExams.map(rem => (
-                  <div key={rem.id} className="text-[11px] flex justify-between items-center py-1">
-                    <div>
-                      <span className="font-bold text-slate-700 dark:text-slate-350">{rem.subjectCode} - {rem.subjectName}</span>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Original Grade: {rem.originalGrade} | Exam Date: {rem.examDate}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`px-2 py-0.5 text-[9px] font-bold rounded uppercase ${
-                        rem.status === 'passed' 
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' 
-                          : rem.status === 'failed' 
-                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400' 
-                          : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
-                      }`}>
-                        {rem.status}
-                      </span>
-                      {rem.remedialScore && <p className="font-bold text-slate-700 dark:text-slate-300 mt-0.5">{rem.remedialScore}%</p>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* School Seal and Signatures */}
-            <div className="flex justify-between items-end mt-12 pt-8 border-t border-dashed border-slate-200">
-              <div className="text-center w-40">
-                <div className="h-0.5 w-full bg-slate-400 mb-1" />
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Registrar Seal</p>
-              </div>
-              
-              <div className="text-center w-40">
-                <p className="text-xs font-bold text-slate-800">Dr. Eleanor Vance</p>
-                <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Academic Dean Signature</p>
-              </div>
-            </div>
-
-          </Card>
-        )}
-
-        {/* Template 2: Retention Standing Summary List */}
-        {reportType === 'standing' && (
-          <Card className="p-8 bg-white text-slate-800 border border-slate-200 dark:border-slate-800 shadow-md">
-            {/* Report Header */}
-            <div className="text-center space-y-1 pb-5 border-b-2 border-slate-350 mb-6">
-              <h2 className="font-heading font-extrabold text-xl uppercase tracking-tight text-slate-800">
-                Retention Standing Master Ledger
-              </h2>
-              <p className="text-xs text-slate-450 uppercase tracking-widest font-bold">List of all active enrolled students with warning counts</p>
-              <p className="text-[10px] text-slate-400">Semester 1 Evaluation Period - Created: {new Date().toISOString().split('T')[0]}</p>
-            </div>
-
-            {/* Standing summary Stats boxes */}
-            <div className="grid grid-cols-4 gap-4 text-center mb-6">
-              <div className="p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-500">Active Good Standing</p>
-                <h4 className="text-2xl font-bold font-heading">{activeCount}</h4>
-              </div>
-              <div className="p-3 bg-amber-50 text-amber-700 border border-amber-100 rounded-xl">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-amber-500">Academic Warnings</p>
-                <h4 className="text-2xl font-bold font-heading">{warningCount}</h4>
-              </div>
-              <div className="p-3 bg-rose-50 text-rose-700 border border-rose-100 rounded-xl">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-rose-500">Critical Standings</p>
-                <h4 className="text-2xl font-bold font-heading">{criticalCount}</h4>
-              </div>
-              <div className="p-3 bg-accent-50 text-accent-700 border border-accent-100 rounded-xl">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-accent-500">Under Remedial</p>
-                <h4 className="text-2xl font-bold font-heading">{remedialCount}</h4>
-              </div>
-            </div>
-
-            {/* Students Standing table */}
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-slate-200 pb-2 text-[10px] text-slate-400 uppercase font-bold">
-                  <th className="py-2.5">Student ID</th>
-                  <th className="py-2.5">Student Name</th>
-                  <th className="py-2.5">Year</th>
-                  <th className="py-2.5">GWA</th>
-                  <th className="py-2.5">Standing</th>
-                  <th className="py-2.5 text-right">Violations List</th>
+                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                  <th className="px-5 py-3">Student details</th>
+                  <th className="px-5 py-3 text-center">Quizzes</th>
+                  <th className="px-5 py-3 text-center">Practicum</th>
+                  <th className="px-5 py-3 text-center">Exams</th>
+                  <th className="px-5 py-3 text-center">Attendance</th>
+                  <th className="px-5 py-3 text-center">Computed GWA</th>
+                  <th className="px-5 py-3">Remarks</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                {students.map(s => {
-                  const violations = s.enrolledSubjects.filter(sub => (sub.isClinical && sub.grade > 2.5) || sub.grade === 5.0);
-                  
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
+                {studentsInSelectedSubject.map(student => {
+                  const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+                  const isFailsRetention = subj && subj.isClinical && subj.grade > settings.retentionThreshold;
+                  const isFailed = subj && subj.grade === 5.0;
+
                   return (
-                    <tr key={s.id} className="hover:bg-slate-50">
-                      <td className="py-3 font-semibold text-slate-500">{s.studentId}</td>
-                      <td className="py-3 font-bold text-slate-800">{s.name}</td>
-                      <td className="py-3">Year {s.yearLevel}</td>
-                      <td className="py-3 font-bold text-slate-800">{s.overallGWA}</td>
-                      <td className="py-3">
-                        <span className={`px-2 py-0.5 text-[9px] font-bold rounded uppercase ${
-                          s.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
-                          s.status === 'remedial' ? 'bg-accent-100 text-accent-700' :
-                          s.status === 'critical' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+                    <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
+                      <td className="px-5 py-3.5">
+                        <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
+                        <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj ? subj.components.exams.toFixed(1) : '80.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
+                        {subj ? subj.grade.toFixed(2) : '2.50'}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                          isFailed 
+                            ? 'bg-rose-100 text-rose-700' 
+                            : isFailsRetention 
+                            ? 'bg-amber-100 text-amber-700' 
+                            : 'bg-emerald-100 text-emerald-700'
                         }`}>
-                          {s.status}
+                          {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
                         </span>
                       </td>
-                      <td className="py-3 text-right text-[11px] text-rose-500 font-semibold">
-                        {violations.length > 0 ? (
-                          <span>{violations.map(v => v.code).join(', ')}</span>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* ----------------------------------------------------
+          TAB 2: RETENTION REPORTS
+      ---------------------------------------------------- */}
+      {reportTab === 'retention' && (
+        <Card className="p-0 overflow-hidden no-print">
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
+            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Retention Status Reports</h3>
+            <button
+              onClick={() => handleExportCSV('retention')}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                  <th className="px-5 py-3">Student details</th>
+                  <th className="px-5 py-3 text-center">Standing GWA</th>
+                  <th className="px-5 py-3 text-center">Warning Counts</th>
+                  <th className="px-5 py-3 text-center">Risk Level</th>
+                  <th className="px-5 py-3">Remedial Program Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
+                {facultyStudents.map(student => {
+                  const warnings = student.enrolledSubjects.filter(sub => assignedSubjects.includes(sub.code) && sub.grade > 2.5);
+                  const isAtRisk = warnings.length > 0;
+                  const remedialCount = student.remedialExams.filter(rem => rem.status === 'pending').length;
+
+                  return (
+                    <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
+                      <td className="px-5 py-3.5">
+                        <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
+                        <span className="text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">{student.overallGWA.toFixed(2)}</td>
+                      <td className="px-5 py-3.5 text-center font-semibold text-rose-500">{warnings.length} Warnings</td>
+                      <td className="px-5 py-3.5 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                          isAtRisk ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {isAtRisk ? 'HIGH RISK' : 'LOW RISK'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-550 dark:text-slate-400">
+                        {remedialCount > 0 ? (
+                          <span className="font-semibold text-violet-555 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> Pending {remedialCount} exam(s)
+                          </span>
                         ) : (
-                          <span className="text-emerald-500 font-bold">None</span>
+                          <span className="font-medium text-slate-400">Stable standing</span>
                         )}
                       </td>
                     </tr>
@@ -347,10 +419,295 @@ export const Reports: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        </Card>
+      )}
+
+      {/* ----------------------------------------------------
+          TAB 3: ATTENDANCE REPORTS
+      ---------------------------------------------------- */}
+      {reportTab === 'attendance' && (
+        <Card className="p-0 overflow-hidden no-print">
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
+            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Intake Attendance Registers</h3>
+            <button
+              onClick={() => handleExportCSV('attendance')}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export CSV
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
+                  <th className="px-5 py-3">Date</th>
+                  <th className="px-5 py-3">Student details</th>
+                  <th className="px-5 py-3">Subject Code</th>
+                  <th className="px-5 py-3">Recorded Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
+                {attendanceRecords
+                  .filter(r => assignedSubjects.includes(r.subjectCode))
+                  .map(record => {
+                    const studentObj = students.find(s => s.id === record.studentId);
+                    return (
+                      <tr key={record.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
+                        <td className="px-5 py-3 font-mono">{record.date}</td>
+                        <td className="px-5 py-3">
+                          <div className="font-bold text-slate-800 dark:text-slate-202">{studentObj?.name}</div>
+                          <span className="text-[10px] text-slate-400 font-mono">{studentObj?.studentId}</span>
+                        </td>
+                        <td className="px-5 py-3 font-bold font-mono text-clinical-650">{record.subjectCode}</td>
+                        <td className="px-5 py-3">
+                          <span className={`px-2 py-0.5 rounded font-extrabold uppercase text-[9px] ${
+                            record.status === 'present' ? 'bg-emerald-100 text-emerald-700' :
+                            record.status === 'late' ? 'bg-amber-100 text-amber-700' :
+                            record.status === 'excused' ? 'bg-sky-100 text-sky-700' : 'bg-rose-100 text-rose-700'
+                          }`}>
+                            {record.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* ----------------------------------------------------
+          TAB 4: ANALYTICS CHARTS
+      ---------------------------------------------------- */}
+      {reportTab === 'analytics' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 no-print">
+          {/* Pie Chart */}
+          <Card className="p-5 flex flex-col justify-between">
+            <div>
+              <h4 className="text-xs font-bold text-slate-850 dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <Layers className="w-4 h-4 text-clinical-550" />
+                Retention Watch Standings
+              </h4>
+              <p className="text-[10px] text-slate-400 mb-4">Proportion of student academic standing warnings</p>
+            </div>
+            <div className="h-56 flex items-center justify-center">
+              {pieData.length === 0 ? (
+                <p className="text-xs text-slate-400 font-semibold">No warning distribution data available.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [`${value} Students`, 'Count']} />
+                    <Legend 
+                      layout="horizontal" 
+                      verticalAlign="bottom" 
+                      align="center"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </Card>
+
+          {/* Bar Chart */}
+          <Card className="p-5 flex flex-col justify-between">
+            <div>
+              <h4 className="text-xs font-bold text-slate-850 dark:text-slate-205 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <FileCheck className="w-4 h-4 text-accent-505" />
+                GWA Distribution
+              </h4>
+              <p className="text-[10px] text-slate-400 mb-4">Number of students within GWA academic thresholds</p>
+            </div>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={gwaData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" className="dark:stroke-slate-900" />
+                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} tickLine={false} />
+                  <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} allowDecimals={false} />
+                  <Tooltip cursor={{ fill: 'rgba(79, 70, 229, 0.05)' }} />
+                  <Bar dataKey="count" fill="#4f46e5" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          {/* Assessment Performance Chart */}
+          <Card className="p-5 flex flex-col justify-between md:col-span-2">
+            <div>
+              <h4 className="text-xs font-bold text-slate-855 dark:text-slate-205 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <FileText className="w-4 h-4 text-clinical-550" />
+                Assessment Average Success Rates
+              </h4>
+              <p className="text-[10px] text-slate-400 mb-4">Average scores across created assessment activities (out of 100%)</p>
+            </div>
+            <div className="h-56">
+              {assessmentStatsData.length === 0 ? (
+                <div className="py-12 text-center text-slate-405 text-xs">No assessment grades recorded yet.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={assessmentStatsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" className="dark:stroke-slate-900" />
+                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} tickLine={false} />
+                    <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} domain={[0, 100]} />
+                    <Tooltip formatter={(v: any) => [`${v}%`, 'Average']} />
+                    <Bar dataKey="average" fill="#0d9488" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------
+          PRINT LAYOUT SHEETS PRINT AREA
+      ---------------------------------------------------- */}
+      <div className="print-only hidden p-8 bg-white text-slate-900 space-y-6">
+        
+        {/* school header */}
+        <div className="text-center space-y-1.5 border-b-2 border-slate-800 pb-5 mb-6">
+          <h2 className="font-heading font-extrabold text-2xl tracking-tight uppercase">DentiSys Academic Portal</h2>
+          <p className="text-xs uppercase tracking-widest text-slate-500 font-bold">Official College Evaluations Report</p>
+          <p className="text-[10px] text-slate-400">Class: {assignedClasses.join(', ')} • Date: {new Date().toISOString().split('T')[0]}</p>
+        </div>
+
+        {/* Dynamic content printing tables */}
+        {reportTab === 'academic' && (
+          <div className="space-y-4">
+            <h3 className="font-bold text-xs uppercase tracking-wider">Academic GWA Evaluation Ledger ({selectedSubjectCode})</h3>
+            <table className="w-full border-collapse border border-slate-350 text-[11px]">
+              <thead>
+                <tr className="bg-slate-100 text-left font-bold uppercase">
+                  <th className="border border-slate-300 px-3 py-2">Student ID</th>
+                  <th className="border border-slate-300 px-3 py-2">Student Name</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Quizzes</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Practicum</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Exams</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Attendance</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">GWA</th>
+                </tr>
+              </thead>
+              <tbody>
+                {studentsInSelectedSubject.map(student => {
+                  const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+                  return (
+                    <tr key={student.id}>
+                      <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj ? subj.components.exams.toFixed(1) : '80.0'}%</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{subj ? subj.grade.toFixed(2) : '2.50'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
+        {reportTab === 'retention' && (
+          <div className="space-y-4">
+            <h3 className="font-bold text-xs uppercase tracking-wider">Retention watch ledger</h3>
+            <table className="w-full border-collapse border border-slate-350 text-[11px]">
+              <thead>
+                <tr className="bg-slate-100 text-left font-bold uppercase">
+                  <th className="border border-slate-300 px-3 py-2">Student ID</th>
+                  <th className="border border-slate-300 px-3 py-2">Student Name</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">GWA</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Standing Status</th>
+                  <th className="border border-slate-300 px-3 py-2">Remedials Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {facultyStudents.map(student => {
+                  const warnings = student.enrolledSubjects.filter(sub => assignedSubjects.includes(sub.code) && sub.grade > 2.5);
+                  const remedialCount = student.remedialExams.filter(rem => rem.status === 'pending').length;
+                  return (
+                    <tr key={student.id}>
+                      <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{student.overallGWA.toFixed(2)}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center capitalize">{student.status}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-slate-500">
+                        {remedialCount > 0 ? `Pending ${remedialCount} exam(s)` : 'Stable standing'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {reportTab === 'attendance' && (
+          <div className="space-y-4">
+            <h3 className="font-bold text-xs uppercase tracking-wider">Attendance Register ledger</h3>
+            <table className="w-full border-collapse border border-slate-350 text-[11px]">
+              <thead>
+                <tr className="bg-slate-100 text-left font-bold uppercase">
+                  <th className="border border-slate-300 px-3 py-2">Date</th>
+                  <th className="border border-slate-300 px-3 py-2">Student ID</th>
+                  <th className="border border-slate-300 px-3 py-2">Name</th>
+                  <th className="border border-slate-300 px-3 py-2">Subject</th>
+                  <th className="border border-slate-300 px-3 py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendanceRecords
+                  .filter(r => assignedSubjects.includes(r.subjectCode))
+                  .map(record => {
+                    const s = students.find(x => x.id === record.studentId);
+                    return (
+                      <tr key={record.id}>
+                        <td className="border border-slate-300 px-3 py-1.5 font-mono">{record.date}</td>
+                        <td className="border border-slate-300 px-3 py-1.5 font-mono">{s?.studentId}</td>
+                        <td className="border border-slate-300 px-3 py-1.5 font-bold">{s?.name}</td>
+                        <td className="border border-slate-300 px-3 py-1.5 font-mono">{record.subjectCode}</td>
+                        <td className="border border-slate-300 px-3 py-1.5 capitalize">{record.status}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* seal signature */}
+        <div className="flex justify-between items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
+          <div className="text-center w-40">
+            <div className="h-0.5 w-full bg-slate-400 mb-1" />
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Registrar Seal</p>
+          </div>
+          
+          <div className="text-center w-48">
+            <p className="font-bold">{currentUser.name}</p>
+            <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Academic Faculty Dean</p>
+          </div>
+        </div>
+
       </div>
+
     </div>
   );
 };

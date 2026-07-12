@@ -53,37 +53,37 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="rounded-3xl bg-gradient-to-r from-clinical-600 to-accent-600 text-white p-6 shadow-lg border border-white/10">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-white/70">Class Secretary Portal</p>
-            <h1 className="text-2xl font-extrabold font-heading mt-1">{className}</h1>
-            <p className="text-sm text-white/80 mt-1">
-              {secretary?.name || 'Class Secretary'} can access records only for this assigned class.
-            </p>
-          </div>
-          <button
-            onClick={() => navigate('/secretary/attendance')}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-clinical-700 font-bold text-xs rounded-xl shadow-md hover:bg-slate-50 transition-colors"
-          >
-            <ClipboardPenLine className="w-4 h-4" />
-            Open Attendance
-          </button>
+      {/* Standard Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-4 border-b border-slate-200/40 dark:border-slate-800/40 gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
+            Class Secretary Portal
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Viewing clinical assignments and logs for <span className="font-semibold text-blue-650 dark:text-blue-400">{className}</span> (Assigned: {secretary?.name || 'Class Secretary'})
+          </p>
         </div>
+        <button
+          onClick={() => navigate('/secretary/attendance')}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
+        >
+          <ClipboardPenLine className="w-4 h-4" />
+          Open Attendance
+        </button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 flex items-center justify-between">
+        <Card className="p-4 flex items-center justify-between bg-gradient-to-tr from-blue-50 to-blue-100/20 dark:from-blue-950/20 dark:to-blue-900/10 border-blue-200/50 dark:border-blue-800/20 hover:scale-101 transition-all">
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Students</span>
             <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">{classStudents.length}</span>
           </div>
-          <div className="p-2 bg-clinical-500/10 text-clinical-600 rounded-lg">
+          <div className="p-2 bg-blue-500/10 text-blue-600 rounded-lg">
             <Users className="w-5 h-5" />
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center justify-between">
+        <Card className="p-4 flex items-center justify-between bg-gradient-to-tr from-emerald-50 to-emerald-100/20 dark:from-emerald-950/20 dark:to-emerald-900/10 border-emerald-200/50 dark:border-emerald-800/20 hover:scale-101 transition-all">
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
             <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">{getAttendanceRate(classAttendance)}%</span>
@@ -93,17 +93,17 @@ export const Dashboard: React.FC = () => {
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center justify-between">
+        <Card className="p-4 flex items-center justify-between bg-gradient-to-tr from-blue-50 to-blue-100/20 dark:from-blue-950/20 dark:to-blue-900/10 border-blue-200/50 dark:border-blue-800/20 hover:scale-101 transition-all">
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Today Records</span>
             <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">{todayRecords.length}</span>
           </div>
-          <div className="p-2 bg-accent-500/10 text-accent-600 rounded-lg">
+          <div className="p-2 bg-blue-500/10 text-blue-600 rounded-lg">
             <Clock className="w-5 h-5" />
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center justify-between">
+        <Card className="p-4 flex items-center justify-between bg-gradient-to-tr from-amber-50 to-amber-100/20 dark:from-amber-950/20 dark:to-amber-900/10 border-amber-200/50 dark:border-amber-800/20 hover:scale-101 transition-all">
           <div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Overrides</span>
             <span className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1">{overriddenCount}</span>
@@ -120,7 +120,7 @@ export const Dashboard: React.FC = () => {
           return (
             <Card key={action.title} hoverEffect onClick={() => navigate(action.path)} className="min-h-[170px]">
               <CardContent className="h-full flex flex-col justify-between">
-                <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-clinical-600 dark:text-clinical-400">
+                <div className="w-11 h-11 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
                   <Icon className="w-5 h-5" />
                 </div>
                 <div>
