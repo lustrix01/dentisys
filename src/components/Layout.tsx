@@ -123,17 +123,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const getNavItems = (): NavItem[] => {
-    const common = [
-      { name: 'My Profile', path: '/profile', icon: UserCircle },
-      { name: 'Settings', path: '/settings', icon: SettingsIcon },
-    ];
-    
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Retention Criteria', path: '/admin/retention-criteria', icon: AlertTriangle },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet },
-        ...common
+        { name: 'Dean Profile', path: '/admin/profile', icon: UserCircle },
+        { name: 'Dean Settings', path: '/admin/settings', icon: SettingsIcon },
       ];
     }
     
@@ -143,7 +139,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'Manual Override', path: '/secretary/override', icon: ClipboardPenLine },
         { name: 'Live CCTV Feed', path: '/secretary/cctv', icon: Video },
-        ...common
+        { name: 'My Profile', path: '/secretary/profile', icon: UserCircle },
+        { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
       ];
     }
     
@@ -155,7 +152,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       { name: 'Retention Monitoring', path: '/retention', icon: AlertTriangle, badge: 'retention' },
       { name: 'Attendance Monitoring', path: '/attendance', icon: CalendarDays },
       { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet },
-      ...common
+      { name: 'My Profile', path: '/faculty/profile', icon: UserCircle },
+      { name: 'Faculty Settings', path: '/faculty/settings', icon: SettingsIcon },
     ];
   };
 
@@ -195,10 +193,18 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Attendance Monitoring', path: '/attendance' });
     } else if (path === '/reports') {
       crumbs.push({ name: 'Reports & Export', path: '/reports' });
-    } else if (path === '/profile') {
-      crumbs.push({ name: 'My Profile', path: '/profile' });
-    } else if (path === '/settings') {
-      crumbs.push({ name: 'Settings', path: '/settings' });
+    } else if (path === '/faculty/profile') {
+      crumbs.push({ name: 'My Profile', path: '/faculty/profile' });
+    } else if (path === '/faculty/settings') {
+      crumbs.push({ name: 'Faculty Settings', path: '/faculty/settings' });
+    } else if (path === '/admin/profile') {
+      crumbs.push({ name: 'Dean Profile', path: '/admin/profile' });
+    } else if (path === '/admin/settings') {
+      crumbs.push({ name: 'Dean Settings', path: '/admin/settings' });
+    } else if (path === '/secretary/profile') {
+      crumbs.push({ name: 'My Profile', path: '/secretary/profile' });
+    } else if (path === '/secretary/settings') {
+      crumbs.push({ name: 'Settings', path: '/secretary/settings' });
     } else if (path === '/admin/retention-criteria') {
       crumbs.push({ name: 'Retention Criteria', path: '/admin/retention-criteria' });
     } else if (path === '/admin/reports') {
@@ -455,21 +461,21 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                     </div>
 
                     <Link
-                      to="/profile"
+                      to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? '/secretary/profile' : '/faculty/profile'}
                       onClick={() => setIsProfileOpen(false)}
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <User className="w-4 h-4 text-slate-400" />
-                      <span>{currentUser.role === 'secretary' ? 'My Secretary Profile' : 'My Faculty Profile'}</span>
+                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : 'My Faculty Profile'}</span>
                     </Link>
 
                     <Link
-                      to="/settings"
+                      to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
                       onClick={() => setIsProfileOpen(false)}
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <SettingsIcon className="w-4 h-4 text-slate-400" />
-                      <span>System Settings</span>
+                      <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
                     </Link>
 
                     <button

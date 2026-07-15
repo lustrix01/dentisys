@@ -47,7 +47,7 @@ export const Dashboard: React.FC = () => {
       title: 'Profile',
       description: 'View secretary account and class assignment details.',
       icon: UserCircle,
-      path: '/profile',
+      path: '/secretary/profile',
     },
   ];
 
