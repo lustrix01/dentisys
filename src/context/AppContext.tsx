@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Student, AttendanceRecord, SystemSettings, RemedialExam, GradeComponents, EnrolledSubject, AttendanceStatus, Assessment, AssessmentScore, GradingComponentConfig, RetentionLog } from '../types';
+import { recordAudit } from '../services/auditService';
 import { computeSubjectGrade, computeOverallGWA, percentageToGWA } from '../utils/gradeHelper';
 
 interface AppContextProps {
@@ -1409,6 +1410,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       remedialExams: [],
     };
     setStudents(prev => syncStudentGrades([...prev, created], assessments, assessmentScores, gradingComponents, attendanceRecords));
+    recordAudit({ action: 'Created student', module: 'Student Management', description: `Created student record for ${created.name}.`, status: 'Success' });
   };
 
   const updateStudent = (updatedStudent: Student) => {
@@ -1416,10 +1418,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const list = prev.map(s => (s.id === updatedStudent.id ? updatedStudent : s));
       return syncStudentGrades(list, assessments, assessmentScores, gradingComponents, attendanceRecords);
     });
+    recordAudit({ action: 'Updated student', module: 'Student Management', description: `Updated student record for ${updatedStudent.name}.`, status: 'Success' });
   };
 
   const deleteStudent = (id: string) => {
     setStudents(prev => prev.filter(s => s.id !== id));
+    recordAudit({ action: 'Deleted student', module: 'Student Management', description: `Deleted student record ${id}.`, status: 'Warning' });
   };
 
   const updateStudentGrade = (studentId: string, subjectCode: string, components: GradeComponents) => {
@@ -1447,6 +1451,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       return syncStudentGrades(updated, assessments, assessmentScores, gradingComponents, attendanceRecords);
     });
+    recordAudit({ action: 'Modified grade', module: 'Grade Computation', description: `Updated grade components for ${studentId} in ${subjectCode}.`, status: 'Success' });
   };
 
   const addAttendanceRecord = (record: Omit<AttendanceRecord, 'id'>) => {
@@ -1455,6 +1460,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `att-${Math.random().toString(36).substr(2, 9)}`,
     };
     setAttendanceRecords(prev => [...prev, newRecord]);
+    recordAudit({ action: 'Created attendance record', module: 'Attendance', description: `Recorded ${record.status} attendance for ${record.studentId}.`, status: 'Success' });
   };
 
   const overrideAttendanceRecord: AppContextProps['overrideAttendanceRecord'] = ({
@@ -1546,6 +1552,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       return next;
     });
+    recordAudit({ action: 'Overrode attendance', module: 'Attendance', description: `Applied ${status} attendance override for ${studentId}.`, status: 'Warning' });
   };
 
   const addRemedialExam = (newRem: Omit<RemedialExam, 'id' | 'status' | 'remedialScore' | 'remedialGrade'>) => {
@@ -1620,6 +1627,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return syncStudentGrades(updated, assessments, assessmentScores, gradingComponents, attendanceRecords);
     });
+    recordAudit({ action: 'Resolved remedial exam', module: 'Retention Monitoring', description: `Recorded remedial score for ${remedialId}.`, status: 'Success' });
   };
 
   const deleteRemedialExam = (remedialId: string) => {
@@ -1648,6 +1656,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateSettings = (newSettings: SystemSettings) => {
     setSettings(newSettings);
+    recordAudit({ action: 'Updated settings', module: 'Settings', description: 'Updated permitted system or workspace settings.', status: 'Success' });
   };
 
   // Assessment Actions
@@ -1658,15 +1667,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString().split('T')[0]
     };
     setAssessments(prev => [...prev, created]);
+    recordAudit({ action: 'Created assessment', module: 'Grade Computation', description: `Created assessment ${created.title}.`, status: 'Success' });
   };
 
   const updateAssessment = (updated: Assessment) => {
     setAssessments(prev => prev.map(a => a.id === updated.id ? updated : a));
+    recordAudit({ action: 'Updated assessment', module: 'Grade Computation', description: `Updated assessment ${updated.title}.`, status: 'Success' });
   };
 
   const deleteAssessment = (id: string) => {
     setAssessments(prev => prev.filter(a => a.id !== id));
     setAssessmentScores(prev => prev.filter(s => s.assessmentId !== id));
+    recordAudit({ action: 'Deleted assessment', module: 'Grade Computation', description: `Deleted assessment ${id}.`, status: 'Warning' });
   };
 
   const archiveAssessment = (id: string) => {
@@ -1686,6 +1698,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
       return [...filtered, ...newScores];
     });
+    recordAudit({ action: 'Saved assessment scores', module: 'Grade Computation', description: `Saved ${inputScores.length} scores for assessment ${assId}.`, status: 'Success' });
   };
 
   // Grading Components Actions
@@ -1694,6 +1707,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const filtered = prev.filter(c => c.subjectCode !== subCode);
       return [...filtered, ...configs];
     });
+    recordAudit({ action: 'Updated grading components', module: 'Grade Computation', description: `Updated grading components for ${subCode}.`, status: 'Success' });
   };
 
   // Retention Override
@@ -1715,6 +1729,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         retentionHistory: [...(s.retentionHistory || []), log]
       };
     }));
+    recordAudit({ action: 'Overrode retention status', module: 'Retention Monitoring', description: `Changed retention status for ${studId} to ${newStatus}.`, status: 'Warning' });
   };
 
   // Facial Recognition Enrollment

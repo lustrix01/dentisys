@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
+import { recordAudit } from '../../services/auditService';
 
 type ReportTab = 'students' | 'academic' | 'retention' | 'attendance';
 
@@ -55,6 +56,7 @@ export const DeanReports: React.FC = () => {
 
   // ── CSV export ───────────────────────────────────────────
   const handleExportCSV = () => {
+    recordAudit({ action: 'Exported report CSV', module: 'Reports & Analytics', description: `Exported ${activeTab} report data as CSV.`, status: 'Success' });
     const now = new Date();
     const ts = now.toISOString().replace('T', ' ').substring(0, 19);
     let csv = '';
@@ -106,7 +108,7 @@ export const DeanReports: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => { recordAudit({ action: 'Generated report PDF', module: 'Reports & Analytics', description: `Opened ${activeTab} report for PDF printing.`, status: 'Success' }); window.print(); };
 
   // ── Status badge ─────────────────────────────────────────
   const StatusBadge = ({ status }: { status: string }) => {
