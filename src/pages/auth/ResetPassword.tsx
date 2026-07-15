@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
+import { recordAudit } from '../../services/auditService';
 
 export function ResetPassword() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export function ResetPassword() {
     }
     setError('');
     // Simulate password reset
+    recordAudit({ action: 'Changed password', module: 'Authentication', description: 'Password reset completed through the frontend workflow.', status: 'Success' });
     navigate('/login');
   };
 

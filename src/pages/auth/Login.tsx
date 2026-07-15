@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, Key } from 'lucide-react';
+import { recordAudit } from '../../services/auditService';
 
 export function Login() {
   const navigate = useNavigate();
@@ -55,9 +56,11 @@ export function Login() {
       
       if (user) {
         localStorage.setItem('dentisys_user', JSON.stringify(user));
+        recordAudit({ userName: user.name, userRole: user.role, action: 'Logged in', module: 'Authentication', description: 'User signed in with portal credentials.', status: 'Success' });
         setIsLoading(false);
         navigate('/');
       } else {
+        recordAudit({ userName: email, userRole: 'admin', action: 'Failed login attempt', module: 'Authentication', description: 'Invalid portal credentials were submitted.', status: 'Failed' });
         setIsLoading(false);
         setError('Invalid email or password. Please check your credentials and try again.');
       }
@@ -76,6 +79,7 @@ export function Login() {
         assignedClasses: ['CLINIC-A', 'CLINIC-B']
       };
       localStorage.setItem('dentisys_user', JSON.stringify(user));
+      recordAudit({ userName: user.name, userRole: user.role, action: 'Logged in', module: 'Authentication', description: 'User signed in using the configured external sign-in flow.', status: 'Success' });
       setIsLoading(false);
       navigate('/');
     }, 1000);

@@ -21,7 +21,9 @@ import {
   User,
   ClipboardPenLine,
   Video
+  ,ListChecks
 } from 'lucide-react';
+import { recordAudit } from '../services/auditService';
 import { useApp } from '../context/AppContext';
 
 interface LayoutProps {
@@ -117,6 +119,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const handleLogout = () => {
+    recordAudit({ action: 'Logged out', module: 'Authentication', description: 'User signed out of the portal.', status: 'Success' });
     localStorage.removeItem('dentisys_user');
     setIsProfileOpen(false);
     navigate('/login');
@@ -128,6 +131,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Retention Criteria', path: '/admin/retention-criteria', icon: AlertTriangle },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet },
+        { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks },
         { name: 'Dean Profile', path: '/admin/profile', icon: UserCircle },
         { name: 'Dean Settings', path: '/admin/settings', icon: SettingsIcon },
       ];
@@ -139,6 +143,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'Manual Override', path: '/secretary/override', icon: ClipboardPenLine },
         { name: 'Live CCTV Feed', path: '/secretary/cctv', icon: Video },
+        { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
         { name: 'My Profile', path: '/secretary/profile', icon: UserCircle },
         { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
       ];
@@ -152,6 +157,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       { name: 'Retention Monitoring', path: '/retention', icon: AlertTriangle, badge: 'retention' },
       { name: 'Attendance Monitoring', path: '/attendance', icon: CalendarDays },
       { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet },
+      { name: 'My Activity Log', path: '/faculty/audit-trail', icon: ListChecks },
       { name: 'My Profile', path: '/faculty/profile', icon: UserCircle },
       { name: 'Faculty Settings', path: '/faculty/settings', icon: SettingsIcon },
     ];
@@ -209,12 +215,18 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Retention Criteria', path: '/admin/retention-criteria' });
     } else if (path === '/admin/reports') {
       crumbs.push({ name: 'Reports & Analytics', path: '/admin/reports' });
+    } else if (path === '/admin/audit-trail') {
+      crumbs.push({ name: 'Audit Trail', path: '/admin/audit-trail' });
     } else if (path === '/secretary/attendance') {
       crumbs.push({ name: 'Attendance List', path: '/secretary/attendance' });
     } else if (path === '/secretary/override') {
       crumbs.push({ name: 'Manual Override', path: '/secretary/override' });
     } else if (path === '/secretary/cctv') {
       crumbs.push({ name: 'Live CCTV Feed', path: '/secretary/cctv' });
+    } else if (path === '/secretary/audit-trail') {
+      crumbs.push({ name: 'My Activity Log', path: '/secretary/audit-trail' });
+    } else if (path === '/faculty/audit-trail') {
+      crumbs.push({ name: 'My Activity Log', path: '/faculty/audit-trail' });
     } else if (path !== '/') {
       crumbs.push({ name: 'Dashboard', path: '/' });
     }

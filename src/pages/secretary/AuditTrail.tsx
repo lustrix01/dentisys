@@ -1,0 +1,1 @@
+import React from 'react'; import { AuditTrailPage } from '../../components/AuditTrailPage'; export const AuditTrail: React.FC = () => <AuditTrailPage role="secretary" title="My Activity Log" subtitle="Review activity recorded for your class secretary account." accent="blue" />;

@@ -13,6 +13,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { recordAudit } from '../../services/auditService';
 
 interface RetentionCriterion {
   id: string;
@@ -129,6 +130,7 @@ export const RetentionCriteria: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    recordAudit({ action: editingId ? 'Updated retention criterion' : 'Created retention criterion', module: 'Retention Criteria', description: `${editingId ? 'Updated' : 'Created'} retention criterion ${form.name}.`, status: 'Success' });
     if (!validate()) return;
     const now = new Date().toISOString().split('T')[0];
 
@@ -173,6 +175,7 @@ export const RetentionCriteria: React.FC = () => {
 
   const handleDelete = () => {
     if (!deleteTarget) return;
+    recordAudit({ action: 'Deleted retention criterion', module: 'Retention Criteria', description: `Deleted retention criterion ${deleteTarget.name}.`, status: 'Warning' });
     setCriteria(prev => prev.filter(c => c.id !== deleteTarget.id));
     setDeleteTarget(null);
   };

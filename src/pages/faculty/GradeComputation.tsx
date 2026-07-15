@@ -27,6 +27,7 @@ import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore,
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { percentageToGWA, gwaToDescription, computeSubjectGrade } from '../../utils/gradeHelper';
+import { recordAudit } from '../../services/auditService';
 
 export const GradeComputation: React.FC = () => {
   const { 
@@ -403,6 +404,7 @@ export const GradeComputation: React.FC = () => {
   }, [activeStudents, summarySearch, sortField, sortAsc, selectedSubjectCode]);
 
   const handleExportCSV = () => {
+    recordAudit({ action: 'Exported grade CSV', module: 'Grade Computation', description: `Exported grade ledger for ${selectedSubjectCode}.`, status: 'Success' });
     let headers = 'Student ID,Name,Midterm Grade,Final Grade,Overall GWA,Status\n';
     let rows = sortedSummaryStudents.map(student => {
       const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);

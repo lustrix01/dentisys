@@ -15,12 +15,15 @@ import { Reports } from './pages/faculty/Reports';
 import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
 import { RetentionCriteria } from './pages/admin/RetentionCriteria';
 import { DeanReports } from './pages/admin/SystemAudit';
+import { AuditTrail as DeanAuditTrail } from './pages/admin/AuditTrail';
 
 // Class Secretary Page Imports
 import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
 import { AttendanceList as SecretaryAttendanceList } from './pages/secretary/AttendanceList';
 import { ManualAttendanceOverride } from './pages/secretary/ManualAttendanceOverride';
 import { CCTVFeed as SecretaryCCTVFeed } from './pages/secretary/CCTVFeed';
+import { AuditTrail as SecretaryAuditTrail } from './pages/secretary/AuditTrail';
+import { AuditTrail as FacultyAuditTrail } from './pages/faculty/AuditTrail';
 
 import { Profile as FacultyProfile } from './pages/faculty/Profile';
 import { Settings as FacultySettings } from './pages/faculty/Settings';
@@ -58,13 +61,15 @@ const MainApp = () => {
         <Route path="/retention" element={currentUser.role === 'faculty' ? <RetentionMonitoring /> : <Navigate to="/" replace />} />
         <Route path="/attendance" element={currentUser.role === 'faculty' ? <AttendanceMonitoring /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={currentUser.role === 'faculty' ? <Reports /> : <Navigate to="/" replace />} />
+        <Route path="/faculty/audit-trail" element={currentUser.role === 'faculty' ? <FacultyAuditTrail /> : <Navigate to="/" replace />} />
 
         {/* Dean Routes */}
         <Route path="/admin/retention-criteria" element={currentUser.role === 'admin' ? <RetentionCriteria /> : <Navigate to="/" replace />} />
         <Route path="/admin/reports" element={currentUser.role === 'admin' ? <DeanReports /> : <Navigate to="/" replace />} />
+        <Route path="/admin/audit-trail" element={currentUser.role === 'admin' ? <DeanAuditTrail /> : <Navigate to="/" replace />} />
         {/* Legacy routes: redirect to dashboard */}
         <Route path="/admin/users" element={<Navigate to="/" replace />} />
-        <Route path="/admin/audit" element={<Navigate to="/admin/reports" replace />} />
+        <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
 
         {/* Class Secretary Routes */}
         <Route
@@ -79,6 +84,7 @@ const MainApp = () => {
           path="/secretary/cctv"
           element={currentUser.role === 'secretary' ? <SecretaryCCTVFeed /> : <Navigate to="/" replace />}
         />
+        <Route path="/secretary/audit-trail" element={currentUser.role === 'secretary' ? <SecretaryAuditTrail /> : <Navigate to="/" replace />} />
 
         {/* Role-specific account routes */}
         <Route path="/faculty/profile" element={currentUser.role === 'faculty' ? <FacultyProfile /> : <Navigate to="/" replace />} />
