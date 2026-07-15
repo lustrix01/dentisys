@@ -22,9 +22,12 @@ import { AttendanceList as SecretaryAttendanceList } from './pages/secretary/Att
 import { ManualAttendanceOverride } from './pages/secretary/ManualAttendanceOverride';
 import { CCTVFeed as SecretaryCCTVFeed } from './pages/secretary/CCTVFeed';
 
-// Shared Page Imports
-import { Profile } from './pages/shared/Profile';
-import { Settings } from './pages/shared/Settings';
+import { Profile as FacultyProfile } from './pages/faculty/Profile';
+import { Settings as FacultySettings } from './pages/faculty/Settings';
+import { Profile as DeanProfile } from './pages/admin/Profile';
+import { Settings as DeanSettings } from './pages/admin/Settings';
+import { Profile as SecretaryProfile } from './pages/secretary/Profile';
+import { Settings as SecretarySettings } from './pages/secretary/Settings';
 import { Login } from './pages/auth/Login';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
@@ -77,9 +80,13 @@ const MainApp = () => {
           element={currentUser.role === 'secretary' ? <SecretaryCCTVFeed /> : <Navigate to="/" replace />}
         />
 
-        {/* Shared Routes */}
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/settings" element={<Settings />} />
+        {/* Role-specific account routes */}
+        <Route path="/faculty/profile" element={currentUser.role === 'faculty' ? <FacultyProfile /> : <Navigate to="/" replace />} />
+        <Route path="/faculty/settings" element={currentUser.role === 'faculty' ? <FacultySettings /> : <Navigate to="/" replace />} />
+        <Route path="/admin/profile" element={currentUser.role === 'admin' ? <DeanProfile /> : <Navigate to="/" replace />} />
+        <Route path="/admin/settings" element={currentUser.role === 'admin' ? <DeanSettings /> : <Navigate to="/" replace />} />
+        <Route path="/secretary/profile" element={currentUser.role === 'secretary' ? <SecretaryProfile /> : <Navigate to="/" replace />} />
+        <Route path="/secretary/settings" element={currentUser.role === 'secretary' ? <SecretarySettings /> : <Navigate to="/" replace />} />
 
         {/* Fallback route */}
         <Route path="*" element={<Navigate to="/" replace />} />
