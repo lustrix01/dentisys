@@ -78,6 +78,8 @@ export interface Student {
   clinicHoursCompleted: number; // For clinicians (3rd & 4th years)
   remedialExams: RemedialExam[];
   faceEnrolled?: boolean; // For facial recognition attendance tracking
+  consentStatus?: 'pending' | 'approved' | 'declined';
+  consentRespondedAt?: string;
   faceEnrollmentDetails?: { images: string[]; status: string; enrolledAt: string };
   retentionHistory?: RetentionLog[];
 }

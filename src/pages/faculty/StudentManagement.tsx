@@ -163,6 +163,11 @@ export const StudentManagement: React.FC = () => {
   // Facial Biometrics multi-angle scanning simulation
   const startBiometricEnrollment = () => {
     if (!facialStudentId) return;
+    const student = facultyStudents.find(s => s.id === facialStudentId);
+    if (student?.consentStatus !== 'approved') {
+      alert('Facial enrollment requires approved privacy consent. Send a request from Email Management first.');
+      return;
+    }
     setIsScanning(true);
     setScanStep(1);
     setScanProgress(0);
@@ -578,6 +583,12 @@ export const StudentManagement: React.FC = () => {
                         {selectedFacialStudent.faceEnrolled ? 'ENROLLED & ACTIVE' : 'PENDING BIOMETRIC INTAKE'}
                       </span>
                     </div>
+                    <div>
+                      <span className="text-slate-400 font-semibold">Privacy Consent:</span>{' '}
+                      <span className={selectedFacialStudent.consentStatus === 'approved' ? 'text-emerald-555 font-bold' : 'text-amber-550 font-bold'}>
+                        {(selectedFacialStudent.consentStatus || 'pending').toUpperCase()}
+                      </span>
+                    </div>
                     {selectedFacialStudent.faceEnrollmentDetails && (
                       <div>
                         <span className="text-slate-400 font-semibold">Registered:</span>{' '}
@@ -591,7 +602,7 @@ export const StudentManagement: React.FC = () => {
                   <button
                     type="button"
                     onClick={startBiometricEnrollment}
-                    disabled={isScanning || !facialStudentId}
+                    disabled={isScanning || !facialStudentId || selectedFacialStudent?.consentStatus !== 'approved'}
                     className="w-full py-3 rounded-xl bg-clinical-500 hover:bg-clinical-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-clinical-500/10 cursor-pointer"
                   >
                     {isScanning ? (

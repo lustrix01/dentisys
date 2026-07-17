@@ -10,6 +10,7 @@ import { GradeComputation } from './pages/faculty/GradeComputation';
 import { RetentionMonitoring } from './pages/faculty/RetentionMonitoring';
 import { AttendanceMonitoring } from './pages/faculty/AttendanceMonitoring';
 import { Reports } from './pages/faculty/Reports';
+import { EmailManagement } from './pages/faculty/EmailManagement';
 
 // Dean (Admin) Page Imports
 import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
@@ -61,6 +62,7 @@ const MainApp = () => {
         <Route path="/retention" element={currentUser.role === 'faculty' ? <RetentionMonitoring /> : <Navigate to="/" replace />} />
         <Route path="/attendance" element={currentUser.role === 'faculty' ? <AttendanceMonitoring /> : <Navigate to="/" replace />} />
         <Route path="/reports" element={currentUser.role === 'faculty' ? <Reports /> : <Navigate to="/" replace />} />
+        <Route path="/email-management" element={currentUser.role === 'faculty' ? <EmailManagement /> : <Navigate to="/" replace />} />
         <Route path="/faculty/audit-trail" element={currentUser.role === 'faculty' ? <FacultyAuditTrail /> : <Navigate to="/" replace />} />
 
         {/* Dean Routes */}

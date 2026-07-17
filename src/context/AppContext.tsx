@@ -47,6 +47,7 @@ interface AppContextProps {
   // Face Enrollment
   enrollStudentFace: (studentId: string, images: string[]) => void;
   deleteStudentFace: (studentId: string) => void;
+  updateFaceConsent: (studentId: string, status: 'approved' | 'declined') => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -1759,6 +1760,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const updateFaceConsent = (studId: string, status: 'approved' | 'declined') => {
+    setStudents(prev => prev.map(s => s.id === studId ? {
+      ...s,
+      consentStatus: status,
+      consentRespondedAt: new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })
+    } : s));
+    recordAudit({ action: `Facial recognition consent ${status}`, module: 'Email Management', description: `Recorded ${status} consent for ${studId}.`, status: 'Success' });
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1787,6 +1797,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         overrideRetentionStatus,
         enrollStudentFace,
         deleteStudentFace,
+        updateFaceConsent,
       }}
     >
       {children}
