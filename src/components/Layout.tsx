@@ -21,7 +21,8 @@ import {
   User,
   ClipboardPenLine,
   Video
-  ,ListChecks
+  ,ListChecks,
+  Mail
 } from 'lucide-react';
 import { recordAudit } from '../services/auditService';
 import { useApp } from '../context/AppContext';
@@ -157,6 +158,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       { name: 'Retention Monitoring', path: '/retention', icon: AlertTriangle, badge: 'retention' },
       { name: 'Attendance Monitoring', path: '/attendance', icon: CalendarDays },
       { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet },
+      { name: 'Email Management', path: '/email-management', icon: Mail },
       { name: 'My Activity Log', path: '/faculty/audit-trail', icon: ListChecks },
       { name: 'My Profile', path: '/faculty/profile', icon: UserCircle },
       { name: 'Faculty Settings', path: '/faculty/settings', icon: SettingsIcon },
@@ -199,6 +201,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Attendance Monitoring', path: '/attendance' });
     } else if (path === '/reports') {
       crumbs.push({ name: 'Reports & Export', path: '/reports' });
+    } else if (path === '/email-management') {
+      crumbs.push({ name: 'Email Management', path: '/email-management' });
     } else if (path === '/faculty/profile') {
       crumbs.push({ name: 'My Profile', path: '/faculty/profile' });
     } else if (path === '/faculty/settings') {
