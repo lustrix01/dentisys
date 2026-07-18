@@ -1,0 +1,37 @@
+services:
+  web:
+    build: .
+    container_name: dentisys-web
+    ports:
+      - "8080:80"
+    environment:
+      DB_HOST: db
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASS: ${MYSQL_PASSWORD}
+      DB_PORT: 3306
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.4.32
+    container_name: dentisys-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MYSQL_DATABASE}
+      MARIADB_USER: ${MYSQL_USER}
+      MARIADB_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - dentisys_db_data:/var/lib/mysql
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MARIADB_ROOT_PASSWORD} --silent"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  dentisys_db_data:
