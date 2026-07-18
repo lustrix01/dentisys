@@ -20,9 +20,10 @@ import {
   LogOut,
   User,
   ClipboardPenLine,
-  Video
-  ,ListChecks,
-  Mail
+  Video,
+  ListChecks,
+  Mail,
+  UserCheck
 } from 'lucide-react';
 import { recordAudit } from '../services/auditService';
 import { useApp } from '../context/AppContext';
@@ -130,6 +131,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Faculty Approval', path: '/admin/faculty-approval', icon: UserCheck },
         { name: 'Retention Criteria', path: '/admin/retention-criteria', icon: AlertTriangle },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet },
         { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks },
@@ -167,7 +169,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const navItems = getNavItems();
 
-  // Calculate notifications
   const criticalAlerts = students.flatMap(s => 
     s.remedialExams
       .filter(rem => rem.status === 'pending')
