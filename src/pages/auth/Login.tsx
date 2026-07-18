@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, Key } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { recordAudit } from '../../services/auditService';
+import { authenticateUser } from '../../services/authService';
 
 export function Login() {
   const navigate = useNavigate();
@@ -24,47 +25,33 @@ export function Login() {
     setError('');
     
     setTimeout(() => {
-      let user = null;
-      if (email === 'faculty@bicol-u.edu.ph' && password === 'faculty123') {
-        user = {
-          email: 'faculty@bicol-u.edu.ph',
-          role: 'faculty',
-          name: 'Dr. Eleanor Vance',
-          title: 'Dental Faculty Member',
-          assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
-          assignedClasses: ['CLINIC-A', 'CLINIC-B']
-        };
-      } else if (email === 'admin@bicol-u.edu.ph' && password === 'admin123') {
-        user = {
-          email: 'admin@bicol-u.edu.ph',
-          role: 'admin',
-          name: 'Dr. Marcus Aurelius',
-          title: 'Office of the Dean'
-        };
-      } else if (email === 'secretary@bicol-u.edu.ph' && password === 'secretary123') {
-        user = {
-          email: 'secretary@bicol-u.edu.ph',
-          role: 'secretary',
-          name: 'Miss Clara Oswald',
-          title: 'Class Secretary',
-          assignedClassId: 'CLINIC-A',
-          assignedClassName: 'Clinical Rotation A',
-          classroomName: 'Dental Clinic B - Room 402',
-          cctvCameraId: 'CCTV-CLINIC-A-01'
-        };
-      }
+      const authResult = authenticateUser(email, password);
       
-      if (user) {
-        localStorage.setItem('dentisys_user', JSON.stringify(user));
-        recordAudit({ userName: user.name, userRole: user.role, action: 'Logged in', module: 'Authentication', description: 'User signed in with portal credentials.', status: 'Success' });
+      if (authResult.success && authResult.user) {
+        localStorage.setItem('dentisys_user', JSON.stringify(authResult.user));
+        recordAudit({
+          userName: authResult.user.name,
+          userRole: authResult.user.role,
+          action: 'Logged in',
+          module: 'Authentication',
+          description: 'User signed in with portal credentials.',
+          status: 'Success',
+        });
         setIsLoading(false);
         navigate('/');
       } else {
-        recordAudit({ userName: email, userRole: 'admin', action: 'Failed login attempt', module: 'Authentication', description: 'Invalid portal credentials were submitted.', status: 'Failed' });
+        recordAudit({
+          userName: email,
+          userRole: 'admin',
+          action: 'Failed login attempt',
+          module: 'Authentication',
+          description: authResult.message || 'Invalid portal credentials were submitted.',
+          status: 'Failed',
+        });
         setIsLoading(false);
-        setError('Invalid email or password. Please check your credentials and try again.');
+        setError(authResult.message || 'Invalid email or password. Please check your credentials and try again.');
       }
-    }, 1000);
+    }, 800);
   };
 
   const handleGoogleLogin = () => {
@@ -76,10 +63,17 @@ export function Login() {
         name: 'Dr. Eleanor Vance',
         title: 'Dental Faculty Member',
         assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
-        assignedClasses: ['CLINIC-A', 'CLINIC-B']
+        assignedClasses: ['CLINIC-A', 'CLINIC-B'],
       };
       localStorage.setItem('dentisys_user', JSON.stringify(user));
-      recordAudit({ userName: user.name, userRole: user.role, action: 'Logged in', module: 'Authentication', description: 'User signed in using the configured external sign-in flow.', status: 'Success' });
+      recordAudit({
+        userName: user.name,
+        userRole: user.role,
+        action: 'Logged in',
+        module: 'Authentication',
+        description: 'User signed in using Google Workspace.',
+        status: 'Success',
+      });
       setIsLoading(false);
       navigate('/');
     }, 1000);
@@ -103,7 +97,7 @@ export function Login() {
       {/* Formal Technical Grid Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-75 pointer-events-none -z-10" />
 
-      {/* Background Decorative Blur Blobs (Slow floating & Muted Formal Colors) */}
+      {/* Background Decorative Blur Blobs */}
       <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent-150/20 dark:bg-accent-950/10 rounded-full blur-[120px] floating-orb-1 pointer-events-none -z-20" />
       <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-clinical-150/15 dark:bg-clinical-950/5 rounded-full blur-[120px] floating-orb-2 pointer-events-none -z-20" />
 
@@ -169,7 +163,7 @@ export function Login() {
                 Login to Your Account
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1.5">
-                Sign in with your Bicol University email to continue
+                Sign in with your official Bicol University email to continue
               </p>
             </div>
 
@@ -281,8 +275,14 @@ export function Login() {
               Sign in with Google Workspace
             </button>
 
-            {/* Footer Support Text */}
-            <p className="text-center mt-8 text-xs text-slate-450 dark:text-slate-500 font-medium">
+            {/* Footer Support & Registration Navigation */}
+            <p className="text-center mt-6 text-xs text-slate-500 dark:text-slate-400 font-medium">
+              Faculty member?{' '}
+              <Link to="/signup" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
+                Register for an account
+              </Link>
+            </p>
+            <p className="text-center mt-2 text-xs text-slate-450 dark:text-slate-500 font-medium">
               Forgot your BU email password?{' '}
               <a href="mailto:support@bicol-u.edu.ph" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
                 Contact support

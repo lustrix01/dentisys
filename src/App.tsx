@@ -17,6 +17,7 @@ import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
 import { RetentionCriteria } from './pages/admin/RetentionCriteria';
 import { DeanReports } from './pages/admin/SystemAudit';
 import { AuditTrail as DeanAuditTrail } from './pages/admin/AuditTrail';
+import { FacultyApproval } from './pages/admin/FacultyApproval';
 
 // Class Secretary Page Imports
 import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
@@ -33,6 +34,8 @@ import { Settings as DeanSettings } from './pages/admin/Settings';
 import { Profile as SecretaryProfile } from './pages/secretary/Profile';
 import { Settings as SecretarySettings } from './pages/secretary/Settings';
 import { Login } from './pages/auth/Login';
+import { SignUp } from './pages/auth/SignUp';
+import { ActivateSecretary } from './pages/auth/ActivateSecretary';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
 
@@ -66,6 +69,7 @@ const MainApp = () => {
         <Route path="/faculty/audit-trail" element={currentUser.role === 'faculty' ? <FacultyAuditTrail /> : <Navigate to="/" replace />} />
 
         {/* Dean Routes */}
+        <Route path="/admin/faculty-approval" element={currentUser.role === 'admin' ? <FacultyApproval /> : <Navigate to="/" replace />} />
         <Route path="/admin/retention-criteria" element={currentUser.role === 'admin' ? <RetentionCriteria /> : <Navigate to="/" replace />} />
         <Route path="/admin/reports" element={currentUser.role === 'admin' ? <DeanReports /> : <Navigate to="/" replace />} />
         <Route path="/admin/audit-trail" element={currentUser.role === 'admin' ? <DeanAuditTrail /> : <Navigate to="/" replace />} />
@@ -109,6 +113,9 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<SignUp />} />
+          <Route path="/register" element={<SignUp />} />
+          <Route path="/activate-secretary" element={<ActivateSecretary />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/*" element={<MainApp />} />
