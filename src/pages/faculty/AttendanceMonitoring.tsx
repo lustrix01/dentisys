@@ -334,7 +334,7 @@ export const AttendanceMonitoring: React.FC = () => {
         <Card className="p-4 bg-gradient-to-tr from-clinical-600 to-accent-600 text-white flex items-center justify-between shadow-md">
           <div className="space-y-1">
             <p className="text-[10px] font-bold uppercase tracking-wider text-clinical-100">Intake Presence Rate</p>
-            <h3 className="text-3xl font-extrabold font-heading">{boundPercentage}%</h3>
+            <h3 className="text-3xl font-extrabold">{boundPercentage}%</h3>
             <p className="text-[10px] text-clinical-200 font-medium">Selected Period: {selectedDate}</p>
           </div>
           <div className="text-right text-[11px] font-medium text-clinical-100 space-y-0.5">
