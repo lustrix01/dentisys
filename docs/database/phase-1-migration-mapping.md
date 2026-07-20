@@ -177,6 +177,80 @@ No row marked `UNRESOLVED — OWNER DECISION REQUIRED` is executable.
 6. Official retention decisions separated from model predictions, with model versions and snapshots.
 7. Identity, roles, MFA/session/reset/login-attempt support, and append-oriented audit.
 
-## Proposed migration grouping and manifests
+## Phase 1B Implementation (2026-07-20)
 
-Provisional groups are `001`–`003` for 1A, `010`–`015` for 1B, `020`–`025` for 1C, followed by 1D validation. Names and exact splits require approved decisions. A manifest for each stage must record source hash, expected tables/columns/keys/relationships/constraints/indexes, decision references, and validation evidence. No manifest is executable SQL.
+### Migration Inventory
+
+Phase 1B uses 33 granular migrations (016–048):
+
+**DROP phase (016–029):** One DROP TABLE per file, child-first dependency order.
+- 016: attendance_record
+- 017: student_assessment_grade
+- 018: remedial_log
+- 019: retention_risk
+- 020: student_image
+- 021: facial_template
+- 022: enrollment
+- 023: assessment
+- 024: attendance_session
+- 025: retention_record
+- 026: class_section
+- 027: faculty
+- 028: student
+- 029: course
+
+user_account is NOT dropped (retained from migration 001).
+
+**CREATE phase (030–048):** One CREATE TABLE per file, parent-first dependency order.
+- 030: device
+- 031: audit_log
+- 032: faculty
+- 033: student
+- 034: course
+- 035: course_component
+- 036: component
+- 037: class_section
+- 038: enrollment
+- 039: attendance_session
+- 040: assessment
+- 041: student_image
+- 042: facial_template
+- 043: attendance_record
+- 044: student_assessment_grade
+- 045: student_term_grade
+- 046: retention_record
+- 047: remedial_log
+- 048: retention_risk
+
+### Phase 1B Object Counts
+
+- 20 business tables
+- 124 physical columns
+- 20 primary keys
+- 23 foreign keys (fk_<child>_<parent> naming)
+- 23 FK indexes (idx_<table>_<column> naming)
+- 1 supporting index (idx_attendance_session_se_created_by)
+- 4 Boolean check constraints
+- 0 business defaults, unique constraints, policy checks
+- 48 migration-history rows (15 Phase 1A + 33 Phase 1B)
+
+### Resolved Phase 1B Decisions
+
+See `docs/database/phase-1-owner-decision-gates.md` for B1-D01 through B1-D16, all resolved 2026-07-20.
+
+### Key Implementation Decisions
+
+- Six Phase 1A compatibility fields omitted: faculty_bu_email, student_face_image, cs_year_level, a_type, risk_confidence, rr_timestamp
+- se_created_by: INT UNSIGNED NULL, supporting index, no FK
+- All 10 new FKs: INT UNSIGNED NOT NULL
+- All FKs use ON UPDATE RESTRICT ON DELETE RESTRICT
+- Audit_Log.timestamp mapped to audit_log.logged_at (reserved word avoidance)
+- user_account retained from migration 001; not dropped or recreated
+- All 23 FK names use fk_<child>_<parent> convention
+- No IF EXISTS or IF NOT EXISTS on any migration
+
+### Stage Manifests
+
+- Phase 1A: `docs/database/phase-1a-stage-manifest.md`
+- Phase 1B: `docs/database/phase-1b-stage-manifest.md`
+- Validation evidence: `docs/database/phase-1a-validation-evidence.md`, `docs/database/phase-1b-validation-evidence.md`

@@ -435,3 +435,27 @@ The ERD is provisional. No schema, migration, DDL, table design, or final data m
 - Related requirement IDs: ERD-001 through ERD-014, AUD-020
 - Expected future phase: Phase 1D
 - Repository or source evidence: `docs/database/phase-1-migration-mapping.md`, `docs/database/phase-1-owner-decision-gates.md`
+
+### DEC-035
+
+- Topic: Phase 1B schema implementation (20-entity authoritative ERD)
+- Context: The authoritative ERD 2 plaintext defines exactly 20 entities with 124 source fields. Phase 1A provided 15 entities with 98 columns. The transition required a controlled DROP-and-recreate migration strategy under P1-D02 Option A.
+- Options considered: ALTER in-place; single multi-statement file; granular DROP+CREATE.
+- Current recommendation: Granular DROP+CREATE with 33 single-statement migration files (016–048), user_account retained from 001.
+- Status: Resolved — Owner Decision 2026-07-20
+- Owner decision required: No. B1-D01 through B1-D16 resolved all implementation blockers.
+- Related requirement IDs: ERD-001 through ERD-014
+- Expected future phase: Phase 1B (complete)
+- Repository or source evidence: `database/migrations/016_phase_1b_drop_attendance_record.sql` through `048_phase_1b_retention_risk.sql`, `docs/database/phase-1b-stage-manifest.md`, `docs/database/phase-1b-validation-evidence.md`
+
+### DEC-036
+
+- Topic: Phase 1B physical design decisions
+- Context: 124 physical columns, 23 FKs with fk_<child>_<parent> naming, 24 indexes, 4 Boolean checks, 0 defaults/unique/policy checks. Six Phase 1A compatibility fields omitted per strict ERD treatment. Audit_Log.timestamp mapped to logged_at for reserved-word safety. se_created_by retained as INT UNSIGNED NULL with supporting index.
+- Options considered: preserve compatibility fields; create se_created_by FK; use alternative FK naming.
+- Current recommendation: Exact ERD fidelity — omit legacy fields, no unmarked FKs, consistent fk_<child>_<parent> naming.
+- Status: Resolved — Owner Decision 2026-07-20
+- Owner decision required: No.
+- Related requirement IDs: ERD-001 through ERD-014
+- Expected future phase: Phase 1B (complete)
+- Repository or source evidence: Phase 1B migration files, `docs/database/phase-1b-stage-manifest.md`
