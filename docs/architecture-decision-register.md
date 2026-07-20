@@ -342,36 +342,36 @@ The ERD is provisional. No schema, migration, DDL, table design, or final data m
 
 ### DEC-027
 
-- Topic: Phase 1 source authority
-- Context: The Owner designated archived standalone images as the structural authorities for Phase 1A and Phase 1B. The capstone PDF remains workflow, policy, and provenance evidence.
-- Options considered: infer structure from prototypes; use the archived source snapshots; defer all source reconciliation.
-- Current recommendation: use `docs/database/erd-sources/phase-1a-original-paper-erd.png` for 1A and `docs/database/erd-sources/phase-1b-present-20-entity-erd.png` for 1B, with `docs/database/phase-1-source-reconciliation.md` as the reconciliation record.
+- Topic: Phase 1 source authority (revised)
+- Context: The Owner-designated archived images remain provenance evidence. The Owner-provided plaintext transcription (`phase-1-authoritative-plaintext-transcription.md`) is the primary AI-readable structural authority for Phase 1A and Phase 1B.
+- Options considered: infer structure from prototypes; use the archived source snapshots; use the Owner plaintext as primary authority.
+- Current recommendation: use `docs/database/erd-sources/phase-1-authoritative-plaintext-transcription.md` as primary structural authority, with archived images as provenance evidence and `docs/database/phase-1-source-reconciliation.md` as the reconciliation record.
 - Status: Accepted Baseline
 - Owner decision required: No; this is an Owner-provided baseline.
 - Related requirement IDs: ERD-001 through ERD-014
 - Expected future phase: Phase 1
-- Repository or source evidence: `docs/database/erd-sources/README.md`, `docs/database/phase-1-source-reconciliation.md`
+- Repository or source evidence: `docs/database/erd-sources/README.md`, `docs/database/erd-sources/phase-1-authoritative-plaintext-transcription.md`, `docs/database/phase-1-source-reconciliation.md`
 
 ### DEC-028
 
 - Topic: Original entity-count discrepancy
 - Context: The Owner-designated 1A image shows 15 visible entities while the paper prose states 14 tables.
 - Options considered: force the schema to 14; treat the image as controlling; defer 1A.
-- Current recommendation: the Owner-designated structural image controls Phase 1A; record the prose discrepancy without deleting or merging visible entities.
-- Status: Open
-- Owner decision required: Yes, to confirm the documented discrepancy.
+- Current recommendation: preserve all 15 entities; treat "14 tables" as a documentation discrepancy.
+- Status: Resolved — Owner Decision 2026-07-20
+- Owner decision required: No; resolved: preserve all 15 entities.
 - Related requirement IDs: ERD-001 through ERD-014
 - Expected future phase: Phase 1A
-- Repository or source evidence: `docs/database/erd-sources/phase-1a-original-paper-erd.png`, `docs/database/phase-1-source-reconciliation.md`
+- Repository or source evidence: `docs/database/erd-sources/phase-1-authoritative-plaintext-transcription.md`, `docs/database/phase-1-source-reconciliation.md`
 
 ### DEC-029
 
 - Topic: Intermediate-stage operational intent
 - Context: 1A and 1B may be historical clean-build checkpoints only or supported deployable, data-bearing versions.
 - Options considered: clean-build-only checkpoints; data-bearing deployable stages.
-- Current recommendation: do not choose without Owner approval; document the selected operational intent before any migration implementation.
-- Status: Open
-- Owner decision required: Yes.
+- Current recommendation: Option A — historical clean-build checkpoints only, per Owner decision.
+- Status: Resolved — Owner Decision 2026-07-20
+- Owner decision required: No; resolved: Option A, clean-build checkpoints only.
 - Related requirement IDs: ERD-001 through ERD-014
 - Expected future phase: Phase 1A through 1D
 - Repository or source evidence: `docs/database/phase-1-owner-decision-gates.md`, `docs/database/phase-1-migration-mapping.md`
@@ -379,11 +379,11 @@ The ERD is provisional. No schema, migration, DDL, table design, or final data m
 ### DEC-030
 
 - Topic: Exact source identifier policy
-- Context: Source identifiers include `User Account` and lowercase `faculty`, which may require escaped physical identifiers or approved SQL-safe alternatives.
+- Context: Source identifiers include `User_Account` and `Faculty`. SQL-safe physical names (`user_account`, `faculty`) are separate from source display names.
 - Options considered: preserve exact physical identifiers; use approved SQL-safe physical identifiers with source display names in manifests.
-- Current recommendation: do not choose without Owner approval; preserve source display names in all cases.
-- Status: Open
-- Owner decision required: Yes.
+- Current recommendation: SQL-safe physical identifiers (Option B). Preserve exact source names in documentation and manifests.
+- Status: Resolved — Owner Decision 2026-07-20
+- Owner decision required: No; resolved: Option B.
 - Related requirement IDs: ERD-001 through ERD-014
 - Expected future phase: Phase 1A and 1B
 - Repository or source evidence: `docs/database/phase-1-source-reconciliation.md`, `docs/database/phase-1-owner-decision-gates.md`
@@ -393,12 +393,12 @@ The ERD is provisional. No schema, migration, DDL, table design, or final data m
 - Topic: Phase 1A physical-assumption policy
 - Context: The source ERD does not show MariaDB types, lengths, nullability, defaults, indexes, referential actions, or constraint names.
 - Options considered: invent physical design; use a controlled physical-assumption register; postpone all physical details.
-- Current recommendation: permit only documented assumptions necessary for MariaDB validity, safe password-hash representation, creation order, identifiers, timestamps, and migration-runner compatibility.
-- Status: Proposed
-- Owner decision required: Yes for assumptions with business, migration, or preservation impact.
+- Current recommendation: Accepted recommended MariaDB physical-assumption baseline (MariaDB 10.4.32, InnoDB, utf8mb4, utf8mb4_unicode_ci, lowercase singular snake_case physical identifiers, INT UNSIGNED AUTO_INCREMENT surrogate PKs, matching unsigned FK types, DATE/TIME/DATETIME(6), UTC timestamps, DECIMAL for scores/grades/weights, TINYINT(1) for Boolean, VARCHAR for bounded text, TEXT for remarks, binary-safe LOB for facial templates, explicit FK indexes, RESTRICT default referential action, password field as hash, predictable constraint names).
+- Status: Accepted Baseline — Owner Decision 2026-07-20
+- Owner decision required: No; accepted recommended baseline.
 - Related requirement IDs: ERD-001 through ERD-014, IAS-A-007
 - Expected future phase: Phase 1A
-- Repository or source evidence: `docs/database/phase-1-source-reconciliation.md`
+- Repository or source evidence: `docs/database/phase-1-source-reconciliation.md`, `docs/database/phase-1-owner-decision-gates.md`
 
 ### DEC-032
 
@@ -429,9 +429,9 @@ The ERD is provisional. No schema, migration, DDL, table design, or final data m
 - Topic: Migration stage-manifest requirement
 - Context: The migration runner records filenames only and cannot independently prove the expected 1A, 1B, or 1C schema state.
 - Options considered: validate final schema only; use source/decision-linked manifests for every stage; defer stage validation.
-- Current recommendation: require non-executable stage manifests and clean-build validation for foundation, 1A, 1B, each 1C group, and the complete chain.
-- Status: Proposed
-- Owner decision required: Yes for required evidence and runner-enhancement scope.
+- Current recommendation: Accepted Gatekeeper-formulated validation standard (foundation verification, Phase 1A manifest verification, deterministic migration history, rerun behavior, secret-safety checks, FK/type compatibility, deliberate failure test, recovery evidence, repository-scope verification).
+- Status: Accepted Baseline — Owner Decision 2026-07-20
+- Owner decision required: No; accepted Gatekeeper standard.
 - Related requirement IDs: ERD-001 through ERD-014, AUD-020
 - Expected future phase: Phase 1D
-- Repository or source evidence: `docs/database/phase-1-migration-mapping.md`, `scripts/migrate.ps1`
+- Repository or source evidence: `docs/database/phase-1-migration-mapping.md`, `docs/database/phase-1-owner-decision-gates.md`
