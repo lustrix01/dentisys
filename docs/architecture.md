@@ -30,7 +30,7 @@ The health controller confirms PHP initialization and attempts `SELECT 1` throug
 
 ## Database
 
-`database/init.sql` is for fresh local MariaDB volumes and creates only `_schema_migrations`. Business tables are intentionally absent.
+`database/init.sql` is for fresh local MariaDB volumes and creates only `_schema_migrations`. Current migrations 001–080 implement Phase 1A, 1B, and 1C business and security tables.
 
 `database/migrations/` stores ordered SQL files named like `001_description.sql`. `scripts/migrate.ps1` applies unapplied migrations and records successful filenames in `_schema_migrations`.
 

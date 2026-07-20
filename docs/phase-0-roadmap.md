@@ -18,7 +18,7 @@ Confirmed repository facts:
 - The current backend exposes `GET /api/health` and a direct `healthcheck.php` endpoint.
 - The backend deliberately does not implement authentication, authorization, CORS, CSRF enforcement, DentiSys CRUD endpoints, or business validation.
 - The database foundation uses MariaDB and currently creates only `_schema_migrations`.
-- DentiSys business tables are intentionally absent.
+- DentiSys business tables are implemented via approved Phase 1A, 1B, and 1C migrations (001–080).
 - `database/migrations/README.md` requires approved data-model decisions before business schema is added.
 - Existing validation is available through root npm scripts and `scripts/check.ps1`, with known frontend lint baseline debt.
 

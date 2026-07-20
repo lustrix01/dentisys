@@ -7,4 +7,4 @@ Place ordered local schema migrations here using names like:
 002_description.sql
 ```
 
-This foundation does not define DentiSys business tables. Add business schema only after an approved data-model decision.
+Current migrations 001–048 implement the approved Phase 1A and Phase 1B 20-entity schema. Migrations 049–080 implement the Phase 1C checkpoint adding academic corrections, RBAC, MFA, sessions, tokens, device-aware audit persistence, and workflow history.
