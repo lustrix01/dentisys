@@ -339,3 +339,99 @@ The ERD is provisional. No schema, migration, DDL, table design, or final data m
 - Related requirement IDs: CAP-SAD-004, IAS-C-004, IAS-C-005, IAS-C-010, AUD-019
 - Expected future phase: Phase 2 onward
 - Repository or source evidence: `docs/frontend.md`, `frontend/src/pages/secretary/ManualAttendanceOverride.tsx`, `docs/architecture.md`
+
+### DEC-027
+
+- Topic: Phase 1 source authority
+- Context: The Owner designated archived standalone images as the structural authorities for Phase 1A and Phase 1B. The capstone PDF remains workflow, policy, and provenance evidence.
+- Options considered: infer structure from prototypes; use the archived source snapshots; defer all source reconciliation.
+- Current recommendation: use `docs/database/erd-sources/phase-1a-original-paper-erd.png` for 1A and `docs/database/erd-sources/phase-1b-present-20-entity-erd.png` for 1B, with `docs/database/phase-1-source-reconciliation.md` as the reconciliation record.
+- Status: Accepted Baseline
+- Owner decision required: No; this is an Owner-provided baseline.
+- Related requirement IDs: ERD-001 through ERD-014
+- Expected future phase: Phase 1
+- Repository or source evidence: `docs/database/erd-sources/README.md`, `docs/database/phase-1-source-reconciliation.md`
+
+### DEC-028
+
+- Topic: Original entity-count discrepancy
+- Context: The Owner-designated 1A image shows 15 visible entities while the paper prose states 14 tables.
+- Options considered: force the schema to 14; treat the image as controlling; defer 1A.
+- Current recommendation: the Owner-designated structural image controls Phase 1A; record the prose discrepancy without deleting or merging visible entities.
+- Status: Open
+- Owner decision required: Yes, to confirm the documented discrepancy.
+- Related requirement IDs: ERD-001 through ERD-014
+- Expected future phase: Phase 1A
+- Repository or source evidence: `docs/database/erd-sources/phase-1a-original-paper-erd.png`, `docs/database/phase-1-source-reconciliation.md`
+
+### DEC-029
+
+- Topic: Intermediate-stage operational intent
+- Context: 1A and 1B may be historical clean-build checkpoints only or supported deployable, data-bearing versions.
+- Options considered: clean-build-only checkpoints; data-bearing deployable stages.
+- Current recommendation: do not choose without Owner approval; document the selected operational intent before any migration implementation.
+- Status: Open
+- Owner decision required: Yes.
+- Related requirement IDs: ERD-001 through ERD-014
+- Expected future phase: Phase 1A through 1D
+- Repository or source evidence: `docs/database/phase-1-owner-decision-gates.md`, `docs/database/phase-1-migration-mapping.md`
+
+### DEC-030
+
+- Topic: Exact source identifier policy
+- Context: Source identifiers include `User Account` and lowercase `faculty`, which may require escaped physical identifiers or approved SQL-safe alternatives.
+- Options considered: preserve exact physical identifiers; use approved SQL-safe physical identifiers with source display names in manifests.
+- Current recommendation: do not choose without Owner approval; preserve source display names in all cases.
+- Status: Open
+- Owner decision required: Yes.
+- Related requirement IDs: ERD-001 through ERD-014
+- Expected future phase: Phase 1A and 1B
+- Repository or source evidence: `docs/database/phase-1-source-reconciliation.md`, `docs/database/phase-1-owner-decision-gates.md`
+
+### DEC-031
+
+- Topic: Phase 1A physical-assumption policy
+- Context: The source ERD does not show MariaDB types, lengths, nullability, defaults, indexes, referential actions, or constraint names.
+- Options considered: invent physical design; use a controlled physical-assumption register; postpone all physical details.
+- Current recommendation: permit only documented assumptions necessary for MariaDB validity, safe password-hash representation, creation order, identifiers, timestamps, and migration-runner compatibility.
+- Status: Proposed
+- Owner decision required: Yes for assumptions with business, migration, or preservation impact.
+- Related requirement IDs: ERD-001 through ERD-014, IAS-A-007
+- Expected future phase: Phase 1A
+- Repository or source evidence: `docs/database/phase-1-source-reconciliation.md`
+
+### DEC-032
+
+- Topic: Source-fidelity deviation policy
+- Context: Any deviation from the source snapshots must remain visible and traceable.
+- Options considered: silent normalization; a deviation register; defer all deviations.
+- Current recommendation: use a source-fidelity deviation register with source element, rationale, impact, approval, and validation evidence; do not silently correct source spelling or relationships.
+- Status: Proposed
+- Owner decision required: Yes for deviations beyond technical necessity.
+- Related requirement IDs: ERD-001 through ERD-014
+- Expected future phase: Phase 1A and 1B
+- Repository or source evidence: `docs/database/phase-1-source-reconciliation.md`
+
+### DEC-033
+
+- Topic: Data-preservation requirement for Phase 1B and Phase 1C
+- Context: Device, course-component, assessment, retention-risk, and identity mappings may be destructive or ambiguous for populated data.
+- Options considered: clean-build-only evolution; explicit mapping/backup/compatibility rules; destructive replacement without preservation.
+- Current recommendation: require approved key maps, preservation checks, destructive gates, and recovery evidence for every data-bearing transformation.
+- Status: Open
+- Owner decision required: Yes.
+- Related requirement IDs: ERD-004, ERD-005, ERD-007 through ERD-013
+- Expected future phase: Phase 1B and 1C
+- Repository or source evidence: `docs/database/phase-1-migration-mapping.md`, `docs/database/phase-1-owner-decision-gates.md`
+
+### DEC-034
+
+- Topic: Migration stage-manifest requirement
+- Context: The migration runner records filenames only and cannot independently prove the expected 1A, 1B, or 1C schema state.
+- Options considered: validate final schema only; use source/decision-linked manifests for every stage; defer stage validation.
+- Current recommendation: require non-executable stage manifests and clean-build validation for foundation, 1A, 1B, each 1C group, and the complete chain.
+- Status: Proposed
+- Owner decision required: Yes for required evidence and runner-enhancement scope.
+- Related requirement IDs: ERD-001 through ERD-014, AUD-020
+- Expected future phase: Phase 1D
+- Repository or source evidence: `docs/database/phase-1-migration-mapping.md`, `scripts/migrate.ps1`
