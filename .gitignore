@@ -1,3 +1,9 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+backend/config/local.php
+
 # Logs
 logs
 *.log
@@ -8,8 +14,11 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+frontend/node_modules
 dist
+frontend/dist
 dist-ssr
+frontend/dist-ssr
 *.local
 
 .env

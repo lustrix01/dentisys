@@ -1,6 +1,7 @@
 services:
   web:
     volumes:
+<<<<<<< HEAD
       - ./backend:/var/www/html:cached
 
   phpmyadmin:
@@ -16,3 +17,8 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+=======
+      - ./backend:/var/www/html/backend:cached
+    environment:
+      APP_DEBUG: ${APP_DEBUG:-false}
+>>>>>>> 13606eb79e14d34d9f8e049eb8ed0f381235531e
