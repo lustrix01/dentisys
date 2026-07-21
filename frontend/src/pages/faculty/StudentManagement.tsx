@@ -17,6 +17,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { Student, EnrolledSubject } from '../../types';
 import { Card } from '../../components/Card';
+import { getAssignedClasses, getClassStudents, getBiometricProfiles, updateBiometricConsent } from '../../services/facultyService';
 
 const getDefaultSubjectsForYear = (year: 1 | 2 | 3 | 4): EnrolledSubject[] => {
   const defaultComponents = { quizzes: 80, exams: 80, practicum: 80, attendance: 80 };
@@ -49,6 +50,23 @@ export const StudentManagement: React.FC = () => {
   
   // Active sub-tab under Left Pane
   const [activeTab, setActiveTab] = useState<'list' | 'enroll' | 'facial'>('list');
+
+  const [assignedClasses, setAssignedClasses] = useState<Array<{ cs_id: number; cs_name: string }>>([]);
+  const [selectedCsId, setSelectedCsId] = useState<number>(0);
+  const [loadingApi, setLoadingApi] = useState<boolean>(false);
+
+  useEffect(() => {
+    getAssignedClasses()
+      .then(res => {
+        if (res.success && res.classes.length > 0) {
+          setAssignedClasses(res.classes);
+          setSelectedCsId(res.classes[0].cs_id);
+        }
+      })
+      .catch(err => {
+        console.warn('Backend API assigned classes check:', err);
+      });
+  }, []);
 
   // Search & Filter state
   const [search, setSearch] = useState('');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
@@ -23,6 +23,8 @@ import { useApp } from '../../context/AppContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 
+import { getFacultyDashboard, FacultyDashboardData } from '../../services/facultyService';
+
 export const Dashboard: React.FC = () => {
   const { students, attendanceRecords, updateRemedialExam, addAttendanceRecord } = useApp();
   const navigate = useNavigate();
@@ -30,6 +32,25 @@ export const Dashboard: React.FC = () => {
   const userStr = localStorage.getItem('dentisys_user');
   const currentUser = userStr ? JSON.parse(userStr) : { name: 'Dr. Eleanor Vance', role: 'faculty', title: 'Dental Faculty Member' };
   
+  const [apiData, setApiData] = useState<FacultyDashboardData | null>(null);
+  const [isLoadingApi, setIsLoadingApi] = useState<boolean>(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsLoadingApi(true);
+    getFacultyDashboard()
+      .then(res => {
+        if (res && res.success) {
+          setApiData(res);
+        }
+      })
+      .catch(err => {
+        console.warn('Backend API connection warning, using active context fallback', err);
+        setApiError(err.message || 'Could not fetch live dashboard metrics.');
+      })
+      .finally(() => setIsLoadingApi(false));
+  }, []);
+
   // States for Recording Remedial Score
   const [selectedRemedialId, setSelectedRemedialId] = useState<string | null>(null);
   const [remedialScore, setRemedialScore] = useState<string>('');
@@ -63,11 +84,11 @@ export const Dashboard: React.FC = () => {
   );
 
   // Stats calculations
-  const facultyTotalStudents = students.length;
+  const facultyTotalStudents = apiData?.stats?.total_students ?? students.length;
   
   // At-risk students
   const atRiskStudents = students.filter(s => s.status === 'warning' || s.status === 'critical');
-  const atRiskCount = atRiskStudents.length;
+  const atRiskCount = apiData?.stats?.at_risk_count ?? atRiskStudents.length;
 
   // Pending remedials to grade
   const pendingRemedials = students.flatMap(s => 
@@ -76,9 +97,11 @@ export const Dashboard: React.FC = () => {
       studentName: s.name,
     }))
   );
+  const pendingRemedialsCount = apiData?.stats?.pending_remedials ?? pendingRemedials.length;
 
   // Calculate class-specific attendance rate
   const classAttendanceRate = (() => {
+    if (apiData?.stats?.attendance_rate !== undefined) return apiData.stats.attendance_rate;
     const classRecords = attendanceRecords.filter(r => r.subjectCode === selectedSubjectCode);
     if (classRecords.length === 0) return 94;
     const presents = classRecords.filter(r => r.status === 'present' || r.status === 'late').length;

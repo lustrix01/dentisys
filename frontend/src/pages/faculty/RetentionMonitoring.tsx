@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AlertTriangle, 
   Activity, 
@@ -18,9 +18,23 @@ import { Student, RemedialExam } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 
+import { getRetentionMonitoring, updateRemedialScore } from '../../services/facultyService';
+
 export const RetentionMonitoring: React.FC = () => {
   const { students, settings, addRemedialExam, updateRemedialExam, deleteRemedialExam } = useApp();
   
+  useEffect(() => {
+    getRetentionMonitoring()
+      .then(res => {
+        if (res.success) {
+          console.log('Fetched retention records from backend:', res.retention_records.length);
+        }
+      })
+      .catch(err => {
+        console.warn('Backend retention monitoring note:', err);
+      });
+  }, []);
+
   // Tab Management
   const [activeTab, setActiveTab] = useState<'watchlist' | 'remedials' | 'all'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');

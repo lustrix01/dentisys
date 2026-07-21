@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarCheck, ClipboardPenLine, Video, UserCircle, Users, Clock, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
@@ -12,17 +12,34 @@ import {
   getCurrentSecretary,
 } from './utils';
 
+import { getSecretaryDashboard, SecretaryDashboardData } from '../../services/secretaryService';
+
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { students, attendanceRecords } = useApp();
+  
+  const [secApiData, setSecApiData] = useState<SecretaryDashboardData | null>(null);
+
+  useEffect(() => {
+    getSecretaryDashboard()
+      .then(res => {
+        if (res.success) {
+          setSecApiData(res);
+        }
+      })
+      .catch(err => {
+        console.warn('Secretary Dashboard API note:', err);
+      });
+  }, []);
+
   const secretary = getCurrentSecretary();
   const classId = getAssignedClassId(secretary);
-  const className = getAssignedClassName(secretary);
+  const className = secApiData?.assigned_class?.cs_name || getAssignedClassName(secretary);
   const classStudents = getClassStudents(students, classId);
   const classAttendance = getClassAttendance(attendanceRecords, classStudents);
   const today = new Date().toISOString().split('T')[0];
   const todayRecords = classAttendance.filter(record => record.date === today);
-  const overriddenCount = classAttendance.filter(record => record.auditTrail?.length).length;
+  const overriddenCount = secApiData?.stats?.total_overrides ?? classAttendance.filter(record => record.auditTrail?.length).length;
 
   const actionCards = [
     {

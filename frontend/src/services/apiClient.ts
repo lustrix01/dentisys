@@ -66,7 +66,7 @@ function mapError(status: number, backendMessage: string): string {
   return 'An unexpected error occurred. Please try again.';
 }
 
-async function request<T>(
+export async function request<T>(
   method: string,
   path: string,
   body?: unknown,

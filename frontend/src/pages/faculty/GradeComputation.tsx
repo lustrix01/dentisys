@@ -15,6 +15,7 @@ import { Student, EnrolledSubject, GradeComponents } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { percentageToGWA, gwaToDescription, computeSubjectGrade } from '../../utils/gradeHelper';
 import confetti from 'canvas-confetti';
+import { computeClassGrades } from '../../services/gradeService';
 
 export const GradeComputation: React.FC = () => {
   const { students, settings, updateStudentGrade } = useApp();
@@ -93,6 +94,11 @@ export const GradeComputation: React.FC = () => {
 
     updateStudentGrade(selectedStudentId, selectedSubjectCode, components);
     setIsSaved(true);
+
+    // Also trigger backend class grade computation
+    computeClassGrades(1).catch(err => {
+      console.warn('Backend grade sync note:', err);
+    });
 
     // Trigger success confetti if GWA is excellent (1.0 or 1.25)
     if (computedGWA <= 1.25) {

@@ -3,6 +3,8 @@ import { AlertCircle, Monitor, Play, Square, Video, WifiOff } from 'lucide-react
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { getAssignedClassName, getCurrentSecretary } from './utils';
 
+import { getCctvStatus, CctvFeedData } from '../../services/secretaryService';
+
 export const CCTVFeed: React.FC = () => {
   const secretary = getCurrentSecretary();
   const className = getAssignedClassName(secretary);
@@ -13,7 +15,20 @@ export const CCTVFeed: React.FC = () => {
   const [error, setError] = useState('');
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [clock, setClock] = useState('');
+  const [cctvData, setCctvData] = useState<CctvFeedData['cctv'] | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    getCctvStatus()
+      .then(res => {
+        if (res.success) {
+          setCctvData(res.cctv);
+        }
+      })
+      .catch(err => {
+        console.warn('CCTV status check note:', err);
+      });
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
