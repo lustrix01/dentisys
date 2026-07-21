@@ -1,71 +1,131 @@
 # IAS Module C: API and Perimeter Defense
 
-## Endpoint-by-Endpoint Security Control Table
+## Endpoint-by-Endpoint Security Control Table (Design Reference)
 
-All endpoints are **proposed and currently unimplemented** — documented as the intended security contract.
+All endpoints are proposed and currently unimplemented — documented as the intended security contract for later stages.
 
-| Endpoint | Method | Auth | Permission | Scope | Input Allowlist | Param Query | Audit Event | Rate Limit | OWASP 2025 |
-|---|---|---|---|---|---|---|---|---|---|
-| /api/auth/register | POST | None | N/A | N/A | Email BU domain; name alpha+spaces; password 8+ chars | Yes | registration_submitted | 3/min/IP | A07:2025 |
-| /api/auth/login | POST | None | N/A | N/A | Email BU domain; password printable ASCII | Yes | login_success, login_failure | 5/min/IP | A07:2025 |
-| /api/auth/mfa/enroll | POST | Session | mfa.write | own | TOTP code digits | Yes | mfa_enrollment | 10/min/user | A07:2025 |
-| /api/auth/mfa/verify | POST | Session | mfa.write | own | TOTP code digits | Yes | mfa_verification | 10/min/user | A07:2025 |
-| /api/auth/mfa/recovery | POST | None | N/A | N/A | Recovery code alphanumeric | Yes | mfa_recovery | 5/min/scope | A07:2025 |
-| /api/auth/refresh | POST | Refresh token | N/A | self | Refresh token | Yes | token_refreshed, token_reuse_detected | 20/min/user | A07:2025, API2:2023 |
-| /api/auth/logout | POST | Session | N/A | self | N/A | Yes | session_logged_out | 20/min/user | A07:2025 |
-| /api/auth/forgot-password | POST | None | N/A | N/A | Email BU domain | Yes | password_reset_requested | 3/min/IP | A07:2025 |
-| /api/auth/reset-password | POST | Reset token | N/A | N/A | Token + password | Yes | password_reset_completed | 5/min/IP | A07:2025 |
-| /api/admin/faculty/approve | POST | Session | account.approve | system_wide | user_id numeric | Yes | faculty_approved | 20/min/user | A01:2025, API5:2023 |
-| /api/admin/faculty/reject | POST | Session | account.reject | system_wide | user_id numeric; reason text | Yes | faculty_rejected | 20/min/user | A01:2025, API5:2023 |
-| /api/faculty/secretary/invite | POST | Session | invitation.create | assigned_class | student_id numeric; email BU domain | Yes | invitation_created | 20/min/user | A01:2025, API1:2023 |
-| /api/faculty/secretary/invite/:id/revoke | POST | Session | invitation.revoke | assigned_class | invitation_id numeric | Yes | invitation_revoked | 20/min/user | A01:2025 |
-| /api/secretary/activate | POST | None | N/A | N/A | Token + password | Yes | secretary_activated | 5/min/scope | A07:2025 |
-| /api/students | GET/POST | Session | student.read/create | assigned_class | Query pagination; body schema | Yes | student_read/created | 100(GET)/50(POST)/min | A01:2025, API1:2023 |
-| /api/students/:id | GET/PUT/DELETE | Session | student.* | assigned_class | ID numeric; body schema | Yes | student_read/updated/deleted | 50/min | A01:2025, API1:2023 |
-| /api/courses | GET | Session | course.read | aggregate | Query pagination | Yes | course_read | 100/min | A01:2025 |
-| /api/academic-terms | GET | Session | academic_term.read | aggregate | Query pagination | Yes | term_read | 100/min | A01:2025 |
-| /api/class-sections | GET | Session | class_section.read | assigned_class | Query pagination | Yes | class_section_read | 100/min | A01:2025, API1:2023 |
-| /api/enrollments | GET/POST | Session | enrollment.read/write | assigned_class | Body schema | Yes | enrollment_read/created | 50/min | A01:2025, API1:2023 |
-| /api/assessments | GET/POST | Session | assessment.read/create | assigned_course | Body schema | Yes | assessment_read/created | 100/50/min | A01:2025, API1:2023 |
-| /api/assessments/:id | PUT/DELETE | Session | assessment.update/delete | assigned_course | Body schema; ID numeric | Yes | assessment_updated/deleted | 50/min | A01:2025, API1:2023 |
-| /api/assessments/:id/scores | POST | Session | assessment_score.write | assigned_course | [{student_id,score}]; score numeric | Yes | scores_entered | 200/min | A01:2025, A08:2025 |
-| /api/grades/term | GET/PUT | Session | term_grade.read/write | assigned_course | Body grade, remarks | Yes | grades_read/finalized | 100/50/min | A01:2025 |
-| /api/attendance/sessions | GET/POST | Session | attendance_session.read/create | assigned_class | Body schema | Yes | session_read/created | 100/min | A01:2025, API1:2023 |
-| /api/attendance/records | GET | Session | attendance_record.read | assigned_class | Query date, class | Yes | records_read | 100/min | A01:2025 |
-| /api/attendance/records/:id/override | POST | Session | attendance_override.create | assigned_class | Status enum; reason 8-240 chars | Yes | attendance_overridden | 30/min | A01:2025 |
-| /api/retention/policies | GET/PUT | Session | retention_policy.read/write | aggregate/system_wide | Body policy schema | Yes | policy_read/updated | 20/min | A01:2025 |
-| /api/retention/cases | GET | Session | retention_case.read | assigned_class | Query | Yes | cases_read | 100/min | A01:2025 |
-| /api/remedial/attempts | GET/POST | Session | remedial_attempt.read/create | assigned_class | Body attempt schema | Yes | remedial_read/created | 50/min | A01:2025 |
-| /api/remedial/attempts/:id | PUT | Session | remedial_attempt.update | assigned_class | Body score/grade, result | Yes | remedial_scored | 50/min | A01:2025 |
-| /api/biometric/consent | GET/POST | Session | biometric_consent.read/write | assigned_class | Body status | Yes | consent_read/updated | 50/min | A01:2025 |
-| /api/biometric/images | GET/POST | Session | student_image.read/write | assigned_class | File type/size | Yes | image_read/uploaded | 20/min | A04:2025, A01:2025 |
-| /api/biometric/templates | GET | Session | facial_template.metadata | assigned_class | ID numeric | Yes | template_metadata_read | 20/min | A04:2025 |
-| /api/cctv/events | GET | Session | cctv.read | assigned_class | Query date | Yes | cctv_events_read | 50/min | A01:2025 |
-| /api/email/send | POST | Session | email.send | assigned_class | Recipients, type, message | Yes | email_sent | 20/min | A01:2025 |
-| /api/reports/:type | GET | Session | report.read | assigned_scope | Query filters | Yes | report_generated | 30/min | A01:2025 |
-| /api/audit | GET | Session | audit.read | own/system_wide | Query filters | Yes | N/A (self-ref) | 50/min | A01:2025 |
-| /api/audit/export | GET | Session | audit.export | system_wide | Query filters | Yes | audit_exported | 10/min | A01:2025 |
-| /api/devices | GET | Session | device.read | aggregate | Query | Yes | devices_read | 50/min | A01:2025 |
-| /api/sessions | GET | Session | session.read | own/system_wide | Query | Yes | sessions_read | 50/min | A01:2025 |
-| /api/sessions/:id/logout | POST | Session | session.force_logout | own/system_wide | ID uuid | Yes | session_forced_logout | 20/min | A01:2025 |
-| /api/profile | GET/PUT | Session | profile.read/update | own | Body schema | Yes | profile_read/updated | 50/min | A01:2025 |
+| Endpoint | Method | Auth | Permission | Scope | Rate Limit | Audit Event |
+|---|---|---|---|---|---|---|
+| /api/health | GET | None | N/A | N/A | None | None |
+| /api/auth/login | POST | None | N/A | N/A | 5/15min/IP | login_success, login_failure |
+| /api/auth/register | POST | None | N/A | N/A | 3/60min/IP | registration_submitted |
+| /api/auth/mfa/enroll/start | POST | enrollment_token | N/A | own | 10/5min/user | mfa_enrollment_start |
+| /api/auth/mfa/enroll/confirm | POST | enrollment_token | N/A | own | 10/5min/user | mfa_enrollment_confirm |
+| /api/auth/mfa/verify | POST | mfa_session_token | N/A | own | 10/5min/user | mfa_verification |
+| /api/auth/mfa/recover | POST | mfa_session_token | N/A | own | 5/15min/user | mfa_recovery |
+| /api/auth/refresh | POST | Refresh cookie | N/A | own | 30/1min/session | token_refreshed, token_reuse |
+| /api/auth/logout | POST | Access token | N/A | own | 20/1min/user | session_logged_out |
+| /api/auth/me | GET | Access token | N/A | own | 30/1min/user | (not audited) |
+| /api/auth/password/reset-request | POST | None | N/A | N/A | 3/15min/IP | password_reset_requested |
+| /api/auth/password/reset-confirm | POST | Reset token | N/A | N/A | 5/15min/IP | password_reset_completed |
+| /api/admin/faculty-approvals | GET | Access token | user_accounts.read | system_wide | 50/1min/user | faculty_approval_read |
+| /api/admin/faculty-approvals/{id}/approve | POST | Access token | user_accounts.update_status | system_wide | 20/1min/user | faculty_approved |
+| /api/admin/faculty-approvals/{id}/reject | POST | Access token | user_accounts.update_status | system_wide | 20/1min/user | faculty_rejected |
+| /api/students | GET/POST | Access token | students.read/create | assigned_class | 100/50/min | student_read/created |
+| /api/students/{id} | GET/PATCH | Access token | students.read/update | assigned_class | 50/min | student_read/updated |
+| /api/courses | GET | Access token | courses.read | assigned_course | 100/min | course_read |
+| /api/class-sections | GET | Access token | class_sections.read | assigned_class | 100/min | section_read |
+| /api/enrollments | GET/POST | Access token | enrollments.read/create | assigned_class | 50/min | enrollment_read/created |
+| /api/enrollments/{id}/archive | POST | Access token | enrollments.archive | assigned_class | 20/min | enrollment_archived |
+| /api/assessments | GET/POST | Access token | assessments.read/create | assigned_course | 100/50/min | assessment_read/created |
+| /api/assessments/{id} | PATCH/DELETE | Access token | assessments.update/archive | assigned_course | 50/min | assessment_updated/archived |
+| /api/assessments/{id}/scores | GET/POST | Access token | assessment_scores.read/create | assigned_course | 50/min | scores_read/submitted |
+| /api/attendance | GET | Access token | attendance.read_records | assigned_class | 100/min | attendance_read |
+| /api/attendance/override | POST | Access token | attendance.override | assigned_class | 30/min | attendance_overridden |
+| /api/biometrics/consent | GET/PATCH | Access token | biometric_consent.read/manage | assigned_class | 50/min | consent_read/updated |
+| /api/biometrics/enroll/{student_id} | POST | Access token | facial_templates.enroll | assigned_class | 20/min | biometric_enrolled |
+| /api/email | GET/POST | Access token | email.read/send | assigned_class | 50/20/min | email_read/sent |
+| /api/reports/* | GET | Access token | reports.generate | assigned_class | 30/min | report_generated |
+| /api/audit | GET | Access token | audit_trail.read_module | assigned_class | 50/min | (self-ref, not audited) |
+| /api/settings | GET/PATCH | Access token | system_settings.read/update | system_wide | 20/min | settings_read/updated |
+| /api/sessions | GET | Access token | sessions.read_any | system_wide | 50/min | sessions_read |
+| /api/sessions/{uuid} | DELETE | Access token | sessions.revoke_any | system_wide | 20/min | session_forced_logout |
+| /api/invitations | GET/POST | Access token | invitations.read/create | assigned_class | 30/min | invitation_created |
+| /api/invitations/{id}/revoke | POST | Access token | invitations.revoke | assigned_class | 20/min | invitation_revoked |
 
-## Extended ACL Rule Table (Host-Specific, Documentation-Only)
+## Input Validation and Parameterized Query Strategy
 
-| Rule | Source | Src Mask | Wildcard (255.255.255.255 - mask) | Dest Host | Proto | Port | Action | Reason |
-|------|--------|----------|-----------------------------------|-----------|-------|------|--------|--------|
-| ACL-01 | 0.0.0.0/0 | 0.0.0.0 | 255.255.255.255 | proxy-01 172.16.0.10 | TCP | 443 | ALLOW | Clients → HTTPS only |
-| ACL-02 | proxy-01 172.16.0.10/32 | 255.255.255.255 | 0.0.0.0 | api-01 10.100.0.10 | TCP | 80 | ALLOW | Proxy → Backend |
-| ACL-03 | api-01 10.100.0.10/32 | 255.255.255.255 | 0.0.0.0 | db-01 10.200.0.10 | TCP | 3306 | ALLOW | Backend → DB |
-| ACL-04 | cctv-01 10.10.0.10/32 | 255.255.255.255 | 0.0.0.0 | proxy-01 172.16.0.10 | TCP | 443 | ALLOW | CCTV → API |
-| ACL-05 | mgmt 10.255.0.0/24 | 255.255.255.0 | 0.0.0.255 | all | TCP | 22 | ALLOW | Management SSH |
-| ACL-06 | 0.0.0.0/0 | 0.0.0.0 | 255.255.255.255 | api-01 10.100.0.10 | any | any | DENY | Block direct client→backend |
-| ACL-07 | 0.0.0.0/0 | 0.0.0.0 | 255.255.255.255 | db-01 10.200.0.10 | any | any | DENY | Block client→DB |
-| ACL-08 | 0.0.0.0/0 | 0.0.0.0 | 255.255.255.255 | any | any | any | DENY+LOG | Default deny |
+- All values bound via `$stmt->bindValue()` with `ATTR_EMULATE_PREPARES = false` (native MariaDB prepared statements).
+- Dynamic sort columns and identifiers validated against hardcoded allowlists before string concatenation. Never bound as raw SQL syntax.
+- Input strings: trim, strip control characters, validate length and format.
+- Email: validate format and domain pattern.
+- Enumerations: validate membership.
+- Numeric IDs: validate type and range.
+- Error responses: generic messages only; no stack traces or SQL in output.
 
-Wildcard arithmetic example (ACL-05): `255.255.255.255 − 255.255.255.0 = 0.0.0.255`.
-All IP addresses are documentation-only examples. ACL implementation is future network-configuration work.
+## Extended ACL Rule Set
+
+Design/documentation artifact only. No physical router changes are planned.
+
+```
+! =============================================================================
+! DentiSys Network Segmentation — Cisco Extended ACL
+! Design documentation only — intended for later network implementation.
+! =============================================================================
+!
+! Network Zone Addresses:
+!   FRONTEND (proxy): host 192.168.10.10
+!   BACKEND (API):    host 192.168.20.20
+!   DATABASE (MariaDB): host 192.168.30.10
+!   ADMIN-VPN:        10.0.0.0 0.0.0.31       (/27)
+!   CLINIC-DEVICES:   192.168.40.0 0.0.0.31    (/27)
+!   SMTP-RELAY:       host 192.168.50.10
+!   DNS-RESOLVER:     host 192.168.50.11
+!
+! ACL-01: Public HTTPS to frontend/reverse-proxy only.
+permit tcp any host 192.168.10.10 eq 443
+!
+! ACL-02: Frontend host to backend API host.
+permit tcp host 192.168.10.10 host 192.168.20.20 eq 8080
+!
+! ACL-03: Backend API host to MariaDB host on TCP 3306 only.
+permit tcp host 192.168.20.20 host 192.168.30.10 eq 3306
+!
+! ACL-04: Admin VPN to frontend (SSH + HTTPS).
+permit tcp 10.0.0.0 0.0.0.31 host 192.168.10.10 eq 22
+permit tcp 10.0.0.0 0.0.0.31 host 192.168.10.10 eq 443
+!
+! ACL-05: Admin VPN to backend (SSH + API management).
+permit tcp 10.0.0.0 0.0.0.31 host 192.168.20.20 eq 22
+permit tcp 10.0.0.0 0.0.0.31 host 192.168.20.20 eq 8080
+!
+! ACL-06: Clinic devices subnet to approved backend API.
+permit tcp 192.168.40.0 0.0.0.31 host 192.168.20.20 eq 8080
+!
+! ACL-07: Backend to SMTP relay.
+permit tcp host 192.168.20.20 host 192.168.50.10 eq 587
+!
+! ACL-08: Backend to DNS resolver.
+permit udp host 192.168.20.20 host 192.168.50.11 eq 53
+!
+! ACL-09: Explicit deny — no public access to backend.
+deny ip any host 192.168.20.20 log
+!
+! ACL-10: Explicit deny — no public access to database.
+deny ip any host 192.168.30.10 log
+!
+! ACL-11: Default deny all with logging.
+deny ip any any log
+!
+! End of ACL
+```
+
+### ACL Notes
+
+- Only the backend API host (`192.168.20.20`) may reach the MariaDB database host (`192.168.30.10:3306`).
+- Admin VPN does NOT have direct MariaDB access. Admin VPN may reach approved frontend and backend SSH/management ports only.
+- The broader database deny rule (ACL-10) covers any Admin-VPN-to-database access attempt.
+- The final line is an explicit deny-all with logging.
 
 ## OWASP Design Rationale
 
-The database schema and endpoint security design address multiple OWASP Top 10:2025 categories simultaneously. Parameterized queries via PDO prepared statements eliminate injection vectors (A05:2025 Injection). Object-level authorization on every endpoint — where Faculty and Secretary users may only access records within their assigned class or course scope, enforced through `scope_type` on `role_permission` joined with `secretary_assignment` or `course_component` — provides defense against Broken Access Control (A01:2025) and Broken Object Level Authorization (API1:2023) that cannot be bypassed by frontend route guards alone. Input validation through strict allowlisting guards against Insecure Design vulnerabilities (A06:2025). Rate limiting on authentication endpoints mitigates brute-force credential attacks (A07:2025 Authentication Failures, API4:2023 Unrestricted Resource Consumption). The tamper-evident audit chain using HMAC-SHA256 with a per-module partitioned event MAC ensures that audit log manipulation is detectable — addressing Security Logging and Alerting Failures (A09:2025). Encrypted TOTP secret storage (AES-256-GCM) and bcrypt recovery-code/password storage address Cryptographic Failures (A04:2025) by ensuring a database breach reveals no plaintext authenticators. Together, these controls form a defense-in-depth architecture protecting against the most prevalent application security risks while remaining implementable in the current plain-PHP/MariaDB architecture. The endpoint control table and ACL rules are documentation-phase artifacts; their implementation as backend middleware and network firewall rules is future work.
+Parameterized queries via PDO native prepares eliminate injection vectors (A05:2025). Backend-enforced RBAC with hardcoded allowlists prevents broken access control (A01:2025, API1:2023). Rate limiting on authentication endpoints mitigates credential brute-force attacks (A07:2025, API4:2023). The HMAC-chained audit trail makes tampering detectable (A09:2025). AES-256-GCM encrypted TOTP secrets and bcrypt/PASSWORD_DEFAULT hash storage prevent plaintext credential exposure (A04:2025). Together these controls form a defense-in-depth architecture implementable in the current plain-PHP/MariaDB architecture. The endpoint control table, ACL rules, and rate-limiter implementation are documented design artifacts; their concrete backend implementation is future work allocated to later approved stages.
+
+## Rate-Limiting Design (Planned Future Implementation)
+
+- **Two-tier**: Unauthenticated IP-based limiter (before auth), authenticated user/session-based limiter (after auth).
+- **Storage**: Filesystem (`backend/storage/ratelimit/`). No Redis or additional dependencies.
+- **Default**: Enabled. No permanent account lockout — window-based counters reset automatically.
+- **Testability**: Injected clock callable for deterministic window testing. Isolated temporary storage directory for tests. No test-only reset endpoint.
+- **Audit Bounds**: At most 1 rate-limit event per minute per scope per endpoint.
+- **Challenge-token attempt limits**: Enforced by the filesystem rate limiter using the challenge JTI as part of the key. No database storage for challenge attempts.

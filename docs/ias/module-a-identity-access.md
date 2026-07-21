@@ -5,112 +5,179 @@
 ```
 User                    Backend                         Database
  |                        |                               |
- |--POST /enroll--------->|                               |
- |                        |--generate TOTP secret-------->|
- |                        |--AES-256-GCM encrypt--------->|
- |                        |  (random nonce, auth tag)     |
- |                        |--INSERT mfa_credential------->|
- |                        |  status='pending'             |
- |<--otpauth URI + QR-----|                               |
- |                        |                               |
- |--POST /verify (code)--->|                               |
- |                        |--SELECT mfa_credential------->|
- |                        |--decrypt ciphertext           |
- |                        |--compute expected TOTP        |
- |                        |--check last_accepted_step     |
- |                        |--UPDATE status='enabled'----->|
- |                        |--generate recovery codes----->|
- |                        |  (store bcrypt hashes)        |
- |<--recovery codes-------|                               |
- |  (display once)        |                               |
- |                        |                               |
- |--POST /login----------->|                               |
- |  (password + TOTP)     |                               |
+ |--POST /login (pwd)---->|                               |
  |                        |--verify password (bcrypt)     |
- |                        |--decrypt TOTP secret          |
- |                        |--compute & verify TOTP        |
- |                        |--update last_accepted_step    |
- |                        |--INSERT auth_session--------->|
- |<--session token--------|                               |
+ |                        |--check mfa_status='enabled'  |
+ |<--mfa_required:true----|                               |
+ |  (mfa_session_token)   |                               |
+ |                        |                               |
+ |--POST /mfa/verify----->|                               |
+ |  (token + code)        |                               |
+ |                        |--decrypt ciphertext           |
+ |                        |--compute TOTP(current_step)   |
+ |                        |--identify matched_step        |
+ |                        |--matched_step >               |
+ |                        |  last_accepted_step?          |
+ |                        |--UPDATE last_accepted_step--> |
+ |                        |--issue access_token +         |
+ |                        |  refresh_token                |
+ |                        |--INSERT auth_sessions-------->|
+ |                        |  (issued_token_version)       |
+ |                        |--INSERT security_tokens------>|
+ |                        |  (purpose=refresh)            |
+ |<--access_token +       |                               |
+ |  refresh cookie        |                               |
 ```
 
-## Complete RBAC Matrix
+### MFA Enrollment
 
-### 66 Permissions × 3 Roles
+```
+User                    Backend                         Database
+ |                        |                               |
+ |--POST /mfa/enroll/--->|                               |
+ |  (enrollment_token)   |                               |
+ |                        |--generate 20B random secret   |
+ |                        |--AES-256-GCM encrypt          |
+ |                        |  ( openssl_cipher_iv_length ) |
+ |                        |--INSERT security_tokens------>|
+ |                        |  (purpose=mfa_credential,     |
+ |                        |   status='pending')           |
+ |<--base32_secret +      |                               |
+ |  otpauth:// URI        |                               |
+ |                        |                               |
+ |--POST /mfa/enroll/--->|                               |
+ |  confirm (code)        |                               |
+ |                        |--decrypt, verify TOTP         |
+ |                        |--UPDATE mfa_status='enabled'  |
+ |                        |  last_accepted_step=matched   |
+ |                        |--generate 8 recovery codes    |
+ |                        |  (password_hash)              |
+ |                        |--INSERT security_tokens------>|
+ |                        |  (purpose=mfa_recovery,       |
+ |                        |   secret_hash)                |
+ |<--recovery codes-------|                               |
+ |  (display once)        |                               |
+```
 
-| perm_code | Admin | Faculty | Secretary | Scope perms for each role |
-|-----------|-------|---------|-----------|--------------------------|
-| account.read | system_wide | — | — |
-| account.approve | system_wide | — | — |
-| account.reject | system_wide | — | — |
-| role_permission.read | system_wide | — | — |
-| faculty_approval.read | system_wide | — | — |
-| student.read | system_wide | assigned_class | — |
-| student.create | — | assigned_class | — |
-| student.update | — | assigned_class | — |
-| student.delete | — | assigned_class | — |
-| course.read | aggregate | aggregate | — |
-| component_type.read | aggregate | aggregate | — |
-| grading_component.read | aggregate | assigned_course | — |
-| grading_component.write | system_wide | assigned_course | — |
-| academic_term.read | aggregate | aggregate | — |
-| academic_term.write | system_wide | — | — |
-| class_section.read | aggregate | assigned_class | assigned_class |
-| class_section.write | system_wide | — | — |
-| enrollment.read | aggregate | assigned_class | assigned_class |
-| enrollment.write | — | assigned_class | — |
-| assessment.read | aggregate | assigned_course | — |
-| assessment.create | — | assigned_course | — |
-| assessment.update | — | assigned_course | — |
-| assessment.delete | — | assigned_course | — |
-| assessment_score.write | — | assigned_course | — |
-| term_grade.read | aggregate | assigned_course | — |
-| term_grade.write | — | assigned_course | — |
-| attendance_session.read | aggregate | assigned_class | assigned_class |
-| attendance_session.create | — | assigned_class | — |
-| attendance_record.read | aggregate | assigned_class | assigned_class |
-| attendance_override.create | — | — | assigned_class |
-| retention_policy.read | aggregate | aggregate | — |
-| retention_policy.write | system_wide | — | — |
-| retention_case.read | aggregate | assigned_class | — |
-| remedial_attempt.read | aggregate | assigned_class | — |
-| remedial_attempt.create | — | assigned_class | — |
-| remedial_attempt.update | — | assigned_class | — |
-| risk_result.read | aggregate | aggregate | — |
-| invitation.create | — | assigned_class | — |
-| invitation.revoke | — | assigned_class | — |
-| assignment.read | aggregate | assigned_class | assigned_class |
-| biometric_consent.read | aggregate | assigned_class | — |
-| biometric_consent.write | — | assigned_class | — |
-| student_image.read | aggregate | assigned_class | — |
-| student_image.write | — | assigned_class | — |
-| facial_template.metadata | aggregate | assigned_class | — |
-| facial_template.enroll | — | assigned_class | — |
-| facial_template.verify | — | assigned_class | — |
-| facial_template.revoke | system_wide | assigned_class | — |
-| cctv.read | — | — | assigned_class |
-| email.send | — | assigned_class | — |
-| report.read | system_wide | assigned_class | — |
-| report.export | system_wide | assigned_class | — |
-| audit.read | system_wide | own | own |
-| audit.export | system_wide | — | — |
-| device.read | aggregate | aggregate | — |
-| session.read | system_wide | own | own |
-| session.force_logout | system_wide | — | — |
-| mfa.read | own | own | own |
-| mfa.write | own | own | own |
-| recovery_code.generate | own | own | own |
-| recovery_code.consume | own | own | own |
-| recovery_code.revoke | own | own | own |
-| profile.read | own | own | own |
-| profile.update | own | own | own |
-| preference.read | own | own | own |
-| preference.update | own | own | own |
+### Key Design Points
 
-**Totals**: Admin 45, Faculty 54, Secretary 18, Combined 117 bindings.
+- **Password hashing**: `password_hash($password, PASSWORD_DEFAULT)`, VARCHAR(255) storage.
+- **TOTP secret encryption**: AES-256-GCM. IV length validated via `openssl_cipher_iv_length('aes-256-gcm')` (12 bytes). Auth tag verified during decryption.
+- **Replay protection**: Identify exact matched_step (`current_step-1`, `current_step`, or `current_step+1`). Accept only when `matched_step > last_accepted_step`. Update `last_accepted_step` to `matched_step` atomically.
+- **Recovery codes**: 8 codes, each hashed with `password_hash(PASSWORD_DEFAULT)`. Consumed via `used_at` timestamp. Marked used, never deleted.
+- **No QR dependency**: Only base32 secret text and otpauth URI returned. QR rendering is not approved for Stage 1.
 
-No permission grants raw TOTP secrets, recovery codes, passwords, refresh/access tokens, or raw LBPH facial-template vectors.
+### Challenge Token Design
+
+- `enrollment_token` claims: `{sub: user_id, purpose: "mfa_enrollment", jti: "unique", iat, exp: iat+300}`
+- `mfa_session_token` claims: `{sub: user_id, purpose: "mfa_challenge", jti: "unique", iat, exp: iat+300}`
+- Lifetime: 5-minute expiry.
+- Normal access-token middleware rejects tokens with a `purpose` claim.
+- **Attempt limit**: Enforced by the filesystem rate limiter using the challenge JTI as part of the rate-limit key. The rate limiter is implemented in a later stage. A verification-attempt counter is NOT maintained inside the signed challenge JWT because client-side state is not authoritative.
+- No new database table or security_tokens purpose is added for challenge attempts.
+
+## Complete RBAC Matrix (125 Static Grants)
+
+| Role | Resource | Action | Scope |
+|------|----------|--------|-------|
+| **Admin** | mfa | enroll_own, verify_own, recover_own | own |
+| | mfa | force_disable_any | system_wide |
+| | user_accounts | read_own, update_own | own |
+| | user_accounts | read, update_status | system_wide |
+| | sessions | read_own, revoke_own | own |
+| | sessions | read_any, revoke_any | system_wide |
+| | students | create, update, disable | system_wide |
+| | students | read | aggregate |
+| | class_sections | read | aggregate |
+| | class_sections | create, update | system_wide |
+| | courses | read | aggregate |
+| | courses | create, update | system_wide |
+| | enrollments | read | aggregate |
+| | enrollments | create, archive, update_grade | system_wide |
+| | assessments | create, update, archive | system_wide |
+| | assessments | read | aggregate |
+| | assessment_scores | create, update, bulk_submit | system_wide |
+| | assessment_scores | read | aggregate |
+| | grades | read | aggregate |
+| | grades | override | system_wide |
+| | attendance | create_session, override | system_wide |
+| | attendance | read_records | aggregate |
+| | retention_policy | read | aggregate |
+| | retention_policy | configure | system_wide |
+| | retention_cases | read | aggregate |
+| | retention_cases | override | system_wide |
+| | remedial_exams | read | aggregate |
+| | remedial_exams | create, score | system_wide |
+| | biometric_consent | read | aggregate |
+| | biometric_consent | manage | system_wide |
+| | facial_templates | enroll, revoke, read_metadata | system_wide |
+| | invitations | read, create, revoke | system_wide |
+| | email | send, read_history | system_wide |
+| | reports | generate | aggregate |
+| | audit_trail | read_own | own |
+| | audit_trail | read_module, read_all | system_wide |
+| | system_settings | read, update | system_wide |
+| **Faculty** | mfa | enroll_own, verify_own, recover_own | own |
+| | user_accounts | read_own, update_own | own |
+| | sessions | read_own, revoke_own | own |
+| | students | create, read, update | assigned_class |
+| | class_sections | read | assigned_class |
+| | class_sections | update | assigned_course |
+| | courses | read | assigned_course |
+| | enrollments | read | assigned_class |
+| | enrollments | create, archive, update_grade | assigned_course |
+| | assessments | create, read, update, archive | assigned_course |
+| | assessment_scores | create, read, update, bulk_submit | assigned_course |
+| | grades | read | assigned_class |
+| | grades | override | assigned_course |
+| | attendance | create_session, override | assigned_course |
+| | attendance | read_records | assigned_class |
+| | retention_policy | read | assigned_class |
+| | retention_cases | read | assigned_class |
+| | remedial_exams | read, create, score | assigned_course |
+| | biometric_consent | read | assigned_class |
+| | facial_templates | enroll, revoke, read_metadata | assigned_class |
+| | invitations | read, create, revoke | assigned_class |
+| | email | send | assigned_class |
+| | email | read_history | own |
+| | reports | generate | assigned_class |
+| | audit_trail | read_own | own |
+| | audit_trail | read_module | assigned_class |
+| **Secretary** | mfa | enroll_own, verify_own, recover_own | own |
+| | user_accounts | read_own, update_own | own |
+| | sessions | read_own, revoke_own | own |
+| | students | read | assigned_class |
+| | class_sections | read | assigned_class |
+| | courses | read | assigned_class |
+| | enrollments | read | assigned_class |
+| | attendance | read_records | assigned_class |
+| | attendance | override | assigned_class |
+| | audit_trail | read_own | own |
+| | audit_trail | read_module | assigned_class |
+| | secretary_invitation_own | accept | own |
+
+Total: 125 rows (= 62 admin + 47 faculty + 16 secretary)
+
+### Secretary Restrictions
+
+- No access to: assessment_scores, grades, retention_cases, remedial_exams, facial_templates (enrollment or metadata), system_settings, student update or disable.
+- Attendance: read_records and override only. No create_session or mark. Automated CCTV/device ingestion is a device/service policy, not a Secretary role action.
+- Facial enrollment is performed from the Faculty Student Management page, not from any Secretary page.
+
+### Faculty Delete = Enrollment Archive
+
+The Faculty Student Management "delete" action maps to `enrollments.archive` (setting `retention_state='archived'` on the enrollment row for the faculty's class section). The student record is NOT globally disabled or deleted. Global student disable (`students.disable`) is admin-only (system_wide).
+
+### Public Endpoint Policies (Outside RBAC Matrix)
+
+- `POST /api/auth/login` — unauthenticated
+- `POST /api/auth/register` — unauthenticated
+- `POST /api/auth/password/reset-request` — unauthenticated
+- `POST /api/activate-secretary` — invitation token based
+- `GET /api/health` — unauthenticated
 
 ## Design Rationale
 
-The TOTP design uses AES-256-GCM authenticated encryption rather than a one-way hash because the shared secret is symmetric key material that the server must recover to compute time-based HMAC codes per RFC 6238. This mirrors the fundamental principle behind HOTP/TOTP: the shared secret is an input to an HMAC computation, not a user-supplied value to compare. By contrast, passwords and recovery codes are stored as irreversible bcrypt hashes because they are compared against user-submitted input rather than used as computational input. The normalized RBAC model separates three concerns: identity (which `access_role` a user holds), capability (which `permission` codes that role grants), and boundary (the `scope_type` on each `role_permission` binding plus assignment records). A Secretary user holds the SECRETARY role which grants `attendance_override.create`, but the `scope_type = 'assigned_class'` combined with `secretary_assignment.cs_id` constrains which class_section records they may act upon — achieving least-privilege without granting broad system-wide access merely through role membership.
+- **Hashing/MAC strategy**: Passwords use `PASSWORD_DEFAULT`. Recovery codes use `PASSWORD_DEFAULT`. Token digests use SHA-256. MFA secrets use AES-256-GCM authenticated encryption. Audit chain uses HMAC-SHA-256.
+- **Privilege management**: Server-side authorization only. Never trusts browser-supplied role or scope. Scope derived from class_sections FK relationships (instructor_user_id, secretary_user_id), not from user_accounts JSON fields.
+- **Least privilege**: Secretary has 16 grants compared to admin's 62 and faculty's 47. Secretary has read-only student, attendance, and audit access within assigned class only.

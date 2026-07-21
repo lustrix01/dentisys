@@ -1,83 +1,47 @@
-# DentiSys Integrated Target ERD — Phase 1C
+# DentiSys Integrated Target ERD — Phase 2 Baseline
 
-## Legend
+## Entity Catalog (15 application tables)
 
-- `[E]` Existing (migrations 001–048)
-- `[E+]` Existing, extended via ALTER
-- `[1C]` New Phase 1C academic entity
-- `[S]` New SAD/IAS security entity
-
-## Entity Catalog (46 business tables)
+Total physical tables: 16 (15 application + 1 `_schema_migrations`).
 
 ### Identity and RBAC
-- `user_account` [E+] — login_email, role_id FK, token_version, timestamps added
-- `access_role` [S] — admin, faculty, secretary
-- `permission` [S] — 66 permission codes
-- `role_permission` [S] — 117 bindings with scope_type
-
-### Academic Structure
-- `academic_term` [1C] — year/semester with unique constraint
-- `course` [E] — unchanged
-- `course_component` [E] — unchanged (lab_weight, lec_weight)
-- `component` [E+] — ct_id FK→component_type
-- `component_type` [1C] — 8 paper-defined categories with domain
-- `class_section` [E+] — term_id FK→academic_term
+- `user_accounts` — central identity, profile, role, preferences, account status
+- `role_permissions` — denormalized RBAC policy (125 static grants)
 
 ### People
-- `student` [E] — unchanged
-- `student_user_account` [1C] — 1:1 mapping
-- `faculty` [E+] — uq_faculty_user_id added
-- `user_preference` [1C] — per-user theme
+- `students` — student identity, demographics, optional user_id FK for secretary activation
+
+### Academic Structure
+- `class_sections` — course offerings with instructor, optional secretary, term fields
+- `courses` — course catalog with grading_config JSON
 
 ### Enrollment and Grading
-- `enrollment` [E] — unchanged (cs_id gives term through class_section)
-- `assessment` [E] — unchanged
-- `student_assessment_grade` [E] — unchanged
-- `student_term_grade` [E] — unchanged (stg_id referenced by retention_case)
-
-### Attendance
-- `attendance_session` [E] — unchanged
-- `device` [E+] — device_type added
-- `attendance_record` [E] — unchanged
-- `attendance_override` [1C] — immutable overrides with operation_uuid
-
-### Retention and Remedial
-- `retention_policy` [1C] — active-key generated
-- `retention_policy_version` [1C] — threshold operators
-- `retention_case` [1C] — stg_id FK→student_term_grade
-- `retention_record` [E] — legacy, unchanged
-- `remedial_attempt` [1C] — typed attempts, immutable on completion
-- `remedial_log` [E] — legacy, unchanged
-- `retention_risk` [E] — unchanged
+- `enrollments` — one student in one class-section (final_gwa, retention_state, remedial_state_json)
+- `assessments` — assessment/activity definitions linked to cs_id
+- `assessment_scores` — individual student scores per assessment
+- `attendance_records` — per-student attendance with override fields (enrollment_id authoritative)
 
 ### Biometric
-- `student_image` [E] — unchanged
-- `facial_template` [E] — unchanged (raw LBPH vectors)
-- `biometric_consent` [1C] — historical rows with current key
-
-### Workflow
-- `faculty_approval` [S] — immutable on decision
-- `secretary_invitation` [S] — active-pending key, identity validation trigger
-- `secretary_assignment` [S] — active key, sua_id chain
+- `biometric_profiles` — one row per student, protected template/image references, consent metadata
 
 ### Security
-- `mfa_credential` [S] — AES-256-GCM ciphertext
-- `mfa_recovery_code` [S] — bcrypt hashes
-- `auth_session` [S] — device-aware
-- `refresh_token` [S] — family, parent UNIQUE
-- `access_token_revocation` [S] — JTI digests
-- `password_reset_token` [S] — single-use
-- `auth_throttle` [S] — scoped-hash
-- `audit_chain` [S] — partitioned MAC state
-- `audit_event` [S] — immutable, insert-time MAC
-- `audit_log` [E] — legacy, preserved unchanged
-- `email_delivery` [S] — immutable on terminal
+- `auth_sessions` — session identity and lifecycle only (issued_token_version, no refresh digests)
+- `security_tokens` — universal token store (purpose discriminator, nullable columns per purpose)
+- `audit_events` — append-only, MAC-chained audit trail (before/after state JSON + hashes)
+- `email_outbox` — outgoing email queue
+- `system_settings` — global config store (is_internal for chain head)
 
 ### Key Relationships
 
 ```
-academic_term 1──< class_section 1──< enrollment 1──< student_term_grade 1──< retention_case
-student 1──< student_user_account (1:1) ──< secretary_assignment
-user_account 1──< auth_session 1──< refresh_token (self-ref)
-audit_chain 1──< audit_event
+courses 1──< class_sections 1──< enrollments 1──< attendance_records
+user_accounts 1──< students (nullable UNIQUE)
+user_accounts 1──< auth_sessions 1──< security_tokens
+audit_events: chain head stored in system_settings (audit_chain_head)
 ```
+
+## Consolidation Summary
+
+- 46 Phase 1C business tables → 15 Phase 2 application tables
+- 80 legacy migration files archived at `database/migrations/archive/`
+- Clean-install-only baseline: `001_baseline_schema.sql`, `002_seed_rbac.sql`, `003_seed_system_settings.sql`

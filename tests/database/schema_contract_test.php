@@ -20,102 +20,192 @@ function db_try(string $db, string $sql): array {
     global $repo, $pass;
     return run("docker compose --project-directory " . escapeshellarg($repo) . " exec -T db mariadb -u root -p" . escapeshellarg($pass) . " " . escapeshellarg($db) . " -e " . escapeshellarg($sql) . " 2>&1");
 }
-
-$dbPrefix = 'dentisys_test_schema_';
-$db = $dbPrefix . substr(md5(uniqid()), 0, 6);
-echo "=== Phase 1C Schema Contract Test ===\nDB: $db\n\n";
-
-run("docker compose --project-directory " . escapeshellarg($repo) . " exec -T db mariadb -u root -p" . escapeshellarg($pass) . " -e " . escapeshellarg("DROP DATABASE IF EXISTS $db; CREATE DATABASE $db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"));
-$migrationDir = $repo . '/database/migrations';
-foreach (glob("$migrationDir/0*.sql") as $f) {
-    if ((int)substr(basename($f),0,3) > 80) break;
-    $cfile = '/tmp/' . basename($f);
-    run("docker cp " . escapeshellarg($f) . " dentisys-db-1:" . escapeshellarg($cfile));
+function source_migration(string $db, string $file): void {
+    global $repo, $pass;
+    $cfile = '/tmp/' . basename($file);
+    run("docker cp " . escapeshellarg($file) . " dentisys-db-1:" . escapeshellarg($cfile));
     db_run($db, "source " . $cfile);
 }
 
-echo "\n--- Setup prerequisite data ---\n";
-db_run($db, "INSERT INTO user_account (username, login_email, password_hash, role, role_id, status) SELECT 'admin@bu.edu.ph', 'admin@bu.edu.ph', '\$2y\$10\$aa', 'admin', role_id, 'Active' FROM access_role WHERE role_name='admin'");
-db_run($db, "INSERT INTO user_account (username, login_email, password_hash, role, role_id, status) SELECT 'faculty@bu.edu.ph', 'faculty@bu.edu.ph', '\$2y\$10\$aa', 'faculty', role_id, 'Active' FROM access_role WHERE role_name='faculty'");
-db_run($db, "INSERT INTO faculty (fac_fname,fac_lname,is_admin,user_id) VALUES ('Test','Faculty',0,2)");
-db_run($db, "INSERT INTO course (course_code,name,units) VALUES ('T','T',3)");
-db_run($db, "INSERT INTO course_component (lab_weight,lec_weight,has_zero_rule,fac_id,course_id) VALUES (0.4,0.6,0,1,1)");
-db_run($db, "INSERT INTO device (device_name,ip_add,location,status) VALUES ('test','0.0.0.0','test','active')");
-db_run($db, "INSERT INTO academic_term (term_code,school_year,semester) VALUES ('2025-2026-1ST','2025-2026','1ST')");
-db_run($db, "INSERT INTO class_section (cs_name,cs_semester,cs_school_year,cs_block,status,term_id,cc_id) VALUES ('Test','1ST','2025-2026','A','Active',1,1)");
-db_run($db, "INSERT INTO student (stud_number,stud_fname,stud_lname,sex,stud_bu_email,stud_contact,year_level,is_regular,acc_status) VALUES ('D001','A','B','M','a@b.u','1','1',1,'Active')");
-db_run($db, "INSERT INTO enrollment (en_status,date_enrolled,student_id,cs_id) VALUES ('Active',NULL,1,1)");
-db_run($db, "INSERT INTO student_term_grade (stg_term,stg_grade,en_id) VALUES ('Midterm',2.50,1)");
-db_run($db, "INSERT INTO retention_policy (policy_name,is_active) VALUES ('Default',1)");
-db_run($db, "INSERT INTO retention_policy_version (policy_id,version_number,effective_from) VALUES (1,1,NOW(6))");
-ok(['c'=>0], 'Prerequisite data inserted');
+$dbPrefix = 'dentisys_test_schema_';
+$db = $dbPrefix . substr(md5(uniqid()), 0, 6);
+echo "=== Phase 2 Baseline Schema Contract Test ===\nDB: $db\n\n";
 
-echo "--- Counts ---\n";
-$tbl = (int)q($db, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$db'");
-echo "Tables: $tbl (expected 46)\n"; if ($tbl !== 46) exit(1);
-ok(['c'=>0], '46 business tables');
-ok(['c'=>0], '3 access_role'); if((int)q($db,"SELECT COUNT(*) FROM access_role")!==3) exit(1);
-ok(['c'=>0], '66 permissions'); if((int)q($db,"SELECT COUNT(*) FROM permission")!==66) exit(1);
-ok(['c'=>0], '117 role_permission'); if((int)q($db,"SELECT COUNT(*) FROM role_permission")!==117) exit(1);
-ok(['c'=>0], '8 component_type'); if((int)q($db,"SELECT COUNT(*) FROM component_type")!==8) exit(1);
-$trig = (int)q($db, "SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='$db'");
-echo "Triggers: $trig\n"; if ($trig !== 11) exit(1); ok(['c'=>0], '11 triggers');
+run("docker compose --project-directory " . escapeshellarg($repo) . " exec -T db mariadb -u root -p" . escapeshellarg($pass) . " -e " . escapeshellarg("DROP DATABASE IF EXISTS $db; CREATE DATABASE $db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"));
 
-echo "\n--- ALTER outcomes ---\n";
-foreach(['component.ct_id','class_section.term_id','user_account.login_email','user_account.role_id','user_account.token_version','device.device_type'] as $a) {
-    list($t,$c)=explode('.',$a);
-    ok(['c'=>(int)q($db,"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$db' AND TABLE_NAME='$t' AND COLUMN_NAME='$c'")===1?0:1], "ALTER: $a");
+// Create _schema_migrations (normally done by migrate.ps1)
+db_run($db, "CREATE TABLE IF NOT EXISTS _schema_migrations (version VARCHAR(255) NOT NULL PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+$migrationDir = $repo . '/database/migrations';
+$baselineFiles = [
+    '001_baseline_schema.sql',
+    '002_seed_rbac.sql',
+    '003_seed_system_settings.sql',
+];
+
+foreach ($baselineFiles as $f) {
+    $full = "$migrationDir/$f";
+    if (!file_exists($full)) {
+        fwrite(STDERR, "FAIL: migration file not found: $full\n");
+        exit(1);
+    }
+    source_migration($db, $full);
 }
+ok(['c'=>0], 'All 3 baseline migrations applied');
+
+echo "\n--- Table count ---\n";
+$tbl = (int)q($db, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$db' AND TABLE_TYPE='BASE TABLE'");
+echo "Tables: $tbl (expected 16)\n"; if ($tbl !== 16) { fwrite(STDERR,"FAIL: table count $tbl != 16\n"); exit(1); }
+ok(['c'=>0], '16 physical tables (15 application + 1 _schema_migrations)');
+
+echo "\n--- Application table count ---\n";
+$appTables = [
+    'user_accounts','role_permissions','students','class_sections','courses',
+    'enrollments','assessments','assessment_scores','attendance_records',
+    'biometric_profiles','auth_sessions','security_tokens','audit_events',
+    'email_outbox','system_settings'
+];
+$missing = [];
+foreach ($appTables as $t) {
+    $cnt = (int)q($db, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$db' AND TABLE_NAME='$t'");
+    if ($cnt !== 1) { $missing[] = $t; }
+}
+if (count($missing) > 0) { fwrite(STDERR,"FAIL: missing tables: " . implode(', ', $missing) . "\n"); exit(1); }
+$expectedApp = count($appTables);
+$allTables = q($db, "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='$db' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME");
+$actualApp = 0;
+foreach (explode("\n", $allTables) as $t) {
+    $t = trim($t);
+    if ($t !== '' && $t !== '_schema_migrations') { $actualApp++; }
+}
+if ($actualApp !== $expectedApp) {
+    fwrite(STDERR, "FAIL: app table count $actualApp != $expectedApp\n");
+    fwrite(STDERR, "ALL TABLES IN DB:\n$allTables\n");
+    exit(1);
+}
+ok(['c'=>0], "15 application tables verified");
+
+echo "\n--- RBAC seed count ---\n";
+$rbac = (int)q($db, "SELECT COUNT(*) FROM role_permissions");
+echo "RBAC rows: $rbac (expected 125)\n"; if ($rbac !== 125) exit(1);
+ok(['c'=>0], '125 role_permissions');
+
+$roles = q($db, "SELECT DISTINCT role_name FROM role_permissions ORDER BY role_name");
+echo "Distinct roles: " . str_replace("\n", ', ', $roles) . " (expected 3)\n";
+if (count(explode("\n", trim($roles))) !== 3) exit(1);
+ok(['c'=>0], '3 distinct roles');
+
+$secretaryChecks = [
+    'assessment_scores' => 'assessment_scores',
+    'grades' => 'grades',
+    'retention_cases' => 'retention_cases',
+    'remedial_exams' => 'remedial_exams',
+    'facial_templates' => 'facial_templates',
+    'system_settings' => 'system_settings',
+];
+foreach ($secretaryChecks as $resource => $label) {
+    $cnt = (int)q($db, "SELECT COUNT(*) FROM role_permissions WHERE role_name='secretary' AND resource='$resource'");
+    if ($cnt !== 0) { fwrite(STDERR,"FAIL: secretary should not have access to $resource\n"); exit(1); }
+}
+ok(['c'=>0], 'Secretary has no prohibited resource grants');
+
+$secretaryRead = (int)q($db, "SELECT COUNT(*) FROM role_permissions WHERE role_name='secretary' AND resource='students' AND action='read'");
+if ($secretaryRead !== 1) exit(1);
+ok(['c'=>0], 'Secretary has students read access');
+
+$secretaryAttRead = (int)q($db, "SELECT COUNT(*) FROM role_permissions WHERE role_name='secretary' AND resource='attendance' AND action='read_records'");
+$secretaryAttOverride = (int)q($db, "SELECT COUNT(*) FROM role_permissions WHERE role_name='secretary' AND resource='attendance' AND action='override'");
+if ($secretaryAttRead !== 1 || $secretaryAttOverride !== 1) exit(1);
+ok(['c'=>0], 'Secretary has attendance read_records and override (but not create_session or mark)');
+
+$secretaryAttMark = (int)q($db, "SELECT COUNT(*) FROM role_permissions WHERE role_name='secretary' AND resource='attendance' AND action IN ('create_session', 'mark')");
+if ($secretaryAttMark !== 0) exit(1);
+ok(['c'=>0], 'Secretary does NOT have attendance.create_session or attendance.mark');
+
+$facultyArchive = (int)q($db, "SELECT COUNT(*) FROM role_permissions WHERE role_name='faculty' AND resource='enrollments' AND action='archive'");
+if ($facultyArchive !== 1) exit(1);
+ok(['c'=>0], 'Faculty has enrollments.archive (assigned_class)');
+
+$noDupes = (int)q($db, "SELECT COUNT(*) FROM (SELECT role_name, resource, action, scope, COUNT(*) AS cnt FROM role_permissions GROUP BY role_name, resource, action, scope HAVING cnt > 1) dupes");
+if ($noDupes !== 0) exit(1);
+ok(['c'=>0], 'No duplicate role/resource/action/scope tuples');
+
+echo "\n--- System settings seed count ---\n";
+$settings = (int)q($db, "SELECT COUNT(*) FROM system_settings");
+echo "System settings rows: $settings (expected 5)\n"; if ($settings !== 5) exit(1);
+ok(['c'=>0], '5 system_settings rows');
+
+$chainHead = (int)q($db, "SELECT COUNT(*) FROM system_settings WHERE setting_key='audit_chain_head' AND is_internal=1");
+if ($chainHead !== 1) exit(1);
+ok(['c'=>0], 'audit_chain_head internal setting exists');
+
+echo "\n--- Trigger count ---\n";
+$trig = (int)q($db, "SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='$db'");
+echo "Triggers: $trig (expected 4)\n"; if ($trig !== 4) exit(1);
+ok(['c'=>0], '4 triggers');
+
+echo "\n--- Required triggers ---\n";
+$noUpdateAudit = (int)q($db, "SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='$db' AND TRIGGER_NAME='trg_audit_events_no_update'");
+if ($noUpdateAudit !== 1) exit(1);
+ok(['c'=>0], 'trg_audit_events_no_update');
+
+$noDeleteAudit = (int)q($db, "SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='$db' AND TRIGGER_NAME='trg_audit_events_no_delete'");
+if ($noDeleteAudit !== 1) exit(1);
+ok(['c'=>0], 'trg_audit_events_no_delete');
+
+$noDeleteInternal = (int)q($db, "SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='$db' AND TRIGGER_NAME='trg_system_settings_internal_no_delete'");
+if ($noDeleteInternal !== 1) exit(1);
+ok(['c'=>0], 'trg_system_settings_internal_no_delete');
+
+$identityGuard = (int)q($db, "SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='$db' AND TRIGGER_NAME='trg_system_settings_internal_identity_guard'");
+if ($identityGuard !== 1) exit(1);
+ok(['c'=>0], 'trg_system_settings_internal_identity_guard');
+
+echo "\n--- Audit append-only behavior ---\n";
+db_run($db, "INSERT INTO audit_events (event_uuid, sequence_number, occurred_at, module_code, action_code, event_status, previous_event_mac, event_mac, mac_key_version, canonical_schema_version) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1, NOW(6), 'T', 't', 'Success', 0x0000000000000000000000000000000000000000000000000000000000000000, 0x0000000000000000000000000000000000000000000000000000000000000001, 1, 1)");
+nok(db_try($db, "UPDATE audit_events SET description='x' WHERE event_uuid='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'"), 'T01: audit_events UPDATE rejected');
+nok(db_try($db, "DELETE FROM audit_events WHERE event_uuid='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'"), 'T02: audit_events DELETE rejected');
+ok(['c'=>0], 'Audit append-only triggers work');
+
+echo "\n--- System settings internal guard ---\n";
+nok(db_try($db, "DELETE FROM system_settings WHERE setting_key='audit_chain_head'"), 'T03: internal delete rejected');
+ok(['c'=>0], 'Internal delete guard works');
 
 echo "\n--- Unique constraints ---\n";
-foreach(['uq_faculty_user_id','uq_student_user_account_stud_id','uq_student_user_account_user_id','uq_retention_case_stg_id','uq_remedial_attempt_case_type','uq_refresh_token_parent','uq_user_account_login_email'] as $u) {
-    ok(['c'=>(int)q($db,"SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA='$db' AND CONSTRAINT_NAME='$u'")===1?0:1], "UQ: $u");
+$uqList = [
+    'uq_user_accounts_login_email',
+    'uq_students_student_number',
+    'uq_students_user_id',
+    'uq_enrollments_student_cs',
+    'uq_assessment_scores',
+    'uq_attendance_enrollment_date_code',
+    'uq_biometric_profiles_student',
+    'uq_auth_sessions_session_uuid',
+    'uq_security_tokens_token_digest',
+    'uq_security_tokens_parent_token_id',
+    'uq_audit_events_event_uuid',
+    'uq_audit_events_sequence',
+    'uq_email_outbox_operation_uuid',
+    'uq_system_settings_key',
+    'uq_role_permissions',
+    'uq_courses_course_code',
+];
+foreach ($uqList as $u) {
+    $cnt = (int)q($db, "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA='$db' AND CONSTRAINT_NAME='$u' AND CONSTRAINT_TYPE='UNIQUE'");
+    if ($cnt !== 1) { fwrite(STDERR,"FAIL: missing unique constraint: $u\n"); exit(1); }
 }
+ok(['c'=>0], 'All required unique constraints exist');
 
-echo "\n--- BINARY(32) ---\n";
+echo "\n--- Foreign keys ---\n";
+$fkCount = (int)q($db, "SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA='$db'");
+if ($fkCount < 20) { fwrite(STDERR,"FAIL: expected at least 20 foreign keys, found $fkCount\n"); exit(1); }
+ok(['c'=>0], "At least 20 foreign keys ($fkCount)");
+
+echo "\n--- BINARY(32) columns ---\n";
 $bin = (int)q($db, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$db' AND DATA_TYPE='binary' AND CHARACTER_MAXIMUM_LENGTH=32");
-echo "BINARY(32) columns: $bin\n"; ok(['c'=>0], "BINARY(32) columns exist");
-
-echo "\n--- Generated columns ---\n";
-$g = q($db, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$db' AND GENERATION_EXPRESSION <> ''");
-echo "Generated columns: $g\n"; if ((int)$g < 1) exit(1); ok(['c'=>0], 'Generated columns exist');
-
-echo "\n--- 11 Trigger behaviors ---\n";
-db_run($db, "INSERT INTO audit_chain (chain_code) VALUES ('t')");
-db_run($db, "INSERT INTO audit_event (event_uuid, chain_id, sequence_number, occurred_at, actor_type, module_code, action_code, event_status, previous_event_mac, event_mac, mac_key_version) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1, 1, NOW(6), 'system', 'T', 't', 'Success', 0x0000000000000000000000000000000000000000000000000000000000000000, 0x0000000000000000000000000000000000000000000000000000000000000001, 1)");
-nok(db_try($db,"UPDATE audit_event SET description='x' WHERE event_id=1"), 'T01: audit_event UPDATE rejected');
-nok(db_try($db,"DELETE FROM audit_event WHERE event_id=1"), 'T02: audit_event DELETE rejected');
-
-db_run($db, "INSERT INTO attendance_session (se_date,se_start,se_end,se_code,device_id,cs_id,se_secretary_id) VALUES ('2026-01-01','08:00','10:00','T',1,1,1)");
-db_run($db, "INSERT INTO attendance_record (sat_time_recorded,rec_status,rec_verification_method,se_id,en_id) VALUES (NOW(6),'present','test',1,1)");
-db_run($db, "INSERT INTO attendance_override (rec_id,overridden_by,previous_status,new_status,reason,operation_uuid) VALUES (1,1,'absent','present','test','bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')");
-nok(db_try($db,"UPDATE attendance_override SET reason='x' WHERE override_id=1"), 'T03: attendance_override UPDATE rejected');
-nok(db_try($db,"DELETE FROM attendance_override WHERE override_id=1"), 'T04: attendance_override DELETE rejected');
-
-db_run($db, "INSERT INTO student_term_grade (stg_term,stg_grade,en_id) VALUES ('Midterm',2.50,1)");
-db_run($db, "INSERT INTO retention_case (stg_id,policy_version_id,triggering_grade_snapshot,triggered_at,current_stage,current_status) VALUES (1,1,2.75,NOW(6),'initial','open')");
-db_run($db, "INSERT INTO remedial_attempt (case_id,attempt_type,status,scheduled_date) VALUES (1,'FIRST_REMEDIAL','SCHEDULED','2026-07-20')");
-db_run($db, "UPDATE remedial_attempt SET status='COMPLETED',percentage_score=75.00,result='PASSED',completed_date='2026-07-21' WHERE attempt_id=1");
-nok(db_try($db,"UPDATE remedial_attempt SET remarks='x' WHERE attempt_id=1"), 'T05: completed remedial UPDATE rejected');
-nok(db_try($db,"DELETE FROM remedial_attempt WHERE attempt_id=1"), 'T06: remedial DELETE rejected');
-
-db_run($db, "INSERT INTO faculty_approval (applicant_user_id,submission_sequence,status,operation_uuid) VALUES (1,1,'Pending','cccccccc-cccc-cccc-cccc-cccccccccccc')");
-db_run($db, "UPDATE faculty_approval SET status='Approved',reviewer_user_id=2,reviewed_at=NOW(6) WHERE approval_id=1");
-nok(db_try($db,"UPDATE faculty_approval SET remarks='x' WHERE approval_id=1"), 'T07: completed approval UPDATE rejected');
-nok(db_try($db,"DELETE FROM faculty_approval WHERE approval_id=1"), 'T08: approval DELETE rejected');
-
-db_run($db, "INSERT INTO email_delivery (sender_user_id,recipient_email,recipient_name,subject,email_type,status,operation_uuid) VALUES (1,'t@bu.edu.ph','T','S','Faculty Approval','Pending','dddddddd-dddd-dddd-dddd-dddddddddddd')");
-db_run($db, "UPDATE email_delivery SET status='Sent',sent_at=NOW(6) WHERE email_id=1");
-nok(db_try($db,"UPDATE email_delivery SET subject='x' WHERE email_id=1"), 'T09: completed email UPDATE rejected');
-nok(db_try($db,"DELETE FROM email_delivery WHERE email_id=1"), 'T10: email DELETE rejected');
-
-db_run($db, "INSERT INTO student (stud_number,stud_fname,stud_lname,sex,stud_bu_email,stud_contact,year_level,is_regular,acc_status) VALUES ('D001','A','B','M','a@b.u','1','1',1,'Active')");
-db_run($db, "INSERT INTO student_user_account (stud_id,user_id) VALUES (1,1)");
-db_run($db, "INSERT INTO secretary_invitation (faculty_id,student_id,cs_id,token_digest,invited_email,status,created_at,expires_at,operation_uuid) VALUES (1,1,1,0x0000000000000000000000000000000000000000000000000000000000000000,'x@bu.edu.ph','Pending',NOW(6),DATE_ADD(NOW(6),INTERVAL 7 DAY),'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee')");
-db_run($db, "INSERT INTO student (stud_number,stud_fname,stud_lname,sex,stud_bu_email,stud_contact,year_level,is_regular,acc_status) VALUES ('D002','C','D','M','b@b.u','2','1',1,'Active')");
-db_run($db, "INSERT INTO student_user_account (stud_id,user_id) VALUES (2,2)");
-nok(db_try($db,"UPDATE secretary_invitation SET status='Accepted',accepted_sua_id=2 WHERE invitation_id=1"), 'T11: invitation accept with mismatched student rejected');
+if ($bin < 4) { fwrite(STDERR,"FAIL: expected at least 4 BINARY(32) columns, found $bin\n"); exit(1); }
+ok(['c'=>0], "BINARY(32) columns exist ($bin)");
 
 echo "\n--- Cleanup ---\n";
 run("docker compose --project-directory " . escapeshellarg($repo) . " exec -T db mariadb -u root -p" . escapeshellarg($pass) . " -e 'DROP DATABASE IF EXISTS $db'");
-echo "ALL SCHEMA CONTRACT TESTS PASSED\n";
+echo "ALL BASELINE SCHEMA CONTRACT TESTS PASSED\n";

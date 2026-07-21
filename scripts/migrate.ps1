@@ -142,6 +142,169 @@ $client = Resolve-DatabaseClient $MysqlCommand
 
 Write-Host "Resolved database target: host=$HostName port=$Port database=$DatabaseName user=$User password=<redacted>"
 
+# ---- Migration preflight ----
+# The current baseline consists of exactly three migration files.
+$activeVersions = @(
+    "001_baseline_schema.sql",
+    "002_seed_rbac.sql",
+    "003_seed_system_settings.sql"
+)
+
+# Well-known tables from the old 46-table schema (legacy detection).
+$legacyTablePatterns = @(
+    "access_role", "permission", "role_permission",
+    "academic_term", "course_component", "component", "component_type",
+    "student_user_account", "user_preference",
+    "student_term_grade", "facial_template", "student_image",
+    "attendance_session", "attendance_override", "device",
+    "retention_policy", "retention_policy_version",
+    "retention_case", "retention_record", "remedial_attempt", "remedial_log", "retention_risk",
+    "biometric_consent", "faculty", "faculty_approval",
+    "secretary_invitation", "secretary_assignment",
+    "mfa_credential", "mfa_recovery_code",
+    "refresh_token", "access_token_revocation", "password_reset_token",
+    "auth_throttle", "audit_chain", "audit_event", "audit_log",
+    "email_delivery"
+)
+
+# Target application tables defined by the Phase 2 baseline.
+$targetTables = @(
+    "user_accounts", "role_permissions", "students", "class_sections",
+    "courses", "enrollments", "assessments", "assessment_scores",
+    "attendance_records", "biometric_profiles", "auth_sessions",
+    "security_tokens", "audit_events", "email_outbox", "system_settings"
+)
+
+# Preflight check function.
+function Invoke-MigrationPreflight {
+    param(
+        [string] $Client,
+        [string] $HostName,
+        [int] $Port,
+        [string] $User,
+        [string] $Password,
+        [string] $DatabaseName,
+        [string[]] $ActiveVersions,
+        [string[]] $LegacyTablePatterns,
+        [string[]] $TargetTables
+    )
+
+    # Determine whether the database is accessible and has a _schema_migrations table.
+    $schemaTableExists = $false
+    $migrationInfo = @{}
+    try {
+        $checkSql = "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='_schema_migrations';"
+        $count = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" $checkSql 2>$null
+        if ($LASTEXITCODE -eq 0 -and "$count".Trim() -eq "1") {
+            $schemaTableExists = $true
+
+            # Read recorded migrations.
+            $rows = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT version FROM _schema_migrations ORDER BY version;" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $rows) {
+                foreach ($row in $rows) {
+                    $v = $row.Trim()
+                    if ($v -ne "") { $migrationInfo[$v] = $true }
+                }
+            }
+        }
+    } catch {
+        # Database may not exist yet. That is acceptable.
+    }
+
+    # If no schema_migrations table exists, check whether any target tables exist.
+    if (-not $schemaTableExists) {
+        foreach ($tbl in $TargetTables) {
+            try {
+                $tcount = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='$tbl';" 2>$null
+                if ($LASTEXITCODE -eq 0 -and "$tcount".Trim() -ne "0") {
+                    throw "Target table '$tbl' already exists in database '$DatabaseName' but no baseline migration record was found. The new baseline is clean-install only. Create a fresh database or drop all existing objects first."
+                }
+            } catch {
+                if ($_.Exception.Message -match "Target table") { throw }
+            }
+        }
+
+        # Check for legacy business tables.
+        foreach ($pattern in $LegacyTablePatterns) {
+            try {
+                $lcount = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='$pattern';" 2>$null
+                if ($LASTEXITCODE -eq 0 -and "$lcount".Trim() -ne "0") {
+                    throw "Legacy '$pattern' table found in database '$DatabaseName'. The new baseline is clean-install only. Create a fresh database or drop all existing objects first."
+                }
+            } catch {
+                if ($_.Exception.Message -match "Legacy|Target table") { throw }
+            }
+        }
+
+        Write-Host "PASS: Preflight — clean database. Proceeding with baseline."
+        return
+    }
+
+    # Schema_migrations table exists.  Check for legacy migration records.
+    $recordedKeys = $migrationInfo.Keys
+    $legacyRecordFound = $false
+    foreach ($key in $recordedKeys) {
+        if ($ActiveVersions -notcontains $key) {
+            Write-Host "ERROR: Migration version '$key' is not part of the current baseline."
+            Write-Host "       The new baseline is clean-install only."
+            Write-Host "       Recorded versions: $($recordedKeys -join ', ')"
+            Write-Host "       Expected active versions: $($ActiveVersions -join ', ')"
+            $legacyRecordFound = $true
+        }
+    }
+    if ($legacyRecordFound) {
+        throw "Legacy migration records found. Create a fresh database or reset _schema_migrations and drop all existing objects."
+    }
+
+    # Check that recorded versions form a valid ordered prefix.
+    $appliedSet = @()
+    foreach ($av in $ActiveVersions) {
+        if ($migrationInfo.ContainsKey($av)) {
+            $appliedSet += $av
+        }
+    }
+
+    if ($appliedSet.Count -gt 0) {
+        # Confirm that all schema objects for applied versions exist.
+        $expectedTables = @()
+        foreach ($av in $appliedSet) {
+            if ($av -eq "001_baseline_schema.sql") { $expectedTables = $TargetTables }
+        }
+
+        if ($expectedTables.Count -gt 0) {
+            foreach ($tbl in $expectedTables) {
+                try {
+                    $tcount = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='$tbl';" 2>$null
+                    if ($LASTEXITCODE -eq 0 -and "$tcount".Trim() -eq "0") {
+                        throw "Expected table '$tbl' (from applied migration '$av') not found in database '$DatabaseName'."
+                    }
+                } catch {
+                    if ($_.Exception.Message -match "Expected table") { throw }
+                }
+            }
+        }
+
+        # Check no target tables exist without a corresponding baseline record.
+        # (Already covered by the applied-versions check above, but also check for unknown business tables.)
+        foreach ($pattern in $LegacyTablePatterns) {
+            try {
+                $lcount = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='$pattern';" 2>$null
+                if ($LASTEXITCODE -eq 0 -and "$lcount".Trim() -ne "0") {
+                    throw "Legacy table '$pattern' found alongside current baseline migrations. The database is in an inconsistent state. Create a fresh database."
+                }
+            } catch {
+                if ($_.Exception.Message -match "Legacy") { throw }
+            }
+        }
+    }
+
+    Write-Host "PASS: Preflight — database is in a valid current-baseline state."
+}
+
+Invoke-MigrationPreflight -Client $client -HostName $HostName -Port $Port -User $User -Password $Password -DatabaseName $DatabaseName -ActiveVersions $activeVersions -LegacyTablePatterns $legacyTablePatterns -TargetTables $targetTables
+
+# ---- End migration preflight ----
+
 $schemaSql = @"
 CREATE TABLE IF NOT EXISTS _schema_migrations (
     version VARCHAR(255) NOT NULL PRIMARY KEY,

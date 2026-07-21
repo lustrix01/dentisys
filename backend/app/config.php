@@ -33,6 +33,70 @@ function config_value(string $key, array $localConfig, mixed $default): mixed
         : $default;
 }
 
+function config_key_bytes_at_least(string $encoded, int $minimumBytes, string $label): string
+{
+    if ($encoded === '') {
+        throw new \RuntimeException(sprintf(
+            'Configuration key "%s" is empty. Set it in environment or local.php.',
+            $label
+        ));
+    }
+
+    $decoded = base64_decode($encoded, true);
+
+    if ($decoded === false || $decoded === '') {
+        throw new \RuntimeException(sprintf(
+            'Configuration key "%s" is not valid Base64.',
+            $label
+        ));
+    }
+
+    $len = strlen($decoded);
+
+    if ($len < $minimumBytes) {
+        throw new \RuntimeException(sprintf(
+            'Configuration key "%s" decodes to %d bytes; at least %d required.',
+            $label,
+            $len,
+            $minimumBytes
+        ));
+    }
+
+    return $decoded;
+}
+
+function config_key_bytes_exact(string $encoded, int $exactBytes, string $label): string
+{
+    if ($encoded === '') {
+        throw new \RuntimeException(sprintf(
+            'Configuration key "%s" is empty. Set it in environment or local.php.',
+            $label
+        ));
+    }
+
+    $decoded = base64_decode($encoded, true);
+
+    if ($decoded === false || $decoded === '') {
+        throw new \RuntimeException(sprintf(
+            'Configuration key "%s" is not valid Base64.',
+            $label
+        ));
+    }
+
+    $len = strlen($decoded);
+
+    if ($len !== $exactBytes) {
+        throw new \RuntimeException(sprintf(
+            'Configuration key "%s" decodes to %d bytes; exactly %d required.',
+            $label,
+            $len,
+            $exactBytes
+        ));
+    }
+
+    return $decoded;
+}
+
 function app_config(?array $localConfig = null): array
 {
     $local = $localConfig ?? load_local_config();
@@ -45,6 +109,27 @@ function app_config(?array $localConfig = null): array
             'name' => (string) config_value('DB_NAME', $local, 'dentisys'),
             'user' => (string) config_value('DB_USER', $local, 'dentisys'),
             'pass' => (string) config_value('DB_PASS', $local, 'local-development-password'),
+        ],
+        'app' => [
+            'env' => (string) config_value('APP_ENV', $local, 'development'),
+            'is_https' => filter_var(config_value('APP_IS_HTTPS', $local, 'false'), FILTER_VALIDATE_BOOLEAN),
+        ],
+        'cors' => [
+            'allowed_origins' => (string) config_value('CORS_ALLOWED_ORIGINS', $local, 'http://localhost:5173'),
+        ],
+        'jwt' => [
+            'signing_key_b64' => (string) config_value('JWT_SIGNING_KEY_B64', $local, ''),
+            'access_ttl' => 900,
+        ],
+        'mfa' => [
+            'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $local, ''),
+        ],
+        'audit' => [
+            'mac_key_b64' => (string) config_value('AUDIT_MAC_KEY_B64', $local, ''),
+        ],
+        'rate_limit' => [
+            'enabled' => filter_var(config_value('RATE_LIMIT_ENABLED', $local, 'true'), FILTER_VALIDATE_BOOLEAN),
+            'storage_dir' => (string) (config_value('RATE_LIMIT_STORAGE_DIR', $local, '') ?: dirname(__DIR__) . '/storage/ratelimit'),
         ],
     ];
 }
