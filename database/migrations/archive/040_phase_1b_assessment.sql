@@ -1,0 +1,20 @@
+CREATE TABLE assessment (
+    a_id        INT UNSIGNED   NOT NULL AUTO_INCREMENT,
+    a_title     VARCHAR(255)   NOT NULL,
+    a_max_score DECIMAL(6,2)   NOT NULL,
+    a_date      DATE           NOT NULL,
+    status      VARCHAR(50)    NOT NULL,
+    comp_id     INT UNSIGNED   NOT NULL,
+    cs_id       INT UNSIGNED   NOT NULL,
+    PRIMARY KEY (a_id),
+    INDEX idx_assessment_comp_id (comp_id),
+    INDEX idx_assessment_cs_id (cs_id),
+    CONSTRAINT fk_assessment_component FOREIGN KEY (comp_id)
+        REFERENCES component (comp_id)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_assessment_class_section FOREIGN KEY (cs_id)
+        REFERENCES class_section (cs_id)
+        ON UPDATE RESTRICT
+        ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
