@@ -48,4 +48,16 @@ return [
         'handler' => 'handle_me',
         'has_params' => false,
     ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/refresh',
+        'handler' => 'handle_refresh',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/logout',
+        'handler' => 'handle_logout',
+        'has_params' => false,
+    ],
 ];

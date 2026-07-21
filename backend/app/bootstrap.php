@@ -18,5 +18,6 @@ require_once __DIR__ . '/auth_runtime.php';
 require_once __DIR__ . '/mfa_runtime.php';
 require_once __DIR__ . '/../controllers/AuthController.php';
 require_once __DIR__ . '/../controllers/MfaController.php';
+require_once __DIR__ . '/../controllers/SessionController.php';
 
 send_security_headers();
