@@ -43,7 +43,6 @@ $tablesToReset = [
     'students',
     'class_sections',
     'courses',
-    'role_permissions',
     'user_accounts',
 ];
 
@@ -324,7 +323,7 @@ $sql[] = "-- 9. EMAIL OUTBOX HISTORY LOGS";
 $sql[] = "-- =============================================================================";
 for ($i = 1; $i <= 25; $i++) {
     $sender = ($i % 2 === 0) ? 2 : 1;
-    $type = ($i % 4 === 0) ? 'At-Risk Notification' : (($i % 3 === 0) ? 'Privacy Consent' : 'Class Secretary Invitation');
+    $type = ($i % 4 === 0) ? 'At-Risk Notification' : (($i % 3 === 0) ? 'Privacy Consent' : 'Secretary Invitation');
     $status = ($i === 5) ? 'Failed' : (($i === 12) ? 'Pending' : 'Sent');
     $sentAt = $status === 'Sent' ? "'2024-09-01 10:00:00.000000'" : "NULL";
     $failReason = $status === 'Failed' ? "'SMTP Connection Timeout: Host unreachable'" : "NULL";
@@ -366,6 +365,5 @@ $sql[] = "-- End of Clean DentiSys Development Seed Data Script";
 $content = implode("\n", $sql);
 
 file_put_contents(__DIR__ . '/../../database/seed.sql', $content);
-file_put_contents(__DIR__ . '/../../database/migrations/004_development_seed.sql', $content);
 
-echo "Successfully re-generated clean database/seed.sql and database/migrations/004_development_seed.sql with {$TOTAL_STUDENTS} students (" . strlen($content) . " bytes)\n";
+echo "Successfully re-generated clean database/seed.sql with {$TOTAL_STUDENTS} students (" . strlen($content) . " bytes)\n";

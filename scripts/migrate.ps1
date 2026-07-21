@@ -104,17 +104,50 @@ function Resolve-DatabaseClient {
     throw "No supported database client is available. Install or expose mariadb/mysql, or use XAMPP's mysql client."
 }
 
-function Invoke-Database {
+function Get-CleanString {
+    param([object] $Value)
+    if ($null -eq $Value) { return "" }
+    $s = [string]$Value
+    return $s.Trim()
+}
+
+function Invoke-SqlFile {
     param(
         [string] $Client,
-        [string[]] $ExtraArgs
+        [string] $Path,
+        [string] $Label
     )
 
-    $baseArgs = @("-h", $HostName, "-P", "$Port", "-u", $User, "-p$Password", $DatabaseName)
-    & $Client @baseArgs @ExtraArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Database command failed against $HostName`:$Port/$DatabaseName as $User."
+    if (!(Test-Path -LiteralPath $Path -PathType Leaf)) {
+        $err = 'Required SQL file is missing: ' + $Path
+        throw $err
     }
+
+    Write-Host ($Label + ': ' + $Path)
+    Get-Content -LiteralPath $Path | & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName
+    if ($LASTEXITCODE -ne 0) {
+        $err = 'SQL execution failed (' + $Label + '): ' + $Path
+        throw $err
+    }
+}
+
+function Get-DatabaseTableCount {
+    param(
+        [string] $Client,
+        [string] $HostName,
+        [int] $Port,
+        [string] $User,
+        [string] $Password,
+        [string] $DatabaseName,
+        [string] $TableName
+    )
+
+    $checkSql = "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='" + $DatabaseName + "' AND TABLE_NAME='" + $TableName + "';"
+    $count = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" $checkSql
+    if ($LASTEXITCODE -ne 0 -or $null -eq $count) { return -1 }
+    $str = Get-CleanString $count
+    if ($str -eq "") { return -1 }
+    return [int]$str
 }
 
 $envFile = Read-EnvFile (Join-Path $root ".env")
@@ -140,15 +173,15 @@ if ($null -eq $Password) { throw "DB_PASS is required. Set it with -Password, DB
 
 $client = Resolve-DatabaseClient $MysqlCommand
 
-Write-Host "Resolved database target: host=$HostName port=$Port database=$DatabaseName user=$User password=<redacted>"
+Write-Host ('Resolved database target: host=' + $HostName + ' port=' + $Port + ' database=' + $DatabaseName + ' user=' + $User + ' password=<redacted>')
 
-# ---- Migration preflight ----
-# The current baseline consists of exactly three migration files.
-$activeVersions = @(
-    "001_baseline_schema.sql",
-    "002_seed_rbac.sql",
-    "003_seed_system_settings.sql"
-)
+# ---- Dynamic Migration Discovery ----
+$migrationFiles = Get-ChildItem -LiteralPath $migrationDir -File -Filter "*.sql" | Sort-Object Name
+$activeVersions = @($migrationFiles | Select-Object -ExpandProperty Name)
+
+# ---- Mandatory Condition 3: Execute database/init.sql FIRST ----
+$initSqlPath = Join-Path $root "database\init.sql"
+Invoke-SqlFile -Client $client -Path $initSqlPath -Label "INITIALIZE"
 
 # Well-known tables from the old 46-table schema (legacy detection).
 $legacyTablePatterns = @(
@@ -189,163 +222,127 @@ function Invoke-MigrationPreflight {
         [string[]] $TargetTables
     )
 
-    # Determine whether the database is accessible and has a _schema_migrations table.
-    $schemaTableExists = $false
+    $schemaCount = Get-DatabaseTableCount -Client $Client -HostName $HostName -Port $Port -User $User -Password $Password -DatabaseName $DatabaseName -TableName "_schema_migrations"
+    $schemaTableExists = ($schemaCount -gt 0)
     $migrationInfo = @{}
-    try {
-        $checkSql = "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='_schema_migrations';"
-        $count = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" $checkSql 2>$null
-        if ($LASTEXITCODE -eq 0 -and "$count".Trim() -eq "1") {
-            $schemaTableExists = $true
+    $recordedCount = 0
 
-            # Read recorded migrations.
-            $rows = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT version FROM _schema_migrations ORDER BY version;" 2>$null
-            if ($LASTEXITCODE -eq 0 -and $rows) {
-                foreach ($row in $rows) {
-                    $v = $row.Trim()
-                    if ($v -ne "") { $migrationInfo[$v] = $true }
+    if ($schemaTableExists) {
+        $rows = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT version FROM _schema_migrations ORDER BY version;"
+        if ($LASTEXITCODE -eq 0 -and $null -ne $rows) {
+            foreach ($row in $rows) {
+                $v = Get-CleanString $row
+                if ($v -ne "") {
+                    $migrationInfo[$v] = $true
+                    $recordedCount++
                 }
             }
         }
-    } catch {
-        # Database may not exist yet. That is acceptable.
     }
 
-    # If no schema_migrations table exists, check whether any target tables exist.
-    if (-not $schemaTableExists) {
+    # Mandatory Condition 4: Treat empty history as no history
+    if (-not $schemaTableExists -or $recordedCount -eq 0) {
         foreach ($tbl in $TargetTables) {
-            try {
-                $tcount = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='$tbl';" 2>$null
-                if ($LASTEXITCODE -eq 0 -and "$tcount".Trim() -ne "0") {
-                    throw "Target table '$tbl' already exists in database '$DatabaseName' but no baseline migration record was found. The new baseline is clean-install only. Create a fresh database or drop all existing objects first."
-                }
-            } catch {
-                if ($_.Exception.Message -match "Target table") { throw }
+            $cnt = Get-DatabaseTableCount -Client $Client -HostName $HostName -Port $Port -User $User -Password $Password -DatabaseName $DatabaseName -TableName $tbl
+            if ($cnt -gt 0) {
+                $msg = 'Target table ' + $tbl + ' already exists in database ' + $DatabaseName + ' but no baseline migration record was found. The baseline is clean-install only. Create a fresh database or drop all existing objects first.'
+                throw $msg
             }
         }
 
-        # Check for legacy business tables.
         foreach ($pattern in $LegacyTablePatterns) {
-            try {
-                $lcount = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='$pattern';" 2>$null
-                if ($LASTEXITCODE -eq 0 -and "$lcount".Trim() -ne "0") {
-                    throw "Legacy '$pattern' table found in database '$DatabaseName'. The new baseline is clean-install only. Create a fresh database or drop all existing objects first."
-                }
-            } catch {
-                if ($_.Exception.Message -match "Legacy|Target table") { throw }
+            $cnt = Get-DatabaseTableCount -Client $Client -HostName $HostName -Port $Port -User $User -Password $Password -DatabaseName $DatabaseName -TableName $pattern
+            if ($cnt -gt 0) {
+                $msg = 'Legacy ' + $pattern + ' table found in database ' + $DatabaseName + '. The baseline is clean-install only. Create a fresh database or drop all existing objects first.'
+                throw $msg
             }
         }
 
-        Write-Host "PASS: Preflight — clean database. Proceeding with baseline."
+        Write-Host "PASS: Preflight - clean database. Proceeding with baseline."
         return
     }
 
-    # Schema_migrations table exists.  Check for legacy migration records.
+    # Mandatory Condition 5: Reject unknown recorded versions
     $recordedKeys = $migrationInfo.Keys
-    $legacyRecordFound = $false
+    $unknownRecordFound = $false
     foreach ($key in $recordedKeys) {
         if ($ActiveVersions -notcontains $key) {
-            Write-Host "ERROR: Migration version '$key' is not part of the current baseline."
-            Write-Host "       The new baseline is clean-install only."
-            Write-Host "       Recorded versions: $($recordedKeys -join ', ')"
-            Write-Host "       Expected active versions: $($ActiveVersions -join ', ')"
-            $legacyRecordFound = $true
+            Write-Host ('ERROR: Migration version ' + $key + ' is recorded in _schema_migrations but is not part of active migration files.')
+            Write-Host ('       Recorded versions: ' + ($recordedKeys -join ', '))
+            Write-Host ('       Active versions: ' + ($ActiveVersions -join ', '))
+            $unknownRecordFound = $true
         }
     }
-    if ($legacyRecordFound) {
-        throw "Legacy migration records found. Create a fresh database or reset _schema_migrations and drop all existing objects."
+    if ($unknownRecordFound) {
+        throw "Legacy or unknown migration records found. Create a fresh database or reset _schema_migrations."
     }
 
-    # Check that recorded versions form a valid ordered prefix.
-    $appliedSet = @()
+    # Mandatory Condition 5: Enforce contiguous ordered prefix
+    $seenUnapplied = $false
     foreach ($av in $ActiveVersions) {
         if ($migrationInfo.ContainsKey($av)) {
-            $appliedSet += $av
+            if ($seenUnapplied) {
+                $msg = 'Inconsistent migration history: ' + $av + ' is recorded as applied, but a preceding active migration was not applied.'
+                throw $msg
+            }
+        } else {
+            $seenUnapplied = $true
         }
     }
 
-    if ($appliedSet.Count -gt 0) {
-        # Confirm that all schema objects for applied versions exist.
-        $expectedTables = @()
-        foreach ($av in $appliedSet) {
-            if ($av -eq "001_baseline_schema.sql") { $expectedTables = $TargetTables }
-        }
-
-        if ($expectedTables.Count -gt 0) {
-            foreach ($tbl in $expectedTables) {
-                try {
-                    $tcount = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='$tbl';" 2>$null
-                    if ($LASTEXITCODE -eq 0 -and "$tcount".Trim() -eq "0") {
-                        throw "Expected table '$tbl' (from applied migration '$av') not found in database '$DatabaseName'."
-                    }
-                } catch {
-                    if ($_.Exception.Message -match "Expected table") { throw }
-                }
-            }
-        }
-
-        # Check no target tables exist without a corresponding baseline record.
-        # (Already covered by the applied-versions check above, but also check for unknown business tables.)
-        foreach ($pattern in $LegacyTablePatterns) {
-            try {
-                $lcount = & $Client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$DatabaseName' AND TABLE_NAME='$pattern';" 2>$null
-                if ($LASTEXITCODE -eq 0 -and "$lcount".Trim() -ne "0") {
-                    throw "Legacy table '$pattern' found alongside current baseline migrations. The database is in an inconsistent state. Create a fresh database."
-                }
-            } catch {
-                if ($_.Exception.Message -match "Legacy") { throw }
+    # Check schema objects for applied versions exist
+    if ($migrationInfo.ContainsKey("001_baseline_schema.sql")) {
+        foreach ($tbl in $TargetTables) {
+            $cnt = Get-DatabaseTableCount -Client $Client -HostName $HostName -Port $Port -User $User -Password $Password -DatabaseName $DatabaseName -TableName $tbl
+            if ($cnt -eq 0) {
+                $msg = 'Expected table ' + $tbl + ' (from applied migration 001_baseline_schema.sql) not found in database ' + $DatabaseName + '.'
+                throw $msg
             }
         }
     }
 
-    Write-Host "PASS: Preflight — database is in a valid current-baseline state."
+    foreach ($pattern in $LegacyTablePatterns) {
+        $cnt = Get-DatabaseTableCount -Client $Client -HostName $HostName -Port $Port -User $User -Password $Password -DatabaseName $DatabaseName -TableName $pattern
+        if ($cnt -gt 0) {
+            $msg = 'Legacy table ' + $pattern + ' found alongside current baseline migrations. The database is in an inconsistent state. Create a fresh database.'
+            throw $msg
+        }
+    }
+
+    Write-Host "PASS: Preflight - database is in a valid current-baseline state."
 }
 
+# Step 8: Preflight validation
 Invoke-MigrationPreflight -Client $client -HostName $HostName -Port $Port -User $User -Password $Password -DatabaseName $DatabaseName -ActiveVersions $activeVersions -LegacyTablePatterns $legacyTablePatterns -TargetTables $targetTables
 
-# ---- End migration preflight ----
-
-$schemaSql = @"
-CREATE TABLE IF NOT EXISTS _schema_migrations (
-    version VARCHAR(255) NOT NULL PRIMARY KEY,
-    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-"@
-
-Invoke-Database $client @("-e", $schemaSql)
-
-$migrations = Get-ChildItem -LiteralPath $migrationDir -Filter "*.sql" | Sort-Object Name
-
-if ($migrations.Count -eq 0) {
+if ($migrationFiles.Count -eq 0) {
     Write-Host "No SQL migration files found."
     exit 0
 }
 
-$baseArgs = @("-h", $HostName, "-P", $Port, "-u", $User, "-p$Password", $DatabaseName)
-
-foreach ($migration in $migrations) {
+# Steps 9 & 10: Apply unapplied migrations and record history
+foreach ($migration in $migrationFiles) {
     $version = $migration.Name
     $escapedVersion = $version.Replace("'", "''")
     $checkSql = "SELECT COUNT(*) FROM _schema_migrations WHERE version = '$escapedVersion';"
     $applied = & $client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "--batch" "--skip-column-names" "-e" $checkSql
-    if ($LASTEXITCODE -ne 0) { throw "Failed checking migration state for $version." }
+    if ($LASTEXITCODE -ne 0) {
+        $err = 'Failed checking migration state for ' + $version + '.'
+        throw $err
+    }
 
     if (($applied | Select-Object -First 1) -eq "1") {
-        Write-Host "SKIP: $version already applied."
+        Write-Host ('SKIP: ' + $version + ' already applied.')
         continue
     }
 
-    Write-Host "APPLY: $version"
-    Get-Content -LiteralPath $migration.FullName | & $client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "Migration failed: $version"
-    }
+    Invoke-SqlFile -Client $client -Path $migration.FullName -Label "APPLY"
 
     $insertSql = "INSERT INTO _schema_migrations (version) VALUES ('$escapedVersion');"
     & $client "-h" $HostName "-P" "$Port" "-u" $User "-p$Password" $DatabaseName "-e" $insertSql
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed recording migration: $version"
+        $err = 'Failed recording migration: ' + $version
+        throw $err
     }
 }

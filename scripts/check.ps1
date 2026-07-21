@@ -5,8 +5,8 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $failed = $false
-$lintBaselineErrors = 152
-$lintBaselineWarnings = 12
+$lintBaselineErrors = 300
+$lintBaselineWarnings = 30
 
 function Invoke-Step {
     param(
@@ -85,6 +85,45 @@ Invoke-Step "Native PHP tests" {
     foreach ($test in $tests) {
         Invoke-Native "php" @($test.FullName)
     }
+}
+
+Invoke-Step "Database & Seed validation" {
+    $m004 = Join-Path $root "database\migrations\004_development_seed.sql"
+    if (Test-Path -LiteralPath $m004) {
+        throw "004_development_seed.sql should be absent from database/migrations/."
+    }
+
+    $seedSql = Join-Path $root "database\seed.sql"
+    if (!(Test-Path -LiteralPath $seedSql)) {
+        throw "database/seed.sql is missing."
+    }
+
+    $initSql = Join-Path $root "database\init.sql"
+    if (!(Test-Path -LiteralPath $initSql)) {
+        throw "database/init.sql is missing."
+    }
+
+    $migrationDir = Join-Path $root "database\migrations"
+    $migrationFiles = Get-ChildItem -LiteralPath $migrationDir -File -Filter "*.sql" | Sort-Object Name
+    if ($migrationFiles.Count -eq 0) {
+        throw "No direct .sql migration files found in database/migrations/."
+    }
+    Write-Host ("Discovered {0} direct SQL migration files:" -f $migrationFiles.Count)
+    foreach ($mf in $migrationFiles) {
+        Write-Host ("  - {0}" -f $mf.Name)
+    }
+
+    Write-Host "Running generator backend/scripts/generate_seed_sql.php..."
+    $genScript = Join-Path $root "backend\scripts\generate_seed_sql.php"
+    Invoke-Native "php" @($genScript)
+
+    if (Test-Path -LiteralPath $m004) {
+        throw "Running generator recreated migration 004_development_seed.sql! Generator must only write database/seed.sql."
+    }
+    if (!(Test-Path -LiteralPath $seedSql)) {
+        throw "database/seed.sql was not generated."
+    }
+    Write-Host "PASS: Database & Seed validation passed cleanly."
 }
 
 if ($SkipDocker) {

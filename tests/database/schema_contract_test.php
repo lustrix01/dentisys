@@ -50,6 +50,7 @@ foreach ($baselineFiles as $f) {
         exit(1);
     }
     source_migration($db, $full);
+    db_run($db, "INSERT INTO _schema_migrations (version) VALUES ('$f');");
 }
 ok(['c'=>0], 'All 3 baseline migrations applied');
 
@@ -130,10 +131,10 @@ $noDupes = (int)q($db, "SELECT COUNT(*) FROM (SELECT role_name, resource, action
 if ($noDupes !== 0) exit(1);
 ok(['c'=>0], 'No duplicate role/resource/action/scope tuples');
 
-echo "\n--- System settings seed count ---\n";
+echo "\n--- System settings baseline count ---\n";
 $settings = (int)q($db, "SELECT COUNT(*) FROM system_settings");
 echo "System settings rows: $settings (expected 5)\n"; if ($settings !== 5) exit(1);
-ok(['c'=>0], '5 system_settings rows');
+ok(['c'=>0], '5 system_settings rows from baseline');
 
 $chainHead = (int)q($db, "SELECT COUNT(*) FROM system_settings WHERE setting_key='audit_chain_head' AND is_internal=1");
 if ($chainHead !== 1) exit(1);
@@ -162,7 +163,7 @@ if ($identityGuard !== 1) exit(1);
 ok(['c'=>0], 'trg_system_settings_internal_identity_guard');
 
 echo "\n--- Audit append-only behavior ---\n";
-db_run($db, "INSERT INTO audit_events (event_uuid, sequence_number, occurred_at, module_code, action_code, event_status, previous_event_mac, event_mac, mac_key_version, canonical_schema_version) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1, NOW(6), 'T', 't', 'Success', 0x0000000000000000000000000000000000000000000000000000000000000000, 0x0000000000000000000000000000000000000000000000000000000000000001, 1, 1)");
+db_run($db, "INSERT INTO audit_events (event_uuid, sequence_number, occurred_at, module_code, action_code, event_status, previous_event_mac, event_mac, mac_key_version, canonical_schema_version) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 999999, NOW(6), 'T', 't', 'Success', 0x0000000000000000000000000000000000000000000000000000000000000000, 0x0000000000000000000000000000000000000000000000000000000000000001, 1, 1)");
 nok(db_try($db, "UPDATE audit_events SET description='x' WHERE event_uuid='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'"), 'T01: audit_events UPDATE rejected');
 nok(db_try($db, "DELETE FROM audit_events WHERE event_uuid='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'"), 'T02: audit_events DELETE rejected');
 ok(['c'=>0], 'Audit append-only triggers work');
@@ -206,6 +207,29 @@ $bin = (int)q($db, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_
 if ($bin < 4) { fwrite(STDERR,"FAIL: expected at least 4 BINARY(32) columns, found $bin\n"); exit(1); }
 ok(['c'=>0], "BINARY(32) columns exist ($bin)");
 
+echo "\n=== Phase 2: Explicit Development Seed Execution (database/seed.sql) ===\n";
+source_migration($db, "$repo/database/seed.sql");
+ok(['c'=>0], 'database/seed.sql executed cleanly');
+
+$rbacAfterSeed = (int)q($db, "SELECT COUNT(*) FROM role_permissions");
+if ($rbacAfterSeed !== 125) { fwrite(STDERR, "FAIL: role_permissions count $rbacAfterSeed != 125 after seed execution\n"); exit(1); }
+ok(['c'=>0], 'role_permissions count preserved at 125 after seed');
+
+$invalidEmails = (int)q($db, "SELECT COUNT(*) FROM email_outbox WHERE email_type NOT IN ('Privacy Consent','At-Risk Notification','Secretary Invitation','Faculty Registration Approved','Faculty Registration Rejected','Other')");
+if ($invalidEmails !== 0) { fwrite(STDERR,"FAIL: invalid email_type enum values found in email_outbox\n"); exit(1); }
+ok(['c'=>0], 'All email_outbox.email_type values in seed are valid');
+
+// Verify migration runner execution on seeded database does not record seed.sql
+$cmdRunner = "powershell -NoProfile -ExecutionPolicy Bypass -File " . escapeshellarg($repo . '\scripts\migrate.ps1') . " -HostName 127.0.0.1 -Port 3307 -DatabaseName " . escapeshellarg($db) . " -User root -Password " . escapeshellarg($pass) . " 2>&1";
+$rRunner = run($cmdRunner);
+ok($rRunner, 'Migration runner executed on seeded DB without error');
+
+$historyCount = (int)q($db, "SELECT COUNT(*) FROM _schema_migrations");
+if ($historyCount !== 3) { fwrite(STDERR, "FAIL: _schema_migrations count $historyCount != 3 after runner rerun on seeded DB\n"); exit(1); }
+$seedRecord = (int)q($db, "SELECT COUNT(*) FROM _schema_migrations WHERE version LIKE '%seed.sql%'");
+if ($seedRecord !== 0) { fwrite(STDERR, "FAIL: database/seed.sql was recorded in _schema_migrations\n"); exit(1); }
+ok(['c'=>0], 'database/seed.sql is NOT recorded in _schema_migrations');
+
 echo "\n--- Cleanup ---\n";
 run("docker compose --project-directory " . escapeshellarg($repo) . " exec -T db mariadb -u root -p" . escapeshellarg($pass) . " -e 'DROP DATABASE IF EXISTS $db'");
-echo "ALL BASELINE SCHEMA CONTRACT TESTS PASSED\n";
+echo "ALL BASELINE SCHEMA CONTRACT & SEED VALIDATION TESTS PASSED\n";
