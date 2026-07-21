@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, Key } from 'lucide-react';
 
 export function Login() {
@@ -222,6 +222,11 @@ export function Login() {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                <div className="flex justify-end mt-2">
+                  <Link to="/forgot-password" className="text-xs font-semibold text-accent-600 dark:text-accent-400 hover:underline">
+                    Forgot Password?
+                  </Link>
+                </div>
               </div>
 
               <div className="flex items-center pt-1">
@@ -277,13 +282,21 @@ export function Login() {
               Sign in with Google Workspace
             </button>
 
-            {/* Footer Support Text */}
-            <p className="text-center mt-8 text-xs text-slate-450 dark:text-slate-500 font-medium">
-              Forgot your BU email password?{' '}
-              <a href="mailto:support@bicol-u.edu.ph" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
-                Contact support
-              </a>
-            </p>
+            {/* Links Footer */}
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center space-y-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Faculty Member?{' '}
+                <Link to="/signup" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
+                  Sign up for an account
+                </Link>
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Class Secretary?{' '}
+                <Link to="/activate-secretary" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
+                  Activate invitation
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
 
