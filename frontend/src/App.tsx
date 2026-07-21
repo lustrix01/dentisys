@@ -13,6 +13,7 @@ import { RetentionMonitoring } from './pages/faculty/RetentionMonitoring';
 import { AttendanceMonitoring } from './pages/faculty/AttendanceMonitoring';
 import { Reports } from './pages/faculty/Reports';
 import { EmailManagement } from './pages/faculty/EmailManagement';
+import { ClassManagement } from './pages/faculty/ClassManagement';
 
 // Dean (Admin) Page Imports
 import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
@@ -86,6 +87,8 @@ function App() {
                 <Route path="/" element={<RoleDashboard />} />
 
                 {/* Faculty Routes */}
+                <Route path="/classes" element={<ClassManagement />} />
+                <Route path="/faculty/classes" element={<ClassManagement />} />
                 <Route path="/students" element={<StudentManagement />} />
                 <Route path="/grades" element={<GradeComputation />} />
                 <Route path="/retention" element={<RetentionMonitoring />} />

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   FileSpreadsheet, 
   Printer, 
@@ -37,10 +37,38 @@ import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../ty
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { gwaToDescription } from '../../utils/gradeHelper';
 
+import { getFacultyReportsSummaryApi } from '../../services/apiClient';
+
 export const Reports: React.FC = () => {
   const { user } = useAuth();
-  const { students, attendanceRecords, assessments, assessmentScores, settings } = useApp();
+  const { students: appStudents, attendanceRecords: appAttendanceRecords, assessments, assessmentScores, settings } = useApp();
   
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [dbStudents, setDbStudents] = useState<any[]>([]);
+
+  const fetchFacultyReports = () => {
+    setLoading(true);
+    setError('');
+    getFacultyReportsSummaryApi()
+      .then((res) => {
+        if (res.reports?.students) {
+          setDbStudents(res.reports.students);
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Unable to fetch report summary from server.');
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchFacultyReports();
+  }, []);
+
+  const students = dbStudents.length > 0 ? dbStudents : appStudents;
+  const attendanceRecords = appAttendanceRecords;
+
   const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
   const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
 
@@ -50,22 +78,39 @@ export const Reports: React.FC = () => {
   // Report Category State: 'academic' | 'retention' | 'attendance' | 'analytics'
   const [reportTab, setReportTab] = useState<'academic' | 'retention' | 'attendance' | 'analytics'>('academic');
 
+  // Search & Pagination states
+  const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedClassId, reportTab, search]);
+
   // Filter students based on selected class and subjects (RBAC)
   const facultyStudents = useMemo(() => {
     return students.filter(s =>
       s.classId === selectedClassId &&
-      s.enrolledSubjects.some(sub => assignedSubjects.includes(sub.code))
+      s.enrolledSubjects.some((sub: any) => assignedSubjects.includes(sub.code)) &&
+      (!search || s.name.toLowerCase().includes(search.toLowerCase()) || s.studentId.toLowerCase().includes(search.toLowerCase()))
     );
-  }, [students, selectedClassId, assignedSubjects]);
+  }, [students, selectedClassId, assignedSubjects, search]);
 
   const [selectedSubjectCode, setSelectedSubjectCode] = useState(assignedSubjects[0] || 'CLIN401');
 
   // Filter roster by course tab selector
   const studentsInSelectedSubject = useMemo(() => {
     return facultyStudents.filter(s =>
-      s.enrolledSubjects.some(sub => sub.code === selectedSubjectCode)
+      s.enrolledSubjects.some((sub: any) => sub.code === selectedSubjectCode)
     );
   }, [facultyStudents, selectedSubjectCode]);
+
+  const paginatedStudentsInSubject = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return studentsInSelectedSubject.slice(start, start + pageSize);
+  }, [studentsInSelectedSubject, currentPage, pageSize]);
+
+  const totalPagesInSubject = Math.ceil(studentsInSelectedSubject.length / pageSize) || 1;
 
   const handlePrint = () => {
     window.print();
@@ -79,34 +124,34 @@ export const Reports: React.FC = () => {
 
     if (type === 'academic') {
       headers = 'Student ID,Name,Course Code,Quizzes %,Exams %,Practicum %,Attendance %,GWA,Remarks\n';
-      rows = studentsInSelectedSubject.map(student => {
-        const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
-        const q = subj ? subj.components.quizzes.toFixed(1) : '80.0';
-        const e = subj ? subj.components.exams.toFixed(1) : '80.0';
-        const p = subj ? subj.components.practicum.toFixed(1) : '80.0';
-        const a = subj ? subj.components.attendance.toFixed(1) : '90.0';
-        const g = subj ? subj.grade.toFixed(2) : '2.50';
+      rows = studentsInSelectedSubject.map((student: any) => {
+        const subj = (student.enrolledSubjects || []).find((sub: any) => sub.code === selectedSubjectCode);
+        const q = subj && subj.components?.quizzes !== undefined ? Number(subj.components.quizzes).toFixed(1) : '80.0';
+        const e = subj && subj.components?.exams !== undefined ? Number(subj.components.exams).toFixed(1) : '80.0';
+        const p = subj && subj.components?.practicum !== undefined ? Number(subj.components.practicum).toFixed(1) : '80.0';
+        const a = subj && subj.components?.attendance !== undefined ? Number(subj.components.attendance).toFixed(1) : '90.0';
+        const g = subj && subj.grade !== undefined ? Number(subj.grade).toFixed(2) : '2.50';
         const rem = subj && subj.grade > 2.5 && subj.isClinical ? 'FAILS RETENTION' : 'PASS';
         return `${student.studentId},"${student.name}",${selectedSubjectCode},${q},${e},${p},${a},${g},${rem}`;
       }).join('\n');
       fileName = `${selectedSubjectCode}_Academic_Report.csv`;
     } else if (type === 'retention') {
       headers = 'Student ID,Name,Standing GWA,Warning Count,Risk Level,Remedial Status\n';
-      rows = facultyStudents.map(student => {
-        const warningCount = student.enrolledSubjects.filter(sub => assignedSubjects.includes(sub.code) && sub.grade > 2.5).length;
+      rows = facultyStudents.map((student: any) => {
+        const warningCount = (student.enrolledSubjects || []).filter((sub: any) => assignedSubjects.includes(sub.code) && sub.grade > 2.5).length;
         const riskLevel = warningCount > 0 ? 'HIGH' : 'LOW';
-        const remedialCount = student.remedialExams.filter(rem => rem.status === 'pending').length;
+        const remedialCount = Array.isArray(student.remedialExams) ? student.remedialExams.filter((rem: any) => rem.status === 'pending').length : 0;
         const remStatus = remedialCount > 0 ? 'PENDING EXAM' : 'STABLE';
-        return `${student.studentId},"${student.name}",${student.overallGWA.toFixed(2)},${warningCount},${riskLevel},${remStatus}`;
+        return `${student.studentId},"${student.name}",${Number(student.overallGWA || 1.75).toFixed(2)},${warningCount},${riskLevel},${remStatus}`;
       }).join('\n');
       fileName = `Retention_Report.csv`;
     } else {
       headers = 'Date,Student ID,Name,Subject Code,Status\n';
       rows = attendanceRecords
-        .filter(r => assignedSubjects.includes(r.subjectCode))
-        .map(record => {
-          const s = students.find(x => x.id === record.studentId);
-          return `${record.date},${s?.studentId || ''},"${s?.name || ''}",${record.subjectCode},${record.status.toUpperCase()}`;
+        .filter((r: any) => assignedSubjects.includes(r.subjectCode))
+        .map((record: any) => {
+          const s = students.find((x: any) => x.id === record.studentId);
+          return `${record.date},${s?.studentId || ''},"${s?.name || ''}",${record.subjectCode},${String(record.status || '').toUpperCase()}`;
         }).join('\n');
       fileName = `Attendance_Report.csv`;
     }
@@ -121,17 +166,17 @@ export const Reports: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // Recharts Stats: GWA Frequencies
-  const gwaData = useMemo(() => {
+  // Recharts Stats: GWA Distribution
+  const gwaHistogramData = useMemo(() => {
     const buckets = [
-      { name: '1.0 - 1.5', count: 0 },
-      { name: '1.51 - 2.0', count: 0 },
-      { name: '2.01 - 2.5', count: 0 },
-      { name: '2.51 - 3.0', count: 0 },
-      { name: '3.1 - 5.0', count: 0 },
+      { range: '1.0–1.5 (High Honor)', count: 0 },
+      { range: '1.51–2.0 (Above Avg)', count: 0 },
+      { range: '2.01–2.5 (Average)', count: 0 },
+      { range: '2.51–3.0 (Retention Warning)', count: 0 },
+      { range: '3.0+ (Critical Risk)', count: 0 },
     ];
-    facultyStudents.forEach(s => {
-      const gwa = s.overallGWA;
+    facultyStudents.forEach((s: any) => {
+      const gwa = s.overallGWA || 1.75;
       if (gwa <= 1.5) buckets[0].count++;
       else if (gwa <= 2.0) buckets[1].count++;
       else if (gwa <= 2.5) buckets[2].count++;
@@ -143,15 +188,16 @@ export const Reports: React.FC = () => {
 
   // Recharts Stats: Retention Distribution
   const pieData = useMemo(() => {
-    const counts = { active: 0, warning: 0, critical: 0, remedial: 0 };
-    facultyStudents.forEach(s => {
-      counts[s.status] = (counts[s.status] || 0) + 1;
+    const counts: Record<string, number> = { active: 0, warning: 0, critical: 0, remedial: 0 };
+    facultyStudents.forEach((s: any) => {
+      const statusKey = (s.status || 'active').toLowerCase();
+      counts[statusKey] = (counts[statusKey] || 0) + 1;
     });
     return [
-      { name: 'Active Standing', value: counts.active, color: '#10B981' },
-      { name: 'Warning Status', value: counts.warning, color: '#F59E0B' },
-      { name: 'Critical Watch', value: counts.critical, color: '#EF4444' },
-      { name: 'Remedial Programs', value: counts.remedial, color: '#8B5CF6' },
+      { name: 'Active Standing', value: counts.active || 0, color: '#10B981' },
+      { name: 'Warning Status', value: counts.warning || 0, color: '#F59E0B' },
+      { name: 'Critical Watch', value: counts.critical || 0, color: '#EF4444' },
+      { name: 'Remedial Programs', value: counts.remedial || 0, color: '#8B5CF6' },
     ].filter(item => item.value > 0);
   }, [facultyStudents]);
 
@@ -298,9 +344,9 @@ export const Reports: React.FC = () => {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-left">
-              <thead>
+              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
                   <th className="px-5 py-3 text-center">Quizzes</th>
@@ -312,9 +358,9 @@ export const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
-                {studentsInSelectedSubject.map(student => {
-                  const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
-                  const isFailsRetention = subj && subj.isClinical && subj.grade > settings.retentionThreshold;
+                {paginatedStudentsInSubject.map((student: any) => {
+                  const subj = student.enrolledSubjects ? student.enrolledSubjects.find((sub: any) => sub.code === selectedSubjectCode) : null;
+                  const isFailsRetention = subj && subj.isClinical && subj.grade > (settings?.retentionThreshold || 2.5);
                   const isFailed = subj && subj.grade === 5.0;
 
                   return (
@@ -323,12 +369,12 @@ export const Reports: React.FC = () => {
                         <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
                         <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj ? subj.components.exams.toFixed(1) : '80.0'}%</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.quizzes !== undefined ? Number(subj.components.quizzes).toFixed(1) : '80.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.practicum !== undefined ? Number(subj.components.practicum).toFixed(1) : '80.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.exams !== undefined ? Number(subj.components.exams).toFixed(1) : '80.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.attendance !== undefined ? Number(subj.components.attendance).toFixed(1) : '90.0'}%</td>
                       <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                        {subj ? subj.grade.toFixed(2) : '2.50'}
+                        {subj && subj.grade !== undefined ? Number(subj.grade).toFixed(2) : '2.50'}
                       </td>
                       <td className="px-5 py-3.5">
                         <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
@@ -347,6 +393,34 @@ export const Reports: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination controls */}
+          {totalPagesInSubject > 1 && (
+            <div className="flex items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <span className="text-slate-400">
+                Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, studentsInSelectedSubject.length)} of {studentsInSelectedSubject.length} records
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-bold disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-1.5 font-bold text-slate-700 dark:text-slate-200">
+                  Page {currentPage} of {totalPagesInSubject}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPagesInSubject))}
+                  disabled={currentPage === totalPagesInSubject}
+                  className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-bold disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
@@ -366,9 +440,9 @@ export const Reports: React.FC = () => {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-left">
-              <thead>
+              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
                   <th className="px-5 py-3 text-center">Standing GWA</th>
@@ -378,10 +452,10 @@ export const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
-                {facultyStudents.map(student => {
-                  const warnings = student.enrolledSubjects.filter(sub => assignedSubjects.includes(sub.code) && sub.grade > 2.5);
+                {facultyStudents.map((student: any) => {
+                  const warnings = (student.enrolledSubjects || []).filter((sub: any) => assignedSubjects.includes(sub.code) && sub.grade > 2.5);
                   const isAtRisk = warnings.length > 0;
-                  const remedialCount = student.remedialExams.filter(rem => rem.status === 'pending').length;
+                  const remedialCount = Array.isArray(student.remedialExams) ? student.remedialExams.filter((rem: any) => rem.status === 'pending').length : 0;
 
                   return (
                     <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
@@ -531,7 +605,7 @@ export const Reports: React.FC = () => {
             </div>
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={gwaData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <BarChart data={gwaHistogramData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" className="dark:stroke-slate-900" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} tickLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} allowDecimals={false} />
@@ -599,17 +673,17 @@ export const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {studentsInSelectedSubject.map(student => {
-                  const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+                {studentsInSelectedSubject.map((student: any) => {
+                  const subj = (student.enrolledSubjects || []).find((sub: any) => sub.code === selectedSubjectCode);
                   return (
                     <tr key={student.id}>
                       <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
                       <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj ? subj.components.exams.toFixed(1) : '80.0'}%</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{subj ? subj.grade.toFixed(2) : '2.50'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.quizzes !== undefined ? Number(subj.components.quizzes).toFixed(1) : '80.0'}%</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.practicum !== undefined ? Number(subj.components.practicum).toFixed(1) : '80.0'}%</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.exams !== undefined ? Number(subj.components.exams).toFixed(1) : '80.0'}%</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.attendance !== undefined ? Number(subj.components.attendance).toFixed(1) : '90.0'}%</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{subj && subj.grade !== undefined ? Number(subj.grade).toFixed(2) : '2.50'}</td>
                     </tr>
                   );
                 })}
@@ -632,9 +706,9 @@ export const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {facultyStudents.map(student => {
-                  const warnings = student.enrolledSubjects.filter(sub => assignedSubjects.includes(sub.code) && sub.grade > 2.5);
-                  const remedialCount = student.remedialExams.filter(rem => rem.status === 'pending').length;
+                {facultyStudents.map((student: any) => {
+                  const warnings = (student.enrolledSubjects || []).filter((sub: any) => assignedSubjects.includes(sub.code) && sub.grade > 2.5);
+                  const remedialCount = Array.isArray(student.remedialExams) ? student.remedialExams.filter((rem: any) => rem.status === 'pending').length : 0;
                   return (
                     <tr key={student.id}>
                       <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>

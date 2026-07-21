@@ -104,6 +104,48 @@ return [
         'handler' => 'handle_secretary_activate',
         'has_params' => false,
     ],
+    [
+        'method' => 'GET',
+        'path' => '/api/secretary/dashboard/kpis',
+        'handler' => 'handle_secretary_dashboard_kpis',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/secretary/attendance',
+        'handler' => 'handle_secretary_attendance_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/secretary/attendance/override',
+        'handler' => 'handle_secretary_attendance_override',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/secretary/profile',
+        'handler' => 'handle_secretary_profile_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/secretary/profile',
+        'handler' => 'handle_secretary_profile_update',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/secretary/settings',
+        'handler' => 'handle_secretary_settings_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/secretary/settings',
+        'handler' => 'handle_secretary_settings_update',
+        'has_params' => false,
+    ],
     // Password Reset Workflow
     [
         'method' => 'POST',
@@ -273,6 +315,61 @@ return [
         'method' => 'POST',
         'path' => '/api/faculty/settings',
         'handler' => 'handle_faculty_settings_update',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/send-email',
+        'handler' => 'handle_faculty_email_send',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/faculty/email-logs',
+        'handler' => 'handle_faculty_email_logs',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/faculty/reports/summary',
+        'handler' => 'handle_faculty_reports_summary',
+        'has_params' => false,
+    ],
+    // Class Management APIs
+    [
+        'method' => 'GET',
+        'path' => '/api/faculty/classes',
+        'handler' => 'handle_faculty_classes_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/faculty/courses',
+        'handler' => 'handle_faculty_courses_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/classes',
+        'handler' => 'handle_faculty_class_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/faculty/classes/available-students',
+        'handler' => 'handle_faculty_class_available_students',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/classes/enroll',
+        'handler' => 'handle_faculty_class_enroll_students',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/classes/unenroll',
+        'handler' => 'handle_faculty_class_unenroll_student',
         'has_params' => false,
     ],
 ];

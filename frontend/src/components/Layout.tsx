@@ -23,7 +23,8 @@ import {
   Video,
   ListChecks,
   Mail,
-  UserCheck
+  UserCheck,
+  BookOpen
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
@@ -162,6 +163,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     // Faculty (default)
     return [
       { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+      { name: 'Class Management', path: '/classes', icon: BookOpen },
       { name: 'Student Management', path: '/students', icon: Users },
       { name: 'Grade Computation', path: '/grades', icon: Calculator },
       { name: 'Retention Monitoring', path: '/retention', icon: AlertTriangle, badge: 'retention' },
@@ -223,6 +225,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'My Profile', path: '/secretary/profile' });
     } else if (path === '/secretary/settings') {
       crumbs.push({ name: 'Settings', path: '/secretary/settings' });
+    } else if (path === '/admin/faculty-approval') {
+      crumbs.push({ name: 'Faculty Approval', path: '/admin/faculty-approval' });
     } else if (path === '/admin/retention-criteria') {
       crumbs.push({ name: 'Retention Criteria', path: '/admin/retention-criteria' });
     } else if (path === '/admin/reports') {

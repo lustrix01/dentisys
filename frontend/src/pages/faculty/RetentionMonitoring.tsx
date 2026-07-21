@@ -374,9 +374,9 @@ export const RetentionMonitoring: React.FC = () => {
       ---------------------------------------------------- */}
       {activeTab === 'watchlist' && (
         <Card className="p-0 overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="w-full text-left">
-              <thead>
+              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800/80 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
                   <th className="px-5 py-3 text-center">GWA</th>

@@ -64,9 +64,9 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
         </select>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
         <table className="w-full text-left text-xs">
-          <thead>
+          <thead className="sticky top-0 bg-white dark:bg-slate-900 z-10 shadow-sm">
             <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase tracking-wide">
               <th className="p-3">Recipient</th>
               <th className="p-3">Subject</th>

@@ -51,23 +51,25 @@ export const EmailManagement: React.FC = () => {
     setSecretaryInvs(getSecretaryInvitations());
   };
 
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+
+  const fetchEmailLogs = () => {
+    setLoadingLogs(true);
+    import('../../services/apiClient')
+      .then(m => m.getFacultyEmailLogsApi())
+      .then(res => {
+        if (Array.isArray(res.logs)) {
+          setLogs(res.logs as EmailLog[]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingLogs(false));
+  };
+
   useEffect(() => {
     loadSecretaryInvitations();
-    // Load stored email logs if present
-    try {
-      const storedLogs = JSON.parse(localStorage.getItem('dentisys_email_logs') || '[]');
-      if (Array.isArray(storedLogs) && storedLogs.length > 0) {
-        setLogs((prev) => {
-          const combined = [...storedLogs, ...prev];
-          const unique = Array.from(new Set(combined.map((a) => a.id))).map((id) =>
-            combined.find((a) => a.id === id)!
-          );
-          return unique;
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    }
+    fetchEmailLogs();
   }, []);
 
   const isConsent = tab === 'consent';
@@ -105,7 +107,8 @@ export const EmailManagement: React.FC = () => {
       return;
     }
 
-    const nowStr = new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+    setIsSending(true);
+    setNotice(null);
 
     if (isSecretary) {
       // Send Secretary Invitations for selected students
@@ -127,35 +130,47 @@ export const EmailManagement: React.FC = () => {
       }
 
       loadSecretaryInvitations();
+      fetchEmailLogs();
       setSelected([]);
+      setIsSending(false);
       setNotice({
         type: 'success',
         message: `Class Secretary invitation email issued to ${count} student${count > 1 ? 's' : ''}.`,
       });
     } else {
-      // Send Consent or Risk Emails
-      const newLogs: EmailLog[] = selected.map((id) => {
-        const student = students.find((s) => s.id === id)!;
-        return {
-          id: `mail-${Date.now()}-${id}`,
-          recipient: student.name,
-          subject: isConsent
-            ? 'Privacy Consent for Facial Recognition'
-            : 'Academic Support & At-Risk Notification',
-          type: isConsent ? 'Privacy Consent' : 'At-Risk Notification',
-          sentAt: nowStr,
-          status: 'Sent',
-        };
+      // Send Consent or Risk Emails via backend API
+      const emailType = isConsent ? 'Privacy Consent' : 'At-Risk Notification';
+      const subject = isConsent
+        ? 'Privacy Consent for Facial Recognition'
+        : 'Academic Support & At-Risk Notification';
+
+      const selectedRecipients = selected.map(id => {
+        const student = students.find(s => s.id === id);
+        return { name: student?.name || id, email: student?.email || '' };
       });
 
-      setLogs((prev) => [...newLogs, ...prev]);
-      setSelected([]);
-      setNotice({
-        type: 'success',
-        message: `${isConsent ? 'Consent request' : 'At-risk notification'} sent to ${
-          selected.length
-        } student${selected.length > 1 ? 's' : ''}.`,
-      });
+      try {
+        const apiClient = await import('../../services/apiClient');
+        await apiClient.sendFacultyEmailApi({
+          recipients: selectedRecipients,
+          emailType,
+          subject,
+        });
+
+        fetchEmailLogs();
+        setSelected([]);
+        setNotice({
+          type: 'success',
+          message: `${emailType} email sent and logged for ${selected.length} student${selected.length > 1 ? 's' : ''}.`,
+        });
+      } catch (err) {
+        setNotice({
+          type: 'error',
+          message: err instanceof Error ? err.message : 'Failed to send emails.',
+        });
+      } finally {
+        setIsSending(false);
+      }
     }
   };
 
@@ -204,7 +219,7 @@ export const EmailManagement: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
-          <Mail className="w-4 h-4 text-clinical-600" /> Mock Email Gateway — Automated sending & tracking
+          <Mail className="w-4 h-4 text-clinical-600" /> Live Email Gateway — Automated sending & tracking
         </div>
       </div>
 
@@ -305,9 +320,9 @@ export const EmailManagement: React.FC = () => {
             </div>
 
             {/* Student Selection Table */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[450px] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
+                <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                   <tr className="bg-slate-50/70 dark:bg-slate-900/40 text-slate-400 uppercase tracking-wide border-b border-slate-100 dark:border-slate-800">
                     <th className="p-3">
                       <input
@@ -369,9 +384,9 @@ export const EmailManagement: React.FC = () => {
               Track activation status (Pending, Accepted, Expired, Revoked) and copy invitation activation links.
             </p>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[450px] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
+                <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                   <tr className="bg-slate-50/70 dark:bg-slate-900/40 text-slate-400 uppercase tracking-wide border-b border-slate-100 dark:border-slate-800">
                     <th className="p-3">Student Recipient</th>
                     <th className="p-3">Class</th>
@@ -478,17 +493,22 @@ export const EmailManagement: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSendEmails}
-                  disabled={!selected.length}
-                  className="px-4 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 disabled:bg-slate-300 text-white text-xs font-bold flex gap-1.5 items-center cursor-pointer shadow-md"
+                  disabled={!selected.length || isSending}
+                  className="px-4 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 disabled:bg-slate-300 text-white text-xs font-bold flex gap-1.5 items-center cursor-pointer shadow-md disabled:cursor-not-allowed"
                 >
-                  <Send className="w-3.5 h-3.5" /> Send {selected.length ? `(${selected.length})` : ''}
+                  {isSending ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  {isSending ? 'Sending...' : `Send ${selected.length ? `(${selected.length})` : ''}`}
                 </button>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[450px] overflow-y-auto">
               <table className="w-full text-left text-xs">
-                <thead>
+                <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                   <tr className="bg-slate-50/70 dark:bg-slate-900/40 text-slate-400 uppercase tracking-wide">
                     <th className="p-4">
                       <input

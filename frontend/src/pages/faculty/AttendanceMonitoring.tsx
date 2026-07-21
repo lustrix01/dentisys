@@ -492,9 +492,9 @@ export const AttendanceMonitoring: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800 text-xs font-medium">
-              <thead className="bg-slate-50 dark:bg-slate-900/60">
+              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="text-left font-bold text-[9px] uppercase tracking-wider text-slate-400">
                   <th className="px-5 py-3">Student Name</th>
                   <th className="px-5 py-3">Date</th>

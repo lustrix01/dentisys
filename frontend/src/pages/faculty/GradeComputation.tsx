@@ -838,9 +838,9 @@ export const GradeComputation: React.FC = () => {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/60">
+              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left">
                   <th className="px-5 py-3">Assessment Title</th>
                   <th className="px-5 py-3">Category</th>
@@ -1041,9 +1041,9 @@ export const GradeComputation: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-900/60">
+              <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left">
                   <th className="px-5 py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => toggleSort('name')}>
                     <div className="flex items-center gap-1">

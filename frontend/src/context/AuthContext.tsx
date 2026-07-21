@@ -121,6 +121,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setUser = useCallback((user: SafeUser) => {
     auditService.setAuditIdentity(user.display_name, user.role);
+    if (user.role === 'secretary') {
+      setCurrentSecretaryUser({
+        email: user.login_email,
+        role: user.role,
+        name: user.display_name,
+        title: 'Class Secretary',
+        assignedClassId: 'CLINIC-A',
+        assignedClassName: 'Clinical Rotation A (Section 4A)',
+        classroomName: 'Dental Clinic B - Room 402',
+        cctvCameraId: 'CCTV-CLINIC-A-01',
+      });
+    }
     setState(prev => ({ ...prev, user }));
   }, []);
 

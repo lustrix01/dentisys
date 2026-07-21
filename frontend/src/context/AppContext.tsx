@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Student, AttendanceRecord, SystemSettings, RemedialExam, GradeComponents, EnrolledSubject, AttendanceStatus, Assessment, AssessmentScore, GradingComponentConfig, RetentionLog } from '../types';
 import { recordAudit } from '../services/auditService';
 import { computeSubjectGrade, computeOverallGWA, percentageToGWA } from '../utils/gradeHelper';
+import { getFacultyStudentsApi } from '../services/apiClient';
 
 interface AppContextProps {
   students: Student[];
@@ -151,6 +152,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     localStorage.setItem('dentisys_mock_version', 'v3');
+    getFacultyStudentsApi()
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const mapped: Student[] = data.map(s => ({
+            id: String(s.id),
+            studentId: s.studentId,
+            name: s.name,
+            email: s.email,
+            yearLevel: (s.yearLevel || 4) as 1 | 2 | 3 | 4,
+            status: (s.status || 'active') as any,
+            classId: s.classId || 'CLINIC-A',
+            className: s.className || 'Clinical Rotation A',
+            overallGWA: 1.75,
+            clinicHoursCompleted: 90,
+            faceEnrolled: s.faceEnrolled,
+            consentStatus: (s.consentStatus || 'pending') as any,
+            remedialExams: [],
+            enrolledSubjects: [
+              { code: 'CLIN401', name: 'Clinical Dentistry I', units: 4, isClinical: true, components: { quizzes: 85, exams: 85, practicum: 85, attendance: 95 }, grade: 1.75, hasRemedial: false },
+              { code: 'CLIN402', name: 'Clinical Dentistry II', units: 4, isClinical: true, components: { quizzes: 85, exams: 85, practicum: 85, attendance: 95 }, grade: 1.75, hasRemedial: false }
+            ],
+          }));
+          setStudents(mapped);
+        }
+      })
+      .catch((err) => {
+        console.warn('Backend student sync warning:', err);
+      });
   }, []);
 
   useEffect(() => {

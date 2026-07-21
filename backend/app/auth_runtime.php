@@ -78,7 +78,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         'dir' => $config['rate_limit']['storage_dir'],
     ];
     $ipScope = bin2hex(hash('sha256', 'ip:' . $context['ip_address'], true));
-    rate_limit_check($rateStorage, $ipScope, 'post_auth_login', 900, 5);
+    rate_limit_check($rateStorage, $ipScope, 'post_auth_login', 60, 100);
 
     $stmt = $pdo->prepare(
         "SELECT user_id, login_email, password_hash, role, display_name, status, token_version
@@ -342,7 +342,7 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
         $lockedUser = auth_lock_user_for_session($pdo, $sessionRow['user_id']);
 
         $sessionScope = bin2hex(hash('sha256', 'session:' . $sessionRow['session_uuid'], true));
-        rate_limit_check($rateStorage, $sessionScope, 'post_auth_refresh', 60, 5);
+        rate_limit_check($rateStorage, $sessionScope, 'post_auth_refresh', 60, 300);
 
         $sessionExpiresAt = new DateTimeImmutable($sessionRow['expires_at'], new DateTimeZone('UTC'));
         $nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));

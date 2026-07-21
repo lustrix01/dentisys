@@ -86,15 +86,20 @@ async function request<T>(
   }
 
   let response: Response;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
       credentials: 'include',
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
   } catch {
     throw new ApiError(0, 'Unable to connect to the server. Check your connection.');
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   let responseData: unknown;
@@ -304,10 +309,26 @@ export function getAdminReportsSummaryApi(): Promise<{
   status: string;
   reports: {
     students: any[];
+    attendance?: any[];
     totalCount: number;
   };
 }> {
   return request('GET', '/admin/reports/summary');
+}
+
+export function getFacultyReportsSummaryApi(): Promise<{
+  status: string;
+  reports: {
+    students: any[];
+    summary: {
+      totalStudents: number;
+      averageGWA: number;
+      atRiskCount: number;
+      retentionPassRate: number;
+    };
+  };
+}> {
+  return request('GET', '/faculty/reports/summary');
 }
 
 // Faculty Module API Methods
@@ -406,3 +427,189 @@ export function getFacultySettingsApi(): Promise<{
 export function updateFacultySettingsApi(settings: any): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/settings', settings);
 }
+
+// Class Secretary Module API Methods
+export function getSecretaryDashboardKpisApi(): Promise<{
+  status: string;
+  kpis: {
+    assignedStudents: number;
+    attendanceRate: number;
+    todayRecords: number;
+    overriddenCount: number;
+  };
+  recentActivity: Array<{ id: string; studentName: string; date: string; subjectCode: string; status: string }>;
+  assignedClass: {
+    classId: string;
+    className: string;
+    classroomName: string;
+    cctvCameraId: string;
+  };
+}> {
+  return request('GET', '/secretary/dashboard/kpis');
+}
+
+export function getSecretaryAttendanceApi(): Promise<{
+  status: string;
+  records: Array<{
+    id: string;
+    studentId: string;
+    studentNumber: string;
+    studentName: string;
+    date: string;
+    subjectCode: string;
+    status: string;
+    overrideReason?: string | null;
+    overrideAt?: string | null;
+  }>;
+}> {
+  return request('GET', '/secretary/attendance');
+}
+
+export function overrideSecretaryAttendanceApi(data: {
+  studentId: string;
+  status: 'present' | 'late' | 'absent';
+  reason: string;
+  recordId?: string;
+  date?: string;
+  subjectCode?: string;
+}): Promise<{ status: string; message: string }> {
+  return request('POST', '/secretary/attendance/override', data);
+}
+
+export function getSecretaryProfileApi(): Promise<{
+  status: string;
+  profile: {
+    id: string;
+    name: string;
+    email: string;
+    title: string;
+    assignedClassName: string;
+    classroomName: string;
+    cctvCameraId: string;
+    theme: string;
+  };
+}> {
+  return request('GET', '/secretary/profile');
+}
+
+export function updateSecretaryProfileApi(data: { name: string; email: string }): Promise<{ status: string; message: string }> {
+  return request('POST', '/secretary/profile', data);
+}
+
+export function getSecretarySettingsApi(): Promise<{
+  status: string;
+  settings: {
+    theme: 'light' | 'dark';
+  };
+}> {
+  return request('GET', '/secretary/settings');
+}
+
+export function updateSecretarySettingsApi(settings: { theme: 'light' | 'dark' }): Promise<{ status: string; message: string }> {
+  return request('POST', '/secretary/settings', settings);
+}
+
+export function sendFacultyEmailApi(data: {
+  recipients: string[] | Array<{ name: string; email?: string }>;
+  emailType: string;
+  subject?: string;
+  body?: string;
+}): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/send-email', data);
+}
+
+export function getFacultyEmailLogsApi(): Promise<{
+  status: string;
+  logs: Array<{
+    id: string;
+    recipient: string;
+    subject: string;
+    type: string;
+    sentAt: string;
+    status: 'Sent' | 'Failed';
+  }>;
+}> {
+  return request('GET', '/faculty/email-logs');
+}
+
+// Class Management API Services
+export interface FacultyClassItem {
+  id: string;
+  csId: number;
+  csName: string;
+  courseId: number;
+  courseCode: string;
+  courseName: string;
+  units: number;
+  schoolYear: string;
+  semester: string;
+  yearLevel: number;
+  block: string;
+  schedule: string;
+  labRoom?: string;
+  lecRoom?: string;
+  enrolledCount: number;
+  instructorName: string;
+  status: string;
+}
+
+export interface CourseCatalogItem {
+  id: number;
+  courseCode: string;
+  name: string;
+  units: number;
+  yearLevel: number;
+  semester: string;
+  isClinical: boolean;
+}
+
+export function getFacultyClassesApi(): Promise<{ status: string; classes: FacultyClassItem[] }> {
+  return request('GET', '/faculty/classes');
+}
+
+export function getFacultyCoursesApi(): Promise<{ status: string; courses: CourseCatalogItem[] }> {
+  return request('GET', '/faculty/courses');
+}
+
+export function createFacultyClassApi(data: {
+  csName: string;
+  courseId: number;
+  semester: string;
+  schoolYear: string;
+  yearLevel: number;
+  block?: string;
+  labRoom?: string;
+  lecRoom?: string;
+}): Promise<{ status: string; message: string; csId: number }> {
+  return request('POST', '/faculty/classes', data);
+}
+
+export function getAvailableStudentsForClassApi(csId: number): Promise<{
+  status: string;
+  students: Array<{
+    id: string;
+    studentId: string;
+    name: string;
+    email: string;
+    yearLevel: number;
+    status: string;
+  }>;
+}> {
+  return request('GET', `/faculty/classes/available-students?csId=${csId}`);
+}
+
+export function enrollStudentsInClassApi(data: {
+  csId: number;
+  studentIds: number[];
+}): Promise<{ status: string; message: string; enrolledCount: number }> {
+  return request('POST', '/faculty/classes/enroll', data);
+}
+
+export function unenrollStudentFromClassApi(data: {
+  csId: number;
+  studentId: number;
+}): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/classes/unenroll', data);
+}
+
+

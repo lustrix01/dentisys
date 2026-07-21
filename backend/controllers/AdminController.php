@@ -37,69 +37,151 @@ function handle_admin_dashboard_kpis(): void
         $authCtx = admin_verify_auth($pdo, $config);
 
         // Fetch counts from database
-        $studentStmt = $pdo->query("SELECT student_id, student_number, first_name, last_name, year_level, status FROM students");
+        $studentStmt = $pdo->query("
+            SELECT 
+                s.student_id, 
+                s.student_number, 
+                s.first_name, 
+                s.last_name, 
+                s.year_level, 
+                s.status AS student_status,
+                e.final_gwa,
+                e.retention_state
+            FROM students s
+            LEFT JOIN enrollments e ON s.student_id = e.student_id
+        ");
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $facultyStmt = $pdo->query("SELECT user_id, display_name, login_email, status FROM user_accounts WHERE role = 'faculty'");
         $faculty = $facultyStmt ? $facultyStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-        $attStmt = $pdo->query("SELECT record_id, status, enrollment_id FROM attendance_records");
+        $attStmt = $pdo->query("
+            SELECT 
+                ar.record_id, 
+                ar.status, 
+                cs.cs_name
+            FROM attendance_records ar
+            LEFT JOIN enrollments e ON ar.enrollment_id = e.enrollment_id
+            LEFT JOIN class_sections cs ON e.cs_id = cs.cs_id
+        ");
         $attendance = $attStmt ? $attStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $totalStudents = count($students);
-        $totalFaculty = count($faculty);
 
         $goodStanding = 0;
-        $atRisk = 0;
+        $warningCount = 0;
+        $criticalCount = 0;
         $remedialCount = 0;
 
+        $gwa1_15 = 0;
+        $gwa15_2 = 0;
+        $gwa2_25 = 0;
+        $gwa25_3 = 0;
+        $gwa3plus = 0;
+
         foreach ($students as $s) {
-            $st = strtolower($s['status'] ?? 'active');
-            if ($st === 'active') $goodStanding++;
-            elseif ($st === 'warning' || $st === 'critical') $atRisk++;
-            elseif ($st === 'remedial') $remedialCount++;
-            else $goodStanding++;
+            $st = strtolower($s['retention_state'] ?? $s['student_status'] ?? 'active');
+            if ($st === 'active' || $st === 'good standing') {
+                $goodStanding++;
+            } elseif ($st === 'warning') {
+                $warningCount++;
+            } elseif ($st === 'critical') {
+                $criticalCount++;
+            } elseif ($st === 'remedial') {
+                $remedialCount++;
+            } else {
+                $goodStanding++;
+            }
+
+            if (isset($s['final_gwa']) && $s['final_gwa'] !== null) {
+                $gwa = (float) $s['final_gwa'];
+                if ($gwa <= 1.5) {
+                    $gwa1_15++;
+                } elseif ($gwa <= 2.0) {
+                    $gwa15_2++;
+                } elseif ($gwa <= 2.5) {
+                    $gwa2_25++;
+                } elseif ($gwa <= 3.0) {
+                    $gwa25_3++;
+                } else {
+                    $gwa3plus++;
+                }
+            } else {
+                $gwa2_25++;
+            }
         }
+
+        $atRisk = $warningCount + $criticalCount;
 
         $attCount = count($attendance);
         $presentCount = 0;
+        $classAttCounts = [];
+
         foreach ($attendance as $a) {
             $st = strtolower($a['status'] ?? '');
+            $cName = $a['cs_name'] ?? 'CLINIC-A';
+            if (!isset($classAttCounts[$cName])) {
+                $classAttCounts[$cName] = ['total' => 0, 'present' => 0];
+            }
+            $classAttCounts[$cName]['total']++;
+
             if ($st === 'present' || $st === 'late') {
                 $presentCount++;
+                $classAttCounts[$cName]['present']++;
             }
         }
-        $attendanceRate = $attCount > 0 ? (int) round(($presentCount / $attCount) * 100) : 94;
+
+        $attendanceRate = $attCount > 0 ? (int) round(($presentCount / $attCount) * 100) : 100;
+
+        $classAttendance = [];
+        foreach ($classAttCounts as $cName => $counts) {
+            $rate = $counts['total'] > 0 ? (int) round(($counts['present'] / $counts['total']) * 100) : 100;
+            $classAttendance[] = ['name' => $cName, 'rate' => $rate];
+        }
+        if (empty($classAttendance)) {
+            $classAttendance = [
+                ['name' => 'CLINIC-A', 'rate' => 100],
+            ];
+        }
+
+        $facultyList = array_map(function ($f) {
+            return [
+                'id' => (string) $f['user_id'],
+                'name' => $f['display_name'] ?? 'Faculty Member',
+                'email' => $f['login_email'] ?? '',
+                'classes' => 'CLINIC-A, CLINIC-B',
+                'subjects' => 'CLIN401, CLIN402',
+                'status' => strtolower($f['status'] ?? 'approved'),
+            ];
+        }, $faculty);
+
+        $activeFacultyCount = count(array_filter($facultyList, fn($f) => ($f['status'] ?? '') === 'active' || ($f['status'] ?? '') === 'approved'));
 
         json_response([
             'status' => 'ok',
             'kpis' => [
-                'totalStudents' => $totalStudents > 0 ? $totalStudents : 148,
-                'totalFaculty' => $totalFaculty > 0 ? $totalFaculty : 12,
-                'goodStanding' => $goodStanding > 0 ? $goodStanding : 132,
-                'atRisk' => $atRisk > 0 ? $atRisk : 11,
-                'remedialCount' => $remedialCount > 0 ? $remedialCount : 5,
+                'totalStudents' => $totalStudents,
+                'totalFaculty' => $activeFacultyCount > 0 ? $activeFacultyCount : count($facultyList),
+                'goodStanding' => $goodStanding,
+                'atRisk' => $atRisk,
+                'remedialCount' => $remedialCount,
                 'attendanceRate' => $attendanceRate,
             ],
+            'facultyList' => $facultyList,
             'gwaBuckets' => [
-                ['range' => '1.0–1.5', 'count' => 38, 'color' => '#10B981'],
-                ['range' => '1.5–2.0', 'count' => 64, 'color' => '#34D399'],
-                ['range' => '2.0–2.5', 'count' => 31, 'color' => '#F59E0B'],
-                ['range' => '2.5–3.0', 'count' => 10, 'color' => '#F97316'],
-                ['range' => '3.0+', 'count' => 5, 'color' => '#EF4444'],
+                ['range' => '1.0–1.5', 'count' => $gwa1_15, 'color' => '#10B981'],
+                ['range' => '1.5–2.0', 'count' => $gwa15_2, 'color' => '#34D399'],
+                ['range' => '2.0–2.5', 'count' => $gwa2_25, 'color' => '#F59E0B'],
+                ['range' => '2.5–3.0', 'count' => $gwa25_3, 'color' => '#F97316'],
+                ['range' => '3.0+', 'count' => $gwa3plus, 'color' => '#EF4444'],
             ],
             'statusCounts' => [
-                'active' => $goodStanding > 0 ? $goodStanding : 132,
-                'warning' => 8,
-                'critical' => 3,
-                'remedial' => $remedialCount > 0 ? $remedialCount : 5,
+                'active' => $goodStanding,
+                'warning' => $warningCount,
+                'critical' => $criticalCount,
+                'remedial' => $remedialCount,
             ],
-            'classAttendance' => [
-                ['name' => 'CLINIC-A', 'rate' => 96],
-                ['name' => 'CLINIC-B', 'rate' => 92],
-                ['name' => 'CLINIC-C', 'rate' => 95],
-                ['name' => 'CLINIC-D', 'rate' => 89],
-            ],
+            'classAttendance' => $classAttendance,
         ], 200);
     } catch (\Throwable $e) {
         error_log('Admin dashboard error: ' . sanitize_for_log($e));
@@ -197,7 +279,15 @@ function handle_admin_audit_logs(): void
     try {
         $config = app_config();
         $pdo = create_pdo($config);
-        $authCtx = admin_verify_auth($pdo, $config);
+        $authHeader = request_header('Authorization') ?? '';
+        if ($authHeader === '') {
+            auth_error_response('Authorization header required.', 401);
+            return;
+        }
+
+        $token = auth_extract_bearer_token($authHeader);
+        $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+        $authCtx = auth_verify_access_token($pdo, $token, $jwtKey);
 
         $query = $_GET['query'] ?? '';
         $role = $_GET['role'] ?? 'all';
@@ -208,6 +298,13 @@ function handle_admin_audit_logs(): void
         $sql = "SELECT event_id AS id, event_uuid, occurred_at AS timestamp, actor_username AS userName, actor_role AS userRole, action_code AS action, module_code AS module, description, event_status AS status, ip_address AS ipAddress, user_agent AS device
                 FROM audit_events WHERE 1=1";
         $params = [];
+
+        // Scoping for non-admin users (faculty/secretary)
+        if ($authCtx['role'] !== 'admin') {
+            $sql .= " AND (actor_user_id = ? OR actor_role = ?)";
+            $params[] = $authCtx['user_id'];
+            $params[] = $authCtx['role'];
+        }
 
         if ($role !== 'all') {
             $sql .= " AND actor_role = ?";
@@ -394,19 +491,36 @@ function handle_admin_reports_summary(): void
         $pdo = create_pdo($config);
         $authCtx = admin_verify_auth($pdo, $config);
 
-        $stmt = $pdo->query("SELECT student_id, student_number, first_name, last_name, bu_email, year_level, status FROM students");
+        // Fetch students with biometric consent
+        $stmt = $pdo->query(
+            "SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.bu_email, s.year_level, s.status,
+                    b.consent_status, b.face_enrolled
+             FROM students s
+             LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
+             ORDER BY s.student_number ASC"
+        );
         $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-        $mapped = array_map(function ($s) {
+        // Fetch attendance logs
+        $attStmt = $pdo->query(
+            "SELECT record_id AS id, enrollment_id AS studentId, session_date AS date, session_code AS subjectCode, status
+             FROM attendance_records
+             ORDER BY session_date DESC LIMIT 500"
+        );
+        $attendanceLogs = $attStmt ? $attStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+
+        $mappedStudents = array_map(function ($s) {
+            $fullName = trim($s['first_name'] . ' ' . ($s['middle_name'] ? $s['middle_name'] . ' ' : '') . $s['last_name']);
             return [
                 'id' => (string) $s['student_id'],
                 'studentId' => $s['student_number'],
-                'name' => $s['first_name'] . ' ' . $s['last_name'],
+                'name' => $fullName,
                 'email' => $s['bu_email'] ?? '',
                 'yearLevel' => (int) ($s['year_level'] ?? 4),
                 'status' => strtolower($s['status'] ?? 'active'),
                 'overallGWA' => 1.75,
-                'faceEnrolled' => true,
+                'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
+                'consentStatus' => $s['consent_status'] ?? 'pending',
                 'classId' => 'CLINIC-A',
                 'enrolledSubjects' => [
                     ['code' => 'CLIN401', 'name' => 'Clinical Dentistry I', 'grade' => 1.75, 'hasRemedial' => false],
@@ -419,8 +533,9 @@ function handle_admin_reports_summary(): void
         json_response([
             'status' => 'ok',
             'reports' => [
-                'students' => $mapped,
-                'totalCount' => count($mapped),
+                'students' => $mappedStudents,
+                'attendance' => $attendanceLogs,
+                'totalCount' => count($mappedStudents),
             ],
         ], 200);
     } catch (\Throwable $e) {

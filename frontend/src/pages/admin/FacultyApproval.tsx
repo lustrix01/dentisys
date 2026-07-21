@@ -217,9 +217,9 @@ export const FacultyApproval: React.FC = () => {
         </div>
 
         {/* Requests Table */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
           <table className="w-full text-left text-xs">
-            <thead>
+            <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
               <tr className="bg-slate-50/70 dark:bg-slate-900/40 text-slate-400 uppercase tracking-wide border-b border-slate-100 dark:border-slate-800">
                 <th className="p-4">Faculty Member</th>
                 <th className="p-4">Official BU Email</th>

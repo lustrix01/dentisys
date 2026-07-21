@@ -20,12 +20,19 @@ function pdo_options(): array
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::ATTR_TIMEOUT => 2,
     ];
 }
 
 function create_pdo(array $config): PDO
 {
     $db = $config['db'];
+
+    $fp = @fsockopen($db['host'], (int) $db['port'], $errno, $errstr, 1.0);
+    if (!$fp) {
+        throw new PDOException("Database server at {$db['host']}:{$db['port']} is unreachable.");
+    }
+    fclose($fp);
 
     return new PDO(database_dsn($config), $db['user'], $db['pass'], pdo_options());
 }

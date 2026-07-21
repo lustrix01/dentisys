@@ -416,9 +416,9 @@ export const StudentManagement: React.FC = () => {
 
             {/* Students Table */}
             <Card className="p-0 overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
                 <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800">
-                  <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-400 uppercase tracking-wider text-[10px] font-bold">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 text-slate-400 uppercase tracking-wider text-[10px] font-bold z-10 shadow-sm">
                     <tr>
                       <th className="px-5 py-3 text-left">Student Details</th>
                       <th className="px-5 py-3 text-left">Student ID</th>
@@ -909,9 +909,9 @@ export const StudentManagement: React.FC = () => {
               {/* Enrolled Courses Table */}
               <div className="space-y-1.5">
                 <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Course Evaluation GWAs</h4>
-                <div className="border border-slate-100 dark:border-slate-800/85 rounded-xl overflow-hidden">
+                <div className="border border-slate-100 dark:border-slate-800/85 rounded-xl overflow-hidden max-h-[220px] overflow-y-auto">
                   <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800 text-[11px] font-medium">
-                    <thead className="bg-slate-50 dark:bg-slate-900/60 text-slate-400 font-bold uppercase">
+                    <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 text-slate-400 font-bold uppercase z-10 shadow-sm">
                       <tr>
                         <th className="px-3 py-1.5 text-left">Code</th>
                         <th className="px-3 py-1.5 text-center">Grade</th>

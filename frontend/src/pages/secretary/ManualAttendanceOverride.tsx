@@ -53,7 +53,9 @@ export const ManualAttendanceOverride: React.FC = () => {
     setMessage(null);
   };
 
-  const handleSave = (event: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     setMessage(null);
 
@@ -74,7 +76,7 @@ export const ManualAttendanceOverride: React.FC = () => {
 
     const cleanedReason = reason.trim().replace(/\s+/g, ' ');
     if (cleanedReason.length < 8) {
-      setMessage({ type: 'error', text: 'Provide a clear reason for the manual correction.' });
+      setMessage({ type: 'error', text: 'Provide a clear reason for the manual correction (at least 8 characters).' });
       return;
     }
 
@@ -96,7 +98,19 @@ export const ManualAttendanceOverride: React.FC = () => {
 
     if (!confirmed) return;
 
+    setIsSubmitting(true);
     try {
+      await import('../../services/apiClient').then(m =>
+        m.overrideSecretaryAttendanceApi({
+          studentId: selectedRecord.studentId,
+          status,
+          reason: cleanedReason,
+          recordId: selectedRecord.id,
+          date: selectedRecord.date,
+          subjectCode: selectedRecord.subjectCode,
+        })
+      );
+
       overrideAttendanceRecord({
         recordId: selectedRecord.id,
         studentId: selectedRecord.studentId,
@@ -108,17 +122,18 @@ export const ManualAttendanceOverride: React.FC = () => {
         changedByName: secretary.name,
         assignedClassId: classId,
       });
+
+      setReason('');
+      setSelectedRecordId('');
+      setMessage({ type: 'success', text: 'Manual override saved and audit trail updated.' });
     } catch (error) {
       setMessage({
         type: 'error',
         text: error instanceof Error ? error.message : 'Attendance override rejected.',
       });
-      return;
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setReason('');
-    setSelectedRecordId('');
-    setMessage({ type: 'success', text: 'Manual override saved and audit trail updated.' });
   };
 
   return (
@@ -173,9 +188,9 @@ export const ManualAttendanceOverride: React.FC = () => {
               <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Select Record to Correct</h2>
               <p className="text-xs text-slate-400 mt-0.5">Only records from your assigned class are listed.</p>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50/80 dark:bg-slate-900/80 text-left text-[11px] uppercase tracking-wider text-slate-400">
+                <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 text-left text-[11px] uppercase tracking-wider text-slate-400 z-10 shadow-sm">
                   <tr>
                     <th className="px-5 py-3">Student</th>
                     <th className="px-5 py-3">Date</th>
@@ -309,10 +324,17 @@ export const ManualAttendanceOverride: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={!selectedRecord}
-                className="w-full px-5 py-3 bg-gradient-to-r from-blue-600 to-accent-600 hover:from-blue-700 hover:to-accent-700 text-white font-semibold text-sm rounded-2xl shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={!selectedRecord || isSubmitting}
+                className="w-full px-5 py-3 bg-gradient-to-r from-blue-600 to-accent-600 hover:from-blue-700 hover:to-accent-700 text-white font-semibold text-sm rounded-2xl shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Review and Apply Override
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Saving Override...</span>
+                  </>
+                ) : (
+                  'Review and Apply Override'
+                )}
               </button>
             </form>
           </CardContent>

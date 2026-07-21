@@ -1,13 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Monitor, Play, Square, Video, WifiOff } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
+import { getSecretaryProfileApi } from '../../services/apiClient';
 import { getAssignedClassName, getCurrentSecretary } from './utils';
 
 export const CCTVFeed: React.FC = () => {
   const secretary = getCurrentSecretary();
-  const className = getAssignedClassName(secretary);
-  const classroomName = secretary?.classroomName || 'Dental Clinic B - Room 402';
-  const cameraId = secretary?.cctvCameraId || 'CCTV-CLINIC-A-01';
+  const [profileData, setProfileData] = useState<{
+    name: string;
+    email: string;
+    assignedClassName: string;
+    classroomName: string;
+    cctvCameraId: string;
+  } | null>(null);
+
+  useEffect(() => {
+    getSecretaryProfileApi()
+      .then(res => setProfileData(res.profile))
+      .catch(() => {});
+  }, []);
+
+  const className = profileData?.assignedClassName || getAssignedClassName(secretary);
+  const classroomName = profileData?.classroomName || secretary?.classroomName || 'Dental Clinic B - Room 402';
+  const cameraId = profileData?.cctvCameraId || secretary?.cctvCameraId || 'CCTV-CLINIC-A-01';
+  const secretaryName = profileData?.name || secretary?.name || 'Class Secretary';
+  const secretaryEmail = profileData?.email || secretary?.email || '';
+
   const [isRunning, setIsRunning] = useState(false);
   const [isCameraAvailable, setIsCameraAvailable] = useState(false);
   const [error, setError] = useState('');
@@ -147,8 +165,8 @@ export const CCTVFeed: React.FC = () => {
           <CardContent className="space-y-4">
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/40 dark:border-slate-800/40">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Secretary</p>
-              <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{secretary?.name || 'Class Secretary'}</p>
-              <p className="text-xs text-slate-400">{secretary?.email}</p>
+              <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{secretaryName}</p>
+              <p className="text-xs text-slate-400">{secretaryEmail}</p>
             </div>
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/40 dark:border-slate-800/40">
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Class</p>

@@ -33,7 +33,7 @@ function handle_refresh(): void
 
     try {
         $ipScope = bin2hex(hash('sha256', 'ip:' . $context['ip_address'], true));
-        rate_limit_check($rateStorage, $ipScope, 'post_auth_refresh', 60, 30);
+        rate_limit_check($rateStorage, $ipScope, 'post_auth_refresh', 60, 300);
     } catch (RateLimitException $e) {
         auth_controller_emit(auth_build_no_store_message_response('Too many requests.', 429));
         return;
