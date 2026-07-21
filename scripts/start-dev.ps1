@@ -13,22 +13,7 @@ Write-Host "          Starting DentiSys Local Environment"
 Write-Host "==================================================="
 Write-Host ""
 
-# Step 1 & 2: Check docker CLI
-$dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
-if (!$dockerCmd) {
-    Write-Host "ERROR: Docker CLI ('docker') is not available in system PATH."
-    Write-Host "Please install Docker Desktop and ensure docker is accessible."
-    exit 1
-}
-
-# Step 3: Check docker compose
-$composeCheck = & docker compose version 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: 'docker compose' is not available."
-    exit 1
-}
-
-# Step 4: Parse root .env safely
+# Helper to read root .env file
 function Read-EnvFile {
     param([string] $Path)
 
@@ -50,78 +35,123 @@ function Read-EnvFile {
     return $values
 }
 
-$envFile = Read-EnvFile (Join-Path $root ".env")
+# Secure temporary option file creation with strict ACL protection
+function New-SecureOptionFile {
+    param([string] $Password)
 
-# Step 5: Resolve credentials with precedence (Process Env > Root .env > Defaults)
-function Resolve-Setting {
-    param(
-        [string] $Name,
-        [hashtable] $EnvFile,
-        [string] $DefaultValue
-    )
-    $procValue = [Environment]::GetEnvironmentVariable($Name)
-    if (![string]::IsNullOrWhiteSpace($procValue)) {
-        return $procValue
-    }
-    if ($EnvFile.ContainsKey($Name) -and ![string]::IsNullOrWhiteSpace($EnvFile[$Name])) {
-        return $EnvFile[$Name]
-    }
-    return $DefaultValue
-}
+    $tempCnf = [System.IO.Path]::GetTempFileName()
+    try {
+        if ($env:OS -match "Windows") {
+            $acl = Get-Acl -LiteralPath $tempCnf
+            $acl.SetAccessRuleProtection($true, $false)
+            $currentUser = [System.Security.Principal.NTAccount]::new($env:USERDOMAIN, $env:USERNAME)
+            $systemUser  = [System.Security.Principal.NTAccount]::new("NT AUTHORITY", "SYSTEM")
 
-$effectiveDbHostPort = Resolve-Setting "DB_HOST_PORT" $envFile "3306"
-$effectiveDbName     = Resolve-Setting "DB_NAME"      $envFile "dentisys"
-$effectiveDbUser     = Resolve-Setting "DB_USER"      $envFile "dentisys"
-$effectiveDbPass     = Resolve-Setting "DB_PASS"      $envFile "local-development-password"
+            $userRule   = [System.Security.AccessControl.FileSystemAccessRule]::new($currentUser, [System.Security.AccessControl.FileSystemRights]::FullControl, [System.Security.AccessControl.AccessControlType]::Allow)
+            $systemRule = [System.Security.AccessControl.FileSystemAccessRule]::new($systemUser,  [System.Security.AccessControl.FileSystemRights]::FullControl, [System.Security.AccessControl.AccessControlType]::Allow)
 
-# Step 6: Validate docker compose syntax quietly
-& docker compose --project-directory $root config --quiet 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: docker-compose configuration validation failed."
-    exit 1
-}
+            $acl.ResetAccessRule($userRule)
+            $acl.AddAccessRule($systemRule)
+            Set-Acl -LiteralPath $tempCnf $acl
+        }
 
-# Step 7: Parse effective compose config output safely for host DB port
-$rawConfig = & docker compose --project-directory $root config 2>&1
-$configuredPort = "3306"
-if ($LASTEXITCODE -eq 0 -and $null -ne $rawConfig) {
-    # Search for Published port under db service in compose config
-    $configText = $rawConfig -join "`n"
-    if ($configText -match 'published:\s*"?(\d+)"?') {
-        $configuredPort = $Matches[1]
-    } elseif ($configText -match '"127\.0\.0\.1:(\d+):3306"') {
-        $configuredPort = $Matches[1]
-    } elseif ($configText -match ':\s*"?(\d+):3306"?') {
-        $configuredPort = $Matches[1]
+        $escapedPass = $Password.Replace('\', '\\').Replace('"', '\"')
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($tempCnf, "[client]`npassword=`"$escapedPass`"`n", $utf8NoBom)
+        return $tempCnf
+    } catch {
+        if (Test-Path -LiteralPath $tempCnf) {
+            Remove-Item -LiteralPath $tempCnf -Force -ErrorAction SilentlyContinue
+        }
+        throw "Failed to create secure temporary option file: $_"
     }
 }
 
-# Step 8: Require effective host DB port to equal 3306
-if ($configuredPort -ne "3306" -or $effectiveDbHostPort -ne "3306") {
-    $activePort = if ($configuredPort -ne "3306") { $configuredPort } else { $effectiveDbHostPort }
-    Write-Host "DentiSys Docker MariaDB is configured to publish host port $activePort."
-    Write-Host ""
-    Write-Host "Update DB_HOST_PORT=3306 in your local .env, recreate the db service"
-    Write-Host "without deleting its volume, and run the launcher again:"
-    Write-Host "    docker compose up -d --force-recreate db"
-    exit 1
+# Helper to load backend app_config database fields ONLY via clean PHP subprocess stdout
+function Get-NativePhpDbConfig {
+    param([string] $RepoRoot)
+    $cmd = "require '$RepoRoot/backend/app/config.php'; echo json_encode(app_config()['db'], JSON_UNESCAPED_SLASHES);"
+    $jsonStr = & php -r $cmd 2>$null
+    if ($LASTEXITCODE -eq 0 -and ![string]::IsNullOrWhiteSpace($jsonStr)) {
+        try {
+            $parsed = ($jsonStr | ConvertFrom-Json)
+            $props = $parsed.psobject.Properties.Name
+            $allowedProps = @('host', 'port', 'name', 'user', 'pass')
+            foreach ($p in $props) {
+                if ($allowedProps -notcontains $p) {
+                    Write-Host "WARNING: Unexpected field '$p' in native database configuration."
+                    return $null
+                }
+            }
+            return $parsed
+        } catch {
+            return $null
+        }
+    }
+    return $null
 }
 
-Write-Host "Docker Compose configuration validated."
-Write-Host "  Configured DB host port: 3306"
-Write-Host "  Configured DB name:      $effectiveDbName"
-Write-Host "  Configured DB user:      $effectiveDbUser"
-Write-Host "  Configured DB password:  present"
-Write-Host ""
+# Docker credential resolution (Process Env > Root .env > Docker Defaults)
+function Resolve-DockerCredentials {
+    param([hashtable] $EnvFile)
 
-# Helper to check if a local port has a listener
+    $procHost = [Environment]::GetEnvironmentVariable("DB_HOST")
+    $procPort = [Environment]::GetEnvironmentVariable("DB_PORT")
+    $procName = [Environment]::GetEnvironmentVariable("DB_NAME")
+    $procUser = [Environment]::GetEnvironmentVariable("DB_USER")
+    $procPass = [Environment]::GetEnvironmentVariable("DB_PASS")
+
+    $hostName = if (![string]::IsNullOrWhiteSpace($procHost)) { $procHost } else { "127.0.0.1" }
+    $port     = if (![string]::IsNullOrWhiteSpace($procPort)) { $procPort } elseif ($EnvFile.ContainsKey("DB_HOST_PORT")) { $EnvFile["DB_HOST_PORT"] } else { "3306" }
+    $dbName   = if (![string]::IsNullOrWhiteSpace($procName)) { $procName } elseif ($EnvFile.ContainsKey("DB_NAME")) { $EnvFile["DB_NAME"] } else { "dentisys" }
+    $dbUser   = if (![string]::IsNullOrWhiteSpace($procUser)) { $procUser } elseif ($EnvFile.ContainsKey("DB_USER")) { $EnvFile["DB_USER"] } else { "dentisys" }
+    $dbPass   = if ($null -ne $procPass) { $procPass } elseif ($EnvFile.ContainsKey("DB_PASS")) { $EnvFile["DB_PASS"] } else { "local-development-password" }
+
+    return @{
+        Host     = $hostName
+        Port     = $port
+        Database = $dbName
+        User     = $dbUser
+        Password = $dbPass
+        Type     = "Docker MariaDB"
+    }
+}
+
+# Native credential resolution (Process Env > local.php via PHP stdout > Native Defaults)
+function Resolve-NativeCredentials {
+    param([string] $RepoRoot)
+
+    $procHost = [Environment]::GetEnvironmentVariable("DB_HOST")
+    $procPort = [Environment]::GetEnvironmentVariable("DB_PORT")
+    $procName = [Environment]::GetEnvironmentVariable("DB_NAME")
+    $procUser = [Environment]::GetEnvironmentVariable("DB_USER")
+    $procPass = [Environment]::GetEnvironmentVariable("DB_PASS")
+
+    $phpConfig = Get-NativePhpDbConfig $RepoRoot
+
+    $hostName = if (![string]::IsNullOrWhiteSpace($procHost)) { $procHost } elseif ($phpConfig -and $phpConfig.host) { $phpConfig.host } else { "127.0.0.1" }
+    $port     = if (![string]::IsNullOrWhiteSpace($procPort)) { $procPort } elseif ($phpConfig -and $phpConfig.port) { [string]$phpConfig.port } else { "3306" }
+    $dbName   = if (![string]::IsNullOrWhiteSpace($procName)) { $procName } elseif ($phpConfig -and $phpConfig.name) { $phpConfig.name } else { "dentisys" }
+    $dbUser   = if (![string]::IsNullOrWhiteSpace($procUser)) { $procUser } elseif ($phpConfig -and $phpConfig.user) { $phpConfig.user } else { "dentisys" }
+    $dbPass   = if ($null -ne $procPass) { $procPass } elseif ($phpConfig -and $null -ne $phpConfig.pass) { $phpConfig.pass } else { "" }
+
+    return @{
+        Host     = $hostName
+        Port     = $port
+        Database = $dbName
+        User     = $dbUser
+        Password = $dbPass
+        Type     = "Native MySQL/MariaDB"
+    }
+}
+
+# Port listener helpers
 function Test-HostPortListening {
     param([int] $Port)
     $conn = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
     return ($null -ne $conn)
 }
 
-# Helper to get listener process description
 function Get-ListeningProcessInfo {
     param([int] $Port)
     $conn = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -129,79 +159,258 @@ function Get-ListeningProcessInfo {
         $pidNum = $conn.OwningProcess
         $proc = Get-Process -Id $pidNum -ErrorAction SilentlyContinue
         $procName = if ($proc) { $proc.ProcessName } else { "Unknown" }
-        return @{ PID = $pidNum; Name = $procName; Process = $proc }
+        $procPath = if ($proc -and $proc.MainModule) { $proc.MainModule.FileName } else { "" }
+        return @{ PID = $pidNum; Name = $procName; Path = $procPath; Process = $proc }
     }
     return $null
 }
 
-# Step 9: Inspect DentiSys db container state
-$dbContainerId = (& docker compose --project-directory $root ps -q db 2>&1 | Out-String).Trim()
+# Native process classification helper
+function Classify-NativeProcess {
+    param([hashtable] $ProcInfo)
+    if (!$ProcInfo) { return "native MySQL/MariaDB" }
 
-# Step 10 & 11: Port conflict check if DB container is not running
-if ([string]::IsNullOrWhiteSpace($dbContainerId)) {
-    if (Test-HostPortListening 3306) {
-        $procInfo = Get-ListeningProcessInfo 3306
-        $procDesc = if ($procInfo) { "PID $($procInfo.PID) ($($procInfo.Name))" } else { "an external process" }
-        Write-Host "Port 3306 is already in use by $procDesc."
-        Write-Host ""
-        Write-Host "DentiSys development uses Docker MariaDB on host port 3306."
-        Write-Host "Stop XAMPP MySQL or the other conflicting process, then run the launcher again."
-        exit 1
+    $name = $ProcInfo.Name.ToLower()
+    $path = $ProcInfo.Path.ToLower()
+
+    if ($path.Contains("\xampp\") -and ($name -eq "mysqld" -or $name -eq "mysqld.exe")) {
+        return "XAMPP MySQL"
     }
-    
-    # Step 12: Start Docker MariaDB container
-    Write-Host "Starting Docker MariaDB container on 127.0.0.1:3306..."
-    & docker compose --project-directory $root up -d db
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Failed to start Docker MariaDB service."
-        exit 1
+    if ($name -eq "mysqld" -or $name -eq "mysqld.exe") {
+        return "native MySQL"
     }
-    $dbContainerId = (& docker compose --project-directory $root ps -q db 2>&1 | Out-String).Trim()
+    if ($name -eq "mariadbd" -or $name -eq "mariadbd.exe") {
+        return "native MariaDB"
+    }
+    return "native MySQL/MariaDB"
 }
 
-# Step 13: Wait up to 120 seconds for DB container to become healthy
-Write-Host "Waiting for Docker MariaDB container to be ready..."
-$dbHealthy = $false
-$maxDbWaitSeconds = 120
-$elapsed = 0
+# Check database client command
+function Resolve-DatabaseClientCommand {
+    foreach ($candidate in @("mariadb", "mysql", "C:\xampp\mysql\bin\mysql.exe")) {
+        $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($cmd) { return $cmd.Source }
+    }
+    return $null
+}
 
-while ($elapsed -lt $maxDbWaitSeconds) {
+# Main Execution Flow
+$envFile = Read-EnvFile (Join-Path $root ".env")
+$selectedRuntime = $null
+$credentials = $null
+$isDocker = $false
+
+# Step 1: Check port 3306 listener state
+$port3306Occupied = Test-HostPortListening 3306
+
+if ($port3306Occupied) {
+    # Check if listener is expected DentiSys Docker container
+    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+    $dbContainerId = ""
+    if ($dockerCmd) {
+        $dbContainerId = (& docker compose --project-directory $root ps -q db 2>&1 | Out-String).Trim()
+    }
+
     if (![string]::IsNullOrWhiteSpace($dbContainerId)) {
-        $healthStatus = (& docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}" $dbContainerId 2>&1 | Out-String).Trim()
-        if ($healthStatus -eq "healthy" -or $healthStatus -eq "running") {
-            # Verify socket ping
-            $pingResult = & docker compose --project-directory $root exec -T db mysqladmin ping -uroot -p$effectiveDbPass --silent 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                $dbHealthy = $true
-                break
-            }
+        # Docker container owns port 3306
+        $isDocker = $true
+        $credentials = Resolve-DockerCredentials $envFile
+        $selectedRuntime = "Docker MariaDB"
+        Write-Host "Reusing active DentiSys Docker MariaDB container on 127.0.0.1:3306."
+    } else {
+        # Check process on port 3306
+        $procInfo = Get-ListeningProcessInfo 3306
+        $classified = Classify-NativeProcess $procInfo
+        $procName = if ($procInfo) { $procInfo.Name } else { "Unknown" }
+
+        if ($procName -eq "mysqld" -or $procName -eq "mariadbd" -or $classified -match "MySQL|MariaDB") {
+            $isDocker = $false
+            $credentials = Resolve-NativeCredentials $root
+            $credentials.Type = $classified
+            $selectedRuntime = $classified
+            Write-Host "Detected active $classified on port 3306."
+        } else {
+            $procDesc = if ($procInfo) { "PID $($procInfo.PID) ($($procInfo.Name))" } else { "an external process" }
+            Write-Host "ERROR: Port 3306 is already in use by $procDesc."
+            Write-Host ""
+            Write-Host "DentiSys development requires Docker MariaDB or XAMPP/native MySQL on host port 3306."
+            Write-Host "Stop the conflicting process, then run start-dev.bat again."
+            exit 1
         }
     }
-    Start-Sleep -Seconds 2
-    $elapsed += 2
+} else {
+    # Port 3306 is FREE: Check Docker usability to start container
+    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+    $dockerUsable = $false
+    $dockerError = ""
+
+    if ($dockerCmd) {
+        $daemonCheck = & docker info 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $composeCheck = & docker compose version 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $dockerUsable = $true
+            } else {
+                $dockerError = "Docker Compose is unavailable."
+            }
+        } else {
+            $dockerError = "Docker engine is not running."
+        }
+    } else {
+        $dockerError = "Docker CLI is not installed."
+    }
+
+    if ($dockerUsable) {
+        # Validate docker compose syntax quietly
+        & docker compose --project-directory $root config --quiet 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: docker-compose configuration validation failed."
+            exit 1
+        }
+
+        Write-Host "Starting DentiSys Docker MariaDB on port 3306..."
+        & docker compose --project-directory $root up -d db 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Failed to start Docker MariaDB container."
+            exit 1
+        }
+
+        # Wait for DB container health
+        $maxDbWaitSeconds = 120
+        $elapsed = 0
+        $dbHealthy = $false
+        while ($elapsed -lt $maxDbWaitSeconds) {
+            $containerId = (& docker compose --project-directory $root ps -q db 2>&1 | Out-String).Trim()
+            if (![string]::IsNullOrWhiteSpace($containerId)) {
+                $healthStatus = (& docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}" $containerId 2>&1 | Out-String).Trim()
+                if ($healthStatus -eq "healthy" -or $healthStatus -eq "running") {
+                    $dbHealthy = $true
+                    break
+                }
+            }
+            Start-Sleep -Seconds 2
+            $elapsed += 2
+        }
+
+        if (!$dbHealthy) {
+            Write-Host "ERROR: Docker MariaDB container failed to reach healthy status within $maxDbWaitSeconds seconds."
+            exit 1
+        }
+
+        $isDocker = $true
+        $credentials = Resolve-DockerCredentials $envFile
+        $selectedRuntime = "Docker MariaDB"
+        Write-Host "PASS: Docker MariaDB container is healthy and publishing 127.0.0.1:3306."
+    } else {
+        # Neither Docker is usable nor port 3306 is listening
+        $xamppInstalled = Test-Path -LiteralPath "C:\xampp\mysql\bin\mysqld.exe"
+
+        Write-Host "No supported DentiSys database server is currently available."
+        Write-Host ""
+        if ($dockerCmd -and $dockerError -match "engine") {
+            Write-Host "Docker is installed, but the Docker engine is not running."
+        } elseif ($dockerError -match "Compose") {
+            Write-Host "Docker is installed, but Docker Compose is unavailable."
+        }
+        if ($xamppInstalled) {
+            Write-Host "XAMPP appears to be installed, but its MySQL service is not running."
+        }
+        Write-Host ""
+        Write-Host "Choose one of the following development database options:"
+        Write-Host "1. Install and start Docker Desktop, then run:"
+        Write-Host "   docker compose up -d db"
+        Write-Host ""
+        Write-Host "2. Start XAMPP MySQL from the XAMPP Control Panel."
+        Write-Host ""
+        Write-Host "After starting either Docker MariaDB or XAMPP MySQL, run start-dev.bat again."
+        exit 1
+    }
 }
 
-if (!$dbHealthy) {
-    Write-Host "ERROR: Docker MariaDB container failed to reach healthy status within $maxDbWaitSeconds seconds."
+# Validate Database Client Tooling
+$clientPath = Resolve-DatabaseClientCommand
+if (!$clientPath) {
+    Write-Host "ERROR: No supported database client (mysql or mariadb) is available in PATH."
+    Write-Host "Please install MySQL/MariaDB client tools or add XAMPP's mysql.exe to PATH."
     exit 1
 }
 
-# Step 14: Confirm published port is 3306
-$publishedPort = (& docker compose --project-directory $root port db 3306 2>&1 | Out-String).Trim()
-if ($publishedPort -notmatch ':3306$') {
-    Write-Host "ERROR: Docker DB service published port does not resolve to host port 3306 ($publishedPort)."
+# Validate Credentials and Database Existence using secure temporary option file
+$tempCnf = New-SecureOptionFile -Password $credentials.Password
+$dbExists = $false
+$authSuccess = $false
+
+try {
+
+    # Ping / Auth check
+    $pingSql = "SELECT 1;"
+    $pingResult = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "-e" $pingSql 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        $authSuccess = $true
+
+        # Check DB existence
+        $dbCheckSql = "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$($credentials.Database)';"
+        $dbRes = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "--batch" "--skip-column-names" "-e" $dbCheckSql 2>&1
+        if ($LASTEXITCODE -eq 0 -and ($dbRes -join "").Trim() -eq $credentials.Database) {
+            $dbExists = $true
+        }
+    }
+} finally {
+    if (Test-Path -LiteralPath $tempCnf) {
+        Remove-Item -LiteralPath $tempCnf -Force -ErrorAction SilentlyContinue
+    }
+}
+
+if (!$authSuccess) {
+    Write-Host "ERROR: Could not authenticate to $($credentials.Type) at $($credentials.Host):$($credentials.Port) as user '$($credentials.User)'."
+    if (!$isDocker) {
+        Write-Host "Please configure correct credentials in backend/config/local.php or process environment variables DB_USER and DB_PASS."
+    }
     exit 1
 }
 
-Write-Host "PASS: Docker MariaDB container is healthy and publishing 127.0.0.1:3306."
+if (!$dbExists) {
+    Write-Host "The configured DentiSys database '$($credentials.Database)' does not exist on the selected $($credentials.Type) server."
+    Write-Host ""
+    Write-Host "Create the database and grant the configured user access, then run start-dev.bat again."
+    exit 1
+}
+
+# Invoke Migrations in a Child PowerShell Process (Mandatory Condition 3)
+$origHost = [Environment]::GetEnvironmentVariable("DB_HOST")
+$origPort = [Environment]::GetEnvironmentVariable("DB_PORT")
+$origName = [Environment]::GetEnvironmentVariable("DB_NAME")
+$origUser = [Environment]::GetEnvironmentVariable("DB_USER")
+$origPass = [Environment]::GetEnvironmentVariable("DB_PASS")
+
+try {
+    [Environment]::SetEnvironmentVariable("DB_HOST", $credentials.Host)
+    [Environment]::SetEnvironmentVariable("DB_PORT", [string]$credentials.Port)
+    [Environment]::SetEnvironmentVariable("DB_NAME", $credentials.Database)
+    [Environment]::SetEnvironmentVariable("DB_USER", $credentials.User)
+    [Environment]::SetEnvironmentVariable("DB_PASS", $credentials.Password)
+
+    Write-Host "Running database migrations on $($credentials.Host):$($credentials.Port) ($($credentials.Database))..."
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root\scripts\migrate.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Database migration execution failed."
+        exit 1
+    }
+} finally {
+    [Environment]::SetEnvironmentVariable("DB_HOST", $origHost)
+    [Environment]::SetEnvironmentVariable("DB_PORT", $origPort)
+    [Environment]::SetEnvironmentVariable("DB_NAME", $origName)
+    [Environment]::SetEnvironmentVariable("DB_USER", $origUser)
+    [Environment]::SetEnvironmentVariable("DB_PASS", $origPass)
+}
 
 if ($PreflightOnly) {
     Write-Host ""
-    Write-Host "Preflight checks passed cleanly (-PreflightOnly mode)."
+    Write-Host "Preflight checks and migrations passed cleanly (-PreflightOnly mode)."
     exit 0
 }
 
-# Step 15: Check port 8090 and port 5173 availability
+# Check port 8090 and port 5173 availability
 if (Test-HostPortListening 8090) {
     $p8090 = Get-ListeningProcessInfo 8090
     Write-Host "ERROR: Port 8090 is already in use by PID $($p8090.PID) ($($p8090.Name))."
@@ -216,35 +425,25 @@ if (Test-HostPortListening 5173) {
     exit 1
 }
 
-# Save previous launcher env vars
-$origDbHost = [Environment]::GetEnvironmentVariable("DB_HOST")
-$origDbPort = [Environment]::GetEnvironmentVariable("DB_PORT")
-$origDbName = [Environment]::GetEnvironmentVariable("DB_NAME")
-$origDbUser = [Environment]::GetEnvironmentVariable("DB_USER")
-$origDbPass = [Environment]::GetEnvironmentVariable("DB_PASS")
-
-$phpProc = $null
-
+# Start PHP Backend API
+Write-Host "Starting PHP Backend API on http://localhost:8090 ..."
 try {
-    # Temporarily set process env for launching child PHP
-    [Environment]::SetEnvironmentVariable("DB_HOST", "127.0.0.1")
-    [Environment]::SetEnvironmentVariable("DB_PORT", "3306")
-    [Environment]::SetEnvironmentVariable("DB_NAME", $effectiveDbName)
-    [Environment]::SetEnvironmentVariable("DB_USER", $effectiveDbUser)
-    [Environment]::SetEnvironmentVariable("DB_PASS", $effectiveDbPass)
+    [Environment]::SetEnvironmentVariable("DB_HOST", $credentials.Host)
+    [Environment]::SetEnvironmentVariable("DB_PORT", [string]$credentials.Port)
+    [Environment]::SetEnvironmentVariable("DB_NAME", $credentials.Database)
+    [Environment]::SetEnvironmentVariable("DB_USER", $credentials.User)
+    [Environment]::SetEnvironmentVariable("DB_PASS", $credentials.Password)
 
-    Write-Host "Starting PHP Backend API on http://localhost:8090 ..."
     $phpProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title DentiSys Backend API (Port 8090) && cd /d `"$root`" && php -S localhost:8090 -t backend/public" -WorkingDirectory $root -PassThru
 } finally {
-    # Restore launcher env immediately
-    [Environment]::SetEnvironmentVariable("DB_HOST", $origDbHost)
-    [Environment]::SetEnvironmentVariable("DB_PORT", $origDbPort)
-    [Environment]::SetEnvironmentVariable("DB_NAME", $origDbName)
-    [Environment]::SetEnvironmentVariable("DB_USER", $origDbUser)
-    [Environment]::SetEnvironmentVariable("DB_PASS", $origDbPass)
+    [Environment]::SetEnvironmentVariable("DB_HOST", $origHost)
+    [Environment]::SetEnvironmentVariable("DB_PORT", $origPort)
+    [Environment]::SetEnvironmentVariable("DB_NAME", $origName)
+    [Environment]::SetEnvironmentVariable("DB_USER", $origUser)
+    [Environment]::SetEnvironmentVariable("DB_PASS", $origPass)
 }
 
-# Step 16, 17, 18: Poll PHP health endpoint http://localhost:8090/api/health
+# Poll PHP backend health endpoint http://localhost:8090/api/health
 Write-Host "Validating PHP Backend API & Database connectivity..."
 $backendHealthy = $false
 $maxHealthWait = 15
@@ -261,40 +460,29 @@ while ($healthElapsed -lt $maxHealthWait) {
             }
         }
     } catch {
-        # Retry
+        # Retry until timeout
     }
     Start-Sleep -Seconds 1
-    $healthElapsed += 1
+    $healthElapsed++
 }
 
 if (!$backendHealthy) {
-    Write-Host "ERROR: Backend database health check failed or timed out at http://localhost:8090/api/health."
-    Write-Host "The database server at 127.0.0.1:3306 was unreachable or authentication failed."
+    Write-Host "ERROR: PHP Backend API failed health check on http://localhost:8090/api/health."
     if ($phpProc -and !$phpProc.HasExited) {
         $phpProc | Stop-Process -Force -ErrorAction SilentlyContinue
     }
     exit 1
 }
 
-Write-Host "PASS: PHP Backend API confirmed database connectivity at 127.0.0.1:3306."
+Write-Host "PASS: PHP Backend API confirmed database connectivity at $($credentials.Host):$($credentials.Port)."
 
-# Step 19: Launch Vite Frontend
+# Start Vite Frontend Dev Server
 Write-Host "Starting Frontend Dev Server on http://localhost:5173 ..."
-$npmCli = Join-Path $root "frontend"
-try {
-    Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "cd /d `"$npmCli`" && npm run dev" -WorkingDirectory $npmCli
-} catch {
-    Write-Host "ERROR: Failed to start Frontend dev server."
-    if ($phpProc -and !$phpProc.HasExited) {
-        $phpProc | Stop-Process -Force -ErrorAction SilentlyContinue
-    }
-    exit 1
-}
+$viteProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title DentiSys Frontend Dev (Port 5173) && cd /d `"$root`" && npm run dev" -WorkingDirectory $root -PassThru
 
-# Step 20: Open browser if permitted
+# Open Browser unless -NoBrowser
 if (!$NoBrowser) {
     Start-Sleep -Seconds 2
-    Write-Host "Opening DentiSys in your web browser..."
     Start-Process "http://localhost:5173"
 }
 

@@ -98,6 +98,11 @@ Invoke-Step "Database & Seed validation" {
         throw "database/seed.sql is missing."
     }
 
+    Invoke-Step "Launcher logic unit test" {
+        $logicTest = Join-Path $root "tests\scripts\start_dev_logic_test.ps1"
+        Invoke-Native "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $logicTest)
+    }
+
     $initSql = Join-Path $root "database\init.sql"
     if (!(Test-Path -LiteralPath $initSql)) {
         throw "database/init.sql is missing."

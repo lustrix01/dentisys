@@ -47,16 +47,21 @@ Default local URLs:
 
 ## Development Environment Setup
 
-Docker MariaDB is the sole DentiSys development database.
+DentiSys local development supports both Docker MariaDB (preferred) and a running XAMPP/native MySQL or MariaDB instance on host port `3306`.
 
-Stop XAMPP MySQL before starting DentiSys because Docker uses host port 3306.
-XAMPP PHP may still be used to run the PHP development server.
+### Preferred Mode (Docker MariaDB)
+- **Host Address**: `127.0.0.1:3306`
+- **Container Address**: `db:3306`
+- **Credentials**: Process environment variables, root `.env`, or repository Docker defaults (`3306`, `dentisys`, `dentisys`, `local-development-password`).
 
-Host PHP connects to `127.0.0.1:3306`.
-Docker services connect to `db:3306`.
+### Native Fallback Mode (XAMPP / Native MySQL / MariaDB)
+- **Host Address**: `127.0.0.1:3306`
+- **Credentials**: Process `DB_*` environment variables, `backend/config/local.php`, or backend application defaults.
+- **Database Requirement**: The `dentisys` database must already exist on the native server with user access granted.
+- **Automatic Migrations**: Pending approved migrations (`001`–`003`) run automatically on startup for both Docker and Native paths. `database/seed.sql` is **never** executed automatically.
 
-The root `.env` defines the Docker database credentials.
-The repository launcher (`start-dev.bat` / `scripts/start-dev.ps1`) passes those same credentials to the host PHP backend without printing them.
+### No-Runtime Instructions
+When neither Docker MariaDB nor a native MySQL/MariaDB server is available on port `3306`, start Docker Desktop (`docker compose up -d db`) or start XAMPP MySQL from the XAMPP Control Panel, then run `start-dev.bat` again.
 
 ```powershell
 .\start-dev.bat
