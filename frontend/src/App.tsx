@@ -1,7 +1,9 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Layout } from './components/Layout';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Faculty Page Imports
 import { Dashboard as FacultyDashboard } from './pages/faculty/Dashboard';
@@ -34,92 +36,89 @@ import { Settings as DeanSettings } from './pages/admin/Settings';
 import { Profile as SecretaryProfile } from './pages/secretary/Profile';
 import { Settings as SecretarySettings } from './pages/secretary/Settings';
 import { Login } from './pages/auth/Login';
-import { SignUp } from './pages/auth/SignUp';
-import { ActivateSecretary } from './pages/auth/ActivateSecretary';
-import { ForgotPassword } from './pages/auth/ForgotPassword';
-import { ResetPassword } from './pages/auth/ResetPassword';
+import { MfaEnrollStart } from './pages/auth/MfaEnrollStart';
+import { MfaEnrollConfirm } from './pages/auth/MfaEnrollConfirm';
+import { MfaVerify } from './pages/auth/MfaVerify';
+import { RecoveryCodes } from './pages/auth/RecoveryCodes';
 
-const MainApp = () => {
-  const userStr = localStorage.getItem('dentisys_user');
-  if (!userStr) {
-    return <Navigate to="/login" replace />;
-  }
+function RoleDashboard() {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'admin') return <DeanDashboard />;
+  if (user.role === 'secretary') return <SecretaryDashboard />;
+  return <FacultyDashboard />;
+}
 
-  const currentUser = JSON.parse(userStr);
-
+function AuthenticatedLayout() {
   return (
     <Layout>
-      <Routes>
-        {/* Dynamic Root Dashboard Selection */}
-        <Route path="/" element={
-          currentUser.role === 'admin'
-            ? <DeanDashboard />
-            : currentUser.role === 'secretary'
-            ? <SecretaryDashboard />
-            : <FacultyDashboard />
-        } />
-
-        {/* Faculty Routes */}
-        <Route path="/students" element={currentUser.role === 'faculty' ? <StudentManagement /> : <Navigate to="/" replace />} />
-        <Route path="/grades" element={currentUser.role === 'faculty' ? <GradeComputation /> : <Navigate to="/" replace />} />
-        <Route path="/retention" element={currentUser.role === 'faculty' ? <RetentionMonitoring /> : <Navigate to="/" replace />} />
-        <Route path="/attendance" element={currentUser.role === 'faculty' ? <AttendanceMonitoring /> : <Navigate to="/" replace />} />
-        <Route path="/reports" element={currentUser.role === 'faculty' ? <Reports /> : <Navigate to="/" replace />} />
-        <Route path="/email-management" element={currentUser.role === 'faculty' ? <EmailManagement /> : <Navigate to="/" replace />} />
-        <Route path="/faculty/audit-trail" element={currentUser.role === 'faculty' ? <FacultyAuditTrail /> : <Navigate to="/" replace />} />
-
-        {/* Dean Routes */}
-        <Route path="/admin/faculty-approval" element={currentUser.role === 'admin' ? <FacultyApproval /> : <Navigate to="/" replace />} />
-        <Route path="/admin/retention-criteria" element={currentUser.role === 'admin' ? <RetentionCriteria /> : <Navigate to="/" replace />} />
-        <Route path="/admin/reports" element={currentUser.role === 'admin' ? <DeanReports /> : <Navigate to="/" replace />} />
-        <Route path="/admin/audit-trail" element={currentUser.role === 'admin' ? <DeanAuditTrail /> : <Navigate to="/" replace />} />
-        {/* Legacy routes: redirect to dashboard */}
-        <Route path="/admin/users" element={<Navigate to="/" replace />} />
-        <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
-
-        {/* Class Secretary Routes */}
-        <Route
-          path="/secretary/attendance"
-          element={currentUser.role === 'secretary' ? <SecretaryAttendanceList /> : <Navigate to="/" replace />}
-        />
-        <Route
-          path="/secretary/override"
-          element={currentUser.role === 'secretary' ? <ManualAttendanceOverride /> : <Navigate to="/" replace />}
-        />
-        <Route
-          path="/secretary/cctv"
-          element={currentUser.role === 'secretary' ? <SecretaryCCTVFeed /> : <Navigate to="/" replace />}
-        />
-        <Route path="/secretary/audit-trail" element={currentUser.role === 'secretary' ? <SecretaryAuditTrail /> : <Navigate to="/" replace />} />
-
-        {/* Role-specific account routes */}
-        <Route path="/faculty/profile" element={currentUser.role === 'faculty' ? <FacultyProfile /> : <Navigate to="/" replace />} />
-        <Route path="/faculty/settings" element={currentUser.role === 'faculty' ? <FacultySettings /> : <Navigate to="/" replace />} />
-        <Route path="/admin/profile" element={currentUser.role === 'admin' ? <DeanProfile /> : <Navigate to="/" replace />} />
-        <Route path="/admin/settings" element={currentUser.role === 'admin' ? <DeanSettings /> : <Navigate to="/" replace />} />
-        <Route path="/secretary/profile" element={currentUser.role === 'secretary' ? <SecretaryProfile /> : <Navigate to="/" replace />} />
-        <Route path="/secretary/settings" element={currentUser.role === 'secretary' ? <SecretarySettings /> : <Navigate to="/" replace />} />
-
-        {/* Fallback route */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Outlet />
     </Layout>
   );
-};
+}
 
 function App() {
   return (
     <AppProvider>
       <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<SignUp />} />
-          <Route path="/register" element={<SignUp />} />
-          <Route path="/activate-secretary" element={<ActivateSecretary />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/*" element={<MainApp />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/mfa/enroll" element={<MfaEnrollStart />} />
+            <Route path="/mfa/enroll/confirm" element={<MfaEnrollConfirm />} />
+            <Route path="/mfa/verify" element={<MfaVerify />} />
+            <Route path="/recovery-codes" element={<RecoveryCodes />} />
+
+            {/* Unsupported mock-auth routes — redirect to login */}
+            <Route path="/signup" element={<Navigate to="/login" replace />} />
+            <Route path="/register" element={<Navigate to="/login" replace />} />
+            <Route path="/activate-secretary" element={<Navigate to="/login" replace />} />
+            <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
+            <Route path="/reset-password" element={<Navigate to="/login" replace />} />
+
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AuthenticatedLayout />}>
+                {/* Dynamic Root Dashboard Selection */}
+                <Route path="/" element={<RoleDashboard />} />
+
+                {/* Faculty Routes */}
+                <Route path="/students" element={<StudentManagement />} />
+                <Route path="/grades" element={<GradeComputation />} />
+                <Route path="/retention" element={<RetentionMonitoring />} />
+                <Route path="/attendance" element={<AttendanceMonitoring />} />
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/email-management" element={<EmailManagement />} />
+                <Route path="/faculty/audit-trail" element={<FacultyAuditTrail />} />
+
+                {/* Dean Routes */}
+                <Route path="/admin/faculty-approval" element={<FacultyApproval />} />
+                <Route path="/admin/retention-criteria" element={<RetentionCriteria />} />
+                <Route path="/admin/reports" element={<DeanReports />} />
+                <Route path="/admin/audit-trail" element={<DeanAuditTrail />} />
+                {/* Legacy routes: redirect to dashboard */}
+                <Route path="/admin/users" element={<Navigate to="/" replace />} />
+                <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
+
+                {/* Class Secretary Routes */}
+                <Route path="/secretary/attendance" element={<SecretaryAttendanceList />} />
+                <Route path="/secretary/override" element={<ManualAttendanceOverride />} />
+                <Route path="/secretary/cctv" element={<SecretaryCCTVFeed />} />
+                <Route path="/secretary/audit-trail" element={<SecretaryAuditTrail />} />
+
+                {/* Role-specific account routes */}
+                <Route path="/faculty/profile" element={<FacultyProfile />} />
+                <Route path="/faculty/settings" element={<FacultySettings />} />
+                <Route path="/admin/profile" element={<DeanProfile />} />
+                <Route path="/admin/settings" element={<DeanSettings />} />
+                <Route path="/secretary/profile" element={<SecretaryProfile />} />
+                <Route path="/secretary/settings" element={<SecretarySettings />} />
+
+                {/* Fallback route */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Route>
+          </Routes>
+        </AuthProvider>
       </Router>
     </AppProvider>
   );

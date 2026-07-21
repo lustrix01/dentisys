@@ -11,15 +11,17 @@ export interface SecretaryUser {
   cctvCameraId?: string;
 }
 
-export const getCurrentSecretary = (): SecretaryUser | null => {
-  const userStr = localStorage.getItem('dentisys_user');
-  if (!userStr) return null;
+let _currentSecretary: SecretaryUser | null = null;
 
-  try {
-    return JSON.parse(userStr) as SecretaryUser;
-  } catch {
-    return null;
-  }
+export function setCurrentSecretaryUser(user: SecretaryUser | null): void {
+  _currentSecretary = user;
+}
+export function clearCurrentSecretaryUser(): void {
+  _currentSecretary = null;
+}
+
+export const getCurrentSecretary = (): SecretaryUser | null => {
+  return _currentSecretary;
 };
 
 export const getAssignedClassId = (user: SecretaryUser | null) => user?.assignedClassId || 'CLINIC-A';

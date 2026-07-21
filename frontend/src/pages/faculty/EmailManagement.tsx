@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { EmailHistoryTable, EmailLog } from '../../components/email/EmailHistoryTable';
 import { EmailPreviewModal, EmailPreviewType } from '../../components/email/EmailPreviewModal';
 import {
@@ -35,7 +36,7 @@ const initialLogs: EmailLog[] = [
 
 export const EmailManagement: React.FC = () => {
   const { students, updateFaceConsent } = useApp();
-  const user = JSON.parse(localStorage.getItem('dentisys_user') || '{"name":"Dr. Eleanor Vance"}');
+  const { user } = useAuth();
 
   const [tab, setTab] = useState<Tab>('consent');
   const [selected, setSelected] = useState<string[]>([]);
@@ -122,7 +123,7 @@ export const EmailManagement: React.FC = () => {
           studentId: student.id,
           studentName: student.name,
           email: student.email,
-          facultyName: user.name,
+          facultyName: user?.display_name || '',
           className: student.className || 'Clinical Rotation A',
           classId: student.classId || 'CLINIC-A',
         });
@@ -164,7 +165,7 @@ export const EmailManagement: React.FC = () => {
   };
 
   const handleRevokeInvitation = async (invId: string) => {
-    const res = await revokeSecretaryInvitation(invId, user.name);
+    const res = await revokeSecretaryInvitation(invId, user?.display_name || '');
     if (res.success) {
       setNotice({ type: 'success', message: res.message });
       loadSecretaryInvitations();
@@ -607,7 +608,7 @@ export const EmailManagement: React.FC = () => {
         onClose={() => setPreview(false)}
         type={previewType}
         recipientName={previewStudentName}
-        facultyName={user.name}
+        facultyName={user?.display_name || ''}
         academicSummary={
           previewStudent ? `${previewStudent.status} standing, GWA ${previewStudent.overallGWA.toFixed(2)}` : undefined
         }

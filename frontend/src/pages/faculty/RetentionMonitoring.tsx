@@ -17,11 +17,13 @@ import {
   TrendingDown
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Student, RemedialExam, RetentionLog } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 
 export const RetentionMonitoring: React.FC = () => {
+  const { user } = useAuth();
   const { 
     students, 
     settings, 
@@ -31,17 +33,8 @@ export const RetentionMonitoring: React.FC = () => {
     overrideRetentionStatus 
   } = useApp();
   
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { 
-    email: 'faculty@bicol-u.edu.ph',
-    role: 'faculty',
-    name: 'Dr. Eleanor Vance',
-    assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
-    assignedClasses: ['CLINIC-A']
-  };
-
-  const assignedSubjects = currentUser.assignedSubjects || ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = currentUser.assignedClasses || ['CLINIC-A', 'CLINIC-B'];
+  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
+  const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
 
   // Selected class block state
   const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
@@ -233,7 +226,7 @@ export const RetentionMonitoring: React.FC = () => {
     e.preventDefault();
     if (!overrideStudentId || !overrideRemarks) return;
 
-    overrideRetentionStatus(overrideStudentId, overrideStatus, overrideRemarks, currentUser.email);
+    overrideRetentionStatus(overrideStudentId, overrideStatus, overrideRemarks, user?.login_email || 'system');
     setIsOverrideOpen(false);
     setOverrideStudentId('');
     setOverrideRemarks('');

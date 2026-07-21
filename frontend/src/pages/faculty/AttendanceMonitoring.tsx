@@ -15,6 +15,7 @@ import {
   AlertOctagon
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, AttendanceStatus } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
@@ -23,18 +24,10 @@ type EditableStatus = Exclude<AttendanceStatus, 'excused'>;
 
 export const AttendanceMonitoring: React.FC = () => {
   const { students, attendanceRecords, addAttendanceRecord, overrideAttendanceRecord } = useApp();
+  const { user } = useAuth();
 
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { 
-    email: 'faculty@bicol-u.edu.ph',
-    role: 'faculty',
-    name: 'Dr. Eleanor Vance',
-    assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
-    assignedClasses: ['CLINIC-A']
-  };
-
-  const assignedSubjects = currentUser.assignedSubjects || ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = currentUser.assignedClasses || ['CLINIC-A', 'CLINIC-B'];
+  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
+  const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
 
   // Tab State: 'worksheet' | 'corrections'
   const [activeTab, setActiveTab] = useState<'worksheet' | 'corrections'>('worksheet');
@@ -193,7 +186,7 @@ export const AttendanceMonitoring: React.FC = () => {
     e.preventDefault();
     setErrorMessage('');
 
-    if (currentUser.role !== 'faculty') {
+    if (user?.role !== 'faculty') {
       setErrorMessage('Access denied! Only authorized faculty members can correct attendance ledgers.');
       return;
     }
@@ -233,8 +226,8 @@ export const AttendanceMonitoring: React.FC = () => {
         subjectCode: selectedCorrectionRecord.subjectCode,
         status: correctStatus,
         reason: cleanedReason,
-        changedBy: currentUser.email,
-        changedByName: currentUser.name,
+        changedBy: user?.login_email,
+        changedByName: user?.display_name,
         assignedClassId: selectedClassId,
       });
       setIsCorrectionModalOpen(false);

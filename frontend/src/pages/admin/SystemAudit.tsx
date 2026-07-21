@@ -11,6 +11,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { recordAudit } from '../../services/auditService';
 
@@ -28,10 +29,9 @@ const PRINT_STYLES = `
 export const DeanReports: React.FC = () => {
   const { students, attendanceRecords, assessments, assessmentScores } = useApp();
 
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { role: 'admin', name: 'Dean' };
+  const { user } = useAuth();
 
-  if (currentUser.role !== 'admin') {
+  if (!user || user.role !== 'admin') {
     return <div className="p-8 text-rose-600 font-bold">Access Denied. Dean access only.</div>;
   }
 

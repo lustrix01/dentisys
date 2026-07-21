@@ -23,6 +23,7 @@ import {
   ClipboardCheck
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore, GradingComponentConfig } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
@@ -30,6 +31,7 @@ import { percentageToGWA, gwaToDescription, computeSubjectGrade } from '../../ut
 import { recordAudit } from '../../services/auditService';
 
 export const GradeComputation: React.FC = () => {
+  const { user } = useAuth();
   const { 
     students, 
     settings, 
@@ -47,17 +49,8 @@ export const GradeComputation: React.FC = () => {
 
   const location = useLocation();
 
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { 
-    email: 'faculty@bicol-u.edu.ph',
-    role: 'faculty',
-    name: 'Dr. Eleanor Vance',
-    assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
-    assignedClasses: ['CLINIC-A']
-  };
-
-  const assignedSubjects = currentUser.assignedSubjects || ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = currentUser.assignedClasses || ['CLINIC-A'];
+  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
+  const assignedClasses = ['CLINIC-A'];
 
   // Parse active tab from URL query params
   const getInitialTab = () => {
@@ -1271,7 +1264,7 @@ export const GradeComputation: React.FC = () => {
           </div>
           
           <div className="text-center w-48">
-            <p className="font-bold">{currentUser.name}</p>
+            <p className="font-bold">{user?.display_name}</p>
             <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Assigned Faculty Signature</p>
           </div>

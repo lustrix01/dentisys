@@ -25,7 +25,7 @@ import {
   Mail,
   UserCheck
 } from 'lucide-react';
-import { recordAudit } from '../services/auditService';
+import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 
 interface LayoutProps {
@@ -39,11 +39,19 @@ type NavItem = {
   badge?: string;
 };
 
+const ROLE_TITLES: Record<string, string> = {
+  admin: 'Office of the Dean',
+  faculty: 'Dental Faculty Member',
+  secretary: 'Class Secretary',
+};
+
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr 
-    ? JSON.parse(userStr) 
-    : { name: 'Dr. Eleanor Vance', title: 'Academic Dean / Clinician', role: 'faculty', email: 'eleanor.vance@dentisys.edu' };
+  const { user, clearAuth } = useAuth();
+  const currentUser = {
+    name: user?.display_name ?? '',
+    email: user?.login_email ?? '',
+    role: user?.role ?? 'faculty',
+  };
 
   const getInitials = (fullName: string) => {
     if (!fullName) return 'U';
@@ -121,8 +129,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   const handleLogout = () => {
-    recordAudit({ action: 'Logged out', module: 'Authentication', description: 'User signed out of the portal.', status: 'Success' });
-    localStorage.removeItem('dentisys_user');
+    clearAuth();
     setIsProfileOpen(false);
     navigate('/login');
   };
@@ -352,7 +359,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               <h2 className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
                 {currentUser.name}
               </h2>
-              <p className="text-[10px] text-slate-400 truncate">{currentUser.title}</p>
+              <p className="text-[10px] text-slate-400 truncate">{ROLE_TITLES[currentUser.role] || ''}</p>
             </div>
           )}
         </div>
@@ -460,9 +467,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} text-sm shadow-md`}>
                   {initials}
                 </div>
-                <div className="text-left hidden lg:block">
+                  <div className="text-left hidden lg:block">
                   <div className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none">{currentUser.name}</div>
-                  <span className={`text-[9px] font-semibold ${colors.roleLabelText}`}>{currentUser.title}</span>
+                  <span className={`text-[9px] font-semibold ${colors.roleLabelText}`}>{ROLE_TITLES[currentUser.role] || ''}</span>
                 </div>
                 <ChevronDown className="w-4 h-4 text-slate-400" />
               </button>

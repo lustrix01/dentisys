@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { recordAudit } from '../../services/auditService';
@@ -80,10 +81,9 @@ const emptyForm = (): Omit<RetentionCriterion, 'id' | 'lastUpdated' | 'updatedBy
 export const RetentionCriteria: React.FC = () => {
   const { settings, updateSettings } = useApp();
 
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { email: 'admin@bicol-u.edu.ph', role: 'admin' };
+  const { user } = useAuth();
 
-  if (currentUser.role !== 'admin') {
+  if (!user || user.role !== 'admin') {
     return <div className="p-8 text-rose-600 font-bold">Access Denied. Dean access only.</div>;
   }
 
@@ -137,7 +137,7 @@ export const RetentionCriteria: React.FC = () => {
     if (editingId) {
       setCriteria(prev =>
         prev.map(c => c.id === editingId
-          ? { ...c, ...form, lastUpdated: now, updatedBy: currentUser.email }
+          ? { ...c, ...form, lastUpdated: now, updatedBy: user?.login_email || 'admin@bicol-u.edu.ph' }
           : c
         )
       );
@@ -152,7 +152,7 @@ export const RetentionCriteria: React.FC = () => {
         id: newId,
         ...form,
         lastUpdated: now,
-        updatedBy: currentUser.email,
+        updatedBy: user?.login_email || 'admin@bicol-u.edu.ph',
       };
       setCriteria(prev => [...prev, newCriterion]);
     }
@@ -163,7 +163,7 @@ export const RetentionCriteria: React.FC = () => {
 
   const toggleEnabled = (id: string) => {
     const updated = criteria.map(c =>
-      c.id === id ? { ...c, enabled: !c.enabled, lastUpdated: new Date().toISOString().split('T')[0], updatedBy: currentUser.email } : c
+      c.id === id ? { ...c, enabled: !c.enabled, lastUpdated: new Date().toISOString().split('T')[0], updatedBy: user?.login_email || 'admin@bicol-u.edu.ph' } : c
     );
     setCriteria(updated);
     // Sync system threshold from the first enabled clinical criterion

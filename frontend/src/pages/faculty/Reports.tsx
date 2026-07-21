@@ -32,24 +32,17 @@ import {
   Legend
 } from 'recharts';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { gwaToDescription } from '../../utils/gradeHelper';
 
 export const Reports: React.FC = () => {
+  const { user } = useAuth();
   const { students, attendanceRecords, assessments, assessmentScores, settings } = useApp();
   
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { 
-    email: 'faculty@bicol-u.edu.ph',
-    role: 'faculty',
-    name: 'Dr. Eleanor Vance',
-    assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
-    assignedClasses: ['CLINIC-A']
-  };
-
-  const assignedSubjects = currentUser.assignedSubjects || ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = currentUser.assignedClasses || ['CLINIC-A', 'CLINIC-B'];
+  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
+  const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
 
   // Selected class block state
   const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
@@ -700,7 +693,7 @@ export const Reports: React.FC = () => {
           </div>
           
           <div className="text-center w-48">
-            <p className="font-bold">{currentUser.name}</p>
+            <p className="font-bold">{user?.display_name}</p>
             <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Academic Faculty Dean</p>
           </div>

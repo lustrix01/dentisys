@@ -31,25 +31,17 @@ import {
   Legend
 } from 'recharts';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 
 export const Dashboard: React.FC = () => {
   const { students, attendanceRecords, assessments, updateRemedialExam, addAttendanceRecord } = useApp();
+  const { user } = useAuth();
   const navigate = useNavigate();
   
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { 
-    name: 'Dr. Eleanor Vance', 
-    role: 'faculty', 
-    title: 'Dental Faculty Member',
-    email: 'faculty@bicol-u.edu.ph',
-    assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
-    assignedClasses: ['CLINIC-A']
-  };
-
-  const assignedSubjects = currentUser.assignedSubjects || ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = currentUser.assignedClasses || ['CLINIC-A', 'CLINIC-B'];
+  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
+  const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
 
   // Selected class block state
   const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
@@ -212,7 +204,7 @@ export const Dashboard: React.FC = () => {
             Faculty Portal Dashboard
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            Logged in: <span className="font-bold text-clinical-650 dark:text-slate-350">{currentUser.name}</span> • {currentUser.title}
+            Logged in: <span className="font-bold text-clinical-650 dark:text-slate-350">{user?.display_name}</span> • {'Dental Faculty Member'}
           </p>
         </div>
         

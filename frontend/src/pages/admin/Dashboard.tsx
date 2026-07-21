@@ -20,6 +20,7 @@ import {
   ResponsiveContainer, Legend,
 } from 'recharts';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 
 const MOCK_FACULTY = [
@@ -32,10 +33,9 @@ export const Dashboard: React.FC = () => {
   const { students, attendanceRecords, settings } = useApp();
   const navigate = useNavigate();
 
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { name: 'Dean', role: 'admin' };
+  const { user } = useAuth();
 
-  if (currentUser.role !== 'admin') {
+  if (!user || user.role !== 'admin') {
     return <div className="p-8 text-rose-600 font-bold">Access Denied. Dean access only.</div>;
   }
 
@@ -129,7 +129,7 @@ export const Dashboard: React.FC = () => {
             Dean's Academic Dashboard
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            Logged in: <span className="font-bold text-accent-600 dark:text-accent-400">{currentUser.name}</span> · Office of the Dean
+            Logged in: <span className="font-bold text-accent-600 dark:text-accent-400">{user?.display_name || 'Dean'}</span> · Office of the Dean
           </p>
         </div>
         <div className="flex gap-2 mt-3 sm:mt-0">

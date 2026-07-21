@@ -66,14 +66,8 @@ export const StudentManagement: React.FC = () => {
     deleteStudentFace
   } = useApp();
 
-  const userStr = localStorage.getItem('dentisys_user');
-  const currentUser = userStr ? JSON.parse(userStr) : { 
-    assignedClasses: ['CLINIC-A'],
-    assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302']
-  };
-
-  const assignedClasses = currentUser.assignedClasses || ['CLINIC-A', 'CLINIC-B'];
-  const assignedSubjects = currentUser.assignedSubjects || ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
+  const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
+  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
 
   // Selected class block
   const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
