@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { confirmEnrollment, getMe, ApiError } from '../../services/apiClient';
+import { confirmEnrollment, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
 
 export function MfaEnrollConfirm() {
   const navigate = useNavigate();
@@ -35,6 +35,7 @@ export function MfaEnrollConfirm() {
     setError('');
     try {
       const result = await confirmEnrollment(confirmationToken, trimmed);
+      setApiAccessToken(result.access_token);
       setAccessToken(result.access_token);
       setRecoveryCodes(result.recovery_codes);
       const user = await getMe();

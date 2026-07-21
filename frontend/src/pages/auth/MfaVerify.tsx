@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { verifyMfa, recoverMfa, getMe, ApiError } from '../../services/apiClient';
+import { verifyMfa, recoverMfa, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
 
 type Mode = 'totp' | 'recovery';
 
@@ -43,6 +43,7 @@ export function MfaVerify() {
       const result = mode === 'totp'
         ? await verifyMfa(mfaSessionToken, trimmed)
         : await recoverMfa(mfaSessionToken, trimmed);
+      setApiAccessToken(result.access_token);
       setAccessToken(result.access_token);
       const user = await getMe();
       setUser(user);

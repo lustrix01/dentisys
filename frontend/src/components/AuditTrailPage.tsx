@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, Download, FileText, Filter, Search, ShieldCheck, SlidersHorizontal, XCircle } from 'lucide-react';
 import { auditForCurrentUser, AuditLog, AuditRole, AuditStatus } from '../services/auditService';
+import { getAdminAuditLogsApi } from '../services/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
 
@@ -14,7 +15,20 @@ const statusClass: Record<AuditStatus, string> = { Success: 'bg-emerald-50 text-
 
 export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs = false, accent }) => {
   const theme = themes[accent]; const [query, setQuery] = useState(''); const [roleFilter, setRoleFilter] = useState('all'); const [moduleFilter, setModuleFilter] = useState('all'); const [statusFilter, setStatusFilter] = useState('all'); const [date, setDate] = useState(''); const [sort, setSort] = useState<'newest' | 'oldest'>('newest'); const [selected, setSelected] = useState<AuditLog | null>(null);
-  const source = auditForCurrentUser(); const logs = allLogs ? source : source.filter(log => log.userRole === role); const modules = Array.from(new Set(logs.map(log => log.module))).sort();
+  const [dbLogs, setDbLogs] = useState<AuditLog[]>([]);
+
+  useEffect(() => {
+    getAdminAuditLogsApi({ query, role: roleFilter, module: moduleFilter, status: statusFilter, date })
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setDbLogs(data as AuditLog[]);
+        }
+      })
+      .catch(() => {});
+  }, [query, roleFilter, moduleFilter, statusFilter, date]);
+
+  const source = dbLogs.length > 0 ? dbLogs : auditForCurrentUser();
+  const logs = allLogs ? source : source.filter(log => log.userRole === role); const modules = Array.from(new Set(logs.map(log => log.module))).sort();
   const filtered = useMemo(() => logs.filter(log => (!query || `${log.userName} ${log.action}`.toLowerCase().includes(query.toLowerCase())) && (roleFilter === 'all' || log.userRole === roleFilter) && (moduleFilter === 'all' || log.module === moduleFilter) && (statusFilter === 'all' || log.status === statusFilter) && (!date || log.timestamp.startsWith(date))).sort((a, b) => sort === 'newest' ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)), [logs, query, roleFilter, moduleFilter, statusFilter, date, sort]);
   const exportCsv = () => { const rows = [['Timestamp', 'User', 'Role', 'Action', 'Module', 'Description', 'Status', 'IP Address', 'Device'], ...filtered.map(log => [log.timestamp, log.userName, log.userRole, log.action, log.module, log.description, log.status, log.ipAddress, log.device])]; const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n'); const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); link.download = `dentisys-audit-trail-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(link.href); };
   const cards = [

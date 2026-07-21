@@ -21,6 +21,7 @@ export interface LoginResponse {
   mfa_enrolled: boolean;
   enrollment_token?: string;
   mfa_session_token?: string;
+  access_token?: string;
 }
 
 export interface EnrollStartResponse {

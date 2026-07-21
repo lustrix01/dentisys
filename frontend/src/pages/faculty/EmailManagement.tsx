@@ -27,12 +27,7 @@ import {
 
 type Tab = 'consent' | 'risk' | 'secretary' | 'history';
 
-const initialLogs: EmailLog[] = [
-  { id: 'mail-1', recipient: 'Sarah Jane V. Ramos', subject: 'Privacy Consent for Facial Recognition', type: 'Privacy Consent', sentAt: 'Jul 15, 2026, 9:42 AM', status: 'Sent' },
-  { id: 'mail-2', recipient: 'Bianca S. Cruz', subject: 'Academic Support & At-Risk Notification', type: 'At-Risk Notification', sentAt: 'Jul 14, 2026, 2:18 PM', status: 'Sent' },
-  { id: 'mail-3', recipient: 'Diana G. Rivera', subject: 'Privacy Consent for Facial Recognition', type: 'Privacy Consent', sentAt: 'Jul 13, 2026, 10:05 AM', status: 'Pending' },
-  { id: 'mail-4', recipient: 'Jude Christian D. Reyes', subject: 'Academic Support & At-Risk Notification', type: 'At-Risk Notification', sentAt: 'Jul 12, 2026, 4:31 PM', status: 'Failed' },
-];
+const initialLogs: EmailLog[] = [];
 
 export const EmailManagement: React.FC = () => {
   const { students, updateFaceConsent } = useApp();

@@ -1,0 +1,22 @@
+[
+    {
+        "id": "ASSESS-001",
+        "title": "Midterm Practical Exam",
+        "type": "Laboratory",
+        "gradingPeriod": "Midterm",
+        "maxScore": 100,
+        "weight": 25,
+        "dueDate": "2026-06-15",
+        "classId": "CLINIC-A"
+    },
+    {
+        "id": "ASSESS-002",
+        "title": "Operative Dentistry Quiz 1",
+        "type": "Quiz",
+        "gradingPeriod": "Midterm",
+        "maxScore": 50,
+        "weight": 10,
+        "dueDate": "2026-05-20",
+        "classId": "CLINIC-A"
+    }
+]

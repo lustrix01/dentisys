@@ -1,0 +1,26 @@
+[
+    {
+        "id": "RC-001",
+        "name": "Standard Clinical Retention",
+        "description": "Primary threshold for all Year 3\u20134 clinical rotations. Students failing this are flagged for warning.",
+        "minGrade": 2.5,
+        "minAttendance": 80,
+        "maxRemedialSubjects": 1,
+        "appliesToClinical": true,
+        "enabled": true,
+        "lastUpdated": "2026-06-01",
+        "updatedBy": "admin@bicol-u.edu.ph"
+    },
+    {
+        "id": "RC-002",
+        "name": "Didactic Course Standard",
+        "description": "Applies to non-clinical lecture and lab courses. Slightly relaxed compared to clinical standard.",
+        "minGrade": 3,
+        "minAttendance": 75,
+        "maxRemedialSubjects": 2,
+        "appliesToClinical": false,
+        "enabled": true,
+        "lastUpdated": "2026-05-15",
+        "updatedBy": "admin@bicol-u.edu.ph"
+    }
+]

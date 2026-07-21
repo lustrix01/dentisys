@@ -1,24 +1,41 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock } from 'lucide-react';
-import { recordAudit } from '../../services/auditService';
+import { confirmPasswordReset } from '../../services/authService';
 
 export function ResetPassword() {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const token = searchParams.get('token') || '';
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
+    if (!token) {
+      setError('Missing or invalid password reset token.');
       return;
     }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setLoading(true);
     setError('');
-    // Simulate password reset
-    recordAudit({ action: 'Changed password', module: 'Authentication', description: 'Password reset completed through the frontend workflow.', status: 'Success' });
-    navigate('/login');
+    const res = await confirmPasswordReset(token, password);
+    setLoading(false);
+    if (res.success) {
+      setSuccess('Password reset successfully! Redirecting to sign in...');
+      setTimeout(() => {
+        navigate('/login');
+      }, 2000);
+    } else {
+      setError(res.message);
+    }
   };
 
   return (

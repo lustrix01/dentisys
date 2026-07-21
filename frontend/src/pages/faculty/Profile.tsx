@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BookOpen, BriefcaseBusiness, CheckCircle2, Mail, Phone, Save, Stethoscope, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
+import { getFacultyProfileApi, updateFacultyProfileApi } from '../../services/apiClient';
 
 const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-clinical-500';
 
@@ -13,9 +14,32 @@ export const Profile: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [specialty, setSpecialty] = useState('Clinical Dentistry');
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    getFacultyProfileApi()
+      .then((res) => {
+        if (res.profile) {
+          if (res.profile.name) setName(res.profile.name);
+          if (res.profile.email) setEmail(res.profile.email);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const subjects: string[] = ['CLIN401', 'CLIN402'];
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((part: string) => part[0]).join('').toUpperCase() || 'F';
-  const save = (event: React.FormEvent) => { event.preventDefault(); recordAudit({ action: 'Updated profile', module: 'Profile', description: 'Updated faculty professional profile details.', status: 'Success' }); setSaved(true); setTimeout(() => setSaved(false), 3000); };
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await updateFacultyProfileApi({ name, email });
+      recordAudit({ action: 'Updated profile', module: 'Profile', description: 'Updated faculty professional profile details.', status: 'Success' });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to update faculty profile', err);
+    }
+  };
 
   return <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">

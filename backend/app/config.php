@@ -108,7 +108,7 @@ function app_config(?array $localConfig = null): array
             'port' => (int) config_value('DB_PORT', $local, 3306),
             'name' => (string) config_value('DB_NAME', $local, 'dentisys'),
             'user' => (string) config_value('DB_USER', $local, 'dentisys'),
-            'pass' => (string) config_value('DB_PASS', $local, 'local-development-password'),
+            'pass' => (string) config_value('DB_PASS', $local, ''),
         ],
         'app' => [
             'env' => (string) config_value('APP_ENV', $local, 'development'),
@@ -122,6 +122,7 @@ function app_config(?array $localConfig = null): array
             'access_ttl' => 900,
         ],
         'mfa' => [
+            'required' => filter_var(config_value('MFA_REQUIRED', $local, 'false'), FILTER_VALIDATE_BOOLEAN),
             'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $local, ''),
         ],
         'audit' => [

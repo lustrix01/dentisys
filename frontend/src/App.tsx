@@ -36,6 +36,10 @@ import { Settings as DeanSettings } from './pages/admin/Settings';
 import { Profile as SecretaryProfile } from './pages/secretary/Profile';
 import { Settings as SecretarySettings } from './pages/secretary/Settings';
 import { Login } from './pages/auth/Login';
+import { SignUp } from './pages/auth/SignUp';
+import { ActivateSecretary } from './pages/auth/ActivateSecretary';
+import { ForgotPassword } from './pages/auth/ForgotPassword';
+import { ResetPassword } from './pages/auth/ResetPassword';
 import { MfaEnrollStart } from './pages/auth/MfaEnrollStart';
 import { MfaEnrollConfirm } from './pages/auth/MfaEnrollConfirm';
 import { MfaVerify } from './pages/auth/MfaVerify';
@@ -69,12 +73,12 @@ function App() {
             <Route path="/mfa/verify" element={<MfaVerify />} />
             <Route path="/recovery-codes" element={<RecoveryCodes />} />
 
-            {/* Unsupported mock-auth routes — redirect to login */}
-            <Route path="/signup" element={<Navigate to="/login" replace />} />
-            <Route path="/register" element={<Navigate to="/login" replace />} />
-            <Route path="/activate-secretary" element={<Navigate to="/login" replace />} />
-            <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
-            <Route path="/reset-password" element={<Navigate to="/login" replace />} />
+            {/* Auth routes */}
+            <Route path="/signup" element={<SignUp />} />
+            <Route path="/register" element={<SignUp />} />
+            <Route path="/activate-secretary" element={<ActivateSecretary />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
             <Route element={<ProtectedRoute />}>
               <Route element={<AuthenticatedLayout />}>

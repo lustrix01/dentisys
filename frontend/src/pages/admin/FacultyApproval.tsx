@@ -16,7 +16,7 @@ import {
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import {
-  getFacultyRegistrationRequests,
+  fetchFacultyRegistrationRequests,
   approveFacultyAccount,
   rejectFacultyAccount,
   RegisteredUser,
@@ -34,8 +34,8 @@ export const FacultyApproval: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const loadData = () => {
-    const list = getFacultyRegistrationRequests();
+  const loadData = async () => {
+    const list = await fetchFacultyRegistrationRequests();
     setFacultyList(list);
   };
 

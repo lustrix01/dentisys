@@ -16,7 +16,7 @@ import {
   Building2,
 } from 'lucide-react';
 import {
-  getSecretaryInvitationByToken,
+  fetchSecretaryInvitationByToken,
   activateSecretaryAccount,
   validatePasswordRequirements,
   SecretaryInvitation,
@@ -49,28 +49,29 @@ export function ActivateSecretary() {
       return;
     }
 
-    const inv = getSecretaryInvitationByToken(token);
-    if (!inv) {
-      setInvitationError('Invalid invitation token. The invitation link may be invalid or corrupted.');
-      return;
-    }
+    fetchSecretaryInvitationByToken(token).then((inv) => {
+      if (!inv) {
+        setInvitationError('Invalid or expired invitation token. The link may be invalid or corrupted.');
+        return;
+      }
 
-    if (inv.status === 'Revoked') {
-      setInvitationError('This Class Secretary invitation has been revoked by the faculty member.');
-      return;
-    }
+      if (inv.status === 'Revoked') {
+        setInvitationError('This Class Secretary invitation has been revoked by the faculty member.');
+        return;
+      }
 
-    if (inv.status === 'Expired') {
-      setInvitationError('This Class Secretary invitation link has expired. Please contact your faculty member to request a new invitation.');
-      return;
-    }
+      if (inv.status === 'Expired') {
+        setInvitationError('This Class Secretary invitation link has expired. Please contact your faculty member to request a new invitation.');
+        return;
+      }
 
-    if (inv.status === 'Accepted') {
-      setInvitationError('This Class Secretary invitation has already been accepted and activated. You can proceed directly to sign in.');
-      return;
-    }
+      if (inv.status === 'Accepted') {
+        setInvitationError('This Class Secretary invitation has already been accepted and activated. You can proceed directly to sign in.');
+        return;
+      }
 
-    setInvitation(inv);
+      setInvitation(inv);
+    });
   }, [token]);
 
   const passwordCriteria = useMemo(() => {

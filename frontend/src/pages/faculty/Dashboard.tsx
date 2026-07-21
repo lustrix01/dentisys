@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
@@ -35,6 +35,8 @@ import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 
+import { getFacultyDashboardKpisApi } from '../../services/apiClient';
+
 export const Dashboard: React.FC = () => {
   const { students, attendanceRecords, assessments, updateRemedialExam, addAttendanceRecord } = useApp();
   const { user } = useAuth();
@@ -42,6 +44,18 @@ export const Dashboard: React.FC = () => {
   
   const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
   const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
+
+  const [loading, setLoading] = useState(true);
+  const [dashboardKpis, setDashboardKpis] = useState<any>(null);
+
+  useEffect(() => {
+    getFacultyDashboardKpisApi()
+      .then((res) => {
+        setDashboardKpis(res);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
 
   // Selected class block state
   const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');

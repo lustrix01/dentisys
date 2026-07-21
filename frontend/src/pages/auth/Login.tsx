@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { login as apiLogin } from '../../services/apiClient';
+import { login as apiLogin, getMe, setAccessToken as setApiAccessToken } from '../../services/apiClient';
 
 export function Login() {
   const navigate = useNavigate();
-  const { storeEnrollmentChallenge, storeMfaChallenge, setError: setAuthError } = useAuth();
+  const { storeEnrollmentChallenge, storeMfaChallenge, setAccessToken, setUser, setAuthenticated, setError: setAuthError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +27,14 @@ export function Login() {
     try {
       const result = await apiLogin(email, password);
 
-      if (!result.mfa_enrolled && result.enrollment_token) {
+      if (result.access_token) {
+        setApiAccessToken(result.access_token);
+        setAccessToken(result.access_token);
+        const user = await getMe();
+        setUser(user);
+        setAuthenticated();
+        navigate('/', { replace: true });
+      } else if (!result.mfa_enrolled && result.enrollment_token) {
         storeEnrollmentChallenge(result.enrollment_token);
         navigate('/mfa/enroll');
       } else if (result.mfa_enrolled && result.mfa_session_token) {
@@ -185,6 +192,11 @@ export function Login() {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                <div className="flex justify-end mt-2">
+                  <Link to="/forgot-password" className="text-xs font-semibold text-accent-600 dark:text-accent-400 hover:underline">
+                    Forgot Password?
+                  </Link>
+                </div>
               </div>
 
               <div className="pt-2">
@@ -202,13 +214,21 @@ export function Login() {
               </div>
             </form>
 
-            {/* Footer */}
-            <p className="text-center mt-6 text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Forgot your BU email password?{' '}
-              <a href="mailto:support@bicol-u.edu.ph" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
-                Contact support
-              </a>
-            </p>
+            {/* Links Footer */}
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center space-y-2">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Faculty Member?{' '}
+                <Link to="/signup" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
+                  Sign up for an account
+                </Link>
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Class Secretary?{' '}
+                <Link to="/activate-secretary" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
+                  Activate invitation
+                </Link>
+              </p>
+            </div>
           </div>
         </div>
 

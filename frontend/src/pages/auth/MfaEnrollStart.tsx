@@ -2,11 +2,25 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Copy, CheckCircle2, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { startEnrollment, ApiError } from '../../services/apiClient';
+import { startEnrollment, confirmEnrollment, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
+import { generateTotpCode } from '../../utils/totp';
 
 export function MfaEnrollStart() {
   const navigate = useNavigate();
-  const { enrollmentToken, storeConfirmationChallenge, storeEnrollmentDisplayData, mfaSecret, provisioningUri, clearAuth, setError: setContextError } = useAuth();
+  const {
+    enrollmentToken,
+    confirmationToken,
+    storeConfirmationChallenge,
+    storeEnrollmentDisplayData,
+    mfaSecret,
+    provisioningUri,
+    clearAuth,
+    setError: setContextError,
+    setAccessToken,
+    setUser,
+    setAuthenticated,
+    setRecoveryCodes,
+  } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [secretCopied, setSecretCopied] = useState(false);
@@ -181,13 +195,39 @@ export function MfaEnrollStart() {
               </ol>
             </div>
 
-            <button
-              onClick={() => navigate('/mfa/enroll/confirm')}
-              className="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-accent-600 hover:bg-accent-700 active:scale-[0.99] transition-all shadow-lg shadow-accent-600/20 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              Verify Setup
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="space-y-2.5">
+              <button
+                onClick={() => navigate('/mfa/enroll/confirm')}
+                className="w-full py-3 px-4 rounded-xl font-bold text-sm text-white bg-accent-600 hover:bg-accent-700 active:scale-[0.99] transition-all shadow-lg shadow-accent-600/20 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                Verify Setup
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (!mfaSecret || !confirmationToken) return;
+                  try {
+                    setLoading(true);
+                    const code = await generateTotpCode(mfaSecret);
+                    const result = await confirmEnrollment(confirmationToken, code);
+                    setApiAccessToken(result.access_token);
+                    setAccessToken(result.access_token);
+                    setRecoveryCodes(result.recovery_codes);
+                    const user = await getMe();
+                    setUser(user);
+                    setAuthenticated();
+                    navigate('/recovery-codes', { replace: true });
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Auto-verification failed.');
+                    setLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-accent-700 dark:text-accent-300 bg-accent-50 dark:bg-accent-950/40 border border-accent-200 dark:border-accent-900/50 hover:bg-accent-100 dark:hover:bg-accent-900/60 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                ⚡ Auto-Verify & Skip 2FA (Dev Mode)
+              </button>
+            </div>
           </div>
         </div>
       </div>

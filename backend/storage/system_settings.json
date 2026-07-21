@@ -1,0 +1,10 @@
+{
+    "theme": "light",
+    "retentionThreshold": 2.5,
+    "weights": {
+        "practicum": 40,
+        "exams": 30,
+        "quizzes": 20,
+        "attendance": 10
+    }
+}

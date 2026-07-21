@@ -1,14 +1,29 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail } from 'lucide-react';
+import { requestPasswordReset } from '../../services/authService';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [devResetLink, setDevResetLink] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setLoading(true);
+    setError('');
+    const res = await requestPasswordReset(email);
+    setLoading(false);
+    if (res.success) {
+      if (res.resetLink) {
+        setDevResetLink(res.resetLink);
+      }
+      setSubmitted(true);
+    } else {
+      setError(res.message);
+    }
   };
 
   return (

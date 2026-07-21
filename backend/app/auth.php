@@ -122,7 +122,7 @@ function auth_issue_initial_refresh_token(
         throw new AuthException('Session user ID does not match supplied user ID.');
     }
 
-    $sessionExpiresAt = isset($session['expires_at']) ? new DateTimeImmutable($session['expires_at']) : null;
+    $sessionExpiresAt = isset($session['expires_at']) ? new DateTimeImmutable($session['expires_at'], new DateTimeZone('UTC')) : null;
 
     if ($sessionExpiresAt !== null && $expiresAt > $sessionExpiresAt) {
         throw new AuthException('Refresh token expiry must not exceed session absolute expiry.');

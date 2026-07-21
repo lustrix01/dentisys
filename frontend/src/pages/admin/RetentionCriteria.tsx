@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BookOpenCheck,
   Plus,
@@ -78,9 +78,9 @@ const emptyForm = (): Omit<RetentionCriterion, 'id' | 'lastUpdated' | 'updatedBy
   enabled: true,
 });
 
-export const RetentionCriteria: React.FC = () => {
-  const { settings, updateSettings } = useApp();
+import { getRetentionCriteriaApi, saveRetentionCriteriaApi } from '../../services/apiClient';
 
+export const RetentionCriteria: React.FC = () => {
   const { user } = useAuth();
 
   if (!user || user.role !== 'admin') {
@@ -94,6 +94,29 @@ export const RetentionCriteria: React.FC = () => {
   const [form, setForm] = useState(emptyForm());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getRetentionCriteriaApi()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setCriteria(data);
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const syncToBackend = async (newCriteria: RetentionCriterion[]) => {
+    setCriteria(newCriteria);
+    try {
+      await saveRetentionCriteriaApi(newCriteria);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to sync retention criteria', err);
+    }
+  };
 
   // ── Validation ──────────────────────────────────────────
   const validate = () => {
@@ -134,18 +157,12 @@ export const RetentionCriteria: React.FC = () => {
     if (!validate()) return;
     const now = new Date().toISOString().split('T')[0];
 
+    let newCriteria: RetentionCriterion[];
     if (editingId) {
-      setCriteria(prev =>
-        prev.map(c => c.id === editingId
-          ? { ...c, ...form, lastUpdated: now, updatedBy: user?.login_email || 'admin@bicol-u.edu.ph' }
-          : c
-        )
+      newCriteria = criteria.map(c => c.id === editingId
+        ? { ...c, ...form, lastUpdated: now, updatedBy: user?.login_email || 'admin@bicol-u.edu.ph' }
+        : c
       );
-      // If this is the enabled criterion, sync the system threshold
-      const target = criteria.find(c => c.id === editingId);
-      if (target?.enabled && form.enabled) {
-        updateSettings({ ...settings, retentionThreshold: form.minGrade });
-      }
     } else {
       const newId = `RC-${String(criteria.length + 1).padStart(3, '0')}`;
       const newCriterion: RetentionCriterion = {
@@ -154,10 +171,9 @@ export const RetentionCriteria: React.FC = () => {
         lastUpdated: now,
         updatedBy: user?.login_email || 'admin@bicol-u.edu.ph',
       };
-      setCriteria(prev => [...prev, newCriterion]);
+      newCriteria = [...criteria, newCriterion];
     }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    syncToBackend(newCriteria);
     setIsModalOpen(false);
   };
 
@@ -165,18 +181,14 @@ export const RetentionCriteria: React.FC = () => {
     const updated = criteria.map(c =>
       c.id === id ? { ...c, enabled: !c.enabled, lastUpdated: new Date().toISOString().split('T')[0], updatedBy: user?.login_email || 'admin@bicol-u.edu.ph' } : c
     );
-    setCriteria(updated);
-    // Sync system threshold from the first enabled clinical criterion
-    const activeClinical = updated.find(c => c.enabled && c.appliesToClinical);
-    if (activeClinical) {
-      updateSettings({ ...settings, retentionThreshold: activeClinical.minGrade });
-    }
+    syncToBackend(updated);
   };
 
   const handleDelete = () => {
     if (!deleteTarget) return;
-    recordAudit({ action: 'Deleted retention criterion', module: 'Retention Criteria', description: `Deleted retention criterion ${deleteTarget.name}.`, status: 'Warning' });
-    setCriteria(prev => prev.filter(c => c.id !== deleteTarget.id));
+    recordAudit({ action: 'Deleted retention criterion', module: 'Retention Criteria', description: `Deleted retention criterion ${deleteTarget.name} (${deleteTarget.id}).`, status: 'Warning' });
+    const updated = criteria.filter(c => c.id !== deleteTarget.id);
+    syncToBackend(updated);
     setDeleteTarget(null);
   };
 

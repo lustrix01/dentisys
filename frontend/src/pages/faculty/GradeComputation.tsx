@@ -30,6 +30,8 @@ import { Modal } from '../../components/Modal';
 import { percentageToGWA, gwaToDescription, computeSubjectGrade } from '../../utils/gradeHelper';
 import { recordAudit } from '../../services/auditService';
 
+import { getFacultyAssessmentsApi, saveFacultyAssessmentsApi } from '../../services/apiClient';
+
 export const GradeComputation: React.FC = () => {
   const { user } = useAuth();
   const { 
@@ -51,6 +53,14 @@ export const GradeComputation: React.FC = () => {
 
   const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
   const assignedClasses = ['CLINIC-A'];
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getFacultyAssessmentsApi()
+      .then(() => setLoading(false))
+      .catch(() => setLoading(false));
+  }, []);
 
   // Parse active tab from URL query params
   const getInitialTab = () => {

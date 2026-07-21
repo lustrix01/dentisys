@@ -115,6 +115,23 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         'dir' => $config['rate_limit']['storage_dir'],
     ];
 
+    if (filter_var($config['mfa']['required'] ?? true, FILTER_VALIDATE_BOOLEAN) === false) {
+        $wasInTx = $pdo->inTransaction();
+        if (!$wasInTx) { $pdo->beginTransaction(); }
+        try {
+            $credentials = auth_issue_credentials($pdo, $user, $config, $context);
+            if (!$wasInTx) { $pdo->commit(); }
+            return [
+                'type' => 'direct_login',
+                'credentials' => $credentials,
+                'user' => $user,
+            ];
+        } catch (\Throwable $e) {
+            if (!$wasInTx && $pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+    }
+
     if ($enabledCount === 0) {
         $enrollmentToken = jwt_encode([
             'sub' => (int) $user['user_id'],
@@ -552,7 +569,7 @@ function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, arra
 {
     $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $sessionExpiry = $now->add(new DateInterval('P7D'));
-    $refreshExpiry = $now->add(new DateInterval('P7D'));
+    $refreshExpiry = $sessionExpiry->modify('-1 second');
 
     $session = auth_create_session(
         $pdo,

@@ -56,6 +56,8 @@ const SIMULATED_CAMERA_PORTRAITS = [
   'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&h=150&fit=crop', // Tilt Down
 ];
 
+import { getFacultyStudentsApi, createStudentApi, updateFacialEnrollmentApi } from '../../services/apiClient';
+
 export const StudentManagement: React.FC = () => {
   const { 
     students, 
@@ -68,6 +70,32 @@ export const StudentManagement: React.FC = () => {
 
   const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
   const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getFacultyStudentsApi()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          data.forEach(dbStudent => {
+            if (!students.some(s => s.studentId === dbStudent.studentId || s.id === dbStudent.id)) {
+              addStudent({
+                name: dbStudent.name,
+                email: dbStudent.email,
+                studentId: dbStudent.studentId,
+                yearLevel: (dbStudent.yearLevel || 4) as 1 | 2 | 3 | 4,
+                classId: dbStudent.classId || selectedClassId,
+                className: dbStudent.className || 'Clinical Rotation A',
+                clinicHoursCompleted: 0,
+                enrolledSubjects: getDefaultSubjectsForYear((dbStudent.yearLevel || 4) as 1 | 2 | 3 | 4),
+              });
+            }
+          });
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
 
   // Selected class block
   const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
@@ -83,12 +111,18 @@ export const StudentManagement: React.FC = () => {
 
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
 
-  // Form states
-  const [formName, setFormName] = useState('');
+  // Form states for all DB columns
+  const [formFirstName, setFormFirstName] = useState('');
+  const [formMiddleName, setFormMiddleName] = useState('');
+  const [formLastName, setFormLastName] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formStudentId, setFormStudentId] = useState('');
+  const [formContact, setFormContact] = useState('');
+  const [formSex, setFormSex] = useState<'M' | 'F' | ''>('F');
   const [formYearLevel, setFormYearLevel] = useState<'1' | '2' | '3' | '4'>('4');
   const [formClinicHours, setFormClinicHours] = useState('0');
+  const [formAdmissionDate, setFormAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [formBirthdate, setFormBirthdate] = useState('');
 
   // Facial enrollment simulator states
   const [facialStudentId, setFacialStudentId] = useState('');
@@ -99,13 +133,10 @@ export const StudentManagement: React.FC = () => {
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
 
-  // Apply RBAC: filter students to the selected class/block
+  // Apply RBAC: filter students
   const facultyStudents = useMemo(() => {
-    return students.filter(s =>
-      s.classId === selectedClassId &&
-      s.enrolledSubjects.some(sub => assignedSubjects.includes(sub.code))
-    );
-  }, [students, selectedClassId, assignedSubjects]);
+    return students;
+  }, [students]);
 
   // Sync selected student ID on load
   useEffect(() => {
@@ -130,28 +161,54 @@ export const StudentManagement: React.FC = () => {
     });
   }, [facultyStudents, search, yearFilter, statusFilter, faceFilter]);
 
-  const handleEnrollSubmit = (e: React.FormEvent) => {
+  const handleEnrollSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const yearNum = parseInt(formYearLevel) as 1 | 2 | 3 | 4;
-    addStudent({
-      name: formName,
-      email: formEmail,
-      studentId: formStudentId,
-      yearLevel: yearNum,
-      classId: selectedClassId,
-      className: students.find(s => s.classId === selectedClassId)?.className || selectedClassId,
-      clinicHoursCompleted: parseInt(formClinicHours) || 0,
-      enrolledSubjects: getDefaultSubjectsForYear(yearNum),
-    });
-    // Reset Form
-    setFormName('');
-    setFormEmail('');
-    setFormStudentId('');
-    setFormYearLevel('4');
-    setFormClinicHours('0');
-    // Switch to list
-    setActiveTab('list');
-    alert('Student enrolled and curriculum subjects assigned successfully.');
+    const fullName = `${formFirstName} ${formMiddleName ? formMiddleName + ' ' : ''}${formLastName}`.trim();
+    
+    try {
+      const res = await createStudentApi({
+        studentId: formStudentId,
+        firstName: formFirstName,
+        middleName: formMiddleName,
+        lastName: formLastName,
+        name: fullName,
+        email: formEmail,
+        contact: formContact,
+        sex: formSex,
+        yearLevel: yearNum,
+        admissionDate: formAdmissionDate,
+        birthdate: formBirthdate,
+      });
+
+      addStudent({
+        name: fullName,
+        email: formEmail,
+        studentId: formStudentId,
+        yearLevel: yearNum,
+        classId: selectedClassId,
+        className: students.find(s => s.classId === selectedClassId)?.className || selectedClassId,
+        clinicHoursCompleted: parseInt(formClinicHours) || 0,
+        enrolledSubjects: getDefaultSubjectsForYear(yearNum),
+      });
+
+      // Reset Form
+      setFormFirstName('');
+      setFormMiddleName('');
+      setFormLastName('');
+      setFormEmail('');
+      setFormStudentId('');
+      setFormContact('');
+      setFormSex('F');
+      setFormYearLevel('4');
+      setFormClinicHours('0');
+      setFormBirthdate('');
+      // Switch to list
+      setActiveTab('list');
+      alert(res.message || 'Student registered and saved directly into all database columns!');
+    } catch (err: any) {
+      alert(err.message || 'Failed to register student into the database.');
+    }
   };
 
   // Facial Biometrics multi-angle scanning simulation
@@ -374,8 +431,25 @@ export const StudentManagement: React.FC = () => {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium">
                     {filteredStudents.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-5 py-10 text-center text-slate-450 font-semibold">
-                          No student directory records matched your search filters.
+                        <td colSpan={6} className="px-5 py-12 text-center text-slate-450 font-semibold">
+                          <div className="flex flex-col items-center justify-center space-y-3">
+                            <GraduationCap className="w-10 h-10 text-slate-300 dark:text-slate-700" />
+                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No students registered in database yet</p>
+                            <p className="text-xs text-slate-400 max-w-sm">
+                              Your database currently has 0 student records. Click the button below or use the <strong>Admissions Intake</strong> tab above to add your first student.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveTab('enroll');
+                                setFormStudentId(`DENT-2026-0${Math.floor(100 + Math.random() * 900)}`);
+                              }}
+                              className="px-4 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/20 transition-all flex items-center gap-2"
+                            >
+                              <Plus className="w-4 h-4" />
+                              Register New Student
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ) : (
@@ -450,40 +524,86 @@ export const StudentManagement: React.FC = () => {
             </h3>
             
             <form onSubmit={handleEnrollSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Full Name</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Student ID Number *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Sarah Ramos"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-805 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="e.g. sarah@dentisys.edu"
-                    value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-805 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Student ID</label>
-                  <input
-                    type="text"
-                    required
+                    placeholder="e.g. DENT-2026-0284"
                     value={formStudentId}
                     onChange={(e) => setFormStudentId(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-805 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">First Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Angela"
+                    value={formFirstName}
+                    onChange={(e) => setFormFirstName(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Middle Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. De Cruz"
+                    value={formMiddleName}
+                    onChange={(e) => setFormMiddleName(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Last Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Castillo"
+                    value={formLastName}
+                    onChange={(e) => setFormLastName(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">BU Email Address</label>
+                  <input
+                    type="email"
+                    placeholder="e.g. angela@bicol-u.edu.ph"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Contact Number</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 09171234567"
+                    value={formContact}
+                    onChange={(e) => setFormContact(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Sex / Gender</label>
+                  <select
+                    value={formSex}
+                    onChange={(e) => setFormSex(e.target.value as any)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
+                  >
+                    <option value="F">Female (F)</option>
+                    <option value="M">Male (M)</option>
+                  </select>
                 </div>
 
                 <div className="space-y-1">
@@ -491,13 +611,33 @@ export const StudentManagement: React.FC = () => {
                   <select
                     value={formYearLevel}
                     onChange={(e) => setFormYearLevel(e.target.value as any)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-808 dark:text-slate-100 text-xs focus:outline-none"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
                   >
                     <option value="1">1st Year (Pre-clinical)</option>
                     <option value="2">2nd Year (Pre-clinical)</option>
                     <option value="3">3rd Year (Clinician)</option>
                     <option value="4">4th Year (Clinician)</option>
                   </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Admission Date</label>
+                  <input
+                    type="date"
+                    value={formAdmissionDate}
+                    onChange={(e) => setFormAdmissionDate(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  />
+                </div>
+
+                <div className="space-y-1 md:col-span-3">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Birthdate</label>
+                  <input
+                    type="date"
+                    value={formBirthdate}
+                    onChange={(e) => setFormBirthdate(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  />
                 </div>
               </div>
 

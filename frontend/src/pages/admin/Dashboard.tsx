@@ -23,17 +23,28 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 
-const MOCK_FACULTY = [
-  { name: 'Dr. Eleanor Vance', classes: 'CLINIC-A, CLINIC-B', subjects: 'CLIN401, CLIN402' },
-  { name: 'Dr. Sarah Ramos', classes: 'CLINIC-C', subjects: 'CLIN301, CLIN302' },
-  { name: 'Dr. James Florido', classes: 'CLINIC-D', subjects: 'ODON401' },
-];
+import { getAdminDashboardKpisApi } from '../../services/apiClient';
+
+const MOCK_FACULTY: any[] = [];
 
 export const Dashboard: React.FC = () => {
-  const { students, attendanceRecords, settings } = useApp();
+  const { students, attendanceRecords } = useApp();
   const navigate = useNavigate();
-
   const { user } = useAuth();
+
+  const [loading, setLoading] = React.useState(true);
+  const [apiData, setApiData] = React.useState<any>(null);
+
+  React.useEffect(() => {
+    getAdminDashboardKpisApi()
+      .then((res) => {
+        setApiData(res);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+  }, []);
 
   if (!user || user.role !== 'admin') {
     return <div className="p-8 text-rose-600 font-bold">Access Denied. Dean access only.</div>;
@@ -161,7 +172,7 @@ export const Dashboard: React.FC = () => {
       {/* Retention threshold banner */}
       <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/40 text-xs font-semibold text-amber-700 dark:text-amber-400">
         <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-        Active retention threshold: <span className="font-extrabold ml-1">GWA {settings.retentionThreshold}</span>
+        Active retention threshold: <span className="font-extrabold ml-1">GWA 2.5</span>
         &nbsp;— students with clinical grades above this threshold are flagged automatically.
         <button onClick={() => navigate('/admin/retention-criteria')} className="ml-auto underline font-bold whitespace-nowrap hover:text-amber-900">
           Manage Criteria →

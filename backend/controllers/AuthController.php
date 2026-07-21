@@ -32,7 +32,26 @@ function handle_login(): void
 
         $result = auth_runtime_login($pdo, $config, $body['data'], $context);
 
-        if ($result['type'] === 'enrollment_start') {
+        if ($result['type'] === 'direct_login') {
+            $cred = $result['credentials'];
+            $response = auth_build_no_store_json_response([
+                'access_token' => $cred['access_token'],
+                'user' => [
+                    'user_id' => $cred['session']['user_id'],
+                ],
+            ], 200);
+
+            $isHttps = request_is_https($config, $_SERVER);
+            $cookieHeaders = build_refresh_cookie_header(
+                $cred['refresh_token'],
+                $cred['cookie_ttl'],
+                $isHttps
+            );
+            $response['headers'] = array_merge($response['headers'], $cookieHeaders);
+
+            auth_controller_emit($response);
+            return;
+        } elseif ($result['type'] === 'enrollment_start') {
             $payload = [
                 'mfa_required' => true,
                 'mfa_enrolled' => false,

@@ -23,7 +23,9 @@ import {
 export function SignUp() {
   const navigate = useNavigate();
 
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -64,8 +66,8 @@ export function SignUp() {
     setEmailTouched(true);
     setConfirmTouched(true);
 
-    if (!name.trim()) {
-      setErrorMessage('Please enter your full name.');
+    if (!firstName.trim() || !lastName.trim()) {
+      setErrorMessage('Please enter your First Name and Last Name.');
       return;
     }
 
@@ -91,9 +93,11 @@ export function SignUp() {
 
     setIsLoading(true);
 
+    const fullName = `${firstName.trim()} ${middleName.trim() ? middleName.trim() + ' ' : ''}${lastName.trim()}`;
+
     try {
       const res = await registerFaculty({
-        name: name.trim(),
+        name: fullName,
         email: email.trim(),
         password,
       });
@@ -253,23 +257,56 @@ export function SignUp() {
                   </div>
                 )}
 
-                {/* Full Name Field */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                    Full Name <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative rounded-xl shadow-sm group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-accent-500 transition-colors">
-                      <User className="h-4 w-4" />
+                {/* First, Middle, and Last Name Fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                      First Name <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative rounded-xl shadow-sm group">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-accent-500 transition-colors">
+                        <User className="h-3.5 w-3.5" />
+                      </div>
+                      <input
+                        type="text"
+                        required
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="e.g. Eleanor"
+                        className="w-full pl-9 pr-3 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
+                      />
                     </div>
-                    <input
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Dr. Eleanor Vance"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
-                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                      Middle Name
+                    </label>
+                    <div className="relative rounded-xl shadow-sm group">
+                      <input
+                        type="text"
+                        value={middleName}
+                        onChange={(e) => setMiddleName(e.target.value)}
+                        placeholder="e.g. De Cruz"
+                        className="w-full px-3 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                      Last Name <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative rounded-xl shadow-sm group">
+                      <input
+                        type="text"
+                        required
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="e.g. Vance"
+                        className="w-full px-3 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
+                      />
+                    </div>
                   </div>
                 </div>
 

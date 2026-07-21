@@ -150,3 +150,259 @@ export interface HealthPayload {
 export function healthCheck(): Promise<HealthPayload> {
   return request<HealthPayload>('GET', '/health');
 }
+
+export function registerFacultyApi(data: { name: string; email: string; password: string }): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>('POST', '/auth/register', data);
+}
+
+export function getFacultyRequestsApi(): Promise<Array<{
+  id: string;
+  email: string;
+  name: string;
+  role: 'faculty' | 'admin' | 'secretary';
+  title: string;
+  status: string;
+  createdAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+}>> {
+  return request('GET', '/admin/users/faculty');
+}
+
+export function approveFacultyApi(email: string): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>('POST', '/admin/users/approval', { email, action: 'approve' });
+}
+
+export function rejectFacultyApi(email: string): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>('POST', '/admin/users/approval', { email, action: 'reject' });
+}
+
+export function inviteSecretaryApi(data: { student_name: string; student_number?: string; class_name: string; email: string }): Promise<{ status: string; token: string; invitation_link: string; message: string }> {
+  return request('POST', '/secretary/invite', data);
+}
+
+export function getSecretaryInvitationApi(token: string): Promise<{
+  status: string;
+  invitation: {
+    token: string;
+    studentName: string;
+    studentNumber: string;
+    email: string;
+    className: string;
+    facultyName: string;
+    expiresAt: string;
+  };
+}> {
+  return request('GET', `/secretary/invitation?token=${encodeURIComponent(token)}`);
+}
+
+export function activateSecretaryApi(token: string, password: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/secretary/activate', { token, password });
+}
+
+export function requestPasswordResetApi(email: string): Promise<{ status: string; token?: string; reset_link?: string; message: string }> {
+  return request('POST', '/auth/password/reset-request', { email });
+}
+
+export function confirmPasswordResetApi(token: string, password: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/password/reset-confirm', { token, password });
+}
+
+// Dean Admin API Methods
+export function getAdminDashboardKpisApi(): Promise<{
+  status: string;
+  kpis: {
+    totalStudents: number;
+    totalFaculty: number;
+    goodStanding: number;
+    atRisk: number;
+    remedialCount: number;
+    attendanceRate: number;
+  };
+  gwaBuckets: Array<{ range: string; count: number; color: string }>;
+  statusCounts: { active: number; warning: number; critical: number; remedial: number };
+  classAttendance: Array<{ name: string; rate: number }>;
+}> {
+  return request('GET', '/admin/dashboard/kpis');
+}
+
+export function getRetentionCriteriaApi(): Promise<Array<{
+  id: string;
+  name: string;
+  description: string;
+  minGrade: number;
+  minAttendance: number;
+  maxRemedialSubjects: number;
+  appliesToClinical: boolean;
+  enabled: boolean;
+  lastUpdated: string;
+  updatedBy: string;
+}>> {
+  return request('GET', '/admin/retention/criteria');
+}
+
+export function saveRetentionCriteriaApi(criteria: any[]): Promise<{ status: string; message: string }> {
+  return request('POST', '/admin/retention/criteria', criteria);
+}
+
+export function getAdminAuditLogsApi(params?: { query?: string; role?: string; module?: string; status?: string; date?: string }): Promise<Array<{
+  id: string;
+  timestamp: string;
+  userName: string;
+  userRole: string;
+  action: string;
+  module: string;
+  description: string;
+  status: 'Success' | 'Warning' | 'Failed';
+  ipAddress: string;
+  device: string;
+}>> {
+  const queryParts: string[] = [];
+  if (params?.query) queryParts.push(`query=${encodeURIComponent(params.query)}`);
+  if (params?.role) queryParts.push(`role=${encodeURIComponent(params.role)}`);
+  if (params?.module) queryParts.push(`module=${encodeURIComponent(params.module)}`);
+  if (params?.status) queryParts.push(`status=${encodeURIComponent(params.status)}`);
+  if (params?.date) queryParts.push(`date=${encodeURIComponent(params.date)}`);
+  const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+  return request('GET', `/admin/audit-logs${qs}`);
+}
+
+export function getAdminProfileApi(): Promise<{
+  status: string;
+  profile: {
+    id: string;
+    name: string;
+    email: string;
+    title: string;
+    office: string;
+    theme: string;
+  };
+}> {
+  return request('GET', '/admin/profile');
+}
+
+export function updateAdminProfileApi(data: { name: string; email: string; office?: string }): Promise<{ status: string; message: string }> {
+  return request('POST', '/admin/profile', data);
+}
+
+export function getAdminSettingsApi(): Promise<{
+  status: string;
+  settings: {
+    theme: 'light' | 'dark';
+    retentionThreshold: number;
+    weights: { practicum: number; exams: number; quizzes: number; attendance: number };
+  };
+}> {
+  return request('GET', '/admin/settings');
+}
+
+export function updateAdminSettingsApi(settings: any): Promise<{ status: string; message: string }> {
+  return request('POST', '/admin/settings', settings);
+}
+
+export function getAdminReportsSummaryApi(): Promise<{
+  status: string;
+  reports: {
+    students: any[];
+    totalCount: number;
+  };
+}> {
+  return request('GET', '/admin/reports/summary');
+}
+
+// Faculty Module API Methods
+export function getFacultyDashboardKpisApi(): Promise<{
+  status: string;
+  kpis: {
+    assignedStudents: number;
+    activeClasses: number;
+    averageAttendance: number;
+    retentionAlerts: number;
+    goodStanding: number;
+    remedialCount: number;
+  };
+  classes: Array<{ id: string; name: string; students: number; attendance: number }>;
+}> {
+  return request('GET', '/faculty/dashboard/kpis');
+}
+
+export function getFacultyStudentsApi(): Promise<Array<{
+  id: string;
+  studentId: string;
+  name: string;
+  email: string;
+  yearLevel: number;
+  status: string;
+  faceEnrolled: boolean;
+  consentStatus: string;
+  classId: string;
+  className: string;
+}>> {
+  return request('GET', '/faculty/students');
+}
+
+export function createStudentApi(data: {
+  studentId: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  name?: string;
+  email?: string;
+  contact?: string;
+  sex?: string;
+  yearLevel?: number;
+  status?: string;
+  admissionDate?: string;
+  birthdate?: string;
+}): Promise<{
+  status: string;
+  message: string;
+  student: any;
+}> {
+  return request('POST', '/faculty/students', data);
+}
+
+export function updateFacialEnrollmentApi(studentId: string, enrolled: boolean): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/students/facial-enroll', { studentId, enrolled });
+}
+
+export function getFacultyAssessmentsApi(): Promise<any[]> {
+  return request('GET', '/faculty/assessments');
+}
+
+export function saveFacultyAssessmentsApi(assessments: any[]): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/assessments', assessments);
+}
+
+export function getFacultyProfileApi(): Promise<{
+  status: string;
+  profile: {
+    id: string;
+    name: string;
+    email: string;
+    title: string;
+    department: string;
+    theme: string;
+  };
+}> {
+  return request('GET', '/faculty/profile');
+}
+
+export function updateFacultyProfileApi(data: { name: string; email: string }): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/profile', data);
+}
+
+export function getFacultySettingsApi(): Promise<{
+  status: string;
+  settings: {
+    emailNotifications: boolean;
+    retentionAlertThreshold: number;
+    theme: string;
+  };
+}> {
+  return request('GET', '/faculty/settings');
+}
+
+export function updateFacultySettingsApi(settings: any): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/settings', settings);
+}
