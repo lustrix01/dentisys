@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Copy, CheckCircle2, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { startEnrollment } from '../../services/apiClient';
+import { startEnrollment, ApiError } from '../../services/apiClient';
 
 export function MfaEnrollStart() {
   const navigate = useNavigate();
-  const { enrollmentToken, storeConfirmationChallenge, storeEnrollmentDisplayData, mfaSecret, provisioningUri } = useAuth();
+  const { enrollmentToken, storeConfirmationChallenge, storeEnrollmentDisplayData, mfaSecret, provisioningUri, clearAuth, setError: setContextError } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [secretCopied, setSecretCopied] = useState(false);
@@ -30,7 +30,13 @@ export function MfaEnrollStart() {
         setLoading(false);
       })
       .catch(err => {
-        setError(err.message || 'Enrollment session expired. Please log in again.');
+        if (err instanceof ApiError && err.status === 401) {
+          clearAuth();
+          setContextError('Your enrollment session has expired. Please log in again.');
+          navigate('/login', { replace: true });
+          return;
+        }
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
         setLoading(false);
       });
   }, [enrollmentToken, navigate, storeConfirmationChallenge, storeEnrollmentDisplayData]);
