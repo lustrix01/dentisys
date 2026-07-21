@@ -220,7 +220,7 @@ if ($invalidEmails !== 0) { fwrite(STDERR,"FAIL: invalid email_type enum values 
 ok(['c'=>0], 'All email_outbox.email_type values in seed are valid');
 
 // Verify migration runner execution on seeded database does not record seed.sql
-$cmdRunner = "powershell -NoProfile -ExecutionPolicy Bypass -File " . escapeshellarg($repo . '\scripts\migrate.ps1') . " -HostName 127.0.0.1 -Port 3307 -DatabaseName " . escapeshellarg($db) . " -User root -Password " . escapeshellarg($pass) . " 2>&1";
+$cmdRunner = "powershell -NoProfile -ExecutionPolicy Bypass -File " . escapeshellarg($repo . '\scripts\migrate.ps1') . " -HostName 127.0.0.1 -Port 3306 -DatabaseName " . escapeshellarg($db) . " -User root -Password " . escapeshellarg($pass) . " 2>&1";
 $rRunner = run($cmdRunner);
 ok($rRunner, 'Migration runner executed on seeded DB without error');
 

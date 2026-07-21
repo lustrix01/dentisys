@@ -43,32 +43,24 @@ Default local URLs:
 - Health route: `http://localhost:8080/api/health`
 - Direct health: `http://localhost:8080/healthcheck.php`
 - phpMyAdmin: `http://localhost:8081`
-- MariaDB host access: `127.0.0.1:3307`
+- MariaDB host access: `127.0.0.1:3306`
 
-## XAMPP Quick Start
+## Development Environment Setup
 
-Place the repository at `C:\xampp\htdocs\dentisys`, enable Apache `mod_rewrite`, PHP `pdo`, and `pdo_mysql`, then copy `backend/config/local.example.php` to ignored `backend/config/local.php`.
+Docker MariaDB is the sole DentiSys development database.
 
-- API: `http://localhost/dentisys/backend/public/api/health`
-- Direct health: `http://localhost/dentisys/backend/public/healthcheck.php`
-- DB defaults: `DB_HOST=127.0.0.1`, `DB_PORT=3306`
+Stop XAMPP MySQL before starting DentiSys because Docker uses host port 3306.
+XAMPP PHP may still be used to run the PHP development server.
 
-## Hybrid Quick Start
+Host PHP connects to `127.0.0.1:3306`.
+Docker services connect to `db:3306`.
 
-Use XAMPP Apache/PHP with Docker MariaDB:
+The root `.env` defines the Docker database credentials.
+The repository launcher (`start-dev.bat` / `scripts/start-dev.ps1`) passes those same credentials to the host PHP backend without printing them.
 
 ```powershell
-docker compose up -d db phpmyadmin
+.\start-dev.bat
 ```
-
-Set XAMPP PHP local config to:
-
-```text
-DB_HOST=127.0.0.1
-DB_PORT=3307
-```
-
-If `3307` is occupied, change both `DB_HOST_PORT` in `.env` and `DB_PORT` in `backend/config/local.php` to the same available host port.
 
 ## Validation
 

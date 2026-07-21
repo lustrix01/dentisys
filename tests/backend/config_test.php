@@ -18,6 +18,9 @@ foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS'] as $key) {
     putenv($key);
 }
 
+$defaultConfig = app_config([]);
+assert_same(3306, $defaultConfig['db']['port'], 'application default DB_PORT is 3306');
+
 $config = app_config([
     'DB_HOST' => 'local-host',
     'DB_PORT' => 3307,

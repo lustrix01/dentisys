@@ -136,6 +136,25 @@ if ($SkipDocker) {
 if (Get-Command docker -ErrorAction SilentlyContinue) {
     Invoke-Step "Docker Compose config" {
         Invoke-Native "docker" @("compose", "--project-directory", $root, "config", "--quiet")
+        $composeContent = Get-Content -LiteralPath (Join-Path $root "docker-compose.yml") -Raw
+        if ($composeContent -notmatch '\$\{DB_HOST_PORT:-3306\}:3306') {
+            throw "docker-compose.yml must default DB_HOST_PORT to 3306."
+        }
+
+        $envExampleContent = Get-Content -LiteralPath (Join-Path $root ".env.example") -Raw
+        if ($envExampleContent -notmatch 'DB_HOST_PORT=3306') {
+            throw ".env.example must specify DB_HOST_PORT=3306."
+        }
+
+        $migrateContent = Get-Content -LiteralPath (Join-Path $root "scripts\migrate.ps1") -Raw
+        if ($migrateContent -notmatch 'return 3306') {
+            throw "scripts/migrate.ps1 default fallback port must be 3306."
+        }
+
+        $startBatContent = Get-Content -LiteralPath (Join-Path $root "start-dev.bat") -Raw
+        if ($startBatContent -notmatch 'scripts\\start-dev\.ps1') {
+            throw "start-dev.bat must target scripts/start-dev.ps1."
+        }
     }
 } else {
     Write-Host ""

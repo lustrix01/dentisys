@@ -84,7 +84,7 @@ function Resolve-DbPort {
         return [int] $EnvFile["DB_HOST_PORT"]
     }
 
-    return 3307
+    return 3306
 }
 
 function Resolve-DatabaseClient {

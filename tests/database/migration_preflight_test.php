@@ -49,7 +49,7 @@ function drop_db(string $db): void {
     run("docker compose --project-directory " . escapeshellarg($repo) . " exec -T db mariadb -u root -p" . escapeshellarg($pass) . " -e " . escapeshellarg("DROP DATABASE IF EXISTS $db;"));
 }
 
-function run_migrate(string $dbName, int $port = 3307, ?string $user = 'root', ?string $password = null): array {
+function run_migrate(string $dbName, int $port = 3306, ?string $user = 'root', ?string $password = null): array {
     global $repo, $pass;
     $userVal = $user ?? 'root';
     $passVal = $password ?? $pass;
@@ -227,7 +227,7 @@ try {
 // ---- Case 10: Failed init command exits non-zero ----
 echo "\n--- Case 10: Failed init command exits non-zero ---\n";
 $db10 = $dbPrefix . 'c10_' . substr(md5(uniqid()), 0, 6);
-$r10 = run_migrate($db10, 3307, 'root', 'invalid-password-12345');
+$r10 = run_migrate($db10, 3306, 'root', 'invalid-password-12345');
 nok($r10, 'Case 10: Invalid DB credentials exited non-zero');
 
 echo "\n=== ALL 10 MIGRATION PREFLIGHT TESTS PASSED ===\n";
