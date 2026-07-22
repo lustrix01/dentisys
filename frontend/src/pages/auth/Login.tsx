@@ -3,8 +3,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { login as apiLogin, getMe, setAccessToken as setApiAccessToken } from '../../services/apiClient';
-import { authenticateUser } from '../../services/authService';
-import type { UserRole } from '../../types/auth';
 
 export function Login() {
   const navigate = useNavigate();
@@ -46,23 +44,6 @@ export function Login() {
         setError('Unexpected authentication response.');
       }
     } catch (err: unknown) {
-      const fallback = authenticateUser(email, password);
-      if (fallback.success && fallback.user) {
-        const fakeToken = `demo_access_token_${fallback.user.role}_${Date.now()}`;
-        setApiAccessToken(fakeToken);
-        setAccessToken(fakeToken);
-        setUser({
-          user_id: 1,
-          login_email: fallback.user.email,
-          role: fallback.user.role as UserRole,
-          display_name: fallback.user.name,
-          session_uuid: `demo-session-${Date.now()}`,
-        });
-        setAuthenticated();
-        navigate('/', { replace: true });
-        return;
-      }
-
       const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
       setError(message);
     } finally {

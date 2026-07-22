@@ -609,5 +609,20 @@ INSERT IGNORE INTO audit_events (event_id, event_uuid, sequence_number, occurred
 INSERT IGNORE INTO audit_events (event_id, event_uuid, sequence_number, occurred_at, actor_user_id, actor_username, actor_role, actor_display_name, session_id, module_code, action_code, event_status, target_type, target_id, description, reason, http_method, endpoint, request_id, correlation_id, operation_uuid, ip_address, user_agent, previous_event_mac, event_mac, mac_key_version, canonical_schema_version) VALUES (54, 'a0000000-0000-4000-8000-000000000054', 54, '2024-09-01 08:00:00.000000', 3, 'admin@bicol-u.edu.ph', 'admin', 'Dean Maria Santos', NULL, 'email_management', 'email_send', 'Success', 'User', '54', 'Dispatched At-Risk Academic Warning Email', 'Routine operational audit log', 'POST', '/api/v1/email_management', 'req-54', 'corr-54', 'a0000000-0000-4000-8000-000000000054', '127.0.0.1', 'Mozilla/5.0 DentiSys Client', UNHEX('29678efda9e6ae44c00fed06ae43f6d7049c270eca38908a42c9adf42affb893'), UNHEX('29678efda9e6ae44c00fed06ae43f6d7049c270eca38908a42c9adf42affb893'), 1, 1);
 INSERT IGNORE INTO audit_events (event_id, event_uuid, sequence_number, occurred_at, actor_user_id, actor_username, actor_role, actor_display_name, session_id, module_code, action_code, event_status, target_type, target_id, description, reason, http_method, endpoint, request_id, correlation_id, operation_uuid, ip_address, user_agent, previous_event_mac, event_mac, mac_key_version, canonical_schema_version) VALUES (55, 'a0000000-0000-4000-8000-000000000055', 55, '2024-09-01 08:00:00.000000', 1, 'admin@bicol-u.edu.ph', 'admin', 'Dean Maria Santos', NULL, 'reports_analytics', 'report_export_csv', 'Success', 'User', '55', 'Exported Academic Grade Summary CSV Report', 'Routine operational audit log', 'POST', '/api/v1/reports_analytics', 'req-55', 'corr-55', 'a0000000-0000-4000-8000-000000000055', '127.0.0.1', 'Mozilla/5.0 DentiSys Client', UNHEX('762f91f3655871f9739057c69470a4d57b2395fbaeaf38ccf42401b1950ce07e'), UNHEX('762f91f3655871f9739057c69470a4d57b2395fbaeaf38ccf42401b1950ce07e'), 1, 1);
 
+-- =============================================================================
+-- 11. SYSTEM SETTINGS (Synchronize audit_chain_head to seeded 55 events)
+-- =============================================================================
+INSERT INTO system_settings (setting_key, setting_value, is_internal, description)
+VALUES (
+    'audit_chain_head',
+    JSON_OBJECT(
+        'latest_sequence', 55,
+        'latest_mac', '762f91f3655871f9739057c69470a4d57b2395fbaeaf38ccf42401b1950ce07e'
+    ),
+    1,
+    'Audit chain head: the latest sequence number and event MAC. Locked with SELECT FOR UPDATE during audited writes. Updated atomically on every audited transaction. Internal system row — not exposed through the generic settings API.'
+)
+ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
+
 SET FOREIGN_KEY_CHECKS = 1;
 -- End of Clean DentiSys Development Seed Data Script

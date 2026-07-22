@@ -206,7 +206,11 @@ function auth_verify_access_token(
     string $keyBytes,
     ?callable $clock = null
 ): array {
-    $claims = jwt_decode($token, $keyBytes, 'access', $clock);
+    try {
+        $claims = jwt_decode($token, $keyBytes, 'access', $clock);
+    } catch (\Throwable $e) {
+        throw new AuthException('Invalid or expired token.', 0, $e);
+    }
 
     $stmt = $pdo->prepare(
         "SELECT user_id, login_email, role, display_name, status, token_version

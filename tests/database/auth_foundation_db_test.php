@@ -306,4 +306,36 @@ foreach ($origEnv as $k => $v) {
     if ($v !== false) { putenv("$k=$v"); } else { putenv($k); }
 }
 
+echo "\n--- Invalid/Expired JWT produces AuthException ---\n";
+$expiredToken = jwt_encode([
+    'sub' => 1,
+    'role' => 'faculty',
+    'sid' => $session['session_uuid'],
+    'jti' => jwt_generate_jti(),
+    'token_type' => 'access',
+    'token_version' => 0,
+    'iat' => 1000000000,
+    'exp' => 1000000100,
+], $keyBytes);
+assert_throws(fn() => auth_verify_access_token($pdo, $expiredToken, $keyBytes, fn() => 1000000500), 'Invalid or expired token', 'Expired JWT produces AuthException');
+
+$tamperedToken = substr_replace($expiredToken, 'X', -2, 1);
+assert_throws(fn() => auth_verify_access_token($pdo, $tamperedToken, $keyBytes, fn() => 1000000050), 'Invalid or expired token', 'Tampered JWT produces AuthException');
+
+$differentKeyBytes = str_repeat('K', 32);
+$wrongKeyToken = jwt_encode([
+    'sub' => 1,
+    'role' => 'faculty',
+    'sid' => $session['session_uuid'],
+    'jti' => jwt_generate_jti(),
+    'token_type' => 'access',
+    'token_version' => 0,
+    'iat' => 1000000000,
+    'exp' => 2000000000,
+], $differentKeyBytes);
+assert_throws(fn() => auth_verify_access_token($pdo, $wrongKeyToken, $keyBytes, fn() => 1000000050), 'Invalid or expired token', 'Key-mismatched JWT produces AuthException');
+
+$malformedB64Token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.invalid!!!b64.signature";
+assert_throws(fn() => auth_verify_access_token($pdo, $malformedB64Token, $keyBytes, fn() => 1000000050), 'Invalid or expired token', 'Malformed Base64URL JWT produces AuthException');
+
 echo "\nALL AUTH FOUNDATION DATABASE TESTS PASSED\n";

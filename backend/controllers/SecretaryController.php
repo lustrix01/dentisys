@@ -113,7 +113,7 @@ function handle_secretary_invite(): void
         ], 201);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
-    } catch (AuthException | ChallengeException $e) {
+    } catch (AuthException | ChallengeException | \RuntimeException $e) {
         auth_error_response('Authentication required.', 401);
     } catch (\Throwable $e) {
         error_log('Secretary invite error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
@@ -314,9 +314,14 @@ function secretary_verify_auth(PDO $pdo, array $config): array
         exit;
     }
 
-    $token = auth_extract_bearer_token($authHeader);
-    $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
-    $authCtx = auth_verify_access_token($pdo, $token, $jwtKey);
+    try {
+        $token = auth_extract_bearer_token($authHeader);
+        $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+        $authCtx = auth_verify_access_token($pdo, $token, $jwtKey);
+    } catch (AuthException | \RuntimeException $e) {
+        auth_error_response($e->getMessage(), 401);
+        exit;
+    }
 
     if (!in_array($authCtx['role'], ['secretary', 'admin'], true)) {
         safe_error_response('Access denied. Class Secretary or administrator privileges required.', 403);

@@ -349,7 +349,29 @@ if ($credentials) {
             $pingResult = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "-e" $pingSql 2>&1
             if ($LASTEXITCODE -eq 0) {
                 $authSuccess = $true
+            } elseif (!$isDocker -and ($credentials.Password -eq "" -or $null -eq $credentials.Password)) {
+                # Fallback credential testing for native/XAMPP MySQL connections using 'local-development-password'
+                if (Test-Path -LiteralPath $tempCnf) {
+                    Remove-Item -LiteralPath $tempCnf -Force -ErrorAction SilentlyContinue
+                }
+                $fallbackCnf = New-SecureOptionFile -Password "local-development-password"
+                try {
+                    $fallbackPing = & $clientPath "--defaults-extra-file=$fallbackCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "-e" $pingSql 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        $authSuccess = $true
+                        $credentials.Password = "local-development-password"
+                        $tempCnf = $fallbackCnf
+                        $fallbackCnf = $null
+                        Write-Host "Connected to $($credentials.Type) using fallback password 'local-development-password'."
+                    }
+                } finally {
+                    if ($fallbackCnf -and (Test-Path -LiteralPath $fallbackCnf)) {
+                        Remove-Item -LiteralPath $fallbackCnf -Force -ErrorAction SilentlyContinue
+                    }
+                }
+            }
 
+            if ($authSuccess) {
                 # Check DB existence
                 $dbCheckSql = "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$($credentials.Database)';"
                 $dbRes = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "--batch" "--skip-column-names" "-e" $dbCheckSql 2>&1

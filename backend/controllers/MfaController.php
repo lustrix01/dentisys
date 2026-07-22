@@ -40,7 +40,7 @@ function handle_mfa_enroll_start(): void
             'provisioning_uri' => $result['provisioning_uri'],
             'base32_secret' => $result['base32_secret'],
         ], 200));
-    } catch (ChallengeException $e) {
+    } catch (ChallengeException | AuthException | \RuntimeException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 401));
     } catch (MfaException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 400));
@@ -112,7 +112,7 @@ function handle_mfa_enroll_confirm(): void
         $response['headers'] = array_merge($response['headers'], $cookieHeaders);
 
         auth_controller_emit($response);
-    } catch (ChallengeException $e) {
+    } catch (ChallengeException | AuthException | \RuntimeException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 401));
     } catch (MfaException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 400));
@@ -178,7 +178,7 @@ function handle_mfa_verify(): void
         $response['headers'] = array_merge($response['headers'], $cookieHeaders);
 
         auth_controller_emit($response);
-    } catch (ChallengeException $e) {
+    } catch (ChallengeException | AuthException | \RuntimeException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 401));
     } catch (MfaException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 400));
@@ -239,7 +239,7 @@ function handle_mfa_recover(): void
         $response['headers'] = array_merge($response['headers'], $cookieHeaders);
 
         auth_controller_emit($response);
-    } catch (ChallengeException $e) {
+    } catch (ChallengeException | AuthException | \RuntimeException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 401));
     } catch (MfaException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 400));

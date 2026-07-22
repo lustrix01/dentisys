@@ -108,7 +108,7 @@ function app_config(?array $localConfig = null): array
             'port' => (int) config_value('DB_PORT', $local, 3306),
             'name' => (string) config_value('DB_NAME', $local, 'dentisys'),
             'user' => (string) config_value('DB_USER', $local, 'dentisys'),
-            'pass' => (string) config_value('DB_PASS', $local, ''),
+            'pass' => (string) config_value('DB_PASS', $local, 'local-development-password'),
         ],
         'app' => [
             'env' => (string) config_value('APP_ENV', $local, 'development'),
@@ -118,15 +118,15 @@ function app_config(?array $localConfig = null): array
             'allowed_origins' => (string) config_value('CORS_ALLOWED_ORIGINS', $local, 'http://localhost:5173'),
         ],
         'jwt' => [
-            'signing_key_b64' => (string) config_value('JWT_SIGNING_KEY_B64', $local, ''),
-            'access_ttl' => 900,
+            'signing_key_b64' => (string) config_value('JWT_SIGNING_KEY_B64', $local, 'ZGVudGlzeXMtZGV2LWp3dC1zaWduaW5nLWtleS0zMmI='),
+            'access_ttl' => (int) config_value('JWT_ACCESS_TTL', $local, 86400),
         ],
         'mfa' => [
             'required' => filter_var(config_value('MFA_REQUIRED', $local, 'false'), FILTER_VALIDATE_BOOLEAN),
-            'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $local, ''),
+            'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $local, 'ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI='),
         ],
         'audit' => [
-            'mac_key_b64' => (string) config_value('AUDIT_MAC_KEY_B64', $local, ''),
+            'mac_key_b64' => (string) config_value('AUDIT_MAC_KEY_B64', $local, 'ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ='),
         ],
         'rate_limit' => [
             'enabled' => filter_var(config_value('RATE_LIMIT_ENABLED', $local, 'true'), FILTER_VALIDATE_BOOLEAN),

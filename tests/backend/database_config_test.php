@@ -50,4 +50,12 @@ foreach ($expectedOptions as $key => $value) {
     }
 }
 
+require_once __DIR__ . '/../../backend/app/config.php';
+
+$resolvedAppConfig = app_config([]);
+if (($resolvedAppConfig['db']['pass'] ?? '') !== 'local-development-password') {
+    fwrite(STDERR, "FAIL: Default database password was not resolved to 'local-development-password'.\nActual: " . ($resolvedAppConfig['db']['pass'] ?? 'NULL') . "\n");
+    exit(1);
+}
+
 echo "PASS: database DSN and PDO options are configured.\n";

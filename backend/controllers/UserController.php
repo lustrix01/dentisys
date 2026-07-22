@@ -159,7 +159,7 @@ function handle_admin_list_faculty(): void
         }, $users);
 
         json_response($mapped, 200);
-    } catch (AuthException | ChallengeException $e) {
+    } catch (AuthException | ChallengeException | \RuntimeException $e) {
         auth_error_response('Authentication required.', 401);
     } catch (\Throwable $e) {
         error_log('Admin list faculty error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));

@@ -350,50 +350,8 @@ export const authenticateUser = (
   email: string,
   pass: string
 ): { success: boolean; message: string; user?: any; status?: AccountStatus } => {
-  const trimmedEmail = email.trim().toLowerCase();
-
-  // 1. Default Dean Demo Account
-  if (trimmedEmail === 'admin@bicol-u.edu.ph' && pass === 'admin123') {
-    const adminUser = {
-      email: 'admin@bicol-u.edu.ph',
-      role: 'admin',
-      name: 'Dr. Marcus Aurelius',
-      title: 'Office of the Dean',
-      status: 'Active' as AccountStatus,
-    };
-    return { success: true, message: 'Logged in successfully.', user: adminUser, status: 'Active' };
-  }
-
-  // 2. Default Faculty Demo Account
-  if (trimmedEmail === 'faculty@bicol-u.edu.ph' && pass === 'faculty123') {
-    const facultyUser = {
-      email: 'faculty@bicol-u.edu.ph',
-      role: 'faculty',
-      name: 'Dr. Eleanor Vance',
-      title: 'Dental Faculty Member',
-      assignedSubjects: ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'],
-      assignedClasses: ['CLINIC-A', 'CLINIC-B'],
-      status: 'Active' as AccountStatus,
-    };
-    return { success: true, message: 'Logged in successfully.', user: facultyUser, status: 'Active' };
-  }
-
-  // 3. Default Secretary Demo Account
-  if (trimmedEmail === 'secretary@bicol-u.edu.ph' && pass === 'secretary123') {
-    const secretaryUser = {
-      email: 'secretary@bicol-u.edu.ph',
-      role: 'secretary',
-      name: 'Miss Clara Oswald',
-      title: 'Class Secretary',
-      assignedClassId: 'CLINIC-A',
-      assignedClassName: 'Clinical Rotation A',
-      classroomName: 'Dental Clinic B - Room 402',
-      cctvCameraId: 'CCTV-CLINIC-A-01',
-      status: 'Active' as AccountStatus,
-    };
-    return { success: true, message: 'Logged in successfully.', user: secretaryUser, status: 'Active' };
-  }
-
+  void email;
+  void pass;
   return {
     success: false,
     message: 'Invalid email or password. Please check your credentials and try again.',
