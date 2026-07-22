@@ -306,5 +306,14 @@ if ($scriptText -notmatch 'Proceeding in offline database mode') {
 }
 Write-Host "PASS 17: Test-DockerEngineAvailable and non-blocking offline database fallback logic verified"
 
+# Assertion A18: Zero-touch database auto-provisioning & clean up-to-date status output logic present
+if ($scriptText -notmatch 'CREATE DATABASE IF NOT EXISTS') {
+    throw "Auto-provisioning database logic missing from start-dev.ps1!"
+}
+if ($scriptText -notmatch 'is ready and up to date') {
+    throw "Clean up-to-date status message logic missing from start-dev.ps1!"
+}
+Write-Host "PASS 18: Zero-touch DB auto-provisioning and clean up-to-date status output logic verified"
+
 Write-Host ""
 Write-Host "=== ALL START-DEV LOGIC, CLASSIFICATION & SECURITY TESTS PASSED ==="

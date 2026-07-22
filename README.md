@@ -165,7 +165,8 @@ DentiSys local development supports both Docker MariaDB (preferred) and a runnin
 ### Native Fallback Mode (XAMPP / Native MySQL / MariaDB)
 - **Host Address**: `127.0.0.1:3306`
 - **Credentials**: Process `DB_*` environment variables, `backend/config/local.php`, or backend application defaults.
-- **Database Requirement**: The `dentisys` database must already exist on the native server with user access granted.
+- **Zero-Touch Setup**: If the configured database does not exist on a reachable database server, it is automatically provisioned and migrated on startup with 0 PDO errors.
+- **Pre-Existing Database Warning Policy**: If an existing database is detected, a clear warning banner is displayed. Pre-existing database objects are **never** automatically dropped or overwritten. If you want a clean install, please back up or drop the database manually.
 - **Automatic Migrations**: Pending approved migrations (`001`–`003`) run automatically on startup for both Docker and Native paths. `database/seed.sql` is **never** executed automatically.
 
 ### No-Runtime Instructions

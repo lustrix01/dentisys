@@ -341,6 +341,8 @@ if ($credentials) {
         $dbExists = $false
         $authSuccess = $false
 
+        $dbPreExisted = $false
+        $isUpToDate = $false
         $oldEap = $ErrorActionPreference
         try {
             $ErrorActionPreference = "Continue"
@@ -377,6 +379,27 @@ if ($credentials) {
                 $dbRes = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "--batch" "--skip-column-names" "-e" $dbCheckSql 2>&1
                 if ($LASTEXITCODE -eq 0 -and ($dbRes -join "").Trim() -eq $credentials.Database) {
                     $dbExists = $true
+                    $dbPreExisted = $true
+
+                    # Check if baseline table user_accounts exists
+                    $tblCheckSql = "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$($credentials.Database)' AND TABLE_NAME='user_accounts';"
+                    $tblRes = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "--batch" "--skip-column-names" "-e" $tblCheckSql 2>&1
+                    $tblCount = 0
+                    if ($LASTEXITCODE -eq 0 -and [int]::TryParse(($tblRes -join "").Trim(), [ref]$tblCount) -and $tblCount -gt 0) {
+                        $isUpToDate = $true
+                    }
+                } elseif ($LASTEXITCODE -eq 0) {
+                    # Database missing: auto-provision
+                    Write-Host "Database '$($credentials.Database)' does not exist on $($credentials.Type). Provisioning database..."
+                    $targetDb = $credentials.Database
+                    $createSql = "CREATE DATABASE IF NOT EXISTS $targetDb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+                    $createRes = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "-e" $createSql 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "PASS: Automatically provisioned database '$($credentials.Database)'."
+                        $dbExists = $true
+                    } else {
+                        Write-Host "WARNING: Failed to auto-create database '$($credentials.Database)': $createRes"
+                    }
                 }
             }
         } finally {
@@ -388,11 +411,22 @@ if ($credentials) {
 
         if ($authSuccess -and $dbExists) {
             $dbAvailable = $true
+            if ($dbPreExisted) {
+                if ($isUpToDate) {
+                    Write-Host "Database '$($credentials.Database)' is ready and up to date."
+                } else {
+                    Write-Host "======================================================================"
+                    Write-Host " WARNING: Existing database '$($credentials.Database)' detected."
+                    Write-Host " Pre-existing database objects will NOT be dropped or overwritten."
+                    Write-Host " If you want a clean install, please back up or drop manually."
+                    Write-Host "======================================================================"
+                }
+            }
         } elseif (!$authSuccess) {
             Write-Host "WARNING: Could not authenticate to $($credentials.Type) at $($credentials.Host):$($credentials.Port) as user '$($credentials.User)'."
             Write-Host "Skipping database migrations. Proceeding in offline database mode."
         } elseif (!$dbExists) {
-            Write-Host "WARNING: The configured DentiSys database '$($credentials.Database)' does not exist on the selected $($credentials.Type) server."
+            Write-Host "WARNING: The configured DentiSys database '$($credentials.Database)' could not be provisioned on the selected $($credentials.Type) server."
             Write-Host "Skipping database migrations. Proceeding in offline database mode."
         }
     } else {
