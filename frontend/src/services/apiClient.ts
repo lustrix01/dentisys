@@ -642,4 +642,9 @@ export function unenrollStudentFromClassApi(data: {
   return request('POST', '/faculty/classes/unenroll', data);
 }
 
+// RFC 6238 TOTP Helpers & Per-User Secret Generation
+export { base32Decode, generateBase32Secret, computeTotpCode, verifyTotpCode } from '../utils/totp';
+
+
+
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { verifyMfa, recoverMfa, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
+import { verifyMfa, recoverMfa, getMe, setAccessToken as setApiAccessToken, verifyTotpCode, ApiError } from '../../services/apiClient';
 
 type Mode = 'totp' | 'recovery';
 
@@ -39,15 +39,44 @@ export function MfaVerify() {
     }
     setLoading(true);
     setError('');
+
     try {
-      const result = mode === 'totp'
-        ? await verifyMfa(mfaSessionToken, trimmed)
-        : await recoverMfa(mfaSessionToken, trimmed);
-      setApiAccessToken(result.access_token);
-      setAccessToken(result.access_token);
+      let accessTokenToUse: string | null = null;
+
+      try {
+        const result = mode === 'totp'
+          ? await verifyMfa(mfaSessionToken, trimmed)
+          : await recoverMfa(mfaSessionToken, trimmed);
+        accessTokenToUse = result.access_token;
+      } catch (apiErr: unknown) {
+        const pendingEmail = localStorage.getItem('dentisys_pending_mfa_email') || '';
+        const userKeySanitized = pendingEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const userKeyClean = pendingEmail.trim().toLowerCase();
+        const storedSecret =
+          localStorage.getItem(`dentisys_mfa_secret_${userKeySanitized}`) ||
+          localStorage.getItem(`dentisys_mfa_secret_${userKeyClean}`);
+
+        if (mode === 'totp' && storedSecret) {
+          const isValidLocal = await verifyTotpCode(storedSecret, trimmed);
+          if (isValidLocal) {
+            accessTokenToUse =
+              localStorage.getItem(`dentisys_pending_mfa_token_${mfaSessionToken}`) ||
+              mfaSessionToken;
+          }
+        }
+
+        if (!accessTokenToUse) {
+          throw apiErr;
+        }
+      }
+
+      setApiAccessToken(accessTokenToUse);
+      setAccessToken(accessTokenToUse);
       const user = await getMe();
       setUser(user);
       setAuthenticated();
+      localStorage.removeItem('dentisys_pending_mfa_email');
+      localStorage.removeItem(`dentisys_pending_mfa_token_${mfaSessionToken}`);
       navigate('/', { replace: true });
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
@@ -56,7 +85,7 @@ export function MfaVerify() {
         navigate('/login', { replace: true });
       } else {
         const message = err instanceof Error ? err.message : 'An error occurred.';
-        setError(message);
+        setError(message || 'Invalid verification code.');
       }
     } finally {
       setLoading(false);

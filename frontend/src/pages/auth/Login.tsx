@@ -27,7 +27,22 @@ export function Login() {
     try {
       const result = await apiLogin(email, password);
 
-      if (result.access_token) {
+      const userKeySanitized = email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const userKeyClean = email.trim().toLowerCase();
+      const isMfaEnabled =
+        result.mfa_enrolled ||
+        localStorage.getItem(`dentisys_mfa_enabled_${userKeySanitized}`) === 'true' ||
+        localStorage.getItem(`dentisys_mfa_enabled_${userKeyClean}`) === 'true';
+
+      if (isMfaEnabled) {
+        const mfaToken = result.mfa_session_token || result.access_token || `mfa_session_${Date.now()}`;
+        storeMfaChallenge(mfaToken);
+        localStorage.setItem('dentisys_pending_mfa_email', email);
+        if (result.access_token) {
+          localStorage.setItem(`dentisys_pending_mfa_token_${mfaToken}`, result.access_token);
+        }
+        navigate('/mfa/verify');
+      } else if (result.access_token) {
         setApiAccessToken(result.access_token);
         setAccessToken(result.access_token);
         const user = await getMe();

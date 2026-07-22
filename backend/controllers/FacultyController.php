@@ -202,6 +202,35 @@ function handle_faculty_student_create(): void
             return;
         }
 
+        $errors = [];
+        if (strlen($studentNumber) < 3) {
+            $errors['studentId'] = 'Student ID number must be at least 3 characters.';
+        }
+        if (empty($firstName) || strlen($firstName) < 2) {
+            $errors['firstName'] = 'First name must be at least 2 characters.';
+        }
+        if (empty($lastName) || strlen($lastName) < 2) {
+            $errors['lastName'] = 'Last name must be at least 2 characters.';
+        }
+        if (!empty($email)) {
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $errors['email'] = 'Invalid email address format.';
+            } else {
+                $domain = substr(strrchr(mb_strtolower($email), '@'), 1);
+                if ($domain !== 'bicol-u.edu.ph') {
+                    $errors['email'] = 'Only official Bicol University email addresses (@bicol-u.edu.ph) are allowed.';
+                }
+            }
+        }
+        if ($yearLevel < 1 || $yearLevel > 4) {
+            $errors['yearLevel'] = 'Year level must be between 1 and 4.';
+        }
+
+        if (!empty($errors)) {
+            validation_error_response($errors);
+            return;
+        }
+
         $stmt = $pdo->prepare("INSERT INTO students (student_number, first_name, middle_name, last_name, bu_email, contact, sex, year_level, status, admission_date, birthdate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6))");
         $stmt->execute([
             $studentNumber,

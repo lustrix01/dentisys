@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
+import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 import { getSecretaryProfileApi, updateSecretaryProfileApi } from '../../services/apiClient';
 import { getCurrentSecretary } from './utils';
 
@@ -233,6 +234,8 @@ export const Profile: React.FC = () => {
                 </form>
               </CardContent>
             </Card>
+
+            <MfaSettingsCard userEmail={editEmail || profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
           </div>
         </div>
       )}

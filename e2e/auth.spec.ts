@@ -109,6 +109,56 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
+  test('login flow redirects to /mfa/verify when MFA is enabled and requires TOTP code', async ({ page }) => {
+    await page.route('**/api/auth/login', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          mfa_enrolled: true,
+          mfa_session_token: 'mock-mfa-session-123456',
+        }),
+      });
+    });
+
+    await page.route('**/api/auth/mfa/verify', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ access_token: 'mock-mfa-verified-access-token' }),
+      });
+    });
+
+    await page.route('**/api/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 2,
+          login_email: 'mfa_user@bicol-u.edu.ph',
+          display_name: 'Dr. MFA User',
+          role: 'faculty',
+        }),
+      });
+    });
+
+    await page.goto('/login');
+    await page.fill('input[type="email"]', 'mfa_user@bicol-u.edu.ph');
+    await page.fill('input[type="password"]', 'Password123!');
+    await page.click('button[type="submit"]');
+
+    // Should redirect to MFA verification screen
+    await expect(page).toHaveURL('/mfa/verify');
+    await expect(page.locator('body')).toContainText(/Two-Factor Authentication/i);
+
+    // Enter 6-digit code and submit
+    await page.fill('input[placeholder="000000"]', '123456');
+    await page.click('button[type="submit"]');
+
+    // Should proceed to dashboard home upon successful TOTP verification
+    await expect(page).toHaveURL('/');
+  });
+
   test('complete faculty account creation and password reset lifecycle', async ({ page }) => {
     const testEmail = 'testfaculty_reset@bicol-u.edu.ph';
     const testPassword = 'NewFacultyPass123!';

@@ -124,6 +124,55 @@ export const StudentManagement: React.FC = () => {
   const [formAdmissionDate, setFormAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
   const [formBirthdate, setFormBirthdate] = useState('');
 
+  // Client-side real-time validation state
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  const validateStudentForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    const cleanId = formStudentId.trim();
+    if (!cleanId) {
+      errors.studentId = 'Student ID Number is required.';
+    } else if (cleanId.length < 3) {
+      errors.studentId = 'Student ID Number must be at least 3 characters.';
+    }
+
+    const cleanFirst = formFirstName.trim();
+    if (!cleanFirst) {
+      errors.firstName = 'First Name is required.';
+    } else if (cleanFirst.length < 2) {
+      errors.firstName = 'First Name must be at least 2 characters.';
+    } else if (!/^[\p{L}\s'\-\.]+$/u.test(cleanFirst)) {
+      errors.firstName = 'First Name can only contain letters, spaces, hyphens, and apostrophes.';
+    }
+
+    const cleanLast = formLastName.trim();
+    if (!cleanLast) {
+      errors.lastName = 'Last Name is required.';
+    } else if (cleanLast.length < 2) {
+      errors.lastName = 'Last Name must be at least 2 characters.';
+    } else if (!/^[\p{L}\s'\-\.]+$/u.test(cleanLast)) {
+      errors.lastName = 'Last Name can only contain letters, spaces, hyphens, and apostrophes.';
+    }
+
+    const cleanEmail = formEmail.trim();
+    if (cleanEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        errors.email = 'Invalid email address format.';
+      } else if (!cleanEmail.toLowerCase().endsWith('@bicol-u.edu.ph')) {
+        errors.email = 'Only official Bicol University email addresses (@bicol-u.edu.ph) are allowed.';
+      }
+    }
+
+    const yearNum = parseInt(formYearLevel);
+    if (isNaN(yearNum) || yearNum < 1 || yearNum > 4) {
+      errors.yearLevel = 'Year level must be between 1 and 4.';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   // Facial enrollment simulator states
   const [facialStudentId, setFacialStudentId] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -163,6 +212,8 @@ export const StudentManagement: React.FC = () => {
 
   const handleEnrollSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateStudentForm()) return;
+
     const yearNum = parseInt(formYearLevel) as 1 | 2 | 3 | 4;
     const fullName = `${formFirstName} ${formMiddleName ? formMiddleName + ' ' : ''}${formLastName}`.trim();
     
@@ -203,6 +254,7 @@ export const StudentManagement: React.FC = () => {
       setFormYearLevel('4');
       setFormClinicHours('0');
       setFormBirthdate('');
+      setFormErrors({});
       // Switch to list
       setActiveTab('list');
       alert(res.message || 'Student registered and saved directly into all database columns!');
@@ -524,6 +576,12 @@ export const StudentManagement: React.FC = () => {
             </h3>
             
             <form onSubmit={handleEnrollSubmit} className="space-y-4">
+              {Object.keys(formErrors).length > 0 && (
+                <div className="p-3.5 rounded-xl bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <span>Please correct the highlighted form errors before submitting.</span>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Student ID Number *</label>
@@ -532,9 +590,13 @@ export const StudentManagement: React.FC = () => {
                     required
                     placeholder="e.g. DENT-2026-0284"
                     value={formStudentId}
-                    onChange={(e) => setFormStudentId(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    onChange={(e) => {
+                      setFormStudentId(e.target.value);
+                      if (formErrors.studentId) setFormErrors(prev => ({ ...prev, studentId: '' }));
+                    }}
+                    className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.studentId ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
                   />
+                  {formErrors.studentId && <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">{formErrors.studentId}</p>}
                 </div>
 
                 <div className="space-y-1">
@@ -544,9 +606,13 @@ export const StudentManagement: React.FC = () => {
                     required
                     placeholder="e.g. Angela"
                     value={formFirstName}
-                    onChange={(e) => setFormFirstName(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    onChange={(e) => {
+                      setFormFirstName(e.target.value);
+                      if (formErrors.firstName) setFormErrors(prev => ({ ...prev, firstName: '' }));
+                    }}
+                    className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.firstName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
                   />
+                  {formErrors.firstName && <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">{formErrors.firstName}</p>}
                 </div>
 
                 <div className="space-y-1">
@@ -567,9 +633,13 @@ export const StudentManagement: React.FC = () => {
                     required
                     placeholder="e.g. Castillo"
                     value={formLastName}
-                    onChange={(e) => setFormLastName(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    onChange={(e) => {
+                      setFormLastName(e.target.value);
+                      if (formErrors.lastName) setFormErrors(prev => ({ ...prev, lastName: '' }));
+                    }}
+                    className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.lastName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
                   />
+                  {formErrors.lastName && <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">{formErrors.lastName}</p>}
                 </div>
 
                 <div className="space-y-1">
@@ -578,9 +648,13 @@ export const StudentManagement: React.FC = () => {
                     type="email"
                     placeholder="e.g. angela@bicol-u.edu.ph"
                     value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    onChange={(e) => {
+                      setFormEmail(e.target.value);
+                      if (formErrors.email) setFormErrors(prev => ({ ...prev, email: '' }));
+                    }}
+                    className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.email ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
                   />
+                  {formErrors.email && <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">{formErrors.email}</p>}
                 </div>
 
                 <div className="space-y-1">
