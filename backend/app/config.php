@@ -27,8 +27,12 @@ function config_value(string $key, array $localConfig, mixed $default): mixed
     if ($value !== false && $value !== '') {
         return $value;
     }
-
-    return array_key_exists($key, $localConfig) && $localConfig[$key] !== ''
+    //
+    //return array_key_exists($key, $localConfig) && $localConfig[$key] !== ''
+        //? $localConfig[$key]
+        //: $default;
+    //ALTERNATIVE
+    return array_key_exists($key, $localConfig)
         ? $localConfig[$key]
         : $default;
 }
