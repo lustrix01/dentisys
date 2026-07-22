@@ -614,3 +614,319 @@ function handle_secretary_settings_update(): void
     }
 }
 
+function handle_assign_class_secretary(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+        'auth_header' => request_header('Authorization') ?? '',
+    ];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+
+        $authCtx = faculty_verify_auth($pdo, $config);
+
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+
+        $data = $body['data'];
+        $csId = (int) ($data['cs_id'] ?? 0);
+        $sessionId = (int) ($data['session_id'] ?? 0);
+        $studentId = (int) ($data['student_id'] ?? 0);
+
+        if ($studentId <= 0) {
+            safe_error_response('Valid student_id is required.', 400);
+            return;
+        }
+
+        // 1. Retrieve & validate student
+        $stuStmt = $pdo->prepare("SELECT student_id, student_number, first_name, last_name, bu_email, status, user_id FROM students WHERE student_id = ?");
+        $stuStmt->execute([$studentId]);
+        $student = $stuStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($student === false) {
+            safe_error_response('Student not found.', 404);
+            return;
+        }
+
+        if (strtolower($student['status'] ?? '') !== 'active') {
+            safe_error_response('Selected student is not active.', 400);
+            return;
+        }
+
+        // 2. Validate enrollment if cs_id is supplied
+        if ($csId > 0) {
+            $enrStmt = $pdo->prepare("SELECT enrollment_id FROM enrollments WHERE student_id = ? AND cs_id = ? AND status = 'Active'");
+            $enrStmt->execute([$studentId, $csId]);
+            if ($enrStmt->fetch() === false) {
+                safe_error_response('Student is not officially enrolled in this class section.', 400);
+                return;
+            }
+        }
+
+        // 3. Validate session if session_id is supplied
+        $session = null;
+        if ($sessionId > 0) {
+            $sessStmt = $pdo->prepare("SELECT * FROM class_sessions WHERE session_id = ?");
+            $sessStmt->execute([$sessionId]);
+            $session = $sessStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($session === false) {
+                safe_error_response('Class session not found.', 404);
+                return;
+            }
+
+            if (!empty($session['secretary_student_id'])) {
+                safe_error_response('A Class Secretary has already been assigned to this session.', 400);
+                return;
+            }
+        }
+
+        $studentName = trim($student['first_name'] . ' ' . $student['last_name']);
+        $studentEmail = $student['bu_email'] ?? '';
+
+        $academicTerm = $data['academic_term'] ?? ($session['academic_term'] ?? '2025-2026 2ND');
+        $subjectCode = $data['subject_code'] ?? ($session['subject_code'] ?? 'DENT-401');
+        $subjectTitle = $data['subject_title'] ?? ($session['subject_title'] ?? 'Clinical Dentistry I');
+        $sessionDate = $data['session_date'] ?? ($session['session_date'] ?? date('Y-m-d'));
+        $startTime = $data['start_time'] ?? ($session['start_time'] ?? '08:00:00');
+        $endTime = $data['end_time'] ?? ($session['end_time'] ?? '11:00:00');
+        $room = $data['room'] ?? ($session['room'] ?? 'Lab 201');
+
+        $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+
+        $pdo->beginTransaction();
+        try {
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditCtx = audit_begin_operation($pdo);
+
+            if ($sessionId > 0) {
+                $upd = $pdo->prepare(
+                    "UPDATE class_sessions
+                     SET secretary_student_id = ?, assigned_by = ?, assigned_at = ?
+                     WHERE session_id = ?"
+                );
+                $upd->execute([$studentId, $authCtx['user_id'], $nowSql, $sessionId]);
+            }
+
+            if ($csId > 0 && !empty($student['user_id'])) {
+                $updCs = $pdo->prepare("UPDATE class_sections SET secretary_user_id = ? WHERE cs_id = ?");
+                $updCs->execute([$student['user_id'], $csId]);
+            }
+
+            // 4. Generate Email Notice
+            $subject = "Class Secretary Designation: {$subjectCode} - {$subjectTitle}";
+            $htmlBody = "
+                <h2>DentiSys - Class Secretary Assignment Notice</h2>
+                <p>Dear <strong>" . htmlspecialchars($studentName) . "</strong>,</p>
+                <p>You have been designated as the <strong>Class Secretary</strong> for the following class session by Professor " . htmlspecialchars($authCtx['display_name']) . ":</p>
+                <ul>
+                    <li><strong>Term:</strong> " . htmlspecialchars($academicTerm) . "</li>
+                    <li><strong>Course/Subject:</strong> " . htmlspecialchars($subjectCode) . " - " . htmlspecialchars($subjectTitle) . "</li>
+                    <li><strong>Date:</strong> " . htmlspecialchars($sessionDate) . "</li>
+                    <li><strong>Time:</strong> " . htmlspecialchars($startTime) . " - " . htmlspecialchars($endTime) . "</li>
+                    <li><strong>Room:</strong> " . htmlspecialchars($room) . "</li>
+                </ul>
+                <h3>Attendance Responsibilities:</h3>
+                <ol>
+                    <li>Assist the faculty member in taking and verifying student attendance during class sessions.</li>
+                    <li>Ensure accurate verification of student biometric or manual attendance entries.</li>
+                    <li>Report any attendance discrepancies promptly to the instructor.</li>
+                </ol>
+                <p>Thank you for your service and dedication to academic integrity.</p>
+                <p><em>DentiSys Official System Notification</em></p>
+            ";
+
+            $textBody = "Class Secretary Designation Notice\n\nDear {$studentName},\n\nYou have been designated as Class Secretary for {$subjectCode} ({$subjectTitle}) on {$sessionDate} at {$room}.\nResponsibilities include assisting with taking attendance and verifying entries.\n\nDentiSys Official";
+
+            $emailResult = send_system_email(
+                $pdo,
+                $studentEmail,
+                $studentName,
+                $subject,
+                $htmlBody,
+                $textBody,
+                'Class Secretary Assignment',
+                true
+            );
+
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'secretary',
+                'action_code' => 'class_secretary_assigned',
+                'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'],
+                'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'],
+                'actor_display_name' => $authCtx['display_name'],
+                'session_id' => $authCtx['session_id'],
+                'target_type' => 'student',
+                'target_id' => (string) $studentId,
+                'description' => "Assigned {$studentName} ({$studentEmail}) as Class Secretary for {$subjectCode}.",
+                'reason' => null,
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey);
+
+            $pdo->commit();
+
+            json_response([
+                'status' => 'ok',
+                'message' => 'Class Secretary assigned successfully and notification email dispatched.',
+                'email_status' => $emailResult['message'] ?? 'Sent',
+            ], 200);
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (\Throwable $e) {
+        error_log('Assign class secretary error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_start_attendance_session(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+        'auth_header' => request_header('Authorization') ?? '',
+    ];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+
+        $body = request_body();
+        $data = $body['has_body'] ? $body['data'] : [];
+        $sessionId = (int) ($data['session_id'] ?? $_GET['session_id'] ?? 0);
+
+        if ($sessionId <= 0) {
+            safe_error_response('session_id is required.', 400);
+            return;
+        }
+
+        // 1. Retrieve session & verify status
+        $stmt = $pdo->prepare("
+            SELECT cs.*, s.first_name, s.last_name, s.bu_email
+            FROM class_sessions cs
+            LEFT JOIN students s ON cs.secretary_student_id = s.student_id
+            WHERE cs.session_id = ?
+        ");
+        $stmt->execute([$sessionId]);
+        $session = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($session === false) {
+            safe_error_response('Class session not found.', 404);
+            return;
+        }
+
+        $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+
+        $pdo->beginTransaction();
+        try {
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditCtx = audit_begin_operation($pdo);
+
+            $updStatus = $pdo->prepare("UPDATE class_sessions SET status = 'active' WHERE session_id = ?");
+            $updStatus->execute([$sessionId]);
+
+            $emailSent = false;
+            $emailStatusMsg = 'No secretary notification required.';
+
+            // 2. Check if secretary exists and notification not sent yet
+            if (!empty($session['secretary_student_id']) && !empty($session['bu_email']) && ((int) $session['notification_sent']) === 0) {
+                $secName = trim($session['first_name'] . ' ' . $session['last_name']);
+                $secEmail = $session['bu_email'];
+                $subject = "Attendance Session Started: {$session['subject_code']} - {$session['subject_title']}";
+                $attendanceLink = "http://localhost:5173/secretary/attendance?session_id={$sessionId}";
+
+                $htmlBody = "
+                    <h2>DentiSys - Class Attendance Session Active</h2>
+                    <p>Dear <strong>" . htmlspecialchars($secName) . "</strong>,</p>
+                    <p>The attendance session for <strong>" . htmlspecialchars($session['subject_code']) . " (" . htmlspecialchars($session['subject_title']) . ")</strong> has officially started.</p>
+                    <ul>
+                        <li><strong>Date:</strong> " . htmlspecialchars($session['session_date']) . "</li>
+                        <li><strong>Time:</strong> " . htmlspecialchars($session['start_time']) . " - " . htmlspecialchars($session['end_time']) . "</li>
+                        <li><strong>Room:</strong> " . htmlspecialchars($session['room']) . "</li>
+                    </ul>
+                    <p>Please click the link below to access your Class Secretary attendance interface:</p>
+                    <p><a href='" . htmlspecialchars($attendanceLink) . "' style='padding:10px 18px; background-color:#1e40af; color:#ffffff; text-decoration:none; border-radius:4px;'>Open Attendance Interface</a></p>
+                    <p>Or open this URL directly: " . htmlspecialchars($attendanceLink) . "</p>
+                ";
+
+                $textBody = "Attendance Session Started\n\nDear {$secName},\n\nThe attendance session for {$session['subject_code']} has started. Open interface: {$attendanceLink}";
+
+                $res = send_system_email(
+                    $pdo,
+                    $secEmail,
+                    $secName,
+                    $subject,
+                    $htmlBody,
+                    $textBody,
+                    'Ongoing Class Session Notification',
+                    true
+                );
+
+                if ($res['success']) {
+                    $updNotif = $pdo->prepare("UPDATE class_sessions SET notification_sent = 1, notification_sent_at = ? WHERE session_id = ?");
+                    $updNotif->execute([$nowSql, $sessionId]);
+                    $emailSent = true;
+                    $emailStatusMsg = 'Secretary notified via PHPMailer.';
+                }
+            }
+
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'attendance',
+                'action_code' => 'session_started',
+                'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'],
+                'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'],
+                'actor_display_name' => $authCtx['display_name'],
+                'session_id' => $authCtx['session_id'],
+                'target_type' => 'class_session',
+                'target_id' => (string) $sessionId,
+                'description' => "Started class session #{$sessionId}. {$emailStatusMsg}",
+                'reason' => null,
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey);
+
+            $pdo->commit();
+
+            json_response([
+                'status' => 'ok',
+                'message' => 'Attendance session opened successfully.',
+                'notification_sent' => $emailSent,
+                'email_status' => $emailStatusMsg,
+            ], 200);
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+    } catch (\Throwable $e) {
+        error_log('Start session error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+

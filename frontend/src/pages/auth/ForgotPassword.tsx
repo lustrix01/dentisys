@@ -44,6 +44,11 @@ export function ForgotPassword() {
         <div className="bg-white/80 backdrop-blur-lg py-8 px-4 shadow-xl sm:rounded-2xl sm:px-10 border border-slate-200/60">
           {!submitted ? (
             <form className="space-y-6" onSubmit={handleSubmit}>
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl font-medium">
+                  {error}
+                </div>
+              )}
               <div>
                 <label htmlFor="email" className="block text-sm font-semibold text-slate-700">
                   Email address
@@ -69,9 +74,10 @@ export function ForgotPassword() {
               <div>
                 <button
                   type="submit"
-                  className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-xl shadow-lg shadow-clinical-500/20 text-sm font-bold text-white bg-gradient-to-r from-clinical-600 to-clinical-500 hover:from-clinical-700 hover:to-clinical-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-clinical-500 transition-all"
+                  disabled={loading}
+                  className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-xl shadow-lg shadow-clinical-500/20 text-sm font-bold text-white bg-gradient-to-r from-clinical-600 to-clinical-500 hover:from-clinical-700 hover:to-clinical-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-clinical-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Send reset link
+                  {loading ? 'Sending reset link...' : 'Send reset link'}
                 </button>
               </div>
             </form>

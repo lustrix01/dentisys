@@ -55,12 +55,13 @@ function mapError(status: number, backendMessage: string): string {
   if (statusMap && statusMap[backendMessage]) {
     return statusMap[backendMessage];
   }
-  if (status === 403) {
+  if (backendMessage && backendMessage.trim() !== '') {
     return backendMessage;
   }
   if (status === 400) return 'Please check your input and try again.';
   if (status === 401) return 'Authentication failed. Please log in again.';
   if (status === 403) return 'Access denied. Contact the administrator.';
+  if (status === 404) return 'Resource not found.';
   if (status === 429) return 'Too many attempts. Please wait and try again.';
   if (status >= 500) return 'A server error occurred. Please try again later.';
   return 'An unexpected error occurred. Please try again.';
@@ -87,7 +88,7 @@ async function request<T>(
 
   let response: Response;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,

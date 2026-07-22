@@ -10,6 +10,7 @@ require_once dirname(__DIR__) . '/controllers/SecretaryController.php';
 require_once dirname(__DIR__) . '/controllers/PasswordResetController.php';
 require_once dirname(__DIR__) . '/controllers/AdminController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyController.php';
+require_once dirname(__DIR__) . '/controllers/ConsentController.php';
 
 return [
     [
@@ -70,6 +71,30 @@ return [
         'method' => 'POST',
         'path' => '/api/auth/logout',
         'handler' => 'handle_logout',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/password/reset-request',
+        'handler' => 'handle_password_reset_request',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/password/reset-confirm',
+        'handler' => 'handle_password_reset_confirm',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/password-reset/request',
+        'handler' => 'handle_password_reset_request',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/password-reset/confirm',
+        'handler' => 'handle_password_reset_confirm',
         'has_params' => false,
     ],
     // User & Admin Approval Workflow
@@ -370,6 +395,37 @@ return [
         'method' => 'POST',
         'path' => '/api/faculty/classes/unenroll',
         'handler' => 'handle_faculty_class_unenroll_student',
+        'has_params' => false,
+    ],
+    // PHPMailer Workflow Endpoints
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/assign-secretary',
+        'handler' => 'handle_assign_class_secretary',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/start-session',
+        'handler' => 'handle_start_attendance_session',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/admin/consent/send',
+        'handler' => 'handle_admin_send_consent_forms',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/consent/verify',
+        'handler' => 'handle_verify_consent_token',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/consent/submit',
+        'handler' => 'handle_submit_consent',
         'has_params' => false,
     ],
 ];

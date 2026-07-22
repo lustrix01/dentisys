@@ -132,5 +132,14 @@ function app_config(?array $localConfig = null): array
             'enabled' => filter_var(config_value('RATE_LIMIT_ENABLED', $local, 'true'), FILTER_VALIDATE_BOOLEAN),
             'storage_dir' => (string) (config_value('RATE_LIMIT_STORAGE_DIR', $local, '') ?: dirname(__DIR__) . '/storage/ratelimit'),
         ],
+        'smtp' => [
+            'host'       => (string) (config_value('SMTP_HOST', $local, '') ?: config_value('MAILER_HOST', $local, 'smtp.gmail.com')),
+            'port'       => (int) (config_value('SMTP_PORT', $local, 587) ?: config_value('MAILER_PORT', $local, 587)),
+            'user'       => (string) (config_value('SMTP_USER', $local, '') ?: config_value('MAILER_EMAIL', $local, 'bu.dentisys@gmail.com')),
+            'pass'       => (string) (config_value('SMTP_PASS', $local, '') ?: config_value('MAILER_APP_PASS', $local, '')),
+            'secure'     => (string) (config_value('SMTP_SECURE', $local, 'tls') ?: config_value('MAILER_SMTP_SECURE', $local, 'tls')),
+            'from_email' => (string) (config_value('SMTP_FROM_EMAIL', $local, '') ?: config_value('MAILER_EMAIL', $local, 'bu.dentisys@gmail.com')),
+            'from_name'  => (string) (config_value('SMTP_FROM_NAME', $local, '') ?: config_value('MAILER_FROM_NAME', $local, 'DentiSYS')),
+        ],
     ];
 }

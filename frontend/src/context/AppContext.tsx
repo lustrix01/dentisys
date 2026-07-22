@@ -152,6 +152,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     localStorage.setItem('dentisys_mock_version', 'v3');
+    const token = localStorage.getItem('dentisys_token');
+    if (!token) return;
+
     getFacultyStudentsApi()
       .then((data) => {
         if (Array.isArray(data)) {
