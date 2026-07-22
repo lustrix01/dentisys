@@ -168,11 +168,11 @@ if ($scriptText -notmatch 'powershell\.exe.*migrate\.ps1') {
 }
 Write-Host "PASS 10: Migration script invoked in child powershell.exe process"
 
-# Assertion A11: Migration child failure blocks startup
-if ($scriptText -notmatch 'if\s*\(\$LASTEXITCODE -ne 0\)\s*\{[\s\S]*?exit 1') {
+# Assertion A11: Migration child failure check present
+if ($scriptText -notmatch 'WARNING: Database migration execution failed') {
     throw "Migration child process failure check missing!"
 }
-Write-Host "PASS 11: Migration child process failure blocks PHP/Vite startup"
+Write-Host "PASS 11: Migration child process failure warning and non-blocking fallback verified"
 
 # Assertion A12: database/seed.sql excluded from migration runner
 $migrationDir = Join-Path $root "database\migrations"
@@ -247,7 +247,13 @@ if ($clientExePath) {
     $pingOptionFile = [System.IO.Path]::GetTempFileName()
     try {
         [System.IO.File]::WriteAllText($pingOptionFile, "[client]`npassword=`"local-development-password`"`n", (New-Object System.Text.UTF8Encoding($false)))
-        & $clientExePath "--defaults-extra-file=$pingOptionFile" "-h" "127.0.0.1" "-P" "3306" "-u" "dentisys" "dentisys" "-e" "SELECT 1;" 2>&1 | Out-Null
+        $oldEap = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            & $clientExePath "--defaults-extra-file=$pingOptionFile" "-h" "127.0.0.1" "-P" "3306" "-u" "dentisys" "dentisys" "-e" "SELECT 1;" 2>$null | Out-Null
+        } catch {} finally {
+            $ErrorActionPreference = $oldEap
+        }
         if ($LASTEXITCODE -eq 0) {
             # Active DB on 3306. Run disposable user integration test with special-character password
             $specialUser = "tmp_spec_usr_" + (Get-Random -Minimum 1000 -Maximum 9999)
@@ -291,5 +297,14 @@ if ($clientExePath) {
     Write-Host "SKIP 16: Database client binary not found; disposable integration test skipped."
 }
 
+# Assertion A17: Test-DockerEngineAvailable helper and non-blocking DB mode present
+if ($scriptText -notmatch 'function Test-DockerEngineAvailable') {
+    throw "Test-DockerEngineAvailable helper missing from start-dev.ps1!"
+}
+if ($scriptText -notmatch 'Proceeding in offline database mode') {
+    throw "Non-blocking offline database fallback logic missing from start-dev.ps1!"
+}
+Write-Host "PASS 17: Test-DockerEngineAvailable and non-blocking offline database fallback logic verified"
+
 Write-Host ""
-Write-Host "=== ALL 16 START-DEV LOGIC, CLASSIFICATION & SECURITY TESTS PASSED ==="
+Write-Host "=== ALL START-DEV LOGIC, CLASSIFICATION & SECURITY TESTS PASSED ==="

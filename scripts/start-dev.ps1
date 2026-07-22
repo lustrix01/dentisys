@@ -194,21 +194,44 @@ function Resolve-DatabaseClientCommand {
     return $null
 }
 
+# Helper to safely test if Docker engine daemon is responsive
+function Test-DockerEngineAvailable {
+    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+    if (!$dockerCmd) { return $false }
+    $oldEap = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $null = & docker info 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $oldEap
+    }
+}
+
 # Main Execution Flow
 $envFile = Read-EnvFile (Join-Path $root ".env")
 $selectedRuntime = $null
 $credentials = $null
 $isDocker = $false
+$dbAvailable = $false
 
-# Step 1: Check port 3306 listener state
+# Step 1: Check port 3306 listener state and Docker daemon responsiveness
 $port3306Occupied = Test-HostPortListening 3306
+$dockerDaemonRunning = Test-DockerEngineAvailable
 
 if ($port3306Occupied) {
     # Check if listener is expected DentiSys Docker container
-    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     $dbContainerId = ""
-    if ($dockerCmd) {
-        $dbContainerId = (& docker compose --project-directory $root ps -q db 2>&1 | Out-String).Trim()
+    if ($dockerDaemonRunning) {
+        $oldEap = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            $dbContainerId = (& docker compose --project-directory $root ps -q db 2>$null | Out-String).Trim()
+        } catch {} finally {
+            $ErrorActionPreference = $oldEap
+        }
     }
 
     if (![string]::IsNullOrWhiteSpace($dbContainerId)) {
@@ -231,182 +254,170 @@ if ($port3306Occupied) {
             Write-Host "Detected active $classified on port 3306."
         } else {
             $procDesc = if ($procInfo) { "PID $($procInfo.PID) ($($procInfo.Name))" } else { "an external process" }
-            Write-Host "ERROR: Port 3306 is already in use by $procDesc."
-            Write-Host ""
-            Write-Host "DentiSys development requires Docker MariaDB or XAMPP/native MySQL on host port 3306."
-            Write-Host "Stop the conflicting process, then run start-dev.bat again."
-            exit 1
+            Write-Host "WARNING: Port 3306 is occupied by $procDesc (not a recognized DentiSys database)."
+            Write-Host "Skipping database connection and migrations. Proceeding with offline database mode."
         }
     }
 } else {
-    # Port 3306 is FREE: Check Docker usability to start container
-    $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
-    $dockerUsable = $false
-    $dockerError = ""
-
-    if ($dockerCmd) {
-        $daemonCheck = & docker info 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            $composeCheck = & docker compose version 2>&1
+    # Port 3306 is FREE: Check Docker engine to start container
+    if ($dockerDaemonRunning) {
+        $oldEap = $ErrorActionPreference
+        $dockerUsable = $false
+        try {
+            $ErrorActionPreference = "Continue"
+            $composeCheck = & docker compose version 2>$null
             if ($LASTEXITCODE -eq 0) {
                 $dockerUsable = $true
-            } else {
-                $dockerError = "Docker Compose is unavailable."
             }
-        } else {
-            $dockerError = "Docker engine is not running."
+        } catch {} finally {
+            $ErrorActionPreference = $oldEap
         }
-    } else {
-        $dockerError = "Docker CLI is not installed."
+
+        if ($dockerUsable) {
+            # Validate docker compose syntax quietly
+            & docker compose --project-directory $root config --quiet 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Starting DentiSys Docker MariaDB on port 3306..."
+                & docker compose --project-directory $root up -d db 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    # Wait for DB container health
+                    $maxDbWaitSeconds = 120
+                    $elapsed = 0
+                    $dbHealthy = $false
+                    while ($elapsed -lt $maxDbWaitSeconds) {
+                        $containerId = (& docker compose --project-directory $root ps -q db 2>$null | Out-String).Trim()
+                        if (![string]::IsNullOrWhiteSpace($containerId)) {
+                            $healthStatus = (& docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}" $containerId 2>$null | Out-String).Trim()
+                            if ($healthStatus -eq "healthy" -or $healthStatus -eq "running") {
+                                $dbHealthy = $true
+                                break
+                            }
+                        }
+                        Start-Sleep -Seconds 2
+                        $elapsed += 2
+                    }
+
+                    if ($dbHealthy) {
+                        $isDocker = $true
+                        $credentials = Resolve-DockerCredentials $envFile
+                        $selectedRuntime = "Docker MariaDB"
+                        Write-Host "PASS: Docker MariaDB container is healthy and publishing 127.0.0.1:3306."
+                    } else {
+                        Write-Host "WARNING: Docker MariaDB container failed to reach healthy status within $maxDbWaitSeconds seconds."
+                    }
+                } else {
+                    Write-Host "WARNING: Failed to start Docker MariaDB container."
+                }
+            } else {
+                Write-Host "WARNING: docker-compose configuration validation failed."
+            }
+        }
     }
 
-    if ($dockerUsable) {
-        # Validate docker compose syntax quietly
-        & docker compose --project-directory $root config --quiet 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: docker-compose configuration validation failed."
-            exit 1
-        }
-
-        Write-Host "Starting DentiSys Docker MariaDB on port 3306..."
-        & docker compose --project-directory $root up -d db 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Failed to start Docker MariaDB container."
-            exit 1
-        }
-
-        # Wait for DB container health
-        $maxDbWaitSeconds = 120
-        $elapsed = 0
-        $dbHealthy = $false
-        while ($elapsed -lt $maxDbWaitSeconds) {
-            $containerId = (& docker compose --project-directory $root ps -q db 2>&1 | Out-String).Trim()
-            if (![string]::IsNullOrWhiteSpace($containerId)) {
-                $healthStatus = (& docker inspect --format "{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}" $containerId 2>&1 | Out-String).Trim()
-                if ($healthStatus -eq "healthy" -or $healthStatus -eq "running") {
-                    $dbHealthy = $true
-                    break
-                }
-            }
-            Start-Sleep -Seconds 2
-            $elapsed += 2
-        }
-
-        if (!$dbHealthy) {
-            Write-Host "ERROR: Docker MariaDB container failed to reach healthy status within $maxDbWaitSeconds seconds."
-            exit 1
-        }
-
-        $isDocker = $true
-        $credentials = Resolve-DockerCredentials $envFile
-        $selectedRuntime = "Docker MariaDB"
-        Write-Host "PASS: Docker MariaDB container is healthy and publishing 127.0.0.1:3306."
-    } else {
-        # Neither Docker is usable nor port 3306 is listening
+    if (!$credentials) {
+        $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
         $xamppInstalled = Test-Path -LiteralPath "C:\xampp\mysql\bin\mysqld.exe"
 
-        Write-Host "No supported DentiSys database server is currently available."
-        Write-Host ""
-        if ($dockerCmd -and $dockerError -match "engine") {
+        Write-Host "WARNING: No active development database found on port 3306."
+        if ($dockerCmd -and !$dockerDaemonRunning) {
             Write-Host "Docker is installed, but the Docker engine is not running."
-        } elseif ($dockerError -match "Compose") {
-            Write-Host "Docker is installed, but Docker Compose is unavailable."
         }
         if ($xamppInstalled) {
             Write-Host "XAMPP appears to be installed, but its MySQL service is not running."
         }
-        Write-Host ""
         Write-Host "Choose one of the following development database options:"
         Write-Host "1. Install and start Docker Desktop, then run:"
         Write-Host "   docker compose up -d db"
-        Write-Host ""
         Write-Host "2. Start XAMPP MySQL from the XAMPP Control Panel."
-        Write-Host ""
-        Write-Host "After starting either Docker MariaDB or XAMPP MySQL, run start-dev.bat again."
-        exit 1
+        Write-Host "Skipping database connection and migrations. Proceeding in offline database mode."
     }
 }
 
-# Validate Database Client Tooling
-$clientPath = Resolve-DatabaseClientCommand
-if (!$clientPath) {
-    Write-Host "ERROR: No supported database client (mysql or mariadb) is available in PATH."
-    Write-Host "Please install MySQL/MariaDB client tools or add XAMPP's mysql.exe to PATH."
-    exit 1
-}
+# Validate Database Client Tooling and Database Connection if candidate credentials exist
+if ($credentials) {
+    $clientPath = Resolve-DatabaseClientCommand
+    if ($clientPath) {
+        $tempCnf = New-SecureOptionFile -Password $credentials.Password
+        $dbExists = $false
+        $authSuccess = $false
 
-# Validate Credentials and Database Existence using secure temporary option file
-$tempCnf = New-SecureOptionFile -Password $credentials.Password
-$dbExists = $false
-$authSuccess = $false
+        $oldEap = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            # Ping / Auth check
+            $pingSql = "SELECT 1;"
+            $pingResult = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "-e" $pingSql 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $authSuccess = $true
 
-try {
-
-    # Ping / Auth check
-    $pingSql = "SELECT 1;"
-    $pingResult = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "-e" $pingSql 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        $authSuccess = $true
-
-        # Check DB existence
-        $dbCheckSql = "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$($credentials.Database)';"
-        $dbRes = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "--batch" "--skip-column-names" "-e" $dbCheckSql 2>&1
-        if ($LASTEXITCODE -eq 0 -and ($dbRes -join "").Trim() -eq $credentials.Database) {
-            $dbExists = $true
+                # Check DB existence
+                $dbCheckSql = "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$($credentials.Database)';"
+                $dbRes = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "--batch" "--skip-column-names" "-e" $dbCheckSql 2>&1
+                if ($LASTEXITCODE -eq 0 -and ($dbRes -join "").Trim() -eq $credentials.Database) {
+                    $dbExists = $true
+                }
+            }
+        } finally {
+            $ErrorActionPreference = $oldEap
+            if (Test-Path -LiteralPath $tempCnf) {
+                Remove-Item -LiteralPath $tempCnf -Force -ErrorAction SilentlyContinue
+            }
         }
-    }
-} finally {
-    if (Test-Path -LiteralPath $tempCnf) {
-        Remove-Item -LiteralPath $tempCnf -Force -ErrorAction SilentlyContinue
+
+        if ($authSuccess -and $dbExists) {
+            $dbAvailable = $true
+        } elseif (!$authSuccess) {
+            Write-Host "WARNING: Could not authenticate to $($credentials.Type) at $($credentials.Host):$($credentials.Port) as user '$($credentials.User)'."
+            Write-Host "Skipping database migrations. Proceeding in offline database mode."
+        } elseif (!$dbExists) {
+            Write-Host "WARNING: The configured DentiSys database '$($credentials.Database)' does not exist on the selected $($credentials.Type) server."
+            Write-Host "Skipping database migrations. Proceeding in offline database mode."
+        }
+    } else {
+        Write-Host "WARNING: No supported database client (mysql or mariadb) is available in PATH."
+        Write-Host "Skipping database migrations. Proceeding in offline database mode."
     }
 }
 
-if (!$authSuccess) {
-    Write-Host "ERROR: Could not authenticate to $($credentials.Type) at $($credentials.Host):$($credentials.Port) as user '$($credentials.User)'."
-    if (!$isDocker) {
-        Write-Host "Please configure correct credentials in backend/config/local.php or process environment variables DB_USER and DB_PASS."
-    }
-    exit 1
-}
-
-if (!$dbExists) {
-    Write-Host "The configured DentiSys database '$($credentials.Database)' does not exist on the selected $($credentials.Type) server."
-    Write-Host ""
-    Write-Host "Create the database and grant the configured user access, then run start-dev.bat again."
-    exit 1
-}
-
-# Invoke Migrations in a Child PowerShell Process (Mandatory Condition 3)
+# Invoke Migrations in a Child PowerShell Process if DB is available
 $origHost = [Environment]::GetEnvironmentVariable("DB_HOST")
 $origPort = [Environment]::GetEnvironmentVariable("DB_PORT")
 $origName = [Environment]::GetEnvironmentVariable("DB_NAME")
 $origUser = [Environment]::GetEnvironmentVariable("DB_USER")
 $origPass = [Environment]::GetEnvironmentVariable("DB_PASS")
 
-try {
-    [Environment]::SetEnvironmentVariable("DB_HOST", $credentials.Host)
-    [Environment]::SetEnvironmentVariable("DB_PORT", [string]$credentials.Port)
-    [Environment]::SetEnvironmentVariable("DB_NAME", $credentials.Database)
-    [Environment]::SetEnvironmentVariable("DB_USER", $credentials.User)
-    [Environment]::SetEnvironmentVariable("DB_PASS", $credentials.Password)
+if ($dbAvailable -and $credentials) {
+    try {
+        [Environment]::SetEnvironmentVariable("DB_HOST", $credentials.Host)
+        [Environment]::SetEnvironmentVariable("DB_PORT", [string]$credentials.Port)
+        [Environment]::SetEnvironmentVariable("DB_NAME", $credentials.Database)
+        [Environment]::SetEnvironmentVariable("DB_USER", $credentials.User)
+        [Environment]::SetEnvironmentVariable("DB_PASS", $credentials.Password)
 
-    Write-Host "Running database migrations on $($credentials.Host):$($credentials.Port) ($($credentials.Database))..."
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root\scripts\migrate.ps1"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: Database migration execution failed."
-        exit 1
+        Write-Host "Running database migrations on $($credentials.Host):$($credentials.Port) ($($credentials.Database))..."
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root\scripts\migrate.ps1"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: Database migration execution failed. Proceeding in offline database mode."
+            $dbAvailable = $false
+        }
+    } finally {
+        [Environment]::SetEnvironmentVariable("DB_HOST", $origHost)
+        [Environment]::SetEnvironmentVariable("DB_PORT", $origPort)
+        [Environment]::SetEnvironmentVariable("DB_NAME", $origName)
+        [Environment]::SetEnvironmentVariable("DB_USER", $origUser)
+        [Environment]::SetEnvironmentVariable("DB_PASS", $origPass)
     }
-} finally {
-    [Environment]::SetEnvironmentVariable("DB_HOST", $origHost)
-    [Environment]::SetEnvironmentVariable("DB_PORT", $origPort)
-    [Environment]::SetEnvironmentVariable("DB_NAME", $origName)
-    [Environment]::SetEnvironmentVariable("DB_USER", $origUser)
-    [Environment]::SetEnvironmentVariable("DB_PASS", $origPass)
+} else {
+    Write-Host "Database is offline or unavailable. Skipping migrations."
 }
 
 if ($PreflightOnly) {
     Write-Host ""
-    Write-Host "Preflight checks and migrations passed cleanly (-PreflightOnly mode)."
+    if ($dbAvailable) {
+        Write-Host "Preflight checks and migrations passed cleanly (-PreflightOnly mode)."
+    } else {
+        Write-Host "Preflight checks completed with database offline/skipped (-PreflightOnly mode)."
+    }
     exit 0
 }
 
@@ -428,11 +439,13 @@ if (Test-HostPortListening 5173) {
 # Start PHP Backend API
 Write-Host "Starting PHP Backend API on http://localhost:8090 ..."
 try {
-    [Environment]::SetEnvironmentVariable("DB_HOST", $credentials.Host)
-    [Environment]::SetEnvironmentVariable("DB_PORT", [string]$credentials.Port)
-    [Environment]::SetEnvironmentVariable("DB_NAME", $credentials.Database)
-    [Environment]::SetEnvironmentVariable("DB_USER", $credentials.User)
-    [Environment]::SetEnvironmentVariable("DB_PASS", $credentials.Password)
+    if ($dbAvailable -and $credentials) {
+        [Environment]::SetEnvironmentVariable("DB_HOST", $credentials.Host)
+        [Environment]::SetEnvironmentVariable("DB_PORT", [string]$credentials.Port)
+        [Environment]::SetEnvironmentVariable("DB_NAME", $credentials.Database)
+        [Environment]::SetEnvironmentVariable("DB_USER", $credentials.User)
+        [Environment]::SetEnvironmentVariable("DB_PASS", $credentials.Password)
+    }
 
     $phpProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title DentiSys Backend API (Port 8090) && cd /d `"$root`" && php -S localhost:8090 -t backend/public" -WorkingDirectory $root -PassThru
 } finally {
@@ -451,12 +464,32 @@ $healthElapsed = 0
 
 while ($healthElapsed -lt $maxHealthWait) {
     try {
-        $response = Invoke-WebRequest -Uri "http://localhost:8090/api/health" -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue
-        if ($response.StatusCode -eq 200) {
-            $json = $response.Content | ConvertFrom-Json
-            if ($json.status -eq "ok" -and $json.database -eq "up") {
-                $backendHealthy = $true
-                break
+        $req = [System.Net.WebRequest]::Create("http://localhost:8090/api/health")
+        $req.Timeout = 2000
+        $res = $null
+        try {
+            $res = $req.GetResponse()
+        } catch [System.Net.WebException] {
+            $res = $_.Exception.Response
+        }
+
+        if ($null -ne $res) {
+            $stream = $res.GetResponseStream()
+            $reader = New-Object System.IO.StreamReader($stream)
+            $content = $reader.ReadToEnd()
+            $res.Close()
+
+            if (![string]::IsNullOrWhiteSpace($content)) {
+                $json = $content | ConvertFrom-Json
+                if ($json.status -eq "ok" -and $json.database -eq "up") {
+                    $backendHealthy = $true
+                    Write-Host "PASS: PHP Backend API confirmed database connectivity at $($credentials.Host):$($credentials.Port)."
+                    break
+                } elseif ($json.database -eq "down" -or $json.status -eq "error") {
+                    $backendHealthy = $true
+                    Write-Host "WARNING: PHP Backend API is running, but database is offline/unreachable."
+                    break
+                }
             }
         }
     } catch {
