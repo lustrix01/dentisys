@@ -62,6 +62,8 @@ assert_same('John Doe', validate_person_name(['name' => 'John Doe'], 'name'), 'S
 assert_same('Mary-Jane', validate_person_name(['name' => 'Mary-Jane'], 'name'), 'Hyphenated name accepted');
 assert_same("O'Connor", validate_person_name(['name' => "O'Connor"], 'name'), 'Apostrophe name accepted');
 assert_same('Maria José', validate_person_name(['name' => 'Maria José'], 'name'), 'Unicode letters accepted');
+assert_same('Dr. Juan A. Dela Cruz', validate_person_name(['name' => 'Dr. Juan A. Dela Cruz'], 'name'), 'Name with periods accepted');
+assert_same('St. John', validate_optional_person_name(['name' => 'St. John'], 'name'), 'Optional name with periods accepted');
 
 assert_throws(fn() => validate_person_name(['name' => 'John123'], 'name'), 'letters, spaces, hyphens', 'Name with digits rejected');
 assert_throws(fn() => validate_person_name(['name' => 'Jane!'], 'name'), 'letters, spaces, hyphens', 'Name with exclamation mark rejected');

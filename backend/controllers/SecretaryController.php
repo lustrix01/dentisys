@@ -105,10 +105,28 @@ function handle_secretary_invite(): void
             throw $e;
         }
 
+        $invitationLink = "http://localhost:5173/activate-secretary?token={$invToken}";
+        $subject = 'DentiSys Class Secretary Invitation';
+        $facultyName = htmlspecialchars((string) $authCtx['display_name']);
+        $safeStudentName = htmlspecialchars((string) $studentName);
+        $safeClassName = htmlspecialchars((string) $className);
+        $safeLink = htmlspecialchars($invitationLink);
+
+        $body = "<p>Hello {$safeStudentName},</p>" .
+                "<p>You have been invited by <strong>{$facultyName}</strong> to register as the Class Secretary for <strong>{$safeClassName}</strong> on DentiSys.</p>" .
+                "<p>Please click the link below to set up your password and activate your Class Secretary account:</p>" .
+                "<p><a href=\"{$safeLink}\">{$safeLink}</a></p>" .
+                "<p>This invitation link will expire in 7 days. If you were not expecting this invitation, please ignore this email.</p>";
+
+        send_email($email, $subject, $body, $config);
+
+        $showDevLink = !empty($config['show_dev_invitation_link']);
+
         json_response([
             'status' => 'ok',
             'token' => $invToken,
-            'invitation_link' => "http://localhost:5173/activate-secretary?token={$invToken}",
+            'invitation_link' => $invitationLink,
+            'dev_invitation_link' => $showDevLink ? $invitationLink : null,
             'message' => 'Class Secretary invitation issued successfully.',
         ], 201);
     } catch (ValidationException $e) {

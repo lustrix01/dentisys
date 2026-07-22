@@ -118,10 +118,27 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
         throw $e;
     }
 
+    $currentStep = intdiv(time(), 30);
+    $totpResult = mfa_compute_totp($secret, $currentStep);
+    $otpCode = $totpResult['code'];
+
+    $userEmail = $locked['login_email'];
+    $safeEmail = htmlspecialchars((string) $userEmail);
+    $safeCode = htmlspecialchars((string) $otpCode);
+    $subject = 'DentiSys MFA Verification Code';
+    $body = "<p>Hello,</p>" .
+            "<p>Your DentiSys multi-factor authentication (MFA) verification code is: <strong>{$safeCode}</strong></p>" .
+            "<p>This code will expire in 30 seconds. If you did not initiate this request, please contact your administrator immediately.</p>";
+
+    send_email($userEmail, $subject, $body, $config);
+
+    $showDevCode = !empty($config['show_dev_mfa_code']);
+
     return [
         'confirmation_token' => $confirmToken,
         'provisioning_uri' => 'otpauth://totp/DentiSys:' . urlencode($locked['login_email']) . '?secret=' . $secret . '&issuer=DentiSys',
         'base32_secret' => $secret,
+        'dev_mfa_code' => $showDevCode ? $otpCode : null,
     ];
 }
 

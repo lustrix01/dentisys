@@ -8,4 +8,4 @@
 - Avoid unrelated refactors and formatting churn.
 - Keep secrets out of version control; use root `.env` for Docker and `backend/config/local.php` for XAMPP-only local overrides.
 - Plan before implementing future broad changes.
-- Run available validation before presenting results.
+- Run full validation (Playwright E2E tests via `npm run test:e2e`, TypeScript build via `npm run build`, and script checks via `.\scripts\check.ps1`) before finalizing or presenting implementation work.

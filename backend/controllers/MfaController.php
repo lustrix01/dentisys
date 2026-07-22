@@ -39,6 +39,7 @@ function handle_mfa_enroll_start(): void
             'confirmation_token' => $result['confirmation_token'],
             'provisioning_uri' => $result['provisioning_uri'],
             'base32_secret' => $result['base32_secret'],
+            'dev_mfa_code' => $result['dev_mfa_code'] ?? null,
         ], 200));
     } catch (ChallengeException | AuthException | \RuntimeException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 401));

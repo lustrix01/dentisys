@@ -41,15 +41,27 @@ function handle_faculty_dashboard_kpis(): void
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
 
-        $studentStmt = $pdo->query("
-            SELECT 
+        $studentStmt = $pdo->prepare("
+            SELECT DISTINCT
                 s.student_id, 
                 s.status AS student_status,
                 e.retention_state
             FROM students s
-            LEFT JOIN enrollments e ON s.student_id = e.student_id
+            JOIN enrollments e ON s.student_id = e.student_id
+            JOIN class_sections cs ON e.cs_id = cs.cs_id
+            WHERE cs.instructor_user_id = :faculty_id
         ");
+        $studentStmt->execute([':faculty_id' => $authCtx['user_id']]);
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+
+        $classStmt = $pdo->prepare("
+            SELECT cs.cs_id, cs.cs_name
+            FROM class_sections cs
+            WHERE cs.instructor_user_id = :faculty_id AND (cs.status = 'active' OR cs.status IS NULL)
+        ");
+        $classStmt->execute([':faculty_id' => $authCtx['user_id']]);
+        $classesList = $classStmt ? $classStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $activeClassesCount = count($classesList);
 
         $totalStudents = count($students);
         $goodStanding = 0;
@@ -69,19 +81,29 @@ function handle_faculty_dashboard_kpis(): void
             }
         }
 
+        $mappedClasses = array_map(function ($c) use ($pdo) {
+            $countStmt = $pdo->prepare("SELECT COUNT(DISTINCT student_id) FROM enrollments WHERE cs_id = :cs_id");
+            $countStmt->execute([':cs_id' => $c['cs_id']]);
+            $cnt = (int)$countStmt->fetchColumn();
+            return [
+                'id' => (string)$c['cs_id'],
+                'name' => $c['cs_name'],
+                'students' => $cnt,
+                'attendance' => 95
+            ];
+        }, $classesList);
+
         json_response([
             'status' => 'ok',
             'kpis' => [
                 'assignedStudents' => $totalStudents,
-                'activeClasses' => $totalStudents > 0 ? 2 : 0,
+                'activeClasses' => $activeClassesCount,
                 'averageAttendance' => $totalStudents > 0 ? 95 : 0,
                 'retentionAlerts' => $atRisk,
                 'goodStanding' => $goodStanding,
                 'remedialCount' => $remedial,
             ],
-            'classes' => $totalStudents > 0 ? [
-                ['id' => 'CLINIC-A', 'name' => 'Clinical Rotation A (Section 4A)', 'students' => $totalStudents, 'attendance' => 96],
-            ] : [],
+            'classes' => $mappedClasses,
         ], 200);
     } catch (\Throwable $e) {
         error_log('Faculty dashboard error: ' . sanitize_for_log($e));
@@ -96,7 +118,19 @@ function handle_faculty_students(): void
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
 
-        $stmt = $pdo->query("SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.bu_email, s.contact, s.sex, s.year_level, s.status, s.admission_date, s.birthdate, b.consent_status, b.face_enrolled FROM students s LEFT JOIN biometric_profiles b ON s.student_id = b.student_id");
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT 
+                s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, 
+                s.bu_email, s.contact, s.sex, s.year_level, s.status, s.admission_date, 
+                s.birthdate, b.consent_status, b.face_enrolled,
+                cs.cs_id, cs.cs_name
+            FROM students s
+            JOIN enrollments e ON s.student_id = e.student_id
+            JOIN class_sections cs ON e.cs_id = cs.cs_id
+            LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
+            WHERE cs.instructor_user_id = :faculty_id
+        ");
+        $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $mapped = array_map(function ($s) {
@@ -117,8 +151,8 @@ function handle_faculty_students(): void
                 'birthdate' => $s['birthdate'] ?? '',
                 'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
                 'consentStatus' => strtolower($s['consent_status'] ?? 'pending'),
-                'classId' => 'CLINIC-A',
-                'className' => 'Clinical Rotation A',
+                'classId' => isset($s['cs_id']) ? (string) $s['cs_id'] : '',
+                'className' => $s['cs_name'] ?? '',
             ];
         }, $students);
 
@@ -752,9 +786,10 @@ function handle_faculty_classes_get(): void
             FROM class_sections cs
             LEFT JOIN courses c ON cs.course_id = c.course_id
             LEFT JOIN user_accounts u ON cs.instructor_user_id = u.user_id
+            WHERE cs.instructor_user_id = :faculty_id
             ORDER BY cs.created_at DESC
         ");
-        $stmt->execute();
+        $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $mapped = array_map(function ($cls) {

@@ -82,10 +82,32 @@ function handle_password_reset_request(): void
             }
         }
 
+        $showDevResetLink = (bool) ($config['show_dev_reset_link'] ?? false);
+        $resetLink = $user !== false ? "http://localhost:5173/reset-password?token={$resetToken}" : null;
+
+        if ($user !== false && $resetLink !== null) {
+            $subject = 'DentiSys Password Reset Request';
+            $body = "<p>Hello " . htmlspecialchars((string) $user['display_name']) . ",</p>" .
+                    "<p>You requested a password reset for your DentiSys account. Click the link below to set a new password:</p>" .
+                    "<p><a href=\"" . htmlspecialchars($resetLink) . "\">" . htmlspecialchars($resetLink) . "</a></p>" .
+                    "<p>This link will expire in 24 hours. If you did not request this, please ignore this email.</p>";
+
+            send_email($email, $subject, $body, $config);
+        } else {
+            log_to_outbox(
+                $email,
+                'DentiSys Password Reset Request (Account Not Found)',
+                '<p>Password reset was requested for this email, but no matching user account was found.</p>',
+                ['From' => $config['smtp']['from'] ?? 'noreply@dentisys.local', 'To' => $email, 'Subject' => 'DentiSys Password Reset Request (Account Not Found)'],
+                false,
+                'Account not found'
+            );
+        }
+
         json_response([
             'status' => 'ok',
-            'token' => $user !== false ? $resetToken : null,
-            'reset_link' => $user !== false ? "http://localhost:5173/reset-password?token={$resetToken}" : null,
+            'token' => ($user !== false && $showDevResetLink) ? $resetToken : null,
+            'reset_link' => ($user !== false && $showDevResetLink) ? $resetLink : null,
             'message' => 'If an account exists with that email address, password reset instructions have been issued.',
         ], 200);
     } catch (ValidationException $e) {

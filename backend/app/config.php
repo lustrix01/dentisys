@@ -7,6 +7,67 @@ function local_config_path(): string
     return dirname(__DIR__) . '/config/local.php';
 }
 
+function root_dotenv_path(): string
+{
+    return dirname(__DIR__, 2) . '/.env';
+}
+
+function load_dotenv_file(?string $path = null): array
+{
+    static $cache = null;
+    if ($cache !== null && $path === null) {
+        return $cache;
+    }
+
+    $dotenvPath = $path ?? root_dotenv_path();
+    $parsed = [];
+
+    if (is_file($dotenvPath)) {
+        $lines = file($dotenvPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines !== false) {
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || str_starts_with($line, '#')) {
+                    continue;
+                }
+
+                $pos = strpos($line, '=');
+                if ($pos === false) {
+                    continue;
+                }
+
+                $key = trim(substr($line, 0, $pos));
+                $value = trim(substr($line, $pos + 1));
+
+                if ($key === '') {
+                    continue;
+                }
+
+                if (
+                    (str_starts_with($value, '"') && str_ends_with($value, '"')) ||
+                    (str_starts_with($value, "'") && str_ends_with($value, "'"))
+                ) {
+                    $value = substr($value, 1, -1);
+                }
+
+                $parsed[$key] = $value;
+
+                if (getenv($key) === false || getenv($key) === '') {
+                    putenv("{$key}={$value}");
+                    $_ENV[$key] = $value;
+                    $_SERVER[$key] = $value;
+                }
+            }
+        }
+    }
+
+    if ($path === null) {
+        $cache = $parsed;
+    }
+
+    return $parsed;
+}
+
 function load_local_config(?string $path = null): array
 {
     $configPath = $path ?? local_config_path();
@@ -22,15 +83,25 @@ function load_local_config(?string $path = null): array
 
 function config_value(string $key, array $localConfig, mixed $default): mixed
 {
+    if (array_key_exists($key, $localConfig) && $localConfig[$key] !== '') {
+        $envVal = getenv($key);
+        $dotenv = load_dotenv_file();
+        $dotenvVal = $dotenv[$key] ?? null;
+
+        if ($envVal !== false && $envVal !== '' && $envVal !== $dotenvVal) {
+            return $envVal;
+        }
+
+        return $localConfig[$key];
+    }
+
     $value = getenv($key);
 
     if ($value !== false && $value !== '') {
         return $value;
     }
 
-    return array_key_exists($key, $localConfig) && $localConfig[$key] !== ''
-        ? $localConfig[$key]
-        : $default;
+    return $default;
 }
 
 function config_key_bytes_at_least(string $encoded, int $minimumBytes, string $label): string
@@ -99,6 +170,7 @@ function config_key_bytes_exact(string $encoded, int $exactBytes, string $label)
 
 function app_config(?array $localConfig = null): array
 {
+    load_dotenv_file();
     $local = $localConfig ?? load_local_config();
 
     return [
@@ -131,6 +203,16 @@ function app_config(?array $localConfig = null): array
         'rate_limit' => [
             'enabled' => filter_var(config_value('RATE_LIMIT_ENABLED', $local, 'true'), FILTER_VALIDATE_BOOLEAN),
             'storage_dir' => (string) (config_value('RATE_LIMIT_STORAGE_DIR', $local, '') ?: dirname(__DIR__) . '/storage/ratelimit'),
+        ],
+        'show_dev_reset_link' => filter_var(config_value('SHOW_DEV_RESET_LINK', $local, true), FILTER_VALIDATE_BOOLEAN),
+        'show_dev_mfa_code' => filter_var(config_value('SHOW_DEV_MFA_CODE', $local, true), FILTER_VALIDATE_BOOLEAN),
+        'show_dev_invitation_link' => filter_var(config_value('SHOW_DEV_INVITATION_LINK', $local, true), FILTER_VALIDATE_BOOLEAN),
+        'smtp' => [
+            'host' => (string) config_value('SMTP_HOST', $local, '127.0.0.1'),
+            'port' => (int) config_value('SMTP_PORT', $local, 1025),
+            'user' => (string) config_value('SMTP_USER', $local, ''),
+            'pass' => (string) config_value('SMTP_PASS', $local, ''),
+            'from' => (string) config_value('SMTP_FROM', $local, 'noreply@dentisys.local'),
         ],
     ];
 }

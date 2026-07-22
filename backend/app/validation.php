@@ -60,11 +60,67 @@ function validate_person_name(array $data, string $field, int $minBytes = 2, int
 {
     $name = validate_required_string($data, $field, $minBytes, $maxBytes);
 
-    if (!preg_match('/^[\p{L}\s\'\-]+$/u', $name)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, and apostrophes.']]);
+    if (!preg_match('/^[\p{L}\s\'\-\.]+$/u', $name)) {
+        throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.']]);
     }
 
     return $name;
+}
+
+function validate_optional_person_name(array $data, string $field, int $minBytes = 2, int $maxBytes = 255): ?string
+{
+    $name = validate_optional_string($data, $field, $minBytes, $maxBytes);
+    if ($name === null) {
+        return null;
+    }
+
+    if (!preg_match('/^[\p{L}\s\'\-\.]+$/u', $name)) {
+        throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.']]);
+    }
+
+    return $name;
+}
+
+function validate_phone_number(array $data, string $field): string
+{
+    $val = validate_required_string($data, $field, 7, 20);
+    if (!preg_match('/^[0-9\+\-\s\(\)]+$/', $val) || preg_match('/[a-zA-Z]/', $val)) {
+        throw new ValidationException([['field' => $field, 'message' => 'Phone number can only contain digits and valid phone symbols.']]);
+    }
+    return $val;
+}
+
+function validate_optional_phone_number(array $data, string $field): ?string
+{
+    $val = validate_optional_string($data, $field, 7, 20);
+    if ($val === null) {
+        return null;
+    }
+    if (!preg_match('/^[0-9\+\-\s\(\)]+$/', $val) || preg_match('/[a-zA-Z]/', $val)) {
+        throw new ValidationException([['field' => $field, 'message' => 'Phone number can only contain digits and valid phone symbols.']]);
+    }
+    return $val;
+}
+
+function validate_numeric_string(array $data, string $field, int $minLen = 1, int $maxLen = 50): string
+{
+    $val = validate_required_string($data, $field, $minLen, $maxLen);
+    if (!preg_match('/^[0-9]+$/', $val)) {
+        throw new ValidationException([['field' => $field, 'message' => 'Field must contain only digits.']]);
+    }
+    return $val;
+}
+
+function validate_optional_numeric_string(array $data, string $field, int $minLen = 1, int $maxLen = 50): ?string
+{
+    $val = validate_optional_string($data, $field, $minLen, $maxLen);
+    if ($val === null) {
+        return null;
+    }
+    if (!preg_match('/^[0-9]+$/', $val)) {
+        throw new ValidationException([['field' => $field, 'message' => 'Field must contain only digits.']]);
+    }
+    return $val;
 }
 
 
