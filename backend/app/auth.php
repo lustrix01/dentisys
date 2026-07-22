@@ -259,7 +259,7 @@ function auth_verify_access_token(
     }
 
     $clock = $clock ?? fn(): int => time();
-    $sessionExpiresAt = new DateTimeImmutable($session['expires_at']);
+    $sessionExpiresAt = new DateTimeImmutable($session['expires_at'], new DateTimeZone('UTC'));
 
     if ($sessionExpiresAt->getTimestamp() <= $clock()) {
         throw new AuthException('Session has expired.');

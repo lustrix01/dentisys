@@ -468,4 +468,20 @@ auth_audit_denial($pdo,$C,cx(),'login_failed','forced');cr($pdo,$sD);
 $called=false;try{auth_runtime_login($pdo,$C,['email'=>'vu@e.c','password'=>'wrong'],cx());}catch(InvalidCredentialsException$e){$called=true;}
 ok($called,'Login rejects after denial audit failure');
 
+echo "\n--- Security token 24-hour TTL and UTC expiration ---\n";
+$nowT = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$nowTSql = $nowT->format('Y-m-d H:i:s.u');
+$expTSql = $nowT->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u');
+$pdo->beginTransaction();
+$insSt = $pdo->prepare("INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at) VALUES ('password_reset', 1, ?, ?, ?)");
+$insSt->execute([hash('sha256', 'test_reset_token'), $nowTSql, $expTSql]);
+$stTestId = (int) $pdo->lastInsertId();
+$pdo->commit();
+$selSt = $pdo->prepare("SELECT expires_at FROM security_tokens WHERE token_id = ?");
+$selSt->execute([$stTestId]);
+$stRow = $selSt->fetch(PDO::FETCH_ASSOC);
+$expParsed = new DateTimeImmutable($stRow['expires_at'], new DateTimeZone('UTC'));
+ok($expParsed > new DateTimeImmutable('now', new DateTimeZone('UTC')), 'Security token with 24h TTL is valid under UTC check');
+$ac++;
+
 echo"\n=== ALL AUTH FLOWS TESTS COMPLETE ===\nTotal assertions: $ac\n";

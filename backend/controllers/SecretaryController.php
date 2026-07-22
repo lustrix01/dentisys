@@ -227,6 +227,12 @@ function handle_secretary_activate(): void
             return;
         }
 
+        $expiresAt = new DateTimeImmutable($row['expires_at'], new DateTimeZone('UTC'));
+        if ($expiresAt <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
+            safe_error_response('Invalid or expired invitation token.', 400);
+            return;
+        }
+
         $meta = json_decode($row['metadata_json'] ?? '{}', true);
         $email = $meta['email'] ?? '';
         $displayName = $meta['student_name'] ?? 'Class Secretary';

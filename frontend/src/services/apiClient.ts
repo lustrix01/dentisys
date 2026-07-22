@@ -27,9 +27,11 @@ export function getAccessToken(): string | null {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  errors?: unknown;
+  constructor(status: number, message: string, errors?: unknown) {
     super(message);
     this.status = status;
+    this.errors = errors;
   }
 }
 
@@ -50,10 +52,34 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
   },
 };
 
-function mapError(status: number, backendMessage: string): string {
+function mapError(status: number, backendMessage: string, responseData?: unknown): string {
+  if (status === 400 && responseData && typeof responseData === 'object') {
+    const dataObj = responseData as Record<string, unknown>;
+    if (dataObj.errors) {
+      if (typeof dataObj.errors === 'string' && dataObj.errors.trim()) {
+        return dataObj.errors;
+      }
+      if (typeof dataObj.errors === 'object' && dataObj.errors !== null) {
+        const errMap = dataObj.errors as Record<string, unknown>;
+        if (errMap.email) {
+          const emailErr = Array.isArray(errMap.email) ? errMap.email[0] : errMap.email;
+          if (emailErr) return String(emailErr);
+        }
+        const values = Object.values(errMap);
+        for (const val of values) {
+          if (typeof val === 'string' && val.trim()) return val;
+          if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') return String(val[0]);
+        }
+      }
+    }
+  }
+
   const statusMap = KNOWN_MESSAGES[status];
   if (statusMap && statusMap[backendMessage]) {
     return statusMap[backendMessage];
+  }
+  if (status === 400 && backendMessage && backendMessage !== 'Validation failed.') {
+    return backendMessage;
   }
   if (status === 403) {
     return backendMessage;
@@ -114,7 +140,11 @@ async function request<T>(
       responseData && typeof responseData === 'object' && 'message' in responseData
         ? String((responseData as Record<string, unknown>).message)
         : '';
-    throw new ApiError(response.status, mapError(response.status, backendMessage));
+    const errorsPayload =
+      responseData && typeof responseData === 'object' && 'errors' in responseData
+        ? (responseData as Record<string, unknown>).errors
+        : undefined;
+    throw new ApiError(response.status, mapError(response.status, backendMessage, responseData), errorsPayload);
   }
 
   return responseData as T;

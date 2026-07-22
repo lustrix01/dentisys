@@ -178,7 +178,7 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
             throw new ChallengeException('Invalid enrollment session.');
         }
 
-        $expiresAt = new DateTimeImmutable($pending['expires_at']);
+        $expiresAt = new DateTimeImmutable($pending['expires_at'], new DateTimeZone('UTC'));
         if ($expiresAt <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
             throw new ChallengeException('Enrollment session has expired.');
         }

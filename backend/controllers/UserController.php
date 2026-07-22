@@ -30,7 +30,7 @@ function handle_register(): void
         }
 
         $data = $body['data'];
-        $name = validate_required_string($data, 'name', 2, 255);
+        $name = validate_person_name($data, 'name', 2, 255);
         $email = validate_institutional_email($data['email'] ?? '');
         $password = extract_password($data, 'password');
         validate_password_policy($password);

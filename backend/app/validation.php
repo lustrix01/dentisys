@@ -49,12 +49,24 @@ function validate_institutional_email(string $value): string
 
     $domain = substr(strrchr($email, '@'), 1);
 
-    if ($domain !== 'bicol-u.edu.ph' && $domain !== 'bu.edu.ph') {
-        throw new ValidationException([['field' => 'email', 'message' => 'Only official Bicol University email addresses are allowed.']]);
+    if ($domain !== 'bicol-u.edu.ph') {
+        throw new ValidationException([['field' => 'email', 'message' => 'Only official Bicol University email addresses (@bicol-u.edu.ph) are allowed.']]);
     }
 
     return $email;
 }
+
+function validate_person_name(array $data, string $field, int $minBytes = 2, int $maxBytes = 255): string
+{
+    $name = validate_required_string($data, $field, $minBytes, $maxBytes);
+
+    if (!preg_match('/^[\p{L}\s\'\-]+$/u', $name)) {
+        throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, and apostrophes.']]);
+    }
+
+    return $name;
+}
+
 
 function validate_required_string(array $data, string $field, int $minBytes, int $maxBytes): string
 {

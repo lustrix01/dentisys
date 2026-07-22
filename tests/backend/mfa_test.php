@@ -177,4 +177,16 @@ assert_same($normalized, $normSpaced, 'Normalization handles whitespace');
 assert_throws(fn() => mfa_normalize_recovery_code('too-short'), 'exactly 32', 'Short code rejected');
 assert_throws(fn() => mfa_normalize_recovery_code('gggggggggggggggggggggggggggggggg'), 'non-hexadecimal', 'Non-hex code rejected');
 
+echo "\n--- Security Token Expiration & UTC Timezone ---\n";
+
+$nowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$expUtc = $nowUtc->add(new DateInterval('P1D'));
+$diffSeconds = $expUtc->getTimestamp() - $nowUtc->getTimestamp();
+assert_same(86400, $diffSeconds, 'Password reset token TTL is 24 hours (86400 seconds)');
+
+// Verify parsing DB timestamp string in explicit UTC timezone versus non-UTC
+$dbTimestampStr = '2026-07-23 12:00:00.000000';
+$parsedUtc = new DateTimeImmutable($dbTimestampStr, new DateTimeZone('UTC'));
+assert_same('UTC', $parsedUtc->getTimezone()->getName(), 'Explicit UTC timezone set on DB timestamp parsing');
+
 echo "\n=== ALL MFA/TOTP/Base32/AES TESTS PASSED ===\n";

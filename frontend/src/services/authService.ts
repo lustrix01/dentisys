@@ -68,18 +68,38 @@ export const validateBicolUEmail = (email: string): { isValid: boolean; message:
   }
 
   const trimmedEmail = email.trim().toLowerCase();
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   
-  if (!emailRegex.test(trimmedEmail)) {
+  if (!basicEmailRegex.test(trimmedEmail)) {
     return { isValid: false, message: 'Please enter a valid email format.' };
   }
 
-  const isBicolUDomain = trimmedEmail.endsWith('@bicol-u.edu.ph') || trimmedEmail.endsWith('@bu.edu.ph');
-  
-  if (!isBicolUDomain) {
+  const strictBicolURegex = /^[^\s@]+@bicol-u\.edu\.ph$/;
+  if (!strictBicolURegex.test(trimmedEmail)) {
     return {
       isValid: false,
       message: 'Only official Bicol University email addresses (@bicol-u.edu.ph) are allowed.',
+    };
+  }
+
+  return { isValid: true, message: '' };
+};
+
+/**
+ * Validates whether a person's name contains only valid letters, spaces, hyphens, and apostrophes.
+ */
+export const validatePersonName = (name: string): { isValid: boolean; message: string } => {
+  if (!name || !name.trim()) {
+    return { isValid: false, message: 'Name is required.' };
+  }
+
+  const trimmedName = name.trim();
+  const nameRegex = /^[\p{L}\s'\-]+$/u;
+
+  if (!nameRegex.test(trimmedName)) {
+    return {
+      isValid: false,
+      message: 'Name can only contain letters, spaces, hyphens, and apostrophes.',
     };
   }
 
@@ -121,7 +141,23 @@ export const registerFaculty = async (
       message: res.message,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Registration failed.';
+    let msg = 'Registration failed.';
+    if (err instanceof ApiError) {
+      if (err.errors && typeof err.errors === 'object') {
+        const errObj = err.errors as Record<string, unknown>;
+        if (errObj.email) {
+          msg = Array.isArray(errObj.email) ? String(errObj.email[0]) : String(errObj.email);
+        } else {
+          msg = err.message;
+        }
+      } else if (typeof err.errors === 'string' && err.errors.trim()) {
+        msg = err.errors;
+      } else {
+        msg = err.message;
+      }
+    } else if (err instanceof Error) {
+      msg = err.message;
+    }
     return { success: false, message: msg };
   }
 };

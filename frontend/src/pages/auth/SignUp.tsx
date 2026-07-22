@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import {
   validateBicolUEmail,
+  validatePersonName,
   validatePasswordRequirements,
   registerFaculty,
 } from '../../services/authService';
@@ -36,6 +37,7 @@ export function SignUp() {
   
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [emailServerError, setEmailServerError] = useState('');
   const [isSubmittedPending, setIsSubmittedPending] = useState(false);
   
   const [useFallbackSvg, setUseFallbackSvg] = useState(false);
@@ -63,6 +65,7 @@ export function SignUp() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setEmailServerError('');
     setEmailTouched(true);
     setConfirmTouched(true);
 
@@ -71,8 +74,27 @@ export function SignUp() {
       return;
     }
 
+    const fnVal = validatePersonName(firstName);
+    if (!fnVal.isValid) {
+      setErrorMessage(`First Name: ${fnVal.message}`);
+      return;
+    }
+
+    if (middleName.trim()) {
+      const mnVal = validatePersonName(middleName);
+      if (!mnVal.isValid) {
+        setErrorMessage(`Middle Name: ${mnVal.message}`);
+        return;
+      }
+    }
+
+    const lnVal = validatePersonName(lastName);
+    if (!lnVal.isValid) {
+      setErrorMessage(`Last Name: ${lnVal.message}`);
+      return;
+    }
+
     if (!emailValidation.isValid) {
-      setErrorMessage(emailValidation.message || 'Please provide a valid Bicol University email address.');
       return;
     }
 
@@ -82,7 +104,6 @@ export function SignUp() {
     }
 
     if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
       return;
     }
 
@@ -108,10 +129,13 @@ export function SignUp() {
         setIsSubmittedPending(true);
       } else {
         setErrorMessage(res.message);
+        setEmailServerError(res.message);
       }
     } catch (err) {
       setIsLoading(false);
-      setErrorMessage('An unexpected error occurred during account creation. Please try again.');
+      const errText = 'An unexpected error occurred during account creation. Please try again.';
+      setErrorMessage(errText);
+      setEmailServerError(errText);
     }
   };
 
@@ -332,33 +356,45 @@ export function SignUp() {
                       onChange={(e) => {
                         setEmail(e.target.value);
                         if (errorMessage) setErrorMessage('');
+                        if (emailServerError) setEmailServerError('');
                       }}
                       placeholder="username@bicol-u.edu.ph"
                       className={`w-full pl-10 pr-10 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border ${
-                        emailTouched && email && !emailValidation.isValid
-                          ? 'border-rose-400 focus:ring-rose-500 focus:border-rose-500'
+                        emailServerError
+                          ? 'border-rose-400 focus:ring-2 focus:ring-rose-500 focus:border-rose-500'
+                          : emailTouched && email && !emailValidation.isValid
+                          ? 'border-rose-400 focus:ring-2 focus:ring-rose-500 focus:border-rose-500'
                           : emailTouched && email && emailValidation.isValid
-                          ? 'border-emerald-400 focus:ring-emerald-500 focus:border-emerald-500'
-                          : 'border-slate-200 dark:border-slate-700 focus:ring-accent-500 focus:border-accent-500'
+                          ? 'border-emerald-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500'
+                          : 'border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-accent-500 focus:border-accent-500'
                       } rounded-xl focus:bg-white dark:focus:bg-slate-900 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200`}
                     />
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                      {emailTouched && email && (
-                        emailValidation.isValid ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-rose-500" />
+                      {emailServerError ? (
+                        <XCircle className="h-4 w-4 text-rose-500" />
+                      ) : (
+                        emailTouched && email && (
+                          emailValidation.isValid ? (
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-rose-500" />
+                          )
                         )
                       )}
                     </div>
                   </div>
-                  {/* Inline Domain Validation Message */}
-                  {emailTouched && email && !emailValidation.isValid && (
+                  {/* Inline Domain / Server Error Validation Message */}
+                  {emailServerError ? (
+                    <p className="mt-1 text-[11px] font-medium text-rose-500 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      {emailServerError}
+                    </p>
+                  ) : emailTouched && email && !emailValidation.isValid ? (
                     <p className="mt-1 text-[11px] font-medium text-rose-500 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3 shrink-0" />
                       {emailValidation.message}
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Password Field */}

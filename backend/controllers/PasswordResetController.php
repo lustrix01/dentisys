@@ -41,7 +41,7 @@ function handle_password_reset_request(): void
         if ($user !== false) {
             $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
             $nowSql = $now->format('Y-m-d H:i:s.u');
-            $expiresSql = $now->add(new DateInterval('PT1H'))->format('Y-m-d H:i:s.u');
+            $expiresSql = $now->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u');
 
             $pdo->beginTransaction();
             try {
