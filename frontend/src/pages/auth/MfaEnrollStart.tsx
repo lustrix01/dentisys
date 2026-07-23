@@ -2,24 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, Copy, CheckCircle2, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { startEnrollment, confirmEnrollment, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
-import { generateTotpCode } from '../../utils/totp';
+import { startEnrollment, ApiError } from '../../services/apiClient';
 
 export function MfaEnrollStart() {
   const navigate = useNavigate();
   const {
     enrollmentToken,
-    confirmationToken,
     storeConfirmationChallenge,
     storeEnrollmentDisplayData,
     mfaSecret,
     provisioningUri,
+    devMfaCode,
     clearAuth,
     setError: setContextError,
-    setAccessToken,
-    setUser,
-    setAuthenticated,
-    setRecoveryCodes,
   } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -39,7 +34,7 @@ export function MfaEnrollStart() {
     setLoading(true);
     startEnrollment(enrollmentToken)
       .then(data => {
-        storeEnrollmentDisplayData(data.base32_secret, data.provisioning_uri);
+        storeEnrollmentDisplayData(data.base32_secret, data.provisioning_uri, data.dev_mfa_code);
         storeConfirmationChallenge(data.confirmation_token);
         setLoading(false);
       })
@@ -133,6 +128,11 @@ export function MfaEnrollStart() {
           </div>
 
           <div className="p-6 space-y-5">
+            {devMfaCode && (
+              <div className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-center text-xs font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+                Development MFA code: <span className="font-mono text-base ml-1">{devMfaCode}</span>
+              </div>
+            )}
             {mfaSecret && (
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
@@ -202,30 +202,6 @@ export function MfaEnrollStart() {
               >
                 Verify Setup
                 <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={async () => {
-                  if (!mfaSecret || !confirmationToken) return;
-                  try {
-                    setLoading(true);
-                    const code = await generateTotpCode(mfaSecret);
-                    const result = await confirmEnrollment(confirmationToken, code);
-                    setApiAccessToken(result.access_token);
-                    setAccessToken(result.access_token);
-                    setRecoveryCodes(result.recovery_codes);
-                    const user = await getMe();
-                    setUser(user);
-                    setAuthenticated();
-                    navigate('/recovery-codes', { replace: true });
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Auto-verification failed.');
-                    setLoading(false);
-                  }
-                }}
-                className="w-full py-2.5 px-4 rounded-xl font-bold text-xs text-accent-700 dark:text-accent-300 bg-accent-50 dark:bg-accent-950/40 border border-accent-200 dark:border-accent-900/50 hover:bg-accent-100 dark:hover:bg-accent-900/60 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                ⚡ Auto-Verify & Skip 2FA (Dev Mode)
               </button>
             </div>
           </div>

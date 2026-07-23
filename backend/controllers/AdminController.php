@@ -50,14 +50,28 @@ function handle_admin_dashboard_kpis(): void
                 s.last_name, 
                 s.year_level, 
                 s.status AS student_status,
-                e.final_gwa,
-                e.retention_state
+                AVG(e.final_gwa) AS final_gwa,
+                MAX(CASE e.retention_state
+                    WHEN 'critical' THEN 4 WHEN 'remedial' THEN 3
+                    WHEN 'warning' THEN 2 WHEN 'active' THEN 1 ELSE 0 END) AS risk_score
             FROM students s
             LEFT JOIN enrollments e ON s.student_id = e.student_id
+            GROUP BY s.student_id, s.student_number, s.first_name, s.last_name, s.year_level, s.status
         ");
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-        $facultyStmt = $pdo->query("SELECT user_id, display_name, login_email, status FROM user_accounts WHERE role = 'faculty'");
+        $facultyStmt = $pdo->query(
+            "SELECT u.user_id, u.display_name, u.login_email, u.status,
+                    GROUP_CONCAT(DISTINCT cs.cs_name ORDER BY cs.cs_name SEPARATOR ', ') AS classes,
+                    GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ') AS subjects,
+                    COUNT(DISTINCT e.student_id) AS student_count
+             FROM user_accounts u
+             LEFT JOIN class_sections cs ON cs.instructor_user_id = u.user_id
+             LEFT JOIN courses c ON c.course_id = cs.course_id
+             LEFT JOIN enrollments e ON e.cs_id = cs.cs_id
+             WHERE u.role = 'faculty'
+             GROUP BY u.user_id, u.display_name, u.login_email, u.status"
+        );
         $faculty = $facultyStmt ? $facultyStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $attStmt = $pdo->query("
@@ -85,7 +99,8 @@ function handle_admin_dashboard_kpis(): void
         $gwa3plus = 0;
 
         foreach ($students as $s) {
-            $st = strtolower($s['retention_state'] ?? $s['student_status'] ?? 'active');
+            $riskScore = (int) ($s['risk_score'] ?? 0);
+            $st = $riskScore >= 4 ? 'critical' : ($riskScore === 3 ? 'remedial' : ($riskScore === 2 ? 'warning' : 'active'));
             if ($st === 'active' || $st === 'good standing') {
                 $goodStanding++;
             } elseif ($st === 'warning') {
@@ -111,8 +126,6 @@ function handle_admin_dashboard_kpis(): void
                 } else {
                     $gwa3plus++;
                 }
-            } else {
-                $gwa2_25++;
             }
         }
 
@@ -124,7 +137,7 @@ function handle_admin_dashboard_kpis(): void
 
         foreach ($attendance as $a) {
             $st = strtolower($a['status'] ?? '');
-            $cName = $a['cs_name'] ?? 'CLINIC-A';
+            $cName = $a['cs_name'] ?? 'Unassigned';
             if (!isset($classAttCounts[$cName])) {
                 $classAttCounts[$cName] = ['total' => 0, 'present' => 0];
             }
@@ -136,26 +149,21 @@ function handle_admin_dashboard_kpis(): void
             }
         }
 
-        $attendanceRate = $attCount > 0 ? (int) round(($presentCount / $attCount) * 100) : 100;
+        $attendanceRate = $attCount > 0 ? (int) round(($presentCount / $attCount) * 100) : 0;
 
         $classAttendance = [];
         foreach ($classAttCounts as $cName => $counts) {
-            $rate = $counts['total'] > 0 ? (int) round(($counts['present'] / $counts['total']) * 100) : 100;
+            $rate = $counts['total'] > 0 ? (int) round(($counts['present'] / $counts['total']) * 100) : 0;
             $classAttendance[] = ['name' => $cName, 'rate' => $rate];
         }
-        if (empty($classAttendance)) {
-            $classAttendance = [
-                ['name' => 'CLINIC-A', 'rate' => 100],
-            ];
-        }
-
         $facultyList = array_map(function ($f) {
             return [
                 'id' => (string) $f['user_id'],
                 'name' => $f['display_name'] ?? 'Faculty Member',
                 'email' => $f['login_email'] ?? '',
-                'classes' => 'CLINIC-A, CLINIC-B',
-                'subjects' => 'CLIN401, CLIN402',
+                'classes' => $f['classes'] ?? '',
+                'subjects' => $f['subjects'] ?? '',
+                'studentCount' => (int) ($f['student_count'] ?? 0),
                 'status' => strtolower($f['status'] ?? 'approved'),
             ];
         }, $faculty);
@@ -194,15 +202,6 @@ function handle_admin_dashboard_kpis(): void
     }
 }
 
-function get_retention_storage_path(): string
-{
-    $dir = dirname(__DIR__) . '/storage';
-    if (!is_dir($dir)) {
-        @mkdir($dir, 0777, true);
-    }
-    return $dir . '/retention_criteria.json';
-}
-
 function handle_admin_retention_criteria_get(): void
 {
     try {
@@ -210,40 +209,9 @@ function handle_admin_retention_criteria_get(): void
         $pdo = create_pdo($config);
         $authCtx = admin_verify_auth($pdo, $config);
 
-        $path = get_retention_storage_path();
-        if (file_exists($path)) {
-            $data = json_decode((string) file_get_contents($path), true);
-        } else {
-            $data = [
-                [
-                    'id' => 'RC-001',
-                    'name' => 'Standard Clinical Retention',
-                    'description' => 'Primary threshold for all Year 3–4 clinical rotations. Students failing this are flagged for warning.',
-                    'minGrade' => 2.5,
-                    'minAttendance' => 80,
-                    'maxRemedialSubjects' => 1,
-                    'appliesToClinical' => true,
-                    'enabled' => true,
-                    'lastUpdated' => '2026-06-01',
-                    'updatedBy' => 'admin@bicol-u.edu.ph',
-                ],
-                [
-                    'id' => 'RC-002',
-                    'name' => 'Didactic Course Standard',
-                    'description' => 'Applies to non-clinical lecture and lab courses. Slightly relaxed compared to clinical standard.',
-                    'minGrade' => 3.0,
-                    'minAttendance' => 75,
-                    'maxRemedialSubjects' => 2,
-                    'appliesToClinical' => false,
-                    'enabled' => true,
-                    'lastUpdated' => '2026-05-15',
-                    'updatedBy' => 'admin@bicol-u.edu.ph',
-                ],
-            ];
-            @file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT));
-        }
-
-        json_response($data, 200);
+        $stmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'retention_criteria' LIMIT 1");
+        $data = json_decode((string) ($stmt->fetchColumn() ?: '[]'), true);
+        json_response(is_array($data) ? $data : [], 200);
     } catch (\Throwable $e) {
         error_log('Admin retention criteria get error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
@@ -265,14 +233,51 @@ function handle_admin_retention_criteria_save(): void
 
         $items = $body['data'];
         if (!is_array($items)) {
-            safe_error_response('Array of retention criteria required.', 400);
+            safe_error_response('Array of retention criteria required.', 422);
             return;
         }
+        $normalized = [];
+        foreach ($items as $index => $item) {
+            if (!is_array($item)) {
+                safe_error_response("Criterion at index {$index} is invalid.", 422);
+                return;
+            }
+            $name = trim((string) ($item['name'] ?? ''));
+            $minGrade = (float) ($item['minGrade'] ?? 0);
+            $minAttendance = (float) ($item['minAttendance'] ?? -1);
+            $maxRemedial = (int) ($item['maxRemedialSubjects'] ?? -1);
+            if ($name === '' || $minGrade < 1 || $minGrade > 5 || $minAttendance < 0 || $minAttendance > 100 || $maxRemedial < 0) {
+                safe_error_response("Criterion '{$name}' contains invalid thresholds.", 422);
+                return;
+            }
+            $normalized[] = [
+                'id' => trim((string) ($item['id'] ?? '')) ?: 'RC-' . str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT),
+                'name' => $name,
+                'description' => trim((string) ($item['description'] ?? '')),
+                'minGrade' => $minGrade,
+                'minAttendance' => $minAttendance,
+                'maxRemedialSubjects' => $maxRemedial,
+                'appliesToClinical' => (bool) ($item['appliesToClinical'] ?? false),
+                'enabled' => (bool) ($item['enabled'] ?? true),
+                'lastUpdated' => gmdate('Y-m-d'),
+                'updatedBy' => $authCtx['login_email'],
+            ];
+        }
+        $encoded = json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $stmt = $pdo->prepare(
+            "INSERT INTO system_settings
+                (setting_key, setting_value, is_internal, description, updated_at, updated_by_user_id)
+             VALUES ('retention_criteria', ?, 0, 'Administrator-defined retention criteria.', NOW(6), ?)
+             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value),
+                 updated_at = VALUES(updated_at), updated_by_user_id = VALUES(updated_by_user_id)"
+        );
+        $stmt->execute([$encoded, $authCtx['user_id']]);
 
-        $path = get_retention_storage_path();
-        file_put_contents($path, json_encode($items, JSON_PRETTY_PRINT));
-
-        json_response(['status' => 'ok', 'message' => 'Retention criteria updated successfully.'], 200);
+        json_response([
+            'status' => 'ok',
+            'message' => 'Retention criteria updated successfully.',
+            'criteria' => $normalized,
+        ], 200);
     } catch (\Throwable $e) {
         error_log('Admin retention criteria save error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
@@ -415,7 +420,7 @@ function handle_admin_profile_update(): void
         }
 
         $data = $body['data'];
-        $name = validate_required_string($data, 'name', 2, 255);
+        $name = validate_person_name($data, 'name', 2, 255);
         $email = validate_email($data['email'] ?? '');
 
         $upd = $pdo->prepare("UPDATE user_accounts SET display_name = ?, login_email = ? WHERE user_id = ?");
@@ -446,22 +451,22 @@ function handle_admin_settings_get(): void
         $pdo = create_pdo($config);
         $authCtx = admin_verify_auth($pdo, $config);
 
-        $path = get_settings_storage_path();
-        if (file_exists($path)) {
-            $settings = json_decode((string) file_get_contents($path), true);
-        } else {
-            $settings = [
-                'theme' => 'light',
-                'retentionThreshold' => 2.5,
-                'weights' => [
-                    'practicum' => 40,
-                    'exams' => 30,
-                    'quizzes' => 20,
-                    'attendance' => 10,
-                ],
-            ];
-            @file_put_contents($path, json_encode($settings, JSON_PRETTY_PRINT));
-        }
+        $stmt = $pdo->query(
+            "SELECT setting_key, setting_value FROM system_settings
+             WHERE setting_key IN ('retention_policy', 'grading_defaults')"
+        );
+        $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_KEY_PAIR) : [];
+        $retention = isset($rows['retention_policy']) ? json_decode($rows['retention_policy'], true) : [];
+        $grading = isset($rows['grading_defaults']) ? json_decode($rows['grading_defaults'], true) : [];
+        $themeStmt = $pdo->prepare("SELECT theme FROM user_accounts WHERE user_id = ?");
+        $themeStmt->execute([$authCtx['user_id']]);
+        $settings = [
+            'theme' => $themeStmt->fetchColumn() ?: 'light',
+            'retentionThreshold' => (float) ($retention['retention_threshold'] ?? 2.5),
+            'weights' => $grading['default_weights'] ?? [
+                'practicum' => 40, 'exams' => 30, 'quizzes' => 20, 'attendance' => 10,
+            ],
+        ];
 
         json_response(['status' => 'ok', 'settings' => $settings], 200);
     } catch (\Throwable $e) {
@@ -484,10 +489,48 @@ function handle_admin_settings_update(): void
         }
 
         $settings = $body['data'];
-        $path = get_settings_storage_path();
-        file_put_contents($path, json_encode($settings, JSON_PRETTY_PRINT));
+        $theme = (string) ($settings['theme'] ?? 'light');
+        $threshold = (float) ($settings['retentionThreshold'] ?? 2.5);
+        $weights = $settings['weights'] ?? [];
+        if (!in_array($theme, ['light', 'dark'], true)
+            || $threshold < 1.0 || $threshold > 5.0
+            || !is_array($weights)
+            || abs(array_sum(array_map('floatval', $weights)) - 100.0) > 0.001
+        ) {
+            safe_error_response('Theme, retention threshold, and grading weights totaling 100 are required.', 422);
+            return;
+        }
+        $pdo->beginTransaction();
+        $themeStmt = $pdo->prepare("UPDATE user_accounts SET theme = ? WHERE user_id = ?");
+        $themeStmt->execute([$theme, $authCtx['user_id']]);
+        $retentionStmt = $pdo->prepare(
+            "UPDATE system_settings
+             SET setting_value = JSON_SET(setting_value, '$.retention_threshold', ?),
+                 updated_at = NOW(6), updated_by_user_id = ?
+             WHERE setting_key = 'retention_policy'"
+        );
+        $retentionStmt->execute([$threshold, $authCtx['user_id']]);
+        $gradingStmt = $pdo->prepare(
+            "UPDATE system_settings
+             SET setting_value = JSON_SET(
+                    setting_value,
+                    '$.default_weights.quizzes', ?,
+                    '$.default_weights.exams', ?,
+                    '$.default_weights.practicum', ?,
+                    '$.default_weights.attendance', ?,
+                    '$.retention_gwa_threshold', ?
+                 ),
+                 updated_at = NOW(6), updated_by_user_id = ?
+             WHERE setting_key = 'grading_defaults'"
+        );
+        $gradingStmt->execute([
+            (float) ($weights['quizzes'] ?? 0), (float) ($weights['exams'] ?? 0),
+            (float) ($weights['practicum'] ?? 0), (float) ($weights['attendance'] ?? 0),
+            $threshold, $authCtx['user_id'],
+        ]);
+        $pdo->commit();
 
-        json_response(['status' => 'ok', 'message' => 'System settings updated successfully.'], 200);
+        json_response(['status' => 'ok', 'message' => 'System settings persisted successfully.', 'settings' => $settings], 200);
     } catch (\Throwable $e) {
         error_log('Admin settings update error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
@@ -503,42 +546,63 @@ function handle_admin_reports_summary(): void
 
         // Fetch students with biometric consent
         $stmt = $pdo->query(
-            "SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.bu_email, s.year_level, s.status,
-                    b.consent_status, b.face_enrolled
+            "SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                    s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
+                    e.final_gwa, e.retention_state, e.remedial_state_json, e.grade_components_json,
+                    cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name, c.units, c.is_clinical
              FROM students s
+             LEFT JOIN enrollments e ON e.student_id = s.student_id
+             LEFT JOIN class_sections cs ON cs.cs_id = e.cs_id
+             LEFT JOIN courses c ON c.course_id = cs.course_id
              LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
-             ORDER BY s.student_number ASC"
+             ORDER BY s.student_number ASC, cs.cs_id ASC"
         );
         $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         // Fetch attendance logs
         $attStmt = $pdo->query(
-            "SELECT record_id AS id, enrollment_id AS studentId, session_date AS date, session_code AS subjectCode, status
-             FROM attendance_records
+            "SELECT r.record_id AS id, s.student_id AS studentId, r.session_date AS date,
+                    c.course_code AS subjectCode, cs.cs_name AS className, r.status
+             FROM attendance_records r
+             JOIN enrollments e ON e.enrollment_id = r.enrollment_id
+             JOIN students s ON s.student_id = e.student_id
+             JOIN class_sections cs ON cs.cs_id = e.cs_id
+             JOIN courses c ON c.course_id = cs.course_id
              ORDER BY session_date DESC LIMIT 500"
         );
         $attendanceLogs = $attStmt ? $attStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-        $mappedStudents = array_map(function ($s) {
-            $fullName = trim($s['first_name'] . ' ' . ($s['middle_name'] ? $s['middle_name'] . ' ' : '') . $s['last_name']);
-            return [
-                'id' => (string) $s['student_id'],
-                'studentId' => $s['student_number'],
-                'name' => $fullName,
-                'email' => $s['bu_email'] ?? '',
-                'yearLevel' => (int) ($s['year_level'] ?? 4),
-                'status' => strtolower($s['status'] ?? 'active'),
-                'overallGWA' => 1.75,
-                'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
-                'consentStatus' => $s['consent_status'] ?? 'pending',
-                'classId' => 'CLINIC-A',
-                'enrolledSubjects' => [
-                    ['code' => 'CLIN401', 'name' => 'Clinical Dentistry I', 'grade' => 1.75, 'hasRemedial' => false],
-                    ['code' => 'CLIN402', 'name' => 'Clinical Dentistry II', 'grade' => 2.0, 'hasRemedial' => false],
-                ],
-                'remedialExams' => [],
-            ];
-        }, $students);
+        $grouped = [];
+        foreach ($students as $s) {
+            $id = (string) $s['student_id'];
+            if (!isset($grouped[$id])) {
+                $grouped[$id] = [
+                    'id' => $id, 'studentId' => $s['student_number'],
+                    'name' => trim($s['first_name'] . ' ' . ($s['middle_name'] ? $s['middle_name'] . ' ' : '') . $s['last_name']),
+                    'email' => $s['bu_email'] ?? '', 'yearLevel' => (int) ($s['year_level'] ?? 4),
+                    'status' => $s['retention_state'] ?? strtolower($s['status'] ?? 'active'),
+                    'overallGWA' => null, 'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
+                    'consentStatus' => $s['consent_status'] ?? 'pending', 'classId' => null,
+                    'className' => null, 'enrolledSubjects' => [], 'remedialExams' => [],
+                ];
+            }
+            if ($s['cs_id'] !== null) {
+                $grouped[$id]['classId'] = (string) $s['cs_id'];
+                $grouped[$id]['className'] = $s['cs_name'];
+                $grouped[$id]['overallGWA'] = $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null;
+                $grouped[$id]['enrolledSubjects'][] = [
+                    'code' => $s['course_code'], 'name' => $s['course_name'],
+                    'units' => (float) $s['units'], 'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : 0,
+                    'isClinical' => (bool) $s['is_clinical'],
+                    'hasRemedial' => $s['retention_state'] === 'remedial',
+                    'components' => $s['grade_components_json'] ? json_decode($s['grade_components_json'], true) : null,
+                ];
+                if ($s['remedial_state_json']) {
+                    $grouped[$id]['remedialExams'][] = json_decode($s['remedial_state_json'], true);
+                }
+            }
+        }
+        $mappedStudents = array_values($grouped);
 
         json_response([
             'status' => 'ok',

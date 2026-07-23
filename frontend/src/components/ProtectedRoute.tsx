@@ -10,6 +10,14 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   const { phase, user } = useAuth();
 
+  if (phase === 'bootstrapping') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-sm font-semibold text-slate-500">
+        Restoring secure session…
+      </div>
+    );
+  }
+
   if (phase !== 'authenticated' || !user) {
     return <Navigate to="/login" replace />;
   }

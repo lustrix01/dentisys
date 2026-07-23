@@ -5,8 +5,6 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $failed = $false
-$lintBaselineErrors = 300
-$lintBaselineWarnings = 30
 
 function Invoke-Step {
     param(
@@ -26,31 +24,8 @@ function Invoke-Step {
 }
 
 function Invoke-Lint {
-    $output = & npm --prefix (Join-Path $root "frontend") run lint 2>&1
-    $exitCode = $LASTEXITCODE
-    $output | ForEach-Object { Write-Host $_ }
-
-    if ($exitCode -eq 0) {
-        Write-Host "PASS: Frontend lint passed."
-        return
-    }
-
-    $summary = $output | Select-String -Pattern '([0-9]+)\s+problems\s+\(([0-9]+)\s+errors,\s+([0-9]+)\s+warnings\)' | Select-Object -Last 1
-    if ($null -eq $summary) {
-        throw "Frontend lint failed and the summary could not be interpreted safely."
-    }
-
-    $errors = [int] $summary.Matches[0].Groups[2].Value
-    $warnings = [int] $summary.Matches[0].Groups[3].Value
-
-    Write-Host "Lint summary: $errors errors, $warnings warnings."
-
-    if ($errors -le $lintBaselineErrors -and $warnings -le $lintBaselineWarnings) {
-        Write-Host "EXPECTED BASELINE FAILURE - NO REGRESSION"
-        return
-    }
-
-    throw "Frontend lint regression detected. Baseline is $lintBaselineErrors errors and $lintBaselineWarnings warnings; actual is $errors errors and $warnings warnings."
+    Invoke-Native "npm" @("--prefix", (Join-Path $root "frontend"), "run", "lint")
+    Write-Host "PASS: Frontend lint passed with zero errors."
 }
 
 function Invoke-Native {

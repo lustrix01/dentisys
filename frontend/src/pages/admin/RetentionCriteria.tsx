@@ -83,11 +83,7 @@ import { getRetentionCriteriaApi, saveRetentionCriteriaApi } from '../../service
 export const RetentionCriteria: React.FC = () => {
   const { user } = useAuth();
 
-  if (!user || user.role !== 'admin') {
-    return <div className="p-8 text-rose-600 font-bold">Access Denied. Dean access only.</div>;
-  }
-
-  const [criteria, setCriteria] = useState<RetentionCriterion[]>(defaultCriteria);
+  const [criteria, setCriteria] = useState<RetentionCriterion[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RetentionCriterion | null>(null);
@@ -95,26 +91,31 @@ export const RetentionCriteria: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [requestError, setRequestError] = useState('');
 
   useEffect(() => {
     getRetentionCriteriaApi()
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setCriteria(data);
-        }
+        if (Array.isArray(data)) setCriteria(data);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((error) => {
+        setRequestError(error instanceof Error ? error.message : 'Unable to load retention criteria.');
+        setLoading(false);
+      });
   }, []);
 
   const syncToBackend = async (newCriteria: RetentionCriterion[]) => {
-    setCriteria(newCriteria);
+    setRequestError('');
     try {
-      await saveRetentionCriteriaApi(newCriteria);
+      const response = await saveRetentionCriteriaApi(newCriteria);
+      setCriteria(response.criteria || newCriteria);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+      return true;
     } catch (err) {
-      console.error('Failed to sync retention criteria', err);
+      setRequestError(err instanceof Error ? err.message : 'Unable to save retention criteria.');
+      return false;
     }
   };
 
@@ -151,9 +152,8 @@ export const RetentionCriteria: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    recordAudit({ action: editingId ? 'Updated retention criterion' : 'Created retention criterion', module: 'Retention Criteria', description: `${editingId ? 'Updated' : 'Created'} retention criterion ${form.name}.`, status: 'Success' });
     if (!validate()) return;
     const now = new Date().toISOString().split('T')[0];
 
@@ -173,26 +173,29 @@ export const RetentionCriteria: React.FC = () => {
       };
       newCriteria = [...criteria, newCriterion];
     }
-    syncToBackend(newCriteria);
-    setIsModalOpen(false);
+    if (await syncToBackend(newCriteria)) {
+      recordAudit({ action: editingId ? 'Updated retention criterion' : 'Created retention criterion', module: 'Retention Criteria', description: `${editingId ? 'Updated' : 'Created'} retention criterion ${form.name}.`, status: 'Success' });
+      setIsModalOpen(false);
+    }
   };
 
-  const toggleEnabled = (id: string) => {
+  const toggleEnabled = async (id: string) => {
     const updated = criteria.map(c =>
       c.id === id ? { ...c, enabled: !c.enabled, lastUpdated: new Date().toISOString().split('T')[0], updatedBy: user?.login_email || 'admin@bicol-u.edu.ph' } : c
     );
-    syncToBackend(updated);
+    await syncToBackend(updated);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
-    recordAudit({ action: 'Deleted retention criterion', module: 'Retention Criteria', description: `Deleted retention criterion ${deleteTarget.name} (${deleteTarget.id}).`, status: 'Warning' });
     const updated = criteria.filter(c => c.id !== deleteTarget.id);
-    syncToBackend(updated);
-    setDeleteTarget(null);
+    if (await syncToBackend(updated)) {
+      recordAudit({ action: 'Deleted retention criterion', module: 'Retention Criteria', description: `Deleted retention criterion ${deleteTarget.name} (${deleteTarget.id}).`, status: 'Warning' });
+      setDeleteTarget(null);
+    }
   };
 
-  const FieldError = ({ field }: { field: string }) =>
+  const fieldError = (field: string) =>
     errors[field] ? <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors[field]}</p> : null;
 
   return (
@@ -224,6 +227,11 @@ export const RetentionCriteria: React.FC = () => {
           Criterion saved successfully. System threshold updated.
         </div>
       )}
+      {requestError && (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+          {requestError}
+        </div>
+      )}
 
       {/* Info Banner */}
       <div className="flex items-start gap-3 px-5 py-3.5 rounded-2xl bg-sky-50 dark:bg-sky-950/20 border border-sky-200/60 dark:border-sky-800/40 text-xs text-sky-700 dark:text-sky-400">
@@ -237,7 +245,9 @@ export const RetentionCriteria: React.FC = () => {
 
       {/* Criteria List */}
       <div className="space-y-4">
-        {criteria.map(c => (
+        {loading ? (
+          <div className="py-16 text-center text-sm text-slate-400">Loading persisted criteria…</div>
+        ) : criteria.map(c => (
           <Card key={c.id} className={`border-l-4 transition-all ${c.enabled ? 'border-l-accent-500' : 'border-l-slate-300 dark:border-l-slate-700 opacity-70'}`}>
             <CardContent className="p-5">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -304,7 +314,7 @@ export const RetentionCriteria: React.FC = () => {
           </Card>
         ))}
 
-        {criteria.length === 0 && (
+        {!loading && criteria.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-slate-400">
             <BookOpenCheck className="w-12 h-12 mb-3 opacity-30" />
             <p className="font-bold text-sm">No criteria defined yet.</p>
@@ -326,7 +336,7 @@ export const RetentionCriteria: React.FC = () => {
                placeholder="e.g. Standard Clinical Retention"
                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500"
              />
-             <FieldError field="name" />
+             {fieldError('name')}
            </div>
 
            <div>
@@ -350,7 +360,7 @@ export const RetentionCriteria: React.FC = () => {
                  onChange={e => setForm({ ...form, minGrade: parseFloat(e.target.value) })}
                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500"
                />
-               <FieldError field="minGrade" />
+               {fieldError('minGrade')}
              </div>
              <div>
                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Min Attendance % *</label>
@@ -361,7 +371,7 @@ export const RetentionCriteria: React.FC = () => {
                  onChange={e => setForm({ ...form, minAttendance: parseInt(e.target.value) })}
                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500"
                />
-               <FieldError field="minAttendance" />
+               {fieldError('minAttendance')}
              </div>
              <div>
                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Max Remedial Subjects *</label>
@@ -372,7 +382,7 @@ export const RetentionCriteria: React.FC = () => {
                  onChange={e => setForm({ ...form, maxRemedialSubjects: parseInt(e.target.value) })}
                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent-500"
                />
-               <FieldError field="maxRemedialSubjects" />
+               {fieldError('maxRemedialSubjects')}
              </div>
            </div>
 

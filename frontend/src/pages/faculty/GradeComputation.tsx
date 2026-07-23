@@ -27,10 +27,11 @@ import { useAuth } from '../../context/AuthContext';
 import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore, GradingComponentConfig } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { percentageToGWA, gwaToDescription, computeSubjectGrade } from '../../utils/gradeHelper';
 import { recordAudit } from '../../services/auditService';
 
-import { getFacultyAssessmentsApi, saveFacultyAssessmentsApi } from '../../services/apiClient';
+import { deleteFacultyAssessmentApi, getFacultyAssessmentsApi, saveFacultyAssessmentScoresApi, saveFacultyAssessmentsApi } from '../../services/apiClient';
 
 export const GradeComputation: React.FC = () => {
   const { user } = useAuth();
@@ -105,6 +106,7 @@ export const GradeComputation: React.FC = () => {
   
   // Assessment Form State
   const [assTitle, setAssTitle] = useState('');
+  const [assClassId, setAssClassId] = useState('CLINIC-A');
   const [assType, setAssType] = useState<'Quiz' | 'Activity' | 'Assignment' | 'Laboratory' | 'Midterm Exam' | 'Final Exam' | 'Others'>('Quiz');
   const [assPeriod, setAssPeriod] = useState<'Midterm' | 'Final'>('Midterm');
   const [assMaxScore, setAssMaxScore] = useState(50);
@@ -124,6 +126,7 @@ export const GradeComputation: React.FC = () => {
   const openNewAssessmentModal = () => {
     setEditingAssessment(null);
     setAssTitle('');
+    setAssClassId(selectedClassId || 'CLINIC-A');
     setAssType('Quiz');
     setAssPeriod('Midterm');
     setAssMaxScore(50);
@@ -137,6 +140,7 @@ export const GradeComputation: React.FC = () => {
   const openEditAssessmentModal = (ass: Assessment) => {
     setEditingAssessment(ass);
     setAssTitle(ass.title);
+    setAssClassId(ass.classId || selectedClassId || 'CLINIC-A');
     setAssType(ass.type);
     setAssPeriod(ass.gradingPeriod);
     setAssMaxScore(ass.maxScore);
@@ -147,39 +151,51 @@ export const GradeComputation: React.FC = () => {
     setIsAssessmentModalOpen(true);
   };
 
-  const handleAssessmentSubmit = (e: React.FormEvent) => {
+  const handleAssessmentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assTitle) return;
 
-    if (editingAssessment) {
-      updateAssessment({
+    const candidate = editingAssessment
+      ? {
         ...editingAssessment,
         title: assTitle,
         type: assType,
+        classId: assClassId,
         gradingPeriod: assPeriod,
         maxScore: assMaxScore,
         dueDate: assDueDate,
         instructions: assInstructions,
         remarks: assRemarks,
         status: assStatus as 'Active' | 'Closed' | 'Archived',
-      });
-      alert('Assessment updated successfully.');
-    } else {
-      addAssessment({
+      }
+      : {
         title: assTitle,
         type: assType,
         subjectCode: selectedSubjectCode,
-        classId: selectedClassId,
+        classId: assClassId,
         gradingPeriod: assPeriod,
         maxScore: assMaxScore,
         dueDate: assDueDate,
         instructions: assInstructions,
         remarks: assRemarks,
         status: assStatus as 'Active' | 'Closed' | 'Archived',
-      });
-      alert('Assessment created successfully.');
+      };
+    try {
+      const response = await saveFacultyAssessmentsApi([candidate]);
+      const persistedId = response.assessments?.[0]?.id;
+      if (editingAssessment) {
+        updateAssessment(candidate as Assessment);
+      } else if (persistedId) {
+        addAssessment({
+          ...candidate,
+          id: persistedId,
+        });
+      }
+      showFeedback(response.message, 'success');
+      setIsAssessmentModalOpen(false);
+    } catch (requestError) {
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment.', 'error');
     }
-    setIsAssessmentModalOpen(false);
   };
 
   // ----------------------------------------------------
@@ -240,16 +256,13 @@ export const GradeComputation: React.FC = () => {
   };
 
   // Auto-save on input blur
-  const handleScoreBlur = (studentId: string) => {
+  const handleScoreBlur = async (studentId: string) => {
     if (!autoSaveEnabled || !selectedAssessmentId || !activeAssessment) return;
     const item = scoresInputState[studentId];
     if (!item) return;
 
     if (!validateSingleScore(item.score, activeAssessment.maxScore)) return;
 
-    const currentScoreValue = item.score ? parseFloat(item.score) : undefined;
-    
-    // Save to context
     const saveList = Object.entries(scoresInputState)
       .filter(([id, val]) => val.score !== '')
       .map(([id, val]) => ({
@@ -257,10 +270,15 @@ export const GradeComputation: React.FC = () => {
         score: parseFloat(val.score),
         remarks: val.remarks
       }));
-    saveAssessmentScores(selectedAssessmentId, saveList);
+    try {
+      await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
+      saveAssessmentScores(selectedAssessmentId, saveList);
+    } catch (requestError) {
+      showFeedback(requestError instanceof Error ? requestError.message : 'Auto-save failed.', 'error');
+    }
   };
 
-  const handleManualSaveScores = () => {
+  const handleManualSaveScores = async () => {
     if (!selectedAssessmentId || !activeAssessment) return;
 
     let hasErrors = false;
@@ -282,15 +300,18 @@ export const GradeComputation: React.FC = () => {
     });
 
     if (hasErrors) {
-      alert('Some scores are invalid! Make sure scores do not exceed the maximum allowed for this assessment.');
+      showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
       return;
     }
 
-    saveAssessmentScores(selectedAssessmentId, saveList);
-    setIsScoresSavedAlert(true);
-    setTimeout(() => {
-      setIsScoresSavedAlert(false);
-    }, 3000);
+    try {
+      await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
+      saveAssessmentScores(selectedAssessmentId, saveList);
+      setIsScoresSavedAlert(true);
+      setTimeout(() => setIsScoresSavedAlert(false), 3000);
+    } catch (requestError) {
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
+    }
   };
 
   // Filter roster for scores entry
@@ -354,7 +375,7 @@ export const GradeComputation: React.FC = () => {
   const handleSaveComponents = (e: React.FormEvent) => {
     e.preventDefault();
     if (weightsSum !== 100) {
-      alert(`The sum of weights must equal exactly 100%. Currently it is ${weightsSum}%.`);
+      showFeedback(`The sum of weights must equal exactly 100%. Current total: ${weightsSum}%.`, 'error');
       return;
     }
 
@@ -509,15 +530,15 @@ export const GradeComputation: React.FC = () => {
     reader.readAsText(file);
   };
 
-  const handleConfirmImport = () => {
+  const handleConfirmImport = async () => {
     if (csvErrors.length > 0) {
-      alert('Please fix the CSV errors listed below before importing.');
+      showFeedback('Please fix the CSV errors listed below before importing.', 'error');
       return;
     }
 
     if (csvPreviewData.length === 0) return;
 
-    const confirmed = window.confirm(
+    const confirmed = await requestConfirmation(
       `Import grades for ${csvPreviewData.length} students?\nThis will automatically recalculate student scores.`
     );
     if (!confirmed) return;
@@ -547,7 +568,7 @@ export const GradeComputation: React.FC = () => {
     setImportSuccess(true);
     setCsvFile(null);
     setCsvPreviewData([]);
-    alert('CSV Grades imported and overall student GWAs recalculated successfully.');
+    showFeedback('CSV grades imported and student grades recalculated.', 'success');
   };
 
   // Helper styles
@@ -890,9 +911,15 @@ export const GradeComputation: React.FC = () => {
                             <Edit className="w-3.8 h-3.8" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Archive ${ass.title}?`)) {
-                                archiveAssessment(ass.id);
+                            onClick={async () => {
+                              if (await requestConfirmation(`Archive ${ass.title}?`, 'Archive assessment')) {
+                                try {
+                                  await saveFacultyAssessmentsApi([{ ...ass, status: 'Archived' }]);
+                                  archiveAssessment(ass.id);
+                                  showFeedback('Assessment archived.', 'success');
+                                } catch (requestError) {
+                                  showFeedback(requestError instanceof Error ? requestError.message : 'Unable to archive assessment.', 'error');
+                                }
                               }
                             }}
                             className="p-1 text-slate-455 hover:text-amber-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
@@ -901,9 +928,15 @@ export const GradeComputation: React.FC = () => {
                             <Archive className="w-3.8 h-3.8" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Permanently delete ${ass.title}? This will delete all student scores for this assessment.`)) {
-                                deleteAssessment(ass.id);
+                            onClick={async () => {
+                              if (await requestConfirmation(`Permanently delete ${ass.title}? This will delete all student scores for this assessment.`, 'Delete assessment')) {
+                                try {
+                                  const response = await deleteFacultyAssessmentApi(ass.id);
+                                  deleteAssessment(ass.id);
+                                  showFeedback(response.message, 'success');
+                                } catch (requestError) {
+                                  showFeedback(requestError instanceof Error ? requestError.message : 'Unable to delete assessment.', 'error');
+                                }
                               }
                             }}
                             className="p-1 text-slate-455 hover:text-rose-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
@@ -1300,6 +1333,23 @@ export const GradeComputation: React.FC = () => {
               onChange={(e) => setAssTitle(e.target.value)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              Target Class / Section
+            </label>
+            <select
+              value={assClassId}
+              onChange={(e) => setAssClassId(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
+            >
+              {assignedClasses.map((clsId) => (
+                <option key={clsId} value={clsId}>
+                  {clsId}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

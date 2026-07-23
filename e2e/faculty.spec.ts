@@ -6,7 +6,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ access_token: 'mock-faculty-token' }),
+        body: JSON.stringify({ type: 'direct_login', access_token: 'mock-faculty-token' }),
       });
     });
 

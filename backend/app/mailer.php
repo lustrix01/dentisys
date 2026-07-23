@@ -72,7 +72,7 @@ function send_smtp_email(string $to, string $subject, string $body, array $confi
     $errstr = '';
 
     try {
-        $timeout = 5;
+        $timeout = 2;
         $context = stream_context_create([
             'ssl' => [
                 'verify_peer' => false,

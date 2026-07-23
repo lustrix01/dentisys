@@ -77,6 +77,16 @@ function handle_refresh(): void
             auth_controller_emit($resp);
             return;
         }
+        if ($result['type'] === 'concurrent') {
+            $resp = build_error_response(
+                'Another tab already refreshed this session. Retry with the rotated cookie.',
+                409,
+                'REFRESH_IN_PROGRESS'
+            );
+            $resp['headers'] = array_merge($resp['headers'], build_no_store_headers());
+            auth_controller_emit($resp);
+            return;
+        }
 
         $resp = auth_build_no_store_message_response('Authentication required.', 401);
         $resp['headers'][] = build_clear_cookie_header($isHttps)[0];

@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Student, AttendanceRecord, SystemSettings, RemedialExam, GradeComponents, EnrolledSubject, AttendanceStatus, Assessment, AssessmentScore, GradingComponentConfig, RetentionLog } from '../types';
 import { recordAudit } from '../services/auditService';
 import { computeSubjectGrade, computeOverallGWA, percentageToGWA } from '../utils/gradeHelper';
-import { getFacultyStudentsApi } from '../services/apiClient';
+import { getFacultyAssessmentsApi, getFacultyAttendanceApi, getFacultyStudentsApi } from '../services/apiClient';
+import { useAuth } from './AuthContext';
 
 interface AppContextProps {
   students: Student[];
@@ -11,7 +12,7 @@ interface AppContextProps {
   assessments: Assessment[];
   assessmentScores: AssessmentScore[];
   gradingComponents: GradingComponentConfig[];
-  addStudent: (student: Omit<Student, 'id' | 'overallGWA' | 'remedialExams' | 'status'>) => void;
+  addStudent: (student: Omit<Student, 'overallGWA' | 'remedialExams' | 'status'>) => void;
   updateStudent: (student: Student) => void;
   deleteStudent: (id: string) => void;
   updateStudentGrade: (studentId: string, subjectCode: string, components: GradeComponents) => void;
@@ -33,7 +34,7 @@ interface AppContextProps {
   updateSettings: (settings: SystemSettings) => void;
   
   // Assessment Actions
-  addAssessment: (assessment: Omit<Assessment, 'id' | 'createdAt'>) => void;
+  addAssessment: (assessment: Omit<Assessment, 'createdAt'>) => void;
   updateAssessment: (assessment: Assessment) => void;
   deleteAssessment: (id: string) => void;
   archiveAssessment: (id: string) => void;
@@ -70,7 +71,8 @@ const initialStudents: Student[] = [];
 const generateInitialAttendance = (): AttendanceRecord[] => [];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const isV3 = localStorage.getItem('dentisys_mock_version') === 'v3';
+  const { phase, user } = useAuth();
+  const isV3 = false;
 
   const [students, setStudents] = useState<Student[]>(() => {
     if (!isV3) return initialStudents;
@@ -152,8 +154,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     localStorage.setItem('dentisys_mock_version', 'v3');
-    getFacultyStudentsApi()
-      .then((data) => {
+    if (phase !== 'authenticated' || user?.role !== 'faculty') {
+      setStudents([]);
+      return;
+    }
+    Promise.all([getFacultyStudentsApi(), getFacultyAssessmentsApi(), getFacultyAttendanceApi()])
+      .then(([data, assessmentData, attendanceData]) => {
         if (Array.isArray(data)) {
           const mapped: Student[] = data.map(s => ({
             id: String(s.id),
@@ -161,26 +167,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             name: s.name,
             email: s.email,
             yearLevel: (s.yearLevel || 4) as 1 | 2 | 3 | 4,
-            status: (s.status || 'active') as any,
-            classId: s.classId || 'CLINIC-A',
-            className: s.className || 'Clinical Rotation A',
-            overallGWA: 1.75,
-            clinicHoursCompleted: 90,
+            status: (s.status || 'active') as Student['status'],
+            classId: s.classId,
+            className: s.className,
+            overallGWA: s.overallGWA ?? 0,
+            clinicHoursCompleted: s.clinicHoursCompleted ?? 0,
             faceEnrolled: s.faceEnrolled,
-            consentStatus: (s.consentStatus || 'pending') as any,
+            consentStatus: (s.consentStatus || 'pending') as Student['consentStatus'],
             remedialExams: [],
-            enrolledSubjects: [
-              { code: 'CLIN401', name: 'Clinical Dentistry I', units: 4, isClinical: true, components: { quizzes: 85, exams: 85, practicum: 85, attendance: 95 }, grade: 1.75, hasRemedial: false },
-              { code: 'CLIN402', name: 'Clinical Dentistry II', units: 4, isClinical: true, components: { quizzes: 85, exams: 85, practicum: 85, attendance: 95 }, grade: 1.75, hasRemedial: false }
-            ],
+            enrolledSubjects: s.enrolledSubjects ?? [],
           }));
           setStudents(mapped);
         }
+        setAssessments(assessmentData as Assessment[]);
+        setAttendanceRecords(attendanceData.records as AttendanceRecord[]);
       })
       .catch((err) => {
         console.warn('Backend student sync warning:', err);
       });
-  }, []);
+  }, [phase, user?.role]);
 
   useEffect(() => {
     localStorage.setItem('dentisys_students', JSON.stringify(students));
@@ -428,10 +433,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [assessments, assessmentScores, gradingComponents, attendanceRecords, settings.weights, settings.retentionThreshold]);
 
-  const addStudent = (newStudent: Omit<Student, 'id' | 'overallGWA' | 'remedialExams' | 'status'>) => {
+  const addStudent = (newStudent: Omit<Student, 'overallGWA' | 'remedialExams' | 'status'>) => {
     const created: Student = {
       ...newStudent,
-      id: Math.random().toString(36).substr(2, 9),
+      id: newStudent.id,
       status: 'active',
       overallGWA: computeOverallGWA(newStudent.enrolledSubjects),
       remedialExams: [],
@@ -454,7 +459,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateStudentGrade = (studentId: string, subjectCode: string, components: GradeComponents) => {
-    // Legacy support: We simulate creating/updating assessments for components to fit recalculator
+    // Compatibility cache for the grade recalculator; persisted APIs remain authoritative.
     setStudents(prev => {
       const updated = prev.map(student => {
         if (student.id !== studentId) return student;
@@ -687,10 +692,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Assessment Actions
-  const addAssessment = (newAss: Omit<Assessment, 'id' | 'createdAt'>) => {
+  const addAssessment = (newAss: Omit<Assessment, 'createdAt'>) => {
     const created: Assessment = {
       ...newAss,
-      id: `as-${Math.random().toString(36).substr(2, 9)}`,
+      id: newAss.id,
       createdAt: new Date().toISOString().split('T')[0]
     };
     setAssessments(prev => [...prev, created]);

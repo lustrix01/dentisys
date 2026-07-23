@@ -5,6 +5,7 @@ import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
 import { getFacultyProfileApi, updateFacultyProfileApi } from '../../services/apiClient';
+import { normalizePersonName } from '../../utils/nameNormalization';
 
 const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-clinical-500';
 
@@ -35,7 +36,9 @@ export const Profile: React.FC = () => {
     event.preventDefault();
     setMessage(null);
     try {
-      await updateFacultyProfileApi({ name, email });
+      const normalizedName = normalizePersonName(name);
+      await updateFacultyProfileApi({ name: normalizedName, email });
+      setName(normalizedName);
       recordAudit({ action: 'Updated profile', module: 'Profile', description: 'Updated faculty professional profile details.', status: 'Success' });
       setSaved(true);
       setMessage({ type: 'success', text: 'Profile saved successfully.' });
@@ -68,5 +71,5 @@ export const Profile: React.FC = () => {
     </div>
   );
 };
-const Field = ({ label, value, setValue, type = 'text', icon }: { label: string; value: string; setValue: (value: string) => void; type?: string; icon?: React.ReactNode }) => <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}<span className="relative block">{icon && <span className="absolute left-3.5 top-4 text-slate-400">{icon}</span>}<input type={type} required={type === 'email'} value={value} onChange={event => { let val = event.target.value; if (label.toLowerCase().includes('name')) val = val.replace(/[0-9]/g, ''); if (label.toLowerCase().includes('contact')) val = val.replace(/[^0-9\+\-\s\(\)]/g, ''); setValue(val); }} className={`${inputClass} ${icon ? 'pl-10' : ''}`} /></span></label>;
+const Field = ({ label, value, setValue, type = 'text', icon }: { label: string; value: string; setValue: (value: string) => void; type?: string; icon?: React.ReactNode }) => <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}<span className="relative block">{icon && <span className="absolute left-3.5 top-4 text-slate-400">{icon}</span>}<input type={type} required={type === 'email'} value={value} onChange={event => { let val = event.target.value; if (label.toLowerCase().includes('name')) val = val.replace(/[0-9]/g, ''); if (label.toLowerCase().includes('contact')) val = val.replace(/[^0-9\+\-\s\(\)]/g, ''); setValue(val); }} onBlur={() => { if (label.toLowerCase().includes('name')) setValue(normalizePersonName(value)); }} className={`${inputClass} ${icon ? 'pl-10' : ''}`} /></span></label>;
 

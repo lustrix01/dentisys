@@ -3,12 +3,11 @@ import { Camera, CheckCircle2, ClipboardCheck, Moon, Save, ShieldCheck, Sun, Ale
 import { useApp } from '../../context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { getSecretarySettingsApi, updateSecretarySettingsApi } from '../../services/apiClient';
-import { getCurrentSecretary } from './utils';
 
 export const Settings: React.FC = () => {
   const { settings, updateSettings } = useApp();
-  const secretary = getCurrentSecretary();
   const [theme, setTheme] = useState(settings.theme);
+  const [assignedClassName, setAssignedClassName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -21,6 +20,7 @@ export const Settings: React.FC = () => {
         if (res.settings?.theme) {
           setTheme(res.settings.theme);
         }
+        setAssignedClassName(res.settings?.assignedClassName || '');
       })
       .catch(err => {
         setError(err instanceof Error ? err.message : 'Unable to load preferences from server.');
@@ -138,7 +138,7 @@ export const Settings: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-400">Assigned class</span>
                   <span className="font-bold text-slate-700 dark:text-slate-200">
-                    {secretary?.assignedClassName || 'Clinical Rotation A'}
+                    {assignedClassName || 'Not assigned'}
                   </span>
                 </div>
                 <div className="flex justify-between">

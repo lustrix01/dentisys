@@ -6,7 +6,7 @@ import { login as apiLogin, getMe, setAccessToken as setApiAccessToken } from '.
 
 export function Login() {
   const navigate = useNavigate();
-  const { storeEnrollmentChallenge, storeMfaChallenge, setAccessToken, setUser, setAuthenticated, setError: setAuthError } = useAuth();
+  const { beginLogin, storeEnrollmentChallenge, storeMfaChallenge, setAccessToken, setUser, setAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -21,39 +21,25 @@ export function Login() {
       return;
     }
 
+    beginLogin();
     setIsLoading(true);
     setError('');
 
     try {
       const result = await apiLogin(email, password);
 
-      const userKeySanitized = email.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      const userKeyClean = email.trim().toLowerCase();
-      const isMfaEnabled =
-        result.mfa_enrolled ||
-        localStorage.getItem(`dentisys_mfa_enabled_${userKeySanitized}`) === 'true' ||
-        localStorage.getItem(`dentisys_mfa_enabled_${userKeyClean}`) === 'true';
-
-      if (isMfaEnabled) {
-        const mfaToken = result.mfa_session_token || result.access_token || `mfa_session_${Date.now()}`;
-        storeMfaChallenge(mfaToken);
-        localStorage.setItem('dentisys_pending_mfa_email', email);
-        if (result.access_token) {
-          localStorage.setItem(`dentisys_pending_mfa_token_${mfaToken}`, result.access_token);
-        }
-        navigate('/mfa/verify');
-      } else if (result.access_token) {
+      if (result.type === 'direct_login' && result.access_token) {
         setApiAccessToken(result.access_token);
         setAccessToken(result.access_token);
         const user = await getMe();
         setUser(user);
         setAuthenticated();
         navigate('/', { replace: true });
-      } else if (!result.mfa_enrolled && result.enrollment_token) {
+      } else if (result.type === 'mfa_enrollment' && result.enrollment_token) {
         storeEnrollmentChallenge(result.enrollment_token);
         navigate('/mfa/enroll');
-      } else if (result.mfa_enrolled && result.mfa_session_token) {
-        storeMfaChallenge(result.mfa_session_token);
+      } else if (result.type === 'mfa_challenge' && result.mfa_session_token) {
+        storeMfaChallenge(result.mfa_session_token, result.dev_mfa_code);
         navigate('/mfa/verify');
       } else {
         setError('Unexpected authentication response.');

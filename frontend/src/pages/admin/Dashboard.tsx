@@ -19,14 +19,12 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from 'recharts';
-import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 
 import { getAdminDashboardKpisApi } from '../../services/apiClient';
 
 export const Dashboard: React.FC = () => {
-  const { students, attendanceRecords } = useApp();
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -51,19 +49,15 @@ export const Dashboard: React.FC = () => {
     loadKpis();
   }, []);
 
-  if (!user || user.role !== 'admin') {
-    return <div className="p-8 text-rose-600 font-bold">Access Denied. Dean access only.</div>;
-  }
-
   const facultyList = apiData?.facultyList || [];
 
   // ── KPI calculations ──────────────────────────────────────
-  const totalStudents = apiData?.kpis?.totalStudents ?? students.length;
-  const totalFaculty = facultyList.length || apiData?.kpis?.totalFaculty || 0;
-  const goodStanding = apiData?.kpis?.goodStanding ?? students.filter(s => s.status === 'active').length;
-  const atRisk = apiData?.kpis?.atRisk ?? students.filter(s => s.status === 'warning' || s.status === 'critical').length;
-  const remedialCount = apiData?.kpis?.remedialCount ?? students.filter(s => s.status === 'remedial').length;
-  const attendanceRate = apiData?.kpis?.attendanceRate ?? 100;
+  const totalStudents = apiData?.kpis?.totalStudents ?? 0;
+  const totalFaculty = apiData?.kpis?.totalFaculty ?? 0;
+  const goodStanding = apiData?.kpis?.goodStanding ?? 0;
+  const atRisk = apiData?.kpis?.atRisk ?? 0;
+  const remedialCount = apiData?.kpis?.remedialCount ?? 0;
+  const attendanceRate = apiData?.kpis?.attendanceRate ?? 0;
 
   // ── GWA Distribution chart ────────────────────────────────
   const gwaBuckets = useMemo(() => {
@@ -75,16 +69,8 @@ export const Dashboard: React.FC = () => {
       { range: '2.5–3.0', count: 0, color: '#F97316' },
       { range: '3.0+', count: 0, color: '#EF4444' },
     ];
-    students.forEach(s => {
-      const g = s.overallGWA;
-      if (g <= 1.5) buckets[0].count++;
-      else if (g <= 2.0) buckets[1].count++;
-      else if (g <= 2.5) buckets[2].count++;
-      else if (g <= 3.0) buckets[3].count++;
-      else buckets[4].count++;
-    });
     return buckets;
-  }, [apiData, students]);
+  }, [apiData]);
 
   // ── Retention Status Donut ────────────────────────────────
   const pieData = useMemo(() => {
@@ -103,9 +89,7 @@ export const Dashboard: React.FC = () => {
   }, [apiData, goodStanding, atRisk, remedialCount]);
 
   // ── Class attendance summary ──────────────────────────────
-  const classAttendance = apiData?.classAttendance || [
-    { name: 'CLINIC-A', rate: attendanceRate },
-  ];
+  const classAttendance = apiData?.classAttendance ?? [];
 
   const kpis = [
     { label: 'Total Faculty', value: totalFaculty, icon: GraduationCap, color: 'text-accent-600 dark:text-accent-400', bg: 'bg-accent-500/10' },
@@ -121,12 +105,26 @@ export const Dashboard: React.FC = () => {
     { label: 'Reports & Analytics', desc: 'Generate institutional academic reports', icon: FileSpreadsheet, path: '/admin/reports', color: 'from-clinical-500 to-accent-500' },
   ];
 
-  const recentReports = [
-    { title: 'Midterm GWA Summary — CLINIC-A', date: '2026-06-30', type: 'Academic' },
-    { title: 'Retention Watch Report — All Classes', date: '2026-06-28', type: 'Retention' },
-    { title: 'Attendance Rate — June 2026', date: '2026-06-27', type: 'Attendance' },
-    { title: 'Remedial Schedule — Batch 2022', date: '2026-06-25', type: 'Remedial' },
-  ];
+  const recentReports: Array<{ title: string; date: string; type: string }> = [];
+
+  if (loading) {
+    return <div className="p-8 text-center text-sm text-slate-500">Loading persisted dashboard data…</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center space-y-3">
+        <p className="text-sm text-rose-600">{error}</p>
+        <button
+          type="button"
+          onClick={loadKpis}
+          className="px-4 py-2 rounded-xl bg-accent-600 text-white text-xs font-bold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
@@ -157,7 +155,7 @@ export const Dashboard: React.FC = () => {
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span>{error} (showing cached overview metrics)</span>
+            <span>{error}</span>
           </div>
           <button onClick={loadKpis} className="font-bold underline hover:opacity-80">
             Retry
@@ -301,6 +299,11 @@ export const Dashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              {recentReports.length === 0 && (
+                <p className="py-6 text-center text-xs text-slate-400">
+                  No persisted generated-report history is available.
+                </p>
+              )}
               {recentReports.map((rep, i) => (
                 <div key={i} className="py-3 flex items-center justify-between gap-3">
                   <div>
@@ -348,8 +351,7 @@ export const Dashboard: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
               {facultyList.map((f: any, i: number) => {
-                const clsIds = (f.classes || '').split(', ');
-                const count = students.filter(s => s.classId && clsIds.includes(s.classId)).length || 15;
+                const count = Number(f.studentCount ?? 0);
                 return (
                   <tr key={f.id || i} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                     <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{f.name}</td>

@@ -5,6 +5,7 @@ import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
 import { getAdminProfileApi, updateAdminProfileApi } from '../../services/apiClient';
+import { normalizePersonName } from '../../utils/nameNormalization';
 
 const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-accent-500';
 export const Profile: React.FC = () => {
@@ -32,7 +33,9 @@ export const Profile: React.FC = () => {
     event.preventDefault();
     setMessage(null);
     try {
-      await updateAdminProfileApi({ name, email, office });
+      const normalizedName = normalizePersonName(name);
+      await updateAdminProfileApi({ name: normalizedName, email, office });
+      setName(normalizedName);
       recordAudit({ action: 'Updated profile', module: 'Profile', description: 'Updated Dean executive profile details.', status: 'Success' });
       setSaved(true);
       setMessage({ type: 'success', text: 'Profile saved successfully.' });
@@ -85,7 +88,7 @@ export const Profile: React.FC = () => {
               <form onSubmit={save} className="space-y-5">
                 {message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <Label label="Full name"><input required value={name} onChange={event => setName(event.target.value.replace(/[0-9]/g, ''))} className={inputClass} /></Label>
+                  <Label label="Full name"><input required value={name} onChange={event => setName(event.target.value.replace(/[0-9]/g, ''))} onBlur={() => setName(normalizePersonName(name))} className={inputClass} /></Label>
                   <Label label="Email address" icon={<Mail className="w-4 h-4" />}><input required type="email" value={email} onChange={event => setEmail(event.target.value)} className={`${inputClass} pl-10`} /></Label>
                   <Label label="Office location" icon={<Building2 className="w-4 h-4" />}><input value={office} onChange={event => setOffice(event.target.value)} className={`${inputClass} pl-10`} /></Label>
                 </div>

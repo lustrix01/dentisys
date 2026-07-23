@@ -47,7 +47,7 @@ const ROLE_TITLES: Record<string, string> = {
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, clearAuth } = useAuth();
+  const { user, logout } = useAuth();
   const currentUser = {
     name: user?.display_name ?? '',
     email: user?.login_email ?? '',
@@ -129,10 +129,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     });
   };
 
-  const handleLogout = () => {
-    clearAuth();
+  const handleLogout = async () => {
+    await logout();
     setIsProfileOpen(false);
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
 
   const getNavItems = (): NavItem[] => {
@@ -153,7 +153,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'Manual Override', path: '/secretary/override', icon: ClipboardPenLine },
-        { name: 'Live CCTV Feed', path: '/secretary/cctv', icon: Video },
+        { name: 'CCTV Integration', path: '/secretary/cctv', icon: Video },
         { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
         { name: 'My Profile', path: '/secretary/profile', icon: UserCircle },
         { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
@@ -238,7 +238,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     } else if (path === '/secretary/override') {
       crumbs.push({ name: 'Manual Override', path: '/secretary/override' });
     } else if (path === '/secretary/cctv') {
-      crumbs.push({ name: 'Live CCTV Feed', path: '/secretary/cctv' });
+      crumbs.push({ name: 'CCTV Integration', path: '/secretary/cctv' });
     } else if (path === '/secretary/audit-trail') {
       crumbs.push({ name: 'My Activity Log', path: '/secretary/audit-trail' });
     } else if (path === '/faculty/audit-trail') {

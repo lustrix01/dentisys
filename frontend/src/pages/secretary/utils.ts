@@ -24,9 +24,9 @@ export const getCurrentSecretary = (): SecretaryUser | null => {
   return _currentSecretary;
 };
 
-export const getAssignedClassId = (user: SecretaryUser | null) => user?.assignedClassId || 'CLINIC-A';
+export const getAssignedClassId = (user: SecretaryUser | null) => user?.assignedClassId || '';
 
-export const getAssignedClassName = (user: SecretaryUser | null) => user?.assignedClassName || 'Clinical Rotation A';
+export const getAssignedClassName = (user: SecretaryUser | null) => user?.assignedClassName || '';
 
 export const getClassStudents = (students: Student[], classId: string) =>
   students.filter(student => student.classId === classId);

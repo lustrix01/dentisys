@@ -1,9 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Smartphone, CheckCircle2, AlertCircle, KeyRound, Lock, RefreshCw, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  KeyRound,
+  Lock,
+  RefreshCw,
+  ShieldCheck,
+  Smartphone,
+} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
-import { generateBase32Secret, verifyTotpCode } from '../services/apiClient';
-import { generateQrCodeSvg } from '../utils/qrCode';
+import {
+  getMfaSettingsApi,
+  regenerateMfaRecoveryCodesApi,
+  revokeMfaApi,
+} from '../services/apiClient';
 
 interface MfaSettingsCardProps {
   userEmail?: string;
@@ -11,256 +22,216 @@ interface MfaSettingsCardProps {
 }
 
 export const MfaSettingsCard: React.FC<MfaSettingsCardProps> = ({
-  userEmail = 'user@bicol-u.edu.ph',
+  userEmail = '',
   roleName = 'User',
 }) => {
-  const userKeySanitized = userEmail.toLowerCase().replace(/[^a-z0-9]/g, '_');
-  const storageKey = `dentisys_mfa_enabled_${userKeySanitized}`;
-  const secretStorageKey = `dentisys_mfa_secret_${userKeySanitized}`;
-  
-  const [mfaEnabled, setMfaEnabled] = useState<boolean>(() => {
-    return localStorage.getItem(storageKey) === 'true';
-  });
+  const [enabled, setEnabled] = useState(false);
+  const [recoveryCount, setRecoveryCount] = useState(0);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showRevoke, setShowRevoke] = useState(false);
+  const [stepUpCode, setStepUpCode] = useState('');
 
-  const [secretKey, setSecretKey] = useState<string>(() => {
-    const existing = localStorage.getItem(secretStorageKey);
-    if (existing && existing.length >= 32) return existing;
-    const generated = generateBase32Secret(32);
-    localStorage.setItem(secretStorageKey, generated);
-    return generated;
-  });
-
-  const [showSetupModal, setShowSetupModal] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [mfaError, setMfaError] = useState('');
-  const [mfaSuccess, setMfaSuccess] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [showRecoveryCodes, setShowRecoveryCodes] = useState(false);
-
-  const mockRecoveryCodes = [
-    '8F2A-9K1M',
-    '3L7P-4W9Q',
-    '5V2X-8N0R',
-    '1K6Y-7T3U',
-  ];
-
-  useEffect(() => {
-    localStorage.setItem(storageKey, mfaEnabled ? 'true' : 'false');
-  }, [mfaEnabled, storageKey]);
-
-  const handleToggleMfa = () => {
-    setMfaError('');
-    setMfaSuccess('');
-    if (mfaEnabled) {
-      // Confirm disable
-      const confirmDisable = window.confirm(
-        `Are you sure you want to disable Multi-Factor Authentication (MFA) for your ${roleName} account?`
+  const loadStatus = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await getMfaSettingsApi();
+      setEnabled(response.mfa.enabled);
+      setRecoveryCount(response.mfa.recoveryCodeCount);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to load MFA status.',
       );
-      if (confirmDisable) {
-        setMfaEnabled(false);
-        setMfaSuccess('Multi-Factor Authentication disabled successfully.');
-        setTimeout(() => setMfaSuccess(''), 4000);
-      }
-    } else {
-      // Ensure per-user 32-character secret exists when opening setup
-      const existing = localStorage.getItem(secretStorageKey);
-      if (!existing || existing.length < 32) {
-        const newSecret = generateBase32Secret(32);
-        localStorage.setItem(secretStorageKey, newSecret);
-        setSecretKey(newSecret);
-      }
-      setVerificationCode('');
-      setShowSetupModal(true);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleConfirmSetup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMfaError('');
-    setIsVerifying(true);
+  useEffect(() => {
+    void loadStatus();
+  }, []);
 
+  const regenerateCodes = async () => {
+    if (!/^\d{6}$/.test(stepUpCode)) {
+      setError('Enter the current 6-digit authenticator code.');
+      return;
+    }
+    setWorking(true);
+    setError('');
+    setSuccess('');
     try {
-      const cleanCode = verificationCode.replace(/\D/g, '');
-      if (!/^\d{6}$/.test(cleanCode)) {
-        setMfaError('Please enter a valid 6-digit authenticator code (e.g. 123456).');
-        setIsVerifying(false);
-        return;
-      }
-
-
-      const isValid = await verifyTotpCode(secretKey, cleanCode);
-      if (!isValid) {
-        setMfaError('Invalid authenticator code. Please enter the current 6-digit code from your authenticator app.');
-        setIsVerifying(false);
-        return;
-      }
-
-      setMfaEnabled(true);
-      setShowSetupModal(false);
-      setVerificationCode('');
-      setMfaSuccess('Multi-Factor Authentication (MFA) enabled successfully.');
-      setTimeout(() => setMfaSuccess(''), 4000);
-    } catch (err) {
-      setMfaError('Verification failed. Please try again.');
+      const response = await regenerateMfaRecoveryCodesApi(stepUpCode);
+      setRecoveryCodes(response.recovery_codes);
+      setRecoveryCount(response.recovery_codes.length);
+      setStepUpCode('');
+      setSuccess(response.message);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to regenerate recovery codes.',
+      );
     } finally {
-      setIsVerifying(false);
+      setWorking(false);
+    }
+  };
+
+  const revoke = async () => {
+    if (!/^\d{6}$/.test(stepUpCode)) {
+      setError('Enter the current 6-digit authenticator code.');
+      return;
+    }
+    setWorking(true);
+    setError('');
+    setSuccess('');
+    try {
+      const response = await revokeMfaApi(stepUpCode);
+      setEnabled(false);
+      setRecoveryCount(0);
+      setRecoveryCodes([]);
+      setShowRevoke(false);
+      setStepUpCode('');
+      setSuccess(response.message);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to revoke MFA.',
+      );
+    } finally {
+      setWorking(false);
     }
   };
 
   return (
     <Card className="p-0 overflow-hidden">
       <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
-        <CardTitle className="flex items-center justify-between text-sm">
+        <CardTitle className="flex items-center justify-between gap-3 text-sm">
           <span className="flex items-center gap-2">
             <Lock className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
-            Security & MFA Settings
+            Security &amp; MFA Settings
           </span>
           <span
             className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-              mfaEnabled
+              enabled
                 ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
             }`}
           >
-            {mfaEnabled ? 'MFA Enabled' : 'MFA Disabled'}
+            {loading ? 'Checking…' : enabled ? 'MFA enabled' : 'Enrollment required'}
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-5 space-y-4">
-        {mfaSuccess && (
+        {error && (
+          <div role="alert" className="p-3.5 rounded-xl bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {error}
+            <button type="button" onClick={() => void loadStatus()} className="ml-auto underline">
+              Retry
+            </button>
+          </div>
+        )}
+        {success && (
           <div className="p-3.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-            <span>{mfaSuccess}</span>
+            {success}
           </div>
         )}
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
-          <div className="space-y-1">
+          <div>
             <div className="flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-indigo-500" />
               <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                Two-Factor Authenticator (TOTP)
+                Server-managed authenticator
               </h4>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg">
-              Secure your {roleName} account using an authenticator app (Google Authenticator, Authy, or Microsoft Authenticator).
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {userEmail || roleName} · {recoveryCount} unused recovery codes
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleToggleMfa}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex-shrink-0 ${
-              mfaEnabled
-                ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/20'
-                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
-            }`}
-          >
-            {mfaEnabled ? 'Disable MFA' : 'Enable MFA'}
-          </button>
-        </div>
-
-        {mfaEnabled && (
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          {enabled ? (
             <button
               type="button"
-              onClick={() => setShowRecoveryCodes(!showRecoveryCodes)}
-              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5"
+              onClick={() => setShowRevoke(true)}
+              disabled={working}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 disabled:opacity-50"
             >
-              <KeyRound className="w-3.5 h-3.5" />
-              {showRecoveryCodes ? 'Hide Backup Recovery Codes' : 'View Backup Recovery Codes'}
+              Revoke MFA
             </button>
+          ) : (
+            <p className="max-w-xs text-xs text-amber-700 dark:text-amber-400">
+              Sign out and sign in again to complete required MFA enrollment.
+            </p>
+          )}
+        </div>
 
-            {showRecoveryCodes && (
-              <div className="mt-3 p-4 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                  Store these one-time recovery codes in a safe place. You can use them if you lose access to your device.
-                </p>
-                <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
-                  {mockRecoveryCodes.map(code => (
-                    <div key={code} className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-center tracking-wider">
-                      {code}
-                    </div>
-                  ))}
+        {enabled && (
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
+              Current authenticator code
+            </label>
+            <input
+              value={stepUpCode}
+              onChange={event => setStepUpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="000000"
+              className="w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono tracking-widest dark:border-slate-800 dark:bg-slate-950"
+            />
+            <button
+              type="button"
+              onClick={() => void regenerateCodes()}
+              disabled={working || stepUpCode.length !== 6}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
+            >
+              {working ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+              Regenerate recovery codes
+            </button>
+          </div>
+        )}
+
+        {recoveryCodes.length > 0 && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
+            <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+              Save these now. They are shown only in this response.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 font-mono text-xs sm:grid-cols-2">
+              {recoveryCodes.map((code) => (
+                <div key={code} className="rounded-lg bg-white px-3 py-2 text-center dark:bg-slate-950">
+                  {code}
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         )}
       </CardContent>
 
-      <Modal
-        isOpen={showSetupModal}
-        onClose={() => setShowSetupModal(false)}
-        title="Enable Multi-Factor Authentication (MFA)"
-        size="lg"
-      >
-        <form onSubmit={handleConfirmSetup} className="space-y-4">
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            To enable MFA, scan the QR Code or enter the secret key into your authenticator app (e.g. Google Authenticator, Authy), then enter the generated 6-digit code below.
-          </p>
-
-          <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Scan QR Code</span>
-            <div
-              data-testid="mfa-qr-code"
-              className="w-44 h-44 flex items-center justify-center"
-              dangerouslySetInnerHTML={{
-                __html: generateQrCodeSvg(
-                  `otpauth://totp/DentiSys:${encodeURIComponent(userEmail)}?secret=${secretKey}&issuer=DentiSys`,
-                  176
-                ),
-              }}
-            />
+      <Modal isOpen={showRevoke} onClose={() => setShowRevoke(false)} title="Revoke MFA credential">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-300">
+            <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <p>
+              The current authenticator and all recovery codes will be revoked.
+              MFA enrollment will be required on the next login.
+            </p>
           </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Authenticator Secret Key</span>
-            <div className="font-mono text-sm font-extrabold text-indigo-600 dark:text-indigo-400 tracking-wider">
-              {secretKey}
-            </div>
-            <p className="text-[11px] text-slate-400">Account: {userEmail}</p>
-          </div>
-
-          {mfaError && (
-            <div className="p-3 rounded-xl bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{mfaError}</span>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              6-Digit Authenticator Code
-            </label>
-            <input
-              type="text"
-              maxLength={6}
-              value={verificationCode}
-              onChange={e => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-              placeholder="e.g. 123456"
-              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm font-mono tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-100"
-              required
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={() => setShowSetupModal(false)}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setShowRevoke(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={isVerifying || verificationCode.length < 6}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md disabled:opacity-50"
-            >
-              {isVerifying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-              {isVerifying ? 'Verifying...' : 'Verify & Enable MFA'}
+            <button type="button" onClick={() => void revoke()} disabled={working || stepUpCode.length !== 6} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+              {working ? 'Revoking…' : 'Revoke MFA'}
             </button>
           </div>
-        </form>
+        </div>
       </Modal>
     </Card>
   );

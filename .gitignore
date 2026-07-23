@@ -24,6 +24,7 @@ frontend/dist-ssr
 # Rate-limit storage
 backend/storage/ratelimit/
 backend/storage/email_outbox.log
+backend/storage/maintenance-backups/
 
 # Playwright Test Artifacts
 test-results/

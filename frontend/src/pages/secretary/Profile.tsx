@@ -3,10 +3,9 @@ import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 import { getSecretaryProfileApi, updateSecretaryProfileApi } from '../../services/apiClient';
-import { getCurrentSecretary } from './utils';
+import { normalizePersonName } from '../../utils/nameNormalization';
 
 export const Profile: React.FC = () => {
-  const secretary = getCurrentSecretary();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -22,12 +21,12 @@ export const Profile: React.FC = () => {
     cctvCameraId: string;
   }>({
     id: '',
-    name: secretary?.name || 'Class Secretary',
-    email: secretary?.email || '',
-    title: secretary?.title || 'Class Secretary',
-    assignedClassName: secretary?.assignedClassName || 'Clinical Rotation A (Section 4A)',
-    classroomName: secretary?.classroomName || 'Dental Clinic B - Room 402',
-    cctvCameraId: secretary?.cctvCameraId || 'CCTV-CLINIC-A-01',
+    name: '',
+    email: '',
+    title: '',
+    assignedClassName: '',
+    classroomName: '',
+    cctvCameraId: '',
   });
 
   const [editName, setEditName] = useState(profile.name);
@@ -53,7 +52,7 @@ export const Profile: React.FC = () => {
     event.preventDefault();
     setMessage(null);
 
-    const trimmedName = editName.trim();
+    const trimmedName = normalizePersonName(editName);
     const trimmedEmail = editEmail.trim();
 
     if (trimmedName.length < 2) {
@@ -78,7 +77,7 @@ export const Profile: React.FC = () => {
     }
   };
 
-  const name = profile.name || 'Class Secretary';
+  const name = profile.name || 'Secretary';
   const initials = name
     .split(' ')
     .filter(Boolean)
@@ -89,9 +88,9 @@ export const Profile: React.FC = () => {
 
   const details = [
     { label: 'Email address', value: profile.email || 'Not available', icon: Mail },
-    { label: 'Assigned class', value: profile.assignedClassName || 'Clinical Rotation A', icon: Users },
-    { label: 'Classroom', value: profile.classroomName || 'Dental Clinic B - Room 402', icon: MapPin },
-    { label: 'CCTV assignment', value: profile.cctvCameraId || 'CCTV-CLINIC-A-01', icon: Camera },
+    { label: 'Assigned class', value: profile.assignedClassName || 'Not assigned', icon: Users },
+    { label: 'Classroom', value: profile.classroomName || 'Not assigned', icon: MapPin },
+    { label: 'CCTV integration', value: profile.cctvCameraId || 'Not configured', icon: Camera },
   ];
 
   return (
@@ -201,6 +200,7 @@ export const Profile: React.FC = () => {
                         type="text"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value.replace(/[0-9]/g, ''))}
+                        onBlur={() => setEditName(normalizePersonName(editName))}
                         required
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
                       />
@@ -234,12 +234,11 @@ export const Profile: React.FC = () => {
                 </form>
               </CardContent>
             </Card>
-
-            <MfaSettingsCard userEmail={editEmail || profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
           </div>
         </div>
       )}
+
+      <MfaSettingsCard userEmail={editEmail || profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
     </div>
   );
 };
-

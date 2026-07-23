@@ -35,6 +35,9 @@ function handle_login(): void
         if ($result['type'] === 'direct_login') {
             $cred = $result['credentials'];
             $response = auth_build_no_store_json_response([
+                'type' => 'direct_login',
+                'mfa_required' => false,
+                'mfa_enrolled' => false,
                 'access_token' => $cred['access_token'],
                 'user' => [
                     'user_id' => $cred['session']['user_id'],
@@ -53,15 +56,18 @@ function handle_login(): void
             return;
         } elseif ($result['type'] === 'enrollment_start') {
             $payload = [
+                'type' => 'mfa_enrollment',
                 'mfa_required' => true,
                 'mfa_enrolled' => false,
                 'enrollment_token' => $result['enrollment_token'],
             ];
         } else {
             $payload = [
+                'type' => 'mfa_challenge',
                 'mfa_required' => true,
                 'mfa_enrolled' => true,
                 'mfa_session_token' => $result['mfa_session_token'],
+                'dev_mfa_code' => $result['dev_mfa_code'] ?? null,
             ];
         }
 

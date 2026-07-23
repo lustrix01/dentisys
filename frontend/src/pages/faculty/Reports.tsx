@@ -204,16 +204,15 @@ export const Reports: React.FC = () => {
   // Recharts Stats: Assessment Success Rates
   const assessmentStatsData = useMemo(() => {
     const activeAss = assessments.filter(a => assignedSubjects.includes(a.subjectCode) && a.status !== 'Archived');
-    return activeAss.map(ass => {
+    return activeAss.flatMap(ass => {
       const scores = assessmentScores.filter(s => s.assessmentId === ass.id);
-      const avg = scores.length > 0 
-        ? scores.reduce((acc, curr) => acc + curr.score, 0) / scores.length
-        : 80; // mock default GWA
+      if (scores.length === 0) return [];
+      const avg = scores.reduce((acc, curr) => acc + curr.score, 0) / scores.length;
       const avgPct = Math.round((avg / ass.maxScore) * 100);
-      return {
+      return [{
         name: ass.title.length > 15 ? ass.title.substring(0, 15) + '...' : ass.title,
         average: avgPct
-      };
+      }];
     }).slice(0, 5);
   }, [assessments, assessmentScores, assignedSubjects]);
 

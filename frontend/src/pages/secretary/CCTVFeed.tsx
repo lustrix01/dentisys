@@ -1,181 +1,102 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, Monitor, Play, Square, Video, WifiOff } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, MonitorOff, Video } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { getSecretaryProfileApi } from '../../services/apiClient';
-import { getAssignedClassName, getCurrentSecretary } from './utils';
+
+type Profile = {
+  name: string;
+  email: string;
+  assignedClassName: string;
+  classroomName: string;
+};
 
 export const CCTVFeed: React.FC = () => {
-  const secretary = getCurrentSecretary();
-  const [profileData, setProfileData] = useState<{
-    name: string;
-    email: string;
-    assignedClassName: string;
-    classroomName: string;
-    cctvCameraId: string;
-  } | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     getSecretaryProfileApi()
-      .then(res => setProfileData(res.profile))
-      .catch(() => {});
-  }, []);
-
-  const className = profileData?.assignedClassName || getAssignedClassName(secretary);
-  const classroomName = profileData?.classroomName || secretary?.classroomName || 'Dental Clinic B - Room 402';
-  const cameraId = profileData?.cctvCameraId || secretary?.cctvCameraId || 'CCTV-CLINIC-A-01';
-  const secretaryName = profileData?.name || secretary?.name || 'Class Secretary';
-  const secretaryEmail = profileData?.email || secretary?.email || '';
-
-  const [isRunning, setIsRunning] = useState(false);
-  const [isCameraAvailable, setIsCameraAvailable] = useState(false);
-  const [error, setError] = useState('');
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [clock, setClock] = useState('');
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setClock(new Date().toLocaleString());
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream]);
-
-  useEffect(() => {
-    return () => {
-      stream?.getTracks().forEach(track => track.stop());
-    };
-  }, [stream]);
-
-  const startFeed = async () => {
-    setIsRunning(true);
-    setError('');
-
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Camera access is unavailable in this browser context.');
-      }
-
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 1280, height: 720 },
-        audio: false,
+      .then((response) => setProfile(response.profile))
+      .catch((requestError) => {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : 'Unable to load the assigned class.',
+        );
       });
-      setStream(mediaStream);
-      setIsCameraAvailable(true);
-    } catch (err) {
-      setIsCameraAvailable(false);
-      setStream(null);
-      setError(err instanceof Error ? err.message : 'The classroom camera is offline or unavailable.');
-    }
-  };
-
-  const stopFeed = () => {
-    stream?.getTracks().forEach(track => track.stop());
-    setStream(null);
-    setIsCameraAvailable(false);
-    setIsRunning(false);
-    setError('');
-  };
+  }, []);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">Assigned Classroom CCTV</p>
-          <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">{classroomName}</h1>
-          <p className="text-xs text-slate-400">{className} - {cameraId}</p>
-        </div>
-        {isRunning ? (
-          <button
-            onClick={stopFeed}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
-          >
-            <Square className="w-4 h-4" />
-            Stop Feed
-          </button>
-        ) : (
-          <button
-            onClick={startFeed}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
-          >
-            <Play className="w-4 h-4" />
-            Start Feed
-          </button>
-        )}
+      <div>
+        <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest">
+          Optional Classroom Integration
+        </p>
+        <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">
+          CCTV Monitoring
+        </h1>
+        <p className="text-xs text-slate-400">
+          {profile?.assignedClassName || 'Assigned class'}
+          {profile?.classroomName ? ` — ${profile.classroomName}` : ''}
+        </p>
       </div>
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs font-medium text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300"
+        >
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <Card className="lg:col-span-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Video className="w-5 h-5 text-blue-500" />
-              Live Stream
+              <Video className="w-5 h-5 text-slate-400" />
+              Camera Integration
             </CardTitle>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg ${
-              isRunning && isCameraAvailable
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                : 'bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400'
-            }`}>
-              {isRunning && isCameraAvailable ? 'Online' : 'Offline'}
+            <span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+              Not configured
             </span>
           </CardHeader>
           <CardContent>
-            <div className="relative aspect-video rounded-2xl bg-slate-950 overflow-hidden border border-slate-900 shadow-inner flex items-center justify-center">
-              {isRunning && isCameraAvailable && (
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              )}
-
-              {isRunning && !isCameraAvailable && (
-                <div className="text-center p-8 max-w-md">
-                  <WifiOff className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-                  <h3 className="text-sm font-bold text-slate-100">Camera offline or unavailable</h3>
-                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                    {error || 'The classroom camera cannot be reached. Check browser permissions or the assigned CCTV connection.'}
-                  </p>
-                </div>
-              )}
-
-              {!isRunning && (
-                <div className="text-center p-8">
-                  <Monitor className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Feed Stopped</h3>
-                  <p className="text-xs text-slate-500 mt-2">Start the assigned classroom camera feed when monitoring is required.</p>
-                </div>
-              )}
-
-              {isRunning && isCameraAvailable && (
-                <div className="absolute top-4 left-4 right-4 flex justify-between text-[10px] font-mono font-bold text-emerald-400 bg-slate-950/70 rounded-lg border border-slate-800 px-3 py-2">
-                  <span>REC - {cameraId}</span>
-                  <span>{clock}</span>
-                </div>
-              )}
+            <div className="aspect-video rounded-2xl border border-dashed border-slate-300 bg-slate-950 flex items-center justify-center dark:border-slate-700">
+              <div className="max-w-md p-8 text-center">
+                <MonitorOff className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+                <h2 className="text-sm font-bold text-slate-200">
+                  CCTV integration not configured
+                </h2>
+                <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                  DentiSys has no connected camera provider. This page does not
+                  access the device webcam or simulate an institutional feed.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="lg:col-span-4">
           <CardHeader>
-            <CardTitle>Access Scope</CardTitle>
+            <CardTitle>Available Attendance Tools</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/40 dark:border-slate-800/40">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Secretary</p>
-              <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{secretaryName}</p>
-              <p className="text-xs text-slate-400">{secretaryEmail}</p>
+            <div className="rounded-2xl border border-slate-200/60 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Secretary
+              </p>
+              <p className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">
+                {profile?.name || 'Loading assigned secretary…'}
+              </p>
+              <p className="text-xs text-slate-400">{profile?.email || ''}</p>
             </div>
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/40 dark:border-slate-800/40">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Class</p>
-              <p className="text-sm font-bold text-slate-800 dark:text-slate-100 mt-1">{className}</p>
-              <p className="text-xs text-slate-400">{classroomName}</p>
-            </div>
-            <div className="flex items-start gap-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 p-4 text-xs text-blue-800 dark:text-blue-300">
+            <div className="flex items-start gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4 text-xs text-blue-800 dark:text-blue-300">
               <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <p>This page exposes only the CCTV camera assigned to the secretary's class.</p>
+              <p>
+                Manual attendance and audited attendance overrides remain
+                available for the assigned section.
+              </p>
             </div>
           </CardContent>
         </Card>

@@ -58,10 +58,16 @@ function validate_institutional_email(string $value): string
 
 function validate_person_name(array $data, string $field, int $minBytes = 2, int $maxBytes = 255): string
 {
-    $name = validate_required_string($data, $field, $minBytes, $maxBytes);
+    $raw = array_key_exists($field, $data) ? (string) $data[$field] : '';
+    $name = normalize_person_name($raw);
 
-    if (!preg_match('/^[\p{L}\s\'\-\.]+$/u', $name)) {
+    if (!preg_match('/^[\p{L}\s\'’\-\.]+$/u', $name)) {
         throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.']]);
+    }
+
+    $length = strlen($name);
+    if ($length < $minBytes || $length > $maxBytes) {
+        throw new ValidationException([['field' => $field, 'message' => "Name must be between {$minBytes} and {$maxBytes} bytes."]]);
     }
 
     return $name;
@@ -69,16 +75,62 @@ function validate_person_name(array $data, string $field, int $minBytes = 2, int
 
 function validate_optional_person_name(array $data, string $field, int $minBytes = 2, int $maxBytes = 255): ?string
 {
-    $name = validate_optional_string($data, $field, $minBytes, $maxBytes);
-    if ($name === null) {
+    if (!array_key_exists($field, $data) || trim((string) $data[$field]) === '') {
         return null;
     }
 
-    if (!preg_match('/^[\p{L}\s\'\-\.]+$/u', $name)) {
-        throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.']]);
+    return validate_person_name($data, $field, $minBytes, $maxBytes);
+}
+
+function normalize_person_name(string $value): string
+{
+    $collapsed = preg_replace('/\s+/u', ' ', trim($value)) ?? trim($value);
+    if ($collapsed === '') {
+        return '';
     }
 
-    return $name;
+    $particles = array_fill_keys(
+        ['da', 'de', 'del', 'di', 'dos', 'du', 'la', 'las', 'le', 'los', 'van', 'von', 'y'],
+        true
+    );
+    $suffixes = [
+        'jr' => 'Jr.', 'jr.' => 'Jr.', 'sr' => 'Sr.', 'sr.' => 'Sr.',
+        'ii' => 'II', 'iii' => 'III', 'iv' => 'IV', 'v' => 'V',
+    ];
+
+    $words = explode(' ', $collapsed);
+    foreach ($words as $index => &$word) {
+        $lowerWord = mb_strtolower($word, 'UTF-8');
+        if (isset($suffixes[$lowerWord])) {
+            $word = $suffixes[$lowerWord];
+            continue;
+        }
+        if ($index > 0 && isset($particles[$lowerWord])) {
+            $word = $lowerWord;
+            continue;
+        }
+
+        $parts = preg_split("/([\\-'’])/u", $lowerWord, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if ($parts === false) {
+            $parts = [$lowerWord];
+        }
+        foreach ($parts as &$part) {
+            if ($part === '' || preg_match("/^[\\-'’]$/u", $part)) {
+                continue;
+            }
+            $part = mb_convert_case($part, MB_CASE_TITLE, 'UTF-8');
+            if (preg_match('/^Mc\p{L}/u', $part)) {
+                $prefix = mb_substr($part, 0, 2, 'UTF-8');
+                $third = mb_strtoupper(mb_substr($part, 2, 1, 'UTF-8'), 'UTF-8');
+                $part = $prefix . $third . mb_substr($part, 3, null, 'UTF-8');
+            }
+        }
+        unset($part);
+        $word = implode('', $parts);
+    }
+    unset($word);
+
+    return implode(' ', $words);
 }
 
 function validate_phone_number(array $data, string $field): string

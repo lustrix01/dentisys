@@ -8,7 +8,7 @@ test.describe('Level 0 Context DFD Data-Flow Verification', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ access_token: 'mock-admin-token' }),
+          body: JSON.stringify({ type: 'direct_login', access_token: 'mock-admin-token' }),
         });
       });
 
@@ -79,7 +79,7 @@ test.describe('Level 0 Context DFD Data-Flow Verification', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ access_token: 'mock-faculty-token' }),
+          body: JSON.stringify({ type: 'direct_login', access_token: 'mock-faculty-token' }),
         });
       });
 
@@ -129,10 +129,10 @@ test.describe('Level 0 Context DFD Data-Flow Verification', () => {
       await expect(page.locator('body')).toContainText(/Retention|Standing|Status|Risk/i);
     });
 
-    test('DFD Flow: Biometric/RFID Attendance Capture & Attendance Logs', async ({ page }) => {
-      await page.click('a[href="/attendance"]');
+    test('DFD Flow: Persisted Manual Attendance Records', async ({ page }) => {
+      await page.goto('/attendance');
       await expect(page).toHaveURL('/attendance');
-      await expect(page.locator('body')).toContainText(/Attendance|Log|Record|RFID|Biometric/i);
+      await expect(page.locator('body')).toContainText(/Attendance|Log|Record/i);
     });
 
     test('DFD Flow: Report Generation & Grade Change Requests', async ({ page }) => {
@@ -148,7 +148,7 @@ test.describe('Level 0 Context DFD Data-Flow Verification', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ access_token: 'mock-faculty-token' }),
+          body: JSON.stringify({ type: 'direct_login', access_token: 'mock-faculty-token' }),
         });
       });
 
@@ -180,13 +180,13 @@ test.describe('Level 0 Context DFD Data-Flow Verification', () => {
       await expect(page).toHaveURL('/');
     });
 
-    test('DFD Flow: Biometric Enrollment Status & Consent Verification', async ({ page }) => {
+    test('DFD Flow: Student Directory and Integration Status', async ({ page }) => {
       await page.click('a[href="/students"]');
       await expect(page).toHaveURL('/students');
-      await expect(page.locator('body')).toContainText(/Student|Facial|Enrollment|Biometric|Consent|List/i);
+      await expect(page.locator('body')).toContainText(/Student|Directory|Biometric|Not configured|List/i);
     });
 
-    test('DFD Flow: Attendance Capture Simulation', async ({ page }) => {
+    test('DFD Flow: Manual Attendance Workflow', async ({ page }) => {
       await page.click('a[href="/attendance"]');
       await expect(page).toHaveURL('/attendance');
       await expect(page.locator('body')).toContainText(/Attendance|Check-in|Record/i);
@@ -205,7 +205,7 @@ test.describe('Level 0 Context DFD Data-Flow Verification', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ access_token: 'mock-secretary-token' }),
+          body: JSON.stringify({ type: 'direct_login', access_token: 'mock-secretary-token' }),
         });
       });
 

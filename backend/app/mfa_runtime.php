@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/mailer.php';
+
 function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, array $context): array
 {
     $userId = (int) $tokenClaims['sub'];
@@ -130,7 +132,11 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
             "<p>Your DentiSys multi-factor authentication (MFA) verification code is: <strong>{$safeCode}</strong></p>" .
             "<p>This code will expire in 30 seconds. If you did not initiate this request, please contact your administrator immediately.</p>";
 
-    send_email($userEmail, $subject, $body, $config);
+    try {
+        send_email($userEmail, $subject, $body, $config);
+    } catch (\Throwable $e) {
+        error_log('MFA email notification failed non-fatally: ' . sanitize_for_log($e));
+    }
 
     $showDevCode = !empty($config['show_dev_mfa_code']);
 

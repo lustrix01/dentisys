@@ -20,6 +20,7 @@ import {
   validatePasswordRequirements,
   registerFaculty,
 } from '../../services/authService';
+import { normalizeOptionalPersonName, normalizePersonName } from '../../utils/nameNormalization';
 
 export function SignUp() {
   const navigate = useNavigate();
@@ -114,7 +115,10 @@ export function SignUp() {
 
     setIsLoading(true);
 
-    const fullName = `${firstName.trim()} ${middleName.trim() ? middleName.trim() + ' ' : ''}${lastName.trim()}`;
+    const normalizedFirst = normalizePersonName(firstName);
+    const normalizedMiddle = normalizeOptionalPersonName(middleName);
+    const normalizedLast = normalizePersonName(lastName);
+    const fullName = `${normalizedFirst} ${normalizedMiddle ? normalizedMiddle + ' ' : ''}${normalizedLast}`;
 
     try {
       const res = await registerFaculty({
@@ -296,6 +300,7 @@ export function SignUp() {
                         required
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
+                        onBlur={() => setFirstName(normalizePersonName(firstName))}
                         placeholder="e.g. Eleanor"
                         className="w-full pl-9 pr-3 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
                       />
@@ -311,6 +316,7 @@ export function SignUp() {
                         type="text"
                         value={middleName}
                         onChange={(e) => setMiddleName(e.target.value)}
+                        onBlur={() => setMiddleName(normalizeOptionalPersonName(middleName))}
                         placeholder="e.g. De Cruz"
                         className="w-full px-3 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
                       />
@@ -327,6 +333,7 @@ export function SignUp() {
                         required
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
+                        onBlur={() => setLastName(normalizePersonName(lastName))}
                         placeholder="e.g. Vance"
                         className="w-full px-3 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs outline-none placeholder-slate-400 dark:text-slate-200"
                       />

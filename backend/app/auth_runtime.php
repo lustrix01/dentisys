@@ -162,9 +162,42 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         ], $jwtKey);
         challenge_state_init($challengeStorage, $jti, 'mfa_challenge', 'complete_login', 5, 300);
 
+        $devCode = null;
+        if (!empty($config['show_dev_mfa_code'])) {
+            $credentialStmt = $pdo->prepare(
+                "SELECT ciphertext, nonce, auth_tag, totp_algorithm, digit_count, period_seconds
+                 FROM security_tokens
+                 WHERE user_id = ? AND purpose = 'mfa_credential' AND mfa_status = 'enabled'
+                 LIMIT 1"
+            );
+            $credentialStmt->execute([$user['user_id']]);
+            $credential = $credentialStmt->fetch(PDO::FETCH_ASSOC);
+            if ($credential) {
+                $mfaKey = config_key_bytes_exact($config['mfa']['encryption_key_b64'], 32, 'MFA_ENCRYPTION_KEY');
+                $secret = mfa_decrypt_secret(
+                    $credential['ciphertext'],
+                    $credential['nonce'],
+                    $credential['auth_tag'],
+                    $mfaKey
+                );
+                if ($secret !== null) {
+                    $period = (int) ($credential['period_seconds'] ?? 30);
+                    $totp = mfa_compute_totp(
+                        $secret,
+                        intdiv(time(), $period),
+                        (string) ($credential['totp_algorithm'] ?? 'sha1'),
+                        (int) ($credential['digit_count'] ?? 6),
+                        $period
+                    );
+                    $devCode = $totp['code'];
+                }
+            }
+        }
+
         return [
             'type' => 'mfa_challenge',
             'mfa_session_token' => $challengeToken,
+            'dev_mfa_code' => $devCode,
             'user' => $user,
         ];
     }
@@ -380,6 +413,20 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
         }
 
         if ($lockedToken['used_at'] !== null) {
+            $usedAt = new DateTimeImmutable($lockedToken['used_at'], new DateTimeZone('UTC'));
+            $ageSeconds = $nowUtc->getTimestamp() - $usedAt->getTimestamp();
+            $childCheck = $pdo->prepare(
+                "SELECT COUNT(*)
+                   FROM security_tokens
+                  WHERE parent_token_id = ?
+                    AND purpose = 'refresh'
+                    AND revoked_at IS NULL"
+            );
+            $childCheck->execute([$lockedToken['token_id']]);
+            if ($ageSeconds >= 0 && $ageSeconds <= 10 && (int) $childCheck->fetchColumn() === 1) {
+                $pdo->rollBack();
+                return ['type' => 'concurrent'];
+            }
             if ($sessionRow['revoked_at'] === null) {
                 auth_runtime_apply_reuse($pdo, $auditCtx, $lockedToken, $sessionRow, $lockedUser, $context, $macKey);
                 $pdo->commit();

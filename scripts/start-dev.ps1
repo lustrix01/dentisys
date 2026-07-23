@@ -333,6 +333,66 @@ if ($port3306Occupied) {
     }
 }
 
+function Build-ProvisioningSql {
+    param(
+        [string] $DbName,
+        [string] $UserName,
+        [string] $UserPassword
+    )
+    $bt = [char]96
+    $cleanDb = $DbName.Replace([string][char]96, "")
+    $u = $UserName.Replace("'", "''")
+    $p = $UserPassword.Replace("'", "''")
+
+    return "CREATE DATABASE IF NOT EXISTS ${bt}${cleanDb}${bt} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; " +
+        "CREATE USER IF NOT EXISTS '$u'@'localhost' IDENTIFIED BY '$p'; " +
+        "ALTER USER '$u'@'localhost' IDENTIFIED BY '$p'; " +
+        "GRANT ALL PRIVILEGES ON ${bt}${cleanDb}${bt}.* TO '$u'@'localhost'; " +
+        "CREATE USER IF NOT EXISTS '$u'@'127.0.0.1' IDENTIFIED BY '$p'; " +
+        "ALTER USER '$u'@'127.0.0.1' IDENTIFIED BY '$p'; " +
+        "GRANT ALL PRIVILEGES ON ${bt}${cleanDb}${bt}.* TO '$u'@'127.0.0.1'; " +
+        "CREATE USER IF NOT EXISTS '$u'@'%' IDENTIFIED BY '$p'; " +
+        "ALTER USER '$u'@'%' IDENTIFIED BY '$p'; " +
+        "GRANT ALL PRIVILEGES ON ${bt}${cleanDb}${bt}.* TO '$u'@'%'; " +
+        "FLUSH PRIVILEGES;"
+}
+
+function Invoke-RootProvisioning {
+    param(
+        [string] $ClientPath,
+        [string] $HostName,
+        [string] $Port,
+        [string] $DbName,
+        [string] $UserName,
+        [string] $UserPassword
+    )
+
+    $rootPasses = @("", "local-root-password", "root")
+    if (![string]::IsNullOrWhiteSpace($env:DB_ROOT_PASS)) {
+        $rootPasses = @($env:DB_ROOT_PASS) + $rootPasses
+    }
+
+    $sql = Build-ProvisioningSql -DbName $DbName -UserName $UserName -UserPassword $UserPassword
+
+    foreach ($rp in $rootPasses) {
+        $rootCnf = New-SecureOptionFile -Password $rp
+        try {
+            # Try 1: TCP connection
+            $res = & $ClientPath "--defaults-extra-file=$rootCnf" "-h" $HostName "-P" "$Port" "-u" "root" "-e" $sql 2>&1
+            if ($LASTEXITCODE -eq 0) { return $true }
+
+            # Try 2: Local socket/pipe connection (XAMPP default on Windows)
+            $res2 = & $ClientPath "--defaults-extra-file=$rootCnf" "-u" "root" "-e" $sql 2>&1
+            if ($LASTEXITCODE -eq 0) { return $true }
+        } finally {
+            if (Test-Path -LiteralPath $rootCnf) {
+                Remove-Item -LiteralPath $rootCnf -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    return $false
+}
+
 # Validate Database Client Tooling and Database Connection if candidate credentials exist
 if ($credentials) {
     $clientPath = Resolve-DatabaseClientCommand
@@ -373,6 +433,18 @@ if ($credentials) {
                 }
             }
 
+            if (!$authSuccess -and !$isDocker) {
+                Write-Host "MySQL user '$($credentials.User)' not found or access denied. Auto-creating user '$($credentials.User)' based on .env configuration..."
+                if (Invoke-RootProvisioning -ClientPath $clientPath -HostName $credentials.Host -Port $credentials.Port -DbName $credentials.Database -UserName $credentials.User -UserPassword $credentials.Password) {
+                    # Retry auth with provisioned user
+                    $retryPing = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "-e" $pingSql 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        $authSuccess = $true
+                        Write-Host "PASS: Automatically created MySQL user '$($credentials.User)' and database '$($credentials.Database)'."
+                    }
+                }
+            }
+
             if ($authSuccess) {
                 # Check DB existence
                 $dbCheckSql = "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='$($credentials.Database)';"
@@ -388,16 +460,24 @@ if ($credentials) {
                     if ($LASTEXITCODE -eq 0 -and [int]::TryParse(($tblRes -join "").Trim(), [ref]$tblCount) -and $tblCount -gt 0) {
                         $isUpToDate = $true
                     }
-                } elseif ($LASTEXITCODE -eq 0) {
-                    # Database missing: auto-provision
-                    Write-Host "Database '$($credentials.Database)' does not exist on $($credentials.Type). Provisioning database..."
+                } else {
+                    # Database missing or user lacks access: auto-provision
+                    Write-Host "Database '$($credentials.Database)' does not exist or user lacks privileges on $($credentials.Type). Provisioning database..."
                     $targetDb = $credentials.Database
                     $createSql = "CREATE DATABASE IF NOT EXISTS $targetDb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
                     $createRes = & $clientPath "--defaults-extra-file=$tempCnf" "-h" $credentials.Host "-P" "$($credentials.Port)" "-u" $credentials.User "-e" $createSql 2>&1
                     if ($LASTEXITCODE -eq 0) {
                         Write-Host "PASS: Automatically provisioned database '$($credentials.Database)'."
                         $dbExists = $true
-                    } else {
+                    } elseif (!$isDocker) {
+                        # User lacks CREATE DATABASE or GRANT privileges; fallback to root connection
+                        if (Invoke-RootProvisioning -ClientPath $clientPath -HostName $credentials.Host -Port $credentials.Port -DbName $credentials.Database -UserName $credentials.User -UserPassword $credentials.Password) {
+                            Write-Host "PASS: Automatically provisioned database '$($credentials.Database)' and granted privileges to '$($credentials.User)' using root connection."
+                            $dbExists = $true
+                        }
+                    }
+
+                    if (!$dbExists) {
                         Write-Host "WARNING: Failed to auto-create database '$($credentials.Database)': $createRes"
                     }
                 }

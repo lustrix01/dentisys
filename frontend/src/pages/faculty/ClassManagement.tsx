@@ -19,6 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { showFeedback } from '../../components/FeedbackCenter';
 import { 
   getFacultyClassesApi, 
   getFacultyCoursesApi, 
@@ -80,11 +81,6 @@ export const ClassManagement: React.FC = () => {
   const [enrollingSubmitting, setEnrollingSubmitting] = useState(false);
   const [loadingAvailable, setLoadingAvailable] = useState(false);
 
-  // Fetch Classes and Courses catalog on mount
-  useEffect(() => {
-    fetchClassesAndCourses();
-  }, []);
-
   const showNotification = (msg: string) => {
     setSuccessToast(msg);
     setTimeout(() => setSuccessToast(null), 4000);
@@ -121,6 +117,10 @@ export const ClassManagement: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    void fetchClassesAndCourses();
+  }, []);
+
   // Open Add Student Modal
   const handleOpenAddStudentModal = async () => {
     if (!selectedClass) return;
@@ -144,7 +144,7 @@ export const ClassManagement: React.FC = () => {
   const handleCreateClassSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.courseId <= 0 || !formData.csName.trim()) {
-      alert('Please fill in all required fields.');
+      showFeedback('Please fill in all required fields.', 'error');
       return;
     }
 
@@ -165,7 +165,7 @@ export const ClassManagement: React.FC = () => {
       setIsCreateModalOpen(false);
       fetchClassesAndCourses();
     } catch (err: any) {
-      alert(err.message || 'Failed to create class section.');
+      showFeedback(err.message || 'Failed to create class section.', 'error');
     } finally {
       setFormSubmitting(false);
     }
@@ -188,7 +188,7 @@ export const ClassManagement: React.FC = () => {
       setSelectedClass(prev => prev ? { ...prev, enrolledCount: prev.enrolledCount + selectedStudentIds.length } : null);
       fetchClassesAndCourses();
     } catch (err: any) {
-      alert(err.message || 'Failed to enroll students.');
+      showFeedback(err.message || 'Failed to enroll students.', 'error');
     } finally {
       setEnrollingSubmitting(false);
     }
@@ -209,7 +209,7 @@ export const ClassManagement: React.FC = () => {
       setSelectedClass(prev => prev ? { ...prev, enrolledCount: Math.max(0, prev.enrolledCount - 1) } : null);
       fetchClassesAndCourses();
     } catch (err: any) {
-      alert(err.message || 'Failed to remove student from class.');
+      showFeedback(err.message || 'Failed to remove student from class.', 'error');
     }
   };
 

@@ -12,6 +12,7 @@ const API_BASE_URL = configuredBase
   : '/api';
 
 let accessToken: string | null = null;
+let refreshInFlight: Promise<{ access_token: string; user: { user_id: number } }> | null = null;
 
 export function setAccessToken(token: string): void {
   accessToken = token;
@@ -28,10 +29,14 @@ export function getAccessToken(): string | null {
 export class ApiError extends Error {
   status: number;
   errors?: unknown;
-  constructor(status: number, message: string, errors?: unknown) {
+  code?: string;
+  requestId?: string;
+  constructor(status: number, message: string, errors?: unknown, code?: string, requestId?: string) {
     super(message);
     this.status = status;
     this.errors = errors;
+    this.code = code;
+    this.requestId = requestId;
   }
 }
 
@@ -53,7 +58,7 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
 };
 
 function mapError(status: number, backendMessage: string, responseData?: unknown): string {
-  if (status === 400 && responseData && typeof responseData === 'object') {
+  if ((status === 400 || status === 422) && responseData && typeof responseData === 'object') {
     const dataObj = responseData as Record<string, unknown>;
     if (dataObj.errors) {
       if (typeof dataObj.errors === 'string' && dataObj.errors.trim()) {
@@ -85,6 +90,7 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
     return backendMessage;
   }
   if (status === 400) return 'Please check your input and try again.';
+  if (status === 422) return backendMessage || 'Please correct the highlighted fields.';
   if (status === 401) return 'Authentication failed. Please log in again.';
   if (status === 403) return 'Access denied. Contact the administrator.';
   if (status === 429) return 'Too many attempts. Please wait and try again.';
@@ -113,7 +119,7 @@ async function request<T>(
 
   let response: Response;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
@@ -135,7 +141,13 @@ async function request<T>(
     throw new ApiError(response.status, mapError(response.status, ''));
   }
 
-  if (!response.ok) {
+  const semanticError =
+    responseData !== null &&
+    typeof responseData === 'object' &&
+    (responseData as Record<string, unknown>).status === 'error';
+
+  if (!response.ok || semanticError) {
+    const errorStatus = response.ok ? 500 : response.status;
     const backendMessage =
       responseData && typeof responseData === 'object' && 'message' in responseData
         ? String((responseData as Record<string, unknown>).message)
@@ -144,7 +156,15 @@ async function request<T>(
       responseData && typeof responseData === 'object' && 'errors' in responseData
         ? (responseData as Record<string, unknown>).errors
         : undefined;
-    throw new ApiError(response.status, mapError(response.status, backendMessage, responseData), errorsPayload);
+    const code =
+      responseData && typeof responseData === 'object' && 'code' in responseData
+        ? String((responseData as Record<string, unknown>).code)
+        : undefined;
+    const requestId =
+      responseData && typeof responseData === 'object' && 'requestId' in responseData
+        ? String((responseData as Record<string, unknown>).requestId)
+        : undefined;
+    throw new ApiError(errorStatus, mapError(errorStatus, backendMessage, responseData), errorsPayload, code, requestId);
   }
 
   return responseData as T;
@@ -170,8 +190,51 @@ export function recoverMfa(mfaSessionToken: string, code: string): Promise<MfaSu
   return request<MfaSuccessResponse>('POST', '/auth/mfa/recover', { code }, mfaSessionToken);
 }
 
+export function getMfaSettingsApi(): Promise<{
+  status: string;
+  mfa: { enabled: boolean; recoveryCodeCount: number };
+}> {
+  return request('GET', '/auth/mfa/settings');
+}
+
+export function regenerateMfaRecoveryCodesApi(code: string): Promise<{
+  status: string;
+  message: string;
+  recovery_codes: string[];
+}> {
+  return request('POST', '/auth/mfa/settings/recovery-codes', { code });
+}
+
+export function revokeMfaApi(code: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/mfa/settings/revoke', { code });
+}
+
 export function getMe(): Promise<SafeUser> {
   return request<SafeUser>('GET', '/auth/me');
+}
+
+export function refreshSession(): Promise<{ access_token: string; user: { user_id: number } }> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        return await request<{ access_token: string; user: { user_id: number } }>('POST', '/auth/refresh');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409 && error.code === 'REFRESH_IN_PROGRESS') {
+          await new Promise(resolve => setTimeout(resolve, 150));
+          return request<{ access_token: string; user: { user_id: number } }>('POST', '/auth/refresh');
+        }
+        throw error;
+      }
+    })()
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+export function logoutSession(): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/logout');
 }
 
 export interface HealthPayload {
@@ -214,6 +277,14 @@ export function rejectFacultyApi(email: string): Promise<{ status: string; messa
 
 export function inviteSecretaryApi(data: { student_name: string; student_number?: string; class_name: string; email: string }): Promise<{ status: string; token: string; invitation_link: string; message: string }> {
   return request('POST', '/secretary/invite', data);
+}
+
+export function listSecretaryInvitationsApi(): Promise<{ status: string; invitations: Array<Record<string, unknown>> }> {
+  return request('GET', '/secretary/invitations');
+}
+
+export function revokeSecretaryInvitationApi(invitationId: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/secretary/invitations/revoke', { invitationId });
 }
 
 export function getSecretaryInvitationApi(token: string): Promise<{
@@ -276,7 +347,7 @@ export function getRetentionCriteriaApi(): Promise<Array<{
   return request('GET', '/admin/retention/criteria');
 }
 
-export function saveRetentionCriteriaApi(criteria: any[]): Promise<{ status: string; message: string }> {
+export function saveRetentionCriteriaApi(criteria: any[]): Promise<{ status: string; message: string; criteria: any[] }> {
   return request('POST', '/admin/retention/criteria', criteria);
 }
 
@@ -367,12 +438,19 @@ export function getFacultyDashboardKpisApi(): Promise<{
   kpis: {
     assignedStudents: number;
     activeClasses: number;
-    averageAttendance: number;
+    averageAttendance: number | null;
     retentionAlerts: number;
     goodStanding: number;
     remedialCount: number;
   };
-  classes: Array<{ id: string; name: string; students: number; attendance: number }>;
+  classes: Array<{
+    id: string;
+    name: string;
+    courseCode: string;
+    courseName: string;
+    students: number;
+    attendance: number | null;
+  }>;
 }> {
   return request('GET', '/faculty/dashboard/kpis');
 }
@@ -388,6 +466,17 @@ export function getFacultyStudentsApi(): Promise<Array<{
   consentStatus: string;
   classId: string;
   className: string;
+  overallGWA?: number;
+  clinicHoursCompleted?: number;
+  enrolledSubjects?: Array<{
+    code: string;
+    name: string;
+    units: number;
+    isClinical: boolean;
+    components: { quizzes: number; exams: number; practicum: number; attendance: number };
+    grade: number;
+    hasRemedial: boolean;
+  }>;
 }>> {
   return request('GET', '/faculty/students');
 }
@@ -405,6 +494,7 @@ export function createStudentApi(data: {
   status?: string;
   admissionDate?: string;
   birthdate?: string;
+  classId?: string;
 }): Promise<{
   status: string;
   message: string;
@@ -421,8 +511,81 @@ export function getFacultyAssessmentsApi(): Promise<any[]> {
   return request('GET', '/faculty/assessments');
 }
 
-export function saveFacultyAssessmentsApi(assessments: any[]): Promise<{ status: string; message: string }> {
+export function saveFacultyAssessmentsApi(assessments: any[]): Promise<{ status: string; message: string; assessments: Array<{ id: string; classId: string; title: string }> }> {
   return request('POST', '/faculty/assessments', assessments);
+}
+
+export function deleteFacultyAssessmentApi(assessmentId: string): Promise<{
+  status: string;
+  message: string;
+  assessmentId: string;
+  deletedScoreCount: number;
+}> {
+  return request('POST', '/faculty/assessments/delete', { assessmentId });
+}
+
+export function getFacultyAttendanceApi(): Promise<{ status: string; records: Array<{
+  id: string;
+  studentId: string;
+  date: string;
+  subjectCode: string;
+  status: 'present' | 'absent' | 'late' | 'excused';
+  overrideReason?: string;
+  overrideAt?: string;
+}> }> {
+  return request('GET', '/faculty/attendance');
+}
+
+export function overrideFacultyAttendanceApi(data: {
+  recordId: string;
+  status: 'present' | 'late' | 'absent';
+  reason: string;
+}): Promise<{ status: string; message: string; recordId: string }> {
+  return request('POST', '/faculty/attendance/override', data);
+}
+
+export function createFacultyAttendanceSessionApi(data: {
+  subjectCode: string;
+  date: string;
+  topic: string;
+}): Promise<{ status: string; message: string; sessionCode: string; createdCount: number }> {
+  return request('POST', '/faculty/attendance/session', data);
+}
+
+export function updateFacultyRetentionStatusApi(data: {
+  studentId: string;
+  classId: string;
+  status: 'active' | 'warning' | 'critical' | 'remedial';
+  reason: string;
+}): Promise<{ status: string; message: string; retention: Record<string, string> }> {
+  return request('POST', '/faculty/retention/status', data);
+}
+
+export function saveFacultyRemedialApi(data: {
+  enrollmentId?: string;
+  studentId?: string;
+  classId?: string;
+  remedial: Record<string, unknown>;
+}): Promise<{ status: string; message: string; enrollmentId: string | null }> {
+  return request('POST', '/faculty/retention/remedial', data);
+}
+
+export function getFacultyAssessmentScoresApi(assessmentId: string): Promise<{ status: string; assessmentId: string; scores: Array<{
+  id: string;
+  studentId: string;
+  score: number;
+  remarks?: string;
+  submittedAt: string;
+}> }> {
+  return request('GET', `/faculty/scores?assessmentId=${encodeURIComponent(assessmentId)}`);
+}
+
+export function saveFacultyAssessmentScoresApi(assessmentId: string, scores: Array<{ studentId: string; score: number; remarks?: string }>): Promise<{ status: string; message: string; savedCount: number }> {
+  return request('POST', '/faculty/scores', { assessmentId, scores });
+}
+
+export function computeFacultyGradesApi(classId?: string): Promise<{ status: string; message: string; results: Array<Record<string, unknown>> }> {
+  return request('POST', '/faculty/grades/compute', classId ? { classId } : {});
 }
 
 export function getFacultyProfileApi(): Promise<{
@@ -472,7 +635,7 @@ export function getSecretaryDashboardKpisApi(): Promise<{
     classId: string;
     className: string;
     classroomName: string;
-    cctvCameraId: string;
+    cctvCameraId: string | null;
   };
 }> {
   return request('GET', '/secretary/dashboard/kpis');
@@ -502,7 +665,7 @@ export function overrideSecretaryAttendanceApi(data: {
   recordId?: string;
   date?: string;
   subjectCode?: string;
-}): Promise<{ status: string; message: string }> {
+}): Promise<{ status: string; message: string; record?: { id: string; status: string; overrideReason: string; overrideAt: string } }> {
   return request('POST', '/secretary/attendance/override', data);
 }
 
@@ -530,6 +693,7 @@ export function getSecretarySettingsApi(): Promise<{
   status: string;
   settings: {
     theme: 'light' | 'dark';
+    assignedClassName: string;
   };
 }> {
   return request('GET', '/secretary/settings');
@@ -544,7 +708,7 @@ export function sendFacultyEmailApi(data: {
   emailType: string;
   subject?: string;
   body?: string;
-}): Promise<{ status: string; message: string }> {
+}): Promise<{ status: string; message: string; sentCount: number; failedCount: number }> {
   return request('POST', '/faculty/send-email', data);
 }
 

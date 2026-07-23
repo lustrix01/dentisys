@@ -21,6 +21,8 @@ import { useApp } from '../../context/AppContext';
 import { Student, EnrolledSubject } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { showFeedback } from '../../components/FeedbackCenter';
+import { normalizeOptionalPersonName, normalizePersonName } from '../../utils/nameNormalization';
 
 const getDefaultSubjectsForYear = (year: 1 | 2 | 3 | 4): EnrolledSubject[] => {
   const defaultComponents = { quizzes: 80, exams: 80, practicum: 80, attendance: 80 };
@@ -56,49 +58,33 @@ const SIMULATED_CAMERA_PORTRAITS = [
   'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&h=150&fit=crop', // Tilt Down
 ];
 
-import { getFacultyStudentsApi, createStudentApi, updateFacialEnrollmentApi } from '../../services/apiClient';
+import { createStudentApi, updateFacialEnrollmentApi, getFacultyClassesApi } from '../../services/apiClient';
 
 export const StudentManagement: React.FC = () => {
   const { 
     students, 
     addStudent, 
-    updateStudent, 
-    deleteStudent,
-    enrollStudentFace,
-    deleteStudentFace
+    updateStudent,
+    enrollStudentFace
   } = useApp();
 
-  const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
+  const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
   const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
 
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getFacultyStudentsApi()
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          data.forEach(dbStudent => {
-            if (!students.some(s => s.studentId === dbStudent.studentId || s.id === dbStudent.id)) {
-              addStudent({
-                name: dbStudent.name,
-                email: dbStudent.email,
-                studentId: dbStudent.studentId,
-                yearLevel: (dbStudent.yearLevel || 4) as 1 | 2 | 3 | 4,
-                classId: dbStudent.classId || selectedClassId,
-                className: dbStudent.className || 'Clinical Rotation A',
-                clinicHoursCompleted: 0,
-                enrolledSubjects: getDefaultSubjectsForYear((dbStudent.yearLevel || 4) as 1 | 2 | 3 | 4),
-              });
-            }
-          });
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const loading = false;
 
   // Selected class block
   const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
+
+  useEffect(() => {
+    getFacultyClassesApi()
+      .then((response) => {
+        const ids = response.classes.map((item) => String(item.id));
+        setAssignedClasses(ids);
+        if (ids.length > 0) setSelectedClassId(ids[0]);
+      })
+      .catch(() => setAssignedClasses([]));
+  }, []);
 
   // Tab management
   const [activeTab, setActiveTab] = useState<'list' | 'enroll' | 'facial'>('list');
@@ -137,21 +123,21 @@ export const StudentManagement: React.FC = () => {
       errors.studentId = 'Student ID Number must be at least 3 characters.';
     }
 
-    const cleanFirst = formFirstName.trim();
+    const cleanFirst = normalizePersonName(formFirstName);
     if (!cleanFirst) {
       errors.firstName = 'First Name is required.';
     } else if (cleanFirst.length < 2) {
       errors.firstName = 'First Name must be at least 2 characters.';
-    } else if (!/^[\p{L}\s'\-\.]+$/u.test(cleanFirst)) {
+    } else if (!/^[\p{L}\s'’\-\.]+$/u.test(cleanFirst)) {
       errors.firstName = 'First Name can only contain letters, spaces, hyphens, and apostrophes.';
     }
 
-    const cleanLast = formLastName.trim();
+    const cleanLast = normalizePersonName(formLastName);
     if (!cleanLast) {
       errors.lastName = 'Last Name is required.';
     } else if (cleanLast.length < 2) {
       errors.lastName = 'Last Name must be at least 2 characters.';
-    } else if (!/^[\p{L}\s'\-\.]+$/u.test(cleanLast)) {
+    } else if (!/^[\p{L}\s'’\-\.]+$/u.test(cleanLast)) {
       errors.lastName = 'Last Name can only contain letters, spaces, hyphens, and apostrophes.';
     }
 
@@ -173,7 +159,7 @@ export const StudentManagement: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // Facial enrollment simulator states
+  // Disabled integration display state retained for the unconfigured status panel.
   const [facialStudentId, setFacialStudentId] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
@@ -215,14 +201,17 @@ export const StudentManagement: React.FC = () => {
     if (!validateStudentForm()) return;
 
     const yearNum = parseInt(formYearLevel) as 1 | 2 | 3 | 4;
-    const fullName = `${formFirstName} ${formMiddleName ? formMiddleName + ' ' : ''}${formLastName}`.trim();
+    const normalizedFirstName = normalizePersonName(formFirstName);
+    const normalizedMiddleName = normalizeOptionalPersonName(formMiddleName);
+    const normalizedLastName = normalizePersonName(formLastName);
+    const fullName = `${normalizedFirstName} ${normalizedMiddleName ? normalizedMiddleName + ' ' : ''}${normalizedLastName}`.trim();
     
     try {
       const res = await createStudentApi({
         studentId: formStudentId,
-        firstName: formFirstName,
-        middleName: formMiddleName,
-        lastName: formLastName,
+        firstName: normalizedFirstName,
+        middleName: normalizedMiddleName,
+        lastName: normalizedLastName,
         name: fullName,
         email: formEmail,
         contact: formContact,
@@ -230,17 +219,19 @@ export const StudentManagement: React.FC = () => {
         yearLevel: yearNum,
         admissionDate: formAdmissionDate,
         birthdate: formBirthdate,
+        classId: selectedClassId,
       });
 
       addStudent({
-        name: fullName,
-        email: formEmail,
-        studentId: formStudentId,
-        yearLevel: yearNum,
-        classId: selectedClassId,
-        className: students.find(s => s.classId === selectedClassId)?.className || selectedClassId,
-        clinicHoursCompleted: parseInt(formClinicHours) || 0,
-        enrolledSubjects: getDefaultSubjectsForYear(yearNum),
+        id: res.student.id,
+        name: res.student.name,
+        email: res.student.email || '',
+        studentId: res.student.studentId,
+        yearLevel: res.student.yearLevel,
+        classId: res.student.classId,
+        className: res.student.className,
+        clinicHoursCompleted: res.student.clinicHoursCompleted || 0,
+        enrolledSubjects: res.student.enrolledSubjects || [],
       });
 
       // Reset Form
@@ -257,25 +248,15 @@ export const StudentManagement: React.FC = () => {
       setFormErrors({});
       // Switch to list
       setActiveTab('list');
-      alert(res.message || 'Student registered and saved directly into all database columns!');
+      showFeedback(res.message || 'Student registered successfully.', 'success');
     } catch (err: any) {
-      alert(err.message || 'Failed to register student into the database.');
+      showFeedback(err.message || 'Failed to register student.', 'error');
     }
   };
 
-  // Facial Biometrics multi-angle scanning simulation
+  // No biometric action is performed until a real integration is configured.
   const startBiometricEnrollment = () => {
-    if (!facialStudentId) return;
-    const student = facultyStudents.find(s => s.id === facialStudentId);
-    if (student?.consentStatus !== 'approved') {
-      alert('Facial enrollment requires approved privacy consent. Send a request from Email Management first.');
-      return;
-    }
-    setIsScanning(true);
-    setScanStep(1);
-    setScanProgress(0);
-    setCapturedPhotos([]);
-    setScanStatusMsg('Looking Center: Aligning face with circular overlay markers...');
+    showFeedback('Biometric integration is not configured. Use manual attendance controls.', 'info');
   };
 
   useEffect(() => {
@@ -293,7 +274,7 @@ export const StudentManagement: React.FC = () => {
     if (!currentStepInfo) return;
 
     const interval = setTimeout(() => {
-      // Capture simulated photo
+      // This branch is unreachable while the integration is disabled.
       setCapturedPhotos(prev => [...prev, SIMULATED_CAMERA_PORTRAITS[scanStep - 1]]);
       setScanProgress(currentStepInfo.p);
 
@@ -313,15 +294,8 @@ export const StudentManagement: React.FC = () => {
     return () => clearTimeout(interval);
   }, [isScanning, scanStep, facialStudentId]);
 
-  const handleRemoveFaceEnrollment = (studId: string) => {
-    const student = facultyStudents.find(s => s.id === studId);
-    if (!student) return;
-
-    const confirmed = window.confirm(`Remove facial recognition data for ${student.name}?`);
-    if (confirmed) {
-      deleteStudentFace(studId);
-      alert('Facial biometric enrollment removed.');
-    }
+  const handleRemoveFaceEnrollment = (_studId: string) => {
+    showFeedback('Biometric integration is not configured.', 'info');
   };
 
   const handleUpdateHours = (student: Student, hours: string) => {
@@ -385,7 +359,6 @@ export const StudentManagement: React.FC = () => {
           <button
             onClick={() => {
               setActiveTab('enroll');
-              setFormStudentId(`DENT-2026-0${Math.floor(100 + Math.random() * 900)}`);
             }}
             className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
               activeTab === 'enroll'
@@ -410,7 +383,7 @@ export const StudentManagement: React.FC = () => {
             }`}
           >
             <Camera className="w-4 h-4" />
-            Facial Recognition Portal
+            Biometric Status
           </button>
         </div>
 
@@ -547,11 +520,7 @@ export const StudentManagement: React.FC = () => {
                           </td>
                           <td className="px-5 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
-                              onClick={() => {
-                                if (confirm(`Delete student register ledger for ${student.name}?`)) {
-                                  deleteStudent(student.id);
-                                }
-                              }}
+                              onClick={() => showFeedback('Student deletion is unavailable until a server-side archival workflow is configured.', 'info')}
                               className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -610,6 +579,7 @@ export const StudentManagement: React.FC = () => {
                       setFormFirstName(e.target.value);
                       if (formErrors.firstName) setFormErrors(prev => ({ ...prev, firstName: '' }));
                     }}
+                    onBlur={() => setFormFirstName(normalizePersonName(formFirstName))}
                     className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.firstName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
                   />
                   {formErrors.firstName && <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">{formErrors.firstName}</p>}
@@ -622,6 +592,7 @@ export const StudentManagement: React.FC = () => {
                     placeholder="e.g. De Cruz"
                     value={formMiddleName}
                     onChange={(e) => setFormMiddleName(e.target.value)}
+                    onBlur={() => setFormMiddleName(normalizeOptionalPersonName(formMiddleName))}
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
                   />
                 </div>
@@ -637,6 +608,7 @@ export const StudentManagement: React.FC = () => {
                       setFormLastName(e.target.value);
                       if (formErrors.lastName) setFormErrors(prev => ({ ...prev, lastName: '' }));
                     }}
+                    onBlur={() => setFormLastName(normalizePersonName(formLastName))}
                     className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.lastName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
                   />
                   {formErrors.lastName && <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">{formErrors.lastName}</p>}
@@ -731,7 +703,7 @@ export const StudentManagement: React.FC = () => {
               <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[11px] text-slate-500 flex items-start gap-2">
                 <Info className="w-4 h-4 text-clinical-550 flex-shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  <strong>Standard Curriculum Assignment:</strong> Confirming registration will assign default clinical subjects for their corresponding Year level. Face enrollment can be processed next in the biometric portal.
+                  <strong>Class assignment:</strong> Confirming registration creates the student record and enrollment in the selected class section.
                 </p>
               </div>
 
@@ -752,11 +724,16 @@ export const StudentManagement: React.FC = () => {
           <Card className="p-5">
             <h3 className="text-sm font-bold text-slate-850 dark:text-slate-100 mb-2 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center gap-1.5">
               <Camera className="w-5 h-5 text-clinical-550" />
-              Facial Biometric Data Enrollment
+              Biometric Attendance Integration
             </h3>
-            <p className="text-xs text-slate-405 mb-4">Register student's facial markers to enable biometric attendance scanning</p>
+            <div className="p-5 rounded-2xl border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+              <p className="text-sm font-bold">Biometric integration is not configured.</p>
+              <p className="text-xs mt-1">
+                No camera, facial template, or verification confidence is available. Use the persisted manual attendance workflow.
+              </p>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="hidden">
               
               {/* Left Form: Select Student & trigger */}
               <div className="space-y-4 flex flex-col justify-between">
@@ -840,10 +817,10 @@ export const StudentManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Right View: Simulated Scanner Cam */}
+              {/* Inactive integration preview */}
               <div className="relative aspect-square md:h-64 rounded-3xl bg-slate-950 border border-slate-800 overflow-hidden flex flex-col items-center justify-center text-slate-500">
                 
-                {/* Simulated Lens view grid */}
+                {/* Inactive preview grid */}
                 <div className="absolute inset-0 border border-accent-500/20 grid grid-cols-3 grid-rows-3 pointer-events-none z-10">
                   <div className="border-r border-b border-white/5" />
                   <div className="border-r border-b border-white/5" />
@@ -945,11 +922,9 @@ export const StudentManagement: React.FC = () => {
                 </div>
 
                 <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                  <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Biometric Status</span>
-                  <span className={`inline-block text-[10px] font-extrabold mt-1 uppercase ${
-                    selectedStudent.faceEnrolled ? 'text-emerald-555' : 'text-slate-450'
-                  }`}>
-                    {selectedStudent.faceEnrolled ? 'Face Enrolled' : 'Pending Setup'}
+                  <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Biometric Integration</span>
+                  <span className="inline-block text-[10px] font-extrabold mt-1 uppercase text-slate-450">
+                    Not configured
                   </span>
                 </div>
               </div>
@@ -958,7 +933,7 @@ export const StudentManagement: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex justify-between text-xs py-1.5 border-b border-slate-100 dark:border-slate-800/80">
                   <span className="text-slate-400">Class Section</span>
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">CLINIC-A</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">{selectedStudent.className || 'Not assigned'}</span>
                 </div>
 
                 <div className="flex justify-between text-xs py-1.5 border-b border-slate-100 dark:border-slate-800/80">
@@ -1031,13 +1006,13 @@ export const StudentManagement: React.FC = () => {
 
           <div>
             <h3 className="font-heading font-extrabold text-slate-800 dark:text-slate-100">Intake Enrollment Success</h3>
-            <p className="text-xs text-slate-400 mt-1">Multi-angle facial templates compiled and cryptographic signatures saved</p>
+            <p className="text-xs text-slate-400 mt-1">Biometric integration is not configured.</p>
           </div>
 
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-xs text-left max-w-sm mx-auto space-y-1.5 font-medium text-slate-650">
             <div className="flex justify-between"><span>Subject Name:</span> <span className="font-bold text-slate-800 dark:text-slate-205">{selectedFacialStudent?.name}</span></div>
-            <div className="flex justify-between"><span>Depth Mesh Hash:</span> <span className="font-mono text-[10px]">MD5_MESH_8B53FC2A</span></div>
-            <div className="flex justify-between"><span>Verification Accuracy:</span> <span className="font-extrabold text-emerald-500">98.4% Confidence</span></div>
+            <div className="flex justify-between"><span>Template status:</span> <span className="font-mono text-[10px]">Not available</span></div>
+            <div className="flex justify-between"><span>Verification accuracy:</span> <span className="font-extrabold text-slate-500">Not available</span></div>
             <div className="flex justify-between"><span>Enrollment Date:</span> <span className="font-mono">{new Date().toISOString().split('T')[0]}</span></div>
           </div>
 

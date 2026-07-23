@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
@@ -8,8 +8,6 @@ import {
   Plus,
   BookOpen,
   CalendarCheck,
-  Sparkles,
-  Camera,
   FileSpreadsheet,
   Layers,
   CheckCircle,
@@ -34,31 +32,48 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { showFeedback } from '../../components/FeedbackCenter';
 
-import { getFacultyDashboardKpisApi } from '../../services/apiClient';
+import { createFacultyAttendanceSessionApi, getFacultyDashboardKpisApi } from '../../services/apiClient';
 
 export const Dashboard: React.FC = () => {
-  const { students, attendanceRecords, assessments, updateRemedialExam, addAttendanceRecord } = useApp();
+  const { students, attendanceRecords, assessments, updateRemedialExam } = useApp();
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
-
   const [loading, setLoading] = useState(true);
-  const [dashboardKpis, setDashboardKpis] = useState<any>(null);
+  const [dashboardError, setDashboardError] = useState('');
+  const [dashboardKpis, setDashboardKpis] = useState<Awaited<ReturnType<typeof getFacultyDashboardKpisApi>> | null>(null);
 
-  useEffect(() => {
+  const loadDashboard = useCallback(() => {
+    setLoading(true);
+    setDashboardError('');
     getFacultyDashboardKpisApi()
       .then((res) => {
         setDashboardKpis(res);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((error) => {
+        setDashboardError(error instanceof Error ? error.message : 'Unable to load dashboard data.');
+        setLoading(false);
+      });
   }, []);
 
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const assignedSubjects = useMemo(
+    () => dashboardKpis?.classes.map(classItem => classItem.courseCode) ?? [],
+    [dashboardKpis],
+  );
+  const assignedClasses = useMemo(
+    () => dashboardKpis?.classes.map(classItem => classItem.id) ?? [],
+    [dashboardKpis],
+  );
+
   // Selected class block state
-  const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
+  const [selectedClassId, setSelectedClassId] = useState('');
   
   // States for Recording Remedial Score
   const [selectedRemedialId, setSelectedRemedialId] = useState<string | null>(null);
@@ -80,13 +95,24 @@ export const Dashboard: React.FC = () => {
 
   // RBAC filter on subjects
   const subjects = allSubjects.filter(subj => assignedSubjects.includes(subj.code));
-  const fallbackSubjects = [
-    { code: 'CLIN401', name: 'Clinical Dentistry I (Endodontics focus)' },
-    { code: 'CLIN402', name: 'Restorative Dentistry Clinic' },
-  ];
-  const activeSubjects = subjects.length > 0 ? subjects : fallbackSubjects;
+  const activeSubjects = dashboardKpis?.classes.map(classItem => ({
+    code: classItem.courseCode,
+    name: classItem.courseName,
+  })).filter((subject, index, values) => values.findIndex(item => item.code === subject.code) === index) ?? subjects;
 
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState(activeSubjects[0]?.code || 'CLIN401');
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState('');
+
+  useEffect(() => {
+    if (!selectedClassId && assignedClasses[0]) {
+      setSelectedClassId(assignedClasses[0]);
+    }
+  }, [assignedClasses, selectedClassId]);
+
+  useEffect(() => {
+    if (!selectedSubjectCode && activeSubjects[0]) {
+      setSelectedSubjectCode(activeSubjects[0].code);
+    }
+  }, [activeSubjects, selectedSubjectCode]);
 
   // Filter students based on selected class and subjects (RBAC)
   const facultyStudents = students.filter(s =>
@@ -100,11 +126,11 @@ export const Dashboard: React.FC = () => {
   );
 
   // Statistics
-  const facultyTotalStudents = facultyStudents.length;
+  const facultyTotalStudents = dashboardKpis?.kpis.assignedStudents ?? 0;
   
   // At-risk students
   const atRiskStudents = facultyStudents.filter(s => s.status === 'warning' || s.status === 'critical');
-  const atRiskCount = atRiskStudents.length;
+  const atRiskCount = dashboardKpis?.kpis.retentionAlerts ?? 0;
 
   // Pending remedials to grade (only for assigned subjects)
   const pendingRemedials = facultyStudents.flatMap(s => 
@@ -115,20 +141,27 @@ export const Dashboard: React.FC = () => {
   );
 
   // Calculate class-specific attendance rate
-  const classAttendanceRate = (() => {
-    const classRecords = attendanceRecords.filter(r => r.subjectCode === selectedSubjectCode);
-    if (classRecords.length === 0) return 95;
-    const presents = classRecords.filter(r => r.status === 'present' || r.status === 'late').length;
-    return Math.round((presents / classRecords.length) * 100);
-  })();
+  const selectedClassSummary = dashboardKpis?.classes.find(classItem => classItem.id === selectedClassId);
+  const classAttendanceRate = selectedClassSummary?.attendance ?? null;
 
-  // Mock attendance trend data
-  const attendanceHistoryData = [
-    { name: 'Week 1', rate: 91 },
-    { name: 'Week 2', rate: 94 },
-    { name: 'Week 3', rate: 90 },
-    { name: 'Week 4', rate: classAttendanceRate },
-  ];
+  const attendanceHistoryData = useMemo(() => {
+    const byDate = new Map<string, { present: number; total: number }>();
+    attendanceRecords
+      .filter(record => record.subjectCode === selectedSubjectCode)
+      .forEach(record => {
+        const current = byDate.get(record.date) ?? { present: 0, total: 0 };
+        current.total += 1;
+        if (record.status === 'present' || record.status === 'late') current.present += 1;
+        byDate.set(record.date, current);
+      });
+    return Array.from(byDate.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(-8)
+      .map(([date, values]) => ({
+        name: date,
+        rate: Math.round((values.present / values.total) * 100),
+      }));
+  }, [attendanceRecords, selectedSubjectCode]);
 
   // Faculty Assessments (filter by assigned subjects)
   const facultyAssessments = assessments.filter(ass => 
@@ -171,7 +204,7 @@ export const Dashboard: React.FC = () => {
     if (!selectedRemedialId) return;
     const scoreVal = parseInt(remedialScore);
     if (isNaN(scoreVal) || scoreVal < 0 || scoreVal > 100) {
-      alert('Please enter a valid score (0-100).');
+      showFeedback('Please enter a valid score (0-100).', 'error');
       return;
     }
     updateRemedialExam(selectedRemedialId, scoreVal, remedialNotes);
@@ -180,7 +213,7 @@ export const Dashboard: React.FC = () => {
     setRemedialNotes('');
   };
 
-  const handleCreateSession = (e: React.FormEvent) => {
+  const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetSub = sessionSubject || activeSubjects[0]?.code;
     const enrolledStudents = students.filter(s => 
@@ -188,25 +221,47 @@ export const Dashboard: React.FC = () => {
     );
     
     if (enrolledStudents.length === 0) {
-      alert('No students enrolled in this class.');
+      showFeedback('No students enrolled in this class.', 'error');
       return;
     }
 
-    enrolledStudents.forEach(student => {
-      addAttendanceRecord({
-        studentId: student.id,
-        date: sessionDate,
+    try {
+      const response = await createFacultyAttendanceSessionApi({
         subjectCode: targetSub,
-        status: 'present',
+        date: sessionDate,
+        topic: sessionTopic,
       });
-    });
-
-    alert(`Class session created. Attendance initialized for ${enrolledStudents.length} students.`);
-    setIsCreateSessionOpen(false);
-    setSessionTopic('');
+      showFeedback(response.message, 'success');
+      setIsCreateSessionOpen(false);
+      setSessionTopic('');
+    } catch (requestError) {
+      showFeedback(
+        requestError instanceof Error ? requestError.message : 'Unable to create attendance session.',
+        'error',
+      );
+    }
   };
 
   const activeRemedialToRecord = pendingRemedials.find(r => r.id === selectedRemedialId);
+
+  if (loading) {
+    return <div className="p-8 text-center text-sm text-slate-500">Loading persisted dashboard data…</div>;
+  }
+
+  if (dashboardError) {
+    return (
+      <div className="p-8 text-center space-y-3">
+        <p className="text-sm text-rose-600">{dashboardError}</p>
+        <button
+          type="button"
+          onClick={loadDashboard}
+          className="px-4 py-2 rounded-xl bg-clinical-600 text-white text-xs font-bold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
@@ -225,16 +280,6 @@ export const Dashboard: React.FC = () => {
         {/* Quick Header Actions */}
         <div className="flex space-x-2 mt-3 sm:mt-0">
           <button
-            onClick={() => {
-              setSessionSubject(selectedSubjectCode);
-              setIsCreateSessionOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs transition-all shadow-md shadow-clinical-500/10 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New Class Session
-          </button>
-          <button
             onClick={() => navigate('/grades')}
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900 font-semibold text-xs transition-all cursor-pointer bg-white dark:bg-slate-950"
           >
@@ -251,7 +296,7 @@ export const Dashboard: React.FC = () => {
           <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl gap-1">
             {assignedClasses.map((clsId: string) => {
               const cls = students.find(s => s.classId === clsId);
-              const label = cls?.className || clsId;
+              const label = cls?.className || dashboardKpis?.classes.find(item => item.id === clsId)?.name || clsId;
               const isActive = selectedClassId === clsId;
               return (
                 <button
@@ -276,7 +321,7 @@ export const Dashboard: React.FC = () => {
         <Card className="p-4 flex items-center justify-between bg-gradient-to-tr from-clinical-50 to-clinical-100/20 dark:from-clinical-950/20 dark:to-clinical-900/10 border-clinical-200/50 dark:border-clinical-800/20 hover:scale-101 transition-all">
           <div>
             <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Assigned Classes</span>
-            <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">{assignedClasses.length} Class</span>
+            <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">{dashboardKpis?.kpis.activeClasses ?? 0}</span>
           </div>
           <div className="p-2.5 bg-clinical-550/10 text-clinical-600 dark:text-clinical-450 rounded-xl">
             <Layers className="w-5 h-5" />
@@ -308,7 +353,7 @@ export const Dashboard: React.FC = () => {
         <Card className="p-4 flex items-center justify-between bg-gradient-to-tr from-violet-50 to-violet-100/20 dark:from-violet-950/20 dark:to-violet-900/10 border-violet-200/50 dark:border-violet-800/20 hover:scale-101 transition-all">
           <div>
             <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Pending Remedials</span>
-            <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">{pendingRemedials.length}</span>
+            <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">{dashboardKpis?.kpis.remedialCount ?? 0}</span>
           </div>
           <div className="p-2.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 rounded-xl">
             <Clock className="w-5 h-5" />
@@ -317,7 +362,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Quick Access Task Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <button
           onClick={() => navigate('/grades?tab=assessments')}
           className="flex flex-col items-center justify-center p-4 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-2xl hover:-translate-y-0.5 hover:shadow-md transition-all group"
@@ -346,26 +391,6 @@ export const Dashboard: React.FC = () => {
             <CalendarCheck className="w-5 h-5" />
           </div>
           <span className="text-[11px] font-bold mt-2 text-slate-700 dark:text-slate-350">Attendance Override</span>
-        </button>
-
-        <button
-          onClick={() => navigate('/retention?tab=ai-risk')}
-          className="flex flex-col items-center justify-center p-4 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-2xl hover:-translate-y-0.5 hover:shadow-md transition-all group"
-        >
-          <div className="p-2 rounded-xl bg-violet-500/10 text-violet-600 group-hover:scale-110 transition-transform">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <span className="text-[11px] font-bold mt-2 text-slate-700 dark:text-slate-350">AI Risk Forecast</span>
-        </button>
-
-        <button
-          onClick={() => navigate('/students?tab=facial')}
-          className="flex flex-col items-center justify-center p-4 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-2xl hover:-translate-y-0.5 hover:shadow-md transition-all group"
-        >
-          <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 group-hover:scale-110 transition-transform">
-            <Camera className="w-5 h-5" />
-          </div>
-          <span className="text-[11px] font-bold mt-2 text-slate-700 dark:text-slate-350">Face Enrollment</span>
         </button>
 
         <button
@@ -423,7 +448,9 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-[9px] font-bold text-slate-400 uppercase block">Attendance Rate</span>
-                  <span className="text-base font-bold text-slate-800 dark:text-slate-100 mt-0.5 block">{classAttendanceRate}%</span>
+                  <span className="text-base font-bold text-slate-800 dark:text-slate-100 mt-0.5 block">
+                    {classAttendanceRate === null ? 'No records' : `${classAttendanceRate}%`}
+                  </span>
                 </div>
                 <div>
                   <span className="text-[9px] font-bold text-slate-400 uppercase block">Total Assessments</span>
@@ -493,7 +520,12 @@ export const Dashboard: React.FC = () => {
               Weekly Attendance Trend ({selectedSubjectCode})
             </h4>
             <div className="h-44">
-              <ResponsiveContainer width="100%" height="100%">
+              {attendanceHistoryData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                  No attendance history is available for this course.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={attendanceHistoryData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
@@ -514,7 +546,8 @@ export const Dashboard: React.FC = () => {
                     fill="url(#chartGradient)"
                   />
                 </AreaChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>
+              )}
             </div>
           </Card>
         </div>

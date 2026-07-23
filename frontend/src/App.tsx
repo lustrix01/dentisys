@@ -4,6 +4,7 @@ import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { FeedbackCenter } from './components/FeedbackCenter';
 
 // Faculty Page Imports
 import { Dashboard as FacultyDashboard } from './pages/faculty/Dashboard';
@@ -64,9 +65,9 @@ function AuthenticatedLayout() {
 
 function App() {
   return (
-    <AppProvider>
-      <Router>
-        <AuthProvider>
+    <Router>
+      <AuthProvider>
+        <AppProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/mfa/enroll" element={<MfaEnrollStart />} />
@@ -86,48 +87,49 @@ function App() {
                 {/* Dynamic Root Dashboard Selection */}
                 <Route path="/" element={<RoleDashboard />} />
 
-                {/* Faculty Routes */}
-                <Route path="/classes" element={<ClassManagement />} />
-                <Route path="/faculty/classes" element={<ClassManagement />} />
-                <Route path="/students" element={<StudentManagement />} />
-                <Route path="/grades" element={<GradeComputation />} />
-                <Route path="/retention" element={<RetentionMonitoring />} />
-                <Route path="/attendance" element={<AttendanceMonitoring />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/email-management" element={<EmailManagement />} />
-                <Route path="/faculty/audit-trail" element={<FacultyAuditTrail />} />
+                <Route element={<ProtectedRoute allowedRoles={['faculty']} />}>
+                  <Route path="/classes" element={<ClassManagement />} />
+                  <Route path="/faculty/classes" element={<ClassManagement />} />
+                  <Route path="/students" element={<StudentManagement />} />
+                  <Route path="/grades" element={<GradeComputation />} />
+                  <Route path="/retention" element={<RetentionMonitoring />} />
+                  <Route path="/attendance" element={<AttendanceMonitoring />} />
+                  <Route path="/reports" element={<Reports />} />
+                  <Route path="/email-management" element={<EmailManagement />} />
+                  <Route path="/faculty/audit-trail" element={<FacultyAuditTrail />} />
+                  <Route path="/faculty/profile" element={<FacultyProfile />} />
+                  <Route path="/faculty/settings" element={<FacultySettings />} />
+                </Route>
 
-                {/* Dean Routes */}
-                <Route path="/admin/faculty-approval" element={<FacultyApproval />} />
-                <Route path="/admin/retention-criteria" element={<RetentionCriteria />} />
-                <Route path="/admin/reports" element={<DeanReports />} />
-                <Route path="/admin/audit-trail" element={<DeanAuditTrail />} />
-                {/* Legacy routes: redirect to dashboard */}
-                <Route path="/admin/users" element={<Navigate to="/" replace />} />
-                <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
+                <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+                  <Route path="/admin/faculty-approval" element={<FacultyApproval />} />
+                  <Route path="/admin/retention-criteria" element={<RetentionCriteria />} />
+                  <Route path="/admin/reports" element={<DeanReports />} />
+                  <Route path="/admin/audit-trail" element={<DeanAuditTrail />} />
+                  <Route path="/admin/users" element={<Navigate to="/" replace />} />
+                  <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
+                  <Route path="/admin/profile" element={<DeanProfile />} />
+                  <Route path="/admin/settings" element={<DeanSettings />} />
+                </Route>
 
-                {/* Class Secretary Routes */}
-                <Route path="/secretary/attendance" element={<SecretaryAttendanceList />} />
-                <Route path="/secretary/override" element={<ManualAttendanceOverride />} />
-                <Route path="/secretary/cctv" element={<SecretaryCCTVFeed />} />
-                <Route path="/secretary/audit-trail" element={<SecretaryAuditTrail />} />
-
-                {/* Role-specific account routes */}
-                <Route path="/faculty/profile" element={<FacultyProfile />} />
-                <Route path="/faculty/settings" element={<FacultySettings />} />
-                <Route path="/admin/profile" element={<DeanProfile />} />
-                <Route path="/admin/settings" element={<DeanSettings />} />
-                <Route path="/secretary/profile" element={<SecretaryProfile />} />
-                <Route path="/secretary/settings" element={<SecretarySettings />} />
+                <Route element={<ProtectedRoute allowedRoles={['secretary']} />}>
+                  <Route path="/secretary/attendance" element={<SecretaryAttendanceList />} />
+                  <Route path="/secretary/override" element={<ManualAttendanceOverride />} />
+                  <Route path="/secretary/cctv" element={<SecretaryCCTVFeed />} />
+                  <Route path="/secretary/audit-trail" element={<SecretaryAuditTrail />} />
+                  <Route path="/secretary/profile" element={<SecretaryProfile />} />
+                  <Route path="/secretary/settings" element={<SecretarySettings />} />
+                </Route>
 
                 {/* Fallback route */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Route>
           </Routes>
-        </AuthProvider>
-      </Router>
-    </AppProvider>
+          <FeedbackCenter />
+        </AppProvider>
+      </AuthProvider>
+    </Router>
   );
 }
 

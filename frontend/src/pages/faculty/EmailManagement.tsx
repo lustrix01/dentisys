@@ -20,7 +20,7 @@ import { EmailHistoryTable, EmailLog } from '../../components/email/EmailHistory
 import { EmailPreviewModal, EmailPreviewType } from '../../components/email/EmailPreviewModal';
 import {
   createSecretaryInvitation,
-  getSecretaryInvitations,
+  fetchSecretaryInvitations,
   revokeSecretaryInvitation,
   SecretaryInvitation,
 } from '../../services/authService';
@@ -47,8 +47,12 @@ export const EmailManagement: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
 
-  const loadSecretaryInvitations = () => {
-    setSecretaryInvs(getSecretaryInvitations());
+  const loadSecretaryInvitations = async () => {
+    try {
+      setSecretaryInvs(await fetchSecretaryInvitations());
+    } catch (err) {
+      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Unable to load invitations.' });
+    }
   };
 
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -68,9 +72,9 @@ export const EmailManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    loadSecretaryInvitations();
+    void loadSecretaryInvitations();
     fetchEmailLogs();
-  }, []);
+  }, [students]);
 
   const isConsent = tab === 'consent';
   const isRisk = tab === 'risk';
@@ -114,29 +118,35 @@ export const EmailManagement: React.FC = () => {
       // Send Secretary Invitations for selected students
       let count = 0;
       for (const studentId of selected) {
-        const student = students.find((s) => s.id === studentId);
+        const student = students.find((s) => s.id === studentId || s.studentId === studentId);
         if (!student) continue;
 
         const res = await createSecretaryInvitation({
-          studentId: student.id,
+          studentId: student.studentId,
           studentName: student.name,
           email: student.email,
           facultyName: user?.display_name || '',
-          className: student.className || 'Clinical Rotation A',
+          className: student.className || 'Not assigned',
           classId: student.classId || 'CLINIC-A',
         });
 
-        if (res.success) count++;
+        if (res.success) {
+          count++;
+        } else {
+          setNotice({ type: 'error', message: res.message });
+        }
       }
 
-      loadSecretaryInvitations();
+      await loadSecretaryInvitations();
       fetchEmailLogs();
       setSelected([]);
       setIsSending(false);
-      setNotice({
-        type: 'success',
-        message: `Class Secretary invitation email issued to ${count} student${count > 1 ? 's' : ''}.`,
-      });
+      if (count > 0) {
+        setNotice({
+          type: 'success',
+          message: `Class Secretary invitation issued to ${count} student${count === 1 ? '' : 's'}.`,
+        });
+      }
     } else {
       // Send Consent or Risk Emails via backend API
       const emailType = isConsent ? 'Privacy Consent' : 'At-Risk Notification';
@@ -151,7 +161,7 @@ export const EmailManagement: React.FC = () => {
 
       try {
         const apiClient = await import('../../services/apiClient');
-        await apiClient.sendFacultyEmailApi({
+        const delivery = await apiClient.sendFacultyEmailApi({
           recipients: selectedRecipients,
           emailType,
           subject,
@@ -160,8 +170,8 @@ export const EmailManagement: React.FC = () => {
         fetchEmailLogs();
         setSelected([]);
         setNotice({
-          type: 'success',
-          message: `${emailType} email sent and logged for ${selected.length} student${selected.length > 1 ? 's' : ''}.`,
+          type: delivery.failedCount > 0 ? 'error' : 'success',
+          message: delivery.message,
         });
       } catch (err) {
         setNotice({
@@ -178,7 +188,9 @@ export const EmailManagement: React.FC = () => {
     const res = await revokeSecretaryInvitation(invId, user?.display_name || '');
     if (res.success) {
       setNotice({ type: 'success', message: res.message });
-      loadSecretaryInvitations();
+      await loadSecretaryInvitations();
+    } else {
+      setNotice({ type: 'error', message: res.message });
     }
   };
 
@@ -197,6 +209,10 @@ export const EmailManagement: React.FC = () => {
   };
 
   const previewStudent = students.find((s) => s.id === previewStudentId) || (selected.length === 1 ? students.find((s) => s.id === selected[0]) : undefined);
+  const previewInvitationToken =
+    selected.length === 1 && isSecretary
+      ? secretaryInvs.find((invitation) => invitation.studentId === (selected[0] || previewStudentId))?.token
+      : undefined;
   const previewStudentName = previewStudent?.name || (selected.length === 1 ? students.find((s) => s.id === selected[0])?.name || 'Selected student' : `${selected.length} selected students`);
   const previewSubjectConcerns = previewStudent?.enrolledSubjects
     .filter((subject) => subject.grade > 2.5 || subject.hasRemedial)
@@ -354,7 +370,7 @@ export const EmailManagement: React.FC = () => {
                       <td className="p-3 font-bold text-slate-700 dark:text-slate-200">{s.name}</td>
                       <td className="p-3 text-slate-500">{s.email}</td>
                       <td className="p-3 text-slate-500">
-                        {s.className || 'Clinical Rotation A'} · Year {s.yearLevel}
+                        {s.className || 'Not assigned'} · Year {s.yearLevel}
                       </td>
                       <td className="p-3 text-right">
                         <button
@@ -628,10 +644,10 @@ export const EmailManagement: React.FC = () => {
           previewStudent ? `${previewStudent.status} standing, GWA ${previewStudent.overallGWA.toFixed(2)}` : undefined
         }
         subjectsOfConcern={previewSubjectConcerns}
-        className={previewStudent?.className || 'Clinical Rotation A'}
+        className={previewStudent?.className || 'Not assigned'}
         invitationLink={
-          selected.length === 1 && isSecretary
-            ? `${window.location.origin}/activate-secretary?token=demo`
+          previewInvitationToken
+            ? `${window.location.origin}/activate-secretary?token=${previewInvitationToken}`
             : undefined
         }
         onConsentAction={isConsent && previewStudentId ? respondConsent : undefined}

@@ -106,7 +106,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{error} (showing local records fallback)</span>
+            <span>{error}</span>
           </div>
           <button onClick={fetchLogs} className="flex items-center gap-1 font-bold underline hover:opacity-80">
             <RefreshCw className="w-3.5 h-3.5" />

@@ -97,13 +97,9 @@ INSERT INTO system_settings (setting_key, setting_value, is_internal, descriptio
 VALUES (
     'devices',
     JSON_OBJECT(
-        'registry',
-        JSON_ARRAY(
-            JSON_OBJECT('id', 'CCTV-CLINIC-A-01', 'type', 'camera', 'location', 'Clinic A', 'status', 'active'),
-            JSON_OBJECT('id', 'CCTV-CLINIC-B-01', 'type', 'camera', 'location', 'Clinic B', 'status', 'active'),
-            JSON_OBJECT('id', 'TERM-CLINIC-A-01', 'type', 'terminal', 'location', 'Clinic A', 'status', 'active')
-        )
+        'configured', false,
+        'registry', JSON_ARRAY()
     ),
     0,
-    'Device/CCTV metadata registry. Reference data only — actual device integration is future work.'
+    'Optional device registry. No CCTV or biometric integration is configured by default.'
 );

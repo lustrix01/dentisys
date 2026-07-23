@@ -64,6 +64,12 @@ assert_same("O'Connor", validate_person_name(['name' => "O'Connor"], 'name'), 'A
 assert_same('Maria José', validate_person_name(['name' => 'Maria José'], 'name'), 'Unicode letters accepted');
 assert_same('Dr. Juan A. Dela Cruz', validate_person_name(['name' => 'Dr. Juan A. Dela Cruz'], 'name'), 'Name with periods accepted');
 assert_same('St. John', validate_optional_person_name(['name' => 'St. John'], 'name'), 'Optional name with periods accepted');
+assert_same("Anne-Marie O'Neill", validate_person_name(['name' => "  aNNE-mARIE   o'NEILL  "], 'name'), 'Whitespace and compound casing normalized');
+assert_same('Luz de la Cruz Jr.', validate_person_name(['name' => 'LUZ DE LA CRUZ JR'], 'name'), 'Particles and suffix normalized');
+assert_same('Sean McDonald III', validate_person_name(['name' => 'sean mcdonald iii'], 'name'), 'Mc prefix and Roman suffix normalized');
+assert_same('Élodie van Gutiérrez', validate_person_name(['name' => 'ÉLODIE VAN GUTIÉRREZ'], 'name'), 'Accents preserved during normalization');
+assert_same('D’Arcy', validate_person_name(['name' => 'd’arcy'], 'name'), 'Curly apostrophe accepted and normalized');
+assert_same(null, validate_optional_person_name(['name' => '   '], 'name'), 'Empty optional middle name remains empty');
 
 assert_throws(fn() => validate_person_name(['name' => 'John123'], 'name'), 'letters, spaces, hyphens', 'Name with digits rejected');
 assert_throws(fn() => validate_person_name(['name' => 'Jane!'], 'name'), 'letters, spaces, hyphens', 'Name with exclamation mark rejected');

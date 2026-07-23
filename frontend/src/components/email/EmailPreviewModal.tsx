@@ -30,10 +30,12 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
   facultyName = 'Dr. Eleanor Vance',
   academicSummary,
   subjectsOfConcern,
-  className = 'Clinical Rotation A',
-  invitationLink = 'https://dentisys.edu.ph/activate-secretary?token=demo',
+  className = '',
+  invitationLink,
   onConsentAction,
 }) => {
+  const effectiveInvitationLink = invitationLink
+    || 'Invitation link will be generated after the server issues the invitation.';
   const getHeader = () => {
     switch (type) {
       case 'consent':
@@ -138,8 +140,12 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
               <p>
                 As Class Secretary, you will assist in attendance monitoring and clinic log overrides. To accept this appointment and set up your account password, please open your activation link below:
               </p>
-              <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 rounded-xl text-blue-800 dark:text-blue-300 font-mono text-xs break-all">
-                {invitationLink}
+              <div className={`p-3 rounded-xl font-mono text-xs break-all border ${
+                invitationLink
+                  ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900/50 text-blue-800 dark:text-blue-300'
+                  : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 italic'
+              }`}>
+                {effectiveInvitationLink}
               </div>
               <p className="text-xs text-slate-400 italic">
                 Notice: This invitation link is valid for 7 days from issuance.

@@ -43,22 +43,59 @@ function create_pdo(array $config): PDO
             str_contains($e->getMessage(), '1049')
         );
 
+        $isAccessDenied = (
+            $e->getCode() === 1045 ||
+            str_contains($e->getMessage(), 'Access denied') ||
+            str_contains($e->getMessage(), '1045')
+        );
+
         $isDev = ($config['app']['env'] ?? 'development') === 'development';
 
-        if ($isMissingDb && $isDev) {
+        if (($isMissingDb || $isAccessDenied) && $isDev) {
             try {
                 $serverDsn = sprintf('mysql:host=%s;port=%d;charset=utf8mb4', $db['host'], (int) $db['port']);
-                $serverPdo = new PDO($serverDsn, $db['user'], $db['pass'], pdo_options());
-                $escapedDb = str_replace('`', '``', $db['name']);
-                $serverPdo->exec("CREATE DATABASE IF NOT EXISTS `{$escapedDb}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
-                unset($serverPdo);
+                $rootPassCandidates = array_unique(array_filter([
+                    getenv('DB_ROOT_PASS') ?: '',
+                    '',
+                    'local-root-password',
+                    'root',
+                ], fn($v) => $v !== null));
 
-                return new PDO(database_dsn($config), $db['user'], $db['pass'], pdo_options());
+                $serverPdo = null;
+                foreach ($rootPassCandidates as $rootPass) {
+                    try {
+                        $serverPdo = new PDO($serverDsn, 'root', $rootPass, pdo_options());
+                        break;
+                    } catch (PDOException) {
+                        continue;
+                    }
+                }
+
+                if ($serverPdo) {
+                    $escapedDb = str_replace('`', '``', $db['name']);
+                    $serverPdo->exec("CREATE DATABASE IF NOT EXISTS `{$escapedDb}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+
+                    $escapedUser = str_replace("'", "''", $db['user']);
+                    $escapedUserPass = str_replace("'", "''", $db['pass']);
+                    $serverPdo->exec("CREATE USER IF NOT EXISTS '{$escapedUser}'@'localhost' IDENTIFIED BY '{$escapedUserPass}';");
+                    $serverPdo->exec("ALTER USER '{$escapedUser}'@'localhost' IDENTIFIED BY '{$escapedUserPass}';");
+                    $serverPdo->exec("GRANT ALL PRIVILEGES ON `{$escapedDb}`.* TO '{$escapedUser}'@'localhost';");
+                    $serverPdo->exec("CREATE USER IF NOT EXISTS '{$escapedUser}'@'127.0.0.1' IDENTIFIED BY '{$escapedUserPass}';");
+                    $serverPdo->exec("ALTER USER '{$escapedUser}'@'127.0.0.1' IDENTIFIED BY '{$escapedUserPass}';");
+                    $serverPdo->exec("GRANT ALL PRIVILEGES ON `{$escapedDb}`.* TO '{$escapedUser}'@'127.0.0.1';");
+                    $serverPdo->exec("CREATE USER IF NOT EXISTS '{$escapedUser}'@'%' IDENTIFIED BY '{$escapedUserPass}';");
+                    $serverPdo->exec("ALTER USER '{$escapedUser}'@'%' IDENTIFIED BY '{$escapedUserPass}';");
+                    $serverPdo->exec("GRANT ALL PRIVILEGES ON `{$escapedDb}`.* TO '{$escapedUser}'@'%';");
+                    $serverPdo->exec("FLUSH PRIVILEGES;");
+                    unset($serverPdo);
+
+                    return new PDO(database_dsn($config), $db['user'], $db['pass'], pdo_options());
+                }
             } catch (PDOException $createErr) {
                 $errCode = (int) $createErr->getCode();
                 if ($errCode === 0) { $errCode = 1049; }
                 throw new PDOException(
-                    "Database '{$db['name']}' does not exist on {$db['host']}:{$db['port']} and auto-creation failed: " . $createErr->getMessage(),
+                    "Database '{$db['name']}' or user '{$db['user']}' auto-creation failed: " . $createErr->getMessage(),
                     $errCode,
                     $createErr
                 );

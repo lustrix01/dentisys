@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { AuthPhase, SafeUser, UserRole } from '../types/auth';
+import type { AuthPhase, SafeUser } from '../types/auth';
 import * as apiClient from '../services/apiClient';
 import * as auditService from '../services/auditService';
-import { setCurrentSecretaryUser, clearCurrentSecretaryUser } from '../pages/secretary/utils';
+import { clearCurrentSecretaryUser } from '../pages/secretary/utils';
 
 const LEGACY_CREDENTIAL_KEYS = [
   'dentisys_user',
@@ -22,14 +22,15 @@ interface AuthState {
   mfaSecret: string | null;
   provisioningUri: string | null;
   recoveryCodes: string[];
+  devMfaCode: string | null;
 }
 
 interface AuthContextValue extends AuthState {
   beginLogin: () => void;
   storeEnrollmentChallenge: (token: string) => void;
-  storeEnrollmentDisplayData: (secret: string, uri: string) => void;
+  storeEnrollmentDisplayData: (secret: string, uri: string, devCode?: string | null) => void;
   storeConfirmationChallenge: (token: string) => void;
-  storeMfaChallenge: (token: string) => void;
+  storeMfaChallenge: (token: string, devCode?: string | null) => void;
   setAccessToken: (token: string) => void;
   setUser: (user: SafeUser) => void;
   setAuthenticated: () => void;
@@ -37,12 +38,13 @@ interface AuthContextValue extends AuthState {
   clearRecoveryCodes: () => void;
   setError: (message: string) => void;
   clearAuth: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const initialState: AuthState = {
-  phase: 'unauthenticated',
+  phase: 'bootstrapping',
   errorMessage: '',
   enrollmentToken: null,
   confirmationToken: null,
@@ -52,12 +54,14 @@ const initialState: AuthState = {
   mfaSecret: null,
   provisioningUri: null,
   recoveryCodes: [],
+  devMfaCode: null,
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>(initialState);
   const location = useLocation();
   const prevPathnameRef = useRef<string | null>(null);
+  const authOperationRef = useRef(0);
 
   useEffect(() => {
     const prev = prevPathnameRef.current;
@@ -74,7 +78,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const operation = ++authOperationRef.current;
+    const bootstrap = async () => {
+      try {
+        const refreshed = await apiClient.refreshSession();
+        if (!active || authOperationRef.current !== operation) return;
+        apiClient.setAccessToken(refreshed.access_token);
+        const user = await apiClient.getMe();
+        if (!active || authOperationRef.current !== operation) return;
+        auditService.setAuditIdentity(user.display_name, user.role);
+        setState(prev => ({
+          ...prev,
+          accessToken: refreshed.access_token,
+          user,
+          phase: 'authenticated',
+          errorMessage: '',
+        }));
+      } catch (error) {
+        if (!active || authOperationRef.current !== operation) return;
+        apiClient.clearAccessToken();
+        const message = error instanceof apiClient.ApiError && error.status !== 401
+          ? error.message
+          : '';
+        setState(prev => ({ ...initialState, phase: 'unauthenticated', errorMessage: message, recoveryCodes: prev.recoveryCodes }));
+      }
+    };
+    void bootstrap();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const beginLogin = useCallback(() => {
+    authOperationRef.current += 1;
     setState(prev => ({ ...prev, phase: 'submitting_login', errorMessage: '' }));
   }, []);
 
@@ -87,11 +125,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  const storeEnrollmentDisplayData = useCallback((secret: string, uri: string) => {
+  const storeEnrollmentDisplayData = useCallback((secret: string, uri: string, devCode?: string | null) => {
     setState(prev => ({
       ...prev,
       mfaSecret: secret,
       provisioningUri: uri,
+      devMfaCode: devCode ?? null,
       phase: 'enrollment_confirmation_required',
       errorMessage: '',
     }));
@@ -105,11 +144,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  const storeMfaChallenge = useCallback((token: string) => {
+  const storeMfaChallenge = useCallback((token: string, devCode?: string | null) => {
     setState(prev => ({
       ...prev,
       mfaSessionToken: token,
       phase: 'mfa_verification_required',
+      devMfaCode: devCode ?? null,
       errorMessage: '',
     }));
   }, []);
@@ -121,18 +161,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setUser = useCallback((user: SafeUser) => {
     auditService.setAuditIdentity(user.display_name, user.role);
-    if (user.role === 'secretary') {
-      setCurrentSecretaryUser({
-        email: user.login_email,
-        role: user.role,
-        name: user.display_name,
-        title: 'Class Secretary',
-        assignedClassId: 'CLINIC-A',
-        assignedClassName: 'Clinical Rotation A (Section 4A)',
-        classroomName: 'Dental Clinic B - Room 402',
-        cctvCameraId: 'CCTV-CLINIC-A-01',
-      });
-    }
     setState(prev => ({ ...prev, user }));
   }, []);
 
@@ -153,10 +181,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearAuth = useCallback(() => {
+    authOperationRef.current += 1;
     apiClient.clearAccessToken();
     auditService.clearAuditIdentity();
     clearCurrentSecretaryUser();
-    setState({ ...initialState });
+    setState({ ...initialState, phase: 'unauthenticated' });
+  }, []);
+
+  const logout = useCallback(async () => {
+    authOperationRef.current += 1;
+    try {
+      await apiClient.logoutSession();
+    } finally {
+      apiClient.clearAccessToken();
+      auditService.clearAuditIdentity();
+      clearCurrentSecretaryUser();
+      setState({ ...initialState, phase: 'unauthenticated' });
+    }
   }, []);
 
   const value: AuthContextValue = {
@@ -173,6 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearRecoveryCodes,
     setError,
     clearAuth,
+    logout,
   };
 
   return (

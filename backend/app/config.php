@@ -172,6 +172,8 @@ function app_config(?array $localConfig = null): array
 {
     load_dotenv_file();
     $local = $localConfig ?? load_local_config();
+    $appEnv = (string) config_value('APP_ENV', $local, 'development');
+    $isDevelopment = strtolower($appEnv) === 'development';
 
     return [
         'debug' => filter_var(config_value('APP_DEBUG', $local, false), FILTER_VALIDATE_BOOLEAN),
@@ -183,7 +185,7 @@ function app_config(?array $localConfig = null): array
             'pass' => (string) config_value('DB_PASS', $local, 'local-development-password'),
         ],
         'app' => [
-            'env' => (string) config_value('APP_ENV', $local, 'development'),
+            'env' => $appEnv,
             'is_https' => filter_var(config_value('APP_IS_HTTPS', $local, 'false'), FILTER_VALIDATE_BOOLEAN),
         ],
         'cors' => [
@@ -194,7 +196,7 @@ function app_config(?array $localConfig = null): array
             'access_ttl' => (int) config_value('JWT_ACCESS_TTL', $local, 86400),
         ],
         'mfa' => [
-            'required' => filter_var(config_value('MFA_REQUIRED', $local, 'false'), FILTER_VALIDATE_BOOLEAN),
+            'required' => filter_var(config_value('MFA_REQUIRED', $local, 'true'), FILTER_VALIDATE_BOOLEAN),
             'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $local, 'ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI='),
         ],
         'audit' => [
@@ -205,7 +207,8 @@ function app_config(?array $localConfig = null): array
             'storage_dir' => (string) (config_value('RATE_LIMIT_STORAGE_DIR', $local, '') ?: dirname(__DIR__) . '/storage/ratelimit'),
         ],
         'show_dev_reset_link' => filter_var(config_value('SHOW_DEV_RESET_LINK', $local, true), FILTER_VALIDATE_BOOLEAN),
-        'show_dev_mfa_code' => filter_var(config_value('SHOW_DEV_MFA_CODE', $local, true), FILTER_VALIDATE_BOOLEAN),
+        'show_dev_mfa_code' => $isDevelopment
+            && filter_var(config_value('SHOW_DEV_MFA_CODE', $local, true), FILTER_VALIDATE_BOOLEAN),
         'show_dev_invitation_link' => filter_var(config_value('SHOW_DEV_INVITATION_LINK', $local, true), FILTER_VALIDATE_BOOLEAN),
         'smtp' => [
             'host' => (string) config_value('SMTP_HOST', $local, '127.0.0.1'),

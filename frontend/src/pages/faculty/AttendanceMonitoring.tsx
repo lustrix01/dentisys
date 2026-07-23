@@ -19,6 +19,8 @@ import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, AttendanceStatus } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
+import { overrideFacultyAttendanceApi } from '../../services/apiClient';
 
 type EditableStatus = Exclude<AttendanceStatus, 'excused'>;
 
@@ -182,7 +184,7 @@ export const AttendanceMonitoring: React.FC = () => {
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [historicalRecords, students, correctionsSearch, selectedCourseCode]);
 
-  const handleCorrectSubmit = (e: React.FormEvent) => {
+  const handleCorrectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -209,7 +211,7 @@ export const AttendanceMonitoring: React.FC = () => {
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await requestConfirmation(
       `Correct attendance status for student?\n` +
       `Date: ${selectedCorrectionRecord.date}\n` +
       `Change: ${selectedCorrectionRecord.status.toUpperCase()} to ${correctStatus.toUpperCase()}\n` +
@@ -219,6 +221,11 @@ export const AttendanceMonitoring: React.FC = () => {
     if (!confirmed) return;
 
     try {
+      await overrideFacultyAttendanceApi({
+        recordId: selectedCorrectionRecord.id,
+        status: correctStatus,
+        reason: cleanedReason,
+      });
       overrideAttendanceRecord({
         recordId: selectedCorrectionRecord.id,
         studentId: selectedCorrectionRecord.studentId,
@@ -233,7 +240,7 @@ export const AttendanceMonitoring: React.FC = () => {
       setIsCorrectionModalOpen(false);
       setSelectedCorrectionRecord(null);
       setCorrectionReason('');
-      alert('Manual correction saved and audit trail updated successfully.');
+      showFeedback('Manual correction saved and audit trail updated successfully.', 'success');
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Correction rejected.');
     }

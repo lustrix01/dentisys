@@ -56,6 +56,24 @@ return [
     ],
     [
         'method' => 'GET',
+        'path' => '/api/auth/mfa/settings',
+        'handler' => 'handle_mfa_settings_status',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/mfa/settings/recovery-codes',
+        'handler' => 'handle_mfa_settings_recovery_codes',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/mfa/settings/revoke',
+        'handler' => 'handle_mfa_settings_revoke',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
         'path' => '/api/auth/me',
         'handler' => 'handle_me',
         'has_params' => false,
@@ -96,6 +114,18 @@ return [
         'method' => 'GET',
         'path' => '/api/secretary/invitation',
         'handler' => 'handle_secretary_get_invitation',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/secretary/invitations',
+        'handler' => 'handle_secretary_list_invitations',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/secretary/invitations/revoke',
+        'handler' => 'handle_secretary_revoke_invitation',
         'has_params' => false,
     ],
     [
@@ -252,6 +282,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/faculty/assessments/delete',
+        'handler' => 'handle_faculty_assessment_delete',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/faculty/scores',
         'handler' => 'handle_faculty_scores_get',
@@ -277,6 +313,12 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/faculty/attendance/session',
+        'handler' => 'handle_faculty_attendance_session_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/faculty/attendance/override',
         'handler' => 'handle_faculty_attendance_override',
         'has_params' => false,
@@ -291,6 +333,12 @@ return [
         'method' => 'POST',
         'path' => '/api/faculty/retention/remedial',
         'handler' => 'handle_faculty_retention_remedial_save',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/retention/status',
+        'handler' => 'handle_faculty_retention_status_update',
         'has_params' => false,
     ],
     [

@@ -10,6 +10,41 @@ declare(strict_types=1);
 
 $TOTAL_STUDENTS = 25;
 
+function seed_percentage_for_student(int $studentId): float
+{
+    if ($studentId === 24) return 68.0;
+    if ($studentId === 25) return 60.0;
+    if ($studentId >= 21) return 74.0;
+    return (float) (78 + (($studentId * 7) % 20));
+}
+
+function seed_gwa_from_percentage(float $percentage): float
+{
+    if ($percentage >= 97) return 1.0;
+    if ($percentage >= 94) return 1.25;
+    if ($percentage >= 91) return 1.5;
+    if ($percentage >= 88) return 1.75;
+    if ($percentage >= 85) return 2.0;
+    if ($percentage >= 82) return 2.25;
+    if ($percentage >= 80) return 2.5;
+    if ($percentage >= 78) return 2.75;
+    if ($percentage >= 75) return 3.0;
+    return 5.0;
+}
+
+function seed_ascii_email_part(string $value): string
+{
+    $ascii = strtr(mb_strtolower($value, 'UTF-8'), [
+        'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a',
+        'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e',
+        'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i',
+        'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o',
+        'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u',
+        'ñ' => 'n',
+    ]);
+    return preg_replace('/[^a-z0-9]+/', '', $ascii) ?: 'student';
+}
+
 $adminHash = '$2y$10$0tYRcP7zAjkSDhMCQ15Dk.6JhJs4nmuqIPhyFdWRp3kdphwW4BwV.';      // Admin123!
 $facultyHash = '$2y$10$2ZtP1tEJ4.xf/H5K62LjtOAscT82f9Z01GULXkFL4NbJFM1fqAwGC';    // Faculty123!
 $secretaryHash = '$2y$10$lg8BDdQrFtEF6LeP/ff5OuSGnP9DSQh/dRXHfa4tieiXLc0YaYenK';  // Secretary123!
@@ -71,7 +106,7 @@ $users = [
     [6, 'dr.torres@bicol-u.edu.ph', $facultyHash, 'faculty', 'Dr. Ramon Torres, DMD', 'Lecturer, Ethics & Practice Management', 'Active', '2024-01-19 09:00:00.000000', '2024-01-19 09:00:00.000000', null, null],
     [7, 'pending.faculty1@bicol-u.edu.ph', $facultyHash, 'faculty', 'Dr. Jessica Mendoza, DMD', 'Applicant Faculty', 'Pending Approval', '2026-07-01 10:00:00.000000', null, null, null],
     [8, 'pending.faculty2@bicol-u.edu.ph', $facultyHash, 'faculty', 'Dr. Gabriel Navarro, DMD', 'Applicant Faculty', 'Pending Approval', '2026-07-02 11:00:00.000000', null, null, null],
-    [9, 'secretary@bicol-u.edu.ph', $secretaryHash, 'secretary', 'Bea Alonzo', 'Class Secretary - CLINIC-4A', 'Active', '2024-02-01 08:30:00.000000', '2024-02-01 08:30:00.000000', null, null],
+    [9, 'secretary@bicol-u.edu.ph', $secretaryHash, 'secretary', 'Bea Alonzo', 'Class Secretary - CLINIC-4B', 'Active', '2024-02-01 08:30:00.000000', '2024-02-01 08:30:00.000000', null, null],
 ];
 
 foreach ($users as $u) {
@@ -112,7 +147,7 @@ $sections = [
     [4, 'ORAL-2B', 5, 3, null, '1ST', '2024-2025', 2, 'Oral Anatomy Lab 2',      'Room 202', 'B', 'Active', '2024-1ST', '2024-08-15', '2024-12-20'],
     [5, 'PROSTHO-3A', 3, 4, null, '1ST', '2024-2025', 3, 'Prosthodontics Lab 1',   'Room 301', 'A', 'Active', '2024-1ST', '2024-08-15', '2024-12-20'],
     [6, 'PERIO-3B', 4, 3, null, '2ND', '2024-2025', 3, 'Periodontics Lab 2',     'Room 302', 'B', 'Active', '2024-2ND', '2025-01-10', '2025-05-30'],
-    [7, 'CLINIC-4A', 1, 2, 9,    '1ST', '2024-2025', 4, 'Dental Clinic Lab 1',    'Lecture Hall A', 'A', 'Active', '2024-1ST', '2024-08-15', '2024-12-20'],
+    [7, 'CLINIC-4A', 1, 2, null, '1ST', '2024-2025', 4, 'Dental Clinic Lab 1',    'Lecture Hall A', 'A', 'Active', '2024-1ST', '2024-08-15', '2024-12-20'],
     [8, 'CLINIC-4B', 2, 2, 9,    '2ND', '2024-2025', 4, 'Dental Clinic Lab 2',    'Lecture Hall B', 'B', 'Active', '2024-2ND', '2025-01-10', '2025-05-30'],
 ];
 
@@ -136,13 +171,21 @@ for ($i = 1; $i <= $TOTAL_STUDENTS; $i++) {
     $fn = $firstNames[($i - 1) % count($firstNames)];
     $ln = $lastNames[($i * 3) % count($lastNames)];
     $mn = $firstNames[($i * 7) % count($firstNames)];
+    if ($i === 24) {
+        $fn = 'Bea';
+        $ln = 'Alonzo';
+        $mn = '';
+    }
     $sn = sprintf("2024-DENT-%04d", $i);
-    $email = strtolower($fn . '.' . str_replace(' ', '', $ln) . $i . '@bicol-u.edu.ph');
-    $contact = sprintf("0917%07d", rand(1000000, 9999999));
+    $email = seed_ascii_email_part($fn) . '.' . seed_ascii_email_part($ln) . $i . '@bicol-u.edu.ph';
+    if ($i === 24) {
+        $email = 'secretary@bicol-u.edu.ph';
+    }
+    $contact = sprintf("0917%07d", 1000000 + (($i * 7919) % 9000000));
     $sex = ($i % 2 === 0) ? 'F' : 'M';
     
     $yl = (($i - 1) % 4) + 1;
-    $userIdVal = ($i === 10) ? "9" : "NULL";
+    $userIdVal = ($i === 24) ? "9" : "NULL";
 
     $sql[] = "INSERT IGNORE INTO students (student_id, student_number, first_name, last_name, middle_name, bu_email, contact, sex, year_level, status, admission_date, birthdate, user_id, created_at) VALUES ({$i}, '{$sn}', '{$fn}', '{$ln}', '{$mn}', '{$email}', '{$contact}', '{$sex}', {$yl}, 'active', '2023-08-01', '2002-05-15', {$userIdVal}, NOW(6));";
     
@@ -157,28 +200,12 @@ for ($i = 1; $i <= $TOTAL_STUDENTS; $i++) {
 $sql[] = "";
 
 // -----------------------------------------------------------------------------
-// SECTION 5: BIOMETRIC PROFILES & PRIVACY CONSENT
+// SECTION 5: BIOMETRIC INTEGRATION
 // -----------------------------------------------------------------------------
 $sql[] = "-- =============================================================================";
-$sql[] = "-- 5. BIOMETRIC PROFILES & PRIVACY CONSENT";
+$sql[] = "-- 5. BIOMETRIC INTEGRATION";
+$sql[] = "-- No biometric enrollment is seeded. A real integration must create these records.";
 $sql[] = "-- =============================================================================";
-for ($i = 1; $i <= $TOTAL_STUDENTS; $i++) {
-    $consent = 'approved';
-    $faceEnrolled = 1;
-    if ($i >= 21 && $i <= 23) {
-        $consent = 'pending';
-        $faceEnrolled = 0;
-    } elseif ($i >= 24) {
-        $consent = 'declined';
-        $faceEnrolled = 0;
-    }
-    
-    $tplRef = $faceEnrolled ? "'facenet_v2_vector_" . sprintf("%04d", $i) . "'" : "NULL";
-    $imgRef = $faceEnrolled ? "'[\"/uploads/faces/student_" . $i . "_1.jpg\", \"/uploads/faces/student_" . $i . "_2.jpg\"]'" : "NULL";
-    $respAt = $consent !== 'pending' ? "'2024-08-10 10:00:00.000000'" : "NULL";
-    
-    $sql[] = "INSERT IGNORE INTO biometric_profiles (profile_id, student_id, consent_status, face_enrolled, template_reference, image_references, enrolled_at, consent_responded_at, created_at) VALUES ({$i}, {$i}, '{$consent}', {$faceEnrolled}, {$tplRef}, {$imgRef}, {$respAt}, {$respAt}, NOW(6));";
-}
 $sql[] = "";
 
 // -----------------------------------------------------------------------------
@@ -201,31 +228,17 @@ for ($i = 1; $i <= $TOTAL_STUDENTS; $i++) {
         $csId = ($blockChoice === 'A') ? 7 : 8;
     }
 
-    $retState = 'active';
-    $gwa = 1.75;
-    $percentage = 88.50;
-    $hrs = rand(60, 120);
+    $percentage = seed_percentage_for_student($i);
+    $gwa = seed_gwa_from_percentage($percentage);
+    $retState = $gwa <= 2.5 ? 'active' : ($gwa <= 3.0 ? 'warning' : 'critical');
+    $hrs = 60 + (($i * 7) % 61);
     $remJson = "NULL";
-    
-    if ($i >= 21 && $i <= 23) {
-        $retState = 'warning';
-        $gwa = 2.65;
-        $percentage = 74.20;
-    } elseif ($i === 24) {
-        $retState = 'critical';
-        $gwa = 3.10;
-        $percentage = 68.50;
-    } elseif ($i === 25) {
-        $retState = 'remedial';
-        $gwa = 3.75;
-        $percentage = 60.00;
+
+    if ($i === 25) {
         $remJson = "'{\"pendingExams\":1,\"completedRemedials\":0,\"subjectCode\":\"CLIN401\",\"dueDate\":\"2026-08-15\"}'";
-    } else {
-        $gwa = 1.25 + (($i % 8) * 0.12);
-        $percentage = 95.0 - (($i % 8) * 1.5);
     }
     
-    $compJson = "'{\"quizzes\":" . number_format($percentage + 2, 1) . ",\"exams\":" . number_format($percentage - 1, 1) . ",\"practicum\":" . number_format($percentage + 3, 1) . ",\"attendance\":95.0}'";
+    $compJson = "'{\"quizzes\":" . number_format($percentage, 1) . ",\"exams\":" . number_format($percentage, 1) . ",\"practicum\":" . number_format($percentage, 1) . ",\"attendance\":" . number_format($percentage, 1) . "}'";
     
     $sql[] = "INSERT IGNORE INTO enrollments (enrollment_id, student_id, cs_id, status, date_enrolled, final_percentage, final_gwa, grade_components_json, retention_state, remedial_state_json, clinic_hours_completed, created_at) VALUES ({$i}, {$i}, {$csId}, 'Active', '2024-08-15', {$percentage}, {$gwa}, {$compJson}, '{$retState}', {$remJson}, {$hrs}, NOW(6));";
 }
@@ -260,9 +273,7 @@ for ($cs = 1; $cs <= 8; $cs++) {
                      (($yl === 3) ? ($blockChoice === 'A' ? 5 : 6) : ($blockChoice === 'A' ? 7 : 8)));
 
             if ($stCsId === $cs) {
-                $baseScore = $a[3] * 0.85;
-                if ($st > 23) $baseScore = $a[3] * 0.58;
-                $scoreVal = min($a[3], max(10, $baseScore + rand(-5, 5)));
+                $scoreVal = round($a[3] * seed_percentage_for_student($st) / 100, 2);
                 $remarks = $scoreVal >= ($a[3] * 0.75) ? 'Satisfactory' : 'Needs Remediation';
                 
                 $sql[] = "INSERT IGNORE INTO assessment_scores (score_id, assessment_id, student_id, score, submitted_at, remarks) VALUES ({$scoreId}, {$assessmentId}, {$st}, {$scoreVal}, '{$a[5]} 14:00:00.000000', '{$remarks}');";
@@ -287,10 +298,10 @@ foreach ($dates as $dIdx => $d) {
     for ($st = 1; $st <= $TOTAL_STUDENTS; $st++) {
         $enrId = $st;
         $yl = (($st - 1) % 4) + 1;
-        $secUser = 9; // Secretary Bea Alonzo
+        $secUser = ($st === 24) ? "9" : "NULL";
         
         $status = 'present';
-        $vMethod = 'face_recognition';
+        $vMethod = 'manual_faculty';
         $overrideReason = "NULL";
         $overrideUser = "NULL";
         $overrideAt = "NULL";
@@ -300,7 +311,7 @@ foreach ($dates as $dIdx => $d) {
             $vMethod = 'manual_secretary';
         } elseif ($st % 7 === 0) {
             $status = 'late';
-            $vMethod = 'face_recognition';
+            $vMethod = 'manual_faculty';
         } elseif ($st % 13 === 0) {
             $status = 'excused';
             $vMethod = 'manual_secretary';
@@ -309,54 +320,14 @@ foreach ($dates as $dIdx => $d) {
             $overrideAt = "'{$d} 10:30:00.000000'";
         }
         
-        $sql[] = "INSERT IGNORE INTO attendance_records (record_id, enrollment_id, session_date, session_code, session_start, session_end, status, verification_method, device_id, secretary_user_id, override_reason, override_by_user_id, override_at, time_recorded, created_at) VALUES ({$attId}, {$enrId}, '{$d}', 'SESSION-{$yl}-{$dIdx}', '08:00:00', '11:00:00', '{$status}', '{$vMethod}', 'CAM-CLINIC-01', {$secUser}, {$overrideReason}, {$overrideUser}, {$overrideAt}, '{$d} 08:05:00.000000', NOW(6));";
+        $sql[] = "INSERT IGNORE INTO attendance_records (record_id, enrollment_id, session_date, session_code, session_start, session_end, status, verification_method, device_id, secretary_user_id, override_reason, override_by_user_id, override_at, time_recorded, created_at) VALUES ({$attId}, {$enrId}, '{$d}', 'SESSION-{$yl}-{$dIdx}', '08:00:00', '11:00:00', '{$status}', '{$vMethod}', NULL, {$secUser}, {$overrideReason}, {$overrideUser}, {$overrideAt}, '{$d} 08:05:00.000000', NOW(6));";
         $attId++;
     }
 }
 $sql[] = "";
 
-// -----------------------------------------------------------------------------
-// SECTION 9: EMAIL OUTBOX LOGS
-// -----------------------------------------------------------------------------
-$sql[] = "-- =============================================================================";
-$sql[] = "-- 9. EMAIL OUTBOX HISTORY LOGS";
-$sql[] = "-- =============================================================================";
-for ($i = 1; $i <= 25; $i++) {
-    $sender = ($i % 2 === 0) ? 2 : 1;
-    $type = ($i % 4 === 0) ? 'At-Risk Notification' : (($i % 3 === 0) ? 'Privacy Consent' : 'Secretary Invitation');
-    $status = ($i === 5) ? 'Failed' : (($i === 12) ? 'Pending' : 'Sent');
-    $sentAt = $status === 'Sent' ? "'2024-09-01 10:00:00.000000'" : "NULL";
-    $failReason = $status === 'Failed' ? "'SMTP Connection Timeout: Host unreachable'" : "NULL";
-    $opUuid = sprintf("e0000000-0000-4000-8000-%012d", $i);
-    
-    $sql[] = "INSERT IGNORE INTO email_outbox (email_id, sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, sent_at, failure_reason, operation_uuid, created_at) VALUES ({$i}, {$sender}, 'student_{$i}@bicol-u.edu.ph', 'Student Name {$i}', 'Official Academic Notice - DentiSys', '{$type}', 'Dear Student, please be advised regarding your academic evaluation standing.', '{$status}', {$sentAt}, {$failReason}, '{$opUuid}', NOW(6));";
-}
-$sql[] = "";
-
-// -----------------------------------------------------------------------------
-// SECTION 10: AUDIT EVENTS LOGS
-// -----------------------------------------------------------------------------
-$sql[] = "-- =============================================================================";
-$sql[] = "-- 10. AUDIT EVENTS LOGS (INSERT IGNORE to respect append-only trigger)";
-$sql[] = "-- =============================================================================";
-$actions = [
-    ['auth', 'login_success', 'User logged in successfully', 'Success'],
-    ['student_management', 'student_create', 'Created student profile 2024-DENT-0012', 'Success'],
-    ['attendance_management', 'attendance_override', 'Updated attendance status to Excused', 'Success'],
-    ['grade_computation', 'grade_compute', 'Computed final grades for section CLINIC-4A', 'Success'],
-    ['email_management', 'email_send', 'Dispatched At-Risk Academic Warning Email', 'Success'],
-    ['reports_analytics', 'report_export_csv', 'Exported Academic Grade Summary CSV Report', 'Success'],
-    ['faculty_approval', 'faculty_approve', 'Approved Faculty Account for Dr. Roberto Santos', 'Success'],
-];
-
-for ($i = 1; $i <= 55; $i++) {
-    $act = $actions[($i - 1) % count($actions)];
-    $uuid = sprintf("a0000000-0000-4000-8000-%012d", $i);
-    $actorUser = (($i - 1) % 3) + 1;
-    $mac = bin2hex(hash_hmac('sha256', "event_{$i}", "dentisys_secret_key", true));
-    
-    $sql[] = "INSERT IGNORE INTO audit_events (event_id, event_uuid, sequence_number, occurred_at, actor_user_id, actor_username, actor_role, actor_display_name, session_id, module_code, action_code, event_status, target_type, target_id, description, reason, http_method, endpoint, request_id, correlation_id, operation_uuid, ip_address, user_agent, previous_event_mac, event_mac, mac_key_version, canonical_schema_version) VALUES ({$i}, '{$uuid}', {$i}, '2024-09-01 08:00:00.000000', {$actorUser}, 'admin@bicol-u.edu.ph', 'admin', 'Dean Maria Santos', NULL, '{$act[0]}', '{$act[1]}', '{$act[3]}', 'User', '{$i}', '{$act[2]}', 'Routine operational audit log', 'POST', '/api/v1/{$act[0]}', 'req-{$i}', 'corr-{$i}', '{$uuid}', '127.0.0.1', 'Mozilla/5.0 DentiSys Client', UNHEX('{$mac}'), UNHEX('{$mac}'), 1, 1);";
-}
+// Runtime-only histories intentionally remain empty in the development seed.
+$sql[] = "-- No fabricated email_outbox or audit_events rows are generated.";
 $sql[] = "";
 
 $sql[] = "SET FOREIGN_KEY_CHECKS = 1;";

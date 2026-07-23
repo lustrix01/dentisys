@@ -9,8 +9,11 @@ import {
   activateSecretaryApi,
   requestPasswordResetApi,
   confirmPasswordResetApi,
+  listSecretaryInvitationsApi,
+  revokeSecretaryInvitationApi,
   ApiError,
 } from './apiClient';
+import { normalizePersonName } from '../utils/nameNormalization';
 
 export type UserRole = 'admin' | 'faculty' | 'secretary';
 export type AccountStatus = 'Active' | 'Pending Approval' | 'Rejected' | 'Pending Invitation';
@@ -94,12 +97,12 @@ export const validatePersonName = (name: string): { isValid: boolean; message: s
   }
 
   const trimmedName = name.trim();
-  const nameRegex = /^[\p{L}\s'\-]+$/u;
+  const nameRegex = /^[\p{L}\s'’.\-]+$/u;
 
   if (!nameRegex.test(trimmedName)) {
     return {
       isValid: false,
-      message: 'Name can only contain letters, spaces, hyphens, and apostrophes.',
+      message: 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.',
     };
   }
 
@@ -135,7 +138,10 @@ export const registerFaculty = async (
   userData: { name: string; email: string; password: string }
 ): Promise<{ success: boolean; message: string; user?: RegisteredUser }> => {
   try {
-    const res = await registerFacultyApi(userData);
+    const res = await registerFacultyApi({
+      ...userData,
+      name: normalizePersonName(userData.name),
+    });
     return {
       success: true,
       message: res.message,
@@ -280,32 +286,40 @@ export const createSecretaryInvitation = async (input: {
     const newInv: SecretaryInvitation = {
       id: res.token,
       studentId: input.studentId,
-      studentName: input.studentName,
+      studentName: normalizePersonName(input.studentName),
       email: input.email,
-      facultyName: input.facultyName,
+      facultyName: normalizePersonName(input.facultyName),
       className: input.className,
-      classId: input.classId || 'CLINIC-A',
+      classId: input.classId || '',
       token: res.token,
       status: 'Pending',
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     };
-    return {
-      success: true,
-      message: res.message,
-      invitation: newInv,
-    };
+    return { success: true, message: res.message, invitation: newInv };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to create invitation.';
-    return { success: false, message: msg };
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Failed to issue secretary invitation.',
+    };
   }
 };
 
 export const revokeSecretaryInvitation = async (
   invitationId: string,
-  facultyName: string
+  _facultyName: string
 ): Promise<{ success: boolean; message: string }> => {
-  return { success: true, message: 'Invitation has been revoked.' };
+  try {
+    const response = await revokeSecretaryInvitationApi(invitationId);
+    return { success: true, message: response.message };
+  } catch (err) {
+    return { success: false, message: err instanceof Error ? err.message : 'Failed to revoke invitation.' };
+  }
+};
+
+export const fetchSecretaryInvitations = async (): Promise<SecretaryInvitation[]> => {
+  const response = await listSecretaryInvitationsApi();
+  return response.invitations as unknown as SecretaryInvitation[];
 };
 
 export const fetchSecretaryInvitationByToken = async (token: string): Promise<SecretaryInvitation | null> => {

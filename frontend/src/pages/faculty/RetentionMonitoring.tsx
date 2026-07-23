@@ -21,6 +21,8 @@ import { useAuth } from '../../context/AuthContext';
 import { Student, RemedialExam, RetentionLog } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
+import { saveFacultyRemedialApi, updateFacultyRetentionStatusApi } from '../../services/apiClient';
 
 export const RetentionMonitoring: React.FC = () => {
   const { user } = useAuth();
@@ -40,7 +42,7 @@ export const RetentionMonitoring: React.FC = () => {
   const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
 
   // Tab Management
-  const [activeTab, setActiveTab] = useState<'watchlist' | 'ai-risk' | 'remedials' | 'all'>('watchlist');
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'risk-rules' | 'remedials' | 'all'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Record Score modal states
@@ -112,9 +114,9 @@ export const RetentionMonitoring: React.FC = () => {
   }, [facultyStudents, searchQuery]);
 
   // ----------------------------------------------------
-  // RANDOM FOREST RISK PREDICTION SIMULATOR
+  // Deterministic warning rules derived from persisted academic data.
   // ----------------------------------------------------
-  const aiRiskPredictions = useMemo(() => {
+  const riskRuleResults = useMemo(() => {
     return facultyStudents.map(student => {
       // Calculate clinical grade violations
       const clinicalFails = student.enrolledSubjects.filter(
@@ -125,21 +127,17 @@ export const RetentionMonitoring: React.FC = () => {
       const studentRecords = student.enrolledSubjects;
       const avgAttendance = studentRecords.length > 0
         ? studentRecords.reduce((acc, curr) => acc + curr.components.attendance, 0) / studentRecords.length
-        : 90;
+        : null;
 
-      // Predict risk level using student features
       let riskLevel: 'High' | 'Medium' | 'Low' = 'Low';
-      let confidence = 50;
       const factors: string[] = [];
 
       if (clinicalFails.length > 0 || student.status === 'critical' || student.overallGWA > 2.5) {
         riskLevel = 'High';
-        confidence = Math.round(85 + Math.random() * 14);
-        
         if (clinicalFails.length > 0) {
           factors.push(`Fails clinical retention threshold: GWA > 2.5 in ${clinicalFails.map(c=>c.code).join(', ')}`);
         }
-        if (avgAttendance < 85) {
+        if (avgAttendance !== null && avgAttendance < 85) {
           factors.push(`Unsatisfactory attendance: ${avgAttendance.toFixed(1)}% rate is below threshold`);
         }
         if (student.yearLevel >= 3 && student.clinicHoursCompleted < 200) {
@@ -150,14 +148,15 @@ export const RetentionMonitoring: React.FC = () => {
         }
       } else if (student.status === 'warning' || student.overallGWA > 2.2) {
         riskLevel = 'Medium';
-        confidence = Math.round(60 + Math.random() * 20);
         factors.push('Borderline GWA: overall score sits close to warning limits');
-        if (avgAttendance < 90) {
+        if (avgAttendance !== null && avgAttendance < 90) {
           factors.push('Attendance rate requires clinical monitoring');
         }
+      } else if (avgAttendance === null) {
+        riskLevel = 'Medium';
+        factors.push('No persisted course or attendance data is available for evaluation');
       } else {
         riskLevel = 'Low';
-        confidence = Math.round(10 + Math.random() * 30);
         factors.push('Satisfactory academic grades across all courses');
         factors.push('Consistent attendance rate above dental threshold');
       }
@@ -165,7 +164,6 @@ export const RetentionMonitoring: React.FC = () => {
       return {
         student,
         riskLevel,
-        confidence,
         factors
       };
     }).sort((a, b) => {
@@ -174,38 +172,56 @@ export const RetentionMonitoring: React.FC = () => {
     });
   }, [facultyStudents, settings]);
 
-  const filteredAiPredictions = useMemo(() => {
-    return aiRiskPredictions.filter(p =>
+  const filteredRiskResults = useMemo(() => {
+    return riskRuleResults.filter(p =>
       p.student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.student.studentId.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [aiRiskPredictions, searchQuery]);
+  }, [riskRuleResults, searchQuery]);
 
-  const handleResolveRemedial = (e: React.FormEvent) => {
+  const handleResolveRemedial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRemedialId) return;
     const scoreVal = parseInt(remedialScore);
     if (isNaN(scoreVal) || scoreVal < 0 || scoreVal > 100) {
-      alert('Please enter a valid percentage score (0-100).');
+      showFeedback('Please enter a valid percentage score (0-100).', 'error');
       return;
     }
-    updateRemedialExam(selectedRemedialId, scoreVal, remedialNotes);
-    setSelectedRemedialId(null);
-    setRemedialScore('');
-    setRemedialNotes('');
+    const owner = students.find((student) => student.remedialExams.some((exam) => exam.id === selectedRemedialId));
+    const exam = owner?.remedialExams.find((item) => item.id === selectedRemedialId);
+    if (!owner || !exam) return;
+    try {
+      const response = await saveFacultyRemedialApi({
+        studentId: owner.id,
+        classId: owner.classId,
+        remedial: {
+          ...exam,
+          remedialScore: scoreVal,
+          notes: remedialNotes,
+          status: scoreVal >= 75 ? 'passed' : 'failed',
+        },
+      });
+      updateRemedialExam(selectedRemedialId, scoreVal, remedialNotes);
+      setSelectedRemedialId(null);
+      setRemedialScore('');
+      setRemedialNotes('');
+      showFeedback(response.message, 'success');
+    } catch (requestError) {
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save remedial result.', 'error');
+    }
   };
 
-  const handleScheduleSubmit = (e: React.FormEvent) => {
+  const handleScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudentId || !selectedSubjectCode || !scheduleDate) {
-      alert('Please complete all fields.');
+      showFeedback('Please complete all fields.', 'error');
       return;
     }
     const student = students.find(s => s.id === selectedStudentId);
     const subject = student?.enrolledSubjects.find(s => s.code === selectedSubjectCode);
     
     if (student && subject) {
-      addRemedialExam({
+      const remedial = {
         studentId: selectedStudentId,
         studentName: student.name,
         subjectCode: selectedSubjectCode,
@@ -213,7 +229,20 @@ export const RetentionMonitoring: React.FC = () => {
         originalGrade: subject.grade,
         examDate: scheduleDate,
         notes: scheduleNotes,
-      });
+        status: 'pending',
+      };
+      try {
+        const response = await saveFacultyRemedialApi({
+          studentId: student.id,
+          classId: student.classId,
+          remedial,
+        });
+        addRemedialExam(remedial);
+        showFeedback(response.message, 'success');
+      } catch (requestError) {
+        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to schedule remedial work.', 'error');
+        return;
+      }
       setIsScheduleOpen(false);
       setSelectedStudentId('');
       setSelectedSubjectCode('');
@@ -222,20 +251,49 @@ export const RetentionMonitoring: React.FC = () => {
     }
   };
 
-  const handleOverrideSubmit = (e: React.FormEvent) => {
+  const handleOverrideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!overrideStudentId || !overrideRemarks) return;
 
-    overrideRetentionStatus(overrideStudentId, overrideStatus, overrideRemarks, user?.login_email || 'system');
-    setIsOverrideOpen(false);
-    setOverrideStudentId('');
-    setOverrideRemarks('');
-    alert('Student retention status overridden and audit logs recorded.');
+    const student = students.find((item) => item.id === overrideStudentId);
+    if (!student) return;
+    if (!student.classId) {
+      showFeedback('The student does not have a persisted class assignment.', 'error');
+      return;
+    }
+    try {
+      const response = await updateFacultyRetentionStatusApi({
+        studentId: student.id,
+        classId: student.classId,
+        status: overrideStatus,
+        reason: overrideRemarks,
+      });
+      overrideRetentionStatus(overrideStudentId, overrideStatus, overrideRemarks, user?.login_email || 'system');
+      setIsOverrideOpen(false);
+      setOverrideStudentId('');
+      setOverrideRemarks('');
+      showFeedback(response.message, 'success');
+    } catch (requestError) {
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to update retention state.', 'error');
+    }
   };
 
-  const handleDeleteRemedial = (id: string) => {
-    if (confirm('Are you sure you want to remove this remedial exam log?')) {
-      deleteRemedialExam(id);
+  const handleDeleteRemedial = async (id: string) => {
+    if (await requestConfirmation('Remove this remedial exam log?', 'Remove remedial log')) {
+      const owner = students.find((student) => student.remedialExams.some((exam) => exam.id === id));
+      const exam = owner?.remedialExams.find((item) => item.id === id);
+      if (!owner || !exam) return;
+      try {
+        await saveFacultyRemedialApi({
+          studentId: owner.id,
+          classId: owner.classId,
+          remedial: { ...exam, status: 'removed', removedAt: new Date().toISOString() },
+        });
+        deleteRemedialExam(id);
+        showFeedback('Remedial record removed.', 'success');
+      } catch (requestError) {
+        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to remove remedial record.', 'error');
+      }
     }
   };
 
@@ -321,15 +379,15 @@ export const RetentionMonitoring: React.FC = () => {
           Retention Watchlist ({watchlistStudents.length})
         </button>
         <button
-          onClick={() => { setActiveTab('ai-risk'); setSearchQuery(''); }}
+          onClick={() => { setActiveTab('risk-rules'); setSearchQuery(''); }}
           className={`pb-3 font-semibold text-sm transition-all relative flex items-center gap-1.5 ${
-            activeTab === 'ai-risk' 
+            activeTab === 'risk-rules'
               ? 'text-clinical-600 dark:text-clinical-400 border-b-2 border-clinical-500 font-extrabold' 
               : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 font-medium'
           }`}
         >
           <Sparkles className="w-4 h-4 text-violet-500 animate-pulse" />
-          AI Risk Prediction
+          Retention Warning Rules
         </button>
         <button
           onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }}
@@ -360,7 +418,7 @@ export const RetentionMonitoring: React.FC = () => {
           type="text"
           placeholder={
             activeTab === 'watchlist' ? 'Search at risk watchlist...' : 
-            activeTab === 'ai-risk' ? 'Search AI forecast watchlist...' :
+            activeTab === 'risk-rules' ? 'Search rules-based warning list...' :
             activeTab === 'remedials' ? 'Search remedial logs...' : 'Search all standings...'
           }
           value={searchQuery}
@@ -452,16 +510,16 @@ export const RetentionMonitoring: React.FC = () => {
       )}
 
       {/* ----------------------------------------------------
-          TAB 2: AI RISK PREDICTION (RANDOM FOREST)
+          TAB 2: RULES-BASED RETENTION WARNINGS
       ---------------------------------------------------- */}
-      {activeTab === 'ai-risk' && (
+      {activeTab === 'risk-rules' && (
         <Card className="p-0 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10">
             <h3 className="font-bold text-sm text-slate-800 dark:text-slate-205 flex items-center gap-1.5">
               <Sparkles className="w-5 h-5 text-violet-500" />
-              Random Forest Academic Warning Predictor
+              Deterministic Academic Warning Rules
             </h3>
-            <p className="text-[10px] text-slate-400 mt-0.5">Simulated predictive confidence generated by evaluated student performance metrics</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Calculated from persisted grades, attendance, clinical hours, and retention rules. No predictive model is used.</p>
           </div>
 
           <div className="overflow-x-auto">
@@ -469,20 +527,19 @@ export const RetentionMonitoring: React.FC = () => {
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-800/80 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
-                  <th className="px-5 py-3 text-center">Prediction Risk</th>
-                  <th className="px-5 py-3 text-center">RF Confidence</th>
+                  <th className="px-5 py-3 text-center">Rule Result</th>
                   <th className="px-5 py-3">Contributing Warning Indicators</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
-                {filteredAiPredictions.length === 0 ? (
+                {filteredRiskResults.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-5 py-8 text-center text-slate-400">
-                      No predictions available for matching search.
+                    <td colSpan={3} className="px-5 py-8 text-center text-slate-400">
+                      No persisted records match this search.
                     </td>
                   </tr>
                 ) : (
-                  filteredAiPredictions.map(({ student, riskLevel, confidence, factors }) => (
+                  filteredRiskResults.map(({ student, riskLevel, factors }) => (
                     <tr key={student.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/10">
                       <td className="px-5 py-4">
                         <h4 className="font-bold text-slate-850 dark:text-slate-205">{student.name}</h4>
@@ -499,10 +556,6 @@ export const RetentionMonitoring: React.FC = () => {
                         }`}>
                           {riskLevel} Risk
                         </span>
-                      </td>
-
-                      <td className="px-5 py-4 text-center font-extrabold font-mono text-slate-800 dark:text-slate-100">
-                        {confidence}%
                       </td>
 
                       <td className="px-5 py-4 text-[10px] text-slate-550 dark:text-slate-400 max-w-sm">
