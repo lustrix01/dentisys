@@ -86,8 +86,7 @@ export const GradeComputation: React.FC = () => {
   // Filter students under active subject/class scope
   const activeStudents = useMemo(() => {
     return students.filter(s =>
-      s.classId === selectedClassId &&
-      s.enrolledSubjects.some(sub => sub.code === selectedSubjectCode)
+      s.enrolledSubjects.some(sub => sub.classId === selectedClassId && sub.code === selectedSubjectCode)
     );
   }, [students, selectedSubjectCode, selectedClassId]);
 
@@ -504,7 +503,7 @@ export const GradeComputation: React.FC = () => {
           valid = false;
           rowErr = `Line ${i + 1}: Student ID "${studId}" is not registered in the system.`;
           errorsList.push(rowErr);
-        } else if (matchedStudent.classId !== selectedClassId) {
+        } else if (!matchedStudent.classSections?.some(section => section.classId === selectedClassId)) {
           valid = false;
           rowErr = `Line ${i + 1}: Student "${matchedStudent.name}" is not enrolled in Class "${selectedClassId}".`;
           errorsList.push(rowErr);
@@ -618,8 +617,8 @@ export const GradeComputation: React.FC = () => {
             className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
           >
             {assignedClasses.map((clsId: string) => {
-              const classStudent = students.find(s => s.classId === clsId);
-              const label = classStudent?.className || clsId;
+              const section = students.flatMap(s => s.classSections || []).find(item => item.classId === clsId);
+              const label = section?.className || clsId;
               return <option key={clsId} value={clsId}>{label}</option>;
             })}
           </select>

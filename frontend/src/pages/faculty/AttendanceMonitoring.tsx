@@ -60,9 +60,8 @@ export const AttendanceMonitoring: React.FC = () => {
 
   // Filter students enrolled in the active course and class (RBAC check)
   const enrolledStudents = useMemo(() => {
-    return students.filter(s => 
-      s.classId && assignedClasses.includes(s.classId) &&
-      s.enrolledSubjects.some(subj => subj.code === selectedCourseCode)
+    return students.filter(s =>
+      s.enrolledSubjects.some(subj => Boolean(subj.classId) && assignedClasses.includes(subj.classId!) && subj.code === selectedCourseCode)
     );
   }, [students, selectedCourseCode, assignedClasses]);
 
@@ -77,8 +76,7 @@ export const AttendanceMonitoring: React.FC = () => {
   useEffect(() => {
     const initialSheet: Record<string, AttendanceStatus> = {};
     const enrolled = students.filter(s =>
-      s.classId && assignedClasses.includes(s.classId) &&
-      s.enrolledSubjects.some(subj => subj.code === selectedCourseCode)
+      s.enrolledSubjects.some(subj => Boolean(subj.classId) && assignedClasses.includes(subj.classId!) && subj.code === selectedCourseCode)
     );
     enrolled.forEach(student => {
       const match = attendanceRecords.find(
@@ -166,7 +164,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const historicalRecords = useMemo(() => {
     return attendanceRecords.filter(r =>
       assignedSubjects.includes(r.subjectCode) &&
-      students.some(s => s.id === r.studentId && s.classId === selectedClassId)
+      students.some(s => s.id === r.studentId && s.classSections?.some(section => section.classId === selectedClassId))
     );
   }, [attendanceRecords, assignedSubjects, students, selectedClassId]);
 
@@ -277,8 +275,8 @@ export const AttendanceMonitoring: React.FC = () => {
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Active Block:</span>
             <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl gap-1">
               {assignedClasses.map((clsId: string) => {
-                const cls = students.find(s => s.classId === clsId);
-                const label = cls?.className || clsId;
+                const section = students.flatMap(s => s.classSections || []).find(item => item.classId === clsId);
+                const label = section?.className || clsId;
                 const isActive = selectedClassId === clsId;
                 return (
                   <button

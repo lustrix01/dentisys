@@ -41,6 +41,8 @@ $baselineFiles = [
     '001_baseline_schema.sql',
     '002_seed_rbac.sql',
     '003_seed_system_settings.sql',
+    '004_repair_seed_data.sql',
+    '005_review_scope_fixes.sql',
 ];
 
 foreach ($baselineFiles as $f) {
@@ -52,7 +54,7 @@ foreach ($baselineFiles as $f) {
     source_migration($db, $full);
     db_run($db, "INSERT INTO _schema_migrations (version) VALUES ('$f');");
 }
-ok(['c'=>0], 'All 3 baseline migrations applied');
+ok(['c'=>0], 'All 5 active migrations applied');
 
 echo "\n--- Table count ---\n";
 $tbl = (int)q($db, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$db' AND TABLE_TYPE='BASE TABLE'");
@@ -215,7 +217,7 @@ $rbacAfterSeed = (int)q($db, "SELECT COUNT(*) FROM role_permissions");
 if ($rbacAfterSeed !== 125) { fwrite(STDERR, "FAIL: role_permissions count $rbacAfterSeed != 125 after seed execution\n"); exit(1); }
 ok(['c'=>0], 'role_permissions count preserved at 125 after seed');
 
-$invalidEmails = (int)q($db, "SELECT COUNT(*) FROM email_outbox WHERE email_type NOT IN ('Privacy Consent','At-Risk Notification','Secretary Invitation','Faculty Registration Approved','Faculty Registration Rejected','Other')");
+$invalidEmails = (int)q($db, "SELECT COUNT(*) FROM email_outbox WHERE email_type NOT IN ('Privacy Consent','At-Risk Notification','Secretary Invitation','Faculty Registration Approved','Faculty Registration Rejected','Authentication Code','Other')");
 if ($invalidEmails !== 0) { fwrite(STDERR,"FAIL: invalid email_type enum values found in email_outbox\n"); exit(1); }
 ok(['c'=>0], 'All email_outbox.email_type values in seed are valid');
 
@@ -225,7 +227,7 @@ $rRunner = run($cmdRunner);
 ok($rRunner, 'Migration runner executed on seeded DB without error');
 
 $historyCount = (int)q($db, "SELECT COUNT(*) FROM _schema_migrations");
-if ($historyCount !== 3) { fwrite(STDERR, "FAIL: _schema_migrations count $historyCount != 3 after runner rerun on seeded DB\n"); exit(1); }
+if ($historyCount !== 5) { fwrite(STDERR, "FAIL: _schema_migrations count $historyCount != 5 after runner rerun on seeded DB\n"); exit(1); }
 $seedRecord = (int)q($db, "SELECT COUNT(*) FROM _schema_migrations WHERE version LIKE '%seed.sql%'");
 if ($seedRecord !== 0) { fwrite(STDERR, "FAIL: database/seed.sql was recorded in _schema_migrations\n"); exit(1); }
 ok(['c'=>0], 'database/seed.sql is NOT recorded in _schema_migrations');

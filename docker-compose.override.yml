@@ -2,5 +2,6 @@ services:
   web:
     volumes:
       - ./backend:/var/www/html/backend:cached
+      - /var/www/html/backend/vendor
     environment:
       APP_DEBUG: ${APP_DEBUG:-false}

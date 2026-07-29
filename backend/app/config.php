@@ -187,6 +187,7 @@ function app_config(?array $localConfig = null): array
         'app' => [
             'env' => $appEnv,
             'is_https' => filter_var(config_value('APP_IS_HTTPS', $local, 'false'), FILTER_VALIDATE_BOOLEAN),
+            'allowed_email_domain' => strtolower((string) config_value('ALLOWED_EMAIL_DOMAIN', $local, 'bicol-u.edu.ph')),
         ],
         'cors' => [
             'allowed_origins' => (string) config_value('CORS_ALLOWED_ORIGINS', $local, 'http://localhost:5173'),
@@ -196,8 +197,9 @@ function app_config(?array $localConfig = null): array
             'access_ttl' => (int) config_value('JWT_ACCESS_TTL', $local, 86400),
         ],
         'mfa' => [
-            'required' => filter_var(config_value('MFA_REQUIRED', $local, 'true'), FILTER_VALIDATE_BOOLEAN),
             'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $local, 'ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI='),
+            'email_otp_hmac_key_b64' => (string) config_value('EMAIL_OTP_HMAC_KEY_B64', $local, 'ZGVudGlzeXMtZGV2ZWxvcG1lbnQtZW1haWwtb3RwLWhtYWMta2V5LTMy'),
+            'issuer' => 'DentiSys',
         ],
         'audit' => [
             'mac_key_b64' => (string) config_value('AUDIT_MAC_KEY_B64', $local, 'ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ='),
@@ -207,8 +209,6 @@ function app_config(?array $localConfig = null): array
             'storage_dir' => (string) (config_value('RATE_LIMIT_STORAGE_DIR', $local, '') ?: dirname(__DIR__) . '/storage/ratelimit'),
         ],
         'show_dev_reset_link' => filter_var(config_value('SHOW_DEV_RESET_LINK', $local, true), FILTER_VALIDATE_BOOLEAN),
-        'show_dev_mfa_code' => $isDevelopment
-            && filter_var(config_value('SHOW_DEV_MFA_CODE', $local, true), FILTER_VALIDATE_BOOLEAN),
         'show_dev_invitation_link' => filter_var(config_value('SHOW_DEV_INVITATION_LINK', $local, true), FILTER_VALIDATE_BOOLEAN),
         'smtp' => [
             'host' => (string) config_value('SMTP_HOST', $local, '127.0.0.1'),
@@ -216,6 +216,9 @@ function app_config(?array $localConfig = null): array
             'user' => (string) config_value('SMTP_USER', $local, ''),
             'pass' => (string) config_value('SMTP_PASS', $local, ''),
             'from' => (string) config_value('SMTP_FROM', $local, 'noreply@dentisys.local'),
+            'encryption' => strtolower((string) config_value('SMTP_ENCRYPTION', $local, $isDevelopment ? 'none' : 'starttls')),
+            'verify_peer' => filter_var(config_value('SMTP_VERIFY_PEER', $local, $isDevelopment ? 'false' : 'true'), FILTER_VALIDATE_BOOLEAN),
+            'ca_file' => (string) config_value('SMTP_CA_FILE', $local, ''),
         ],
     ];
 }

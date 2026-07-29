@@ -174,12 +174,12 @@ export function login(email: string, password: string): Promise<LoginResponse> {
   return request<LoginResponse>('POST', '/auth/login', { email, password });
 }
 
-export function startEnrollment(enrollmentToken: string): Promise<EnrollStartResponse> {
-  return request<EnrollStartResponse>('POST', '/auth/mfa/enroll/start', undefined, enrollmentToken);
+export function startEnrollment(): Promise<EnrollStartResponse> {
+  return request<EnrollStartResponse>('POST', '/auth/mfa/enroll/start');
 }
 
 export function confirmEnrollment(confirmationToken: string, code: string): Promise<EnrollConfirmResponse> {
-  return request<EnrollConfirmResponse>('POST', '/auth/mfa/enroll/confirm', { code }, confirmationToken);
+  return request<EnrollConfirmResponse>('POST', '/auth/mfa/enroll/confirm', { confirmation_token: confirmationToken, code });
 }
 
 export function verifyMfa(mfaSessionToken: string, code: string): Promise<MfaSuccessResponse> {
@@ -190,9 +190,38 @@ export function recoverMfa(mfaSessionToken: string, code: string): Promise<MfaSu
   return request<MfaSuccessResponse>('POST', '/auth/mfa/recover', { code }, mfaSessionToken);
 }
 
+export function startMfaChallenge(
+  selectionToken: string,
+  method: 'email' | 'authenticator',
+): Promise<{
+  type: 'mfa_challenge';
+  method: 'email' | 'authenticator';
+  mfa_challenge_token: string;
+  masked_email?: string;
+  expires_in: number;
+  resend_after?: number;
+}> {
+  return request('POST', '/auth/mfa/challenge/start', { method }, selectionToken);
+}
+
+export function resendMfaEmail(challengeToken: string): Promise<{
+  mfa_challenge_token: string;
+  masked_email: string;
+  expires_in: number;
+  resend_after: number;
+}> {
+  return request('POST', '/auth/mfa/email/resend', undefined, challengeToken);
+}
+
 export function getMfaSettingsApi(): Promise<{
   status: string;
-  mfa: { enabled: boolean; recoveryCodeCount: number };
+  mfa: {
+    enabled: boolean;
+    authenticatorEnabled: boolean;
+    emailEnabled: boolean;
+    emailVerifiedAt: string | null;
+    recoveryCodeCount: number;
+  };
 }> {
   return request('GET', '/auth/mfa/settings');
 }
@@ -207,6 +236,25 @@ export function regenerateMfaRecoveryCodesApi(code: string): Promise<{
 
 export function revokeMfaApi(code: string): Promise<{ status: string; message: string }> {
   return request('POST', '/auth/mfa/settings/revoke', { code });
+}
+
+export function startEmailMfaSettingApi(action: 'enable' | 'disable'): Promise<{
+  confirmation_token: string;
+  masked_email: string;
+  expires_in: number;
+  resend_after: number;
+}> {
+  return request('POST', '/auth/mfa/settings/email/start', { action });
+}
+
+export function confirmEmailMfaSettingApi(
+  confirmationToken: string,
+  code: string,
+): Promise<{ status: string; emailEnabled: boolean }> {
+  return request('POST', '/auth/mfa/settings/email/confirm', {
+    confirmation_token: confirmationToken,
+    code,
+  });
 }
 
 export function getMe(): Promise<SafeUser> {
@@ -464,8 +512,7 @@ export function getFacultyStudentsApi(): Promise<Array<{
   status: string;
   faceEnrolled: boolean;
   consentStatus: string;
-  classId: string;
-  className: string;
+  classSections: Array<{ classId: string; className: string; enrollmentId: string }>;
   overallGWA?: number;
   clinicHoursCompleted?: number;
   enrolledSubjects?: Array<{
@@ -476,6 +523,8 @@ export function getFacultyStudentsApi(): Promise<Array<{
     components: { quizzes: number; exams: number; practicum: number; attendance: number };
     grade: number;
     hasRemedial: boolean;
+    classId: string;
+    enrollmentId: string;
   }>;
 }>> {
   return request('GET', '/faculty/students');
@@ -609,15 +658,13 @@ export function updateFacultyProfileApi(data: { name: string; email: string }): 
 export function getFacultySettingsApi(): Promise<{
   status: string;
   settings: {
-    emailNotifications: boolean;
-    retentionAlertThreshold: number;
-    theme: string;
+    theme: 'light' | 'dark';
   };
 }> {
   return request('GET', '/faculty/settings');
 }
 
-export function updateFacultySettingsApi(settings: any): Promise<{ status: string; message: string }> {
+export function updateFacultySettingsApi(settings: { theme: 'light' | 'dark' }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/settings', settings);
 }
 
@@ -704,10 +751,10 @@ export function updateSecretarySettingsApi(settings: { theme: 'light' | 'dark' }
 }
 
 export function sendFacultyEmailApi(data: {
-  recipients: string[] | Array<{ name: string; email?: string }>;
+  studentIds: string[];
   emailType: string;
   subject?: string;
-  body?: string;
+  message?: string;
 }): Promise<{ status: string; message: string; sentCount: number; failedCount: number }> {
   return request('POST', '/faculty/send-email', data);
 }

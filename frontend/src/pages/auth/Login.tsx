@@ -6,7 +6,7 @@ import { login as apiLogin, getMe, setAccessToken as setApiAccessToken } from '.
 
 export function Login() {
   const navigate = useNavigate();
-  const { beginLogin, storeEnrollmentChallenge, storeMfaChallenge, setAccessToken, setUser, setAuthenticated } = useAuth();
+  const { beginLogin, storeMfaSelection, setAccessToken, setUser, setAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -35,12 +35,9 @@ export function Login() {
         setUser(user);
         setAuthenticated();
         navigate('/', { replace: true });
-      } else if (result.type === 'mfa_enrollment' && result.enrollment_token) {
-        storeEnrollmentChallenge(result.enrollment_token);
-        navigate('/mfa/enroll');
-      } else if (result.type === 'mfa_challenge' && result.mfa_session_token) {
-        storeMfaChallenge(result.mfa_session_token, result.dev_mfa_code);
-        navigate('/mfa/verify');
+      } else if (result.type === 'mfa_method_selection' && result.mfa_selection_token && result.methods?.length) {
+        storeMfaSelection(result.mfa_selection_token, result.methods);
+        navigate('/mfa/select');
       } else {
         setError('Unexpected authentication response.');
       }

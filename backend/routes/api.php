@@ -32,6 +32,12 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/auth/mfa/challenge/start',
+        'handler' => 'handle_mfa_challenge_start',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/auth/mfa/enroll/start',
         'handler' => 'handle_mfa_enroll_start',
         'has_params' => false,
@@ -50,6 +56,12 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/auth/mfa/email/resend',
+        'handler' => 'handle_mfa_email_resend',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/auth/mfa/recover',
         'handler' => 'handle_mfa_recover',
         'has_params' => false,
@@ -58,6 +70,18 @@ return [
         'method' => 'GET',
         'path' => '/api/auth/mfa/settings',
         'handler' => 'handle_mfa_settings_status',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/mfa/settings/email/start',
+        'handler' => 'handle_mfa_settings_email_start',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/mfa/settings/email/confirm',
+        'handler' => 'handle_mfa_settings_email_confirm',
         'has_params' => false,
     ],
     [

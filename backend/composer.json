@@ -1,0 +1,17 @@
+{
+    "name": "dentisys/backend",
+    "description": "DentiSys PHP backend",
+    "license": "proprietary",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "ext-iconv": "*",
+        "bacon/bacon-qr-code": "^3.1",
+        "robthree/twofactorauth": "^3.0"
+    },
+    "config": {
+        "allow-plugins": {},
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}

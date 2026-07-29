@@ -71,7 +71,7 @@ function reject_control_chars_no_trim(string $value, string $field): void
 
 function auth_runtime_login(PDO $pdo, array $config, array $body, array $context): array
 {
-    $email = validate_email($body['email']);
+    $email = validate_institutional_email((string) ($body['email'] ?? ''));
     $password = extract_password($body, 'password');
 
     $rateStorage = [
@@ -81,7 +81,8 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
     rate_limit_check($rateStorage, $ipScope, 'post_auth_login', 60, 100);
 
     $stmt = $pdo->prepare(
-        "SELECT user_id, login_email, password_hash, role, display_name, status, token_version
+        "SELECT user_id, login_email, password_hash, role, display_name, status, token_version,
+                email_mfa_enabled
          FROM user_accounts WHERE login_email = ?"
     );
     $stmt->execute([$email]);
@@ -102,20 +103,20 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
 
     $stmt = $pdo->prepare(
         "SELECT COUNT(*) FROM security_tokens
-         WHERE user_id = ? AND purpose = 'mfa_credential' AND mfa_status = 'enabled'"
+         WHERE user_id = ? AND purpose = 'mfa_credential'
+           AND mfa_status = 'enabled' AND revoked_at IS NULL"
     );
     $stmt->execute([$user['user_id']]);
-    $enabledCount = (int) $stmt->fetchColumn();
+    $authenticatorCount = (int) $stmt->fetchColumn();
+    if ($authenticatorCount > 1) {
+        throw new TooManyMfaCredentialsException('Multiple enabled authenticator credentials found.');
+    }
+    $authenticatorEnabled = $authenticatorCount === 1;
+    $emailEnabled = (int) ($user['email_mfa_enabled'] ?? 0) === 1;
 
     $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
     $now = time();
-    $jti = jwt_generate_jti();
-
-    $challengeStorage = [
-        'dir' => $config['rate_limit']['storage_dir'],
-    ];
-
-    if (filter_var($config['mfa']['required'] ?? true, FILTER_VALIDATE_BOOLEAN) === false) {
+    if (!$authenticatorEnabled && !$emailEnabled) {
         $wasInTx = $pdo->inTransaction();
         if (!$wasInTx) { $pdo->beginTransaction(); }
         try {
@@ -132,77 +133,29 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         }
     }
 
-    if ($enabledCount === 0) {
-        $enrollmentToken = jwt_encode([
-            'sub' => (int) $user['user_id'],
-            'jti' => $jti,
-            'token_type' => 'mfa_enrollment',
-            'token_version' => (int) $user['token_version'],
-            'enrollment_stage' => 'start',
-            'iat' => $now,
-            'exp' => $now + 300,
-        ], $jwtKey);
-        challenge_state_init($challengeStorage, $jti, 'mfa_enrollment', 'enrollment_start', 5, 300);
-
-        return [
-            'type' => 'enrollment_start',
-            'enrollment_token' => $enrollmentToken,
-            'user' => $user,
-        ];
+    $methods = [];
+    if ($emailEnabled) {
+        $methods[] = 'email';
     }
-
-    if ($enabledCount === 1) {
-        $challengeToken = jwt_encode([
-            'sub' => (int) $user['user_id'],
-            'jti' => $jti,
-            'token_type' => 'mfa_challenge',
-            'token_version' => (int) $user['token_version'],
-            'iat' => $now,
-            'exp' => $now + 300,
-        ], $jwtKey);
-        challenge_state_init($challengeStorage, $jti, 'mfa_challenge', 'complete_login', 5, 300);
-
-        $devCode = null;
-        if (!empty($config['show_dev_mfa_code'])) {
-            $credentialStmt = $pdo->prepare(
-                "SELECT ciphertext, nonce, auth_tag, totp_algorithm, digit_count, period_seconds
-                 FROM security_tokens
-                 WHERE user_id = ? AND purpose = 'mfa_credential' AND mfa_status = 'enabled'
-                 LIMIT 1"
-            );
-            $credentialStmt->execute([$user['user_id']]);
-            $credential = $credentialStmt->fetch(PDO::FETCH_ASSOC);
-            if ($credential) {
-                $mfaKey = config_key_bytes_exact($config['mfa']['encryption_key_b64'], 32, 'MFA_ENCRYPTION_KEY');
-                $secret = mfa_decrypt_secret(
-                    $credential['ciphertext'],
-                    $credential['nonce'],
-                    $credential['auth_tag'],
-                    $mfaKey
-                );
-                if ($secret !== null) {
-                    $period = (int) ($credential['period_seconds'] ?? 30);
-                    $totp = mfa_compute_totp(
-                        $secret,
-                        intdiv(time(), $period),
-                        (string) ($credential['totp_algorithm'] ?? 'sha1'),
-                        (int) ($credential['digit_count'] ?? 6),
-                        $period
-                    );
-                    $devCode = $totp['code'];
-                }
-            }
-        }
-
-        return [
-            'type' => 'mfa_challenge',
-            'mfa_session_token' => $challengeToken,
-            'dev_mfa_code' => $devCode,
-            'user' => $user,
-        ];
+    if ($authenticatorEnabled) {
+        $methods[] = 'authenticator';
     }
+    $selectionToken = jwt_encode([
+        'sub' => (int) $user['user_id'],
+        'jti' => jwt_generate_jti(),
+        'token_type' => 'mfa_selection',
+        'token_version' => (int) $user['token_version'],
+        'methods' => $methods,
+        'iat' => $now,
+        'exp' => $now + 300,
+    ], $jwtKey);
 
-    throw new TooManyMfaCredentialsException('Multiple MFA credentials found. Contact support.');
+    return [
+        'type' => 'mfa_method_selection',
+        'mfa_selection_token' => $selectionToken,
+        'methods' => $methods,
+        'user' => $user,
+    ];
 }
 
 function auth_runtime_me(PDO $pdo, array $config, array $context): array

@@ -2,12 +2,9 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/mailer.php';
-
 function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, array $context): array
 {
     $userId = (int) $tokenClaims['sub'];
-    $jti = $tokenClaims['jti'];
     $tokenVersion = $tokenClaims['token_version'];
     $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
     $mfaKey = config_key_bytes_exact($config['mfa']['encryption_key_b64'], 32, 'MFA_ENCRYPTION_KEY');
@@ -16,8 +13,6 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
     $rateStorage = ['dir' => $config['rate_limit']['storage_dir']];
     $userScope = bin2hex(hash('sha256', 'user:' . $userId, true));
     rate_limit_check($rateStorage, $userScope, 'post_mfa_enroll_start', 300, 10);
-
-    challenge_state_attempt($rateStorage, $jti, 'mfa_enrollment', 'enrollment_start');
 
     $pdo->beginTransaction();
     try {
@@ -56,8 +51,6 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
         );
         $stmt->execute([$userId]);
 
-        challenge_state_consume($rateStorage, $jti, 'mfa_enrollment', 'enrollment_start');
-
         $secret = mfa_generate_secret();
         $enc = mfa_encrypt_secret($secret, $mfaKey);
 
@@ -68,6 +61,7 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
             'token_type' => 'mfa_enrollment',
             'token_version' => (int) $locked['token_version'],
             'enrollment_stage' => 'confirm',
+            'session_id' => $tokenClaims['session_id'] ?? null,
             'iat' => time(),
             'exp' => time() + 300,
         ], $jwtKey);
@@ -120,31 +114,13 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
         throw $e;
     }
 
-    $currentStep = intdiv(time(), 30);
-    $totpResult = mfa_compute_totp($secret, $currentStep);
-    $otpCode = $totpResult['code'];
-
-    $userEmail = $locked['login_email'];
-    $safeEmail = htmlspecialchars((string) $userEmail);
-    $safeCode = htmlspecialchars((string) $otpCode);
-    $subject = 'DentiSys MFA Verification Code';
-    $body = "<p>Hello,</p>" .
-            "<p>Your DentiSys multi-factor authentication (MFA) verification code is: <strong>{$safeCode}</strong></p>" .
-            "<p>This code will expire in 30 seconds. If you did not initiate this request, please contact your administrator immediately.</p>";
-
-    try {
-        send_email($userEmail, $subject, $body, $config);
-    } catch (\Throwable $e) {
-        error_log('MFA email notification failed non-fatally: ' . sanitize_for_log($e));
-    }
-
-    $showDevCode = !empty($config['show_dev_mfa_code']);
+    $provisioning = mfa_provisioning_payload((string) $locked['login_email'], $secret);
 
     return [
         'confirmation_token' => $confirmToken,
-        'provisioning_uri' => 'otpauth://totp/DentiSys:' . urlencode($locked['login_email']) . '?secret=' . $secret . '&issuer=DentiSys',
+        'provisioning_uri' => $provisioning['provisioning_uri'],
+        'qr_code_data_uri' => $provisioning['qr_code_data_uri'],
         'base32_secret' => $secret,
-        'dev_mfa_code' => $showDevCode ? $otpCode : null,
     ];
 }
 
@@ -251,8 +227,6 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
             $recStmt->execute([$userId, $hash, $nowSql]);
         }
 
-        $credentials = auth_issue_credentials($pdo, $locked, $config, $context);
-
         audit_finish_operation($pdo, $auditCtx, [
             'module_code' => 'mfa',
             'action_code' => 'mfa_enrollment_completed',
@@ -261,7 +235,7 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
             'actor_username' => $locked['login_email'],
             'actor_role' => $locked['role'],
             'actor_display_name' => $locked['display_name'],
-            'session_id' => $credentials['session']['session_id'],
+            'session_id' => isset($tokenClaims['session_id']) ? (int) $tokenClaims['session_id'] : null,
             'target_type' => 'security_token',
             'target_id' => (string) $pending['token_id'],
             'description' => 'MFA enrollment completed.',
@@ -280,13 +254,15 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
     }
 
     return [
-        'credentials' => $credentials,
         'recovery_codes' => $recovery['codes'],
     ];
 }
 
 function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string $code, array $context): array
 {
+    if (($tokenClaims['method'] ?? null) !== 'authenticator') {
+        throw new ChallengeException('This challenge does not allow authenticator verification.');
+    }
     $userId = (int) $tokenClaims['sub'];
     $jti = $tokenClaims['jti'];
     $tokenVersion = $tokenClaims['token_version'];
@@ -401,6 +377,9 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
     $jti = $tokenClaims['jti'];
     $tokenVersion = $tokenClaims['token_version'];
     $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+    if (($tokenClaims['method'] ?? null) !== 'authenticator') {
+        throw new ChallengeException('Recovery codes are available only for authenticator challenges.');
+    }
 
     $rateStorage = ['dir' => $config['rate_limit']['storage_dir']];
     $userScope = bin2hex(hash('sha256', 'user:' . $userId, true));

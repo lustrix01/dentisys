@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 backend/config/local.php
+backend/vendor/
 
 # Logs
 logs

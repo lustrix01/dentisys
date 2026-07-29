@@ -116,13 +116,12 @@ export const Dashboard: React.FC = () => {
 
   // Filter students based on selected class and subjects (RBAC)
   const facultyStudents = students.filter(s =>
-    s.classId === selectedClassId &&
-    s.enrolledSubjects.some(sub => assignedSubjects.includes(sub.code))
+    s.enrolledSubjects.some(sub => sub.classId === selectedClassId && assignedSubjects.includes(sub.code))
   );
 
   // Filter students in the selected active tab subject
   const studentsInSelectedSubject = facultyStudents.filter(s =>
-    s.enrolledSubjects.some(sub => sub.code === selectedSubjectCode)
+    s.enrolledSubjects.some(sub => sub.classId === selectedClassId && sub.code === selectedSubjectCode)
   );
 
   // Statistics
@@ -295,8 +294,8 @@ export const Dashboard: React.FC = () => {
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Block:</span>
           <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl gap-1">
             {assignedClasses.map((clsId: string) => {
-              const cls = students.find(s => s.classId === clsId);
-              const label = cls?.className || dashboardKpis?.classes.find(item => item.id === clsId)?.name || clsId;
+              const section = students.flatMap(s => s.classSections || []).find(item => item.classId === clsId);
+              const label = section?.className || dashboardKpis?.classes.find(item => item.id === clsId)?.name || clsId;
               const isActive = selectedClassId === clsId;
               return (
                 <button

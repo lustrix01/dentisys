@@ -48,9 +48,13 @@ function validate_institutional_email(string $value): string
     $email = validate_email($value);
 
     $domain = substr(strrchr($email, '@'), 1);
+    $configured = function_exists('app_config')
+        ? (app_config()['app']['allowed_email_domain'] ?? null)
+        : (getenv('ALLOWED_EMAIL_DOMAIN') ?: null);
+    $allowedDomain = strtolower((string) ($configured ?: 'bicol-u.edu.ph'));
 
-    if ($domain !== 'bicol-u.edu.ph') {
-        throw new ValidationException([['field' => 'email', 'message' => 'Only official Bicol University email addresses (@bicol-u.edu.ph) are allowed.']]);
+    if ($domain !== $allowedDomain) {
+        throw new ValidationException([['field' => 'email', 'message' => "Only official email addresses (@{$allowedDomain}) are allowed."]]);
     }
 
     return $email;

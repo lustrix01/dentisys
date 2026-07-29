@@ -13,6 +13,8 @@ export interface EnrolledSubject {
   components: GradeComponents;
   grade: number;        // 1.0 - 5.0 scale (computed or overridden)
   hasRemedial: boolean;
+  classId?: string;
+  enrollmentId?: string;
 }
 
 export interface RemedialExam {
@@ -71,6 +73,7 @@ export interface Student {
   email: string;
   classId?: string;
   className?: string;
+  classSections?: Array<{ classId: string; className: string; enrollmentId: string }>;
   yearLevel: 1 | 2 | 3 | 4; // 1st to 4th Year (Clinicians)
   status: 'active' | 'warning' | 'critical' | 'remedial';
   enrolledSubjects: EnrolledSubject[];

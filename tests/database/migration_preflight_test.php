@@ -61,7 +61,7 @@ $dbPrefix = 'dentisys_test_preflight_';
 
 echo "=== Migration Preflight & Runner Test Suite ===\n\n";
 
-// ---- Case 1: Clean first execution (init.sql + 001-003 run) ----
+// ---- Case 1: Clean first execution (init.sql + all active migrations run) ----
 echo "--- Case 1: Clean first execution ---\n";
 $db1 = $dbPrefix . 'c01_' . substr(md5(uniqid()), 0, 6);
 try {
@@ -69,11 +69,11 @@ try {
     $r1 = run_migrate($db1);
     ok($r1, 'Case 1: Clean first execution completed');
     $records = (int)q($db1, "SELECT COUNT(*) FROM _schema_migrations");
-    if ($records !== 3) {
-        fwrite(STDERR, "FAIL: Case 1 recorded count $records != 3\n");
+    if ($records !== 5) {
+        fwrite(STDERR, "FAIL: Case 1 recorded count $records != 5\n");
         exit(1);
     }
-    echo "PASS: Case 1: 3 migration records created in _schema_migrations\n";
+    echo "PASS: Case 1: 5 migration records created in _schema_migrations\n";
 } finally {
     drop_db($db1);
 }
@@ -91,7 +91,7 @@ try {
         fwrite(STDERR, "FAIL: Case 2 did not report expected SKIP messages\n$out\n");
         exit(1);
     }
-    echo "PASS: Case 2: Rerun skipped all 3 migrations\n";
+    echo "PASS: Case 2: Rerun skipped all 5 migrations\n";
 } finally {
     drop_db($db2);
 }
@@ -111,12 +111,12 @@ try {
         db_run($db3, "source $tmpFile;");
         db_run($db3, "INSERT INTO _schema_migrations (version) VALUES ('$bf');");
     }
-    // Now run migrate.ps1 - should skip 001-002 and apply 003
+    // Now run migrate.ps1 - should skip 001-002 and apply 003-005.
     $r3 = run_migrate($db3);
     ok($r3, 'Case 3: Partial history resume completed');
     $records3 = (int)q($db3, "SELECT COUNT(*) FROM _schema_migrations");
-    if ($records3 !== 3) {
-        fwrite(STDERR, "FAIL: Case 3 total records $records3 != 3\n");
+    if ($records3 !== 5) {
+        fwrite(STDERR, "FAIL: Case 3 total records $records3 != 5\n");
         exit(1);
     }
     echo "PASS: Case 3: 003 applied successfully after 001-002 baseline\n";

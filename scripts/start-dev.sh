@@ -55,7 +55,7 @@ else
 fi
 
 echo "Starting PHP Backend API on http://localhost:8090 ..."
-php -S localhost:8090 -t backend/public &
+php -S localhost:8090 -t backend/public backend/public/router.php &
 PHP_PID=$!
 
 echo "Starting Frontend Dev Server on http://localhost:5173 ..."

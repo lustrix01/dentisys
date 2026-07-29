@@ -228,8 +228,7 @@ export const StudentManagement: React.FC = () => {
         email: res.student.email || '',
         studentId: res.student.studentId,
         yearLevel: res.student.yearLevel,
-        classId: res.student.classId,
-        className: res.student.className,
+        classSections: res.student.classSections || [],
         clinicHoursCompleted: res.student.clinicHoursCompleted || 0,
         enrolledSubjects: res.student.enrolledSubjects || [],
       });
@@ -319,8 +318,8 @@ export const StudentManagement: React.FC = () => {
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Block</span>
           <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl gap-1">
             {assignedClasses.map((clsId: string) => {
-              const cls = students.find(s => s.classId === clsId);
-              const label = cls?.className || clsId;
+              const section = students.flatMap(s => s.classSections || []).find(item => item.classId === clsId);
+              const label = section?.className || clsId;
               const isActive = selectedClassId === clsId;
               return (
                 <button

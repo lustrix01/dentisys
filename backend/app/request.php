@@ -40,8 +40,8 @@ function parse_json_object_body(string $rawBody, ?string $contentType, int $maxB
         throw new RequestException('Malformed JSON.', 400);
     }
 
-    if (!($decoded instanceof \stdClass)) {
-        throw new RequestException('Request body must be a JSON object.', 400);
+    if (!($decoded instanceof \stdClass) && !is_array($decoded)) {
+        throw new RequestException('Request body must be a JSON object or array.', 400);
     }
 
     return ['has_body' => true, 'data' => (array) $decoded];

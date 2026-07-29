@@ -67,13 +67,15 @@ assert_throws(fn() => parse_json_object_body('{"a":1}', null, 1024), 'Unsupporte
 assert_throws(fn() => parse_json_object_body('{invalid}', 'application/json', 1024), 'Malformed JSON', 'Malformed: 400');
 
 // Top-level array
-assert_throws(fn() => parse_json_object_body('[1,2,3]', 'application/json', 1024), 'must be a JSON object', 'Array: 400');
+$result = parse_json_object_body('[1,2,3]', 'application/json', 1024);
+assert_same(true, $result['has_body'], 'Array: has_body=true');
+assert_same([1, 2, 3], $result['data'], 'Array: data parsed');
 
 // Top-level scalar
-assert_throws(fn() => parse_json_object_body('"hello"', 'application/json', 1024), 'must be a JSON object', 'Scalar: 400');
+assert_throws(fn() => parse_json_object_body('"hello"', 'application/json', 1024), 'must be a JSON object or array', 'Scalar: 400');
 
 // Top-level number
-assert_throws(fn() => parse_json_object_body('42', 'application/json', 1024), 'must be a JSON object', 'Number: 400');
+assert_throws(fn() => parse_json_object_body('42', 'application/json', 1024), 'must be a JSON object or array', 'Number: 400');
 
 // JSON with charset parameter
 $result = parse_json_object_body('{"x":1}', 'application/json; charset=utf-8', 1024);

@@ -2,112 +2,42 @@
 
 declare(strict_types=1);
 
-function base32_encode(string $data): string
+use RobThree\Auth\Algorithm;
+use RobThree\Auth\Providers\Qr\BaconQrCodeProvider;
+use RobThree\Auth\TwoFactorAuth;
+
+function mfa_totp_service(): TwoFactorAuth
 {
-    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    $result = '';
-    $bits = 0;
-    $buffer = 0;
-    $len = strlen($data);
-
-    for ($i = 0; $i < $len; $i++) {
-        $buffer = ($buffer << 8) | ord($data[$i]);
-        $bits += 8;
-
-        while ($bits >= 5) {
-            $bits -= 5;
-            $result .= $alphabet[($buffer >> $bits) & 0x1F];
-        }
+    static $service = null;
+    if (!$service instanceof TwoFactorAuth) {
+        $service = new TwoFactorAuth(
+            new BaconQrCodeProvider(4, '#ffffff', '#000000', 'svg'),
+            'DentiSys',
+            6,
+            30,
+            Algorithm::Sha1
+        );
     }
-
-    if ($bits > 0) {
-        $result .= $alphabet[($buffer << (5 - $bits)) & 0x1F];
-    }
-
-    return $result;
-}
-
-function base32_decode(string $data): string
-{
-    $data = strtoupper($data);
-    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    $result = '';
-    $bits = 0;
-    $buffer = 0;
-    $len = strlen($data);
-
-    for ($i = 0; $i < $len; $i++) {
-        $ch = $data[$i];
-        $val = strpos($alphabet, $ch);
-
-        if ($val === false) {
-            throw new \InvalidArgumentException(sprintf('Invalid Base32 character: %s', $ch));
-        }
-
-        $buffer = ($buffer << 5) | $val;
-        $bits += 5;
-
-        if ($bits >= 8) {
-            $bits -= 8;
-            $result .= chr(($buffer >> $bits) & 0xFF);
-        }
-    }
-
-    if ($bits >= 5 || ($bits > 0 && ($buffer & ((1 << $bits) - 1)) !== 0)) {
-        throw new \InvalidArgumentException('Invalid Base32 length: dangling bits detected.');
-    }
-
-    return $result;
+    return $service;
 }
 
 function mfa_compute_totp(string $base32Secret, int $step, string $algorithm = 'sha1', int $digits = 6, int $period = 30): array
 {
-    $allowedAlgos = ['sha1', 'sha256', 'sha512'];
-
-    if (!in_array($algorithm, $allowedAlgos, true)) {
-        throw new \InvalidArgumentException("Unsupported TOTP algorithm: $algorithm");
+    if ($algorithm !== 'sha1' || $digits !== 6 || $period !== 30) {
+        throw new \InvalidArgumentException('DentiSys authenticator credentials use SHA-1, six digits, and a 30-second period.');
     }
-
-    if ($digits < 6 || $digits > 8) {
-        throw new \InvalidArgumentException("Digit count must be 6-8, got $digits");
-    }
-
-    if ($period < 1) {
-        throw new \InvalidArgumentException("Period must be positive, got $period");
-    }
-
-    $secret = base32_decode($base32Secret);
-
-    $counterBE = pack('N', 0) . pack('N', $step);
-
-    $hmac = hash_hmac($algorithm, $counterBE, $secret, true);
-
-    $offset = ord($hmac[strlen($hmac) - 1]) & 0x0F;
-
-    $binary = ((ord($hmac[$offset]) & 0x7F) << 24)
-        | ((ord($hmac[$offset + 1]) & 0xFF) << 16)
-        | ((ord($hmac[$offset + 2]) & 0xFF) << 8)
-        | (ord($hmac[$offset + 3]) & 0xFF);
-
-    $code = str_pad((string)($binary % (10 ** $digits)), $digits, '0', STR_PAD_LEFT);
-
-    return ['step' => $step, 'code' => $code];
+    return ['step' => $step, 'code' => mfa_totp_service()->getCode($base32Secret, $step * $period)];
 }
 
 function mfa_verify_window(string $base32Secret, string $userCode, string $algorithm = 'sha1', int $digits = 6, int $period = 30, int $windowWidth = 1, ?callable $clock = null): array
 {
-    $clock = $clock ?? fn(): int => time();
-    $currentStep = intdiv($clock(), $period);
-
-    for ($offset = -$windowWidth; $offset <= $windowWidth; $offset++) {
-        $candidate = mfa_compute_totp($base32Secret, $currentStep + $offset, $algorithm, $digits, $period);
-
-        if (hash_equals($candidate['code'], $userCode)) {
-            return ['valid' => true, 'matched_step' => $currentStep + $offset];
-        }
+    if ($algorithm !== 'sha1' || $digits !== 6 || $period !== 30) {
+        throw new \InvalidArgumentException('Unsupported authenticator credential parameters.');
     }
-
-    return ['valid' => false, 'matched_step' => null];
+    $time = $clock ? $clock() : null;
+    $matchedStep = 0;
+    $valid = mfa_totp_service()->verifyCode($base32Secret, $userCode, $windowWidth, $time, $matchedStep);
+    return ['valid' => $valid, 'matched_step' => $valid ? $matchedStep : null];
 }
 
 function mfa_encrypt_secret(string $plaintext, string $keyBytes): array
@@ -168,7 +98,17 @@ function mfa_decrypt_secret(string $ciphertext, string $nonce, string $authTag, 
 
 function mfa_generate_secret(): string
 {
-    return base32_encode(random_bytes(20));
+    return mfa_totp_service()->createSecret(160);
+}
+
+function mfa_provisioning_payload(string $accountEmail, string $secret): array
+{
+    $label = 'DentiSys:' . $accountEmail;
+    $service = mfa_totp_service();
+    return [
+        'provisioning_uri' => $service->getQRText($label, $secret),
+        'qr_code_data_uri' => $service->getQRCodeImageAsDataUri($label, $secret, 240),
+    ];
 }
 
 function mfa_generate_recovery_codes(int $count = 8): array

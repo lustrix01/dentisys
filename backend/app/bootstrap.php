@@ -2,6 +2,12 @@
 
 declare(strict_types=1);
 
+$autoload = dirname(__DIR__) . '/vendor/autoload.php';
+if (!is_file($autoload)) {
+    throw new \RuntimeException('Backend dependencies are missing. Run composer install in backend/.');
+}
+require_once $autoload;
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/request.php';
@@ -11,6 +17,7 @@ require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/jwt.php';
 require_once __DIR__ . '/mfa.php';
+require_once __DIR__ . '/email_mfa.php';
 require_once __DIR__ . '/ratelimit.php';
 require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/mailer.php';

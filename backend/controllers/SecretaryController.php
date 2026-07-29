@@ -130,6 +130,7 @@ function handle_secretary_invite(): void
                 'actor_role' => $authCtx['role'],
                 'actor_display_name' => $authCtx['display_name'],
                 'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => (int) $assignment['cs_id'],
                 'target_type' => 'security_token',
                 'target_id' => (string) $stId,
                 'description' => "Invited {$studentName} ({$email}) as Class Secretary for {$className}.",
@@ -447,6 +448,7 @@ function handle_secretary_activate(): void
                 'actor_role' => 'secretary',
                 'actor_display_name' => $displayName,
                 'session_id' => null,
+                'scope_cs_id' => (int) $row['related_cs_id'],
                 'target_type' => 'user_account',
                 'target_id' => (string) $userId,
                 'description' => "Class Secretary account activated for {$displayName} ({$email}).",
@@ -672,7 +674,7 @@ function handle_secretary_attendance_override(): void
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
 
-            $lookupSql = "SELECT r.record_id
+            $lookupSql = "SELECT r.record_id, cs.cs_id
                           FROM attendance_records r
                           JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                           JOIN students s ON s.student_id = e.student_id
@@ -691,7 +693,9 @@ function handle_secretary_attendance_override(): void
             $lookupSql .= " ORDER BY r.session_date DESC, r.record_id DESC LIMIT 1 FOR UPDATE";
             $lookup = $pdo->prepare($lookupSql);
             $lookup->execute($params);
-            $targetRecordId = (int) ($lookup->fetchColumn() ?: 0);
+            $targetRecord = $lookup->fetch(PDO::FETCH_ASSOC);
+            $targetRecordId = (int) ($targetRecord['record_id'] ?? 0);
+            $targetCsId = (int) ($targetRecord['cs_id'] ?? 0);
             if ($targetRecordId <= 0) {
                 throw new ValidationException([['field' => 'recordId', 'message' => 'Attendance record was not found in an assigned class.']]);
             }
@@ -713,6 +717,7 @@ function handle_secretary_attendance_override(): void
                 'actor_role' => $authCtx['role'],
                 'actor_display_name' => $authCtx['display_name'],
                 'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => $targetCsId,
                 'target_type' => 'attendance_record',
                 'target_id' => (string) $targetRecordId,
                 'description' => "Manual attendance override applied for student ID {$studentId} to status '{$status}'. Reason: {$reason}",
@@ -799,14 +804,21 @@ function handle_secretary_profile_update(): void
         $name = validate_person_name($data, 'name', 2, 255);
         $email = validate_institutional_email($data['email'] ?? '');
 
-        $upd = $pdo->prepare("UPDATE user_accounts SET display_name = ?, login_email = ? WHERE user_id = ?");
-        $upd->execute([$name, $email, $authCtx['user_id']]);
-
         $parts = explode(' ', $name);
         $lastName = count($parts) > 1 ? array_pop($parts) : '';
         $firstName = implode(' ', $parts) ?: $name;
-        $updStudent = $pdo->prepare("UPDATE students SET first_name = ?, last_name = ?, bu_email = ? WHERE user_id = ?");
-        $updStudent->execute([$firstName, $lastName, $email, $authCtx['user_id']]);
+        $pdo->beginTransaction();
+        try {
+            email_mfa_update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
+            $updStudent = $pdo->prepare("UPDATE students SET first_name = ?, last_name = ?, bu_email = ? WHERE user_id = ?");
+            $updStudent->execute([$firstName, $lastName, $email, $authCtx['user_id']]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
 
         json_response(['status' => 'ok', 'message' => 'Class Secretary profile updated successfully.'], 200);
     } catch (ValidationException $e) {

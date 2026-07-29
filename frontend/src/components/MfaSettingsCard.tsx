@@ -1,237 +1,180 @@
 import React, { useEffect, useState } from 'react';
-import {
-  AlertCircle,
-  CheckCircle2,
-  KeyRound,
-  Lock,
-  RefreshCw,
-  ShieldCheck,
-  Smartphone,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2, KeyRound, Mail, RefreshCw, Smartphone } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
 import {
+  confirmEmailMfaSettingApi,
+  confirmEnrollment,
   getMfaSettingsApi,
   regenerateMfaRecoveryCodesApi,
   revokeMfaApi,
+  startEmailMfaSettingApi,
+  startEnrollment,
 } from '../services/apiClient';
 
-interface MfaSettingsCardProps {
-  userEmail?: string;
-  roleName?: string;
+interface Enrollment {
+  confirmationToken: string;
+  provisioningUri: string;
+  qrDataUri: string;
+  secret: string;
 }
 
-export const MfaSettingsCard: React.FC<MfaSettingsCardProps> = ({
+export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }> = ({
   userEmail = '',
-  roleName = 'User',
 }) => {
-  const [enabled, setEnabled] = useState(false);
+  const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
+  const [emailEnabled, setEmailEnabled] = useState(false);
   const [recoveryCount, setRecoveryCount] = useState(0);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+  const [emailConfirmation, setEmailConfirmation] = useState<{ token: string; action: 'enable' | 'disable'; masked: string } | null>(null);
+  const [code, setCode] = useState('');
   const [working, setWorking] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [showRevoke, setShowRevoke] = useState(false);
-  const [stepUpCode, setStepUpCode] = useState('');
 
   const loadStatus = async () => {
     setLoading(true);
     setError('');
     try {
       const response = await getMfaSettingsApi();
-      setEnabled(response.mfa.enabled);
+      setAuthenticatorEnabled(response.mfa.authenticatorEnabled);
+      setEmailEnabled(response.mfa.emailEnabled);
       setRecoveryCount(response.mfa.recoveryCodeCount);
     } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'Unable to load MFA status.',
-      );
+      setError(requestError instanceof Error ? requestError.message : 'Unable to load 2FA settings.');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    void loadStatus();
-  }, []);
+  useEffect(() => { void loadStatus(); }, []);
 
-  const regenerateCodes = async () => {
-    if (!/^\d{6}$/.test(stepUpCode)) {
-      setError('Enter the current 6-digit authenticator code.');
-      return;
-    }
-    setWorking(true);
-    setError('');
-    setSuccess('');
+  const beginAuthenticator = async () => {
+    setWorking(true); setError(''); setSuccess('');
     try {
-      const response = await regenerateMfaRecoveryCodesApi(stepUpCode);
-      setRecoveryCodes(response.recovery_codes);
-      setRecoveryCount(response.recovery_codes.length);
-      setStepUpCode('');
-      setSuccess(response.message);
+      const response = await startEnrollment();
+      setEnrollment({
+        confirmationToken: response.confirmation_token,
+        provisioningUri: response.provisioning_uri,
+        qrDataUri: response.qr_code_data_uri,
+        secret: response.base32_secret,
+      });
+      setCode('');
     } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'Unable to regenerate recovery codes.',
-      );
-    } finally {
-      setWorking(false);
-    }
+      setError(requestError instanceof Error ? requestError.message : 'Unable to begin authenticator setup.');
+    } finally { setWorking(false); }
   };
 
-  const revoke = async () => {
-    if (!/^\d{6}$/.test(stepUpCode)) {
-      setError('Enter the current 6-digit authenticator code.');
-      return;
-    }
-    setWorking(true);
-    setError('');
-    setSuccess('');
+  const confirmAuthenticator = async () => {
+    if (!enrollment || !/^\d{6}$/.test(code)) return;
+    setWorking(true); setError('');
     try {
-      const response = await revokeMfaApi(stepUpCode);
-      setEnabled(false);
-      setRecoveryCount(0);
-      setRecoveryCodes([]);
-      setShowRevoke(false);
-      setStepUpCode('');
+      const response = await confirmEnrollment(enrollment.confirmationToken, code);
+      setAuthenticatorEnabled(true);
+      setRecoveryCodes(response.recovery_codes);
+      setRecoveryCount(response.recovery_codes.length);
+      setEnrollment(null); setCode('');
+      setSuccess('Authenticator 2FA enabled.');
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to confirm authenticator.');
+    } finally { setWorking(false); }
+  };
+
+  const beginEmail = async (action: 'enable' | 'disable') => {
+    setWorking(true); setError(''); setSuccess('');
+    try {
+      const response = await startEmailMfaSettingApi(action);
+      setEmailConfirmation({ token: response.confirmation_token, action, masked: response.masked_email });
+      setCode('');
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to send email confirmation.');
+    } finally { setWorking(false); }
+  };
+
+  const confirmEmail = async () => {
+    if (!emailConfirmation || !/^\d{6}$/.test(code)) return;
+    setWorking(true); setError('');
+    try {
+      const response = await confirmEmailMfaSettingApi(emailConfirmation.token, code);
+      setEmailEnabled(response.emailEnabled);
+      setEmailConfirmation(null); setCode('');
+      setSuccess(`Email-code 2FA ${response.emailEnabled ? 'enabled' : 'disabled'}.`);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to confirm email code.');
+    } finally { setWorking(false); }
+  };
+
+  const disableAuthenticator = async () => {
+    if (!/^\d{6}$/.test(code)) { setError('Enter the current authenticator code.'); return; }
+    setWorking(true); setError('');
+    try {
+      const response = await revokeMfaApi(code);
+      setAuthenticatorEnabled(false); setRecoveryCount(0); setRecoveryCodes([]); setCode('');
       setSuccess(response.message);
     } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'Unable to revoke MFA.',
-      );
-    } finally {
-      setWorking(false);
-    }
+      setError(requestError instanceof Error ? requestError.message : 'Unable to disable authenticator.');
+    } finally { setWorking(false); }
+  };
+
+  const regenerate = async () => {
+    if (!/^\d{6}$/.test(code)) { setError('Enter the current authenticator code.'); return; }
+    setWorking(true); setError('');
+    try {
+      const response = await regenerateMfaRecoveryCodesApi(code);
+      setRecoveryCodes(response.recovery_codes);
+      setRecoveryCount(response.recovery_codes.length);
+      setCode(''); setSuccess(response.message);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to regenerate recovery codes.');
+    } finally { setWorking(false); }
   };
 
   return (
     <Card className="p-0 overflow-hidden">
-      <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
-        <CardTitle className="flex items-center justify-between gap-3 text-sm">
-          <span className="flex items-center gap-2">
-            <Lock className="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
-            Security &amp; MFA Settings
-          </span>
-          <span
-            className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
-              enabled
-                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
-            }`}
-          >
-            {loading ? 'Checking…' : enabled ? 'MFA enabled' : 'Enrollment required'}
-          </span>
-        </CardTitle>
+      <CardHeader className="border-b border-slate-100 dark:border-slate-800">
+        <CardTitle className="text-sm">Two-factor authentication</CardTitle>
       </CardHeader>
-      <CardContent className="p-5 space-y-4">
-        {error && (
-          <div role="alert" className="p-3.5 rounded-xl bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            {error}
-            <button type="button" onClick={() => void loadStatus()} className="ml-auto underline">
-              Retry
-            </button>
-          </div>
-        )}
-        {success && (
-          <div className="p-3.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-            {success}
-          </div>
-        )}
+      <CardContent className="space-y-4 p-5">
+        {loading && <p className="text-xs text-slate-500">Loading security settings…</p>}
+        {error && <div role="alert" className="flex gap-2 rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700"><AlertCircle className="h-4 w-4" />{error}</div>}
+        {success && <div className="flex gap-2 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" />{success}</div>}
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-indigo-500" />
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                Server-managed authenticator
-              </h4>
-            </div>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {userEmail || roleName} · {recoveryCount} unused recovery codes
-            </p>
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <div><p className="flex items-center gap-2 text-sm font-bold"><Mail className="h-4 w-4" />Email code</p><p className="mt-1 text-xs text-slate-500">Codes are sent only to {userEmail || 'your account email'}.</p></div>
+          <button type="button" disabled={working} onClick={() => void beginEmail(emailEnabled ? 'disable' : 'enable')} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{emailEnabled ? 'Disable' : 'Enable'}</button>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-4">
+            <div><p className="flex items-center gap-2 text-sm font-bold"><Smartphone className="h-4 w-4" />Authenticator app</p><p className="mt-1 text-xs text-slate-500">Google Authenticator compatible · {recoveryCount} recovery codes</p></div>
+            {!authenticatorEnabled && <button type="button" disabled={working} onClick={() => void beginAuthenticator()} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Set up</button>}
           </div>
-          {enabled ? (
-            <button
-              type="button"
-              onClick={() => setShowRevoke(true)}
-              disabled={working}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 disabled:opacity-50"
-            >
-              Revoke MFA
-            </button>
-          ) : (
-            <p className="max-w-xs text-xs text-amber-700 dark:text-amber-400">
-              Sign out and sign in again to complete required MFA enrollment.
-            </p>
+          {authenticatorEnabled && (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="text-xs font-bold">Current code<input value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="mt-1 block rounded-xl border px-3 py-2 font-mono tracking-widest dark:bg-slate-950" placeholder="000000" /></label>
+              <button type="button" onClick={() => void regenerate()} disabled={working || code.length !== 6} className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"><RefreshCw className="h-4 w-4" />New recovery codes</button>
+              <button type="button" onClick={() => void disableAuthenticator()} disabled={working || code.length !== 6} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Disable</button>
+            </div>
           )}
         </div>
 
-        {enabled && (
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
-              Current authenticator code
-            </label>
-            <input
-              value={stepUpCode}
-              onChange={event => setStepUpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="000000"
-              className="w-full max-w-xs rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-mono tracking-widest dark:border-slate-800 dark:bg-slate-950"
-            />
-            <button
-              type="button"
-              onClick={() => void regenerateCodes()}
-              disabled={working || stepUpCode.length !== 6}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"
-            >
-              {working ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
-              Regenerate recovery codes
-            </button>
-          </div>
-        )}
-
-        {recoveryCodes.length > 0 && (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
-            <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
-              Save these now. They are shown only in this response.
-            </p>
-            <div className="mt-3 grid grid-cols-1 gap-2 font-mono text-xs sm:grid-cols-2">
-              {recoveryCodes.map((code) => (
-                <div key={code} className="rounded-lg bg-white px-3 py-2 text-center dark:bg-slate-950">
-                  {code}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {recoveryCodes.length > 0 && <div className="rounded-xl bg-amber-50 p-4"><p className="text-xs font-bold text-amber-800">Save these recovery codes now.</p><div className="mt-2 grid gap-2 font-mono text-xs sm:grid-cols-2">{recoveryCodes.map(item => <span key={item}>{item}</span>)}</div></div>}
       </CardContent>
 
-      <Modal isOpen={showRevoke} onClose={() => setShowRevoke(false)} title="Revoke MFA credential">
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-300">
-            <ShieldCheck className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <p>
-              The current authenticator and all recovery codes will be revoked.
-              MFA enrollment will be required on the next login.
-            </p>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setShowRevoke(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
-              Cancel
-            </button>
-            <button type="button" onClick={() => void revoke()} disabled={working || stepUpCode.length !== 6} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-              {working ? 'Revoking…' : 'Revoke MFA'}
-            </button>
-          </div>
-        </div>
+      <Modal isOpen={enrollment !== null} onClose={() => setEnrollment(null)} title="Set up authenticator">
+        {enrollment && <div className="space-y-4 text-center">
+          <img src={enrollment.qrDataUri} alt="Authenticator provisioning QR code" className="mx-auto h-60 w-60 rounded-xl bg-white p-2" />
+          <p className="text-xs text-slate-500">Scan this QR code in Google Authenticator, then enter its six-digit code.</p>
+          <details className="text-left text-xs"><summary className="cursor-pointer font-bold">Manual setup</summary><p className="mt-2 break-all font-mono">{enrollment.secret}</p><p className="mt-1 break-all text-slate-500">{enrollment.provisioningUri}</p></details>
+          <input value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border px-3 py-2 text-center font-mono tracking-widest dark:bg-slate-950" placeholder="000000" />
+          <button type="button" onClick={() => void confirmAuthenticator()} disabled={working || code.length !== 6} className="w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"><KeyRound className="mr-2 inline h-4 w-4" />Confirm</button>
+        </div>}
+      </Modal>
+
+      <Modal isOpen={emailConfirmation !== null} onClose={() => setEmailConfirmation(null)} title={`${emailConfirmation?.action === 'disable' ? 'Disable' : 'Enable'} email 2FA`}>
+        {emailConfirmation && <div className="space-y-4"><p className="text-sm text-slate-600">Enter the code sent to {emailConfirmation.masked}.</p><input value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border px-3 py-2 text-center font-mono tracking-widest dark:bg-slate-950" placeholder="000000" /><button type="button" onClick={() => void confirmEmail()} disabled={working || code.length !== 6} className="w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Confirm</button></div>}
       </Modal>
     </Card>
   );

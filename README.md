@@ -47,10 +47,12 @@ Copy the template environment file `.env.example` to `.env`:
 
 #### Step 2: Install Dependencies
 
-Install root and frontend Node.js packages:
+Install root/frontend Node.js packages and the locked PHP dependencies:
 
 ```bash
+npm ci
 npm ci --prefix frontend
+composer install --working-dir=backend
 ```
 
 #### Step 3: Install Playwright Browsers (for E2E testing)
@@ -65,7 +67,7 @@ npx playwright install chromium
 
 ### 3. Database Migration & Seeding Instructions
 
-Pending migrations (`database/migrations/001_initial_schema.sql`, `002_user_roles.sql`, `003_system_audit.sql`) are automatically applied on startup by `start-dev.bat` or Docker initialization.
+Active migrations in `database/migrations/` are applied in filename order and recorded in `_schema_migrations` by `start-dev.bat` or Docker initialization.
 
 To manually seed demo users and initial data into the database:
 
@@ -105,7 +107,7 @@ docker compose up -d
 - **macOS / Linux**:
   Start your native PHP built-in server and MySQL instance:
   ```bash
-  php -S localhost:8090 -t backend/public
+  php -S localhost:8090 -t backend/public backend/public/router.php
   npm run dev
   ```
 
@@ -167,7 +169,7 @@ DentiSys local development supports both Docker MariaDB (preferred) and a runnin
 - **Credentials**: Process `DB_*` environment variables, `backend/config/local.php`, or backend application defaults.
 - **Zero-Touch Setup**: If the configured database does not exist on a reachable database server, it is automatically provisioned and migrated on startup with 0 PDO errors.
 - **Pre-Existing Database Warning Policy**: If an existing database is detected, a clear warning banner is displayed. Pre-existing database objects are **never** automatically dropped or overwritten. If you want a clean install, please back up or drop the database manually.
-- **Automatic Migrations**: Pending approved migrations (`001`–`003`) run automatically on startup for both Docker and Native paths. `database/seed.sql` is **never** executed automatically.
+- **Automatic Migrations**: Pending approved migrations (`001`–`005`) run automatically on startup for both Docker and Native paths. `database/seed.sql` is **never** executed automatically.
 
 ### No-Runtime Instructions
 When neither Docker MariaDB nor a native MySQL/MariaDB server is available on port `3306`, start Docker Desktop (`docker compose up -d db`) or start XAMPP MySQL from the XAMPP Control Panel, then run `start-dev.bat` again.
@@ -180,4 +182,19 @@ When neither Docker MariaDB nor a native MySQL/MariaDB server is available on po
 
 The existing frontend currently has pre-existing lint debt. Do not change frontend behavior just to satisfy lint unless a future task explicitly approves it.
 
-Production deployment, registry publishing, TLS, VPS/cloud hosting, replicas, and CI/CD are outside this local foundation.
+### Optional two-factor authentication
+
+Password login remains the primary sign-in method. From any authenticated profile, users may independently enable an email code or a Google Authenticator-compatible mobile authenticator. If both are enabled, either one may be selected after password verification. Accounts with neither method enabled continue to use password-only login.
+
+Email codes are always sent to the server-side `user_accounts.login_email`; clients cannot supply a destination. `ALLOWED_EMAIL_DOMAIN` defaults to `bicol-u.edu.ph`. A future Google Sign-In implementation must populate this canonical identity only after validating the Google token, the verified-email claim, and this configured domain.
+
+The complete Compose stack exposes:
+
+- Frontend: `http://localhost:5173`
+- Direct API: `http://localhost:8080`
+- Mailpit: `http://localhost:8025`
+- phpMyAdmin: `http://localhost:8081`
+
+Mailpit uses unencrypted SMTP on port `1025` only in development. Outside development, configure `SMTP_ENCRYPTION=tls` or `starttls` and leave `SMTP_VERIFY_PEER=true`.
+
+Production deployment, registry publishing, VPS/cloud hosting, replicas, and CI/CD remain outside this local foundation.

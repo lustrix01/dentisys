@@ -55,9 +55,9 @@ $activeCount = count($activeFiles);
 $archiveCount = count($archiveFiles);
 echo "Active SQL files: $activeCount\n";
 echo "Archived SQL files: $archiveCount\n";
-if ($activeCount !== 3) { fwrite(STDERR, "FAIL: expected 3 active migration files, found $activeCount\n"); exit(1); }
+if ($activeCount !== 5) { fwrite(STDERR, "FAIL: expected 5 active migration files, found $activeCount\n"); exit(1); }
 if ($archiveCount !== 80) { fwrite(STDERR, "FAIL: expected 80 archived migration files, found $archiveCount\n"); exit(1); }
-echo "PASS: 3 active + 80 archived = 83 total SQL files\n";
+echo "PASS: 5 active + 80 archived = 85 total SQL files\n";
 
 echo "\n--- Phase 2 migration mapping ---\n";
 $phase2 = assert_present("$repo_root/docs/database/phase-2-migration-mapping.md", 'Phase 2 mapping document');

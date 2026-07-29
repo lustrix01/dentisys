@@ -4,8 +4,7 @@ export type AuthPhase =
   | 'bootstrapping'
   | 'unauthenticated'
   | 'submitting_login'
-  | 'enrollment_start_required'
-  | 'enrollment_confirmation_required'
+  | 'mfa_method_selection_required'
   | 'mfa_verification_required'
   | 'authenticated';
 
@@ -18,25 +17,23 @@ export interface SafeUser {
 }
 
 export interface LoginResponse {
-  type: 'direct_login' | 'mfa_enrollment' | 'mfa_challenge';
+  type: 'direct_login' | 'mfa_method_selection';
   mfa_required: boolean;
   mfa_enrolled: boolean;
-  enrollment_token?: string;
-  mfa_session_token?: string;
+  mfa_selection_token?: string;
+  methods?: Array<'email' | 'authenticator'>;
   access_token?: string;
-  dev_mfa_code?: string | null;
 }
 
 export interface EnrollStartResponse {
   confirmation_token: string;
   provisioning_uri: string;
+  qr_code_data_uri: string;
   base32_secret: string;
-  dev_mfa_code?: string | null;
 }
 
 export interface EnrollConfirmResponse {
-  access_token: string;
-  user: { user_id: number };
+  status: string;
   recovery_codes: string[];
 }
 

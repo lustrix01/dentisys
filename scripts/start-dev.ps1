@@ -583,7 +583,7 @@ try {
         [Environment]::SetEnvironmentVariable("DB_PASS", $credentials.Password)
     }
 
-    $phpProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title DentiSys Backend API (Port 8090) && cd /d `"$root`" && php -S localhost:8090 -t backend/public" -WorkingDirectory $root -PassThru
+    $phpProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "title DentiSys Backend API (Port 8090) && cd /d `"$root`" && php -S localhost:8090 -t backend/public backend/public/router.php" -WorkingDirectory $root -PassThru
 } finally {
     [Environment]::SetEnvironmentVariable("DB_HOST", $origHost)
     [Environment]::SetEnvironmentVariable("DB_PORT", $origPort)

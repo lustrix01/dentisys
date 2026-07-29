@@ -54,20 +54,13 @@ function handle_login(): void
 
             auth_controller_emit($response);
             return;
-        } elseif ($result['type'] === 'enrollment_start') {
-            $payload = [
-                'type' => 'mfa_enrollment',
-                'mfa_required' => true,
-                'mfa_enrolled' => false,
-                'enrollment_token' => $result['enrollment_token'],
-            ];
         } else {
             $payload = [
-                'type' => 'mfa_challenge',
+                'type' => 'mfa_method_selection',
                 'mfa_required' => true,
                 'mfa_enrolled' => true,
-                'mfa_session_token' => $result['mfa_session_token'],
-                'dev_mfa_code' => $result['dev_mfa_code'] ?? null,
+                'mfa_selection_token' => $result['mfa_selection_token'],
+                'methods' => $result['methods'],
             ];
         }
 

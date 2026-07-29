@@ -14,23 +14,20 @@ const LEGACY_CREDENTIAL_KEYS = [
 interface AuthState {
   phase: AuthPhase;
   errorMessage: string;
-  enrollmentToken: string | null;
-  confirmationToken: string | null;
   mfaSessionToken: string | null;
+  mfaSelectionToken: string | null;
+  mfaMethods: Array<'email' | 'authenticator'>;
+  selectedMfaMethod: 'email' | 'authenticator' | null;
+  maskedMfaEmail: string | null;
   accessToken: string | null;
   user: SafeUser | null;
-  mfaSecret: string | null;
-  provisioningUri: string | null;
   recoveryCodes: string[];
-  devMfaCode: string | null;
 }
 
 interface AuthContextValue extends AuthState {
   beginLogin: () => void;
-  storeEnrollmentChallenge: (token: string) => void;
-  storeEnrollmentDisplayData: (secret: string, uri: string, devCode?: string | null) => void;
-  storeConfirmationChallenge: (token: string) => void;
-  storeMfaChallenge: (token: string, devCode?: string | null) => void;
+  storeMfaSelection: (token: string, methods: Array<'email' | 'authenticator'>) => void;
+  storeSelectedMfaChallenge: (token: string, method: 'email' | 'authenticator', maskedEmail?: string | null) => void;
   setAccessToken: (token: string) => void;
   setUser: (user: SafeUser) => void;
   setAuthenticated: () => void;
@@ -46,15 +43,14 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const initialState: AuthState = {
   phase: 'bootstrapping',
   errorMessage: '',
-  enrollmentToken: null,
-  confirmationToken: null,
   mfaSessionToken: null,
+  mfaSelectionToken: null,
+  mfaMethods: [],
+  selectedMfaMethod: null,
+  maskedMfaEmail: null,
   accessToken: null,
   user: null,
-  mfaSecret: null,
-  provisioningUri: null,
   recoveryCodes: [],
-  devMfaCode: null,
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -116,44 +112,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, phase: 'submitting_login', errorMessage: '' }));
   }, []);
 
-  const storeEnrollmentChallenge = useCallback((token: string) => {
-    setState(prev => ({
-      ...prev,
-      enrollmentToken: token,
-      phase: 'enrollment_start_required',
-      errorMessage: '',
-    }));
-  }, []);
-
-  const storeEnrollmentDisplayData = useCallback((secret: string, uri: string, devCode?: string | null) => {
-    setState(prev => ({
-      ...prev,
-      mfaSecret: secret,
-      provisioningUri: uri,
-      devMfaCode: devCode ?? null,
-      phase: 'enrollment_confirmation_required',
-      errorMessage: '',
-    }));
-  }, []);
-
-  const storeConfirmationChallenge = useCallback((token: string) => {
-    setState(prev => ({
-      ...prev,
-      confirmationToken: token,
-      errorMessage: '',
-    }));
-  }, []);
-
-  const storeMfaChallenge = useCallback((token: string, devCode?: string | null) => {
-    setState(prev => ({
-      ...prev,
-      mfaSessionToken: token,
-      phase: 'mfa_verification_required',
-      devMfaCode: devCode ?? null,
-      errorMessage: '',
-    }));
-  }, []);
-
   const setAccessToken = useCallback((token: string) => {
     apiClient.setAccessToken(token);
     setState(prev => ({ ...prev, accessToken: token, errorMessage: '' }));
@@ -162,6 +120,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setUser = useCallback((user: SafeUser) => {
     auditService.setAuditIdentity(user.display_name, user.role);
     setState(prev => ({ ...prev, user }));
+  }, []);
+
+  const storeMfaSelection = useCallback((token: string, methods: Array<'email' | 'authenticator'>) => {
+    setState(prev => ({
+      ...prev,
+      mfaSelectionToken: token,
+      mfaMethods: methods,
+      phase: 'mfa_method_selection_required',
+      errorMessage: '',
+    }));
+  }, []);
+
+  const storeSelectedMfaChallenge = useCallback((
+    token: string,
+    method: 'email' | 'authenticator',
+    maskedEmail?: string | null,
+  ) => {
+    setState(prev => ({
+      ...prev,
+      mfaSessionToken: token,
+      selectedMfaMethod: method,
+      maskedMfaEmail: maskedEmail ?? null,
+      phase: 'mfa_verification_required',
+      errorMessage: '',
+    }));
   }, []);
 
   const setAuthenticated = useCallback(() => {
@@ -203,10 +186,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextValue = {
     ...state,
     beginLogin,
-    storeEnrollmentChallenge,
-    storeEnrollmentDisplayData,
-    storeConfirmationChallenge,
-    storeMfaChallenge,
+    storeMfaSelection,
+    storeSelectedMfaChallenge,
     setAccessToken,
     setUser,
     setAuthenticated,

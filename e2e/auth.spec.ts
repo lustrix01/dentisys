@@ -109,14 +109,30 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('login flow redirects to /mfa/verify when MFA is enabled and requires TOTP code', async ({ page }) => {
+  test('login with both factors selects authenticator and issues no session before verification', async ({ page }) => {
     await page.route('**/api/auth/login', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
+          type: 'mfa_method_selection',
+          mfa_selection_token: 'mock-mfa-selection-123456',
+          methods: ['email', 'authenticator'],
+        }),
+      });
+    });
+
+    await page.route('**/api/auth/mfa/challenge/start', async (route) => {
+      expect(route.request().postDataJSON()).toEqual({ method: 'authenticator' });
+      expect(route.request().headers().authorization).toBe('Bearer mock-mfa-selection-123456');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
           type: 'mfa_challenge',
-          mfa_session_token: 'mock-mfa-session-123456',
+          method: 'authenticator',
+          mfa_challenge_token: 'mock-mfa-session-123456',
+          expires_in: 300,
         }),
       });
     });
@@ -147,7 +163,10 @@ test.describe('Auth Module E2E Tests', () => {
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
 
-    // Should redirect to MFA verification screen
+    await expect(page).toHaveURL('/mfa/select');
+    await expect(page.getByText('Email code', { exact: true })).toBeVisible();
+    await page.getByText('Authenticator app', { exact: true }).click();
+
     await expect(page).toHaveURL('/mfa/verify');
     await expect(page.locator('body')).toContainText(/Two-Factor Authentication/i);
 
@@ -267,14 +286,12 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('mfa enroll start returns dev_mfa_code in json response when enabled', async ({ request }) => {
-    // Test API route direct assertion for mfa enroll start payload structure
+  test('authenticator enrollment requires an authenticated profile session', async ({ request }) => {
     const response = await request.post('/api/auth/mfa/enroll/start', {
       headers: {
-        'Authorization': 'Bearer mock-enrollment-token',
+        'Authorization': 'Bearer invalid-access-token',
       },
     });
-    // Expected 401 due to invalid token signature or 502 when backend is offline in test env, confirming endpoint accessibility
-    expect([200, 401, 502]).toContain(response.status());
+    expect([401, 502]).toContain(response.status());
   });
 });

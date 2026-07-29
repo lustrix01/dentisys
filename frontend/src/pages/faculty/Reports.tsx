@@ -90,8 +90,7 @@ export const Reports: React.FC = () => {
   // Filter students based on selected class and subjects (RBAC)
   const facultyStudents = useMemo(() => {
     return students.filter(s =>
-      s.classId === selectedClassId &&
-      s.enrolledSubjects.some((sub: any) => assignedSubjects.includes(sub.code)) &&
+      s.enrolledSubjects.some((sub: any) => sub.classId === selectedClassId && assignedSubjects.includes(sub.code)) &&
       (!search || s.name.toLowerCase().includes(search.toLowerCase()) || s.studentId.toLowerCase().includes(search.toLowerCase()))
     );
   }, [students, selectedClassId, assignedSubjects, search]);
@@ -233,8 +232,8 @@ export const Reports: React.FC = () => {
           {assignedClasses.length > 1 && (
             <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl gap-1">
               {assignedClasses.map((clsId: string) => {
-                const cls = students.find(s => s.classId === clsId);
-                const label = cls?.className || clsId;
+                const section = students.flatMap(s => s.classSections || []).find(item => item.classId === clsId);
+                const label = section?.className || clsId;
                 const isActive = selectedClassId === clsId;
                 return (
                   <button

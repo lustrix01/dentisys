@@ -60,6 +60,16 @@ $challengeClaims = [
     'exp' => 2000000000,
 ];
 
+$selectionClaims = [
+    'sub' => 42,
+    'jti' => 'd4e5f6a7b8c9d0e1f2a3b4c5d6e7f809',
+    'token_type' => 'mfa_selection',
+    'token_version' => 0,
+    'methods' => ['email', 'authenticator'],
+    'iat' => 1000000000,
+    'exp' => 2000000000,
+];
+
 $clock = fn(): int => 1500000000;
 
 echo "=== JWT Unit Tests ===\n\n";
@@ -84,11 +94,15 @@ assert_same(0, $decoded['token_version'], 'Roundtrip: token_version');
 // Type-specific decode
 $enrToken = jwt_encode($enrollmentClaims, $key);
 $chToken = jwt_encode($challengeClaims, $key);
+$selectionToken = jwt_encode($selectionClaims, $key);
 jwt_decode($enrToken, $key, 'mfa_enrollment', $clock);
 assert_same(true, true, 'Enrollment decode succeeds with correct type');
 jwt_decode($chToken, $key, 'mfa_challenge', $clock);
 assert_same(true, true, 'Challenge decode succeeds with correct type');
+$decodedSelection = jwt_decode($selectionToken, $key, 'mfa_selection', $clock);
+assert_same(['email', 'authenticator'], $decodedSelection['methods'], 'MFA selection methods survive roundtrip');
 assert_throws(fn() => jwt_decode($enrToken, $key, 'access', $clock), 'Expected token_type', 'Enrollment token rejected for access type');
+assert_throws(fn() => jwt_decode($selectionToken, $key, 'mfa_challenge', $clock), 'Expected token_type', 'Selection token rejected for challenge type');
 
 // Short key
 assert_throws(fn() => jwt_encode($claims, $shortKey), 'at least 32 bytes', 'Encode rejects short key');

@@ -70,8 +70,7 @@ export const RetentionMonitoring: React.FC = () => {
   // Filter students based on selected class and subjects (RBAC constraint)
   const facultyStudents = useMemo(() => {
     return students.filter(s =>
-      s.classId === selectedClassId &&
-      s.enrolledSubjects.some(sub => assignedSubjects.includes(sub.code))
+      s.enrolledSubjects.some(sub => sub.classId === selectedClassId && assignedSubjects.includes(sub.code))
     );
   }, [students, selectedClassId, assignedSubjects]);
 
@@ -218,7 +217,7 @@ export const RetentionMonitoring: React.FC = () => {
       return;
     }
     const student = students.find(s => s.id === selectedStudentId);
-    const subject = student?.enrolledSubjects.find(s => s.code === selectedSubjectCode);
+    const subject = student?.enrolledSubjects.find(s => s.code === selectedSubjectCode && s.classId === selectedClassId);
     
     if (student && subject) {
       const remedial = {
@@ -233,8 +232,9 @@ export const RetentionMonitoring: React.FC = () => {
       };
       try {
         const response = await saveFacultyRemedialApi({
+          enrollmentId: subject.enrollmentId,
           studentId: student.id,
-          classId: student.classId,
+          classId: subject.classId,
           remedial,
         });
         addRemedialExam(remedial);
@@ -257,14 +257,15 @@ export const RetentionMonitoring: React.FC = () => {
 
     const student = students.find((item) => item.id === overrideStudentId);
     if (!student) return;
-    if (!student.classId) {
+    const association = student.classSections?.find(section => section.classId === selectedClassId);
+    if (!association) {
       showFeedback('The student does not have a persisted class assignment.', 'error');
       return;
     }
     try {
       const response = await updateFacultyRetentionStatusApi({
         studentId: student.id,
-        classId: student.classId,
+        classId: association.classId,
         status: overrideStatus,
         reason: overrideRemarks,
       });
@@ -331,8 +332,8 @@ export const RetentionMonitoring: React.FC = () => {
           {assignedClasses.length > 1 && (
             <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl gap-1">
               {assignedClasses.map((clsId: string) => {
-                const cls = students.find(s => s.classId === clsId);
-                const label = cls?.className || clsId;
+                const section = students.flatMap(s => s.classSections || []).find(item => item.classId === clsId);
+                const label = section?.className || clsId;
                 const isActive = selectedClassId === clsId;
                 return (
                   <button
@@ -820,9 +821,9 @@ export const RetentionMonitoring: React.FC = () => {
               >
                 <option value="">Select course...</option>
                 {selectedStudentForSchedule.enrolledSubjects
-                  .filter(subj => assignedSubjects.includes(subj.code))
+                  .filter(subj => subj.classId === selectedClassId && assignedSubjects.includes(subj.code))
                   .map(subj => (
-                    <option key={subj.code} value={subj.code}>{subj.code} - {subj.name} (Grade: {subj.grade})</option>
+                    <option key={subj.enrollmentId || `${subj.classId}:${subj.code}`} value={subj.code}>{subj.code} - {subj.name} (Grade: {subj.grade})</option>
                   ))
                 }
               </select>

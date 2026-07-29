@@ -316,9 +316,21 @@ function handle_admin_audit_logs(): void
 
         // Scoping for non-admin users (faculty/secretary)
         if ($authCtx['role'] !== 'admin') {
-            $sql .= " AND (actor_user_id = ? OR actor_role = ?)";
+            $sql .= " AND (
+                actor_user_id = ?
+                OR (
+                    canonical_schema_version >= 2
+                    AND scope_cs_id IS NOT NULL
+                    AND EXISTS (
+                        SELECT 1 FROM class_sections cs
+                         WHERE cs.cs_id = audit_events.scope_cs_id
+                           AND (cs.instructor_user_id = ? OR cs.secretary_user_id = ?)
+                    )
+                )
+            )";
             $params[] = $authCtx['user_id'];
-            $params[] = $authCtx['role'];
+            $params[] = $authCtx['user_id'];
+            $params[] = $authCtx['user_id'];
         }
 
         if ($role !== 'all') {
@@ -421,10 +433,9 @@ function handle_admin_profile_update(): void
 
         $data = $body['data'];
         $name = validate_person_name($data, 'name', 2, 255);
-        $email = validate_email($data['email'] ?? '');
+        $email = validate_institutional_email($data['email'] ?? '');
 
-        $upd = $pdo->prepare("UPDATE user_accounts SET display_name = ?, login_email = ? WHERE user_id = ?");
-        $upd->execute([$name, $email, $authCtx['user_id']]);
+        email_mfa_update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
 
         json_response(['status' => 'ok', 'message' => 'Profile details updated successfully.'], 200);
     } catch (ValidationException $e) {

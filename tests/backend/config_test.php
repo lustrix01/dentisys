@@ -13,7 +13,7 @@ function assert_same(mixed $expected, mixed $actual, string $label): void
 }
 
 $original = [];
-foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64'] as $key) {
+foreach (['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'EMAIL_OTP_HMAC_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN'] as $key) {
     $original[$key] = getenv($key);
     putenv($key);
 }
@@ -23,10 +23,13 @@ assert_same(3306, $defaultConfig['db']['port'], 'application default DB_PORT is 
 assert_same('ZGVudGlzeXMtZGV2LWp3dC1zaWduaW5nLWtleS0zMmI=', $defaultConfig['jwt']['signing_key_b64'], 'application default JWT_SIGNING_KEY_B64');
 assert_same(86400, $defaultConfig['jwt']['access_ttl'], 'application default JWT_ACCESS_TTL is 86400');
 assert_same('ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI=', $defaultConfig['mfa']['encryption_key_b64'], 'application default MFA_ENCRYPTION_KEY_B64');
+assert_same('ZGVudGlzeXMtZGV2ZWxvcG1lbnQtZW1haWwtb3RwLWhtYWMta2V5LTMy', $defaultConfig['mfa']['email_otp_hmac_key_b64'], 'application default EMAIL_OTP_HMAC_KEY_B64');
 assert_same('ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ=', $defaultConfig['audit']['mac_key_b64'], 'application default AUDIT_MAC_KEY_B64');
+assert_same('bicol-u.edu.ph', $defaultConfig['app']['allowed_email_domain'], 'application default allowed email domain');
 
 assert_same(32, strlen(config_key_bytes_at_least($defaultConfig['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY')), 'default JWT key decodes to 32 bytes');
 assert_same(32, strlen(config_key_bytes_at_least($defaultConfig['mfa']['encryption_key_b64'], 32, 'MFA_ENCRYPTION_KEY')), 'default MFA key decodes to 32 bytes');
+assert_same(42, strlen(config_key_bytes_at_least($defaultConfig['mfa']['email_otp_hmac_key_b64'], 32, 'EMAIL_OTP_HMAC_KEY_B64')), 'default email OTP HMAC key decodes safely');
 assert_same(32, strlen(config_key_bytes_at_least($defaultConfig['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY')), 'default AUDIT MAC key decodes to 32 bytes');
 
 $config = app_config([

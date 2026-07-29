@@ -11,52 +11,45 @@ function email_outbox_log_path(): string
     return $dir . '/email_outbox.log';
 }
 
-function log_to_outbox(string $to, string $subject, string $body, array $headers = [], bool $smtpSent = false, ?string $smtpError = null): void
-{
-    $timestamp = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s UTC');
-    $logPath = email_outbox_log_path();
-
-    $headerStr = '';
-    foreach ($headers as $k => $v) {
-        $headerStr .= "{$k}: {$v}\n";
-    }
-
-    $entry = sprintf(
-        "========================================\n" .
-        "DATE: %s\n" .
-        "TO: %s\n" .
-        "SUBJECT: %s\n" .
-        "SMTP STATUS: %s\n" .
-        ($smtpError !== null ? "SMTP ERROR: %s\n" : "") .
-        "HEADERS:\n%s" .
-        "----------------------------------------\n" .
-        "BODY:\n%s\n" .
-        "========================================\n\n",
-        $timestamp,
-        $to,
-        $subject,
-        $smtpSent ? 'SENT' : ($smtpError ? 'FAILED' : 'SKIPPED/LOGGED_ONLY'),
-        $smtpError ?? '',
-        $headerStr,
-        $body
+function log_to_outbox(
+    string $to,
+    string $subject,
+    string $body,
+    array $headers = [],
+    bool $smtpSent = false,
+    ?string $smtpError = null
+): void {
+    $entry = [
+        'timestamp' => (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format(DATE_ATOM),
+        'to' => $to,
+        'subject' => $subject,
+        'smtp_status' => $smtpSent ? 'SENT' : 'FAILED',
+        'smtp_error' => $smtpError,
+        'headers' => $headers,
+        'body' => $body,
+    ];
+    @file_put_contents(
+        email_outbox_log_path(),
+        json_encode($entry, JSON_UNESCAPED_SLASHES) . PHP_EOL,
+        FILE_APPEND | LOCK_EX
     );
-
-    @file_put_contents($logPath, $entry, FILE_APPEND | LOCK_EX);
 }
 
-function send_smtp_email(string $to, string $subject, string $body, array $config): bool
+/**
+ * @return array{sent: bool, error: ?string, headers: array<string,string>}
+ */
+function smtp_transport(string $to, string $subject, string $body, array $config): array
 {
     $smtp = $config['smtp'] ?? [];
     $host = (string) ($smtp['host'] ?? '');
     $port = (int) ($smtp['port'] ?? 25);
     $user = (string) ($smtp['user'] ?? '');
-    $pass = str_replace(' ', '', (string) ($smtp['pass'] ?? ''));
+    $pass = (string) ($smtp['pass'] ?? '');
     $from = (string) ($smtp['from'] ?? 'noreply@dentisys.local');
-
-    if ($host === '' || $host === '127.0.0.1' && $port === 1025 && $user === '') {
-        // If unconfigured or default empty local dev, skip live socket and return false (outbox will still log)
-        return false;
-    }
+    $encryption = strtolower((string) ($smtp['encryption'] ?? 'none'));
+    $verifyPeer = (bool) ($smtp['verify_peer'] ?? true);
+    $caFile = (string) ($smtp['ca_file'] ?? '');
+    $isDevelopment = strtolower((string) ($config['app']['env'] ?? 'production')) === 'development';
 
     $headers = [
         'From' => $from,
@@ -67,33 +60,39 @@ function send_smtp_email(string $to, string $subject, string $body, array $confi
         'Date' => date('r'),
     ];
 
-    $socket = null;
+    if ($host === '') {
+        return ['sent' => false, 'error' => 'SMTP host is not configured.', 'headers' => $headers];
+    }
+    if (!$isDevelopment && !in_array($encryption, ['tls', 'starttls'], true)) {
+        return ['sent' => false, 'error' => 'Encrypted SMTP is required outside development.', 'headers' => $headers];
+    }
+    if (!$isDevelopment && !$verifyPeer) {
+        return ['sent' => false, 'error' => 'SMTP certificate verification is required outside development.', 'headers' => $headers];
+    }
+
+    $ssl = [
+        'verify_peer' => $verifyPeer,
+        'verify_peer_name' => $verifyPeer,
+        'allow_self_signed' => !$verifyPeer,
+        'peer_name' => $host,
+    ];
+    if ($caFile !== '') {
+        $ssl['cafile'] = $caFile;
+    }
+    $context = stream_context_create(['ssl' => $ssl]);
+    $remote = $encryption === 'tls' ? "tls://{$host}:{$port}" : "{$host}:{$port}";
     $errno = 0;
     $errstr = '';
+    $socket = @stream_socket_client($remote, $errno, $errstr, 5, STREAM_CLIENT_CONNECT, $context);
+    if (!is_resource($socket)) {
+        return ['sent' => false, 'error' => "SMTP connection failed ({$errno}).", 'headers' => $headers];
+    }
 
     try {
-        $timeout = 2;
-        $context = stream_context_create([
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-                'allow_self_signed' => true,
-            ]
-        ]);
-
-        $remote = ($port === 465) ? 'ssl://' . $host : $host;
-        $socket = @stream_socket_client("{$remote}:{$port}", $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $context);
-
-        if (!$socket) {
-            log_to_outbox($to, $subject, $body, $headers, false, "Connection failed: {$errstr} ({$errno})");
-            return false;
-        }
-
-        stream_set_timeout($socket, $timeout);
-
-        $readResponse = function () use ($socket): string {
+        stream_set_timeout($socket, 5);
+        $read = static function () use ($socket): string {
             $response = '';
-            while ($line = fgets($socket, 512)) {
+            while (($line = fgets($socket, 1024)) !== false) {
                 $response .= $line;
                 if (isset($line[3]) && $line[3] === ' ') {
                     break;
@@ -101,114 +100,81 @@ function send_smtp_email(string $to, string $subject, string $body, array $confi
             }
             return $response;
         };
-
-        $sendCommand = function (string $cmd) use ($socket, $readResponse): string {
-            fputs($socket, $cmd . "\r\n");
-            return $readResponse();
+        $send = static function (string $command) use ($socket, $read): string {
+            fwrite($socket, $command . "\r\n");
+            return $read();
+        };
+        $expect = static function (string $response, array $codes, string $stage): void {
+            if (!in_array(substr($response, 0, 3), $codes, true)) {
+                throw new RuntimeException("SMTP {$stage} failed.");
+            }
         };
 
-        $greeting = $readResponse();
-        if (substr($greeting, 0, 3) !== '220') {
-            log_to_outbox($to, $subject, $body, $headers, false, "SMTP Greeting error: {$greeting}");
-            fclose($socket);
-            return false;
-        }
+        $expect($read(), ['220'], 'greeting');
+        $ehlo = $send('EHLO dentisys.local');
+        $expect($ehlo, ['250'], 'EHLO');
 
-        $ehlo = $sendCommand("EHLO dentisys.local");
-
-        // Upgrade to STARTTLS if port 587 or TLS supported
-        if ($port === 587 && str_contains($ehlo, 'STARTTLS')) {
-            $starttls = $sendCommand("STARTTLS");
-            if (substr($starttls, 0, 3) === '220') {
-                if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
-                    log_to_outbox($to, $subject, $body, $headers, false, "TLS encryption handshake failed.");
-                    fclose($socket);
-                    return false;
-                }
-                // Re-send EHLO after TLS handshake
-                $ehlo = $sendCommand("EHLO dentisys.local");
+        if ($encryption === 'starttls') {
+            if (!str_contains(strtoupper($ehlo), 'STARTTLS')) {
+                throw new RuntimeException('SMTP server does not advertise STARTTLS.');
             }
-        }
-
-        // Authenticate if credentials provided
-        if ($user !== '' && $pass !== '') {
-            $authRes = $sendCommand("AUTH LOGIN");
-            if (substr($authRes, 0, 3) === '334') {
-                $userRes = $sendCommand(base64_encode($user));
-                if (substr($userRes, 0, 3) === '334') {
-                    $passRes = $sendCommand(base64_encode($pass));
-                    if (substr($passRes, 0, 3) !== '235') {
-                        log_to_outbox($to, $subject, $body, $headers, false, "SMTP Auth failed: {$passRes}");
-                        fclose($socket);
-                        return false;
-                    }
-                }
+            $expect($send('STARTTLS'), ['220'], 'STARTTLS');
+            if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                throw new RuntimeException('SMTP TLS handshake failed.');
             }
+            $expect($send('EHLO dentisys.local'), ['250'], 'EHLO after STARTTLS');
         }
 
-        $mailFromRes = $sendCommand("MAIL FROM: <{$from}>");
-        if (substr($mailFromRes, 0, 3) !== '250') {
-            log_to_outbox($to, $subject, $body, $headers, false, "MAIL FROM failed: {$mailFromRes}");
-            fclose($socket);
-            return false;
+        if ($user !== '' || $pass !== '') {
+            if ($user === '' || $pass === '') {
+                throw new RuntimeException('Both SMTP username and password are required.');
+            }
+            $expect($send('AUTH LOGIN'), ['334'], 'authentication');
+            $expect($send(base64_encode($user)), ['334'], 'username');
+            $expect($send(base64_encode($pass)), ['235'], 'password');
         }
 
-        $rcptToRes = $sendCommand("RCPT TO: <{$to}>");
-        if (substr($rcptToRes, 0, 3) !== '250') {
-            log_to_outbox($to, $subject, $body, $headers, false, "RCPT TO failed: {$rcptToRes}");
-            fclose($socket);
-            return false;
-        }
+        $expect($send("MAIL FROM:<{$from}>"), ['250'], 'MAIL FROM');
+        $expect($send("RCPT TO:<{$to}>"), ['250', '251'], 'RCPT TO');
+        $expect($send('DATA'), ['354'], 'DATA');
 
-        $dataRes = $sendCommand("DATA");
-        if (substr($dataRes, 0, 3) !== '354') {
-            log_to_outbox($to, $subject, $body, $headers, false, "DATA command failed: {$dataRes}");
-            fclose($socket);
-            return false;
+        $payload = '';
+        foreach ($headers as $name => $value) {
+            $payload .= "{$name}: {$value}\r\n";
         }
-
-        $emailData = '';
-        foreach ($headers as $k => $v) {
-            $emailData .= "{$k}: {$v}\r\n";
-        }
-        $emailData .= "\r\n" . $body . "\r\n.";
-
-        $sendDataRes = $sendCommand($emailData);
-        $sendCommand("QUIT");
+        $safeBody = preg_replace('/(?m)^\./', '..', $body) ?? $body;
+        $expect($send($payload . "\r\n" . $safeBody . "\r\n."), ['250'], 'message delivery');
+        $send('QUIT');
         fclose($socket);
-
-        if (substr($sendDataRes, 0, 3) === '250') {
-            log_to_outbox($to, $subject, $body, $headers, true, null);
-            return true;
-        } else {
-            log_to_outbox($to, $subject, $body, $headers, false, "Send payload failed: {$sendDataRes}");
-            return false;
-        }
-    } catch (\Throwable $e) {
+        return ['sent' => true, 'error' => null, 'headers' => $headers];
+    } catch (Throwable $e) {
         if (is_resource($socket)) {
-            @fclose($socket);
+            fclose($socket);
         }
-        log_to_outbox($to, $subject, $body, $headers, false, "SMTP Exception: " . $e->getMessage());
-        return false;
+        return ['sent' => false, 'error' => $e->getMessage(), 'headers' => $headers];
     }
 }
 
-function send_email(string $to, string $subject, string $body, array $config): bool
+function send_smtp_email(string $to, string $subject, string $body, array $config): bool
 {
-    $headers = [
-        'From' => $config['smtp']['from'] ?? 'noreply@dentisys.local',
-        'To' => $to,
-        'Subject' => $subject,
-        'Content-Type' => 'text/html; charset=UTF-8',
-        'Date' => date('r'),
-    ];
+    return smtp_transport($to, $subject, $body, $config)['sent'];
+}
 
-    $sent = send_smtp_email($to, $subject, $body, $config);
-
-    // If send_smtp_email returned false without error (e.g. unconfigured/dev mode), ensure it is logged
-    if (!$sent && !file_exists(email_outbox_log_path())) {
-        log_to_outbox($to, $subject, $body, $headers, false, null);
-    }
-
-    return $sent;
+function send_email(
+    string $to,
+    string $subject,
+    string $body,
+    array $config,
+    bool $redactBody = false
+): bool {
+    $result = smtp_transport($to, $subject, $body, $config);
+    log_to_outbox(
+        $to,
+        $subject,
+        $redactBody ? '[REDACTED AUTHENTICATION MESSAGE]' : $body,
+        $result['headers'],
+        $result['sent'],
+        $result['error']
+    );
+    return $result['sent'];
 }

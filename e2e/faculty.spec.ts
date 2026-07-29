@@ -86,6 +86,36 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Settings/i);
   });
 
+  test('faculty theme changes persist only after a successful API save', async ({ page }) => {
+    await page.route('**/api/faculty/settings', async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', settings: { theme: 'light' } }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'error', message: 'Unable to save theme.' }),
+      });
+    });
+
+    await page.click('a[href="/faculty/settings"]');
+    await expect(page).toHaveURL('/faculty/settings');
+    const light = page.getByRole('button', { name: /Clean light mode/i });
+    const dark = page.getByRole('button', { name: /Clinical dark mode/i });
+    await expect(light).toHaveClass(/border-clinical-500/);
+    await dark.click();
+    await expect(dark).toHaveClass(/border-clinical-500/);
+    await page.getByRole('button', { name: /Save preferences/i }).click();
+    await expect(page.getByRole('alert')).toContainText(/server error|Unable to save theme/i);
+    await expect(light).toHaveClass(/border-clinical-500/);
+    await expect(dark).not.toHaveClass(/border-clinical-500/);
+  });
+
   test('fresh faculty account defaults to 0 students and 0 active classes', async ({ page }) => {
     await page.route('**/api/faculty/dashboard/kpis', async (route) => {
       await route.fulfill({

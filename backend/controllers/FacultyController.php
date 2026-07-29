@@ -133,6 +133,78 @@ function handle_faculty_dashboard_kpis(): void
     }
 }
 
+function faculty_map_student_rows(array $rows): array
+{
+    $byStudent = [];
+    $statusPriority = ['active' => 0, 'warning' => 1, 'remedial' => 2, 'critical' => 3];
+    foreach ($rows as $row) {
+        $id = (string) $row['student_id'];
+        if (!isset($byStudent[$id])) {
+            $fullName = trim($row['first_name'] . ($row['middle_name'] ? ' ' . $row['middle_name'] : '') . ' ' . $row['last_name']);
+            $byStudent[$id] = [
+                'id' => $id,
+                'studentId' => $row['student_number'],
+                'name' => $fullName,
+                'firstName' => $row['first_name'],
+                'middleName' => $row['middle_name'] ?? '',
+                'lastName' => $row['last_name'],
+                'email' => $row['bu_email'] ?? '',
+                'contact' => $row['contact'] ?? '',
+                'sex' => $row['sex'] ?? '',
+                'yearLevel' => (int) ($row['year_level'] ?? 4),
+                'status' => 'active',
+                'admissionDate' => $row['admission_date'] ?? '',
+                'birthdate' => $row['birthdate'] ?? '',
+                'faceEnrolled' => (bool) ($row['face_enrolled'] ?? false),
+                'consentStatus' => strtolower($row['consent_status'] ?? 'pending'),
+                'overallGWA' => null,
+                'clinicHoursCompleted' => 0,
+                'classSections' => [],
+                'enrolledSubjects' => [],
+                '_grades' => [],
+            ];
+        }
+        $entry = &$byStudent[$id];
+        $state = strtolower((string) ($row['retention_state'] ?? 'active'));
+        if (($statusPriority[$state] ?? 0) > ($statusPriority[$entry['status']] ?? 0)) {
+            $entry['status'] = $state;
+        }
+        if ($row['final_gwa'] !== null) {
+            $entry['_grades'][] = (float) $row['final_gwa'];
+        }
+        $entry['clinicHoursCompleted'] += (int) ($row['clinic_hours_completed'] ?? 0);
+        $entry['classSections'][] = [
+            'classId' => (string) $row['cs_id'],
+            'className' => $row['cs_name'],
+            'enrollmentId' => (string) $row['enrollment_id'],
+        ];
+        $entry['enrolledSubjects'][] = [
+            'code' => $row['course_code'],
+            'name' => $row['course_name'],
+            'units' => (float) $row['units'],
+            'isClinical' => (bool) $row['is_clinical'],
+            'classId' => (string) $row['cs_id'],
+            'enrollmentId' => (string) $row['enrollment_id'],
+            'components' => $row['grade_components_json']
+                ? json_decode($row['grade_components_json'], true)
+                : ['quizzes' => 0, 'exams' => 0, 'practicum' => 0, 'attendance' => 0],
+            'grade' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
+            'hasRemedial' => $state === 'remedial',
+        ];
+        unset($entry);
+    }
+
+    $mapped = array_values($byStudent);
+    foreach ($mapped as &$student) {
+        $student['overallGWA'] = count($student['_grades']) > 0
+            ? array_sum($student['_grades']) / count($student['_grades'])
+            : null;
+        unset($student['_grades']);
+    }
+    unset($student);
+    return $mapped;
+}
+
 function handle_faculty_students(): void
 {
     try {
@@ -145,7 +217,7 @@ function handle_faculty_students(): void
                 s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, 
                 s.bu_email, s.contact, s.sex, s.year_level, s.status, s.admission_date, 
                 s.birthdate, b.consent_status, b.face_enrolled,
-                cs.cs_id, cs.cs_name, e.final_gwa, e.grade_components_json,
+                cs.cs_id, cs.cs_name, e.enrollment_id, e.final_gwa, e.grade_components_json,
                 e.retention_state, e.clinic_hours_completed, c.course_code,
                 c.name AS course_name, c.units, c.is_clinical
             FROM students s
@@ -158,41 +230,7 @@ function handle_faculty_students(): void
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-        $mapped = array_map(function ($s) {
-            $fullName = trim($s['first_name'] . ($s['middle_name'] ? ' ' . $s['middle_name'] : '') . ' ' . $s['last_name']);
-            return [
-                'id' => (string) $s['student_id'],
-                'studentId' => $s['student_number'],
-                'name' => $fullName,
-                'firstName' => $s['first_name'],
-                'middleName' => $s['middle_name'] ?? '',
-                'lastName' => $s['last_name'],
-                'email' => $s['bu_email'] ?? '',
-                'contact' => $s['contact'] ?? '',
-                'sex' => $s['sex'] ?? '',
-                'yearLevel' => (int) ($s['year_level'] ?? 4),
-                'status' => strtolower($s['retention_state'] ?? 'active'),
-                'admissionDate' => $s['admission_date'] ?? '',
-                'birthdate' => $s['birthdate'] ?? '',
-                'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
-                'consentStatus' => strtolower($s['consent_status'] ?? 'pending'),
-                'classId' => isset($s['cs_id']) ? (string) $s['cs_id'] : '',
-                'className' => $s['cs_name'] ?? '',
-                'overallGWA' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : 0,
-                'clinicHoursCompleted' => (int) ($s['clinic_hours_completed'] ?? 0),
-                'enrolledSubjects' => [[
-                    'code' => $s['course_code'],
-                    'name' => $s['course_name'],
-                    'units' => (float) $s['units'],
-                    'isClinical' => (bool) $s['is_clinical'],
-                    'components' => $s['grade_components_json']
-                        ? json_decode($s['grade_components_json'], true)
-                        : ['quizzes' => 0, 'exams' => 0, 'practicum' => 0, 'attendance' => 0],
-                    'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : 0,
-                    'hasRemedial' => ($s['retention_state'] ?? '') === 'remedial',
-                ]],
-            ];
-        }, $students);
+        $mapped = faculty_map_student_rows($students);
 
         json_response($mapped, 200);
     } catch (\Throwable $e) {
@@ -296,6 +334,7 @@ function handle_faculty_student_create(): void
         $newId = (int) $pdo->lastInsertId();
         $enroll = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status, date_enrolled) VALUES (?, ?, 'Active', CURDATE())");
         $enroll->execute([$newId, $csId]);
+        $enrollmentId = (int) $pdo->lastInsertId();
         $classInfo = $pdo->prepare("SELECT cs_name FROM class_sections WHERE cs_id = ?");
         $classInfo->execute([$csId]);
         $className = (string) $classInfo->fetchColumn();
@@ -322,8 +361,12 @@ function handle_faculty_student_create(): void
                 'birthdate' => $birthdate,
                 'faceEnrolled' => false,
                 'consentStatus' => 'pending',
-                'classId' => (string) $csId,
-                'className' => $className,
+                'classSections' => [[
+                    'classId' => (string) $csId,
+                    'className' => $className,
+                    'enrollmentId' => (string) $enrollmentId,
+                ]],
+                'enrolledSubjects' => [],
             ],
         ], 201);
     } catch (\Throwable $e) {
@@ -1130,10 +1173,9 @@ function handle_faculty_profile_update(): void
 
         $data = $body['data'];
         $name = validate_person_name($data, 'name', 2, 255);
-        $email = validate_email($data['email'] ?? '');
+        $email = validate_institutional_email($data['email'] ?? '');
 
-        $upd = $pdo->prepare("UPDATE user_accounts SET display_name = ?, login_email = ? WHERE user_id = ?");
-        $upd->execute([$name, $email, $authCtx['user_id']]);
+        email_mfa_update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
 
         json_response(['status' => 'ok', 'message' => 'Faculty profile updated successfully.'], 200);
     } catch (ValidationException $e) {
@@ -1151,12 +1193,13 @@ function handle_faculty_settings_get(): void
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
 
+        $stmt = $pdo->prepare("SELECT theme FROM user_accounts WHERE user_id = ?");
+        $stmt->execute([$authCtx['user_id']]);
+        $theme = $stmt->fetchColumn();
         json_response([
             'status' => 'ok',
             'settings' => [
-                'emailNotifications' => true,
-                'retentionAlertThreshold' => 2.5,
-                'theme' => 'light',
+                'theme' => in_array($theme, ['light', 'dark'], true) ? $theme : 'light',
             ],
         ], 200);
     } catch (\Throwable $e) {
@@ -1171,7 +1214,18 @@ function handle_faculty_settings_update(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
-
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+        $theme = (string) ($body['data']['theme'] ?? '');
+        if (!in_array($theme, ['light', 'dark'], true)) {
+            safe_error_response('Theme must be light or dark.', 422);
+            return;
+        }
+        $stmt = $pdo->prepare("UPDATE user_accounts SET theme = ? WHERE user_id = ?");
+        $stmt->execute([$theme, $authCtx['user_id']]);
         json_response(['status' => 'ok', 'message' => 'Faculty preferences saved successfully.'], 200);
     } catch (\Throwable $e) {
         error_log('Faculty settings update error: ' . sanitize_for_log($e));
@@ -1201,33 +1255,46 @@ function handle_faculty_email_send(): void
         }
 
         $data = $body['data'];
-        $recipients = $data['recipients'] ?? [];
+        $studentIds = $data['studentIds'] ?? [];
         $type = validate_required_string($data, 'emailType', 2, 100);
         $subject = validate_optional_string($data, 'subject', 1, 255) ?? "DentiSys Notification: {$type}";
 
-        if (!is_array($recipients) || count($recipients) === 0) {
-            safe_error_response('At least one recipient is required.', 400);
+        if (!is_array($studentIds) || count($studentIds) === 0) {
+            safe_error_response('At least one studentId is required.', 400);
             return;
         }
 
-        $messageBody = validate_optional_string($data, 'body', 1, 10000)
+        $messageText = validate_optional_string($data, 'message', 1, 10000)
             ?? "This is an official DentiSys {$type} notice.";
-        $allowedTypes = ['Privacy Consent', 'At-Risk Notification', 'Secretary Invitation', 'Faculty Registration Approved', 'Faculty Registration Rejected', 'Other'];
+        $allowedTypes = ['Privacy Consent', 'At-Risk Notification', 'Other'];
         $emailType = in_array($type, $allowedTypes, true) ? $type : 'Other';
-        $validatedRecipients = [];
-        foreach ($recipients as $recipient) {
-            $recipientName = normalize_person_name(
-                is_array($recipient) ? (string) ($recipient['name'] ?? 'Student') : (string) $recipient
-            );
-            $recipientEmail = is_array($recipient)
-                ? mb_strtolower(trim((string) ($recipient['email'] ?? '')))
-                : '';
-            if ($recipientName === '' || $recipientEmail === '' || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
-                safe_error_response('Every recipient must have a valid name and email address.', 422);
-                return;
-            }
-            $validatedRecipients[] = ['name' => $recipientName, 'email' => $recipientEmail];
+        $studentIds = array_values(array_unique(array_filter(
+            array_map(static fn(mixed $id): int => (int) $id, $studentIds),
+            static fn(int $id): bool => $id > 0
+        )));
+        if (count($studentIds) === 0) {
+            safe_error_response('At least one valid studentId is required.', 422);
+            return;
         }
+        $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+        $recipientStmt = $pdo->prepare(
+            "SELECT DISTINCT s.student_id, s.bu_email,
+                    TRIM(CONCAT(s.first_name, ' ', COALESCE(s.middle_name, ''), ' ', s.last_name)) AS student_name
+               FROM students s
+               JOIN enrollments e ON e.student_id = s.student_id
+               JOIN class_sections cs ON cs.cs_id = e.cs_id
+              WHERE cs.instructor_user_id = ?
+                AND s.student_id IN ({$placeholders})"
+        );
+        $recipientStmt->execute(array_merge([(int) $authCtx['user_id']], $studentIds));
+        $validatedRecipients = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
+        $ownedIds = array_map(static fn(array $row): int => (int) $row['student_id'], $validatedRecipients);
+        if (count(array_diff($studentIds, $ownedIds)) > 0) {
+            safe_error_response('One or more students are not enrolled in your classes.', 403);
+            return;
+        }
+        $safeMessage = nl2br(htmlspecialchars($messageText, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+        $messageBody = "<p>{$safeMessage}</p>";
         $insert = $pdo->prepare(
             "INSERT INTO email_outbox
              (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)
@@ -1240,8 +1307,18 @@ function handle_faculty_email_send(): void
         );
         $results = [];
         foreach ($validatedRecipients as $recipient) {
-            $recipientName = $recipient['name'];
-            $recipientEmail = $recipient['email'];
+            $recipientName = trim((string) $recipient['student_name']);
+            $recipientEmail = mb_strtolower(trim((string) ($recipient['bu_email'] ?? '')));
+            if ($recipientEmail === '' || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+                $results[] = [
+                    'id' => null,
+                    'studentId' => (string) $recipient['student_id'],
+                    'recipient' => null,
+                    'status' => 'Failed',
+                    'failureReason' => 'Student has no valid email address.',
+                ];
+                continue;
+            }
             $operationUuid = uuid_v4_string();
             $insert->execute([
                 $authCtx['user_id'], $recipientEmail, $recipientName,
@@ -1570,6 +1647,7 @@ function handle_faculty_class_create(): void
                 'actor_role' => $authCtx['role'],
                 'actor_display_name' => $authCtx['display_name'],
                 'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => $newCsId,
                 'target_type' => 'class_section',
                 'target_id' => (string) $newCsId,
                 'description' => "Created class section '{$csName}' for term {$termCode}.",
@@ -1711,6 +1789,7 @@ function handle_faculty_class_enroll_students(): void
                 'actor_role' => $authCtx['role'],
                 'actor_display_name' => $authCtx['display_name'],
                 'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => $csId,
                 'target_type' => 'class_section',
                 'target_id' => (string) $csId,
                 'description' => "Enrolled {$enrolledCount} student(s) into class section #{$csId}.",
@@ -1794,6 +1873,7 @@ function handle_faculty_class_unenroll_student(): void
                 'actor_role' => $authCtx['role'],
                 'actor_display_name' => $authCtx['display_name'],
                 'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => $csId,
                 'target_type' => 'class_section',
                 'target_id' => (string) $csId,
                 'description' => "Removed student #{$studentId} from class section #{$csId}.",

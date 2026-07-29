@@ -227,7 +227,8 @@ export const ClassManagement: React.FC = () => {
   // Enrolled students for selected class
   const enrolledStudentsForSelectedClass = globalStudents.filter(s => {
     if (!selectedClass) return false;
-    return s.classId === selectedClass.csName || s.classId === `CS-${selectedClass.csId}`;
+    return s.classSections?.some(section => section.classId === String(selectedClass.csId))
+      || s.enrolledSubjects.some(subject => subject.classId === String(selectedClass.csId));
   });
 
   const filteredEnrolledStudents = enrolledStudentsForSelectedClass.filter(s => {

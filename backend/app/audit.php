@@ -124,7 +124,7 @@ function audit_finish_operation(
 
     $insertSql = "INSERT INTO audit_events (
         event_uuid, sequence_number, occurred_at,
-        actor_user_id, actor_username, actor_role, actor_display_name, session_id,
+        actor_user_id, actor_username, actor_role, actor_display_name, session_id, scope_cs_id,
         module_code, action_code, event_status,
         target_type, target_id, description, reason,
         http_method, endpoint, request_id, correlation_id, operation_uuid,
@@ -135,7 +135,7 @@ function audit_finish_operation(
         mac_key_version, canonical_schema_version
     ) VALUES (
         :event_uuid, :sequence_number, :occurred_at,
-        :actor_user_id, :actor_username, :actor_role, :actor_display_name, :session_id,
+        :actor_user_id, :actor_username, :actor_role, :actor_display_name, :session_id, :scope_cs_id,
         :module_code, :action_code, :event_status,
         :target_type, :target_id, :description, :reason,
         :http_method, :endpoint, :request_id, :correlation_id, :operation_uuid,
@@ -157,6 +157,7 @@ function audit_finish_operation(
         ':actor_role' => $event['actor_role'] ?? null,
         ':actor_display_name' => $event['actor_display_name'] ?? null,
         ':session_id' => $event['session_id'] ?? null,
+        ':scope_cs_id' => isset($event['scope_cs_id']) ? (int) $event['scope_cs_id'] : null,
         ':module_code' => $event['module_code'] ?? '',
         ':action_code' => $event['action_code'] ?? '',
         ':event_status' => $event['event_status'] ?? 'Success',
@@ -180,7 +181,7 @@ function audit_finish_operation(
         ':previous_event_mac' => $prevMac,
         ':event_mac' => $eventMac,
         ':mac_key_version' => 1,
-        ':canonical_schema_version' => 1,
+        ':canonical_schema_version' => 2,
     ];
 
     $allowedStatuses = ['Success', 'Failed', 'Warning'];
@@ -266,7 +267,7 @@ function audit_build_canonical_event(
         'actor_username' => $event['actor_username'] ?? null,
         'after_state_hash' => $afterStateHash !== null ? bin2hex($afterStateHash) : null,
         'before_state_hash' => $beforeStateHash !== null ? bin2hex($beforeStateHash) : null,
-        'canonical_schema_version' => 1,
+        'canonical_schema_version' => 2,
         'correlation_id' => $event['correlation_id'] ?? null,
         'description' => $event['description'] ?? null,
         'device_id' => $event['device_id'] ?? null,
@@ -284,6 +285,7 @@ function audit_build_canonical_event(
         'request_id' => $event['request_id'] ?? null,
         'sequence_number' => $sequenceNumber,
         'session_id' => $event['session_id'] ?? null,
+        'scope_cs_id' => isset($event['scope_cs_id']) ? (int) $event['scope_cs_id'] : null,
         'target_id' => $event['target_id'] ?? null,
         'target_type' => $event['target_type'] ?? null,
         'user_agent' => $event['user_agent'] ?? null,

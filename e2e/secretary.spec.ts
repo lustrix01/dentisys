@@ -62,7 +62,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await page.click('a[href="/secretary/profile"]');
     await expect(page).toHaveURL('/secretary/profile');
     await expect(page.locator('body')).toContainText(/Profile|Alex Smith/i);
-    await expect(page.locator('text=Security & MFA Settings')).toBeVisible();
+    await expect(page.getByText('Two-factor authentication', { exact: true })).toBeVisible();
 
     await page.click('a[href="/secretary/settings"]');
     await expect(page).toHaveURL('/secretary/settings');
@@ -83,16 +83,22 @@ test.describe('Class Secretary Module E2E Tests', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           status: 'ok',
-          mfa: { enabled: true, recoveryCodeCount: 8 },
+          mfa: {
+            enabled: true,
+            authenticatorEnabled: true,
+            emailEnabled: false,
+            emailVerifiedAt: null,
+            recoveryCodeCount: 8,
+          },
         }),
       });
     });
     await page.click('a[href="/secretary/profile"]');
     await expect(page).toHaveURL('/secretary/profile');
 
-    await expect(page.locator('text=Security & MFA Settings')).toBeVisible();
-    await expect(page.locator('body')).toContainText(/MFA enabled|8 recovery codes/i);
-    await expect(page.locator('button', { hasText: 'Enable MFA' })).toHaveCount(0);
+    await expect(page.getByText('Two-factor authentication', { exact: true })).toBeVisible();
+    await expect(page.locator('body')).toContainText(/Google Authenticator compatible.*8 recovery codes/i);
+    await expect(page.locator('button', { hasText: 'Set up' })).toHaveCount(0);
   });
 });
 

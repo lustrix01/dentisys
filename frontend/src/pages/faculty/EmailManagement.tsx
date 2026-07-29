@@ -126,8 +126,8 @@ export const EmailManagement: React.FC = () => {
           studentName: student.name,
           email: student.email,
           facultyName: user?.display_name || '',
-          className: student.className || 'Not assigned',
-          classId: student.classId || 'CLINIC-A',
+          className: student.classSections?.[0]?.className || 'Not assigned',
+          classId: student.classSections?.[0]?.classId || '',
         });
 
         if (res.success) {
@@ -154,15 +154,10 @@ export const EmailManagement: React.FC = () => {
         ? 'Privacy Consent for Facial Recognition'
         : 'Academic Support & At-Risk Notification';
 
-      const selectedRecipients = selected.map(id => {
-        const student = students.find(s => s.id === id);
-        return { name: student?.name || id, email: student?.email || '' };
-      });
-
       try {
         const apiClient = await import('../../services/apiClient');
         const delivery = await apiClient.sendFacultyEmailApi({
-          recipients: selectedRecipients,
+          studentIds: selected,
           emailType,
           subject,
         });
