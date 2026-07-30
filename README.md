@@ -100,20 +100,42 @@ This model is unsupported and non-runnable. It requires external PostgreSQL conn
 
 ## Validation
 
+Use the smallest relevant check while coding, then run both aggregate checks before handing off a significant change. `check.ps1` includes the frontend build and mocked E2E suite; `check-postgres.ps1` includes migrations, seed checks, smoke checks, PostgreSQL integration tests, and live E2E. You do not need to run the individual commands again after their aggregate check unless you are diagnosing a failure.
+
 ```powershell
+# Verify Compose file parsing, environment interpolation, paths, and service configuration.
 docker compose config --quiet
+
+# Fast regression suite for ordinary frontend or backend changes. Validates Compose,
+# builds the frontend, lints PHP, runs backend unit tests, and runs mocked Playwright E2E.
 .\scripts\check.ps1
+
+# Full isolated PostgreSQL suite. Creates and removes its own test stack and volumes;
+# verifies migrations and seed idempotency, PHP/PostgreSQL integration, API smoke checks,
+# live Playwright flows, Mailpit delivery, and database/application logs.
 .\scripts\check-postgres.ps1
+
+# Apply any newly added ordered PostgreSQL migrations to the running development database.
+# Run after editing or pulling migrations; start-dev.ps1 already runs this on startup.
 .\scripts\migrate.ps1
+
+# Confirm the running development API and database are healthy; -CheckPgAdmin also
+# verifies the optional pgAdmin service. This does not modify data.
 .\scripts\smoke.ps1 -CheckPgAdmin
+
+# Compile the production frontend bundle and catch TypeScript/Vite build failures.
 npm run build
+
+# Run the fast mocked UI Playwright suite only. Included in check.ps1.
 npm run test:e2e
+
+# Run live Playwright tests only against an already-running disposable integration stack.
+# Normally invoked by check-postgres.ps1 rather than run directly.
 npm run test:e2e:live
 ```
 
-`npm run test:e2e` is the fast mocked-UI suite. `scripts/check-postgres.ps1` performs the complete disposable PostgreSQL integration and live browser validation without resetting development data or volumes.
+For the normal developer loop, start the application with `.\scripts\start-dev.ps1`, make a change, then run the smallest relevant validation above. Use pgAdmin only for manual data inspection or SQL; it is not required for automated tests.
 
 ## Documentation
 
 Start with [the documentation index](docs/README.md).
-
