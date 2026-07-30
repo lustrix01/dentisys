@@ -1,0 +1,20 @@
+services:
+  db:
+    volumes:
+      - ./tests/fixtures:/postgres/test-fixtures:ro
+      - ./database/seeds:/postgres/test-seeds:ro
+
+  web:
+    environment:
+      RATE_LIMIT_STORAGE_DIR: /tmp/dentisys-ratelimit
+    volumes:
+      - ./tests:/var/www/html/tests:ro
+      - ./database:/var/www/html/database:ro
+
+  frontend:
+    volumes:
+      - ./frontend:/app:ro
+      - frontend_test_node_modules:/app/node_modules
+
+volumes:
+  frontend_test_node_modules:

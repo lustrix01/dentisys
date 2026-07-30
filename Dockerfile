@@ -3,9 +3,11 @@ WORKDIR /app
 COPY backend/composer.json backend/composer.lock ./
 RUN composer install --no-dev --no-interaction --prefer-dist --classmap-authoritative
 
-FROM php:8.2.12-apache-bookworm
-RUN docker-php-ext-install -j"$(nproc)" pdo_mysql \
-    && php -m | grep -qi '^iconv$' \
+FROM php:8.4-apache-bookworm AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && docker-php-ext-install -j"$(nproc)" pdo_pgsql \
     && a2enmod rewrite
 
 WORKDIR /var/www/html

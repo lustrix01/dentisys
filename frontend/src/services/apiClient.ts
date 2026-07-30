@@ -190,37 +190,12 @@ export function recoverMfa(mfaSessionToken: string, code: string): Promise<MfaSu
   return request<MfaSuccessResponse>('POST', '/auth/mfa/recover', { code }, mfaSessionToken);
 }
 
-export function startMfaChallenge(
-  selectionToken: string,
-  method: 'email' | 'authenticator',
-): Promise<{
-  type: 'mfa_challenge';
-  method: 'email' | 'authenticator';
-  mfa_challenge_token: string;
-  masked_email?: string;
-  expires_in: number;
-  resend_after?: number;
-}> {
-  return request('POST', '/auth/mfa/challenge/start', { method }, selectionToken);
-}
-
-export function resendMfaEmail(challengeToken: string): Promise<{
-  mfa_challenge_token: string;
-  masked_email: string;
-  expires_in: number;
-  resend_after: number;
-}> {
-  return request('POST', '/auth/mfa/email/resend', undefined, challengeToken);
-}
-
 export function getMfaSettingsApi(): Promise<{
   status: string;
-  mfa: {
+  two_factor: {
     enabled: boolean;
-    authenticatorEnabled: boolean;
-    emailEnabled: boolean;
-    emailVerifiedAt: string | null;
-    recoveryCodeCount: number;
+    authenticator_enabled: boolean;
+    recovery_code_count: number;
   };
 }> {
   return request('GET', '/auth/mfa/settings');
@@ -236,25 +211,6 @@ export function regenerateMfaRecoveryCodesApi(code: string): Promise<{
 
 export function revokeMfaApi(code: string): Promise<{ status: string; message: string }> {
   return request('POST', '/auth/mfa/settings/revoke', { code });
-}
-
-export function startEmailMfaSettingApi(action: 'enable' | 'disable'): Promise<{
-  confirmation_token: string;
-  masked_email: string;
-  expires_in: number;
-  resend_after: number;
-}> {
-  return request('POST', '/auth/mfa/settings/email/start', { action });
-}
-
-export function confirmEmailMfaSettingApi(
-  confirmationToken: string,
-  code: string,
-): Promise<{ status: string; emailEnabled: boolean }> {
-  return request('POST', '/auth/mfa/settings/email/confirm', {
-    confirmation_token: confirmationToken,
-    code,
-  });
 }
 
 export function getMe(): Promise<SafeUser> {

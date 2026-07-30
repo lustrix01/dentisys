@@ -113,13 +113,13 @@ function handle_secretary_invite(): void
             $ins = $pdo->prepare(
                 "INSERT INTO security_tokens
                  (purpose, user_id, related_student_id, related_cs_id, secret_hash, issued_at, expires_at, metadata_json)
-                 VALUES ('secretary_invitation', ?, ?, ?, ?, ?, ?, ?)"
+                 VALUES ('secretary_invitation', ?, ?, ?, ?, ?, ?, ?) RETURNING token_id"
             );
             $ins->execute([
                 $authCtx['user_id'], $assignment['student_id'], $assignment['cs_id'],
                 $tokenHash, $nowSql, $expiresSql, $metadata,
             ]);
-            $stId = (int) $pdo->lastInsertId();
+            $stId = (int) $ins->fetchColumn();
 
             audit_finish_operation($pdo, $auditCtx, [
                 'module_code' => 'secretary',
@@ -148,7 +148,7 @@ function handle_secretary_invite(): void
             throw $e;
         }
 
-        $invitationLink = "http://localhost:5173/activate-secretary?token={$invToken}";
+        $invitationLink = app_url($config, '/activate-secretary', ['token' => $invToken]);
         $subject = 'DentiSys Class Secretary Invitation';
         $facultyName = htmlspecialchars((string) $authCtx['display_name']);
         $safeStudentName = htmlspecialchars((string) $studentName);
@@ -165,10 +165,10 @@ function handle_secretary_invite(): void
         $outbox = $pdo->prepare(
             "INSERT INTO email_outbox
              (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)
-             VALUES (?, ?, ?, ?, 'Secretary Invitation', ?, 'Pending', ?)"
+             VALUES (?, ?, ?, ?, 'Secretary Invitation', ?, 'Pending', ?) RETURNING email_id"
         );
         $outbox->execute([$authCtx['user_id'], $email, $studentName, $subject, $body, $operationUuid]);
-        $emailId = (int) $pdo->lastInsertId();
+        $emailId = (int) $outbox->fetchColumn();
         $sent = send_email($email, $subject, $body, $config);
         $finish = $pdo->prepare(
             "UPDATE email_outbox SET status = ?, sent_at = ?, failure_reason = ? WHERE email_id = ?"
@@ -184,8 +184,8 @@ function handle_secretary_invite(): void
 
         json_response([
             'status' => 'ok',
-            'token' => $invToken,
-            'invitation_link' => $invitationLink,
+            'token' => $showDevLink ? $invToken : null,
+            'invitation_link' => $showDevLink ? $invitationLink : null,
             'dev_invitation_link' => $showDevLink ? $invitationLink : null,
             'delivery_status' => $sent ? 'Sent' : 'Failed',
             'message' => $sent
@@ -256,7 +256,7 @@ function handle_secretary_revoke_invitation(): void
         }
         $stmt = $pdo->prepare(
             "UPDATE security_tokens
-             SET revoked_at = NOW(6), revocation_reason = 'Revoked by issuing faculty member'
+             SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Revoked by issuing faculty member'
              WHERE token_id = ? AND purpose = 'secretary_invitation' AND user_id = ?
                AND used_at IS NULL AND revoked_at IS NULL"
         );
@@ -425,10 +425,10 @@ function handle_secretary_activate(): void
             }
             $ins = $pdo->prepare(
                 "INSERT INTO user_accounts (login_email, password_hash, role, display_name, title, status, created_at)
-                 VALUES (?, ?, 'secretary', ?, 'Class Secretary', 'Active', ?)"
+                 VALUES (?, ?, 'secretary', ?, 'Class Secretary', 'Active', ?) RETURNING user_id"
             );
             $ins->execute([$email, $passwordHash, $displayName, $nowSql]);
-            $userId = (int) $pdo->lastInsertId();
+            $userId = (int) $ins->fetchColumn();
 
             $linkStudent = $pdo->prepare("UPDATE students SET user_id = ? WHERE student_id = ? AND user_id IS NULL");
             $linkStudent->execute([$userId, (int) $row['related_student_id']]);
@@ -809,7 +809,7 @@ function handle_secretary_profile_update(): void
         $firstName = implode(' ', $parts) ?: $name;
         $pdo->beginTransaction();
         try {
-            email_mfa_update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
+            update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
             $updStudent = $pdo->prepare("UPDATE students SET first_name = ?, last_name = ?, bu_email = ? WHERE user_id = ?");
             $updStudent->execute([$firstName, $lastName, $email, $authCtx['user_id']]);
             $pdo->commit();

@@ -36,8 +36,8 @@ function handle_login(): void
             $cred = $result['credentials'];
             $response = auth_build_no_store_json_response([
                 'type' => 'direct_login',
-                'mfa_required' => false,
-                'mfa_enrolled' => false,
+                'two_factor_required' => false,
+                'two_factor_enrolled' => false,
                 'access_token' => $cred['access_token'],
                 'user' => [
                     'user_id' => $cred['session']['user_id'],
@@ -56,11 +56,11 @@ function handle_login(): void
             return;
         } else {
             $payload = [
-                'type' => 'mfa_method_selection',
-                'mfa_required' => true,
-                'mfa_enrolled' => true,
-                'mfa_selection_token' => $result['mfa_selection_token'],
-                'methods' => $result['methods'],
+                'type' => 'two_factor_required',
+                'two_factor_required' => true,
+                'two_factor_enrolled' => true,
+                'two_factor_challenge_token' => $result['two_factor_challenge_token'],
+                'expires_in' => $result['expires_in'],
             ];
         }
 

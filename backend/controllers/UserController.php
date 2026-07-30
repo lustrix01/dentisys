@@ -57,10 +57,10 @@ function handle_register(): void
 
             $ins = $pdo->prepare(
                 "INSERT INTO user_accounts (login_email, password_hash, role, display_name, title, status, created_at)
-                 VALUES (?, ?, 'faculty', ?, 'Dental Faculty Member', 'Pending', ?)"
+                 VALUES (?, ?, 'faculty', ?, 'Dental Faculty Member', 'Pending', ?) RETURNING user_id"
             );
             $ins->execute([$email, $passwordHash, $name, $nowSql]);
-            $newUserId = (int) $pdo->lastInsertId();
+            $newUserId = (int) $ins->fetchColumn();
 
             audit_finish_operation($pdo, $auditCtx, [
                 'module_code' => 'auth',

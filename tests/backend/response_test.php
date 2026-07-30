@@ -17,7 +17,7 @@ ob_start();
 safe_error_response('Database connectivity check failed.', 503);
 $output = ob_get_clean();
 
-if (str_contains($output, 'local-development-password') || str_contains($output, 'mysql:')) {
+if (str_contains($output, 'local-development-password') || str_contains($output, 'pgsql:')) {
     fwrite(STDERR, "FAIL: safe error response exposed credentials or DSN details.\n");
     exit(1);
 }

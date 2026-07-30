@@ -17,7 +17,7 @@ require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/jwt.php';
 require_once __DIR__ . '/mfa.php';
-require_once __DIR__ . '/email_mfa.php';
+require_once __DIR__ . '/account_identity.php';
 require_once __DIR__ . '/ratelimit.php';
 require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/mailer.php';

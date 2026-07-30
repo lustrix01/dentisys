@@ -43,5 +43,5 @@ audit_events: chain head stored in system_settings (audit_chain_head)
 ## Consolidation Summary
 
 - 46 Phase 1C business tables → 15 Phase 2 application tables
-- 80 legacy migration files archived at `database/migrations/archive/`
+- Superseded MariaDB migration history archived under `database/archive/mariadb/`
 - Clean-install-only baseline: `001_baseline_schema.sql`, `002_seed_rbac.sql`, `003_seed_system_settings.sql`

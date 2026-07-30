@@ -89,6 +89,6 @@
 - **16 total physical tables** (15 + _schema_migrations)
 - **125 static RBAC grants** across admin (62), faculty (47), secretary (16)
 - **5 system settings rows** (audit_chain_head, retention_policy, grading_defaults, rate_limit_defaults, devices)
-- **80 legacy migration files** archived at database/migrations/archive/
+- **Superseded MariaDB migration history** archived under `database/archive/mariadb/`
 - **Clean-install-only baseline**: 001_baseline_schema.sql, 002_seed_rbac.sql, 003_seed_system_settings.sql
 - **All backend and frontend runtime files unchanged** in Stage 1

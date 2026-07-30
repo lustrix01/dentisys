@@ -46,7 +46,7 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
         }
 
         $stmt = $pdo->prepare(
-            "UPDATE security_tokens SET mfa_status = 'revoked', revoked_at = NOW(6), revocation_reason = 'Replaced by new enrollment'
+            "UPDATE security_tokens SET mfa_status = 'revoked', revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Replaced by new enrollment'
              WHERE user_id = ? AND purpose = 'mfa_credential' AND mfa_status = 'pending'"
         );
         $stmt->execute([$userId]);
@@ -79,14 +79,18 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
              (purpose, user_id, issued_at, expires_at, ciphertext, nonce, auth_tag,
               enc_key_version, enc_algorithm, totp_algorithm, digit_count, period_seconds,
               mfa_status, metadata_json)
-             VALUES ('mfa_credential', ?, ?, ?, ?, ?, ?, 1, 'AES-256-GCM', 'sha1', 6, 30, 'pending', ?)"
+             VALUES ('mfa_credential', ?, ?, ?, ?, ?, ?, 1, 'AES-256-GCM', 'sha1', 6, 30, 'pending', ?)
+             RETURNING token_id"
         );
-        $stmt->execute([
-            $userId, $issuedSql, $expiresSql,
-            $enc['ciphertext'], $enc['nonce'], $enc['auth_tag'],
-            $metadata,
-        ]);
-        $credentialId = (int) $pdo->lastInsertId();
+        $stmt->bindValue(1, $userId, PDO::PARAM_INT);
+        $stmt->bindValue(2, $issuedSql, PDO::PARAM_STR);
+        $stmt->bindValue(3, $expiresSql, PDO::PARAM_STR);
+        pdo_bind_binary($stmt, 4, $enc['ciphertext']);
+        pdo_bind_binary($stmt, 5, $enc['nonce']);
+        pdo_bind_binary($stmt, 6, $enc['auth_tag']);
+        $stmt->bindValue(7, $metadata, PDO::PARAM_STR);
+        $stmt->execute();
+        $credentialId = (int) $stmt->fetchColumn();
 
         audit_finish_operation($pdo, $auditCtx, [
             'module_code' => 'mfa',
@@ -156,7 +160,7 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
         $stmt = $pdo->prepare(
             "SELECT * FROM security_tokens
              WHERE user_id = ? AND purpose = 'mfa_credential' AND mfa_status = 'pending'
-               AND JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.confirm_jti')) = ?
+                AND metadata_json->>'confirm_jti' = ?
              FOR UPDATE"
         );
         $stmt->execute([$userId, $jti]);
@@ -182,11 +186,14 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
             throw new ChallengeException('Enrollment session has expired.');
         }
 
-        if ($pending['ciphertext'] === null || $pending['nonce'] === null || $pending['auth_tag'] === null) {
+        $pendingCiphertext = pdo_binary_value($pending['ciphertext']);
+        $pendingNonce = pdo_binary_value($pending['nonce']);
+        $pendingAuthTag = pdo_binary_value($pending['auth_tag']);
+        if ($pendingCiphertext === null || $pendingNonce === null || $pendingAuthTag === null) {
             throw new MfaException('Corrupt MFA credential.');
         }
 
-        $secret = mfa_decrypt_secret($pending['ciphertext'], $pending['nonce'], $pending['auth_tag'], $mfaKey);
+        $secret = mfa_decrypt_secret($pendingCiphertext, $pendingNonce, $pendingAuthTag, $mfaKey);
 
         if ($secret === null) {
             throw new MfaException('Failed to decrypt MFA secret.');
@@ -211,7 +218,7 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
 
         $stmt = $pdo->prepare(
             "UPDATE security_tokens
-             SET mfa_status = 'enabled', mfa_verified_at = NOW(6), last_accepted_step = ?
+             SET mfa_status = 'enabled', mfa_verified_at = CURRENT_TIMESTAMP(6), last_accepted_step = ?
              WHERE token_id = ?"
         );
         $stmt->execute([$matchedStep, $pending['token_id']]);
@@ -305,7 +312,13 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
 
         $cred = $enabledRows[0];
 
-        $secret = mfa_decrypt_secret($cred['ciphertext'], $cred['nonce'], $cred['auth_tag'], $mfaKey);
+        $ciphertext = pdo_binary_value($cred['ciphertext']);
+        $nonce = pdo_binary_value($cred['nonce']);
+        $authTag = pdo_binary_value($cred['auth_tag']);
+        if ($ciphertext === null || $nonce === null || $authTag === null) {
+            throw new MfaException('Corrupt MFA credential.');
+        }
+        $secret = mfa_decrypt_secret($ciphertext, $nonce, $authTag, $mfaKey);
 
         if ($secret === null) {
             throw new MfaException('Failed to decrypt MFA secret.');
@@ -437,7 +450,7 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
         challenge_state_consume($rateStorage, $jti, 'mfa_challenge', 'complete_login');
 
         $stmt = $pdo->prepare(
-            "UPDATE security_tokens SET used_at = NOW(6) WHERE token_id = ?"
+            "UPDATE security_tokens SET used_at = CURRENT_TIMESTAMP(6) WHERE token_id = ?"
         );
         $stmt->execute([$matchedRow['token_id']]);
 

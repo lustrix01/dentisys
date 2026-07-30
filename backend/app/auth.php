@@ -77,7 +77,8 @@ function auth_create_session(
     $stmt = $pdo->prepare(
         "INSERT INTO auth_sessions
          (session_uuid, user_id, issued_token_version, ip_address, user_agent, device_id, last_seen_at, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING session_id"
     );
     $stmt->execute([
         $sessionUuid,
@@ -91,7 +92,7 @@ function auth_create_session(
         $expiresSql,
     ]);
 
-    $sessionId = (int) $pdo->lastInsertId();
+    $sessionId = (int) $stmt->fetchColumn();
 
     return [
         'session_id' => $sessionId,
@@ -139,18 +140,18 @@ function auth_issue_initial_refresh_token(
     $stmt = $pdo->prepare(
         "INSERT INTO security_tokens
          (purpose, user_id, session_id, token_digest, family_uuid, parent_token_id, issued_at, expires_at)
-         VALUES ('refresh', ?, ?, ?, ?, NULL, ?, ?)"
+         VALUES ('refresh', ?, ?, ?, ?, NULL, ?, ?)
+         RETURNING token_id"
     );
-    $stmt->execute([
-        $userId,
-        $session['session_id'],
-        $digest,
-        $familyUuid,
-        $issuedSql,
-        $expiresSql,
-    ]);
+    $stmt->bindValue(1, $userId, PDO::PARAM_INT);
+    $stmt->bindValue(2, (int) $session['session_id'], PDO::PARAM_INT);
+    pdo_bind_binary($stmt, 3, $digest);
+    $stmt->bindValue(4, $familyUuid, PDO::PARAM_STR);
+    $stmt->bindValue(5, $issuedSql, PDO::PARAM_STR);
+    $stmt->bindValue(6, $expiresSql, PDO::PARAM_STR);
+    $stmt->execute();
 
-    $tokenId = (int) $pdo->lastInsertId();
+    $tokenId = (int) $stmt->fetchColumn();
 
     return [
         'raw_token' => $rawToken,
@@ -270,7 +271,8 @@ function auth_verify_access_token(
         "SELECT 1 FROM security_tokens
          WHERE token_digest = ? AND purpose = 'access_token_blacklist'"
     );
-    $stmt->execute([$jtiDigest]);
+    pdo_bind_binary($stmt, 1, $jtiDigest);
+    $stmt->execute();
     $blacklisted = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($blacklisted !== false) {

@@ -14,11 +14,7 @@ const LEGACY_CREDENTIAL_KEYS = [
 interface AuthState {
   phase: AuthPhase;
   errorMessage: string;
-  mfaSessionToken: string | null;
-  mfaSelectionToken: string | null;
-  mfaMethods: Array<'email' | 'authenticator'>;
-  selectedMfaMethod: 'email' | 'authenticator' | null;
-  maskedMfaEmail: string | null;
+  twoFactorToken: string | null;
   accessToken: string | null;
   user: SafeUser | null;
   recoveryCodes: string[];
@@ -26,8 +22,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   beginLogin: () => void;
-  storeMfaSelection: (token: string, methods: Array<'email' | 'authenticator'>) => void;
-  storeSelectedMfaChallenge: (token: string, method: 'email' | 'authenticator', maskedEmail?: string | null) => void;
+  storeTwoFactorChallenge: (token: string) => void;
   setAccessToken: (token: string) => void;
   setUser: (user: SafeUser) => void;
   setAuthenticated: () => void;
@@ -43,11 +38,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const initialState: AuthState = {
   phase: 'bootstrapping',
   errorMessage: '',
-  mfaSessionToken: null,
-  mfaSelectionToken: null,
-  mfaMethods: [],
-  selectedMfaMethod: null,
-  maskedMfaEmail: null,
+  twoFactorToken: null,
   accessToken: null,
   user: null,
   recoveryCodes: [],
@@ -122,27 +113,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, user }));
   }, []);
 
-  const storeMfaSelection = useCallback((token: string, methods: Array<'email' | 'authenticator'>) => {
+  const storeTwoFactorChallenge = useCallback((token: string) => {
     setState(prev => ({
       ...prev,
-      mfaSelectionToken: token,
-      mfaMethods: methods,
-      phase: 'mfa_method_selection_required',
-      errorMessage: '',
-    }));
-  }, []);
-
-  const storeSelectedMfaChallenge = useCallback((
-    token: string,
-    method: 'email' | 'authenticator',
-    maskedEmail?: string | null,
-  ) => {
-    setState(prev => ({
-      ...prev,
-      mfaSessionToken: token,
-      selectedMfaMethod: method,
-      maskedMfaEmail: maskedEmail ?? null,
-      phase: 'mfa_verification_required',
+      twoFactorToken: token,
+      phase: 'two_factor_verification_required',
       errorMessage: '',
     }));
   }, []);
@@ -186,8 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextValue = {
     ...state,
     beginLogin,
-    storeMfaSelection,
-    storeSelectedMfaChallenge,
+    storeTwoFactorChallenge,
     setAccessToken,
     setUser,
     setAuthenticated,

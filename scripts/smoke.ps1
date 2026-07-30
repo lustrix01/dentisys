@@ -1,7 +1,7 @@
 param(
     [string] $BackendUrl = "http://localhost:8080",
-    [string] $PhpMyAdminUrl = "http://localhost:8081",
-    [switch] $CheckPhpMyAdmin
+    [string] $PgAdminUrl = "http://127.0.0.1:5050",
+    [switch] $CheckPgAdmin
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,10 +26,10 @@ function Test-Health {
 Test-Health "$BackendUrl/api/health"
 Test-Health "$BackendUrl/healthcheck.php"
 
-if ($CheckPhpMyAdmin) {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri $PhpMyAdminUrl
+if ($CheckPgAdmin) {
+    $response = Invoke-WebRequest -UseBasicParsing -Uri $PgAdminUrl
     if ($response.StatusCode -ne 200) {
-        throw "$PhpMyAdminUrl returned HTTP $($response.StatusCode)."
+        throw "$PgAdminUrl returned HTTP $($response.StatusCode)."
     }
-    Write-Host "PASS: phpMyAdmin responded at $PhpMyAdminUrl."
+    Write-Host "PASS: pgAdmin responded at $PgAdminUrl."
 }

@@ -62,8 +62,8 @@ function handle_admin_dashboard_kpis(): void
 
         $facultyStmt = $pdo->query(
             "SELECT u.user_id, u.display_name, u.login_email, u.status,
-                    GROUP_CONCAT(DISTINCT cs.cs_name ORDER BY cs.cs_name SEPARATOR ', ') AS classes,
-                    GROUP_CONCAT(DISTINCT c.course_code ORDER BY c.course_code SEPARATOR ', ') AS subjects,
+                    STRING_AGG(DISTINCT cs.cs_name, ', ' ORDER BY cs.cs_name) AS classes,
+                    STRING_AGG(DISTINCT c.course_code, ', ' ORDER BY c.course_code) AS subjects,
                     COUNT(DISTINCT e.student_id) AS student_count
              FROM user_accounts u
              LEFT JOIN class_sections cs ON cs.instructor_user_id = u.user_id
@@ -267,9 +267,9 @@ function handle_admin_retention_criteria_save(): void
         $stmt = $pdo->prepare(
             "INSERT INTO system_settings
                 (setting_key, setting_value, is_internal, description, updated_at, updated_by_user_id)
-             VALUES ('retention_criteria', ?, 0, 'Administrator-defined retention criteria.', NOW(6), ?)
-             ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value),
-                 updated_at = VALUES(updated_at), updated_by_user_id = VALUES(updated_by_user_id)"
+             VALUES ('retention_criteria', ?, 0, 'Administrator-defined retention criteria.', CURRENT_TIMESTAMP(6), ?)
+             ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value,
+                 updated_at = EXCLUDED.updated_at, updated_by_user_id = EXCLUDED.updated_by_user_id"
         );
         $stmt->execute([$encoded, $authCtx['user_id']]);
 
@@ -435,7 +435,7 @@ function handle_admin_profile_update(): void
         $name = validate_person_name($data, 'name', 2, 255);
         $email = validate_institutional_email($data['email'] ?? '');
 
-        email_mfa_update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
+        update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
 
         json_response(['status' => 'ok', 'message' => 'Profile details updated successfully.'], 200);
     } catch (ValidationException $e) {
@@ -516,22 +516,17 @@ function handle_admin_settings_update(): void
         $themeStmt->execute([$theme, $authCtx['user_id']]);
         $retentionStmt = $pdo->prepare(
             "UPDATE system_settings
-             SET setting_value = JSON_SET(setting_value, '$.retention_threshold', ?),
-                 updated_at = NOW(6), updated_by_user_id = ?
+             SET setting_value = setting_value || jsonb_build_object('retention_threshold', ?::numeric),
+                 updated_at = CURRENT_TIMESTAMP(6), updated_by_user_id = ?
              WHERE setting_key = 'retention_policy'"
         );
         $retentionStmt->execute([$threshold, $authCtx['user_id']]);
         $gradingStmt = $pdo->prepare(
             "UPDATE system_settings
-             SET setting_value = JSON_SET(
-                    setting_value,
-                    '$.default_weights.quizzes', ?,
-                    '$.default_weights.exams', ?,
-                    '$.default_weights.practicum', ?,
-                    '$.default_weights.attendance', ?,
-                    '$.retention_gwa_threshold', ?
-                 ),
-                 updated_at = NOW(6), updated_by_user_id = ?
+             SET setting_value = jsonb_set(setting_value, '{default_weights}',
+                    jsonb_build_object('quizzes', ?::numeric, 'exams', ?::numeric, 'practicum', ?::numeric, 'attendance', ?::numeric), true)
+                    || jsonb_build_object('retention_gwa_threshold', ?::numeric),
+                 updated_at = CURRENT_TIMESTAMP(6), updated_by_user_id = ?
              WHERE setting_key = 'grading_defaults'"
         );
         $gradingStmt->execute([

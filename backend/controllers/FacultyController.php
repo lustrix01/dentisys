@@ -326,15 +326,15 @@ function handle_faculty_student_create(): void
         }
 
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare("INSERT INTO students (student_number, first_name, middle_name, last_name, bu_email, contact, sex, year_level, status, admission_date, birthdate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(6))");
+        $stmt = $pdo->prepare("INSERT INTO students (student_number, first_name, middle_name, last_name, bu_email, contact, sex, year_level, status, admission_date, birthdate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(6)) RETURNING student_id");
         $stmt->execute([
             $studentNumber, $firstName, $middleName ?: null, $lastName, $email ?: null,
             $contact ?: null, $sex ?: null, $yearLevel, $status, $admissionDate, $birthdate
         ]);
-        $newId = (int) $pdo->lastInsertId();
-        $enroll = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status, date_enrolled) VALUES (?, ?, 'Active', CURDATE())");
+        $newId = (int) $stmt->fetchColumn();
+        $enroll = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status, date_enrolled) VALUES (?, ?, 'Active', CURRENT_DATE) RETURNING enrollment_id");
         $enroll->execute([$newId, $csId]);
-        $enrollmentId = (int) $pdo->lastInsertId();
+        $enrollmentId = (int) $enroll->fetchColumn();
         $classInfo = $pdo->prepare("SELECT cs_name FROM class_sections WHERE cs_id = ?");
         $classInfo->execute([$csId]);
         $className = (string) $classInfo->fetchColumn();
@@ -537,12 +537,12 @@ function handle_faculty_assessments_save(): void
             $assessmentId = ctype_digit((string) ($item['id'] ?? '')) ? (int) $item['id'] : 0;
             if ($assessmentId > 0) {
                 $stmt = $pdo->prepare(
-                    "UPDATE assessments a
-                     JOIN class_sections cs ON cs.cs_id = a.cs_id
-                     SET a.cs_id = ?, a.title = ?, a.type = ?, a.grading_period = ?,
-                         a.max_score = ?, a.weight = ?, a.due_date = ?, a.instructions = ?,
-                         a.status = ?
-                     WHERE a.assessment_id = ? AND cs.instructor_user_id = ?"
+                    "UPDATE assessments AS a
+                     SET cs_id = ?, title = ?, type = ?, grading_period = ?,
+                         max_score = ?, weight = ?, due_date = ?, instructions = ?,
+                         status = ?
+                     FROM class_sections AS cs
+                     WHERE a.assessment_id = ? AND cs.cs_id = a.cs_id AND cs.instructor_user_id = ?"
                 );
                 $stmt->execute([
                     $csId, $title, $type, $period, $maxScore, $weight,
@@ -568,14 +568,14 @@ function handle_faculty_assessments_save(): void
                 $stmt = $pdo->prepare(
                     "INSERT INTO assessments
                      (cs_id, title, type, grading_period, max_score, weight, due_date, instructions, status)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING assessment_id"
                 );
                 $stmt->execute([
                     $csId, $title, $type, $period, $maxScore, $weight,
                     $item['dueDate'] ?? null, $item['instructions'] ?? null,
                     $item['status'] ?? 'Active',
                 ]);
-                $assessmentId = (int) $pdo->lastInsertId();
+                $assessmentId = (int) $stmt->fetchColumn();
             }
             $persisted[] = ['id' => (string) $assessmentId, 'classId' => (string) $csId, 'title' => $title];
         }
@@ -716,8 +716,11 @@ function handle_faculty_scores_save(): void
         );
         $upsert = $pdo->prepare(
             "INSERT INTO assessment_scores (assessment_id, student_id, score, submitted_at, remarks)
-             VALUES (?, ?, ?, NOW(6), ?)
-             ON DUPLICATE KEY UPDATE score = VALUES(score), submitted_at = VALUES(submitted_at), remarks = VALUES(remarks)"
+             VALUES (?, ?, ?, CURRENT_TIMESTAMP(6), ?)
+             ON CONFLICT (assessment_id, student_id) DO UPDATE
+             SET score = EXCLUDED.score,
+                 submitted_at = EXCLUDED.submitted_at,
+                 remarks = EXCLUDED.remarks"
         );
         $saved = 0;
         foreach ($scores as $scoreRow) {
@@ -972,12 +975,12 @@ function handle_faculty_attendance_override(): void
             return;
         }
         $stmt = $pdo->prepare(
-            "UPDATE attendance_records r
-             JOIN enrollments e ON e.enrollment_id = r.enrollment_id
-             JOIN class_sections cs ON cs.cs_id = e.cs_id
-             SET r.status = ?, r.verification_method = 'manual_faculty', r.override_reason = ?,
-                 r.override_by_user_id = ?, r.override_at = NOW(6)
-             WHERE r.record_id = ? AND cs.instructor_user_id = ?"
+            "UPDATE attendance_records AS r
+             SET status = ?, verification_method = 'manual_faculty', override_reason = ?,
+                 override_by_user_id = ?, override_at = CURRENT_TIMESTAMP(6)
+             FROM enrollments AS e
+             JOIN class_sections AS cs ON cs.cs_id = e.cs_id
+             WHERE r.record_id = ? AND e.enrollment_id = r.enrollment_id AND cs.instructor_user_id = ?"
         );
         $stmt->execute([$status, $reason, $authCtx['user_id'], $recordId, $authCtx['user_id']]);
         if ($stmt->rowCount() === 0) {
@@ -1060,10 +1063,10 @@ function handle_faculty_retention_remedial_save(): void
             ? 'e.enrollment_id = ?'
             : 'e.student_id = ? AND e.cs_id = ?';
         $stmt = $pdo->prepare(
-            "UPDATE enrollments e
-             JOIN class_sections cs ON cs.cs_id = e.cs_id
-             SET e.remedial_state_json = ?, e.retention_state = ?
-             WHERE {$where} AND cs.instructor_user_id = ?"
+            "UPDATE enrollments AS e
+             SET remedial_state_json = ?, retention_state = ?
+             FROM class_sections AS cs
+             WHERE {$where} AND cs.cs_id = e.cs_id AND cs.instructor_user_id = ?"
         );
         $params = $enrollmentId > 0
             ? [$json, $state, $enrollmentId, $authCtx['user_id']]
@@ -1102,10 +1105,14 @@ function handle_faculty_retention_status_update(): void
         }
         $stmt = $pdo->prepare(
             "UPDATE enrollments e
-             JOIN class_sections cs ON cs.cs_id = e.cs_id
-             SET e.retention_state = ?,
-                 e.remedial_state_json = JSON_SET(COALESCE(e.remedial_state_json, JSON_OBJECT()), '$.overrideReason', ?, '$.overriddenAt', ?)
-             WHERE e.student_id = ? AND e.cs_id = ? AND cs.instructor_user_id = ?"
+             SET retention_state = ?,
+                 remedial_state_json = jsonb_set(
+                     jsonb_set(COALESCE(e.remedial_state_json, '{}'::jsonb), '{overrideReason}', to_jsonb(?::text), true),
+                     '{overriddenAt}', to_jsonb(?::text), true
+                 )
+             FROM class_sections cs
+             WHERE cs.cs_id = e.cs_id
+               AND e.student_id = ? AND e.cs_id = ? AND cs.instructor_user_id = ?"
         );
         $now = gmdate('Y-m-d\TH:i:s\Z');
         $stmt->execute([$state, $reason, $now, $studentId, $classId, $authCtx['user_id']]);
@@ -1175,7 +1182,7 @@ function handle_faculty_profile_update(): void
         $name = validate_person_name($data, 'name', 2, 255);
         $email = validate_institutional_email($data['email'] ?? '');
 
-        email_mfa_update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
+        update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
 
         json_response(['status' => 'ok', 'message' => 'Faculty profile updated successfully.'], 200);
     } catch (ValidationException $e) {
@@ -1298,7 +1305,7 @@ function handle_faculty_email_send(): void
         $insert = $pdo->prepare(
             "INSERT INTO email_outbox
              (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)
-             VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?)"
+             VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?) RETURNING email_id"
         );
         $finish = $pdo->prepare(
             "UPDATE email_outbox
@@ -1324,7 +1331,10 @@ function handle_faculty_email_send(): void
                 $authCtx['user_id'], $recipientEmail, $recipientName,
                 $subject, $emailType, $messageBody, $operationUuid,
             ]);
-            $emailId = (int) $pdo->lastInsertId();
+            $emailId = (int) $insert->fetchColumn();
+            if ($emailId <= 0) {
+                throw new RuntimeException('Email outbox insert did not return a valid identifier.');
+            }
             $sent = send_email($recipientEmail, $subject, $messageBody, $config);
             $status = $sent ? 'Sent' : 'Failed';
             $sentAt = $sent ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null;
@@ -1629,12 +1639,12 @@ function handle_faculty_class_create(): void
             $stmt = $pdo->prepare("
                 INSERT INTO class_sections (
                     cs_name, course_id, instructor_user_id, semester, school_year, year_level, lab_room, lec_room, block, status, term_code, term_start_date, term_end_date, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, '2024-08-15', '2024-12-20', NOW(6))
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, '2024-08-15', '2024-12-20', CURRENT_TIMESTAMP(6)) RETURNING cs_id
             ");
             $stmt->execute([
                 $csName, $courseId, $authCtx['user_id'], $semester, $schoolYear, $yearLevel, $labRoom, $lecRoom, $block, $termCode
             ]);
-            $newCsId = (int) $pdo->lastInsertId();
+            $newCsId = (int) $stmt->fetchColumn();
 
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
@@ -1763,8 +1773,9 @@ function handle_faculty_class_enroll_students(): void
         $pdo->beginTransaction();
         try {
             $insertStmt = $pdo->prepare("
-                INSERT IGNORE INTO enrollments (student_id, cs_id, status, date_enrolled, retention_state, created_at)
-                VALUES (?, ?, 'Active', CURDATE(), 'active', NOW(6))
+                INSERT INTO enrollments (student_id, cs_id, status, date_enrolled, retention_state, created_at)
+                VALUES (?, ?, 'Active', CURRENT_DATE, 'active', CURRENT_TIMESTAMP(6))
+                ON CONFLICT (student_id, cs_id) DO NOTHING
             ");
 
             $enrolledCount = 0;

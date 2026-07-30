@@ -81,8 +81,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
     rate_limit_check($rateStorage, $ipScope, 'post_auth_login', 60, 100);
 
     $stmt = $pdo->prepare(
-        "SELECT user_id, login_email, password_hash, role, display_name, status, token_version,
-                email_mfa_enabled
+        "SELECT user_id, login_email, password_hash, role, display_name, status, token_version
          FROM user_accounts WHERE login_email = ?"
     );
     $stmt->execute([$email]);
@@ -112,11 +111,8 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         throw new TooManyMfaCredentialsException('Multiple enabled authenticator credentials found.');
     }
     $authenticatorEnabled = $authenticatorCount === 1;
-    $emailEnabled = (int) ($user['email_mfa_enabled'] ?? 0) === 1;
 
-    $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
-    $now = time();
-    if (!$authenticatorEnabled && !$emailEnabled) {
+    if (!$authenticatorEnabled) {
         $wasInTx = $pdo->inTransaction();
         if (!$wasInTx) { $pdo->beginTransaction(); }
         try {
@@ -133,27 +129,37 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         }
     }
 
-    $methods = [];
-    if ($emailEnabled) {
-        $methods[] = 'email';
-    }
-    if ($authenticatorEnabled) {
-        $methods[] = 'authenticator';
-    }
-    $selectionToken = jwt_encode([
+    return auth_issue_two_factor_challenge($config, $user);
+}
+
+function auth_issue_two_factor_challenge(array $config, array $user): array
+{
+    $jti = jwt_generate_jti();
+    $now = time();
+    $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+    $token = jwt_encode([
         'sub' => (int) $user['user_id'],
-        'jti' => jwt_generate_jti(),
-        'token_type' => 'mfa_selection',
+        'jti' => $jti,
+        'token_type' => 'mfa_challenge',
         'token_version' => (int) $user['token_version'],
-        'methods' => $methods,
+        'method' => 'authenticator',
         'iat' => $now,
         'exp' => $now + 300,
     ], $jwtKey);
 
+    challenge_state_init(
+        ['dir' => $config['rate_limit']['storage_dir']],
+        $jti,
+        'mfa_challenge',
+        'complete_login',
+        5,
+        300
+    );
+
     return [
-        'type' => 'mfa_method_selection',
-        'mfa_selection_token' => $selectionToken,
-        'methods' => $methods,
+        'type' => 'two_factor_required',
+        'two_factor_challenge_token' => $token,
+        'expires_in' => 300,
         'user' => $user,
     ];
 }
@@ -292,7 +298,8 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
          WHERE token_digest = ? AND purpose = 'refresh'
          LIMIT 1"
     );
-    $stmt->execute([$digest]);
+    pdo_bind_binary($stmt, 1, $digest);
+    $stmt->execute();
     $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($tokenRow === false) {
@@ -422,18 +429,18 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
         $stmtIns = $pdo->prepare(
             "INSERT INTO security_tokens
              (purpose, user_id, session_id, token_digest, family_uuid, parent_token_id, issued_at, expires_at)
-             VALUES ('refresh', ?, ?, ?, ?, ?, ?, ?)"
+             VALUES ('refresh', ?, ?, ?, ?, ?, ?, ?)
+             RETURNING token_id"
         );
-        $stmtIns->execute([
-            $lockedToken['user_id'],
-            $lockedToken['session_id'],
-            $childDigest,
-            $lockedToken['family_uuid'],
-            $lockedToken['token_id'],
-            $nowSql,
-            $childExpiresSql,
-        ]);
-        $childTokenId = (int) $pdo->lastInsertId();
+        $stmtIns->bindValue(1, (int) $lockedToken['user_id'], PDO::PARAM_INT);
+        $stmtIns->bindValue(2, (int) $lockedToken['session_id'], PDO::PARAM_INT);
+        pdo_bind_binary($stmtIns, 3, $childDigest);
+        $stmtIns->bindValue(4, $lockedToken['family_uuid'], PDO::PARAM_STR);
+        $stmtIns->bindValue(5, (int) $lockedToken['token_id'], PDO::PARAM_INT);
+        $stmtIns->bindValue(6, $nowSql, PDO::PARAM_STR);
+        $stmtIns->bindValue(7, $childExpiresSql, PDO::PARAM_STR);
+        $stmtIns->execute();
+        $childTokenId = (int) $stmtIns->fetchColumn();
 
         $accessResult = auth_issue_access_token($lockedUser, $sessionRow, $jwtKey, 900);
 
@@ -486,7 +493,8 @@ function auth_runtime_logout(PDO $pdo, array $config, array $context, string $re
          WHERE token_digest = ? AND purpose = 'refresh'
          LIMIT 1"
     );
-    $stmt->execute([$digest]);
+    pdo_bind_binary($stmt, 1, $digest);
+    $stmt->execute();
     $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($tokenRow === false) {

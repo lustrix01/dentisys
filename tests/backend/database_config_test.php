@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../backend/app/database.php';
 $defaultConfig = [
     'db' => [
         'host' => '127.0.0.1',
-        'port' => 3306,
+        'port' => 5432,
         'name' => 'dentisys',
         'user' => 'dentisys',
         'pass' => 'secret',
@@ -15,7 +15,7 @@ $defaultConfig = [
 ];
 
 $defaultDsn = database_dsn($defaultConfig);
-if ($defaultDsn !== 'mysql:host=127.0.0.1;port=3306;dbname=dentisys;charset=utf8mb4') {
+if ($defaultDsn !== 'pgsql:host=127.0.0.1;port=5432;dbname=dentisys') {
     fwrite(STDERR, "FAIL: Default DSN was not constructed as expected.\nActual: $defaultDsn\n");
     exit(1);
 }
@@ -23,7 +23,7 @@ if ($defaultDsn !== 'mysql:host=127.0.0.1;port=3306;dbname=dentisys;charset=utf8
 $config = [
     'db' => [
         'host' => '127.0.0.1',
-        'port' => 3307,
+        'port' => 5433,
         'name' => 'dentisys',
         'user' => 'dentisys',
         'pass' => 'secret',
@@ -31,7 +31,7 @@ $config = [
 ];
 
 $dsn = database_dsn($config);
-if ($dsn !== 'mysql:host=127.0.0.1;port=3307;dbname=dentisys;charset=utf8mb4') {
+if ($dsn !== 'pgsql:host=127.0.0.1;port=5433;dbname=dentisys') {
     fwrite(STDERR, "FAIL: DSN was not constructed as expected.\nActual: $dsn\n");
     exit(1);
 }

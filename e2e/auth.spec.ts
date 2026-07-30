@@ -109,29 +109,16 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('login with both factors selects authenticator and issues no session before verification', async ({ page }) => {
+  test('login with 2FA enrolled goes directly to authenticator verification before a session is issued', async ({ page }) => {
     await page.route('**/api/auth/login', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          type: 'mfa_method_selection',
-          mfa_selection_token: 'mock-mfa-selection-123456',
-          methods: ['email', 'authenticator'],
-        }),
-      });
-    });
-
-    await page.route('**/api/auth/mfa/challenge/start', async (route) => {
-      expect(route.request().postDataJSON()).toEqual({ method: 'authenticator' });
-      expect(route.request().headers().authorization).toBe('Bearer mock-mfa-selection-123456');
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          type: 'mfa_challenge',
-          method: 'authenticator',
-          mfa_challenge_token: 'mock-mfa-session-123456',
+          type: 'two_factor_required',
+          two_factor_required: true,
+          two_factor_enrolled: true,
+          two_factor_challenge_token: 'mock-two-factor-session-123456',
           expires_in: 300,
         }),
       });
@@ -163,11 +150,7 @@ test.describe('Auth Module E2E Tests', () => {
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
 
-    await expect(page).toHaveURL('/mfa/select');
-    await expect(page.getByText('Email code', { exact: true })).toBeVisible();
-    await page.getByText('Authenticator app', { exact: true }).click();
-
-    await expect(page).toHaveURL('/mfa/verify');
+    await expect(page).toHaveURL('/2fa/verify');
     await expect(page.locator('body')).toContainText(/Two-Factor Authentication/i);
 
     // Enter 6-digit code and submit

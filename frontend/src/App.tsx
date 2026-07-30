@@ -43,7 +43,6 @@ import { ActivateSecretary } from './pages/auth/ActivateSecretary';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
 import { MfaVerify } from './pages/auth/MfaVerify';
-import { MfaMethodSelection } from './pages/auth/MfaMethodSelection';
 import { RecoveryCodes } from './pages/auth/RecoveryCodes';
 
 function RoleDashboard() {
@@ -69,8 +68,8 @@ function App() {
         <AppProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/mfa/verify" element={<MfaVerify />} />
-            <Route path="/mfa/select" element={<MfaMethodSelection />} />
+            <Route path="/2fa/verify" element={<MfaVerify />} />
+            <Route path="/mfa/verify" element={<Navigate to="/2fa/verify" replace />} />
             <Route path="/recovery-codes" element={<RecoveryCodes />} />
 
             {/* Auth routes */}

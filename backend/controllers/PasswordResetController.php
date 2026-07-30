@@ -50,10 +50,10 @@ function handle_password_reset_request(): void
 
                 $ins = $pdo->prepare(
                     "INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at)
-                     VALUES ('password_reset', ?, ?, ?, ?)"
+                     VALUES ('password_reset', ?, ?, ?, ?) RETURNING token_id"
                 );
                 $ins->execute([$user['user_id'], $tokenHash, $nowSql, $expiresSql]);
-                $stId = (int) $pdo->lastInsertId();
+                $stId = (int) $ins->fetchColumn();
 
                 audit_finish_operation($pdo, $auditCtx, [
                     'module_code' => 'auth',
@@ -83,7 +83,7 @@ function handle_password_reset_request(): void
         }
 
         $showDevResetLink = (bool) ($config['show_dev_reset_link'] ?? false);
-        $resetLink = $user !== false ? "http://localhost:5173/reset-password?token={$resetToken}" : null;
+        $resetLink = $user !== false ? app_url($config, '/reset-password', ['token' => $resetToken]) : null;
 
         if ($user !== false && $resetLink !== null) {
             $subject = 'DentiSys Password Reset Request';

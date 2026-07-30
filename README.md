@@ -1,200 +1,119 @@
 # DentiSys
 
-DentiSys is being organized as a local full-stack repository with a preserved React/Vite frontend and a minimal plain-PHP API foundation. Business APIs and the DentiSys domain database schema are not implemented yet.
+DentiSys is a Docker-first academic and clinical management system for the Bicol University College of Dental Medicine. Its supported runtime today is local development on one device, using React/Vite, a plain PHP API, PostgreSQL, Mailpit, and pgAdmin.
 
-## Project Map
+| Runtime | Status | Use it for |
+| --- | --- | --- |
+| Development workstation | **Supported** | Daily development and local testing on one device |
+| Same-host single-server stack | **Unfinished private-LAN prototype** | Controlled implementation testing only |
+| Separate application/database servers | **Not implemented** | Future work |
 
-```text
-frontend/   Existing React 19, TypeScript, Vite, TailwindCSS app
-backend/    Plain PHP API foundation served from backend/public
-database/   Local MariaDB init, reset, seed, and ordered migration files
-scripts/    Local PowerShell checks, migrations, and smoke tests
-tests/      Native PHP tests without Composer or PHPUnit
-e2e/        Playwright end-to-end browser test suites
-docs/       Architecture, local development, and preserved frontend docs
+## Development environment: from-scratch guide
+
+The development stack runs entirely on your device as Docker containers. PostgreSQL communicates only on Docker's internal network; it has no published host port.
+
+### 1. Install prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose available.
+- Node.js 18 or newer for frontend builds and browser tests.
+- Playwright Chromium only when running end-to-end tests.
+
+This repository supports Docker Compose only. Do not use XAMPP, native PHP, native MySQL/MariaDB, or phpMyAdmin.
+
+### 2. Create the development environment file
+
+```powershell
+Copy-Item .env.example .env
 ```
 
-## From Scratch Setup Guide
+The committed example contains development-safe defaults. Keep `.env` local and do not commit secrets.
 
-Follow this sequential step-by-step guide to set up, seed, and run DentiSys on a new local development environment.
+### 3. Install test dependencies when needed
 
-### 1. System Prerequisites
+For frontend builds or Playwright tests, install the root test dependency and the Chromium browser once:
 
-Ensure the following prerequisites are installed on your system before proceeding:
-
-- **Node.js**: v18.0.0 or higher (`node -v`)
-- **PHP CLI**: v8.2.0 or higher with PDO and PDO_MySQL extensions enabled (`php -v`)
-- **Database / Container Engine** (Choose one):
-  - **Docker Desktop**: Recommended for containerized MariaDB and phpMyAdmin.
-  - **XAMPP / Native MariaDB / MySQL**: Running on host port `3306`.
-
----
-
-### 2. Step-by-Step Onboarding Commands
-
-#### Step 1: Clone Repository & Setup Environment File
-
-Copy the template environment file `.env.example` to `.env`:
-
-- **Windows (PowerShell)**:
-  ```powershell
-  copy .env.example .env
-  ```
-- **macOS / Linux (Bash)**:
-  ```bash
-  cp .env.example .env
-  ```
-
-#### Step 2: Install Dependencies
-
-Install root/frontend Node.js packages and the locked PHP dependencies:
-
-```bash
+```powershell
 npm ci
-npm ci --prefix frontend
-composer install --working-dir=backend
-```
-
-#### Step 3: Install Playwright Browsers (for E2E testing)
-
-Install Chromium browser binaries for Playwright end-to-end testing:
-
-```bash
 npx playwright install chromium
 ```
 
----
-
-### 3. Database Migration & Seeding Instructions
-
-Active migrations in `database/migrations/` are applied in filename order and recorded in `_schema_migrations` by `start-dev.bat` or Docker initialization.
-
-To manually seed demo users and initial data into the database:
-
-- **Docker Mode**:
-  ```bash
-  docker compose exec -T db mysql -udentisys -plocal-development-password dentisys < database/seed.sql
-  ```
-- **XAMPP / Native MySQL (Windows PowerShell)**:
-  ```powershell
-  Get-Content database/seed.sql | mysql -u dentisys -p dentisys
-  ```
-- **Native MySQL (macOS / Linux Bash)**:
-  ```bash
-  mysql -u dentisys -p dentisys < database/seed.sql
-  ```
-
----
-
-### 4. Local Server Execution
-
-Start the frontend and backend servers using your preferred environment mode:
-
-#### Preferred Mode (Docker Desktop)
-
-```bash
-docker compose up -d
-```
-
-#### Native / XAMPP Mode
-
-- **Windows (PowerShell / Batch)**:
-  ```powershell
-  .\start-dev.bat
-  ```
-  *(Or execute directly: `powershell -ExecutionPolicy Bypass -File .\scripts\start-dev.ps1`)*
-
-- **macOS / Linux**:
-  Start your native PHP built-in server and MySQL instance:
-  ```bash
-  php -S localhost:8090 -t backend/public backend/public/router.php
-  npm run dev
-  ```
-
----
-
-### 5. Default Local URLs & Seeded Demo Credentials
-
-#### Default Local URLs
-
-| Service | Native / XAMPP URL | Docker URL | Description |
-| :--- | :--- | :--- | :--- |
-| **Frontend** | `http://localhost:5173` | `http://localhost:5173` | React / Vite Frontend App |
-| **PHP API** | `http://localhost:8090` | `http://localhost:8080` | Backend API Server |
-| **Health Check** | `http://localhost:8090/api/health` | `http://localhost:8080/api/health` | Backend Health Endpoint |
-| **phpMyAdmin** | N/A (or XAMPP `/phpmyadmin`) | `http://localhost:8081` | Database Management GUI |
-| **MariaDB** | `127.0.0.1:3306` | `127.0.0.1:3306` | Database Server |
-
-#### Seeded Demo Login Credentials
-
-The following demo accounts are available after applying `database/seed.sql`:
-
-| Role | Email | Default Password | Notes |
-| :--- | :--- | :--- | :--- |
-| **Admin** | `admin@bicol-u.edu.ph` | *(Refer to seed.sql / dev setup)* | System Administrator |
-| **Faculty** | `faculty@bicol-u.edu.ph` | *(Refer to seed.sql / dev setup)* | Faculty / Dentist Staff |
-| **Secretary** | `secretary@bicol-u.edu.ph` | *(Refer to seed.sql / dev setup)* | Clinic Secretary |
-
----
-
-### 6. Validation and Testing Commands
-
-Run the full validation suite to verify compilation, test suites, and environment sanity:
+### 4. Start the complete development system
 
 ```powershell
+docker compose up --build -d
+```
+
+This starts the five development services: PostgreSQL, PHP API, Vite frontend, Mailpit, and loopback-only pgAdmin. On a new PostgreSQL volume, the database, application role, schema, and pending additive migrations are created automatically. Startup never loads demo data, drops tables, or truncates the database.
+
+### 5. Verify the local services
+
+| Service | URL |
+| --- | --- |
+| Frontend | http://localhost:5173 |
+| API health | http://localhost:8080/api/health |
+| Mailpit | http://localhost:8025 |
+| pgAdmin | http://127.0.0.1:5050 |
+
+### 6. Load demo data manually (optional)
+
+Demo users and academic/clinical records are intentionally separate from startup.
+
+1. Sign in to pgAdmin with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` from `.env`.
+2. Select the preconfigured **DentiSys PostgreSQL (development)** server and enter `DB_PASS` when prompted.
+3. Select the `dentisys` database, then open **Tools → Query Tool**.
+4. Copy all of [`database/seeds/development-demo.sql`](database/seeds/development-demo.sql) into Query Tool and execute it.
+
+The seed is transaction-wrapped and non-destructive: it does not change schema, drop or truncate data, and skips rows already present.
+
+### 7. Daily development commands
+
+```powershell
+docker compose up -d
+docker compose logs -f web
+.\scripts\migrate.ps1
+.\scripts\smoke.ps1 -CheckPgAdmin
+docker compose down
+```
+
+Run migrations after pulling schema changes. `docker compose down` stops the stack but preserves all volumes and local data. `docker compose down -v` deletes the PostgreSQL volume and is destructive—use it only when intentionally discarding local database data.
+
+For a detailed walkthrough, test commands, and the safe pgAdmin-only reset, see [the development environment guide](docs/development-environment.md).
+
+## Same-host single-server deployment foundation
+
+The Compose files and start script can launch Nginx, the PHP API, and internal PostgreSQL on one private host. This is an **unfinished private-LAN prototype**, not a supported production deployment process. DentiSys does not yet have the operational deployment workflow used by LearningFullStack.
+
+For controlled implementation testing only:
+
+```powershell
+Copy-Item .env.single-server.example .env.single-server
+.\scripts\start-single-server.ps1
+```
+
+Before starting, set unique database/admin passwords, application signing/encryption keys, and real SMTP values in `.env.single-server`. The stack publishes only the frontend HTTP port; Vite, Mailpit, pgAdmin, and a PostgreSQL host port are intentionally absent.
+
+It is not ready for production or public-internet use. A complete deployment process still needs a defined runbook, TLS/reverse-proxy policy, firewall guidance, backups and restore testing, secret handling, monitoring, upgrade/rollback procedures, and deployment automation. See [the single-server deployment foundation](docs/single-server.md).
+
+## Future: separate application and database servers
+
+This model is unsupported and non-runnable. It requires external PostgreSQL connectivity and credential rotation, restricted network policy, TLS/reverse-proxy configuration, tested backups/restores, secret management, monitoring, and deployment automation. No provisional commands are provided.
+
+## Validation
+
+```powershell
+docker compose config --quiet
+.\scripts\check.ps1
+.\scripts\check-postgres.ps1
+.\scripts\migrate.ps1
+.\scripts\smoke.ps1 -CheckPgAdmin
 npm run build
 npm run test:e2e
-.\scripts\check.ps1
-.\scripts\smoke.ps1
+npm run test:e2e:live
 ```
 
-- `npm run build`: Validates TypeScript compilation and builds the Vite frontend production bundle.
-- `npm run test:e2e`: Executes Playwright end-to-end browser test suites.
-- `.\scripts\check.ps1`: Verifies local PHP version, database connection, and environment sanity.
-- `.\scripts\smoke.ps1`: Executes backend API endpoint smoke tests.
+`npm run test:e2e` is the fast mocked-UI suite. `scripts/check-postgres.ps1` performs the complete disposable PostgreSQL integration and live browser validation without resetting development data or volumes.
 
----
+## Documentation
 
-## Development Environment Setup
+Start with [the documentation index](docs/README.md).
 
-DentiSys local development supports both Docker MariaDB (preferred) and a running XAMPP/native MySQL or MariaDB instance on host port `3306`.
-
-### Preferred Mode (Docker MariaDB)
-- **Host Address**: `127.0.0.1:3306`
-- **Container Address**: `db:3306`
-- **Credentials**: Process environment variables, root `.env`, or repository Docker defaults (`3306`, `dentisys`, `dentisys`, `local-development-password`).
-
-### Native Fallback Mode (XAMPP / Native MySQL / MariaDB)
-- **Host Address**: `127.0.0.1:3306`
-- **Credentials**: Process `DB_*` environment variables, `backend/config/local.php`, or backend application defaults.
-- **Zero-Touch Setup**: If the configured database does not exist on a reachable database server, it is automatically provisioned and migrated on startup with 0 PDO errors.
-- **Pre-Existing Database Warning Policy**: If an existing database is detected, a clear warning banner is displayed. Pre-existing database objects are **never** automatically dropped or overwritten. If you want a clean install, please back up or drop the database manually.
-- **Automatic Migrations**: Pending approved migrations (`001`–`005`) run automatically on startup for both Docker and Native paths. `database/seed.sql` is **never** executed automatically.
-
-### No-Runtime Instructions
-When neither Docker MariaDB nor a native MySQL/MariaDB server is available on port `3306`, start Docker Desktop (`docker compose up -d db`) or start XAMPP MySQL from the XAMPP Control Panel, then run `start-dev.bat` again.
-
-```powershell
-.\start-dev.bat
-```
-
----
-
-The existing frontend currently has pre-existing lint debt. Do not change frontend behavior just to satisfy lint unless a future task explicitly approves it.
-
-### Optional two-factor authentication
-
-Password login remains the primary sign-in method. From any authenticated profile, users may independently enable an email code or a Google Authenticator-compatible mobile authenticator. If both are enabled, either one may be selected after password verification. Accounts with neither method enabled continue to use password-only login.
-
-Email codes are always sent to the server-side `user_accounts.login_email`; clients cannot supply a destination. `ALLOWED_EMAIL_DOMAIN` defaults to `bicol-u.edu.ph`. A future Google Sign-In implementation must populate this canonical identity only after validating the Google token, the verified-email claim, and this configured domain.
-
-The complete Compose stack exposes:
-
-- Frontend: `http://localhost:5173`
-- Direct API: `http://localhost:8080`
-- Mailpit: `http://localhost:8025`
-- phpMyAdmin: `http://localhost:8081`
-
-Mailpit uses unencrypted SMTP on port `1025` only in development. Outside development, configure `SMTP_ENCRYPTION=tls` or `starttls` and leave `SMTP_VERIFY_PEER=true`.
-
-Production deployment, registry publishing, VPS/cloud hosting, replicas, and CI/CD remain outside this local foundation.

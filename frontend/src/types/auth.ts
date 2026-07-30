@@ -4,8 +4,7 @@ export type AuthPhase =
   | 'bootstrapping'
   | 'unauthenticated'
   | 'submitting_login'
-  | 'mfa_method_selection_required'
-  | 'mfa_verification_required'
+  | 'two_factor_verification_required'
   | 'authenticated';
 
 export interface SafeUser {
@@ -17,11 +16,11 @@ export interface SafeUser {
 }
 
 export interface LoginResponse {
-  type: 'direct_login' | 'mfa_method_selection';
-  mfa_required: boolean;
-  mfa_enrolled: boolean;
-  mfa_selection_token?: string;
-  methods?: Array<'email' | 'authenticator'>;
+  type: 'direct_login' | 'two_factor_required';
+  two_factor_required: boolean;
+  two_factor_enrolled: boolean;
+  two_factor_challenge_token?: string;
+  expires_in?: number;
   access_token?: string;
 }
 

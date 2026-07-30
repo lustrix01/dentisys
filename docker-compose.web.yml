@@ -1,0 +1,44 @@
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    image: ${WEB_IMAGE:-dentisys-web:local}
+    environment:
+      APP_ENV: single-server
+      APP_BASE_URL: ${APP_BASE_URL:?Set APP_BASE_URL to the public HTTP(S) application URL.}
+      APP_IS_HTTPS: ${APP_IS_HTTPS:-false}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-dentisys}
+      DB_USER: ${DB_USER:-dentisys}
+      DB_PASS: ${DB_PASS}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_ENCRYPTION: ${SMTP_ENCRYPTION:-starttls}
+      SMTP_VERIFY_PEER: ${SMTP_VERIFY_PEER:-true}
+      JWT_SIGNING_KEY_B64: ${JWT_SIGNING_KEY_B64}
+      MFA_ENCRYPTION_KEY_B64: ${MFA_ENCRYPTION_KEY_B64}
+      AUDIT_MAC_KEY_B64: ${AUDIT_MAC_KEY_B64}
+    healthcheck:
+      test: ["CMD-SHELL", "php -r '$$r = @file_get_contents(\"http://127.0.0.1/healthcheck.php\"); $$j = json_decode((string) $$r, true); exit(($$j[\"status\"] ?? \"\") === \"ok\" ? 0 : 1);'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    image: ${FRONTEND_IMAGE:-dentisys-frontend:local}
+    ports:
+      - "${APP_HTTP_PORT:-8080}:80"
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped

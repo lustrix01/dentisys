@@ -1,5 +1,7 @@
 # IAS Module A: Identity and Access Fortification
 
+> Implementation update: DentiSys now uses optional authenticator-app 2FA and recovery codes. Email-code verification and MFA method selection are retired; Google-only sign-in remains planned.
+
 ## TOTP Enrollment and Verification Flow
 
 ```

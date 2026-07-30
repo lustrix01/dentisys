@@ -1,5 +1,7 @@
 # Security Data Dictionary — Phase 2 Baseline (15 Tables)
 
+> Current authentication note: migration 006 removes email-code 2FA. Authenticator credentials and recovery codes continue to use `security_tokens`.
+
 ## user_accounts
 
 | Column | Type | Constraints |

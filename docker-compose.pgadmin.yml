@@ -1,0 +1,19 @@
+services:
+  pgadmin:
+    image: dpage/pgadmin4:9.16
+    ports:
+      - "127.0.0.1:${PGADMIN_HTTP_PORT:-5050}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@dentisys.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-local-pgadmin-password}
+      PGADMIN_DISABLE_POSTFIX: "true"
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+    volumes:
+      - dentisys_pgadmin_data:/var/lib/pgadmin
+      - ./database/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  dentisys_pgadmin_data:

@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${DB_ADMIN_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_ADMIN_PASS}
+      POSTGRES_DB: ${DB_NAME:-dentisys}
+      DB_USER: ${DB_USER:-dentisys}
+      DB_PASS: ${DB_PASS}
+    volumes:
+      - dentisys_postgres_18_data:/var/lib/postgresql
+      - ./database/init.sql:/postgres/init.sql:ro
+      - ./database/apply-migrations.sh:/docker-entrypoint-initdb.d/001-migrations.sh:ro
+      - ./database/migrations:/postgres/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  web:
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  dentisys_postgres_18_data:

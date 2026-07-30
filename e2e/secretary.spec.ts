@@ -83,12 +83,10 @@ test.describe('Class Secretary Module E2E Tests', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           status: 'ok',
-          mfa: {
+          two_factor: {
             enabled: true,
-            authenticatorEnabled: true,
-            emailEnabled: false,
-            emailVerifiedAt: null,
-            recoveryCodeCount: 8,
+            authenticator_enabled: true,
+            recovery_code_count: 8,
           },
         }),
       });

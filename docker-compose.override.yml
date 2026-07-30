@@ -1,7 +1,11 @@
+include:
+  - path: ./docker-compose.pgadmin.yml
+
 services:
   web:
     volumes:
       - ./backend:/var/www/html/backend:cached
       - /var/www/html/backend/vendor
+      - ./tests:/var/www/html/tests:ro
     environment:
       APP_DEBUG: ${APP_DEBUG:-false}

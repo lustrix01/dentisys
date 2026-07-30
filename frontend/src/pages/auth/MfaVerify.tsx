@@ -2,17 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { verifyMfa, recoverMfa, resendMfaEmail, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
+import { verifyMfa, recoverMfa, getMe, setAccessToken as setApiAccessToken, ApiError } from '../../services/apiClient';
 
 type Mode = 'totp' | 'recovery';
 
 export function MfaVerify() {
   const navigate = useNavigate();
   const {
-    mfaSessionToken,
-    selectedMfaMethod,
-    maskedMfaEmail,
-    storeSelectedMfaChallenge,
+    twoFactorToken,
     setAccessToken,
     setUser,
     setAuthenticated,
@@ -24,7 +21,7 @@ export function MfaVerify() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (!mfaSessionToken) {
+  if (!twoFactorToken) {
     navigate('/login', { replace: true });
     return null;
   }
@@ -45,8 +42,8 @@ export function MfaVerify() {
 
     try {
       const result = mode === 'totp'
-        ? await verifyMfa(mfaSessionToken, trimmed)
-        : await recoverMfa(mfaSessionToken, trimmed);
+        ? await verifyMfa(twoFactorToken, trimmed)
+        : await recoverMfa(twoFactorToken, trimmed);
       const accessTokenToUse = result.access_token;
 
       setApiAccessToken(accessTokenToUse);
@@ -82,11 +79,8 @@ export function MfaVerify() {
             </h1>
             <p className="text-xs text-accent-600/80 dark:text-accent-400/80 mt-1">
               {mode === 'totp'
-                ? selectedMfaMethod === 'email'
-                  ? `Enter the 6-digit code sent to ${maskedMfaEmail || 'your account email'}.`
-                  : 'Enter the 6-digit code from your authenticator app.'
-                : 'Enter one of your recovery codes to sign in.'
-              }
+                ? 'Enter the 6-digit code from your authenticator app.'
+                : 'Enter one of your recovery codes to sign in.'}
             </p>
           </div>
 
@@ -101,7 +95,7 @@ export function MfaVerify() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                  {mode === 'totp' ? selectedMfaMethod === 'email' ? 'Email Code' : 'Authenticator Code' : 'Recovery Code'}
+                  {mode === 'totp' ? 'Authenticator Code' : 'Recovery Code'}
                 </label>
                 <input
                   type="text"
@@ -129,7 +123,7 @@ export function MfaVerify() {
               </button>
             </form>
 
-            {selectedMfaMethod === 'authenticator' && <div className="mt-4 text-center">
+            <div className="mt-4 text-center">
               <button
                 onClick={() => {
                   setMode(mode === 'totp' ? 'recovery' : 'totp');
@@ -140,31 +134,7 @@ export function MfaVerify() {
               >
                 {mode === 'totp' ? 'Use a recovery code instead' : 'Use authenticator code instead'}
               </button>
-            </div>}
-
-            {selectedMfaMethod === 'email' && (
-              <div className="mt-4 text-center">
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={async () => {
-                    setLoading(true);
-                    setError('');
-                    try {
-                      const replacement = await resendMfaEmail(mfaSessionToken);
-                      storeSelectedMfaChallenge(replacement.mfa_challenge_token, 'email', replacement.masked_email);
-                    } catch (requestError) {
-                      setError(requestError instanceof Error ? requestError.message : 'Unable to resend code.');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  className="text-xs font-semibold text-accent-600 hover:underline disabled:opacity-50"
-                >
-                  Resend email code
-                </button>
-              </div>
-            )}
+            </div>
 
             <button
               onClick={() => {

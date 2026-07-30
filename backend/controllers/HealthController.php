@@ -2,6 +2,51 @@
 
 declare(strict_types=1);
 
+function classify_health_exception(Throwable $e, array $dbConfig = []): array
+{
+    $dbName = (string) ($dbConfig['name'] ?? 'dentisys');
+    $dbHost = (string) ($dbConfig['host'] ?? '127.0.0.1');
+    $dbPort = (int) ($dbConfig['port'] ?? 5432);
+    $dbUser = (string) ($dbConfig['user'] ?? 'dentisys');
+    $message = $e->getMessage();
+    $sqlState = ($e instanceof PDOException && isset($e->errorInfo[0]))
+        ? (string) $e->errorInfo[0]
+        : '';
+
+    if ($sqlState === '3D000' || (str_contains($message, 'database') && str_contains($message, 'does not exist'))) {
+        return [
+            'error_code' => 'missing_database',
+            'message' => "Database '{$dbName}' does not exist. Start the PostgreSQL Docker service and apply migrations.",
+        ];
+    }
+
+    if ($sqlState === '28P01' || str_contains($message, 'password authentication failed')) {
+        return [
+            'error_code' => 'invalid_credentials',
+            'message' => "Database authentication failed for user '{$dbUser}'. Verify DB_USER and DB_PASS.",
+        ];
+    }
+
+    if (str_starts_with($sqlState, '08') || str_contains($message, 'unreachable') || str_contains($message, 'Connection refused')) {
+        return [
+            'error_code' => 'server_unreachable',
+            'message' => "PostgreSQL server is unreachable on {$dbHost}:{$dbPort}. Ensure the Docker database container is running.",
+        ];
+    }
+
+    if ($sqlState === '42P01' || (str_contains($message, 'relation') && str_contains($message, 'does not exist'))) {
+        return [
+            'error_code' => 'schema_missing',
+            'message' => "Database '{$dbName}' exists, but required schema tables are missing. Run the PostgreSQL migrations.",
+        ];
+    }
+
+    return [
+        'error_code' => 'database_error',
+        'message' => 'Database connectivity check failed: ' . $message,
+    ];
+}
+
 function health_payload(): array
 {
     $payload = [
@@ -16,15 +61,15 @@ function health_payload(): array
     $dbConfig = $config['db'] ?? [];
     $dbName = $dbConfig['name'] ?? 'dentisys';
     $dbHost = $dbConfig['host'] ?? '127.0.0.1';
-    $dbPort = (int) ($dbConfig['port'] ?? 3306);
+    $dbPort = (int) ($dbConfig['port'] ?? 5432);
     $dbUser = $dbConfig['user'] ?? 'dentisys';
 
     try {
         $pdo = create_pdo($config);
         $pdo->query('SELECT 1');
 
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = :dbname AND TABLE_NAME = 'user_accounts'");
-        $stmt->execute([':dbname' => $dbName]);
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_accounts'");
+        $stmt->execute();
         $tableCount = (int) $stmt->fetchColumn();
 
         if ($tableCount === 0) {
@@ -51,26 +96,9 @@ function health_payload(): array
         $payload['status'] = 'error';
         $payload['database'] = 'down';
 
-        $code = (int) $e->getCode();
-        $msg = $e->getMessage();
-        $sqlState = ($e instanceof PDOException && isset($e->errorInfo[0])) ? (string) $e->errorInfo[0] : '';
-
-        if ($code === 1049 || $sqlState === '1049' || str_contains($msg, '1049') || str_contains($msg, 'Unknown database')) {
-            $payload['error_code'] = 'missing_database';
-            $payload['message'] = "Database '{$dbName}' does not exist yet. Run .\\start-dev.bat to auto-create and seed the database.";
-        } elseif ($code === 1045 || $sqlState === '1045' || str_contains($msg, '1045') || str_contains($msg, 'Access denied')) {
-            $payload['error_code'] = 'invalid_credentials';
-            $payload['message'] = "Database authentication failed for user '{$dbUser}'. Verify DB_USER and DB_PASS in .env or local.php.";
-        } elseif ($code === 2002 || $sqlState === '2002' || str_contains($msg, '2002') || str_contains($msg, 'unreachable') || str_contains($msg, 'Connection refused') || str_contains($msg, 'No connection could be made')) {
-            $payload['error_code'] = 'server_unreachable';
-            $payload['message'] = "Database server is unreachable on {$dbHost}:{$dbPort}. Ensure MySQL/MariaDB daemon or Docker container is running.";
-        } elseif ($code === 1146 || $sqlState === '42S02' || $sqlState === '1146' || str_contains($msg, '1146') || str_contains($msg, '42S02') || str_contains($msg, "doesn't exist")) {
-            $payload['error_code'] = 'schema_missing';
-            $payload['message'] = "Database '{$dbName}' exists, but baseline schema tables are missing. Run .\\start-dev.bat to apply migrations.";
-        } else {
-            $payload['error_code'] = 'database_error';
-            $payload['message'] = 'Database connectivity check failed: ' . $msg;
-        }
+        $classification = classify_health_exception($e, $dbConfig);
+        $payload['error_code'] = $classification['error_code'];
+        $payload['message'] = $classification['message'];
 
         return [
             'statusCode' => 503,

@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, KeyRound, Mail, RefreshCw, Smartphone } from 'lucide-react';
+import { AlertCircle, CheckCircle2, KeyRound, RefreshCw, Smartphone } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
 import {
-  confirmEmailMfaSettingApi,
   confirmEnrollment,
   getMfaSettingsApi,
   regenerateMfaRecoveryCodesApi,
   revokeMfaApi,
-  startEmailMfaSettingApi,
   startEnrollment,
 } from '../services/apiClient';
 
@@ -19,18 +17,15 @@ interface Enrollment {
   secret: string;
 }
 
-export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }> = ({
-  userEmail = '',
-}) => {
+export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }> = () => {
   const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
-  const [emailEnabled, setEmailEnabled] = useState(false);
   const [recoveryCount, setRecoveryCount] = useState(0);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
-  const [emailConfirmation, setEmailConfirmation] = useState<{ token: string; action: 'enable' | 'disable'; masked: string } | null>(null);
   const [code, setCode] = useState('');
   const [working, setWorking] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [statusAvailable, setStatusAvailable] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -39,10 +34,20 @@ export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }
     setError('');
     try {
       const response = await getMfaSettingsApi();
-      setAuthenticatorEnabled(response.mfa.authenticatorEnabled);
-      setEmailEnabled(response.mfa.emailEnabled);
-      setRecoveryCount(response.mfa.recoveryCodeCount);
+      const twoFactor = response?.two_factor;
+      if (!twoFactor
+        || typeof twoFactor.authenticator_enabled !== 'boolean'
+        || !Number.isInteger(twoFactor.recovery_code_count)
+        || twoFactor.recovery_code_count < 0) {
+        throw new Error('Unable to read the current 2FA settings.');
+      }
+      setAuthenticatorEnabled(twoFactor.authenticator_enabled);
+      setRecoveryCount(twoFactor.recovery_code_count);
+      setStatusAvailable(true);
     } catch (requestError) {
+      setStatusAvailable(false);
+      setAuthenticatorEnabled(false);
+      setRecoveryCount(0);
       setError(requestError instanceof Error ? requestError.message : 'Unable to load 2FA settings.');
     } finally {
       setLoading(false);
@@ -82,30 +87,6 @@ export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }
     } finally { setWorking(false); }
   };
 
-  const beginEmail = async (action: 'enable' | 'disable') => {
-    setWorking(true); setError(''); setSuccess('');
-    try {
-      const response = await startEmailMfaSettingApi(action);
-      setEmailConfirmation({ token: response.confirmation_token, action, masked: response.masked_email });
-      setCode('');
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to send email confirmation.');
-    } finally { setWorking(false); }
-  };
-
-  const confirmEmail = async () => {
-    if (!emailConfirmation || !/^\d{6}$/.test(code)) return;
-    setWorking(true); setError('');
-    try {
-      const response = await confirmEmailMfaSettingApi(emailConfirmation.token, code);
-      setEmailEnabled(response.emailEnabled);
-      setEmailConfirmation(null); setCode('');
-      setSuccess(`Email-code 2FA ${response.emailEnabled ? 'enabled' : 'disabled'}.`);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to confirm email code.');
-    } finally { setWorking(false); }
-  };
-
   const disableAuthenticator = async () => {
     if (!/^\d{6}$/.test(code)) { setError('Enter the current authenticator code.'); return; }
     setWorking(true); setError('');
@@ -141,15 +122,10 @@ export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }
         {error && <div role="alert" className="flex gap-2 rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700"><AlertCircle className="h-4 w-4" />{error}</div>}
         {success && <div className="flex gap-2 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" />{success}</div>}
 
-        <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-          <div><p className="flex items-center gap-2 text-sm font-bold"><Mail className="h-4 w-4" />Email code</p><p className="mt-1 text-xs text-slate-500">Codes are sent only to {userEmail || 'your account email'}.</p></div>
-          <button type="button" disabled={working} onClick={() => void beginEmail(emailEnabled ? 'disable' : 'enable')} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{emailEnabled ? 'Disable' : 'Enable'}</button>
-        </div>
-
         <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <div className="flex items-center justify-between gap-4">
             <div><p className="flex items-center gap-2 text-sm font-bold"><Smartphone className="h-4 w-4" />Authenticator app</p><p className="mt-1 text-xs text-slate-500">Google Authenticator compatible · {recoveryCount} recovery codes</p></div>
-            {!authenticatorEnabled && <button type="button" disabled={working} onClick={() => void beginAuthenticator()} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Set up</button>}
+            {statusAvailable && !authenticatorEnabled && <button type="button" disabled={working} onClick={() => void beginAuthenticator()} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Set up</button>}
           </div>
           {authenticatorEnabled && (
             <div className="flex flex-wrap items-end gap-2">
@@ -173,9 +149,6 @@ export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }
         </div>}
       </Modal>
 
-      <Modal isOpen={emailConfirmation !== null} onClose={() => setEmailConfirmation(null)} title={`${emailConfirmation?.action === 'disable' ? 'Disable' : 'Enable'} email 2FA`}>
-        {emailConfirmation && <div className="space-y-4"><p className="text-sm text-slate-600">Enter the code sent to {emailConfirmation.masked}.</p><input value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="w-full rounded-xl border px-3 py-2 text-center font-mono tracking-widest dark:bg-slate-950" placeholder="000000" /><button type="button" onClick={() => void confirmEmail()} disabled={working || code.length !== 6} className="w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Confirm</button></div>}
-      </Modal>
     </Card>
   );
 };

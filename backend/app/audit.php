@@ -135,12 +135,12 @@ function audit_finish_operation(
         mac_key_version, canonical_schema_version
     ) VALUES (
         :event_uuid, :sequence_number, :occurred_at,
-        :actor_user_id, :actor_username, :actor_role, :actor_display_name, :session_id, :scope_cs_id,
+        CAST(:actor_user_id AS INTEGER), CAST(:actor_username AS VARCHAR), CAST(:actor_role AS VARCHAR), CAST(:actor_display_name AS VARCHAR), CAST(:session_id AS INTEGER), CAST(:scope_cs_id AS INTEGER),
         :module_code, :action_code, :event_status,
-        :target_type, :target_id, :description, :reason,
-        :http_method, :endpoint, :request_id, :correlation_id, :operation_uuid,
-        :ip_address, :user_agent, :device_id, :device_name,
-        :before_state_json, :after_state_json,
+        CAST(:target_type AS VARCHAR), CAST(:target_id AS VARCHAR), CAST(:description AS TEXT), CAST(:reason AS VARCHAR),
+        CAST(:http_method AS VARCHAR), CAST(:endpoint AS VARCHAR), CAST(:request_id AS VARCHAR), CAST(:correlation_id AS VARCHAR), CAST(:operation_uuid AS CHAR(36)),
+        CAST(:ip_address AS VARCHAR), CAST(:user_agent AS VARCHAR), CAST(:device_id AS VARCHAR), CAST(:device_name AS VARCHAR),
+        CAST(:before_state_json AS TEXT), CAST(:after_state_json AS TEXT),
         :before_state_hash, :after_state_hash,
         :previous_event_mac, :event_mac,
         :mac_key_version, :canonical_schema_version
@@ -213,9 +213,9 @@ function audit_finish_operation(
     }
 
     $updateSql = "UPDATE system_settings
-                  SET setting_value = JSON_OBJECT(
-                      'latest_sequence', :next_seq,
-                      'latest_mac', :latest_mac
+    SET setting_value = jsonb_build_object(
+                      'latest_sequence', CAST(:next_seq AS BIGINT),
+                      'latest_mac', CAST(:latest_mac AS TEXT)
                   )
                   WHERE setting_key = 'audit_chain_head'";
 

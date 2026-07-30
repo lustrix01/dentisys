@@ -1,5 +1,7 @@
 # IAS Module C: API and Perimeter Defense
 
+> Implementation update: this remains a security design reference. Current Docker development uses PostgreSQL 18 and exposes no database port to the host.
+
 ## Endpoint-by-Endpoint Security Control Table (Design Reference)
 
 All endpoints are proposed and currently unimplemented — documented as the intended security contract for later stages.
@@ -45,7 +47,7 @@ All endpoints are proposed and currently unimplemented — documented as the int
 
 ## Input Validation and Parameterized Query Strategy
 
-- All values bound via `$stmt->bindValue()` with `ATTR_EMULATE_PREPARES = false` (native MariaDB prepared statements).
+- All values bound via `$stmt->bindValue()` with `ATTR_EMULATE_PREPARES = false` (native PostgreSQL prepared statements).
 - Dynamic sort columns and identifiers validated against hardcoded allowlists before string concatenation. Never bound as raw SQL syntax.
 - Input strings: trim, strip control characters, validate length and format.
 - Email: validate format and domain pattern.
@@ -66,7 +68,7 @@ Design/documentation artifact only. No physical router changes are planned.
 ! Network Zone Addresses:
 !   FRONTEND (proxy): host 192.168.10.10
 !   BACKEND (API):    host 192.168.20.20
-!   DATABASE (MariaDB): host 192.168.30.10
+!   DATABASE (PostgreSQL): host 192.168.30.10
 !   ADMIN-VPN:        10.0.0.0 0.0.0.31       (/27)
 !   CLINIC-DEVICES:   192.168.40.0 0.0.0.31    (/27)
 !   SMTP-RELAY:       host 192.168.50.10
@@ -78,8 +80,8 @@ permit tcp any host 192.168.10.10 eq 443
 ! ACL-02: Frontend host to backend API host.
 permit tcp host 192.168.10.10 host 192.168.20.20 eq 8080
 !
-! ACL-03: Backend API host to MariaDB host on TCP 3306 only.
-permit tcp host 192.168.20.20 host 192.168.30.10 eq 3306
+! ACL-03: Backend API host to PostgreSQL host on TCP 5432 only.
+permit tcp host 192.168.20.20 host 192.168.30.10 eq 5432
 !
 ! ACL-04: Admin VPN to frontend (SSH + HTTPS).
 permit tcp 10.0.0.0 0.0.0.31 host 192.168.10.10 eq 22
@@ -112,14 +114,14 @@ deny ip any any log
 
 ### ACL Notes
 
-- Only the backend API host (`192.168.20.20`) may reach the MariaDB database host (`192.168.30.10:3306`).
-- Admin VPN does NOT have direct MariaDB access. Admin VPN may reach approved frontend and backend SSH/management ports only.
+- Only the backend API host (`192.168.20.20`) may reach the PostgreSQL database host (`192.168.30.10:5432`).
+- Admin VPN does NOT have direct PostgreSQL access. Admin VPN may reach approved frontend and backend SSH/management ports only.
 - The broader database deny rule (ACL-10) covers any Admin-VPN-to-database access attempt.
 - The final line is an explicit deny-all with logging.
 
 ## OWASP Design Rationale
 
-Parameterized queries via PDO native prepares eliminate injection vectors (A05:2025). Backend-enforced RBAC with hardcoded allowlists prevents broken access control (A01:2025, API1:2023). Rate limiting on authentication endpoints mitigates credential brute-force attacks (A07:2025, API4:2023). The HMAC-chained audit trail makes tampering detectable (A09:2025). AES-256-GCM encrypted TOTP secrets and bcrypt/PASSWORD_DEFAULT hash storage prevent plaintext credential exposure (A04:2025). Together these controls form a defense-in-depth architecture implementable in the current plain-PHP/MariaDB architecture. The endpoint control table, ACL rules, and rate-limiter implementation are documented design artifacts; their concrete backend implementation is future work allocated to later approved stages.
+Parameterized queries via PDO native prepares eliminate injection vectors (A05:2025). Backend-enforced RBAC with hardcoded allowlists prevents broken access control (A01:2025, API1:2023). Rate limiting on authentication endpoints mitigates credential brute-force attacks (A07:2025, API4:2023). The HMAC-chained audit trail makes tampering detectable (A09:2025). AES-256-GCM encrypted TOTP secrets and bcrypt/PASSWORD_DEFAULT hash storage prevent plaintext credential exposure (A04:2025). Together these controls form a defense-in-depth architecture implementable in the current plain-PHP/PostgreSQL architecture. The endpoint control table, ACL rules, and rate-limiter implementation are documented design artifacts; their concrete backend implementation is future work allocated to later approved stages.
 
 ## Rate-Limiting Design (Planned Future Implementation)
 

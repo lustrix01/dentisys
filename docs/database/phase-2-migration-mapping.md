@@ -6,7 +6,7 @@ Phase 2 reduces the DentiSys database from 46 business tables (Phase 1C) to 15 a
 
 **Total physical tables**: 16 (15 application + 1 `_schema_migrations`)
 
-Exact count: 16 total physical tables.
+Exact count: 16 total physical tables. Migration `006_remove_email_code_2fa.sql` retires email-code 2FA data and schema support while preserving the 15-table application baseline.
 
 **Clean-install-only baseline**: 001_baseline_schema.sql, 002_seed_rbac.sql, 003_seed_system_settings.sql
 
@@ -35,7 +35,7 @@ Exact count: 16 total physical tables.
 
 ## Legacy Migration Classification
 
-All 80 Phase 1A/1B/1C migration files moved to `database/migrations/archive/`. None remain active. The active migration directory contains exactly 3 files:
+Superseded Phase 1A/1B/1C migrations were removed during the PostgreSQL cutover. The active PostgreSQL migration directory contains:
 
 - 001_baseline_schema.sql — 15 application tables + _schema_migrations
 - 002_seed_rbac.sql — 125 static RBAC grants
