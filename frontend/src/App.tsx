@@ -38,12 +38,15 @@ import { Settings as DeanSettings } from './pages/admin/Settings';
 import { Profile as SecretaryProfile } from './pages/secretary/Profile';
 import { Settings as SecretarySettings } from './pages/secretary/Settings';
 import { Login } from './pages/auth/Login';
+import { SsoLogin } from './pages/auth/SsoLogin';
 import { SignUp } from './pages/auth/SignUp';
 import { ActivateSecretary } from './pages/auth/ActivateSecretary';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
 import { MfaVerify } from './pages/auth/MfaVerify';
 import { RecoveryCodes } from './pages/auth/RecoveryCodes';
+
+import { LandingPage } from './pages/LandingPage';
 
 function RoleDashboard() {
   const { user } = useAuth();
@@ -61,13 +64,42 @@ function AuthenticatedLayout() {
   );
 }
 
+function RootRoute() {
+  const { phase, user } = useAuth();
+
+  if (phase === 'bootstrapping') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-sm font-semibold text-slate-500">
+        Restoring secure session…
+      </div>
+    );
+  }
+
+  if (phase === 'authenticated' && user) {
+    return (
+      <Layout>
+        <RoleDashboard />
+      </Layout>
+    );
+  }
+
+  return <LandingPage />;
+}
+
 function App() {
   return (
     <Router>
       <AuthProvider>
         <AppProvider>
           <Routes>
-            <Route path="/login" element={<Login />} />
+            {/* Public Root Route: Landing page for guests, Role Dashboard for authenticated users */}
+            <Route path="/" element={<RootRoute />} />
+            <Route path="/landing" element={<LandingPage />} />
+
+            {/* Primary SSO Login & Dev Password Login */}
+            <Route path="/login" element={<SsoLogin />} />
+            <Route path="/login/dev" element={<Login />} />
+            <Route path="/dev-login" element={<Navigate to="/login/dev" replace />} />
             <Route path="/2fa/verify" element={<MfaVerify />} />
             <Route path="/mfa/verify" element={<Navigate to="/2fa/verify" replace />} />
             <Route path="/recovery-codes" element={<RecoveryCodes />} />
@@ -81,8 +113,7 @@ function App() {
 
             <Route element={<ProtectedRoute />}>
               <Route element={<AuthenticatedLayout />}>
-                {/* Dynamic Root Dashboard Selection */}
-                <Route path="/" element={<RoleDashboard />} />
+                <Route path="/dashboard" element={<RoleDashboard />} />
 
                 <Route element={<ProtectedRoute allowedRoles={['faculty']} />}>
                   <Route path="/classes" element={<ClassManagement />} />
