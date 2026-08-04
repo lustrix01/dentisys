@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { login as apiLogin, getMe, setAccessToken as setApiAccessToken } from '../../services/apiClient';
 
 export function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialEmail = searchParams.get('email') || '';
   const { beginLogin, storeTwoFactorChallenge, setAccessToken, setUser, setAuthenticated } = useAuth();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

@@ -5,10 +5,10 @@ import { ShieldCheck, GraduationCap, Video, ArrowLeft, KeyRound } from 'lucide-r
 export function SsoLogin() {
   const navigate = useNavigate();
 
-  const handleRoleSelect = () => {
+  const handleRoleSelect = (email: string) => {
     // In production, this will initiate BU ICTO OAuth2/OIDC Single Sign-On.
-    // During development, redirect to the dev password login interface.
-    navigate('/login/dev');
+    // During development, redirect to the dev password login interface pre-filled with email.
+    navigate(`/login/dev?email=${encodeURIComponent(email)}`);
   };
 
   return (
@@ -85,7 +85,7 @@ export function SsoLogin() {
             
             {/* Role 1: Dean & Administration */}
             <div 
-              onClick={handleRoleSelect}
+              onClick={() => handleRoleSelect('admin@bicol-u.edu.ph')}
               className="w-full bg-[#F8F9FA] dark:bg-slate-800/50 hover:bg-[#F4F1FA] dark:hover:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-3.5 sm:p-4 flex items-center gap-3.5 transition-all group cursor-pointer"
             >
               <div className="w-11 h-11 rounded-xl bg-accent-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm shadow-accent-600/20 group-hover:scale-105 transition-transform">
@@ -103,7 +103,7 @@ export function SsoLogin() {
 
             {/* Role 2: Faculty Members */}
             <div 
-              onClick={handleRoleSelect}
+              onClick={() => handleRoleSelect('faculty@bicol-u.edu.ph')}
               className="w-full bg-[#F8F9FA] dark:bg-slate-800/50 hover:bg-[#F4F1FA] dark:hover:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-3.5 sm:p-4 flex items-center gap-3.5 transition-all group cursor-pointer"
             >
               <div className="w-11 h-11 rounded-xl bg-accent-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm shadow-accent-600/20 group-hover:scale-105 transition-transform">
@@ -121,7 +121,7 @@ export function SsoLogin() {
 
             {/* Role 3: Class Secretary */}
             <div 
-              onClick={handleRoleSelect}
+              onClick={() => handleRoleSelect('secretary@bicol-u.edu.ph')}
               className="w-full bg-[#F8F9FA] dark:bg-slate-800/50 hover:bg-[#F4F1FA] dark:hover:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-3.5 sm:p-4 flex items-center gap-3.5 transition-all group cursor-pointer"
             >
               <div className="w-11 h-11 rounded-xl bg-accent-600 text-white flex items-center justify-center flex-shrink-0 shadow-sm shadow-accent-600/20 group-hover:scale-105 transition-transform">
