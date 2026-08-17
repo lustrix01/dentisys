@@ -163,8 +163,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     // Faculty (default)
     return [
       { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-      { name: 'Class Management', path: '/classes', icon: BookOpen },
-      { name: 'Student Management', path: '/students', icon: Users },
+      { name: 'My Classes & Rosters', path: '/classes', icon: BookOpen },
       { name: 'Grade Computation', path: '/grades', icon: Calculator },
       { name: 'Retention Monitoring', path: '/retention', icon: AlertTriangle, badge: 'retention' },
       { name: 'Attendance Monitoring', path: '/attendance', icon: CalendarDays },
@@ -201,8 +200,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const crumbs = [{ name: 'Home', path: '/' }];
     const path = location.pathname;
 
-    if (path === '/students') {
-      crumbs.push({ name: 'Student Management', path: '/students' });
+    if (path === '/classes' || path === '/students' || path === '/faculty/classes-rosters') {
+      crumbs.push({ name: 'My Classes & Rosters', path: '/classes' });
     } else if (path === '/grades') {
       crumbs.push({ name: 'Grade Computation', path: '/grades' });
     } else if (path === '/retention') {

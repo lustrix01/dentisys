@@ -15,6 +15,7 @@ import { AttendanceMonitoring } from './pages/faculty/AttendanceMonitoring';
 import { Reports } from './pages/faculty/Reports';
 import { EmailManagement } from './pages/faculty/EmailManagement';
 import { ClassManagement } from './pages/faculty/ClassManagement';
+import { ClassesAndRosters } from './pages/faculty/ClassesAndRosters';
 
 // Dean (Admin) Page Imports
 import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
@@ -116,9 +117,10 @@ function App() {
                 <Route path="/dashboard" element={<RoleDashboard />} />
 
                 <Route element={<ProtectedRoute allowedRoles={['faculty']} />}>
-                  <Route path="/classes" element={<ClassManagement />} />
-                  <Route path="/faculty/classes" element={<ClassManagement />} />
-                  <Route path="/students" element={<StudentManagement />} />
+                  <Route path="/classes" element={<ClassesAndRosters />} />
+                  <Route path="/faculty/classes" element={<ClassesAndRosters />} />
+                  <Route path="/faculty/classes-rosters" element={<ClassesAndRosters />} />
+                  <Route path="/students" element={<ClassesAndRosters />} />
                   <Route path="/grades" element={<GradeComputation />} />
                   <Route path="/retention" element={<RetentionMonitoring />} />
                   <Route path="/attendance" element={<AttendanceMonitoring />} />
