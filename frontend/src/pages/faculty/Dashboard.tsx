@@ -394,7 +394,7 @@ export const Dashboard: React.FC = () => {
                   Clinical Operations
                 </span>
                 <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  CCTV & Attendance Override Guidelines
+                  Facial Verification & Attendance Guidelines
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                   Class Secretaries may submit daily attendance logs for faculty audit verification.

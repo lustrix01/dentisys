@@ -136,35 +136,36 @@ export const Dashboard: React.FC = () => {
             </Card>
           </div>
 
-          {/* 4. Quick Actions Panel */}
+          {/* Quick Action Grid */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold font-heading text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Quick Actions
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              
               <button
                 onClick={() => navigate('/secretary/attendance')}
                 className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-blue-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
               >
-                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">Logs</span>
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">Daily Register</span>
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-blue-600 transition-colors">
-                  Attendance List
+                  Section Attendance List
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Review section records
+                  View daily student check-ins
                 </p>
               </button>
 
               <button
                 onClick={() => navigate('/secretary/override')}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-sky-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
+                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-emerald-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
               >
-                <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider block">Corrections</span>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-sky-600 transition-colors">
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Audited Actions</span>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-emerald-600 transition-colors">
                   Manual Override
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Correct with reason
+                  Correct attendance log status
                 </p>
               </button>
 
@@ -174,10 +175,10 @@ export const Dashboard: React.FC = () => {
               >
                 <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block">Integration</span>
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-indigo-600 transition-colors">
-                  CCTV Sync
+                  Face & Geofence Logs
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  View feed status
+                  View biometric logs
                 </p>
               </button>
 
@@ -244,7 +245,7 @@ export const Dashboard: React.FC = () => {
 
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[9px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">
-                  CCTV Sync
+                  Face Verification
                 </span>
                 <h4 className="font-bold text-slate-800 dark:text-slate-100">
                   Biometric Verification Active

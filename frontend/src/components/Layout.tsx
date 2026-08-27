@@ -24,7 +24,9 @@ import {
   ListChecks,
   Mail,
   UserCheck,
-  BookOpen
+  BookOpen,
+  Camera,
+  History
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
@@ -44,6 +46,7 @@ const ROLE_TITLES: Record<string, string> = {
   admin: 'Office of the Dean',
   faculty: 'Dental Faculty Member',
   secretary: 'Class Secretary',
+  student: 'Dental Student',
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
@@ -82,6 +85,20 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           sidebarGradient: 'from-accent-50/90 to-accent-100/70 dark:from-accent-955/80 dark:to-accent-950/70',
         };
       case 'secretary':
+        return {
+          bgGradient: 'from-blue-500/10 to-blue-600/10',
+          textActive: 'text-blue-600 dark:text-blue-400 font-semibold border-l-4 border-blue-500',
+          iconActive: 'text-blue-500',
+          iconHover: 'group-hover:text-blue-600 dark:group-hover:text-blue-300',
+          logoRing: 'shadow-blue-500/20',
+          avatarBg: 'from-blue-200 to-blue-300 dark:from-blue-800 dark:to-blue-900',
+          avatarText: 'text-blue-700 dark:text-blue-300 font-bold font-heading',
+          crumbHover: 'hover:text-blue-500',
+          roleLabelText: 'text-blue-500',
+          hoverBg: 'hover:bg-blue-50/50 dark:hover:bg-blue-900/50 hover:text-blue-850 dark:hover:text-slate-200',
+          sidebarGradient: 'from-blue-50/90 to-blue-100/70 dark:from-blue-955/80 dark:to-blue-950/70',
+        };
+      case 'student':
         return {
           bgGradient: 'from-blue-500/10 to-blue-600/10',
           textActive: 'text-blue-600 dark:text-blue-400 font-semibold border-l-4 border-blue-500',
@@ -157,6 +174,17 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
         { name: 'My Profile', path: '/secretary/profile', icon: UserCircle },
         { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
+      ];
+    }
+
+    if (currentUser.role === 'student') {
+      return [
+        { name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
+        { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
+        { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
+        { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
+        { name: 'My Classes & Retention', path: '/student/classes', icon: BookOpen },
+        { name: 'My Student Profile', path: '/student/profile', icon: UserCircle },
       ];
     }
     
@@ -488,12 +516,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                     </div>
 
                     <Link
-                      to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? '/secretary/profile' : '/faculty/profile'}
+                      to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
                       onClick={() => setIsProfileOpen(false)}
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <User className="w-4 h-4 text-slate-400" />
-                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : 'My Faculty Profile'}</span>
+                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Student Profile' : 'My Faculty Profile'}</span>
                     </Link>
 
                     <Link

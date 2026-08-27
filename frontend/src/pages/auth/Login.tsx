@@ -27,6 +27,23 @@ export function Login() {
     setIsLoading(true);
     setError('');
 
+    // Handle student role login (client-side demo auth)
+    if (email.trim().toLowerCase() === 'student@bicol-u.edu.ph') {
+      const studentUser = {
+        user_id: 99,
+        login_email: 'student@bicol-u.edu.ph',
+        role: 'student' as const,
+        display_name: 'Juan Dela Cruz',
+        session_uuid: 'demo-student-session-uuid',
+      };
+      setAccessToken('demo-student-token');
+      setUser(studentUser);
+      setAuthenticated();
+      setIsLoading(false);
+      navigate('/student/dashboard', { replace: true });
+      return;
+    }
+
     try {
       const result = await apiLogin(email, password);
 

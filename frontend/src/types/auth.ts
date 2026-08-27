@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'faculty' | 'secretary';
+export type UserRole = 'admin' | 'faculty' | 'secretary' | 'student';
 
 export type AuthPhase =
   | 'bootstrapping'

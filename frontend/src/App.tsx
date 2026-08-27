@@ -32,6 +32,14 @@ import { CCTVFeed as SecretaryCCTVFeed } from './pages/secretary/CCTVFeed';
 import { AuditTrail as SecretaryAuditTrail } from './pages/secretary/AuditTrail';
 import { AuditTrail as FacultyAuditTrail } from './pages/faculty/AuditTrail';
 
+// Student Page Imports
+import { Dashboard as StudentDashboard } from './pages/student/Dashboard';
+import { Attendance as StudentAttendance } from './pages/student/Attendance';
+import { AttendanceLogs as StudentAttendanceLogs } from './pages/student/AttendanceLogs';
+import { FaceRegistration as StudentFaceRegistration } from './pages/student/FaceRegistration';
+import { Classes as StudentClasses } from './pages/student/Classes';
+import { Profile as StudentProfile } from './pages/student/Profile';
+
 import { Profile as FacultyProfile } from './pages/faculty/Profile';
 import { Settings as FacultySettings } from './pages/faculty/Settings';
 import { Profile as DeanProfile } from './pages/admin/Profile';
@@ -54,7 +62,14 @@ function RoleDashboard() {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'admin') return <DeanDashboard />;
   if (user.role === 'secretary') return <SecretaryDashboard />;
+  if (user.role === 'student') return <StudentDashboard />;
   return <FacultyDashboard />;
+}
+
+function RoleAttendance() {
+  const { user } = useAuth();
+  if (user?.role === 'student') return <StudentAttendance />;
+  return <AttendanceMonitoring />;
 }
 
 function AuthenticatedLayout() {
@@ -123,12 +138,21 @@ function App() {
                   <Route path="/students" element={<ClassesAndRosters />} />
                   <Route path="/grades" element={<GradeComputation />} />
                   <Route path="/retention" element={<RetentionMonitoring />} />
-                  <Route path="/attendance" element={<AttendanceMonitoring />} />
+                  <Route path="/attendance" element={<RoleAttendance />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/email-management" element={<EmailManagement />} />
                   <Route path="/faculty/audit-trail" element={<FacultyAuditTrail />} />
                   <Route path="/faculty/profile" element={<FacultyProfile />} />
                   <Route path="/faculty/settings" element={<FacultySettings />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['student']} />}>
+                  <Route path="/student/dashboard" element={<StudentDashboard />} />
+                  <Route path="/student/attendance" element={<StudentAttendance />} />
+                  <Route path="/student/attendance-logs" element={<StudentAttendanceLogs />} />
+                  <Route path="/student/face-registration" element={<StudentFaceRegistration />} />
+                  <Route path="/student/classes" element={<StudentClasses />} />
+                  <Route path="/student/profile" element={<StudentProfile />} />
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>

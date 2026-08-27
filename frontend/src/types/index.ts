@@ -49,6 +49,11 @@ export interface AttendanceRecord {
   date: string;         // YYYY-MM-DD
   subjectCode: string;
   status: AttendanceStatus;
+  verificationType?: 'facial_geofence' | 'manual_override' | 'standard';
+  faceVerified?: boolean;
+  locationVerified?: boolean;
+  verifiedLocationName?: string;
+  verifiedAt?: string;
   overrideReason?: string;
   overrideBy?: string;
   overrideByName?: string;
