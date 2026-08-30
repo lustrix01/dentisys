@@ -263,11 +263,6 @@ export function SsoLogin() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  <div className="flex justify-end mt-1.5">
-                    <Link to="/forgot-password" className="text-xs font-semibold text-accent-600 dark:text-accent-400 hover:underline">
-                      Forgot Password?
-                    </Link>
-                  </div>
                 </div>
 
                 <div className="pt-1">
@@ -283,23 +278,24 @@ export function SsoLogin() {
                     )}
                   </button>
                 </div>
+
+                {/* Forgot Password Contact ICTO Link */}
+                <div className="mt-4 text-center">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    Forgot password?{' '}
+                    <a
+                      href="https://icto.bicol-u.edu.ph/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all"
+                    >
+                      Contact ICTO
+                    </a>
+                  </p>
+                </div>
               </form>
 
-              {/* Links Footer */}
-              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 text-center space-y-1.5 text-xs">
-                <p className="text-slate-500 dark:text-slate-400 font-medium">
-                  Faculty Member?{' '}
-                  <Link to="/signup" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
-                    Sign up for an account
-                  </Link>
-                </p>
-                <p className="text-slate-500 dark:text-slate-400 font-medium">
-                  Class Secretary?{' '}
-                  <Link to="/activate-secretary" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
-                    Activate invitation
-                  </Link>
-                </p>
-              </div>
+
             </div>
           </div>
 

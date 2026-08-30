@@ -24,9 +24,11 @@ import {
   ListChecks,
   Mail,
   UserCheck,
+  UserPlus,
   BookOpen,
   Camera,
-  History
+  History,
+  Play
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
@@ -40,6 +42,7 @@ type NavItem = {
   path: string;
   icon: typeof LayoutDashboard;
   badge?: string;
+  sectionHeader?: string;
 };
 
 const ROLE_TITLES: Record<string, string> = {
@@ -156,8 +159,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     if (currentUser.role === 'admin') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-        { name: 'Faculty Approval', path: '/admin/faculty-approval', icon: UserCheck },
-        { name: 'Retention Criteria', path: '/admin/retention-criteria', icon: AlertTriangle },
+        { name: 'Faculty Invitations', path: '/admin/faculty-invite', icon: UserPlus },
         { name: 'Reports & Analytics', path: '/admin/reports', icon: FileSpreadsheet },
         { name: 'Audit Trail', path: '/admin/audit-trail', icon: ListChecks },
         { name: 'Dean Profile', path: '/admin/profile', icon: UserCircle },
@@ -167,13 +169,22 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     
     if (currentUser.role === 'secretary') {
       return [
-        { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        // Secretary Functions
+        { name: 'Dashboard', path: '/', icon: LayoutDashboard, sectionHeader: 'Secretary Functions' },
+        { name: 'Start Class Session', path: '/secretary/start-session', icon: Play },
         { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'Manual Override', path: '/secretary/override', icon: ClipboardPenLine },
-        { name: 'CCTV Integration', path: '/secretary/cctv', icon: Video },
         { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
-        { name: 'My Profile', path: '/secretary/profile', icon: UserCircle },
+        { name: 'Secretary Profile', path: '/secretary/profile', icon: UserCircle },
         { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
+
+        // Student Functions
+        { name: 'Student Dashboard', path: '/student/dashboard', icon: LayoutDashboard, sectionHeader: 'Student Functions' },
+        { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
+        { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
+        { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
+        { name: 'My Classes', path: '/student/classes', icon: BookOpen },
+        { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
       ];
     }
 
@@ -183,7 +194,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
         { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
         { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
-        { name: 'My Classes & Retention', path: '/student/classes', icon: BookOpen },
+        { name: 'My Classes', path: '/student/classes', icon: BookOpen },
+        { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
         { name: 'My Student Profile', path: '/student/profile', icon: UserCircle },
       ];
     }
@@ -232,8 +244,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'My Classes & Rosters', path: '/classes' });
     } else if (path === '/grades') {
       crumbs.push({ name: 'Grade Computation', path: '/grades' });
-    } else if (path === '/retention') {
-      crumbs.push({ name: 'Retention Monitoring', path: '/retention' });
+    } else if (path === '/retention' || path === '/student/retention') {
+      crumbs.push({ name: 'Retention Monitoring', path: path });
     } else if (path === '/attendance') {
       crumbs.push({ name: 'Attendance Monitoring', path: '/attendance' });
     } else if (path === '/reports') {
@@ -260,16 +272,28 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Reports & Analytics', path: '/admin/reports' });
     } else if (path === '/admin/audit-trail') {
       crumbs.push({ name: 'Audit Trail', path: '/admin/audit-trail' });
+    } else if (path === '/secretary/start-session') {
+      crumbs.push({ name: 'Start Class Session', path: '/secretary/start-session' });
     } else if (path === '/secretary/attendance') {
       crumbs.push({ name: 'Attendance List', path: '/secretary/attendance' });
     } else if (path === '/secretary/override') {
       crumbs.push({ name: 'Manual Override', path: '/secretary/override' });
-    } else if (path === '/secretary/cctv') {
-      crumbs.push({ name: 'CCTV Integration', path: '/secretary/cctv' });
     } else if (path === '/secretary/audit-trail') {
       crumbs.push({ name: 'My Activity Log', path: '/secretary/audit-trail' });
     } else if (path === '/faculty/audit-trail') {
       crumbs.push({ name: 'My Activity Log', path: '/faculty/audit-trail' });
+    } else if (path === '/student/dashboard') {
+      crumbs.push({ name: 'Student Dashboard', path: '/student/dashboard' });
+    } else if (path === '/student/attendance') {
+      crumbs.push({ name: 'Daily Attendance', path: '/student/attendance' });
+    } else if (path === '/student/attendance-logs') {
+      crumbs.push({ name: 'Attendance Logs', path: '/student/attendance-logs' });
+    } else if (path === '/student/face-registration') {
+      crumbs.push({ name: 'Face Registration', path: '/student/face-registration' });
+    } else if (path === '/student/classes') {
+      crumbs.push({ name: 'My Classes & Retention', path: '/student/classes' });
+    } else if (path === '/student/profile') {
+      crumbs.push({ name: 'My Student Profile', path: '/student/profile' });
     } else if (path !== '/') {
       crumbs.push({ name: 'Dashboard', path: '/' });
     }
@@ -345,37 +369,49 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Navigation Items */}
         <nav className="flex-1 space-y-1.5 overflow-y-auto">
-          {navItems.map((item) => {
+          {navItems.map((item, idx) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
             const badgeValue = item.badge ? getBadgeValue(item.badge) : undefined;
 
             return (
-              <Link
-                key={item.name}
-                to={item.path}
-                onClick={() => setIsSidebarOpen(false)}
-                className={`flex items-center justify-between px-3 py-3 rounded-2xl transition-all duration-300 group ${
-                  isActive
-                    ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive}`
-                    : `text-slate-500 dark:text-slate-400 ${colors.hoverBg}`
-                }`}
-                title={isSidebarCollapsed ? item.name : undefined}
-              >
-                <div className="flex items-center space-x-3 min-w-0">
-                  <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${
-                    isActive ? colors.iconActive : `text-slate-400 dark:text-slate-500 ${colors.iconHover}`
-                  }`} />
-                  {!isSidebarCollapsed && (
-                    <span className="text-sm font-medium truncate transition-opacity duration-300">{item.name}</span>
-                  )}
-                </div>
-                {badgeValue !== undefined && !isSidebarCollapsed && (
-                  <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
-                    {badgeValue}
-                  </span>
+              <React.Fragment key={item.name + idx}>
+                {item.sectionHeader && (
+                  <div className={`px-3 ${idx === 0 ? 'pt-1' : 'pt-4'} pb-1.5`}>
+                    {!isSidebarCollapsed ? (
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600 dark:text-blue-400 opacity-90 block">
+                        {item.sectionHeader}
+                      </span>
+                    ) : (
+                      idx > 0 && <div className="border-t border-slate-200/60 dark:border-slate-800/60 my-2" />
+                    )}
+                  </div>
                 )}
-              </Link>
+                <Link
+                  to={item.path}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className={`flex items-center justify-between px-3 py-3 rounded-2xl transition-all duration-300 group ${
+                    isActive
+                      ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive}`
+                      : `text-slate-500 dark:text-slate-400 ${colors.hoverBg}`
+                  }`}
+                  title={isSidebarCollapsed ? item.name : undefined}
+                >
+                  <div className="flex items-center space-x-3 min-w-0">
+                    <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${
+                      isActive ? colors.iconActive : `text-slate-400 dark:text-slate-500 ${colors.iconHover}`
+                    }`} />
+                    {!isSidebarCollapsed && (
+                      <span className="text-sm font-medium truncate transition-opacity duration-300">{item.name}</span>
+                    )}
+                  </div>
+                  {badgeValue !== undefined && !isSidebarCollapsed && (
+                    <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
+                      {badgeValue}
+                    </span>
+                  )}
+                </Link>
+              </React.Fragment>
             );
           })}
         </nav>

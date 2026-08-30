@@ -19,16 +19,15 @@ import { ClassesAndRosters } from './pages/faculty/ClassesAndRosters';
 
 // Dean (Admin) Page Imports
 import { Dashboard as DeanDashboard } from './pages/admin/Dashboard';
-import { RetentionCriteria } from './pages/admin/RetentionCriteria';
 import { DeanReports } from './pages/admin/SystemAudit';
 import { AuditTrail as DeanAuditTrail } from './pages/admin/AuditTrail';
-import { FacultyApproval } from './pages/admin/FacultyApproval';
+import { FacultyInvitation } from './pages/admin/FacultyInvitation';
 
 // Class Secretary Page Imports
 import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
+import { StartSession as SecretaryStartSession } from './pages/secretary/StartSession';
 import { AttendanceList as SecretaryAttendanceList } from './pages/secretary/AttendanceList';
 import { ManualAttendanceOverride } from './pages/secretary/ManualAttendanceOverride';
-import { CCTVFeed as SecretaryCCTVFeed } from './pages/secretary/CCTVFeed';
 import { AuditTrail as SecretaryAuditTrail } from './pages/secretary/AuditTrail';
 import { AuditTrail as FacultyAuditTrail } from './pages/faculty/AuditTrail';
 
@@ -38,6 +37,7 @@ import { Attendance as StudentAttendance } from './pages/student/Attendance';
 import { AttendanceLogs as StudentAttendanceLogs } from './pages/student/AttendanceLogs';
 import { FaceRegistration as StudentFaceRegistration } from './pages/student/FaceRegistration';
 import { Classes as StudentClasses } from './pages/student/Classes';
+import { RetentionMonitoring as StudentRetentionMonitoring } from './pages/student/RetentionMonitoring';
 import { Profile as StudentProfile } from './pages/student/Profile';
 
 import { Profile as FacultyProfile } from './pages/faculty/Profile';
@@ -131,13 +131,17 @@ function App() {
               <Route element={<AuthenticatedLayout />}>
                 <Route path="/dashboard" element={<RoleDashboard />} />
 
+                <Route element={<ProtectedRoute allowedRoles={['faculty', 'admin']} />}>
+                  <Route path="/retention" element={<RetentionMonitoring />} />
+                  <Route path="/faculty/retention" element={<RetentionMonitoring />} />
+                </Route>
+
                 <Route element={<ProtectedRoute allowedRoles={['faculty']} />}>
                   <Route path="/classes" element={<ClassesAndRosters />} />
                   <Route path="/faculty/classes" element={<ClassesAndRosters />} />
                   <Route path="/faculty/classes-rosters" element={<ClassesAndRosters />} />
                   <Route path="/students" element={<ClassesAndRosters />} />
                   <Route path="/grades" element={<GradeComputation />} />
-                  <Route path="/retention" element={<RetentionMonitoring />} />
                   <Route path="/attendance" element={<RoleAttendance />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/email-management" element={<EmailManagement />} />
@@ -146,18 +150,20 @@ function App() {
                   <Route path="/faculty/settings" element={<FacultySettings />} />
                 </Route>
 
-                <Route element={<ProtectedRoute allowedRoles={['student']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['student', 'secretary']} />}>
                   <Route path="/student/dashboard" element={<StudentDashboard />} />
                   <Route path="/student/attendance" element={<StudentAttendance />} />
                   <Route path="/student/attendance-logs" element={<StudentAttendanceLogs />} />
                   <Route path="/student/face-registration" element={<StudentFaceRegistration />} />
                   <Route path="/student/classes" element={<StudentClasses />} />
+                  <Route path="/student/retention" element={<StudentRetentionMonitoring />} />
                   <Route path="/student/profile" element={<StudentProfile />} />
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-                  <Route path="/admin/faculty-approval" element={<FacultyApproval />} />
-                  <Route path="/admin/retention-criteria" element={<RetentionCriteria />} />
+                  <Route path="/admin/faculty-invite" element={<FacultyInvitation />} />
+                  <Route path="/admin/faculty-approval" element={<Navigate to="/admin/faculty-invite" replace />} />
+                  <Route path="/admin/retention-criteria" element={<Navigate to="/admin/reports" replace />} />
                   <Route path="/admin/reports" element={<DeanReports />} />
                   <Route path="/admin/audit-trail" element={<DeanAuditTrail />} />
                   <Route path="/admin/users" element={<Navigate to="/" replace />} />
@@ -167,9 +173,9 @@ function App() {
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['secretary']} />}>
+                  <Route path="/secretary/start-session" element={<SecretaryStartSession />} />
                   <Route path="/secretary/attendance" element={<SecretaryAttendanceList />} />
                   <Route path="/secretary/override" element={<ManualAttendanceOverride />} />
-                  <Route path="/secretary/cctv" element={<SecretaryCCTVFeed />} />
                   <Route path="/secretary/audit-trail" element={<SecretaryAuditTrail />} />
                   <Route path="/secretary/profile" element={<SecretaryProfile />} />
                   <Route path="/secretary/settings" element={<SecretarySettings />} />

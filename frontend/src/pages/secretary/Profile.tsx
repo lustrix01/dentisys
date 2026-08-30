@@ -18,7 +18,6 @@ export const Profile: React.FC = () => {
     title: string;
     assignedClassName: string;
     classroomName: string;
-    cctvCameraId: string;
   }>({
     id: '',
     name: '',
@@ -26,7 +25,6 @@ export const Profile: React.FC = () => {
     title: '',
     assignedClassName: '',
     classroomName: '',
-    cctvCameraId: '',
   });
 
   const [editName, setEditName] = useState(profile.name);
@@ -90,7 +88,6 @@ export const Profile: React.FC = () => {
     { label: 'Email address', value: profile.email || 'Not available', icon: Mail },
     { label: 'Assigned class', value: profile.assignedClassName || 'Not assigned', icon: Users },
     { label: 'Classroom', value: profile.classroomName || 'Not assigned', icon: MapPin },
-    { label: 'CCTV integration', value: profile.cctvCameraId || 'Not configured', icon: Camera },
   ];
 
   return (
@@ -237,6 +234,46 @@ export const Profile: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Facial Biometric Registration & Data Privacy Audit Card */}
+      <Card className="p-6 space-y-4">
+        <CardHeader className="p-0 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Camera className="w-4.5 h-4.5 text-blue-600" />
+            Facial Biometric Registration & Data Privacy Audit
+          </CardTitle>
+        </CardHeader>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div>
+              <h4 className="font-bold text-slate-800 dark:text-slate-100">Face Biometric Status</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {localStorage.getItem(`dentisys_face_registered_${profile.id || '1'}`) === 'true' 
+                  ? 'Registered and active for biometric verification' 
+                  : 'Biometric registration available'}
+              </p>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+              localStorage.getItem(`dentisys_face_registered_${profile.id || '1'}`) === 'true'
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' 
+                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+            }`}>
+              {localStorage.getItem(`dentisys_face_registered_${profile.id || '1'}`) === 'true' ? 'Active ✓' : 'Pending'}
+            </span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 space-y-2">
+            <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-bold">
+              <ShieldCheck className="w-4 h-4" />
+              <span>Data Privacy Act of 2012 (RA 10173) Compliance</span>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
+              Your consent record is retained for audit compliance. Facial biometric descriptors are processed strictly for attendance verification within DentiSys.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <MfaSettingsCard userEmail={editEmail || profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
     </div>

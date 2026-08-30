@@ -63,17 +63,27 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       
-      {/* 1. Clean Welcome Banner Header (Admin PURPLE Theme) */}
-      <div className="rounded-3xl bg-gradient-to-r from-accent-700 via-accent-800 to-purple-950 p-6 sm:p-8 text-white shadow-lg shadow-accent-900/10">
-        <span className="text-xs font-bold text-accent-200 tracking-wider uppercase block mb-1">
-          Dean & Administration Portal • Bicol University CDM
-        </span>
-        <h1 className="text-2xl sm:text-3xl font-extrabold font-heading tracking-tight">
-          Welcome back, {user?.display_name || 'Dean Maria Santos'}
-        </h1>
-        <p className="text-xs sm:text-sm text-accent-100/90 mt-1.5 max-w-2xl leading-relaxed">
-          Oversee university user accounts, faculty pending approvals, student retention watch standings, institutional system rules, and activity audit trails.
-        </p>
+      {/* 1. Clean Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+        <div>
+          <span className="text-xs font-extrabold text-accent-600 dark:text-accent-400 uppercase tracking-widest block mb-0.5">
+            Dean & Administration Portal • Bicol University CDM
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
+            Welcome back, {user?.display_name || 'Dean Maria Santos'}
+          </h1>
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Oversee university faculty email invitations, student attendance logs, system reports, and activity audit trails.
+          </p>
+        </div>
+
+        <button
+          onClick={() => navigate('/admin/faculty-invite')}
+          className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-accent-600 hover:bg-accent-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-accent-600/20 transition-all cursor-pointer flex-shrink-0"
+        >
+          <span>Invite Faculty</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
       </div>
 
       {/* 2-Column Layout */}
@@ -90,18 +100,18 @@ export const Dashboard: React.FC = () => {
                   Administration Workspace
                 </span>
                 <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100 mt-0.5">
-                  System Rules & Faculty Approvals
+                  Faculty Email Invitations & Operations
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-lg leading-relaxed">
-                  Review applicant faculty accounts, update system governance rules, inspect global retention metrics, and analyze audit logs.
+                  Send email invitations to new faculty members, monitor registered accounts, and analyze audit logs.
                 </p>
               </div>
 
               <button
-                onClick={() => navigate('/admin/approvals')}
+                onClick={() => navigate('/admin/faculty-invite')}
                 className="self-start sm:self-center flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-accent-600/20 transition-all cursor-pointer flex-shrink-0"
               >
-                <span>Faculty Approvals</span>
+                <span>Invite Faculty</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

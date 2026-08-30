@@ -8,7 +8,6 @@ export interface SecretaryUser {
   assignedClassId?: string;
   assignedClassName?: string;
   classroomName?: string;
-  cctvCameraId?: string;
 }
 
 let _currentSecretary: SecretaryUser | null = null;

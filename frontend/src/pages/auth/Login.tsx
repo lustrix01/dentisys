@@ -209,11 +209,6 @@ export function Login() {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
-                <div className="flex justify-end mt-2">
-                  <Link to="/forgot-password" className="text-xs font-semibold text-accent-600 dark:text-accent-400 hover:underline">
-                    Forgot Password?
-                  </Link>
-                </div>
               </div>
 
               <div className="pt-2">
@@ -229,23 +224,24 @@ export function Login() {
                   )}
                 </button>
               </div>
+
+              {/* Forgot Password Contact ICTO Link */}
+              <div className="mt-4 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  Forgot password?{' '}
+                  <a
+                    href="https://icto.bicol-u.edu.ph/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all"
+                  >
+                    Contact ICTO
+                  </a>
+                </p>
+              </div>
             </form>
 
-            {/* Links Footer */}
-            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center space-y-2">
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Faculty Member?{' '}
-                <Link to="/signup" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
-                  Sign up for an account
-                </Link>
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Class Secretary?{' '}
-                <Link to="/activate-secretary" className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all">
-                  Activate invitation
-                </Link>
-              </p>
-            </div>
+
           </div>
         </div>
 

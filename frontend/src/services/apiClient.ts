@@ -638,7 +638,6 @@ export function getSecretaryDashboardKpisApi(): Promise<{
     classId: string;
     className: string;
     classroomName: string;
-    cctvCameraId: string | null;
   };
 }> {
   return request('GET', '/secretary/dashboard/kpis');
@@ -681,7 +680,6 @@ export function getSecretaryProfileApi(): Promise<{
     title: string;
     assignedClassName: string;
     classroomName: string;
-    cctvCameraId: string;
     theme: string;
   };
 }> {

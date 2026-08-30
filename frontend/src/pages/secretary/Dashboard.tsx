@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight } from 'lucide-react';
+import { Search, ArrowRight, Play, Zap, Clock, CheckCircle2, BookOpen, MapPin } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { getSecretaryDashboardKpisApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -41,17 +41,29 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       
-      {/* 1. Clean Welcome Banner Header (Class Secretary BLUE Theme) */}
-      <div className="rounded-3xl bg-gradient-to-r from-sky-700 via-blue-800 to-indigo-950 p-6 sm:p-8 text-white shadow-lg shadow-blue-900/10">
-        <span className="text-xs font-bold text-sky-200 tracking-wider uppercase block mb-1">
-          Class Secretary Portal • Section {assignedClassName}
-        </span>
-        <h1 className="text-2xl sm:text-3xl font-extrabold font-heading tracking-tight">
-          Welcome back, {user?.display_name || 'Class Secretary'}
-        </h1>
-        <p className="text-xs sm:text-sm text-sky-100/90 mt-1.5 max-w-2xl leading-relaxed">
-          Manage your assigned section attendance sheets, daily student check-ins, manual attendance overrides, and CCTV verification logs.
-        </p>
+      {/* 1. Clean Top Header with Highlighted Action Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+        <div>
+          <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-0.5">
+            Class Secretary Portal • Section {assignedClassName}
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
+            Welcome back, {user?.display_name || 'Class Secretary'}
+          </h1>
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Manage section attendance registers, start live class sessions, and submit manual overrides.
+          </p>
+        </div>
+
+        {/* Highlighted Primary CTA Button */}
+        <button
+          onClick={() => navigate('/secretary/start-session')}
+          className="flex items-center justify-center gap-2.5 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
+        >
+          <Play className="w-4 h-4 fill-white" />
+          <span>Start Class Session</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
       </div>
 
       {/* 2-Column Layout */}
@@ -71,7 +83,7 @@ export const Dashboard: React.FC = () => {
                   Section Operations & Attendance Tracking
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-lg leading-relaxed">
-                  Review student check-in entries, perform manual attendance overrides with audit logging, and verify CCTV sync status.
+                  Review student check-in entries, perform manual attendance overrides with audit logging, and verify section attendance status.
                 </p>
               </div>
 
@@ -170,28 +182,56 @@ export const Dashboard: React.FC = () => {
               </button>
 
               <button
-                onClick={() => navigate('/secretary/cctv')}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-indigo-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
+                onClick={() => navigate('/student/attendance')}
+                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-blue-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
               >
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block">Integration</span>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-indigo-600 transition-colors">
-                  Face & Geofence Logs
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">Student Feature</span>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-blue-600 transition-colors">
+                  Daily Attendance Check-In
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  View biometric logs
+                  Camera & Geofence verification
+                </p>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <button
+                onClick={() => navigate('/student/face-registration')}
+                className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/60 dark:border-slate-800/80 hover:border-teal-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
+              >
+                <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider block">Student Biometrics</span>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5 group-hover:text-teal-600 transition-colors">
+                  Face Registration
+                </h4>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Webcam biometric enrollment flow
                 </p>
               </button>
 
               <button
-                onClick={() => navigate('/secretary/profile')}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-slate-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
+                onClick={() => navigate('/student/attendance-logs')}
+                className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/60 dark:border-slate-800/80 hover:border-amber-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
               >
-                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider block">Account</span>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-slate-600 transition-colors">
-                  Secretary Profile
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Student Logs</span>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5 group-hover:text-amber-600 transition-colors">
+                  Attendance Logs
                 </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  View assigned section
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Filterable student log records
+                </p>
+              </button>
+
+              <button
+                onClick={() => navigate('/student/classes')}
+                className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/60 dark:border-slate-800/80 hover:border-purple-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
+              >
+                <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block">Academic Roster</span>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5 group-hover:text-purple-600 transition-colors">
+                  My Classes & Retention
+                </h4>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Student subjects & retention status
                 </p>
               </button>
             </div>

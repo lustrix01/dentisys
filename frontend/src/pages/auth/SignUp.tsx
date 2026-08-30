@@ -238,27 +238,27 @@ export function SignUp() {
           <div className="max-w-lg w-full mx-auto">
             {/* Confirmation View: Pending Approval */}
             {isSubmittedPending ? (
-              <div className="p-8 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 rounded-3xl text-center space-y-5 my-4 animate-in fade-in zoom-in-95">
-                <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-600 dark:text-amber-300 flex items-center justify-center mx-auto shadow-md">
-                  <Clock className="w-8 h-8 animate-pulse" />
+              <div className="p-8 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-900/40 rounded-3xl text-center space-y-5 my-4 animate-in fade-in zoom-in-95">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-300 flex items-center justify-center mx-auto shadow-md">
+                  <CheckCircle2 className="w-8 h-8" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-extrabold text-amber-900 dark:text-amber-200 font-heading">
-                    Registration Request Submitted!
+                  <h3 className="text-xl font-extrabold text-emerald-900 dark:text-emerald-200 font-heading">
+                    Faculty Account Created!
                   </h3>
-                  <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider mt-1">
-                    Status: Pending Approval by Dean
+                  <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mt-1">
+                    Status: Account Active & Ready
                   </p>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-md mx-auto">
-                  Your Faculty account registration for <strong className="text-slate-900 dark:text-slate-100">{email}</strong> has been submitted. For security purposes, your account must be reviewed and approved by the <strong>Office of the Dean</strong> before you can log in to DentiSys.
+                  Your Faculty account for <strong className="text-slate-900 dark:text-slate-100">{email}</strong> has been successfully registered. You may now log in to DentiSys using your credentials or Google Sign-In with your Bicol University email.
                 </p>
                 <div className="pt-3">
                   <Link
                     to="/login"
                     className="inline-flex items-center justify-center px-6 py-3 rounded-xl font-bold text-xs text-white bg-accent-600 hover:bg-accent-700 active:scale-[0.99] transition-all shadow-md gap-2"
                   >
-                    Return to Sign In <ArrowRight className="w-4 h-4" />
+                    Proceed to Sign In <ArrowRight className="w-4 h-4" />
                   </Link>
                 </div>
               </div>

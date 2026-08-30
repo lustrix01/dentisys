@@ -109,19 +109,28 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       
-      {/* 1. Clean Blue Welcome Banner (WITHOUT buttons) */}
-      <div className="rounded-3xl bg-gradient-to-r from-sky-700 via-blue-800 to-indigo-950 p-6 sm:p-8 text-white shadow-lg shadow-blue-900/10">
-        <div className="space-y-1.5">
-          <span className="text-xs font-bold text-sky-200 tracking-wider uppercase block">
+      {/* 1. Clean Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+        <div>
+          <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-0.5">
             Dental Student Portal • Doctor of Dental Medicine (DDM IV)
           </span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {studentName}
           </h1>
-          <p className="text-xs sm:text-sm text-sky-100/90 leading-relaxed">
-            Student ID: <span className="font-mono font-bold">{studentId}</span> • Bicol University College of Dentistry
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Student ID: <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{studentId}</span> • Bicol University College of Dentistry
           </p>
         </div>
+
+        <button
+          onClick={() => navigate('/student/attendance')}
+          className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
+        >
+          <Camera className="w-4 h-4" />
+          <span>Daily Check-In</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
       </div>
 
       {/* RETENTION WARNING ALERT */}

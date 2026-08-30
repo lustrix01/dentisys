@@ -161,7 +161,7 @@ export const Settings: React.FC = () => {
               </CardHeader>
               <CardContent className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                 <ShieldCheck className="w-4 h-4 inline mr-2 text-slate-400" />
-                CCTV assignment, academic policy, grading rules, and account management are administrator-controlled.
+                Academic policy, grading rules, and account management are administrator-controlled.
               </CardContent>
             </Card>
           </div>
