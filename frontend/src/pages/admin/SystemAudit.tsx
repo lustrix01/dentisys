@@ -180,8 +180,7 @@ export const DeanReports: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
         <div>
-          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <FileSpreadsheet className="w-6 h-6 text-accent-500" />
+          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Reports & Analytics
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">

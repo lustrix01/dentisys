@@ -66,9 +66,6 @@ export const Dashboard: React.FC = () => {
       {/* 1. Clean Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <span className="text-xs font-extrabold text-accent-600 dark:text-accent-400 uppercase tracking-widest block mb-0.5">
-            Dean & Administration Portal • Bicol University CDM
-          </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {user?.display_name || 'Dean Maria Santos'}
           </h1>
@@ -96,9 +93,6 @@ export const Dashboard: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 mb-5">
               <div>
-                <span className="text-[10px] font-extrabold text-accent-600 dark:text-accent-400 uppercase tracking-widest block">
-                  Administration Workspace
-                </span>
                 <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100 mt-0.5">
                   Faculty Email Invitations & Operations
                 </h2>

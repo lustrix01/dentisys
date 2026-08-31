@@ -9,7 +9,7 @@ export function SsoLogin() {
   const [searchParams] = useSearchParams();
   const initialEmail = searchParams.get('email') || '';
   const { beginLogin, storeTwoFactorChallenge, setAccessToken, setUser, setAuthenticated } = useAuth();
-  
+
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -84,7 +84,7 @@ export function SsoLogin() {
 
   return (
     <div className="h-screen max-h-screen w-screen overflow-hidden flex flex-col justify-between bg-slate-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 relative select-none">
-      
+
       {/* Grid Pattern Overlay */}
       <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-75 pointer-events-none -z-10" />
 
@@ -125,7 +125,7 @@ export function SsoLogin() {
       {/* 2. Main Login Card Container */}
       <main className="flex-1 flex items-center justify-center px-4 py-4 min-h-0 overflow-y-auto">
         <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-[32px] shadow-xl shadow-slate-200/60 dark:shadow-none border border-slate-200/60 dark:border-slate-800/80 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[500px] my-auto relative z-10">
-          
+
           {/* Left Side: Lavender/Purple Branding Sidebar */}
           <div className="md:col-span-5 bg-[#EAE5F8] dark:bg-accent-950/20 p-8 flex flex-col justify-center items-center text-center relative overflow-hidden">
             <div className="absolute inset-0 bg-grid-slate-100/50 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] -z-10" />
@@ -137,20 +137,20 @@ export function SsoLogin() {
                 <div className="absolute inset-0 bg-accent-300/20 rounded-full blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <div className="relative w-24 h-24 flex items-center justify-center">
                   {!useFallbackSvg ? (
-                    <img 
-                      src="/tooth-logo.png" 
-                      alt="DentiSys Logo" 
-                      className="max-w-full max-h-full object-contain hover:scale-105 transition-transform duration-300" 
+                    <img
+                      src="/tooth-logo.png"
+                      alt="DentiSys Logo"
+                      className="max-w-full max-h-full object-contain hover:scale-105 transition-transform duration-300"
                       onError={() => setUseFallbackSvg(true)}
                     />
                   ) : (
-                    <svg 
-                      viewBox="0 0 100 100" 
-                      className="w-20 h-20 text-accent-600 dark:text-accent-400 drop-shadow-sm hover:scale-105 transition-transform duration-300" 
-                      fill="none" 
-                      stroke="currentColor" 
-                      strokeWidth="2.8" 
-                      strokeLinecap="round" 
+                    <svg
+                      viewBox="0 0 100 100"
+                      className="w-20 h-20 text-accent-600 dark:text-accent-400 drop-shadow-sm hover:scale-105 transition-transform duration-300"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.8"
+                      strokeLinecap="round"
                       strokeLinejoin="round"
                     >
                       <path d="M 30,40 C 25,25 40,20 50,28 C 60,20 75,25 70,40 C 68,60 72,75 66,85 C 63,90 56,90 54,82 C 52,74 51,64 50,64 C 49,64 48,74 46,82 C 44,90 37,90 34,85 C 28,75 32,60 30,40 Z" />
@@ -158,9 +158,9 @@ export function SsoLogin() {
                   )}
                 </div>
               </div>
-              
+
               <h1 className="text-3xl font-extrabold font-heading text-accent-800 dark:text-accent-300 tracking-tight mt-3">
-                DentiSys
+                DentiSYS
               </h1>
               <p className="text-xs font-semibold text-accent-600/80 dark:text-accent-400/80 uppercase tracking-widest text-center mt-2.5 max-w-[200px] leading-relaxed">
                 BU Dental Medicine Information System

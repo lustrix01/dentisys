@@ -327,9 +327,6 @@ export const AttendanceMonitoring: React.FC = () => {
       {/* 1. Clean Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest block mb-0.5">
-            Faculty Portal • Bicol University CDM
-          </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Attendance Monitoring Portal
           </h1>

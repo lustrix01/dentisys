@@ -185,7 +185,7 @@ export function ActivateSecretary() {
             </div>
 
             <h1 className="text-3xl font-extrabold font-heading text-blue-900 dark:text-blue-300 tracking-tight">
-              DentiSys
+              DentiSYS
             </h1>
             <p className="text-xs font-semibold text-blue-700/80 dark:text-blue-400/80 uppercase tracking-widest text-center mt-2 max-w-[220px] leading-relaxed">
               BU Dental Medicine Information System

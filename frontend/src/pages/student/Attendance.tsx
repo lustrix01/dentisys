@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Camera, 
-  MapPin, 
-  CheckCircle2, 
-  XCircle, 
-  AlertCircle, 
+import {
+  Camera,
+  MapPin,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
   Navigation,
   Sparkles,
   RefreshCw,
@@ -34,9 +34,9 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) *
-      Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -102,7 +102,7 @@ export const Attendance: React.FC = () => {
 
   // STEP 1: DROPDOWN CLASS SELECTION
   const [selectedCourseCode, setSelectedCourseCode] = useState<string>('CLIN401');
-  
+
   // STEP 2: SESSION STATUS CHECK & INFO
   const activeSessionInfo: ClassSessionInfo = MOCK_CLASS_SESSIONS[selectedCourseCode] || {
     code: selectedCourseCode,
@@ -191,7 +191,7 @@ export const Attendance: React.FC = () => {
         stream = s;
         if (videoRef.current) videoRef.current.srcObject = s;
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       if (stream) stream.getTracks().forEach(t => t.stop());
@@ -256,28 +256,30 @@ export const Attendance: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12 animate-fade-in">
-      
-      {/* Header */}
-      <div className="border-b border-slate-200/80 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
+      {/* 1. Clean Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block">
-            Student Attendance Portal
-          </span>
-          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 mt-0.5">
+          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Daily Class Check-In
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Follow the 3 steps below to verify session status, check geofence location, and scan face to submit attendance.
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Verify session status, check geofence location, and scan face to submit attendance.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
+          </div>
+
           <button
             onClick={() => navigate('/student/attendance-logs')}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
           >
             <History className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-            <span>View Attendance Logs</span>
+            <span>Attendance Logs</span>
           </button>
         </div>
       </div>
@@ -443,11 +445,10 @@ export const Attendance: React.FC = () => {
               </span>
             </div>
 
-            <span className={`self-start sm:self-center px-3 py-1 rounded-full text-[10px] font-bold ${
-              gpsData.inGeofence 
-                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' 
+            <span className={`self-start sm:self-center px-3 py-1 rounded-full text-[10px] font-bold ${gpsData.inGeofence
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
                 : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-            }`}>
+              }`}>
               {gpsData.inGeofence ? 'Geofence Validated ✓' : 'Outside Geofence ✕'}
             </span>
           </div>
@@ -480,9 +481,8 @@ export const Attendance: React.FC = () => {
               className="w-full h-full object-cover scale-x-[-1]"
             />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className={`w-40 h-52 rounded-[50%] border-2 ${
-                isVerifying ? 'border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.6)]' : 'border-white/60 border-dashed'
-              }`} />
+              <div className={`w-40 h-52 rounded-[50%] border-2 ${isVerifying ? 'border-blue-400 shadow-[0_0_20px_rgba(59,130,246,0.6)]' : 'border-white/60 border-dashed'
+                }`} />
             </div>
 
             {isVerifying && (
@@ -510,11 +510,10 @@ export const Attendance: React.FC = () => {
             <button
               onClick={handleTakeAttendance}
               disabled={isVerifying}
-              className={`w-full py-3.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                isVerifying
+              className={`w-full py-3.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${isVerifying
                   ? 'bg-blue-400 text-white cursor-wait'
                   : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99]'
-              }`}
+                }`}
             >
               <Sparkles className="w-4 h-4" />
               <span>Submit Attendance for {selectedCourseCode}</span>
@@ -523,11 +522,10 @@ export const Attendance: React.FC = () => {
 
           {/* Outcome Banner */}
           {verificationOutcome && (
-            <div className={`p-4 rounded-2xl border text-xs space-y-1 ${
-              verificationOutcome.success 
+            <div className={`p-4 rounded-2xl border text-xs space-y-1 ${verificationOutcome.success
                 ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900 text-emerald-900 dark:text-emerald-100'
                 : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-100'
-            }`}>
+              }`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-bold text-sm">
                   {verificationOutcome.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <XCircle className="w-4 h-4 text-rose-600" />}

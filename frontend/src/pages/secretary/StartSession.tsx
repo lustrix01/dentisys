@@ -283,10 +283,6 @@ export const StartSession: React.FC = () => {
       {/* 1. Top Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 text-[10px] font-extrabold uppercase tracking-wider mb-2">
-            <Zap className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
-            Classroom Operations
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Start Class Session & Attendance Control
           </h1>

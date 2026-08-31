@@ -49,7 +49,7 @@ export const Settings: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Class Secretary Settings
+            My Settings
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             Set your workspace appearance and review the attendance tools available to your assignment.

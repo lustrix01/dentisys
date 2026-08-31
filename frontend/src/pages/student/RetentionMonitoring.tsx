@@ -19,12 +19,13 @@ export const RetentionMonitoring: React.FC = () => {
 
   const studentName = currentStudent?.name || user?.display_name || 'Student';
   const studentId = currentStudent?.studentId || '2024-DENT-0004';
-  const overallGWA = currentStudent?.overallGWA || 2.25;
   const status = currentStudent?.status || 'active';
   const enrolledSubjects = currentStudent?.enrolledSubjects || [];
   const remedialExams = currentStudent?.remedialExams || [];
 
-  const isAtRisk = status === 'warning' || status === 'critical' || overallGWA > 2.5;
+  const threshold = settings?.retentionThreshold || 2.5;
+  const deficientSubjects = enrolledSubjects.filter(s => s.grade > threshold);
+  const isAtRisk = status === 'warning' || status === 'critical' || deficientSubjects.length > 0;
 
   const getStatusBadge = (st: Student['status']) => {
     const styles = {
@@ -52,14 +53,11 @@ export const RetentionMonitoring: React.FC = () => {
       {/* 1. Clean Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-0.5">
-            Student Portal • Bicol University CDM
-          </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Retention Risk Monitoring
           </h1>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Track your Midterm GWA performance, retention warning standing, and scheduled remedial exams.
+            Track your per-subject midterm grades, retention warning standing, and scheduled remedial exams.
           </p>
         </div>
 
@@ -84,8 +82,8 @@ export const RetentionMonitoring: React.FC = () => {
             
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
               {isAtRisk 
-                ? 'Your Midterm Exam GWA exceeds the 2.5 retention threshold limit or requires faculty monitoring. Please review your subject performance and complete any assigned remedial exams.'
-                : 'Your academic performance is currently in good standing! Midterm GWA meets all College of Dental Medicine retention criteria.'
+                ? `You have ${deficientSubjects.length} subject(s) with midterm grades exceeding the ${threshold.toFixed(2)} retention limit or requiring faculty monitoring. Please review your subject performance below.`
+                : `Your academic performance is currently in good standing! All enrolled subject midterm grades meet College of Dental Medicine retention criteria (${threshold.toFixed(2)} or better per subject).`
               }
             </p>
           </div>
@@ -93,19 +91,19 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shrink-0">
             <div className="text-center px-3 border-r border-slate-200 dark:border-slate-700">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">
-                Midterm GWA
+                Deficient Subjects
               </span>
-              <span className={`text-2xl font-extrabold font-mono ${overallGWA > 2.5 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {overallGWA.toFixed(2)}
+              <span className={`text-2xl font-extrabold font-mono ${deficientSubjects.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {deficientSubjects.length}
               </span>
             </div>
 
             <div className="text-center px-3">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">
-                Passing Limit
+                Subject Grade Limit
               </span>
               <span className="text-2xl font-extrabold font-mono text-slate-700 dark:text-slate-200">
-                2.50
+                {threshold.toFixed(2)}
               </span>
             </div>
           </div>
@@ -119,7 +117,7 @@ export const RetentionMonitoring: React.FC = () => {
             Midterm Course Performance Breakdown ({enrolledSubjects.length} Enrolled)
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Midterm exam scores and clinical attendance rates for enrolled subjects.
+            Per-subject midterm grades and clinical attendance rates.
           </p>
         </div>
 
@@ -195,7 +193,7 @@ export const RetentionMonitoring: React.FC = () => {
             Assigned Remedial Exams ({remedialExams.length})
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Scheduled remedial exams for academic clearance. Score 75% or higher to pass.
+            Scheduled remedial exams for academic clearance per subject. Score 75% or higher to pass.
           </p>
         </div>
 
@@ -263,16 +261,16 @@ export const RetentionMonitoring: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
           <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">1. Passing Threshold</span>
+            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">1. Per-Subject Passing Limit</span>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Students must maintain a Midterm GWA of 2.50 or lower across all enrolled dental subjects to avoid retention warning.
+              Students must maintain a grade of 2.50 or better in each enrolled dental subject to avoid retention warning.
             </p>
           </div>
 
           <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
             <span className="font-extrabold text-slate-800 dark:text-slate-100 block">2. Remedial Exam Policy</span>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Assigned remedial exams require a score of 75% or higher to resolve retention warnings and clear academic deficiency.
+              Assigned remedial exams require a score of 75% or higher to resolve retention warnings and clear subject deficiency.
             </p>
           </div>
 

@@ -204,7 +204,7 @@ export function SignUp() {
             </div>
 
             <h1 className="text-3xl font-extrabold font-heading text-accent-800 dark:text-accent-300 tracking-tight">
-              DentiSys
+              DentiSYS
             </h1>
             <p className="text-xs font-semibold text-accent-600/80 dark:text-accent-400/80 uppercase tracking-widest text-center mt-2 max-w-[220px] leading-relaxed">
               BU Dental Medicine Information System

@@ -52,7 +52,7 @@ export const Profile: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div><h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">Faculty Profile</h1><p className="text-xs text-slate-400 mt-1">Maintain your professional details and review your assigned academic scope.</p></div>
+        <div><h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">My Profile</h1><p className="text-xs text-slate-400 mt-1">Maintain your professional details and review your assigned academic scope.</p></div>
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-clinical-650 dark:text-clinical-400 bg-clinical-50 dark:bg-clinical-950/30 px-3 py-2 rounded-xl"><CheckCircle2 className="w-3.5 h-3.5" />Faculty access active</div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">

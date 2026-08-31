@@ -221,8 +221,7 @@ export const Reports: React.FC = () => {
       {/* Page Header - Hidden during print */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print border-b border-slate-205 dark:border-slate-800 pb-4">
         <div>
-          <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <FileSpreadsheet className="w-6 h-6 text-clinical-550" />
+          <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">
             Reports & Analytics
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Generate GWA evaluation logs, print transcript records, and review analytics dashboards</p>

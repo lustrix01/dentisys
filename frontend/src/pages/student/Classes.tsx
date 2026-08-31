@@ -35,28 +35,31 @@ export const Classes: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* 1. Clean Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 text-[10px] font-extrabold uppercase tracking-wider mb-2">
-            <BookOpen className="w-3.5 h-3.5" />
-            My Academic Roster
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Enrolled Classes & Retention Standing
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Review enrolled dentistry subjects, computed grades, attendance rates, and retention threshold compliance.
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+            Review enrolled dentistry subjects, midterm grades, attendance rates, and retention limit compliance.
           </p>
         </div>
 
-        <button
-          onClick={() => navigate('/student/attendance')}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center gap-2 cursor-pointer"
-        >
-          <CalendarDays className="w-4 h-4" />
-          <span>Verify Attendance</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{currentStudent?.studentId || '2024-DENT-0004'}</span>
+          </div>
+
+          <button
+            onClick={() => navigate('/student/attendance')}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
+          >
+            <CalendarDays className="w-4 h-4" />
+            <span>Daily Check-In</span>
+          </button>
+        </div>
       </div>
 
       {/* RETENTION WARNING BANNER IF AT RISK */}

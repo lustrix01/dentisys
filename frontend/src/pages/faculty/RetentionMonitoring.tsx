@@ -300,9 +300,6 @@ export const RetentionMonitoring: React.FC = () => {
       {/* 1. Clean Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <span className="text-xs font-extrabold text-amber-600 dark:text-amber-400 uppercase tracking-widest block mb-0.5">
-            Faculty Portal • Bicol University CDM
-          </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Retention & Remedial Monitoring
           </h1>
@@ -427,7 +424,7 @@ export const RetentionMonitoring: React.FC = () => {
                 Retention Watchlist ({filteredWatchlist.length})
               </h2>
               <p className="text-xs text-slate-400">
-                Students requiring retention monitoring due to Midterm Exam GWA exceeding 2.5 or failing marks.
+                Students requiring retention monitoring due to subject midterm grades exceeding 2.50 or failing marks.
               </p>
             </div>
 
@@ -643,7 +640,7 @@ export const RetentionMonitoring: React.FC = () => {
               Midterm Academic Warning Evaluation Rules
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              Retention warnings are calculated strictly from student Midterm Exam scores and academic thresholds (Passing limit: GWA ≤ 2.5). No AI models used.
+              Retention warnings are calculated strictly from student Midterm Exam scores and academic thresholds (Passing limit: Subject grade ≤ 2.50). No AI models used.
             </p>
           </div>
 

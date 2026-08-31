@@ -75,60 +75,60 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     switch (role) {
       case 'admin':
         return {
-          bgGradient: 'from-accent-500/10 to-accent-600/10',
-          textActive: 'text-accent-600 dark:text-accent-400 font-semibold border-l-4 border-accent-500',
-          iconActive: 'text-accent-500',
+          bgGradient: 'from-accent-500/20 to-accent-600/20 dark:from-accent-500/25 dark:to-accent-600/25',
+          textActive: 'text-accent-600 dark:text-accent-300 font-bold border-l-4 border-accent-500 bg-accent-500/10 dark:bg-accent-500/20',
+          iconActive: 'text-accent-600 dark:text-accent-400',
           iconHover: 'group-hover:text-accent-600 dark:group-hover:text-accent-300',
           logoRing: 'shadow-accent-500/20',
-          avatarBg: 'from-accent-200 to-accent-300 dark:from-accent-850 dark:to-accent-950',
-          avatarText: 'text-accent-700 dark:text-accent-300 font-bold font-heading',
+          avatarBg: 'from-accent-500 to-accent-600 dark:from-accent-600 dark:to-accent-700',
+          avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-accent-500',
           roleLabelText: 'text-accent-500',
-          hoverBg: 'hover:bg-accent-50/50 dark:hover:bg-accent-900/50 hover:text-accent-850 dark:hover:text-slate-200',
-          sidebarGradient: 'from-accent-50/90 to-accent-100/70 dark:from-accent-955/80 dark:to-accent-950/70',
+          hoverBg: 'hover:bg-accent-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+          sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
       case 'secretary':
         return {
-          bgGradient: 'from-blue-500/10 to-blue-600/10',
-          textActive: 'text-blue-600 dark:text-blue-400 font-semibold border-l-4 border-blue-500',
-          iconActive: 'text-blue-500',
+          bgGradient: 'from-blue-500/20 to-blue-600/20 dark:from-blue-500/25 dark:to-blue-600/25',
+          textActive: 'text-blue-600 dark:text-blue-300 font-bold border-l-4 border-blue-500 bg-blue-500/10 dark:bg-blue-500/20',
+          iconActive: 'text-blue-600 dark:text-blue-400',
           iconHover: 'group-hover:text-blue-600 dark:group-hover:text-blue-300',
           logoRing: 'shadow-blue-500/20',
-          avatarBg: 'from-blue-200 to-blue-300 dark:from-blue-800 dark:to-blue-900',
-          avatarText: 'text-blue-700 dark:text-blue-300 font-bold font-heading',
+          avatarBg: 'from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700',
+          avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-blue-500',
           roleLabelText: 'text-blue-500',
-          hoverBg: 'hover:bg-blue-50/50 dark:hover:bg-blue-900/50 hover:text-blue-850 dark:hover:text-slate-200',
-          sidebarGradient: 'from-blue-50/90 to-blue-100/70 dark:from-blue-955/80 dark:to-blue-950/70',
+          hoverBg: 'hover:bg-blue-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+          sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
       case 'student':
         return {
-          bgGradient: 'from-blue-500/10 to-blue-600/10',
-          textActive: 'text-blue-600 dark:text-blue-400 font-semibold border-l-4 border-blue-500',
-          iconActive: 'text-blue-500',
+          bgGradient: 'from-blue-500/20 to-blue-600/20 dark:from-blue-500/25 dark:to-blue-600/25',
+          textActive: 'text-blue-600 dark:text-blue-300 font-bold border-l-4 border-blue-500 bg-blue-500/10 dark:bg-blue-500/20',
+          iconActive: 'text-blue-600 dark:text-blue-400',
           iconHover: 'group-hover:text-blue-600 dark:group-hover:text-blue-300',
           logoRing: 'shadow-blue-500/20',
-          avatarBg: 'from-blue-200 to-blue-300 dark:from-blue-800 dark:to-blue-900',
-          avatarText: 'text-blue-700 dark:text-blue-300 font-bold font-heading',
+          avatarBg: 'from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700',
+          avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-blue-500',
           roleLabelText: 'text-blue-500',
-          hoverBg: 'hover:bg-blue-50/50 dark:hover:bg-blue-900/50 hover:text-blue-850 dark:hover:text-slate-200',
-          sidebarGradient: 'from-blue-50/90 to-blue-100/70 dark:from-blue-955/80 dark:to-blue-950/70',
+          hoverBg: 'hover:bg-blue-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+          sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
       case 'faculty':
       default:
         return {
-          bgGradient: 'from-clinical-500/10 to-accent-500/10',
-          textActive: 'text-clinical-600 dark:text-clinical-400 font-semibold border-l-4 border-clinical-500',
-          iconActive: 'text-clinical-500',
-          iconHover: 'group-hover:text-slate-600 dark:group-hover:text-slate-300',
+          bgGradient: 'from-clinical-500/20 to-accent-500/20 dark:from-clinical-500/25 dark:to-accent-500/25',
+          textActive: 'text-clinical-600 dark:text-clinical-300 font-bold border-l-4 border-clinical-500 bg-clinical-500/10 dark:bg-clinical-500/20',
+          iconActive: 'text-clinical-600 dark:text-clinical-400',
+          iconHover: 'group-hover:text-clinical-600 dark:group-hover:text-clinical-300',
           logoRing: 'shadow-clinical-500/20',
-          avatarBg: 'from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900',
-          avatarText: 'text-clinical-700 dark:text-clinical-300 font-bold font-heading',
+          avatarBg: 'from-clinical-500 to-accent-600 dark:from-clinical-600 dark:to-accent-700',
+          avatarText: 'text-white font-bold font-heading',
           crumbHover: 'hover:text-clinical-500',
           roleLabelText: 'text-emerald-500',
-          hoverBg: 'hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-800 dark:hover:text-slate-200',
-          sidebarGradient: 'from-accent-50/90 to-clinical-50/70 dark:from-accent-955/80 dark:to-clinical-950/70',
+          hoverBg: 'hover:bg-slate-100/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+          sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
     }
   };
@@ -196,7 +196,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
         { name: 'My Classes', path: '/student/classes', icon: BookOpen },
         { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
-        { name: 'My Student Profile', path: '/student/profile', icon: UserCircle },
+        { name: 'My Profile', path: '/student/profile', icon: UserCircle },
       ];
     }
     
@@ -293,7 +293,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     } else if (path === '/student/classes') {
       crumbs.push({ name: 'My Classes & Retention', path: '/student/classes' });
     } else if (path === '/student/profile') {
-      crumbs.push({ name: 'My Student Profile', path: '/student/profile' });
+      crumbs.push({ name: 'My Profile', path: '/student/profile' });
     } else if (path !== '/') {
       crumbs.push({ name: 'Dashboard', path: '/' });
     }
@@ -304,27 +304,85 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col md:flex-row bg-gradient-to-br from-accent-50/80 via-white to-clinical-50/60 dark:from-slate-950 dark:via-accent-955/20 dark:to-clinical-950/20 transition-colors duration-200 relative">
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative overflow-hidden font-sans">
       
-      {/* Ambient background glows */}
+      {/* Background Subtle Gradient Blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] aspect-square rounded-full bg-accent-200/25 dark:bg-accent-950/30 blur-[120px] pointer-events-none z-0" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] aspect-square rounded-full bg-clinical-200/25 dark:bg-clinical-950/20 blur-[120px] pointer-events-none z-0" />
 
       {/* Mobile Header */}
-      <header className="md:hidden flex items-center justify-between px-6 py-4 bg-accent-50/80 dark:bg-accent-955/80 backdrop-blur-md border-b border-accent-200/30 dark:border-accent-900/20 sticky top-0 z-40 relative z-10">
+      <header className="md:hidden flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-40 relative z-10">
         <div className="flex items-center space-x-2">
           <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-9 h-9 rounded-full object-cover" />
           <span className="font-heading font-bold text-xl tracking-tight bg-gradient-to-r from-clinical-600 to-accent-600 dark:from-clinical-400 dark:to-accent-400 bg-clip-text text-transparent">
-            DentiSys
+            DentiSYS
           </span>
         </div>
-        <div className="flex items-center space-x-3">
+
+        <div className="flex items-center space-x-2.5">
+          {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
             className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
           >
             {settings.theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
           </button>
+
+          {/* Mobile User Profile Avatar Trigger */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setIsProfileOpen(!isProfileOpen);
+                setIsNotificationsOpen(false);
+              }}
+              className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${colors.avatarBg} ${colors.avatarText} text-xs font-extrabold flex items-center justify-center shadow-xs cursor-pointer`}
+              title="Profile menu"
+            >
+              {initials}
+            </button>
+
+            {isProfileOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
+                <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
+                  
+                  <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
+                  </div>
+
+                  <Link
+                    to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
+                    onClick={() => setIsProfileOpen(false)}
+                    className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                  >
+                    <User className="w-4 h-4 text-slate-400" />
+                    <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
+                  </Link>
+
+                  <Link
+                    to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
+                    onClick={() => setIsProfileOpen(false)}
+                    className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                  >
+                    <SettingsIcon className="w-4 h-4 text-slate-400" />
+                    <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
+                  </Link>
+
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-800 pt-2 cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-rose-500" />
+                    <span>Sign Out</span>
+                  </button>
+
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Hamburger Menu Toggle */}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
@@ -336,7 +394,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Sidebar Navigation — fixed on desktop, drawer on mobile */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} backdrop-blur-md border-r border-accent-200/30 dark:border-accent-900/20 p-5 flex flex-col transition-all duration-300 ease-out ${
+        className={`fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} border-r border-slate-200/80 dark:border-slate-800 p-5 flex flex-col transition-all duration-300 ease-out ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } ${isSidebarCollapsed ? 'md:w-20' : 'md:w-72'}`}
       >
@@ -348,7 +406,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             {!isSidebarCollapsed && (
               <div className="transition-opacity duration-300">
                 <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                  DentiSys
+                  DentiSYS
                 </h1>
                 <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">
                   BU College of Dental Medicine
@@ -393,13 +451,13 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   className={`flex items-center justify-between px-3 py-3 rounded-2xl transition-all duration-300 group ${
                     isActive
                       ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive}`
-                      : `text-slate-500 dark:text-slate-400 ${colors.hoverBg}`
+                      : `text-slate-600 dark:text-slate-300 ${colors.hoverBg}`
                   }`}
                   title={isSidebarCollapsed ? item.name : undefined}
                 >
                   <div className="flex items-center space-x-3 min-w-0">
                     <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${
-                      isActive ? colors.iconActive : `text-slate-400 dark:text-slate-500 ${colors.iconHover}`
+                      isActive ? colors.iconActive : `text-slate-400 dark:text-slate-400 ${colors.iconHover}`
                     }`} />
                     {!isSidebarCollapsed && (
                       <span className="text-sm font-medium truncate transition-opacity duration-300">{item.name}</span>
@@ -417,8 +475,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         </nav>
 
         {/* Sidebar Footer / User Profile Summary */}
-        <div className="pt-5 border-t border-slate-100 dark:border-slate-800/80 flex items-center space-x-3 px-1.5 min-w-0">
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} flex-shrink-0`}>
+        <div className="pt-4 mt-auto border-t border-slate-200/80 dark:border-slate-800/80 flex items-center space-x-3 px-1.5 min-w-0">
+          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} flex-shrink-0 shadow-sm`}>
             {initials}
           </div>
           {!isSidebarCollapsed && (
@@ -457,7 +515,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               ))}
             </nav>
             <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
-              {navItems.find(x => x.path === location.pathname)?.name || 'DentiSys Portal'}
+              {navItems.find(x => x.path === location.pathname)?.name || 'DentiSYS Portal'}
             </h2>
           </div>
 
@@ -492,7 +550,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               {isNotificationsOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setIsNotificationsOpen(false)} />
-                  <div className="absolute right-0 mt-3 w-80 glass rounded-2xl border border-slate-200/60 dark:border-slate-800/80 shadow-2xl p-4 z-50 max-h-96 overflow-y-auto">
+                  <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-4 z-50 max-h-96 overflow-y-auto">
                     <h3 className="font-heading font-semibold text-sm mb-3 border-b border-slate-100 dark:border-slate-800 pb-2 flex justify-between items-center">
                       <span>Alerts & Notifications</span>
                       <span className="text-[10px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded-md font-bold">
@@ -544,9 +602,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               {isProfileOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)} />
-                  <div className="absolute right-0 mt-3 w-56 glass rounded-2xl border border-slate-200/60 dark:border-slate-800/80 shadow-2xl p-2.5 z-50 space-y-1">
+                  <div className="absolute right-0 mt-3 w-56 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-2.5 z-50 space-y-1">
                     
-                    <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-850 pb-2 mb-1.5">
+                    <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
                     </div>
@@ -557,7 +615,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <User className="w-4 h-4 text-slate-400" />
-                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Student Profile' : 'My Faculty Profile'}</span>
+                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
                     </Link>
 
                     <Link
@@ -571,7 +629,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-850/50 pt-2"
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-800 pt-2 cursor-pointer"
                     >
                       <LogOut className="w-4 h-4 text-rose-500" />
                       <span>Sign Out</span>

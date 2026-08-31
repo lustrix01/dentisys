@@ -44,9 +44,6 @@ export const Dashboard: React.FC = () => {
       {/* 1. Clean Top Header with Highlighted Action Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-0.5">
-            Class Secretary Portal • Section {assignedClassName}
-          </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {user?.display_name || 'Class Secretary'}
           </h1>
@@ -76,9 +73,6 @@ export const Dashboard: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5 mb-5">
               <div>
-                <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block">
-                  Secretary Workspace
-                </span>
                 <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100 mt-0.5">
                   Section Operations & Attendance Tracking
                 </h2>

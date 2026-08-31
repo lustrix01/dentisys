@@ -129,7 +129,7 @@ export function Login() {
             </div>
             
             <h1 className="text-3xl font-extrabold font-heading text-accent-800 dark:text-accent-300 tracking-tight mt-3">
-              DentiSys
+              DentiSYS
             </h1>
             <p className="text-xs font-semibold text-accent-600/80 dark:text-accent-400/80 uppercase tracking-widest text-center mt-2.5 max-w-[200px] leading-relaxed">
               BU Dental Medicine Information System

@@ -102,7 +102,7 @@ export function LandingPage() {
               className="rounded-xl bg-accent-600 hover:bg-accent-700 active:scale-[0.99] text-white font-bold text-sm sm:text-base px-7 py-3.5 flex items-center gap-2.5 shadow-lg shadow-accent-600/20 transition-all cursor-pointer"
             >
               <LogIn className="w-5 h-5" />
-              <span>Sign In to DentiSys Portal</span>
+              <span>Sign In to DentiSYS Portal</span>
             </button>
 
             <button
@@ -164,7 +164,7 @@ export function LandingPage() {
             {/* Modal Title */}
             <div className="flex items-center gap-2 text-accent-600 dark:text-accent-400 text-xs font-bold uppercase tracking-wider font-heading">
               <HelpCircle className="w-4 h-4" />
-              <span>DentiSys Portal Support & FAQ</span>
+              <span>DentiSYS Portal Support & FAQ</span>
             </div>
             <h3 className="text-xl font-bold font-heading text-slate-900 dark:text-white">
               Frequently Asked Questions

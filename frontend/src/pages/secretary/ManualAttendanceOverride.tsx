@@ -150,9 +150,6 @@ export const ManualAttendanceOverride: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
-          <p className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest">
-            Manual Corrections Only
-          </p>
           <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">
             Manual Attendance Override
           </h1>

@@ -64,7 +64,6 @@ export const AttendanceList: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-slate-800 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Assigned Section</p>
           <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">Attendance List</h1>
           <p className="text-xs text-slate-400">{className || 'No section assigned'}</p>
         </div>

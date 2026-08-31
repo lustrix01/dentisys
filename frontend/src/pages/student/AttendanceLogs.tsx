@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  History, 
-  Search, 
-  CalendarDays, 
-  CheckCircle2, 
-  Clock, 
-  MapPin, 
-  Camera, 
+import {
+  History,
+  Search,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  Camera,
   Filter,
   ArrowRight,
   UserCheck
@@ -36,7 +36,7 @@ export const AttendanceLogs: React.FC = () => {
 
   // Filter records
   const filteredRecords = allStudentRecords.filter(r => {
-    const matchesSearch = 
+    const matchesSearch =
       r.date.includes(searchQuery) ||
       r.subjectCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (r.verifiedLocationName && r.verifiedLocationName.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -58,29 +58,32 @@ export const AttendanceLogs: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12 animate-fade-in">
-      
-      {/* Header */}
-      <div className="border-b border-slate-200/80 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
+      {/* 1. Clean Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 text-[10px] font-extrabold uppercase tracking-wider mb-2">
-            <History className="w-3.5 h-3.5" />
-            Attendance Audit Trail
-          </div>
-          <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 mt-0.5">
+          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Session Attendance Logs
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
             Complete historical audit log of facial recognition and geofence verified class check-ins.
           </p>
         </div>
 
-        <button
-          onClick={() => navigate('/student/attendance')}
-          className="self-start sm:self-center flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-        >
-          <Camera className="w-4 h-4" />
-          <span>Take Daily Attendance</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
+          </div>
+
+          <button
+            onClick={() => navigate('/student/attendance')}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Daily Check-In</span>
+          </button>
+        </div>
       </div>
 
       {/* 4 Summary Metric Cards */}
@@ -204,11 +207,10 @@ export const AttendanceLogs: React.FC = () => {
                       <span>{r.verifiedLocationName || 'BU Dental Clinic'}</span>
                     </td>
                     <td className="py-3.5 text-right">
-                      <span className={`px-3 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        r.status === 'present' 
+                      <span className={`px-3 py-0.5 rounded-full text-[10px] font-bold uppercase ${r.status === 'present'
                           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
                           : 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300'
-                      }`}>
+                        }`}>
                         {r.status}
                       </span>
                     </td>

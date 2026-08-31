@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Camera, 
-  ShieldCheck, 
-  CheckCircle2, 
-  RefreshCw, 
-  FileText, 
-  Lock, 
+import {
+  Camera,
+  ShieldCheck,
+  CheckCircle2,
+  RefreshCw,
+  FileText,
+  Lock,
   ArrowRight,
-  Sparkles,
   AlertCircle,
   UserCheck
 } from 'lucide-react';
@@ -93,12 +92,12 @@ export const FaceRegistration: React.FC = () => {
         if (prev >= 100) {
           clearInterval(interval);
           setIsScanning(false);
-          
+
           // Complete registration
           const nowStr = new Date().toLocaleString();
           localStorage.setItem(storageKey, 'true');
           localStorage.setItem(timestampKey, nowStr);
-          
+
           setIsRegistered(true);
           setRegisteredAt(nowStr);
           setCurrentStep(3);
@@ -121,62 +120,62 @@ export const FaceRegistration: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
-      
-      {/* Header */}
+
+      {/* 1. Clean Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 text-[10px] font-extrabold uppercase tracking-wider mb-2">
-            <UserCheck className="w-3.5 h-3.5" />
-            Biometric Enrollment Portal
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Facial Recognition Template Registration
+            Facial Recognition Registration
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">
             Register your facial biometric model for automated, location-verified attendance check-in.
           </p>
         </div>
 
-        {isRegistered && currentStep === 3 && (
-          <button
-            onClick={handleReRegister}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-all cursor-pointer"
-          >
-            <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span>Re-Register Face Template</span>
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
+          </div>
+
+          {isRegistered && currentStep === 3 && (
+            <button
+              onClick={handleReRegister}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
+            >
+              <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Re-Register Face</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 3-Step Visual Progress Bar */}
       <div className="grid grid-cols-3 gap-3">
-        <div className={`p-3 rounded-2xl border text-center transition-all ${
-          currentStep === 1 
-            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20' 
-            : currentStep > 1 
-              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800' 
+        <div className={`p-3 rounded-2xl border text-center transition-all ${currentStep === 1
+            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
+            : currentStep > 1
+              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
               : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
-        }`}>
+          }`}>
           <span className="text-[10px] font-bold uppercase tracking-wider block">Step 1</span>
           <span className="text-xs font-extrabold block mt-0.5">Privacy Agreement</span>
         </div>
 
-        <div className={`p-3 rounded-2xl border text-center transition-all ${
-          currentStep === 2 
-            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20' 
-            : currentStep > 2 
-              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800' 
+        <div className={`p-3 rounded-2xl border text-center transition-all ${currentStep === 2
+            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
+            : currentStep > 2
+              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
               : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
-        }`}>
+          }`}>
           <span className="text-[10px] font-bold uppercase tracking-wider block">Step 2</span>
           <span className="text-xs font-extrabold block mt-0.5">Facial Scan</span>
         </div>
 
-        <div className={`p-3 rounded-2xl border text-center transition-all ${
-          currentStep === 3 
-            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20' 
+        <div className={`p-3 rounded-2xl border text-center transition-all ${currentStep === 3
+            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
             : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
-        }`}>
+          }`}>
           <span className="text-[10px] font-bold uppercase tracking-wider block">Step 3</span>
           <span className="text-xs font-extrabold block mt-0.5">Registration Status</span>
         </div>
@@ -234,11 +233,10 @@ export const FaceRegistration: React.FC = () => {
             <button
               onClick={handleProceedToScan}
               disabled={!hasAgreed}
-              className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 ${
-                hasAgreed 
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer' 
+              className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 ${hasAgreed
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
                   : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-              }`}
+                }`}
             >
               <span>Continue to Facial Scan</span>
               <ArrowRight className="w-4 h-4" />
@@ -294,9 +292,8 @@ export const FaceRegistration: React.FC = () => {
 
                 {/* Face Alignment Target Oval Overlay */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className={`w-52 h-64 rounded-[50%] border-2 transition-all ${
-                    isScanning ? 'border-blue-400 shadow-[0_0_25px_rgba(59,130,246,0.5)]' : 'border-white/60 border-dashed'
-                  }`} />
+                  <div className={`w-52 h-64 rounded-[50%] border-2 transition-all ${isScanning ? 'border-blue-400 shadow-[0_0_25px_rgba(59,130,246,0.5)]' : 'border-white/60 border-dashed'
+                    }`} />
                 </div>
 
                 {/* Scan Overlay Banner */}
@@ -304,7 +301,7 @@ export const FaceRegistration: React.FC = () => {
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-4 text-center text-white space-y-1.5">
                     <p className="text-xs font-bold animate-pulse">Extracting Facial Feature Vector... {scanProgress}%</p>
                     <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="bg-blue-500 h-full transition-all duration-300"
                         style={{ width: `${scanProgress}%` }}
                       />
@@ -321,13 +318,11 @@ export const FaceRegistration: React.FC = () => {
                 <button
                   onClick={handleStartCapture}
                   disabled={isScanning}
-                  className={`px-8 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 mx-auto ${
-                    isScanning
+                  className={`px-8 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 mx-auto ${isScanning
                       ? 'bg-blue-400 text-white cursor-wait'
                       : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
-                  }`}
+                    }`}
                 >
-                  <Sparkles className="w-4 h-4" />
                   <span>{isScanning ? 'Scanning...' : 'Capture & Extract Face Template'}</span>
                 </button>
               </div>

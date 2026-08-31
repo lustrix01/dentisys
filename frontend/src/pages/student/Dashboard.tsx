@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  UserCheck, 
-  CalendarDays, 
-  BookOpen, 
-  AlertTriangle, 
-  ShieldCheck, 
-  Clock, 
+import {
+  UserCheck,
+  CalendarDays,
+  BookOpen,
+  AlertTriangle,
+  ShieldCheck,
+  Clock,
   ArrowRight,
   MapPin,
   Camera,
@@ -78,7 +78,7 @@ export const Dashboard: React.FC = () => {
   const failingSubjects = enrolledSubjects.filter(
     subj => subj.isClinical && subj.grade > retentionThreshold
   );
-  
+
   const studentRecords = attendanceRecords.filter(r => r.studentId === currentStudent?.id);
   const totalLogs = studentRecords.length;
   const presentCount = studentRecords.filter(r => r.status === 'present' || r.status === 'late').length;
@@ -108,29 +108,33 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
-      
+
       {/* 1. Clean Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <span className="text-xs font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block mb-0.5">
-            Dental Student Portal • Doctor of Dental Medicine (DDM IV)
-          </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Welcome back, {studentName}
+            Welcome back, {studentName}!
           </h1>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Student ID: <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{studentId}</span> • Bicol University College of Dentistry
+            Monitor your clinical attendance, today's schedule, and academic retention standing.
           </p>
         </div>
 
-        <button
-          onClick={() => navigate('/student/attendance')}
-          className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
-        >
-          <Camera className="w-4 h-4" />
-          <span>Daily Check-In</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-4">
+          <div className="text-right hidden sm:block">
+            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentId}</span>
+          </div>
+
+          <button
+            onClick={() => navigate('/student/attendance')}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Daily Check-In</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* RETENTION WARNING ALERT */}
@@ -209,10 +213,10 @@ export const Dashboard: React.FC = () => {
 
       {/* 2-Column Main Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
+
         {/* Main Workspace Column (Spans 8) */}
         <div className="lg:col-span-8 space-y-6">
-          
+
           {/* Student Overview Metrics Card */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
@@ -413,7 +417,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Right Sidebar Column (Spans 4) */}
         <div className="lg:col-span-4 space-y-5">
-          
+
           {/* Quick Check-In Guidance Widget */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
