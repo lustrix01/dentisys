@@ -42,3 +42,4 @@ playwright-report/
 *.njsproj
 *.sln
 *.sw?
+.dentisys-local
