@@ -6,6 +6,12 @@ services:
 
   web:
     environment:
+      APP_ENV: test
+      EMAIL_PROVIDER: mailpit
+      DEV_MOCK_IDENTITY_ENABLED: "false"
+      DEV_MOCK_BIOMETRIC_ENABLED: "false"
+      DEV_MOCK_LOCATION_ENABLED: "false"
+      DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED: "false"
       RATE_LIMIT_STORAGE_DIR: /tmp/dentisys-ratelimit
     volumes:
       - ./tests:/var/www/html/tests:ro

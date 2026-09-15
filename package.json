@@ -6,7 +6,7 @@
     "build": "npm --prefix frontend run build",
     "lint": "npm --prefix frontend run lint",
     "preview": "npm --prefix frontend run preview",
-    "test:e2e": "playwright test",
+    "test:e2e": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-e2e.ps1",
     "test:e2e:live": "playwright test -c playwright.live.config.ts"
   },
   "devDependencies": {

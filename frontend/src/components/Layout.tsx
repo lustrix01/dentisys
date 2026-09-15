@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useRuntimeConfig } from '../context/RuntimeConfigContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -135,6 +136,12 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const colors = getRoleColors(currentUser.role);
 
   const { settings, updateSettings, students } = useApp();
+  const config = useRuntimeConfig();
+  const studentPrototypeEnabled = currentUser.role === 'student'
+    && config.providers.identity.development_mock_enabled
+    && config.providers.biometrics.active === 'development-mock'
+    && config.providers.location.active === 'development-mock'
+    && config.features.browser_attendance_prototype;
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -645,6 +652,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Scrollable Content Body */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8">
+          {currentUser.role === 'student' && !studentPrototypeEnabled && (
+            <div className="mb-6 p-4 rounded-2xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+              Student attendance and biometric workflows are development-only browser prototypes. No authoritative attendance record or facial template is written while the explicit P02 providers are disabled.
+            </div>
+          )}
           {children}
         </main>
       </div>

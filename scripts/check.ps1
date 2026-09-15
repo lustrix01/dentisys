@@ -5,6 +5,34 @@ $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
 
+# The runtime validator is the last line of defence against accidentally
+# shipping development identity/biometric/location providers. Exercise the
+# negative production-like path without touching a database or Compose volume.
+$savedAppEnv = $env:APP_ENV
+$savedMockIdentity = $env:DEV_MOCK_IDENTITY_ENABLED
+$savedMockBiometric = $env:DEV_MOCK_BIOMETRIC_ENABLED
+$savedMockLocation = $env:DEV_MOCK_LOCATION_ENABLED
+$savedMockAttendance = $env:DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED
+try {
+    $env:APP_ENV = 'production'
+    $env:DEV_MOCK_IDENTITY_ENABLED = 'true'
+    $env:DEV_MOCK_BIOMETRIC_ENABLED = 'false'
+    $env:DEV_MOCK_LOCATION_ENABLED = 'false'
+    $env:DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED = 'false'
+    $validatorPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & php (Join-Path $root 'backend/bin/validate-config.php') 2>&1 | Out-Null
+    $validatorExit = $LASTEXITCODE
+    $ErrorActionPreference = $validatorPreference
+    if ($validatorExit -eq 0) { throw 'Production runtime validator accepted a mock identity provider.' }
+} finally {
+    $env:APP_ENV = $savedAppEnv
+    $env:DEV_MOCK_IDENTITY_ENABLED = $savedMockIdentity
+    $env:DEV_MOCK_BIOMETRIC_ENABLED = $savedMockBiometric
+    $env:DEV_MOCK_LOCATION_ENABLED = $savedMockLocation
+    $env:DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED = $savedMockAttendance
+}
+
 & docker compose config --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Docker Compose configuration is invalid.' }
 
@@ -20,6 +48,9 @@ $compose = Get-Content -LiteralPath (Join-Path $root 'docker-compose.yml') -Raw
 if ($compose -match 'DB_HOST_PORT|xampp|XAMPP') { throw 'Docker Compose still contains a removed native-runtime reference.' }
 if ($compose -notmatch 'postgres:18') { throw 'Docker Compose must use PostgreSQL 18.' }
 if ($compose -match 'phpmyadmin|mariadb:') { throw 'Docker Compose contains a removed MariaDB/phpMyAdmin runtime reference.' }
+
+& docker compose build web frontend
+if ($LASTEXITCODE -ne 0) { throw 'Docker images failed to build.' }
 
 $runtimeFiles = Get-ChildItem -Path backend,frontend -Recurse -File -Include *.php,*.ts,*.tsx
 $obsolete = $runtimeFiles | Select-String -Pattern 'email_mfa|EMAIL_OTP_HMAC_KEY|XAMPP|xampp'

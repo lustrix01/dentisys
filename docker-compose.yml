@@ -36,7 +36,9 @@ services:
     ports:
       - "127.0.0.1:${BACKEND_HTTP_PORT:-8080}:80"
     environment:
-      APP_ENV: development
+      # The default stack is intentionally development-safe when .env is absent.
+      # Production-like deployments use docker-compose.web.yml with explicit APP_ENV.
+      APP_ENV: ${APP_ENV:-development}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
       DB_HOST: db
       DB_PORT: 5432
@@ -48,6 +50,11 @@ services:
       SMTP_ENCRYPTION: none
       SMTP_VERIFY_PEER: "false"
       SMTP_FROM: ${SMTP_FROM:-noreply@dentisys.local}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-mailpit}
+      DEV_MOCK_IDENTITY_ENABLED: ${DEV_MOCK_IDENTITY_ENABLED:-false}
+      DEV_MOCK_BIOMETRIC_ENABLED: ${DEV_MOCK_BIOMETRIC_ENABLED:-false}
+      DEV_MOCK_LOCATION_ENABLED: ${DEV_MOCK_LOCATION_ENABLED:-false}
+      DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED: ${DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED:-false}
       ALLOWED_EMAIL_DOMAIN: ${ALLOWED_EMAIL_DOMAIN:-bicol-u.edu.ph}
       JWT_SIGNING_KEY_B64: ${JWT_SIGNING_KEY_B64:-ZGVudGlzeXMtZGV2LWp3dC1zaWduaW5nLWtleS0zMmI=}
       MFA_ENCRYPTION_KEY_B64: ${MFA_ENCRYPTION_KEY_B64:-ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI=}

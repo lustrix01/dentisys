@@ -13,12 +13,17 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { Card } from '../../components/Card';
+import { developmentBiometricOutcome } from '../../services/developmentProviders';
 
 export const FaceRegistration: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { students } = useApp();
+  const runtimeConfig = useRuntimeConfig();
+  const simulationEnabled = runtimeConfig.providers.identity.development_mock_enabled
+    && runtimeConfig.providers.biometrics.active === 'development-mock';
 
   const currentStudent = students.find(
     s => s.email.toLowerCase() === user?.login_email.toLowerCase() || s.id === '1'
@@ -54,36 +59,19 @@ export const FaceRegistration: React.FC = () => {
 
   // Start webcam when entering Step 2
   useEffect(() => {
-    if (currentStep !== 2) return;
+    if (!simulationEnabled || currentStep !== 2) return;
 
-    let mediaStream: MediaStream | null = null;
     setCameraError(null);
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } })
-      .then(stream => {
-        mediaStream = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      })
-      .catch(err => {
-        console.error('Camera access error:', err);
-        setCameraError('Unable to access webcam. Please check browser permissions and try again.');
-      });
-
-    return () => {
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [currentStep]);
+    return undefined;
+  }, [currentStep, simulationEnabled]);
 
   const handleProceedToScan = () => {
-    if (!hasAgreed) return;
+    if (!simulationEnabled || !hasAgreed) return;
     setCurrentStep(2);
   };
 
   const handleStartCapture = () => {
+    if (!simulationEnabled) return;
     setIsScanning(true);
     setScanProgress(0);
 
@@ -94,13 +82,15 @@ export const FaceRegistration: React.FC = () => {
           setIsScanning(false);
 
           // Complete registration
-          const nowStr = new Date().toLocaleString();
+          const outcome = developmentBiometricOutcome('enrolled');
+          const nowStr = 'Development fixture enrollment';
           localStorage.setItem(storageKey, 'true');
           localStorage.setItem(timestampKey, nowStr);
 
           setIsRegistered(true);
           setRegisteredAt(nowStr);
           setCurrentStep(3);
+          void outcome;
           return 100;
         }
         return prev + 20;
@@ -117,6 +107,17 @@ export const FaceRegistration: React.FC = () => {
     setScanProgress(0);
     setCurrentStep(1);
   };
+
+  if (!simulationEnabled) {
+    return (
+      <div className="max-w-3xl mx-auto rounded-3xl border border-amber-200 bg-amber-50 p-8 text-amber-900 shadow-xs">
+        <h1 className="text-2xl font-extrabold">Facial enrollment is not configured</h1>
+        <p className="mt-2 text-sm leading-relaxed">
+          The development biometric simulation is disabled. No facial image or template is being enrolled or stored by this application.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">

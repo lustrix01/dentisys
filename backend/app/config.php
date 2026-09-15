@@ -44,6 +44,48 @@ function config_key_bytes_exact(string $encoded, int $exactBytes, string $label)
     return $decoded;
 }
 
+function config_strict_bool(mixed $value, string $label, bool $default = false): bool
+{
+    if ($value === null || $value === '') {
+        return $default;
+    }
+
+    if (is_bool($value)) {
+        return $value;
+    }
+
+    $normalized = strtolower(trim((string) $value));
+    if ($normalized === 'true') {
+        return true;
+    }
+    if ($normalized === 'false') {
+        return false;
+    }
+
+    throw new RuntimeException(sprintf('Configuration value "%s" must be true or false.', $label));
+}
+
+function config_environment(string $value): string
+{
+    $normalized = strtolower(trim($value));
+    $allowed = ['development', 'test', 'single-server', 'production'];
+    if (!in_array($normalized, $allowed, true)) {
+        throw new RuntimeException('Configuration value "APP_ENV" must be one of: development, test, single-server, production.');
+    }
+
+    return $normalized;
+}
+
+function config_email_provider(string $value): string
+{
+    $normalized = strtolower(trim($value));
+    if (!in_array($normalized, ['mailpit', 'smtp'], true)) {
+        throw new RuntimeException('Configuration value "EMAIL_PROVIDER" must be mailpit or smtp.');
+    }
+
+    return $normalized;
+}
+
 function config_app_base_url(string $value, bool $required): string
 {
     $url = rtrim(trim($value), '/');
@@ -79,11 +121,24 @@ function app_url(array $config, string $path, array $query = []): string
 function app_config(?array $overrides = null): array
 {
     $values = $overrides ?? [];
-    $appEnv = (string) config_value('APP_ENV', $values, 'development');
-    $isDevelopment = strtolower($appEnv) === 'development';
+    $appEnv = config_environment((string) config_value('APP_ENV', $values, 'development'));
+    $isDevelopment = $appEnv === 'development';
+    $isTest = $appEnv === 'test';
+    $mockFlags = [
+        'identity' => config_strict_bool(config_value('DEV_MOCK_IDENTITY_ENABLED', $values, false), 'DEV_MOCK_IDENTITY_ENABLED'),
+        'biometrics' => config_strict_bool(config_value('DEV_MOCK_BIOMETRIC_ENABLED', $values, false), 'DEV_MOCK_BIOMETRIC_ENABLED'),
+        'location' => config_strict_bool(config_value('DEV_MOCK_LOCATION_ENABLED', $values, false), 'DEV_MOCK_LOCATION_ENABLED'),
+        'browser_attendance_prototype' => config_strict_bool(config_value('DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', $values, false), 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED'),
+    ];
+    $emailProvider = config_email_provider(
+        (string) config_value('EMAIL_PROVIDER', $values, ($isDevelopment || $isTest) ? 'mailpit' : 'smtp')
+    );
+    if (!$isDevelopment && !$isTest && ($emailProvider === 'mailpit' || in_array(true, $mockFlags, true))) {
+        throw new RuntimeException('Development and test providers are forbidden when APP_ENV is production-like.');
+    }
     $baseUrl = config_app_base_url(
         (string) config_value('APP_BASE_URL', $values, $isDevelopment ? 'http://localhost:5173' : ''),
-        strtolower($appEnv) === 'single-server'
+        $appEnv === 'single-server'
     );
 
     return [
@@ -118,6 +173,22 @@ function app_config(?array $overrides = null): array
         'rate_limit' => [
             'enabled' => filter_var(config_value('RATE_LIMIT_ENABLED', $values, 'true'), FILTER_VALIDATE_BOOLEAN),
             'storage_dir' => (string) (config_value('RATE_LIMIT_STORAGE_DIR', $values, '') ?: dirname(__DIR__) . '/storage/ratelimit'),
+        ],
+        'mocks' => $mockFlags,
+        'providers' => [
+            'identity' => [
+                'primary' => 'password',
+                'development_mock_enabled' => $mockFlags['identity'],
+            ],
+            'email' => [
+                'active' => $emailProvider,
+            ],
+            'biometrics' => [
+                'active' => $mockFlags['biometrics'] ? 'development-mock' : 'disabled',
+            ],
+            'location' => [
+                'active' => $mockFlags['location'] ? 'development-mock' : 'disabled',
+            ],
         ],
         'show_dev_reset_link' => $isDevelopment && filter_var(config_value('SHOW_DEV_RESET_LINK', $values, true), FILTER_VALIDATE_BOOLEAN),
         'show_dev_invitation_link' => $isDevelopment && filter_var(config_value('SHOW_DEV_INVITATION_LINK', $values, true), FILTER_VALIDATE_BOOLEAN),

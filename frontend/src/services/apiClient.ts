@@ -217,6 +217,33 @@ export function getMe(): Promise<SafeUser> {
   return request<SafeUser>('GET', '/auth/me');
 }
 
+export interface RuntimeConfigPayload {
+  status: 'ok';
+  environment: string;
+  providers: {
+    identity: {
+      primary: 'password';
+      development_mock_enabled: boolean;
+    };
+    email: {
+      active: 'mailpit' | 'smtp';
+    };
+    biometrics: {
+      active: 'disabled' | 'development-mock';
+    };
+    location: {
+      active: 'disabled' | 'development-mock';
+    };
+  };
+  features: {
+    browser_attendance_prototype: boolean;
+  };
+}
+
+export function getRuntimeConfigApi(): Promise<RuntimeConfigPayload> {
+  return request<RuntimeConfigPayload>('GET', '/runtime-config');
+}
+
 export function refreshSession(): Promise<{ access_token: string; user: { user_id: number } }> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {

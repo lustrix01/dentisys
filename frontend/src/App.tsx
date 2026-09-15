@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { RuntimeConfigProvider } from './context/RuntimeConfigContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { FeedbackCenter } from './components/FeedbackCenter';
@@ -105,9 +106,10 @@ function RootRoute() {
 function App() {
   return (
     <Router>
-      <AuthProvider>
-        <AppProvider>
-          <Routes>
+        <AuthProvider>
+          <RuntimeConfigProvider>
+            <AppProvider>
+              <Routes>
             {/* Public Root Route: Landing page for guests, Role Dashboard for authenticated users */}
             <Route path="/" element={<RootRoute />} />
             <Route path="/landing" element={<LandingPage />} />
@@ -185,10 +187,11 @@ function App() {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Route>
-          </Routes>
-          <FeedbackCenter />
-        </AppProvider>
-      </AuthProvider>
+              </Routes>
+              <FeedbackCenter />
+            </AppProvider>
+          </RuntimeConfigProvider>
+        </AuthProvider>
     </Router>
   );
 }

@@ -34,6 +34,13 @@ function Invoke-PsqlScalar {
     return ($output | Out-String).Trim()
 }
 
+function Invoke-PsqlScalarDatabase {
+    param([string] $Database, [string] $Query)
+    $output = & docker compose @composeFiles exec -T db psql -U postgres -d $Database -Atc $Query
+    if ($LASTEXITCODE -ne 0) { throw "PostgreSQL query failed for database ${Database}: $Query" }
+    return ($output | Out-String).Trim()
+}
+
 try {
     Invoke-Compose @('down', '-v', '--remove-orphans')
     Invoke-Compose @('up', '--build', '-d')
@@ -47,6 +54,34 @@ try {
         Start-Sleep -Seconds 2
     }
     if (-not $healthy) { throw 'Integration PostgreSQL/web services did not become healthy.' }
+
+    # Exercise the public runtime-config contract over HTTP, including the
+    # cache-safety headers and method guard. This runs against the disposable
+    # integration web service only.
+    $runtimeResponse = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:18080/api/runtime-config'
+    if ($runtimeResponse.StatusCode -ne 200) { throw "Runtime configuration endpoint returned HTTP $($runtimeResponse.StatusCode)." }
+    if (($runtimeResponse.Headers['Cache-Control'] -as [string]) -notmatch 'no-store') {
+        throw 'Runtime configuration endpoint must send Cache-Control: no-store.'
+    }
+    if (($runtimeResponse.Headers['Pragma'] -as [string]) -notmatch 'no-cache') {
+        throw 'Runtime configuration endpoint must send Pragma: no-cache.'
+    }
+    $runtimePayload = $runtimeResponse.Content | ConvertFrom-Json
+    if ($runtimePayload.environment -ne 'test' -or $runtimePayload.providers.email.active -ne 'mailpit') {
+        throw 'Runtime configuration endpoint returned an unexpected safe provider payload.'
+    }
+    foreach ($secretName in @('JWT_SIGNING_KEY_B64', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'DB_PASS')) {
+        if ($runtimeResponse.Content -match [regex]::Escape($secretName)) {
+            throw "Runtime configuration endpoint leaked $secretName."
+        }
+    }
+    $postStatus = 0
+    try {
+        Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://127.0.0.1:18080/api/runtime-config' -Body '' | Out-Null
+    } catch {
+        if ($_.Exception.Response) { $postStatus = [int]$_.Exception.Response.StatusCode }
+    }
+    if ($postStatus -ne 405) { throw "Runtime configuration endpoint method guard returned HTTP $postStatus instead of 405." }
 
     Invoke-Compose @('exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'dentisys', '-v', 'ON_ERROR_STOP=1', '-f', '/postgres/test-fixtures/live-stack.sql')
 
@@ -89,6 +124,41 @@ FROM (
 ) checks;
 "@
     if ($sequencesAligned -ne 't') { throw 'Manual demo seed did not align every identity sequence.' }
+
+    # Prove backup/restore only inside this disposable integration project.
+    # The normal development volume is never targeted by this rehearsal.
+    if ($project -ne 'dentisys-integration') { throw 'Backup/restore guard rejected an unexpected Compose project.' }
+    $backupPath = '/tmp/dentisys-p02.backup'
+    $restoreDatabase = 'dentisys_p02_restore'
+    $countQuery = @"
+SELECT COALESCE(string_agg(format('%s=%s', table_name, row_count), ',' ORDER BY table_name), '')
+FROM (
+    SELECT table_name,
+           (xpath('/table/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM public.%I', table_name), true, false, '')))[1]::text::bigint AS row_count
+    FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+) counts;
+"@
+    $sequenceQuery = "SELECT concat_ws(',', (SELECT last_value FROM user_accounts_user_id_seq), (SELECT last_value FROM courses_course_id_seq), (SELECT last_value FROM class_sections_cs_id_seq), (SELECT last_value FROM students_student_id_seq), (SELECT last_value FROM enrollments_enrollment_id_seq), (SELECT last_value FROM assessments_assessment_id_seq), (SELECT last_value FROM assessment_scores_score_id_seq), (SELECT last_value FROM attendance_records_record_id_seq));"
+    $accountQuery = "SELECT COALESCE(string_agg(user_id || ':' || login_email || ':' || role || ':' || status, ',' ORDER BY user_id), '') FROM user_accounts;"
+    $sourceCounts = Invoke-PsqlScalar $countQuery
+    $sourceSequences = Invoke-PsqlScalar $sequenceQuery
+    $sourceAccounts = Invoke-PsqlScalar $accountQuery
+    try {
+        Invoke-Compose @('exec', '-T', 'db', 'pg_dump', '-U', 'postgres', '-d', 'dentisys', '-Fc', '-f', $backupPath)
+        Invoke-Compose @('exec', '-T', 'db', 'createdb', '-U', 'postgres', $restoreDatabase)
+        Invoke-Compose @('exec', '-T', 'db', 'pg_restore', '--exit-on-error', '--no-owner', '--no-privileges', '-U', 'postgres', '-d', $restoreDatabase, $backupPath)
+        $restoreCounts = Invoke-PsqlScalarDatabase $restoreDatabase $countQuery
+        $restoreSequences = Invoke-PsqlScalarDatabase $restoreDatabase $sequenceQuery
+        $restoreAccounts = Invoke-PsqlScalarDatabase $restoreDatabase $accountQuery
+        if ($restoreCounts -ne $sourceCounts) { throw "Backup/restore counts differ (source $sourceCounts; restored $restoreCounts)." }
+        if ($restoreSequences -ne $sourceSequences) { throw "Backup/restore sequence positions differ (source $sourceSequences; restored $restoreSequences)." }
+        if ($restoreAccounts -ne $sourceAccounts) { throw 'Backup/restore seeded account ledger differs.' }
+    }
+    finally {
+        try { Invoke-Compose @('exec', '-T', 'db', 'dropdb', '-U', 'postgres', '--if-exists', $restoreDatabase) } catch { Write-Warning $_ }
+        try { Invoke-Compose @('exec', '-T', 'db', 'rm', '-f', $backupPath) } catch { Write-Warning $_ }
+    }
 
     Invoke-Compose @('exec', '-T', '-e', 'DB_TEST_HOST=db', '-e', 'DB_TEST_PORT=5432', '-e', 'DB_TEST_NAME=dentisys', '-e', 'DB_TEST_USER=dentisys', '-e', 'DB_TEST_PASS=integration-development-password', 'web', 'php', '/var/www/html/tests/database/postgres_integration_test.php')
 

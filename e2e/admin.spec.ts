@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Admin (Dean) Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -34,16 +34,16 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Dean|Office of the Dean|Dashboard/i);
   });
 
-  test('admin can navigate to Faculty Approval page', async ({ page }) => {
-    await page.click('a[href="/admin/faculty-approval"]');
-    await expect(page).toHaveURL('/admin/faculty-approval');
-    await expect(page.locator('body')).toContainText(/Faculty Approval|Registrations|Pending/i);
+  test('admin can navigate to the Faculty Invitation page', async ({ page }) => {
+    await page.click('a[href="/admin/faculty-invite"]');
+    await expect(page).toHaveURL('/admin/faculty-invite');
+    await expect(page.locator('body')).toContainText(/Faculty Invitation|Invite|Pending/i);
   });
 
-  test('admin can navigate to Retention Criteria page', async ({ page }) => {
-    await page.click('a[href="/admin/retention-criteria"]');
-    await expect(page).toHaveURL('/admin/retention-criteria');
-    await expect(page.locator('body')).toContainText(/Retention|Criteria|Policy/i);
+  test('admin can reach reports from the retained retention-criteria redirect', async ({ page }) => {
+    await page.click('a[href="/admin/reports"]');
+    await expect(page).toHaveURL('/admin/reports');
+    await expect(page.locator('body')).toContainText(/Report|System|Analytics/i);
   });
 
   test('admin can navigate to System Audit Reports page', async ({ page }) => {

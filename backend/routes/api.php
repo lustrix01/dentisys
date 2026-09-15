@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/controllers/HealthController.php';
+require_once dirname(__DIR__) . '/controllers/RuntimeConfigController.php';
 require_once dirname(__DIR__) . '/controllers/AuthController.php';
 require_once dirname(__DIR__) . '/controllers/MfaController.php';
 require_once dirname(__DIR__) . '/controllers/UserController.php';
@@ -16,6 +17,11 @@ return [
         'method' => 'GET',
         'path' => '/api/health',
         'handler' => 'handle_health_check',
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/runtime-config',
+        'handler' => 'handle_runtime_config',
     ],
     // Auth & MFA
     [

@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
+import { DEVELOPMENT_LOCATION_FIXTURES, developmentBiometricOutcome } from '../../services/developmentProviders';
 
 // Geofence center (Bicol University Dental Clinic)
 const BU_DENTAL_CLINIC_COORDS = {
@@ -85,6 +87,11 @@ export const Attendance: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { students, attendanceRecords, addAttendanceRecord } = useApp();
+  const runtimeConfig = useRuntimeConfig();
+  const simulationEnabled = runtimeConfig.providers.identity.development_mock_enabled
+    && runtimeConfig.providers.biometrics.active === 'development-mock'
+    && runtimeConfig.providers.location.active === 'development-mock'
+    && runtimeConfig.features.browser_attendance_prototype;
 
   const currentStudent = students.find(
     s => s.email.toLowerCase() === user?.login_email.toLowerCase() || s.id === '1'
@@ -120,7 +127,7 @@ export const Attendance: React.FC = () => {
 
   // STEP 3: GEOFENCING LOCATION CHECK & LIVE GPS
   const [gpsLoading, setGpsLoading] = useState(false);
-  const [overrideGeofence, setOverrideGeofence] = useState(true);
+  const [overrideGeofence, setOverrideGeofence] = useState(false);
   const [gpsData, setGpsData] = useState<{
     lat: number;
     lng: number;
@@ -136,67 +143,31 @@ export const Attendance: React.FC = () => {
   });
 
   const refreshGpsLocation = () => {
-    if (overrideGeofence) {
+    if (runtimeConfig.providers.location.active === 'development-mock') {
+      const fixture = DEVELOPMENT_LOCATION_FIXTURES.inside;
       setGpsData({
-        lat: 13.1436,
-        lng: 123.7438,
+        lat: fixture.latitude ?? BU_DENTAL_CLINIC_COORDS.lat,
+        lng: fixture.longitude ?? BU_DENTAL_CLINIC_COORDS.lng,
         distanceMeters: 12,
         inGeofence: true,
-        locationName: 'BU Dental Clinic (Zone A)'
+        locationName: 'Development location fixture: BU Dental Clinic (not authoritative)'
       });
       return;
     }
 
-    if (!navigator.geolocation) return;
-    setGpsLoading(true);
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const distKm = getDistanceKm(
-          pos.coords.latitude,
-          pos.coords.longitude,
-          BU_DENTAL_CLINIC_COORDS.lat,
-          BU_DENTAL_CLINIC_COORDS.lng
-        );
-        const distM = Math.round(distKm * 1000);
-        const isInside = distKm <= BU_DENTAL_CLINIC_COORDS.maxDistanceKm;
-
-        setGpsData({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          distanceMeters: distM,
-          inGeofence: isInside,
-          locationName: isInside ? 'BU Dental Clinic' : `${distM}m from BU Clinic`
-        });
-        setGpsLoading(false);
-      },
-      () => {
-        setGpsLoading(false);
-      },
-      { timeout: 5000 }
-    );
+    setGpsLoading(false);
   };
 
   useEffect(() => {
     refreshGpsLocation();
-  }, [overrideGeofence]);
+  }, [overrideGeofence, runtimeConfig.providers.location.active]);
 
   // Webcam stream
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    if (!isFaceRegistered) return;
-    let stream: MediaStream | null = null;
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } })
-      .then(s => {
-        stream = s;
-        if (videoRef.current) videoRef.current.srcObject = s;
-      })
-      .catch(() => { });
-
-    return () => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
-    };
-  }, [isFaceRegistered]);
+    if (!simulationEnabled || !isFaceRegistered || !videoRef.current) return;
+    videoRef.current.srcObject = null;
+  }, [isFaceRegistered, simulationEnabled]);
 
   // ATTENDANCE SUBMISSION
   const [isVerifying, setIsVerifying] = useState(false);
@@ -212,13 +183,15 @@ export const Attendance: React.FC = () => {
   const todayRecord = studentRecords.find(r => r.date === todayStr && r.subjectCode === selectedCourseCode);
 
   const handleTakeAttendance = () => {
-    if (!isFaceRegistered || activeSessionInfo.status !== 'active') return;
+    if (!simulationEnabled || !isFaceRegistered || activeSessionInfo.status !== 'active') return;
 
     setIsVerifying(true);
     setVerificationOutcome(null);
 
     setTimeout(() => {
       setIsVerifying(false);
+
+      const biometricOutcome = developmentBiometricOutcome('matched');
 
       if (!gpsData.inGeofence && !overrideGeofence) {
         setVerificationOutcome({
@@ -244,6 +217,7 @@ export const Attendance: React.FC = () => {
         verifiedLocationName: gpsData.locationName,
         verifiedAt: timeStr,
       });
+      void biometricOutcome;
 
       setVerificationOutcome({
         success: true,
@@ -253,6 +227,17 @@ export const Attendance: React.FC = () => {
       });
     }, 1500);
   };
+
+  if (!simulationEnabled) {
+    return (
+      <div className="max-w-3xl mx-auto rounded-3xl border border-amber-200 bg-amber-50 p-8 text-amber-900 shadow-xs">
+        <h1 className="text-2xl font-extrabold">Browser attendance simulation is disabled</h1>
+        <p className="mt-2 text-sm leading-relaxed">
+          Server-backed Student attendance, geofencing, and biometric verification are not implemented in this phase. No attendance record can be created here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto pb-12 animate-fade-in">

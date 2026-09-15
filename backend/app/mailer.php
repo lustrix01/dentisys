@@ -49,7 +49,10 @@ function smtp_transport(string $to, string $subject, string $body, array $config
     $encryption = strtolower((string) ($smtp['encryption'] ?? 'none'));
     $verifyPeer = (bool) ($smtp['verify_peer'] ?? true);
     $caFile = (string) ($smtp['ca_file'] ?? '');
-    $isDevelopment = strtolower((string) ($config['app']['env'] ?? 'production')) === 'development';
+    $environment = strtolower((string) ($config['app']['env'] ?? 'production'));
+    $provider = strtolower((string) ($config['providers']['email']['active'] ?? 'smtp'));
+    $isMailpit = $provider === 'mailpit';
+    $isDevelopmentOrTest = in_array($environment, ['development', 'test'], true);
 
     $headers = [
         'From' => $from,
@@ -63,11 +66,14 @@ function smtp_transport(string $to, string $subject, string $body, array $config
     if ($host === '') {
         return ['sent' => false, 'error' => 'SMTP host is not configured.', 'headers' => $headers];
     }
-    if (!$isDevelopment && !in_array($encryption, ['tls', 'starttls'], true)) {
+    if (!$isMailpit && !in_array($encryption, ['tls', 'starttls'], true)) {
         return ['sent' => false, 'error' => 'Encrypted SMTP is required outside development.', 'headers' => $headers];
     }
-    if (!$isDevelopment && !$verifyPeer) {
+    if (!$isMailpit && !$verifyPeer) {
         return ['sent' => false, 'error' => 'SMTP certificate verification is required outside development.', 'headers' => $headers];
+    }
+    if ($isMailpit && !$isDevelopmentOrTest) {
+        return ['sent' => false, 'error' => 'Mailpit is available only in development and test.', 'headers' => $headers];
     }
 
     $ssl = [

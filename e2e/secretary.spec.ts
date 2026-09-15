@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Class Secretary Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -46,10 +46,8 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Override|Manual|Correction|Status/i);
   });
 
-  test('secretary can navigate to CCTV Feed page', async ({ page }) => {
-    await page.click('a[href="/secretary/cctv"]');
-    await expect(page).toHaveURL('/secretary/cctv');
-    await expect(page.locator('body')).toContainText(/CCTV|Camera|Feed|Live/i);
+  test('secretary navigation does not claim a CCTV integration', async ({ page }) => {
+    await expect(page.locator('a[href="/secretary/cctv"]')).toHaveCount(0);
   });
 
   test('secretary can navigate to Audit Trail page', async ({ page }) => {
@@ -69,11 +67,8 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Settings/i);
   });
 
-  test('secretary sees an explicitly unconfigured CCTV integration with no simulator', async ({ page }) => {
-    await page.click('a[href="/secretary/cctv"]');
-    await expect(page).toHaveURL('/secretary/cctv');
-    await expect(page.locator('body')).toContainText('CCTV integration not configured');
-    await expect(page.locator('button', { hasText: /Simulate|Trigger Scan/i })).toHaveCount(0);
+  test('secretary does not expose an unconfigured CCTV simulator', async ({ page }) => {
+    await expect(page.locator('a[href="/secretary/cctv"]')).toHaveCount(0);
   });
 
   test('secretary profile displays backend-managed MFA status', async ({ page }) => {

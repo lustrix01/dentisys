@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Faculty Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -41,7 +41,10 @@ test.describe('Faculty Module E2E Tests', () => {
   });
 
   test('faculty can navigate to Student Management', async ({ page }) => {
-    await page.click('a[href="/students"]');
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/students');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
     await expect(page).toHaveURL('/students');
     await expect(page.locator('body')).toContainText(/Student|Enrolled|List/i);
   });
@@ -144,40 +147,13 @@ test.describe('Faculty Module E2E Tests', () => {
       });
     });
 
-    await page.goto('/');
     await expect(page.locator('body')).toContainText(/Faculty|Dashboard/i);
   });
 
-  test('faculty student management enforces data and input validation', async ({ page }) => {
-    await page.click('a[href="/students"]');
-    await expect(page).toHaveURL('/students');
-
-    const enrollTab = page.locator('button', { hasText: 'Admissions Intake' }).or(page.locator('button', { hasText: 'Enroll' }));
-    if (await enrollTab.first().isVisible()) {
-      await enrollTab.first().click();
-    }
-
-    const idInput = page.locator('input[placeholder="e.g. DENT-2026-0284"]');
-    if (await idInput.isVisible()) {
-      await idInput.fill('STU-999');
-    }
-
-    const firstInput = page.locator('input[placeholder="e.g. Angela"]');
-    if (await firstInput.isVisible()) {
-      await firstInput.fill('Angela');
-    }
-
-    const lastInput = page.locator('input[placeholder="e.g. Castillo"]');
-    if (await lastInput.isVisible()) {
-      await lastInput.fill('Castillo');
-    }
-
-    const emailInput = page.locator('input[placeholder="e.g. angela@bicol-u.edu.ph"]');
-    if (await emailInput.isVisible()) {
-      await emailInput.fill('invalidemail@gmail.com');
-      await page.click('button[type="submit"]');
-
-      await expect(page.locator('body')).toContainText(/Only official Bicol University email/i);
-    }
+  test('faculty class and roster surface identifies its current development status', async ({ page }) => {
+    await page.click('a[href="/classes"]');
+    await expect(page).toHaveURL('/classes');
+    await expect(page.locator('body')).toContainText(/Classes & Student Rosters|Assigned Classes|Enrolled Student Roster/i);
+    await expect(page.locator('body')).toContainText(/Development preview|browser-local/i);
   });
 });

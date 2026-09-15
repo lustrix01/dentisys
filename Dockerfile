@@ -16,4 +16,5 @@ RUN sed -ri 's!/var/www/html!/var/www/html/backend/public!g' /etc/apache2/sites-
 
 COPY --chown=www-data:www-data backend/ /var/www/html/backend/
 COPY --from=composer --chown=www-data:www-data /app/vendor /var/www/html/backend/vendor
+CMD ["sh", "-c", "php /var/www/html/backend/bin/validate-config.php && exec apache2-foreground"]
 EXPOSE 80

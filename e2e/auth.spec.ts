@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Auth Module E2E Tests', () => {
   test('login page renders correctly with brand title and form elements', async ({ page }) => {
     await page.goto('/login');
     await expect(page).toHaveTitle(/DentiSys/i);
-    await expect(page.locator('h1')).toContainText('DentiSys');
+    await expect(page.locator('h1')).toContainText('DentiSYS');
     await expect(page.locator('h2')).toContainText('Login to Your Account');
 
     const emailInput = page.locator('input[type="email"]');
@@ -191,7 +191,7 @@ test.describe('Auth Module E2E Tests', () => {
     await page.click('button[type="submit"]');
 
     // Assert registration request submission success message
-    await expect(page.locator('body')).toContainText(/Registration Request Submitted!/i);
+    await expect(page.locator('body')).toContainText(/Faculty Account Created!/i);
 
     // 2. Intercept Password Reset Request API
     await page.route('**/api/auth/password/reset-request', async (route) => {

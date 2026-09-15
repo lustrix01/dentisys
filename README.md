@@ -37,6 +37,8 @@ npm ci
 npx playwright install chromium
 ```
 
+`npm run test:e2e` checks for the frontend Vite dependency and installs `frontend/package-lock.json` automatically when `frontend/node_modules` is absent. The root `npm ci` above remains required for Playwright itself.
+
 ### 4. Start the complete development system
 
 ```powershell
@@ -44,6 +46,8 @@ docker compose up --build -d
 ```
 
 This starts the five development services: PostgreSQL, PHP API, Vite frontend, Mailpit, and loopback-only pgAdmin. On a new PostgreSQL volume, the database, application role, schema, and pending additive migrations are created automatically. Startup never loads demo data, drops tables, or truncates the database.
+
+The default `docker-compose.yml` intentionally falls back to `APP_ENV=development` when `.env` is absent; this supports a safe local developer stack and is not a production deployment path. The single-server/production-like Compose definition requires explicit environment and provider settings, and the startup validator fails closed when mock providers or Mailpit are selected there.
 
 ### 5. Verify the local services
 

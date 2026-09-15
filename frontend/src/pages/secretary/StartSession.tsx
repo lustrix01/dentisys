@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { useApp } from '../../context/AppContext';
+import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
+import { DEVELOPMENT_LOCATION_FIXTURES } from '../../services/developmentProviders';
 
 export interface ActiveSessionState {
   code: string;
@@ -73,8 +75,11 @@ const TIME_OPTIONS = [
 export const StartSession: React.FC = () => {
   const navigate = useNavigate();
   const { students, attendanceRecords } = useApp();
+  const config = useRuntimeConfig();
+  const simulationEnabled = config.providers.location.active === 'development-mock' && config.features.browser_attendance_prototype;
 
   const [activeSession, setActiveSession] = useState<ActiveSessionState | null>(() => {
+    if (!simulationEnabled) return null;
     const saved = localStorage.getItem('dentisys_active_class_session');
     if (saved) {
       try {
@@ -143,6 +148,13 @@ export const StartSession: React.FC = () => {
   const [isLocating, setIsLocating] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!simulationEnabled) {
+      setGpsLocation(null);
+      setActiveSession(null);
+    }
+  }, [simulationEnabled]);
+
   // Success / Status alerts
   const [notification, setNotification] = useState<{ type: 'success' | 'info' | 'warning'; message: string } | null>(null);
 
@@ -168,9 +180,24 @@ export const StartSession: React.FC = () => {
   }, [activeSession]);
 
   const handleAcquireGps = () => {
+    if (!simulationEnabled) {
+      setGpsError('Development location simulation is disabled. Configure the explicit P02 test flags to exercise this browser prototype.');
+      return;
+    }
     setIsLocating(true);
     setGpsError(null);
 
+    window.setTimeout(() => {
+      setGpsLocation({
+        lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
+        lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
+        address: 'BU Dental Room Location Verified (13.1436°, 123.7438°)',
+      });
+      setIsLocating(false);
+    }, 50);
+    return;
+
+    /* Legacy browser geolocation path retained only as historical context; P02 never executes it.
     if (!navigator.geolocation) {
       setGpsError('Geolocation API is not supported by your browser.');
       setGpsLocation({
@@ -203,7 +230,7 @@ export const StartSession: React.FC = () => {
         setIsLocating(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
-    );
+    ); */
   };
 
   const handleSubjectChange = (code: string) => {
@@ -216,6 +243,14 @@ export const StartSession: React.FC = () => {
 
   const handleStartSession = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!simulationEnabled) {
+      setNotification({
+        type: 'warning',
+        message: 'Browser session simulation is disabled. No authoritative attendance session was created.'
+      });
+      return;
+    }
 
     if (!gpsLocation) {
       handleAcquireGps();
@@ -268,6 +303,17 @@ export const StartSession: React.FC = () => {
     });
   };
 
+  if (!simulationEnabled) {
+    return (
+      <div className="max-w-3xl mx-auto rounded-3xl border border-amber-200 bg-amber-50 p-8 text-amber-900 shadow-xs dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+        <h1 className="text-2xl font-extrabold">Browser session simulation is disabled</h1>
+        <p className="mt-2 text-sm leading-relaxed">
+          Authoritative attendance sessions are planned for a later phase. This page cannot create or reopen a server session while the development simulation is disabled.
+        </p>
+      </div>
+    );
+  }
+
   // Live session student metrics
   const sessionRecords = activeSession 
     ? attendanceRecords.filter(r => r.subjectCode === activeSession.code)
@@ -279,7 +325,7 @@ export const StartSession: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
-      
+
       {/* 1. Top Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>

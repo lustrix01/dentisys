@@ -27,7 +27,7 @@ function assert_throws(callable $fn, string $needle, string $label): void
 }
 
 $original = [];
-foreach (['APP_ENV', 'APP_BASE_URL', 'SHOW_DEV_RESET_LINK', 'SHOW_DEV_INVITATION_LINK', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN'] as $key) {
+foreach (['APP_ENV', 'APP_BASE_URL', 'SHOW_DEV_RESET_LINK', 'SHOW_DEV_INVITATION_LINK', 'EMAIL_PROVIDER', 'DEV_MOCK_IDENTITY_ENABLED', 'DEV_MOCK_BIOMETRIC_ENABLED', 'DEV_MOCK_LOCATION_ENABLED', 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN'] as $key) {
     $original[$key] = getenv($key);
     putenv($key);
 }
@@ -39,6 +39,14 @@ assert_same(86400, $defaultConfig['jwt']['access_ttl'], 'application default JWT
 assert_same('ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI=', $defaultConfig['mfa']['encryption_key_b64'], 'application default MFA_ENCRYPTION_KEY_B64');
 assert_same('ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ=', $defaultConfig['audit']['mac_key_b64'], 'application default AUDIT_MAC_KEY_B64');
 assert_same('bicol-u.edu.ph', $defaultConfig['app']['allowed_email_domain'], 'application default allowed email domain');
+assert_same('development', $defaultConfig['app']['env'], 'APP_ENV defaults to development');
+assert_same('mailpit', $defaultConfig['providers']['email']['active'], 'development defaults to Mailpit');
+assert_same([
+    'identity' => false,
+    'biometrics' => false,
+    'location' => false,
+    'browser_attendance_prototype' => false,
+], $defaultConfig['mocks'], 'development mock providers default to disabled');
 assert_same('http://localhost:5173', $defaultConfig['app']['base_url'], 'development base URL defaults to the Vite frontend');
 assert_same(true, $defaultConfig['show_dev_reset_link'], 'development reset disclosure is enabled by default');
 assert_same(true, $defaultConfig['show_dev_invitation_link'], 'development invitation disclosure is enabled by default');
@@ -67,6 +75,64 @@ assert_throws(
     'valid absolute HTTP(S) URL',
     'single-server rejects a relative APP_BASE_URL'
 );
+assert_throws(
+    static fn() => app_config(['APP_ENV' => 'unknown']),
+    'APP_ENV',
+    'unknown APP_ENV is rejected'
+);
+assert_throws(
+    static fn() => app_config(['DEV_MOCK_LOCATION_ENABLED' => 'sometimes']),
+    'DEV_MOCK_LOCATION_ENABLED',
+    'invalid mock flag is rejected'
+);
+foreach ([
+    'DEV_MOCK_IDENTITY_ENABLED',
+    'DEV_MOCK_BIOMETRIC_ENABLED',
+    'DEV_MOCK_LOCATION_ENABLED',
+    'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED',
+] as $mockFlag) {
+    assert_throws(
+        static fn() => app_config(['APP_ENV' => 'production', $mockFlag => 'true']),
+        'forbidden',
+        "production rejects $mockFlag"
+    );
+    assert_throws(
+        static fn() => app_config(['APP_ENV' => 'single-server', $mockFlag => 'true']),
+        'forbidden',
+        "single-server rejects $mockFlag"
+    );
+}
+assert_throws(
+    static fn() => app_config(['APP_ENV' => 'single-server', 'EMAIL_PROVIDER' => 'mailpit']),
+    'forbidden',
+    'single-server rejects Mailpit'
+);
+assert_throws(
+    static fn() => app_config(['APP_ENV' => 'production', 'EMAIL_PROVIDER' => 'mailpit']),
+    'forbidden',
+    'production rejects Mailpit'
+);
+assert_throws(
+    static fn() => app_config(['APP_ENV' => 'test', 'EMAIL_PROVIDER' => 'unknown']),
+    'EMAIL_PROVIDER',
+    'unknown email provider is rejected'
+);
+$productionSmtp = app_config([
+    'APP_ENV' => 'production',
+    'EMAIL_PROVIDER' => 'smtp',
+    'SMTP_ENCRYPTION' => 'starttls',
+    'SMTP_VERIFY_PEER' => 'true',
+]);
+assert_same('smtp', $productionSmtp['providers']['email']['active'], 'production accepts SMTP provider');
+$testConfig = app_config([
+    'APP_ENV' => 'test',
+    'DEV_MOCK_IDENTITY_ENABLED' => 'true',
+    'DEV_MOCK_BIOMETRIC_ENABLED' => 'true',
+    'DEV_MOCK_LOCATION_ENABLED' => 'true',
+    'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED' => 'true',
+]);
+assert_same(true, $testConfig['mocks']['identity'], 'test environment permits explicit mock identity');
+assert_same(true, $testConfig['mocks']['browser_attendance_prototype'], 'test environment permits explicit browser prototype');
 
 assert_same(32, strlen(config_key_bytes_at_least($defaultConfig['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY')), 'default JWT key decodes to 32 bytes');
 assert_same(32, strlen(config_key_bytes_at_least($defaultConfig['mfa']['encryption_key_b64'], 32, 'MFA_ENCRYPTION_KEY')), 'default MFA key decodes to 32 bytes');

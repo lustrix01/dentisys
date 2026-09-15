@@ -9,7 +9,7 @@ export default defineConfig({
   workers: 2,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://127.0.0.1:15174',
     trace: 'on-first-retry',
   },
   projects: [
@@ -18,10 +18,4 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true,
-    timeout: 120 * 1000,
-  },
 });

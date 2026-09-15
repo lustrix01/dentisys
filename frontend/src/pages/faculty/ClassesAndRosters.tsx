@@ -360,6 +360,9 @@ export const ClassesAndRosters: React.FC = () => {
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
             Create classes, import iBU student rosters (PDF/CSV), manage students, and send email invitations.
           </p>
+          <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-2">
+            Development preview: roster changes and invitations are browser-local until a later authoritative workflow is approved.
+          </p>
         </div>
 
         {/* Action Buttons */}
