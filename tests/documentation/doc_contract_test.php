@@ -24,10 +24,26 @@ require_document("{$root}/docs/development-environment.md", 'pgAdmin');
 require_document("{$root}/docs/single-server.md", 'Same-Host');
 require_document("{$root}/docs/roadmap.md", 'Google-only sign-in');
 require_document("{$root}/docs/database/phase-2-migration-mapping.md", '006_remove_email_code_2fa.sql');
+require_document("{$root}/docs/database/security-data-dictionary.md", 'student_account_user_id');
+require_document("{$root}/docs/ias/module-a-identity-access.md", 'auth_assert_student_eligible');
+require_document("{$root}/docs/requirements-traceability.md", 'P03 Student Identity and Authentication');
+
+$migration = file_get_contents("{$root}/database/migrations/005_student_identity_authentication.sql");
+if ($migration === false
+    || preg_match('/UPDATE\s+students\s+SET\s+student_account_user_id\s*=\s*.*user_id/i', $migration)
+    || !str_contains($migration, "CHECK (role IN ('admin', 'faculty', 'secretary', 'student'))")
+    || !str_contains($migration, "'student_activation'")) {
+    fwrite(STDERR, "FAIL: P03 migration contract is incomplete.\n");
+    exit(1);
+}
 
 $migrations = glob("{$root}/database/migrations/*.sql") ?: [];
-if (count($migrations) !== 4) {
-    fwrite(STDERR, 'FAIL: Expected 4 active PostgreSQL migrations, found ' . count($migrations) . "\n");
+if (count($migrations) !== 5) {
+    fwrite(STDERR, 'FAIL: Expected 5 active PostgreSQL migrations, found ' . count($migrations) . "\n");
+    exit(1);
+}
+if (!in_array('005_student_identity_authentication.sql', array_map('basename', $migrations), true)) {
+    fwrite(STDERR, "FAIL: P03 migration is not present.\n");
     exit(1);
 }
 

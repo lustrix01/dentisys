@@ -100,6 +100,10 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         throw new InactiveAccountException($user['status']);
     }
 
+    if ($user['role'] === 'student') {
+        auth_assert_student_eligible($pdo, $config, (int) $user['user_id']);
+    }
+
     $stmt = $pdo->prepare(
         "SELECT COUNT(*) FROM security_tokens
          WHERE user_id = ? AND purpose = 'mfa_credential'
@@ -174,15 +178,22 @@ function auth_runtime_me(PDO $pdo, array $config, array $context): array
 
     $token = auth_extract_bearer_token($authHeader);
     $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
-    $authContext = auth_verify_access_token($pdo, $token, $jwtKey);
+    $authContext = auth_verify_access_token($pdo, $config, $token, $jwtKey);
 
-    return [
+    $response = [
         'user_id' => $authContext['user_id'],
         'login_email' => $authContext['login_email'],
         'role' => $authContext['role'],
         'display_name' => $authContext['display_name'],
         'session_uuid' => $authContext['session_uuid'],
+        'authentication_source' => $authContext['authentication_source'] ?? 'password',
     ];
+
+    if (($authContext['role'] ?? null) === 'student' && isset($authContext['student'])) {
+        $response['student'] = $authContext['student'];
+    }
+
+    return $response;
 }
 
 function auth_controller_emit(array $response): void
@@ -312,8 +323,6 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
 
     $pdo->beginTransaction();
     try {
-        $auditCtx = audit_begin_operation($pdo);
-
         $stmtLock = $pdo->prepare(
             "SELECT * FROM security_tokens
              WHERE token_id = ? AND purpose = 'refresh'
@@ -352,6 +361,18 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
             throw new ChallengeException('Authentication required.');
         }
 
+        if ($lockedUser['role'] === 'student') {
+            $authenticationSource = (string) ($sessionRow['authentication_source'] ?? 'password');
+            if ($authenticationSource === 'development_mock' && !student_auth_mock_is_available($config)) {
+                student_auth_record_eligibility_denied($pdo, $config, (int) $lockedUser['user_id'], 'development_mock_unavailable');
+                throw new ChallengeException('Authentication required.');
+            }
+            // Re-check the canonical Student identity at refresh time. This
+            // deliberately does not require an active enrollment; object
+            // ownership is enforced separately by require_owned_enrollment().
+            auth_assert_student_eligible($pdo, $config, (int) $lockedUser['user_id'], true);
+        }
+
         if ((int) $sessionRow['issued_token_version'] !== (int) $lockedUser['token_version']) {
             throw new ChallengeException('Authentication required.');
         }
@@ -371,6 +392,12 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
         if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $lockedToken['family_uuid'])) {
             throw new ChallengeException('Authentication required.');
         }
+
+        // Defer the audit-chain row lock until all Student provenance and
+        // eligibility checks have passed. Those checks may append a denial on
+        // an independent connection so a rejected refresh cannot lose its
+        // audit evidence to this transaction's rollback.
+        $auditCtx = audit_begin_operation($pdo);
 
         if ($lockedToken['used_at'] !== null) {
             $usedAt = new DateTimeImmutable($lockedToken['used_at'], new DateTimeZone('UTC'));
@@ -573,7 +600,7 @@ function auth_runtime_logout(PDO $pdo, array $config, array $context, string $re
     }
 }
 
-function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, array $context): array
+function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, array $context, string $authenticationSource = 'password'): array
 {
     $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $sessionExpiry = $now->add(new DateInterval('P7D'));
@@ -585,7 +612,9 @@ function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, arra
         $context['ip_address'],
         $context['user_agent'],
         null,
-        $sessionExpiry
+        $sessionExpiry,
+        null,
+        $authenticationSource
     );
 
     $refreshResult = auth_issue_initial_refresh_token(

@@ -67,6 +67,8 @@ function handle_login(): void
         auth_controller_emit(auth_build_no_store_json_response($payload, 200));
     } catch (InvalidCredentialsException $e) {
         auth_controller_emit(auth_build_no_store_message_response('Invalid credentials.', 401));
+    } catch (AuthException $e) {
+        auth_controller_emit(auth_build_no_store_message_response('Invalid credentials.', 401));
     } catch (InactiveAccountException $e) {
         auth_controller_emit(auth_build_no_store_message_response($e->getMessage(), 403));
     } catch (TooManyMfaCredentialsException $e) {

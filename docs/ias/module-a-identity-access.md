@@ -2,6 +2,18 @@
 
 > Implementation update: DentiSys now uses optional authenticator-app 2FA and recovery codes. Email-code verification and MFA method selection are retired; Google-only sign-in remains planned.
 
+## P03 Student identity and sessions
+
+Student authentication is password-based in this phase and uses the existing server-issued access/refresh session machinery. `auth_sessions.authentication_source` records `password` or the explicitly development-only `development_mock` source. Access-token verification calls `auth_assert_student_eligible()` to re-check the canonical Student identity invariant (role, account status, Student status, institutional-email match, and exactly one canonical link) without requiring a current enrollment. Enrollment is checked only by signup eligibility, activation-token consumption, and `require_owned_enrollment()` object scoping.
+
+Unauthenticated endpoints are `POST /api/auth/student/signup` and `POST /api/auth/student/activate`. Signup is email-only, non-enumerating, rate-limited, and issues a 24-hour one-time activation token only for an active Student with an active enrollment and no conflicting identity links. A pending canonical Student account may receive a resend; the previous live token is revoked first. Activation validates password policy before any token-dependent lookup, consumes the token atomically, and never returns the raw token. Password reset, MFA enrollment/verification/recovery, refresh rotation, and logout retain their existing server-side lifecycle and re-check Student eligibility where an account is acted upon.
+
+### Explicit identity decisions
+
+- **Provisioning/link invariant:** P03 provisions one Pending Activation `user_accounts` row and sets `students.student_account_user_id`; it never backfills `students.user_id`. Signup requires an active enrollment only at provisioning time. Existing conflicting links are a safe no-op. P06 owns legacy Secretary reconciliation.
+- **Google OIDC:** unresolved/planned; no Google button, callback, provider, schema, or dependency is introduced.
+- **Student/Secretary relationship:** one canonical Student account may not be converted to admin/faculty; a legacy Secretary-only `students.user_id` link remains valid and separate. Secretary activation rejects a Student canonical link, and P03 does not merge or migrate the two identities.
+
 ## TOTP Enrollment and Verification Flow
 
 ```
@@ -78,7 +90,7 @@ User                    Backend                         Database
 - **Attempt limit**: Enforced by the filesystem rate limiter using the challenge JTI as part of the rate-limit key. The rate limiter is implemented in a later stage. A verification-attempt counter is NOT maintained inside the signed challenge JWT because client-side state is not authoritative.
 - No new database table or security_tokens purpose is added for challenge attempts.
 
-## Complete RBAC Matrix (125 Static Grants)
+## Complete RBAC Matrix (125 Baseline + 7 P03 Student Grants)
 
 | Role | Resource | Action | Scope |
 |------|----------|--------|-------|
@@ -158,7 +170,16 @@ User                    Backend                         Database
 | | audit_trail | read_module | assigned_class |
 | | secretary_invitation_own | accept | own |
 
-Total: 125 rows (= 62 admin + 47 faculty + 16 secretary)
+Baseline total: 125 rows (= 62 admin + 47 faculty + 16 secretary). P03 adds
+seven Student self-scoped grants, for 132 active grants.
+
+### Student P03 Grants
+
+| Role | Resource | Action | Scope |
+|------|----------|--------|-------|
+| **Student** | mfa | enroll_own, verify_own, recover_own | own |
+| | user_accounts | read_own, update_own | own |
+| | sessions | read_own, revoke_own | own |
 
 ### Secretary Restrictions
 

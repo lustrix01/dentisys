@@ -68,6 +68,12 @@ docker compose logs -f db
 
 The manual seed contains documented demo accounts, courses, classes, students, grades, and attendance records. It is safe to rerun: it is transaction-wrapped, makes no schema changes, never drops or truncates data, and skips rows already present.
 
+### P03 Student authentication fixture
+
+The optional development fixture includes `student@bicol-u.edu.ph / Student123!`, a canonical `student_account_user_id` link, and one active enrollment. It is intentionally explicit: `STUDENT_AUTH_ENABLED` defaults to `false` and must be enabled in a disposable development/test environment before Student signup, activation, or the server-issued development mock session is available. The development mock endpoint is backend-issued and rejected outside development/test; the browser never fabricates Student credentials.
+
+Student activation mail is delivered to Mailpit when the feature is enabled. The activation URL contains a one-time raw token; the token is scrubbed from the browser address bar immediately and is not stored in localStorage, sessionStorage, or auth context.
+
 ## 6. Daily lifecycle and validation
 
 ```powershell
@@ -117,4 +123,3 @@ When an already-running test stack is configured through `E2E_BASE_URL`, the liv
 ```powershell
 npm run test:e2e:live
 ```
-

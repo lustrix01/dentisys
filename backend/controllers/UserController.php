@@ -125,7 +125,7 @@ function handle_admin_list_faculty(): void
 
         $token = auth_extract_bearer_token($authHeader);
         $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
-        $authCtx = auth_verify_access_token($pdo, $token, $jwtKey);
+        $authCtx = auth_verify_access_token($pdo, $config, $token, $jwtKey);
 
         if ($authCtx['role'] !== 'admin') {
             safe_error_response('Access denied. Administrator privileges required.', 403);
@@ -190,7 +190,7 @@ function handle_admin_faculty_approval(): void
 
         $token = auth_extract_bearer_token($authHeader);
         $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
-        $authCtx = auth_verify_access_token($pdo, $token, $jwtKey);
+        $authCtx = auth_verify_access_token($pdo, $config, $token, $jwtKey);
 
         if ($authCtx['role'] !== 'admin') {
             safe_error_response('Access denied. Administrator privileges required.', 403);

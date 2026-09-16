@@ -81,6 +81,12 @@ assert_same('550e8400-e29b-41d4-a716-446655440000', $decoded['sid'], 'Roundtrip:
 assert_same('a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6', $decoded['jti'], 'Roundtrip: jti');
 assert_same(0, $decoded['token_version'], 'Roundtrip: token_version');
 
+$studentClaims = $claims;
+$studentClaims['role'] = 'student';
+$studentToken = jwt_encode($studentClaims, $key);
+$studentDecoded = jwt_decode($studentToken, $key, 'access', $clock);
+assert_same('student', $studentDecoded['role'], 'Student role is accepted for access tokens');
+
 // Type-specific decode
 $enrToken = jwt_encode($enrollmentClaims, $key);
 $chToken = jwt_encode($challengeClaims, $key);
@@ -178,8 +184,8 @@ assert_throws(fn() => jwt_decode(jwt_encode($badJti2, $key), $key, 'access', $cl
 
 // Invalid role
 $badRole = $claims;
-$badRole['role'] = 'student';
-assert_throws(fn() => jwt_decode(jwt_encode($badRole, $key), $key, 'access', $clock), 'admin, faculty, secretary', 'Invalid role rejected');
+$badRole['role'] = 'auditor';
+assert_throws(fn() => jwt_decode(jwt_encode($badRole, $key), $key, 'access', $clock), 'admin, faculty, secretary, student', 'Unknown role rejected');
 
 // Invalid SID
 $badSid = $claims;

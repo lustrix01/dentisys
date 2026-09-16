@@ -35,6 +35,16 @@ function handle_password_reset_request(): void
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
+        if ($user !== false && $user['role'] === 'student') {
+            try {
+                auth_assert_student_eligible($pdo, $config, (int) $user['user_id']);
+            } catch (AuthException $e) {
+                // Preserve the non-enumerating reset response for unavailable
+                // or no-longer-eligible Student identities.
+                $user = false;
+            }
+        }
+
         $resetToken = bin2hex(random_bytes(16));
         $tokenHash = hash('sha256', $resetToken);
 
@@ -176,6 +186,15 @@ function handle_password_reset_confirm(): void
         if ($user === false) {
             safe_error_response('User account not found.', 404);
             return;
+        }
+
+        if ($user['role'] === 'student') {
+            try {
+                auth_assert_student_eligible($pdo, $config, $userId);
+            } catch (AuthException $e) {
+                safe_error_response('Invalid or expired password reset token.', 400);
+                return;
+            }
         }
 
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);

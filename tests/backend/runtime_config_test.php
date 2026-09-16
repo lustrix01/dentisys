@@ -13,6 +13,7 @@ $environmentKeys = [
     'DEV_MOCK_BIOMETRIC_ENABLED',
     'DEV_MOCK_LOCATION_ENABLED',
     'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED',
+    'STUDENT_AUTH_ENABLED',
 ];
 $savedEnvironment = [];
 foreach ($environmentKeys as $key) {
@@ -26,6 +27,7 @@ putenv('DEV_MOCK_IDENTITY_ENABLED=true');
 putenv('DEV_MOCK_BIOMETRIC_ENABLED=false');
 putenv('DEV_MOCK_LOCATION_ENABLED=true');
 putenv('DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED=true');
+putenv('STUDENT_AUTH_ENABLED=true');
 ob_start();
 handle_runtime_config();
 $body = (string) ob_get_clean();
@@ -41,6 +43,10 @@ if (($payload['providers']['identity']['development_mock_enabled'] ?? null) !== 
     || ($payload['providers']['location']['active'] ?? null) !== 'development-mock'
     || ($payload['features']['browser_attendance_prototype'] ?? null) !== true) {
     fwrite(STDERR, "FAIL: runtime configuration payload does not preserve explicit provider flags.\n");
+    exit(1);
+}
+if (($payload['features']['student_auth_enabled'] ?? null) !== true) {
+    fwrite(STDERR, "FAIL: runtime configuration payload does not expose Student authentication state.\n");
     exit(1);
 }
 

@@ -17,7 +17,7 @@ const DISABLED_CONFIG: RuntimeConfig = {
     biometrics: { active: 'disabled' },
     location: { active: 'disabled' },
   },
-  features: { browser_attendance_prototype: false },
+  features: { browser_attendance_prototype: false, student_auth_enabled: false },
 };
 
 const RuntimeConfigContext = createContext<RuntimeConfig>(DISABLED_CONFIG);
@@ -43,6 +43,7 @@ function normalizeRuntimeConfig(payload: RuntimeConfigPayload): RuntimeConfig {
     },
     features: {
       browser_attendance_prototype: payload.features?.browser_attendance_prototype === true,
+      student_auth_enabled: payload.features?.student_auth_enabled === true,
     },
   };
 }

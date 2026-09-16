@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { RuntimeConfigProvider } from './context/RuntimeConfigContext';
+import { RuntimeConfigProvider, useRuntimeConfig } from './context/RuntimeConfigContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { FeedbackCenter } from './components/FeedbackCenter';
@@ -40,6 +40,8 @@ import { FaceRegistration as StudentFaceRegistration } from './pages/student/Fac
 import { Classes as StudentClasses } from './pages/student/Classes';
 import { RetentionMonitoring as StudentRetentionMonitoring } from './pages/student/RetentionMonitoring';
 import { Profile as StudentProfile } from './pages/student/Profile';
+import { RealStudentDashboard, RealStudentProfile, StudentUnavailable } from './pages/student/RealStudentSurfaces';
+import { isStudentPrototypeAllowed } from './pages/student/studentGates';
 
 import { Profile as FacultyProfile } from './pages/faculty/Profile';
 import { Settings as FacultySettings } from './pages/faculty/Settings';
@@ -47,8 +49,9 @@ import { Profile as DeanProfile } from './pages/admin/Profile';
 import { Settings as DeanSettings } from './pages/admin/Settings';
 import { Profile as SecretaryProfile } from './pages/secretary/Profile';
 import { Settings as SecretarySettings } from './pages/secretary/Settings';
-import { Login } from './pages/auth/Login';
 import { SsoLogin } from './pages/auth/SsoLogin';
+import { StudentSignup } from './pages/auth/StudentSignup';
+import { ActivateStudent } from './pages/auth/ActivateStudent';
 import { SignUp } from './pages/auth/SignUp';
 import { ActivateSecretary } from './pages/auth/ActivateSecretary';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
@@ -63,8 +66,46 @@ function RoleDashboard() {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'admin') return <DeanDashboard />;
   if (user.role === 'secretary') return <SecretaryDashboard />;
-  if (user.role === 'student') return <StudentDashboard />;
+  if (user.role === 'student') return <StudentDashboardRoute />;
   return <FacultyDashboard />;
+}
+
+function isRealStudent(user: { role: string; authentication_source?: string } | null): boolean {
+  return user?.role === 'student' && user.authentication_source === 'password';
+}
+
+function StudentDashboardRoute() {
+  const { user } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  if (isRealStudent(user)) return <RealStudentDashboard />;
+  return isStudentPrototypeAllowed(user, runtimeConfig, 'dashboard')
+    ? <StudentDashboard />
+    : <StudentUnavailable title="Student Dashboard unavailable" />;
+}
+
+function StudentProfileRoute() {
+  const { user } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  if (isRealStudent(user)) return <RealStudentProfile />;
+  return isStudentPrototypeAllowed(user, runtimeConfig, 'academic')
+    ? <StudentProfile />
+    : <StudentUnavailable title="Student Profile unavailable" />;
+}
+
+function StudentPrototypeRoute({
+  prototype,
+  title,
+  surface,
+}: {
+  prototype: React.ComponentType;
+  title: string;
+  surface: Parameters<typeof isStudentPrototypeAllowed>[2];
+}) {
+  const { user } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  return isStudentPrototypeAllowed(user, runtimeConfig, surface)
+    ? React.createElement(prototype)
+    : <StudentUnavailable title={title} />;
 }
 
 function RoleAttendance() {
@@ -116,8 +157,8 @@ function App() {
 
             {/* Primary SSO Login & Dev Password Login */}
             <Route path="/login" element={<SsoLogin />} />
-            <Route path="/login/dev" element={<Login />} />
-            <Route path="/dev-login" element={<Navigate to="/login/dev" replace />} />
+            <Route path="/login/dev" element={<Navigate to="/login" replace />} />
+            <Route path="/dev-login" element={<Navigate to="/login" replace />} />
             <Route path="/2fa/verify" element={<MfaVerify />} />
             <Route path="/mfa/verify" element={<Navigate to="/2fa/verify" replace />} />
             <Route path="/recovery-codes" element={<RecoveryCodes />} />
@@ -125,6 +166,8 @@ function App() {
             {/* Auth routes */}
             <Route path="/signup" element={<SignUp />} />
             <Route path="/register" element={<SignUp />} />
+            <Route path="/signup/student" element={<StudentSignup />} />
+            <Route path="/activate-student" element={<ActivateStudent />} />
             <Route path="/activate-secretary" element={<ActivateSecretary />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -152,14 +195,14 @@ function App() {
                   <Route path="/faculty/settings" element={<FacultySettings />} />
                 </Route>
 
-                <Route element={<ProtectedRoute allowedRoles={['student', 'secretary']} />}>
-                  <Route path="/student/dashboard" element={<StudentDashboard />} />
-                  <Route path="/student/attendance" element={<StudentAttendance />} />
-                  <Route path="/student/attendance-logs" element={<StudentAttendanceLogs />} />
-                  <Route path="/student/face-registration" element={<StudentFaceRegistration />} />
-                  <Route path="/student/classes" element={<StudentClasses />} />
-                  <Route path="/student/retention" element={<StudentRetentionMonitoring />} />
-                  <Route path="/student/profile" element={<StudentProfile />} />
+                <Route element={<ProtectedRoute allowedRoles={['student']} />}>
+                  <Route path="/student/dashboard" element={<StudentDashboardRoute />} />
+                  <Route path="/student/attendance" element={<StudentPrototypeRoute prototype={StudentAttendance} title="Daily Attendance unavailable" surface="attendance" />} />
+                  <Route path="/student/attendance-logs" element={<StudentPrototypeRoute prototype={StudentAttendanceLogs} title="Attendance Logs unavailable" surface="attendance_logs" />} />
+                  <Route path="/student/face-registration" element={<StudentPrototypeRoute prototype={StudentFaceRegistration} title="Face Registration unavailable" surface="face" />} />
+                  <Route path="/student/classes" element={<StudentPrototypeRoute prototype={StudentClasses} title="My Classes unavailable" surface="academic" />} />
+                  <Route path="/student/retention" element={<StudentPrototypeRoute prototype={StudentRetentionMonitoring} title="Retention Monitoring unavailable" surface="academic" />} />
+                  <Route path="/student/profile" element={<StudentProfileRoute />} />
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['admin']} />}>

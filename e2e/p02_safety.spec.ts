@@ -10,18 +10,39 @@ const ENABLED_RUNTIME_CONFIG = {
     biometrics: { active: 'development-mock' },
     location: { active: 'development-mock' },
   },
-  features: { browser_attendance_prototype: true },
+  features: { browser_attendance_prototype: true, student_auth_enabled: true },
 };
 
 async function signInDevelopmentStudent(page: Page): Promise<void> {
   await page.route('**/api/runtime-config', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ENABLED_RUNTIME_CONFIG) });
   });
+  await page.route('**/api/auth/refresh', async (route) => {
+    await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'Authentication required.' }) });
+  });
+  await page.route('**/api/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      user_id: 101,
+      login_email: 'student@bicol-u.edu.ph',
+      display_name: 'Development Student',
+      role: 'student',
+      session_uuid: 'server-fixture-student-session',
+      authentication_source: 'development_mock',
+      student: { student_id: 26, student_number: 'DEV-P03-0001', status: 'active' },
+    }) });
+  });
+  await page.route('**/api/auth/development/mock-student-session', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      type: 'direct_login',
+      two_factor_required: false,
+      two_factor_enrolled: false,
+      access_token: 'server-fixture-student-token',
+      user: { user_id: 101 },
+    }) });
+  });
   await page.goto('/login');
   await expect(page.getByRole('button', { name: /Development mock Student sign-in/i })).toBeVisible();
-  await page.fill('input[type="email"]', 'student@bicol-u.edu.ph');
-  await page.fill('input[type="password"]', 'Password123!');
-  await page.click('button[type="submit"]');
+  await page.getByRole('button', { name: /Development mock Student sign-in/i }).click();
   await expect(page).toHaveURL('/student/dashboard');
 }
 
@@ -41,19 +62,40 @@ test.describe('P02 development safety seams', () => {
   });
 
   test('student biometric enrollment remains fail-closed when providers are disabled', async ({ page }) => {
-    await page.route('**/api/auth/login', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'direct_login', access_token: 'student-token' }) });
+    const disabledProviderConfig = {
+      ...ENABLED_RUNTIME_CONFIG,
+      providers: {
+        ...ENABLED_RUNTIME_CONFIG.providers,
+        identity: { primary: 'password', development_mock_enabled: true },
+        biometrics: { active: 'disabled' as const },
+        location: { active: 'disabled' as const },
+      },
+      features: { browser_attendance_prototype: false, student_auth_enabled: true },
+    };
+    await page.route('**/api/runtime-config', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(disabledProviderConfig) });
+    });
+    let refreshCalls = 0;
+    await page.route('**/api/auth/refresh', async (route) => {
+      refreshCalls += 1;
+      if (refreshCalls === 1) {
+        await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'Authentication required.' }) });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'student-token', user: { user_id: 400 } }) });
     });
     await page.route('**/api/auth/me', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 400, login_email: 'student@bicol-u.edu.ph', display_name: 'Student', role: 'student' }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 400, user_id: 400, login_email: 'student@bicol-u.edu.ph', display_name: 'Development Student', role: 'student', session_uuid: 'fixture-student-session', authentication_source: 'development_mock', student: { student_id: 26, student_number: 'DEV-P03-0001', status: 'active' } }) });
+    });
+    await page.route('**/api/auth/development/mock-student-session', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'direct_login', access_token: 'student-token', user: { user_id: 400 } }) });
     });
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
-    await page.fill('input[type="password"]', 'Password123!');
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL('/');
-    await page.click('a[href="/student/face-registration"]');
-    await expect(page.getByText(/Facial enrollment is not configured/i)).toBeVisible();
+    await page.getByRole('button', { name: /Development mock Student sign-in/i }).click();
+    await expect(page).toHaveURL('/student/dashboard');
+    await expect(page.getByRole('link', { name: 'Face Registration' })).toHaveCount(0);
+    await page.goto('/student/face-registration');
+    await expect(page.getByRole('status')).toContainText('Face Registration unavailable');
   });
 
   test('secretary session prototype uses the stable inside-location fixture', async ({ page }) => {

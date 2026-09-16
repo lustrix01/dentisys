@@ -174,6 +174,18 @@ export function login(email: string, password: string): Promise<LoginResponse> {
   return request<LoginResponse>('POST', '/auth/login', { email, password });
 }
 
+export function requestStudentActivation(email: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/student/signup', { email });
+}
+
+export function activateStudent(token: string, password: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/student/activate', { token, password });
+}
+
+export function createDevelopmentMockStudentSession(): Promise<LoginResponse> {
+  return request<LoginResponse>('POST', '/auth/development/mock-student-session', {});
+}
+
 export function startEnrollment(): Promise<EnrollStartResponse> {
   return request<EnrollStartResponse>('POST', '/auth/mfa/enroll/start');
 }
@@ -237,6 +249,7 @@ export interface RuntimeConfigPayload {
   };
   features: {
     browser_attendance_prototype: boolean;
+    student_auth_enabled: boolean;
   };
 }
 

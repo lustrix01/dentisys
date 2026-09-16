@@ -137,7 +137,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search user or action..." className="pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            {allLogs && <Select value={roleFilter} onChange={setRoleFilter} options={['all', 'admin', 'faculty', 'secretary']} />}
+            {allLogs && <Select value={roleFilter} onChange={setRoleFilter} options={['all', 'admin', 'faculty', 'secretary', 'student']} />}
             <Select value={moduleFilter} onChange={setModuleFilter} options={['all', ...modules]} />
             <Select value={statusFilter} onChange={setStatusFilter} options={['all', 'Success', 'Warning', 'Failed']} />
             <input type="date" value={date} onChange={event => setDate(event.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />

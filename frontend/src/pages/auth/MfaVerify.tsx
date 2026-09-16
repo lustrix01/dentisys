@@ -51,7 +51,7 @@ export function MfaVerify() {
       const user = await getMe();
       setUser(user);
       setAuthenticated();
-      navigate('/', { replace: true });
+      navigate(user.role === 'student' ? '/student/dashboard' : '/', { replace: true });
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
         clearAuth();

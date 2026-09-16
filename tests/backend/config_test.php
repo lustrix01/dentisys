@@ -27,7 +27,7 @@ function assert_throws(callable $fn, string $needle, string $label): void
 }
 
 $original = [];
-foreach (['APP_ENV', 'APP_BASE_URL', 'SHOW_DEV_RESET_LINK', 'SHOW_DEV_INVITATION_LINK', 'EMAIL_PROVIDER', 'DEV_MOCK_IDENTITY_ENABLED', 'DEV_MOCK_BIOMETRIC_ENABLED', 'DEV_MOCK_LOCATION_ENABLED', 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN'] as $key) {
+foreach (['APP_ENV', 'APP_BASE_URL', 'SHOW_DEV_RESET_LINK', 'SHOW_DEV_INVITATION_LINK', 'EMAIL_PROVIDER', 'DEV_MOCK_IDENTITY_ENABLED', 'DEV_MOCK_BIOMETRIC_ENABLED', 'DEV_MOCK_LOCATION_ENABLED', 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', 'STUDENT_AUTH_ENABLED', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN'] as $key) {
     $original[$key] = getenv($key);
     putenv($key);
 }
@@ -41,6 +41,7 @@ assert_same('ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ=', $defaultConfig['audi
 assert_same('bicol-u.edu.ph', $defaultConfig['app']['allowed_email_domain'], 'application default allowed email domain');
 assert_same('development', $defaultConfig['app']['env'], 'APP_ENV defaults to development');
 assert_same('mailpit', $defaultConfig['providers']['email']['active'], 'development defaults to Mailpit');
+assert_same(false, $defaultConfig['features']['student_auth_enabled'], 'Student authentication defaults to disabled');
 assert_same([
     'identity' => false,
     'biometrics' => false,
@@ -61,7 +62,9 @@ $singleServer = app_config([
     'APP_BASE_URL' => 'https://dentisys.example.edu/',
     'SHOW_DEV_RESET_LINK' => 'true',
     'SHOW_DEV_INVITATION_LINK' => 'true',
+    'STUDENT_AUTH_ENABLED' => 'true',
 ]);
+assert_same(true, $singleServer['features']['student_auth_enabled'], 'single-server can explicitly enable Student authentication');
 assert_same('https://dentisys.example.edu', $singleServer['app']['base_url'], 'single-server base URL is normalized');
 assert_same(false, $singleServer['show_dev_reset_link'], 'single-server always suppresses reset disclosures');
 assert_same(false, $singleServer['show_dev_invitation_link'], 'single-server always suppresses invitation disclosures');
@@ -84,6 +87,11 @@ assert_throws(
     static fn() => app_config(['DEV_MOCK_LOCATION_ENABLED' => 'sometimes']),
     'DEV_MOCK_LOCATION_ENABLED',
     'invalid mock flag is rejected'
+);
+assert_throws(
+    static fn() => app_config(['STUDENT_AUTH_ENABLED' => 'sometimes']),
+    'STUDENT_AUTH_ENABLED',
+    'invalid Student auth flag is rejected'
 );
 foreach ([
     'DEV_MOCK_IDENTITY_ENABLED',
@@ -122,17 +130,21 @@ $productionSmtp = app_config([
     'EMAIL_PROVIDER' => 'smtp',
     'SMTP_ENCRYPTION' => 'starttls',
     'SMTP_VERIFY_PEER' => 'true',
+    'STUDENT_AUTH_ENABLED' => 'true',
 ]);
 assert_same('smtp', $productionSmtp['providers']['email']['active'], 'production accepts SMTP provider');
+assert_same(true, $productionSmtp['features']['student_auth_enabled'], 'production can explicitly enable Student authentication');
 $testConfig = app_config([
     'APP_ENV' => 'test',
     'DEV_MOCK_IDENTITY_ENABLED' => 'true',
     'DEV_MOCK_BIOMETRIC_ENABLED' => 'true',
     'DEV_MOCK_LOCATION_ENABLED' => 'true',
     'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED' => 'true',
+    'STUDENT_AUTH_ENABLED' => 'true',
 ]);
 assert_same(true, $testConfig['mocks']['identity'], 'test environment permits explicit mock identity');
 assert_same(true, $testConfig['mocks']['browser_attendance_prototype'], 'test environment permits explicit browser prototype');
+assert_same(true, $testConfig['features']['student_auth_enabled'], 'test environment permits Student authentication');
 
 assert_same(32, strlen(config_key_bytes_at_least($defaultConfig['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY')), 'default JWT key decodes to 32 bytes');
 assert_same(32, strlen(config_key_bytes_at_least($defaultConfig['mfa']['encryption_key_b64'], 32, 'MFA_ENCRYPTION_KEY')), 'default MFA key decodes to 32 bytes');

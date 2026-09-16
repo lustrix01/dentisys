@@ -88,7 +88,8 @@ export const Attendance: React.FC = () => {
   const { user } = useAuth();
   const { students, attendanceRecords, addAttendanceRecord } = useApp();
   const runtimeConfig = useRuntimeConfig();
-  const simulationEnabled = runtimeConfig.providers.identity.development_mock_enabled
+  const simulationEnabled = user?.authentication_source === 'development_mock'
+    && runtimeConfig.providers.identity.development_mock_enabled
     && runtimeConfig.providers.biometrics.active === 'development-mock'
     && runtimeConfig.providers.location.active === 'development-mock'
     && runtimeConfig.features.browser_attendance_prototype;

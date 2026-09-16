@@ -71,8 +71,8 @@ function jwt_validate_type_claims(array $payload, string $expectedType): void
     }
 
     if ($expectedType === 'access') {
-        if (!isset($payload['role']) || !is_string($payload['role']) || !in_array($payload['role'], ['admin', 'faculty', 'secretary'], true)) {
-            throw new \RuntimeException('role must be one of admin, faculty, secretary.');
+        if (!isset($payload['role']) || !is_string($payload['role']) || !in_array($payload['role'], ['admin', 'faculty', 'secretary', 'student'], true)) {
+            throw new \RuntimeException('role must be one of admin, faculty, secretary, student.');
         }
 
         if (!isset($payload['sid']) || !is_string($payload['sid']) || !preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $payload['sid'])) {

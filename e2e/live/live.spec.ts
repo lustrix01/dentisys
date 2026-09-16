@@ -5,6 +5,7 @@ const adminEmail = process.env.E2E_ADMIN_EMAIL ?? 'admin@bicol-u.edu.ph';
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? 'Admin123!';
 const facultyEmail = process.env.E2E_FACULTY_EMAIL ?? 'faculty@bicol-u.edu.ph';
 const facultyPassword = process.env.E2E_FACULTY_PASSWORD ?? 'Faculty123!';
+const studentPassword = process.env.E2E_STUDENT_PASSWORD ?? 'Student123!';
 
 function decodeBase32(value: string): Buffer {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -232,4 +233,68 @@ test('faculty can create a student and enrollment with returned identifiers', as
   });
   const students = await jsonResponse(listed);
   expect(students.some((student: { id: string }) => student.id === created.student.id)).toBeTruthy();
+});
+
+test('Student signup, Mailpit activation, password login, and exact identity shape', async ({ page }) => {
+  const facultyCredentials = await login(page, facultyEmail, facultyPassword);
+  const classesResponse = await page.request.get('/api/faculty/classes', {
+    headers: { Authorization: `Bearer ${facultyCredentials.access_token}` },
+  });
+  const classesPayload = await jsonResponse(classesResponse);
+  const classId = String(classesPayload.classes[0].id ?? classesPayload.classes[0].csId);
+  const suffix = Date.now().toString(36);
+  const email = `p03.student.${suffix}@bicol-u.edu.ph`;
+
+  const create = await page.request.post('/api/faculty/students', {
+    headers: { Authorization: `Bearer ${facultyCredentials.access_token}` },
+    data: {
+      studentNumber: `P03-${suffix}`,
+      firstName: 'P03',
+      lastName: 'Student',
+      email,
+      yearLevel: 1,
+      classId,
+    },
+  });
+  expect(create.ok(), await create.text()).toBeTruthy();
+
+  const signup = await page.request.post('/api/auth/student/signup', { data: { email } });
+  const signupPayload = await jsonResponse(signup);
+  expect(signup.status()).toBe(202);
+  expect(signupPayload.message).toMatch(/If an eligible Student record matches/i);
+
+  const mailpitMessages = await page.request.get('http://127.0.0.1:18025/api/v1/messages');
+  const mailpitPayload = await jsonResponse(mailpitMessages);
+  const activationMessage = (mailpitPayload.messages as Array<{ ID: string; Subject: string; To?: Array<{ Address?: string }> }>).find(message =>
+    message.Subject === 'DentiSys Student Account Activation'
+    && message.To?.some(recipient => recipient.Address?.toLowerCase() === email.toLowerCase())
+  );
+  expect(activationMessage).toBeTruthy();
+  const messageDetail = await page.request.get(`http://127.0.0.1:18025/api/v1/message/${activationMessage!.ID}`);
+  const detailPayload = await jsonResponse(messageDetail);
+  const activationToken = JSON.stringify(detailPayload).match(/activate-student\?token=([A-Za-z0-9_-]{43})/)?.[1];
+  expect(activationToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+  const activation = await page.request.post('/api/auth/student/activate', {
+    data: { token: activationToken, password: studentPassword },
+  });
+  expect(activation.ok(), await activation.text()).toBeTruthy();
+
+  const studentCredentials = await login(page, email, studentPassword);
+  const me = await page.request.get('/api/auth/me', {
+    headers: { Authorization: `Bearer ${studentCredentials.access_token}` },
+  });
+  const mePayload = await jsonResponse(me);
+  expect(mePayload).toEqual(expect.objectContaining({
+    role: 'student',
+    login_email: email,
+    authentication_source: 'password',
+    student: expect.objectContaining({ status: 'active' }),
+  }));
+  expect(mePayload.student).toBeDefined();
+
+  const logout = await page.request.post('/api/auth/logout', {
+    headers: { Authorization: `Bearer ${studentCredentials.access_token}` },
+  });
+  expect(logout.ok(), await logout.text()).toBeTruthy();
 });

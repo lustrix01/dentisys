@@ -1,13 +1,3 @@
-import type { SafeUser } from '../types/auth';
-
-export const DEVELOPMENT_MOCK_STUDENT: SafeUser = {
-  user_id: 99,
-  login_email: 'student@bicol-u.edu.ph',
-  role: 'student',
-  display_name: 'Development Mock Student',
-  session_uuid: 'development-mock-student-session',
-};
-
 export interface DevelopmentBiometricOutcome {
   provider: 'development-mock';
   outcome: 'enrolled' | 'matched' | 'not-matched' | 'error';

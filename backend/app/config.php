@@ -130,6 +130,10 @@ function app_config(?array $overrides = null): array
         'location' => config_strict_bool(config_value('DEV_MOCK_LOCATION_ENABLED', $values, false), 'DEV_MOCK_LOCATION_ENABLED'),
         'browser_attendance_prototype' => config_strict_bool(config_value('DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', $values, false), 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED'),
     ];
+    $studentAuthEnabled = config_strict_bool(
+        config_value('STUDENT_AUTH_ENABLED', $values, false),
+        'STUDENT_AUTH_ENABLED'
+    );
     $emailProvider = config_email_provider(
         (string) config_value('EMAIL_PROVIDER', $values, ($isDevelopment || $isTest) ? 'mailpit' : 'smtp')
     );
@@ -175,6 +179,9 @@ function app_config(?array $overrides = null): array
             'storage_dir' => (string) (config_value('RATE_LIMIT_STORAGE_DIR', $values, '') ?: dirname(__DIR__) . '/storage/ratelimit'),
         ],
         'mocks' => $mockFlags,
+        'features' => [
+            'student_auth_enabled' => $studentAuthEnabled,
+        ],
         'providers' => [
             'identity' => [
                 'primary' => 'password',

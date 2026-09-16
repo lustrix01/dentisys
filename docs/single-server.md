@@ -38,6 +38,8 @@ The script validates the required configuration and starts `docker-compose.web.y
 
 Do not run this prototype alongside the development stack unless one stack uses a different published application port.
 
+P03 real Student authentication can be enabled in this private-LAN prototype with `STUDENT_AUTH_ENABLED=true`, provided production-grade SMTP and normal secret/TLS controls are configured. The development identity mock remains unavailable in production-like environments; browser-created Student credentials are never accepted. Google OIDC is not part of this phase.
+
 ## Why this is not deployment-ready
 
 Before DentiSys can call this a supported single-server deployment, it needs:

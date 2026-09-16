@@ -33,6 +33,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useRuntimeConfig } from '../context/RuntimeConfigContext';
+import { isDevelopmentMockStudent, isStudentPrototypeAllowed } from '../pages/student/studentGates';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -53,12 +54,13 @@ const ROLE_TITLES: Record<string, string> = {
   student: 'Dental Student',
 };
 
-export const Layout: React.FC<LayoutProps> = ({ children }) => {
+const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
   const currentUser = {
     name: user?.display_name ?? '',
     email: user?.login_email ?? '',
     role: user?.role ?? 'faculty',
+    authentication_source: user?.authentication_source ?? 'password',
   };
 
   const getInitials = (fullName: string) => {
@@ -137,11 +139,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const { settings, updateSettings, students } = useApp();
   const config = useRuntimeConfig();
-  const studentPrototypeEnabled = currentUser.role === 'student'
-    && config.providers.identity.development_mock_enabled
-    && config.providers.biometrics.active === 'development-mock'
-    && config.providers.location.active === 'development-mock'
-    && config.features.browser_attendance_prototype;
+  const studentPrototypeEnabled = isStudentPrototypeAllowed(user, config, 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -196,15 +194,26 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     }
 
     if (currentUser.role === 'student') {
-      return [
+      const items: NavItem[] = [
         { name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
-        { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
-        { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
-        { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
-        { name: 'My Classes', path: '/student/classes', icon: BookOpen },
-        { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
-        { name: 'My Profile', path: '/student/profile', icon: UserCircle },
       ];
+      if (isStudentPrototypeAllowed(user, config, 'attendance')) {
+        items.push({ name: 'Daily Attendance', path: '/student/attendance', icon: Camera });
+      }
+      if (isStudentPrototypeAllowed(user, config, 'attendance_logs')) {
+        items.push({ name: 'Attendance Logs', path: '/student/attendance-logs', icon: History });
+      }
+      if (isStudentPrototypeAllowed(user, config, 'face')) {
+        items.push({ name: 'Face Registration', path: '/student/face-registration', icon: UserCheck });
+      }
+      if (isStudentPrototypeAllowed(user, config, 'academic')) {
+        items.push(
+          { name: 'My Classes', path: '/student/classes', icon: BookOpen },
+          { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
+          { name: 'My Profile', path: '/student/profile', icon: UserCircle },
+        );
+      }
+      return items;
     }
     
     // Faculty (default)
@@ -670,4 +679,82 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       )}
     </div>
   );
+};
+
+const RealStudentLayout: React.FC<LayoutProps> = ({ children }) => {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
+  const navItems = [
+    { name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
+    { name: 'My Profile', path: '/student/profile', icon: UserCircle },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col md:flex-row">
+      <aside className="w-full md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <div className="flex items-center gap-3 mb-8">
+          <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-10 h-10 rounded-full object-cover" />
+          <div>
+            <h1 className="font-heading font-extrabold text-xl">DentiSYS</h1>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Student Portal</p>
+          </div>
+        </div>
+
+        <nav className="space-y-1.5" aria-label="Student navigation">
+          {navItems.map(item => {
+            const Icon = item.icon;
+            const active = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-colors ${active
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+              >
+                <Icon className="h-5 w-5" />
+                <span>{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="mt-8 border-t border-slate-200 pt-5 dark:border-slate-800">
+          <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-200">{user?.display_name}</p>
+          <p className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-400">{user?.login_email}</p>
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="mt-4 w-full rounded-xl border border-rose-200 px-3 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
+          >
+            <LogOut className="mr-2 inline h-4 w-4" />
+            Sign Out
+          </button>
+        </div>
+      </aside>
+
+      <main className="min-w-0 flex-1">
+        <header className="border-b border-slate-200 bg-white/80 px-6 py-4 dark:border-slate-800 dark:bg-slate-900/80">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Authenticated Student account</p>
+          <p className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">{user?.login_email}</p>
+        </header>
+        <div className="p-6">{children}</div>
+      </main>
+    </div>
+  );
+};
+
+export const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const { user } = useAuth();
+  const config = useRuntimeConfig();
+  return user?.role === 'student' && !isDevelopmentMockStudent(user, config)
+    ? <RealStudentLayout>{children}</RealStudentLayout>
+    : <AppBackedLayout>{children}</AppBackedLayout>;
 };

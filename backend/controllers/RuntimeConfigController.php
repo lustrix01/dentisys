@@ -6,6 +6,7 @@ function handle_runtime_config(): void
 {
     $config = app_config();
     $mocks = $config['mocks'] ?? [];
+    $features = $config['features'] ?? [];
     $providers = $config['providers'] ?? [];
 
     header('Cache-Control: no-store, max-age=0');
@@ -30,6 +31,7 @@ function handle_runtime_config(): void
         ],
         'features' => [
             'browser_attendance_prototype' => (bool) ($mocks['browser_attendance_prototype'] ?? false),
+            'student_auth_enabled' => (bool) ($features['student_auth_enabled'] ?? false),
         ],
     ]);
 }

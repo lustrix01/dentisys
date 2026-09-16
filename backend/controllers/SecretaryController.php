@@ -32,7 +32,7 @@ function handle_secretary_invite(): void
 
         $token = auth_extract_bearer_token($authHeader);
         $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
-        $authCtx = auth_verify_access_token($pdo, $token, $jwtKey);
+        $authCtx = auth_verify_access_token($pdo, $config, $token, $jwtKey);
 
         if (!in_array($authCtx['role'], ['faculty', 'admin'], true)) {
             safe_error_response('Access denied. Faculty or administrator privileges required.', 403);
@@ -403,15 +403,16 @@ function handle_secretary_activate(): void
             $auditCtx = audit_begin_operation($pdo);
 
             $studentLock = $pdo->prepare(
-                "SELECT student_id, user_id, bu_email
-                   FROM students
-                  WHERE student_id = ?
-                  FOR UPDATE"
+                "SELECT student_id, user_id, student_account_user_id, bu_email
+                    FROM students
+                   WHERE student_id = ?
+                   FOR UPDATE"
             );
             $studentLock->execute([(int) $row['related_student_id']]);
             $student = $studentLock->fetch(PDO::FETCH_ASSOC);
             if (!$student
                 || $student['user_id'] !== null
+                || $student['student_account_user_id'] !== null
                 || mb_strtolower((string) $student['bu_email']) !== mb_strtolower((string) $email)
             ) {
                 throw new DomainException('Invitation no longer matches an unlinked student account.');
@@ -493,7 +494,7 @@ function secretary_verify_auth(PDO $pdo, array $config): array
     try {
         $token = auth_extract_bearer_token($authHeader);
         $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
-        $authCtx = auth_verify_access_token($pdo, $token, $jwtKey);
+        $authCtx = auth_verify_access_token($pdo, $config, $token, $jwtKey);
     } catch (AuthException | \RuntimeException $e) {
         auth_error_response($e->getMessage(), 401);
         exit;

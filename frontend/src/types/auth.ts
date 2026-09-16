@@ -13,6 +13,12 @@ export interface SafeUser {
   role: UserRole;
   display_name: string;
   session_uuid: string;
+  authentication_source: 'password' | 'development_mock';
+  student?: {
+    student_id: number;
+    student_number: string;
+    status: string;
+  };
 }
 
 export interface LoginResponse {

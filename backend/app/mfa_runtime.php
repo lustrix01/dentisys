@@ -16,17 +16,23 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
 
     $pdo->beginTransaction();
     try {
-        $auditCtx = audit_begin_operation($pdo);
-
         $locked = auth_lock_user_for_session($pdo, $userId);
 
         if ($locked['status'] !== 'Active') {
             throw new InactiveAccountException($locked['status']);
         }
 
+        if ($locked['role'] === 'student') {
+            auth_assert_student_eligible($pdo, $config, (int) $locked['user_id'], true);
+        }
+
         if ((int) $locked['token_version'] !== $tokenVersion) {
             throw new ChallengeException('Token version mismatch.');
         }
+
+        // Student eligibility may append denial evidence on an independent
+        // connection; take the audit-chain lock only after those checks.
+        $auditCtx = audit_begin_operation($pdo);
 
         $stmt = $pdo->prepare(
             "SELECT mfa_status FROM security_tokens
@@ -145,17 +151,21 @@ function mfa_runtime_enroll_confirm(PDO $pdo, array $config, array $tokenClaims,
 
     $pdo->beginTransaction();
     try {
-        $auditCtx = audit_begin_operation($pdo);
-
         $locked = auth_lock_user_for_session($pdo, $userId);
 
         if ($locked['status'] !== 'Active') {
             throw new InactiveAccountException($locked['status']);
         }
 
+        if ($locked['role'] === 'student') {
+            auth_assert_student_eligible($pdo, $config, (int) $locked['user_id'], true);
+        }
+
         if ((int) $locked['token_version'] !== $tokenVersion) {
             throw new ChallengeException('Token version mismatch.');
         }
+
+        $auditCtx = audit_begin_operation($pdo);
 
         $stmt = $pdo->prepare(
             "SELECT * FROM security_tokens
@@ -284,17 +294,21 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
 
     $pdo->beginTransaction();
     try {
-        $auditCtx = audit_begin_operation($pdo);
-
         $locked = auth_lock_user_for_session($pdo, $userId);
 
         if ($locked['status'] !== 'Active') {
             throw new InactiveAccountException($locked['status']);
         }
 
+        if ($locked['role'] === 'student') {
+            auth_assert_student_eligible($pdo, $config, (int) $locked['user_id'], true);
+        }
+
         if ((int) $locked['token_version'] !== $tokenVersion) {
             throw new ChallengeException('Token version mismatch.');
         }
+
+        $auditCtx = audit_begin_operation($pdo);
 
         $stmt = $pdo->prepare(
             "SELECT * FROM security_tokens
@@ -404,17 +418,21 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
 
     $pdo->beginTransaction();
     try {
-        $auditCtx = audit_begin_operation($pdo);
-
         $locked = auth_lock_user_for_session($pdo, $userId);
 
         if ($locked['status'] !== 'Active') {
             throw new InactiveAccountException($locked['status']);
         }
 
+        if ($locked['role'] === 'student') {
+            auth_assert_student_eligible($pdo, $config, (int) $locked['user_id'], true);
+        }
+
         if ((int) $locked['token_version'] !== $tokenVersion) {
             throw new ChallengeException('Token version mismatch.');
         }
+
+        $auditCtx = audit_begin_operation($pdo);
 
         $stmt = $pdo->prepare(
             "SELECT * FROM security_tokens

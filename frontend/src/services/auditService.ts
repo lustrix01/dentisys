@@ -1,5 +1,5 @@
 export type AuditStatus = 'Success' | 'Failed' | 'Warning';
-export type AuditRole = 'admin' | 'faculty' | 'secretary';
+export type AuditRole = 'admin' | 'faculty' | 'secretary' | 'student';
 
 export interface AuditLog {
   id: string;

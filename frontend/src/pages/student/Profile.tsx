@@ -17,12 +17,14 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 
 export const Profile: React.FC = () => {
   const { user } = useAuth();
   const { students } = useApp();
+  const runtimeConfig = useRuntimeConfig();
 
   const currentStudent = students.find(
     s => s.email.toLowerCase() === user?.login_email.toLowerCase() || s.id === '1'
@@ -33,7 +35,9 @@ export const Profile: React.FC = () => {
   const studentIdNum = currentStudent?.studentId || '2024-DENT-0004';
   const enrolledSubjects = currentStudent?.enrolledSubjects || [];
 
-  const isFaceRegistered = localStorage.getItem(`dentisys_face_registered_${currentStudent?.id || '1'}`) === 'true';
+  const biometricPrototypeEnabled = runtimeConfig.providers.biometrics.active === 'development-mock';
+  const isFaceRegistered = biometricPrototypeEnabled
+    && localStorage.getItem(`dentisys_face_registered_${currentStudent?.id || '1'}`) === 'true';
 
   const initials = studentName
     .replace(/^(Dr\.|Mr\.|Mrs\.|Ms\.)\s+/i, '')
@@ -119,12 +123,14 @@ export const Profile: React.FC = () => {
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">Retention Status</span>
                 <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1">Cleared</span>
               </div>
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">Biometric Face</span>
-                <span className={`text-xs font-extrabold block mt-1 ${isFaceRegistered ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                  {isFaceRegistered ? 'Active ✓' : 'Pending'}
-                </span>
-              </div>
+              {biometricPrototypeEnabled && (
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">Biometric Face</span>
+                  <span className={`text-xs font-extrabold block mt-1 ${isFaceRegistered ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                    {isFaceRegistered ? 'Active ✓' : 'Pending'}
+                  </span>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -213,7 +219,7 @@ export const Profile: React.FC = () => {
         <div className="lg:col-span-5 space-y-6">
           
           {/* Biometric Privacy Audit */}
-          <Card className="p-6 space-y-4">
+          {biometricPrototypeEnabled && <Card className="p-6 space-y-4">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <Camera className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
@@ -246,7 +252,7 @@ export const Profile: React.FC = () => {
                 </p>
               </div>
             </div>
-          </Card>
+          </Card>}
 
           {/* MFA Security & Account Credentials Card */}
           <MfaSettingsCard userEmail={studentEmail} roleName="Dental Student" />

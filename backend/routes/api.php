@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/controllers/HealthController.php';
 require_once dirname(__DIR__) . '/controllers/RuntimeConfigController.php';
 require_once dirname(__DIR__) . '/controllers/AuthController.php';
+require_once dirname(__DIR__) . '/controllers/StudentAuthController.php';
 require_once dirname(__DIR__) . '/controllers/MfaController.php';
 require_once dirname(__DIR__) . '/controllers/UserController.php';
 require_once dirname(__DIR__) . '/controllers/SecretaryController.php';
@@ -28,6 +29,24 @@ return [
         'method' => 'POST',
         'path' => '/api/auth/login',
         'handler' => 'handle_login',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/student/signup',
+        'handler' => 'handle_student_signup',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/student/activate',
+        'handler' => 'handle_student_activate',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/development/mock-student-session',
+        'handler' => 'handle_development_mock_student_session',
         'has_params' => false,
     ],
     [

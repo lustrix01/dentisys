@@ -35,7 +35,8 @@ function auth_create_session(
     string $userAgent,
     ?string $deviceId,
     DateTimeImmutable $absoluteExpiry,
-    ?callable $clock = null
+    ?callable $clock = null,
+    string $authenticationSource = 'password'
 ): array {
     if (!$pdo->inTransaction()) {
         throw new AuthException('auth_create_session requires an active transaction.');
@@ -63,6 +64,10 @@ function auth_create_session(
         throw new AuthException('Device ID exceeds 100 characters.');
     }
 
+    if (!in_array($authenticationSource, ['password', 'development_mock'], true)) {
+        throw new AuthException('Invalid authentication source.');
+    }
+
     $clock = $clock ?? fn(): DateTimeImmutable => new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $now = $clock();
     $nowSql = $now->format('Y-m-d H:i:s.u');
@@ -76,8 +81,8 @@ function auth_create_session(
 
     $stmt = $pdo->prepare(
         "INSERT INTO auth_sessions
-         (session_uuid, user_id, issued_token_version, ip_address, user_agent, device_id, last_seen_at, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (session_uuid, user_id, issued_token_version, ip_address, user_agent, device_id, last_seen_at, created_at, expires_at, authentication_source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          RETURNING session_id"
     );
     $stmt->execute([
@@ -90,6 +95,7 @@ function auth_create_session(
         $nowSql,
         $nowSql,
         $expiresSql,
+        $authenticationSource,
     ]);
 
     $sessionId = (int) $stmt->fetchColumn();
@@ -203,6 +209,7 @@ function auth_issue_access_token(
 
 function auth_verify_access_token(
     PDO $pdo,
+    array $config,
     string $token,
     string $keyBytes,
     ?callable $clock = null
@@ -237,7 +244,7 @@ function auth_verify_access_token(
     }
 
     $stmt = $pdo->prepare(
-        "SELECT session_id, session_uuid, user_id, issued_token_version, revoked_at, expires_at
+        "SELECT session_id, session_uuid, user_id, issued_token_version, revoked_at, expires_at, authentication_source
          FROM auth_sessions WHERE session_uuid = ?"
     );
     $stmt->execute([$claims['sid']]);
@@ -245,6 +252,14 @@ function auth_verify_access_token(
 
     if ($session === false) {
         throw new AuthException('Session not found.');
+    }
+
+    $authenticationSource = (string) ($session['authentication_source'] ?? 'password');
+    if ($user['role'] === 'student'
+        && $authenticationSource === 'development_mock'
+        && !student_auth_mock_is_available($config)) {
+        student_auth_record_eligibility_denied($pdo, $config, (int) $user['user_id'], 'development_mock_unavailable');
+        throw new AuthException('Student authentication is unavailable.');
     }
 
     if ((int) $session['issued_token_version'] !== (int) $user['token_version']) {
@@ -279,6 +294,11 @@ function auth_verify_access_token(
         throw new AuthException('Token JTI is blacklisted.');
     }
 
+    $student = null;
+    if ($user['role'] === 'student') {
+        $student = auth_assert_student_eligible($pdo, $config, (int) $user['user_id']);
+    }
+
     return [
         'user_id' => (int) $user['user_id'],
         'login_email' => $user['login_email'],
@@ -289,6 +309,8 @@ function auth_verify_access_token(
         'jti' => $claims['jti'],
         'exp' => $claims['exp'],
         'token_version' => (int) $user['token_version'],
+        'authentication_source' => $authenticationSource,
+        'student' => $student,
     ];
 }
 

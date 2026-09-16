@@ -85,6 +85,9 @@ if ($LASTEXITCODE -ne 0) { throw 'PHP syntax validation failed.' }
 & docker compose run --rm --no-deps web sh -lc 'for test in /var/www/html/tests/backend/*_test.php; do php "$test" || exit 1; done'
 if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed.' }
 
+& php (Join-Path $root 'tests/documentation/doc_contract_test.php')
+if ($LASTEXITCODE -ne 0) { throw 'Documentation contract test failed.' }
+
 & npm run test:e2e
 if ($LASTEXITCODE -ne 0) { throw 'Mocked UI E2E tests failed.' }
 

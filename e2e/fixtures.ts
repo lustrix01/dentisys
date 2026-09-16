@@ -8,7 +8,7 @@ type RuntimeConfig = {
     biometrics: { active: 'disabled' | 'development-mock' };
     location: { active: 'disabled' | 'development-mock' };
   };
-  features: { browser_attendance_prototype: boolean };
+  features: { browser_attendance_prototype: boolean; student_auth_enabled: boolean };
 };
 
 const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
@@ -19,7 +19,7 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
     biometrics: { active: 'disabled' },
     location: { active: 'disabled' },
   },
-  features: { browser_attendance_prototype: false },
+  features: { browser_attendance_prototype: false, student_auth_enabled: false },
 };
 
 const KNOWN_API_PATHS = new Set([
@@ -27,6 +27,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh',
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
+  '/api/auth/student/signup', '/api/auth/student/activate', '/api/auth/development/mock-student-session',
   '/api/admin/users/faculty', '/api/admin/users/approval', '/api/admin/dashboard/kpis', '/api/admin/retention/criteria',
   '/api/admin/retention/criteria', '/api/admin/audit-logs', '/api/admin/profile', '/api/admin/settings', '/api/admin/reports/summary',
   '/api/secretary/invite', '/api/secretary/invitation', '/api/secretary/invitations', '/api/secretary/invitations/revoke',
@@ -70,7 +71,8 @@ function isKnownApiRequest(pathname: string, method: string): boolean {
 function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/runtime-config') return { status: 'ok', ...DEFAULT_RUNTIME_CONFIG };
   if (pathname === '/api/auth/refresh') return { access_token: 'mock-refresh-token', user: { user_id: 100 } };
-  if (pathname === '/api/auth/me') return { id: 100, user_id: 100, login_email: 'mock@bicol-u.edu.ph', display_name: 'Mock User', role: 'faculty' };
+  if (pathname === '/api/auth/me') return { id: 100, user_id: 100, login_email: 'mock@bicol-u.edu.ph', display_name: 'Mock User', role: 'faculty', session_uuid: 'server-fixture-session', authentication_source: 'password' };
+  if (pathname === '/api/auth/development/mock-student-session') return { type: 'direct_login', two_factor_required: false, two_factor_enrolled: false, access_token: 'server-fixture-student-token', user: { user_id: 101 } };
   if (pathname === '/api/health') return { status: 'ok', app: 'DentiSYS API', php: 'up', database: 'up', timestamp: new Date().toISOString() };
   if (pathname === '/api/secretary/dashboard/kpis') return { status: 'ok', kpis: { todayRecords: 0, overriddenCount: 0, assignedStudents: 0, attendanceRate: 0 }, assignedClass: { classId: '1', className: 'CLIN401', classroomName: 'BU Dental Room 101' }, recentActivity: [] };
   if (pathname.endsWith('/dashboard/kpis')) return { status: 'ok', kpis: {}, classes: [], gwaBuckets: [], statusCounts: {}, classAttendance: [] };

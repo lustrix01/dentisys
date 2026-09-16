@@ -12,7 +12,7 @@ function mfa_authenticated_context(PDO $pdo, array $config): array
 {
     $token = auth_extract_bearer_token(request_header('Authorization') ?? '');
     $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
-    return auth_verify_access_token($pdo, $token, $jwtKey);
+    return auth_verify_access_token($pdo, $config, $token, $jwtKey);
 }
 
 function mfa_require_step_up(PDO $pdo, array $config, int $userId, string $code): void

@@ -1,6 +1,8 @@
-# Security Data Dictionary — Phase 2 Baseline (15 Tables)
+# Security Data Dictionary — Phase 2/P03 (15 Tables + Student Identity)
 
 > Current authentication note: migration 006 removes email-code 2FA. Authenticator credentials and recovery codes continue to use `security_tokens`.
+
+> PostgreSQL P03 note: migration `005_student_identity_authentication.sql` is additive. It introduces the nullable canonical Student link, server-issued session provenance, and the live Student activation-token invariant. It does not backfill `students.user_id`; that legacy Secretary relationship remains unchanged for P06 reconciliation.
 
 ## user_accounts
 
@@ -9,7 +11,7 @@
 | user_id | INT UNSIGNED | PK, AUTO_INCREMENT |
 | login_email | VARCHAR(255) | UNIQUE, NOT NULL |
 | password_hash | VARCHAR(255) | NOT NULL (PASSWORD_DEFAULT: bcrypt or argon2) |
-| role | ENUM('admin','faculty','secretary') | NOT NULL |
+| role | ENUM('admin','faculty','secretary','student') | NOT NULL |
 | display_name | VARCHAR(255) | NOT NULL |
 | title | VARCHAR(255) | NULL |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'Active' |
@@ -22,13 +24,14 @@
 | Column | Type | Constraints |
 |--------|------|-------------|
 | rp_id | INT UNSIGNED | PK, AUTO_INCREMENT |
-| role_name | ENUM('admin','faculty','secretary') | NOT NULL |
+| role_name | ENUM('admin','faculty','secretary','student') | NOT NULL |
 | resource | VARCHAR(100) | NOT NULL |
 | action | VARCHAR(50) | NOT NULL |
 | scope | ENUM('own','assigned_class','assigned_course','aggregate','system_wide') | NOT NULL |
 | | | UNIQUE (role_name, resource, action, scope) |
 
-125 static grants. Missing rows = deny.
+The baseline contains 125 grants. P03 adds seven Student self-scoped grants
+(132 active grants total). Missing rows = deny.
 
 ## students
 
@@ -36,6 +39,7 @@
 |--------|------|-------------|
 | student_id | INT UNSIGNED | PK, AUTO_INCREMENT |
 | student_number | VARCHAR(50) | UNIQUE, NOT NULL |
+| student_account_user_id | INTEGER | NULL, UNIQUE, FK→user_accounts RESTRICT; canonical Student account link |
 | user_id | INT UNSIGNED | NULL, UNIQUE, FK→user_accounts ON DELETE SET NULL |
 | first_name, last_name, middle_name | VARCHAR(100) | NOT NULL (first, last) |
 | status | ENUM('active','disabled','archived') | NOT NULL, DEFAULT 'active' |
@@ -116,6 +120,7 @@ Revocation clears template_reference and image_references, sets revoke_at. Raw t
 | user_id | INT UNSIGNED | FK→user_accounts RESTRICT |
 | issued_token_version | INT UNSIGNED | NOT NULL (compared to user_accounts.token_version) |
 | expires_at, revoked_at | DATETIME(6) | lifecycle |
+| authentication_source | TEXT | NOT NULL, `password` or `development_mock`; server-issued provenance |
 
 Session identity and lifecycle only. Refresh token digests stored in security_tokens.
 
@@ -124,7 +129,7 @@ Session identity and lifecycle only. Refresh token digests stored in security_to
 | Column | Type | Purpose-Specific Use |
 |--------|------|----------------------|
 | token_id | INT UNSIGNED | PK, AUTO_INCREMENT |
-| purpose | ENUM('mfa_credential','mfa_recovery','password_reset','access_token_blacklist','secretary_invitation','refresh') | NOT NULL |
+| purpose | TEXT; includes `student_activation`, `mfa_credential`, `mfa_recovery`, `password_reset`, `access_token_blacklist`, `secretary_invitation`, `refresh` | NOT NULL |
 | user_id | INT UNSIGNED | NULL (nullable for pre-account secretary_invitation) |
 | session_id | INT UNSIGNED | FK→auth_sessions (refresh only) |
 | related_student_id, related_cs_id | INT UNSIGNED | FK (secretary_invitation only) |
@@ -138,6 +143,12 @@ Session identity and lifecycle only. Refresh token digests stored in security_to
 | metadata_json | JSON | NULL (purpose-specific data) |
 
 Recovery codes marked used_at on consumption, never deleted.
+
+Student activation tokens use `purpose='student_activation'`, a 32-byte SHA-256 `token_digest`, a 24-hour expiry, and `related_student_id`. A partial unique index permits at most one live unconsumed token per account; resend revokes the prior token before issuing its replacement. Raw activation tokens are sent only through the configured mailer and are never logged or returned by APIs.
+
+## Student identity invariant
+
+An active Student login requires exactly one canonical `students.student_account_user_id` link to an Active `user_accounts` row with role `student`, matching institutional email, and active Student status. Enrollment is required for signup eligibility, activation-token consumption, and `require_owned_enrollment()` only; it is not a post-activation session prerequisite. A legacy `students.user_id` link is not migrated or interpreted as a Student login link by P03.
 
 ## audit_events
 

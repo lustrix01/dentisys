@@ -20,6 +20,7 @@ $env:MAILPIT_UI_PORT = '18025'
 $env:JWT_SIGNING_KEY_B64 = 'SkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSko='
 $env:MFA_ENCRYPTION_KEY_B64 = 'RUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUU='
 $env:AUDIT_MAC_KEY_B64 = 'TU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU0='
+$env:STUDENT_AUTH_ENABLED = 'true'
 
 function Invoke-Compose {
     param([string[]] $Arguments)
@@ -86,14 +87,14 @@ try {
     Invoke-Compose @('exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'dentisys', '-v', 'ON_ERROR_STOP=1', '-f', '/postgres/test-fixtures/live-stack.sql')
 
     $ledger = Invoke-PsqlScalar 'SELECT count(*) FROM _schema_migrations;'
-    if ($ledger -ne '4') { throw "Expected four applied migrations, found $ledger." }
+    if ($ledger -ne '5') { throw "Expected five applied migrations, found $ledger." }
     $grant = Invoke-PsqlScalar "SELECT has_schema_privilege('dentisys', 'public', 'USAGE');"
     if ($grant -ne 't') { throw 'Application role does not have the expected schema grant.' }
 
     # Re-run the migration runner and require the ledger to remain unchanged.
     Invoke-Compose @('exec', '-T', 'db', 'sh', '/docker-entrypoint-initdb.d/001-migrations.sh')
     $ledgerAfter = Invoke-PsqlScalar 'SELECT count(*) FROM _schema_migrations;'
-    if ($ledgerAfter -ne '4') { throw "Migration runner was not idempotent (found $ledgerAfter rows)." }
+    if ($ledgerAfter -ne '5') { throw "Migration runner was not idempotent (found $ledgerAfter rows)." }
 
     # Exercise the manual development seed exactly as an operator would, without
     # making it part of normal startup.
@@ -107,8 +108,8 @@ try {
         throw "Manual demo seed is not idempotent (first $seedCounts; second $secondSeedCounts)."
     }
 
-    $usableAccounts = Invoke-PsqlScalar "SELECT count(*) FROM user_accounts WHERE status = 'Active' AND login_email IN ('admin@bicol-u.edu.ph', 'faculty@bicol-u.edu.ph', 'secretary@bicol-u.edu.ph');"
-    if ($usableAccounts -ne '3') { throw "Expected three usable demo accounts, found $usableAccounts." }
+    $usableAccounts = Invoke-PsqlScalar "SELECT count(*) FROM user_accounts WHERE status = 'Active' AND login_email IN ('admin@bicol-u.edu.ph', 'faculty@bicol-u.edu.ph', 'secretary@bicol-u.edu.ph', 'student@bicol-u.edu.ph');"
+    if ($usableAccounts -ne '4') { throw "Expected four usable demo accounts, found $usableAccounts." }
 
     $sequencesAligned = Invoke-PsqlScalar @"
 SELECT bool_and(aligned)

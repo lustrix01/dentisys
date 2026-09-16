@@ -1,4 +1,4 @@
-# Requirements Traceability Matrix — Phase 2 Baseline
+# Requirements Traceability Matrix — Phase 2/P03
 
 ## Source Register
 
@@ -92,3 +92,17 @@
 - **Superseded MariaDB migration history** archived under `database/archive/mariadb/`
 - **Clean-install-only baseline**: 001_baseline_schema.sql, 002_seed_rbac.sql, 003_seed_system_settings.sql
 - **All backend and frontend runtime files unchanged** in Stage 1
+
+## P03 Student Identity and Authentication
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Canonical Student account linkage without legacy Secretary backfill | Confirmed | Migration 005, `students.student_account_user_id`, deferred identity constraints |
+| Student signup and one-time activation | Confirmed | `StudentAuthController`, `/api/auth/student/signup`, `/api/auth/student/activate`, 24-hour hashed token |
+| Server-issued Student sessions and provenance | Confirmed | `auth_sessions.authentication_source`, centralized `auth_assert_student_eligible`, JWT role `student` |
+| Student self/enrollment authorization | Confirmed | `require_student_identity`, `require_owned_enrollment`, Student-only route group |
+| Password/MFA/refresh/logout/recovery compatibility | Confirmed | Existing auth/MFA/session/reset paths re-check Student identity and preserve token rotation/revocation |
+| Safe development fixture and production mock rejection | Confirmed | Explicit `STUDENT_AUTH_ENABLED`, server mock endpoint, seed fixture, production validator |
+| Google OIDC | Owner Decision Required / deferred | No provider or callback in P03; roadmap remains unresolved |
+
+P03 intentionally excludes classes, roster management, attendance, geofencing, biometrics, retention changes, academic APIs, and legacy Secretary migration/reconciliation (P06).

@@ -164,6 +164,9 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
             login_email: 'student@bicol-u.edu.ph',
             display_name: 'Development Mock Student',
             role: 'student',
+            session_uuid: 'fixture-student-session',
+            authentication_source: 'development_mock',
+            student: { student_id: 1, student_number: 'FIXTURE-001', status: 'active' },
           }),
         });
       });
@@ -181,11 +184,10 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
               biometrics: { active: 'development-mock' },
               location: { active: 'development-mock' },
             },
-            features: { browser_attendance_prototype: true },
+            features: { browser_attendance_prototype: true, student_auth_enabled: true },
           }),
         });
       });
-
       await page.goto('/login');
       await page.fill('input[type="email"]', 'student@bicol-u.edu.ph');
       await page.fill('input[type="password"]', 'Password123!');
@@ -199,13 +201,13 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
     });
 
     test('Workflow: Manual Attendance Workflow', async ({ page }) => {
-      await page.goto('/student/attendance');
+      await page.click('a[href="/student/attendance"]');
       await expect(page).toHaveURL('/student/attendance');
       await expect(page.locator('body')).toContainText(/Attendance|Check-in|Development/i);
     });
 
     test('Workflow: Student facial enrollment prototype', async ({ page }) => {
-      await page.goto('/student/face-registration');
+      await page.click('a[href="/student/face-registration"]');
       await expect(page).toHaveURL('/student/face-registration');
       await expect(page.locator('body')).toContainText(/Facial|Development|Privacy/i);
     });
