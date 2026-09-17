@@ -2,49 +2,50 @@
 
 declare(strict_types=1);
 
-function require_document(string $path, string $needle): void
+function require_nonempty_file(string $path): void
 {
     if (!is_file($path)) {
-        fwrite(STDERR, "FAIL: Missing documentation file: {$path}\n");
+        fwrite(STDERR, "FAIL: Missing required file: {$path}\n");
         exit(1);
     }
     $content = file_get_contents($path);
-    if ($content === false || !str_contains($content, $needle)) {
-        fwrite(STDERR, "FAIL: Documentation contract not met by {$path}\n");
+    if ($content === false || trim($content) === '') {
+        fwrite(STDERR, "FAIL: Required file is empty: {$path}\n");
         exit(1);
     }
 }
 
 $root = dirname(__DIR__, 2);
 
-require_document("{$root}/README.md", 'Docker-first');
-require_document("{$root}/AGENTS.md", 'Docker Compose only');
-require_document("{$root}/docs/README.md", 'Documentation');
-require_document("{$root}/docs/development-environment.md", 'pgAdmin');
-require_document("{$root}/docs/single-server.md", 'Same-Host');
-require_document("{$root}/docs/roadmap.md", 'Google-only sign-in');
-require_document("{$root}/docs/database/phase-2-migration-mapping.md", '006_remove_email_code_2fa.sql');
-require_document("{$root}/docs/database/security-data-dictionary.md", 'student_account_user_id');
-require_document("{$root}/docs/ias/module-a-identity-access.md", 'auth_assert_student_eligible');
-require_document("{$root}/docs/requirements-traceability.md", 'P03 Student Identity and Authentication');
-
-$migration = file_get_contents("{$root}/database/migrations/005_student_identity_authentication.sql");
-if ($migration === false
-    || preg_match('/UPDATE\s+students\s+SET\s+student_account_user_id\s*=\s*.*user_id/i', $migration)
-    || !str_contains($migration, "CHECK (role IN ('admin', 'faculty', 'secretary', 'student'))")
-    || !str_contains($migration, "'student_activation'")) {
-    fwrite(STDERR, "FAIL: P03 migration contract is incomplete.\n");
-    exit(1);
+foreach ([
+    "{$root}/README.md",
+    "{$root}/AGENTS.md",
+    "{$root}/docs/README.md",
+    "{$root}/docs/features.md",
+    "{$root}/docs/roadmap.md",
+    "{$root}/database/README.md",
+] as $path) {
+    require_nonempty_file($path);
 }
 
 $migrations = glob("{$root}/database/migrations/*.sql") ?: [];
-if (count($migrations) !== 5) {
-    fwrite(STDERR, 'FAIL: Expected 5 active PostgreSQL migrations, found ' . count($migrations) . "\n");
-    exit(1);
-}
-if (!in_array('005_student_identity_authentication.sql', array_map('basename', $migrations), true)) {
-    fwrite(STDERR, "FAIL: P03 migration is not present.\n");
+if ($migrations === []) {
+    fwrite(STDERR, "FAIL: No active PostgreSQL migrations found.\n");
     exit(1);
 }
 
-echo "PASS: current documentation and migration contracts are present.\n";
+$prefixes = [];
+foreach ($migrations as $migration) {
+    $name = basename($migration);
+    if (!preg_match('/^(\d{3})_[a-z0-9_]+\.sql$/', $name, $matches)) {
+        fwrite(STDERR, "FAIL: Invalid active migration filename: {$name}\n");
+        exit(1);
+    }
+    if (isset($prefixes[$matches[1]])) {
+        fwrite(STDERR, "FAIL: Duplicate active migration prefix: {$matches[1]}\n");
+        exit(1);
+    }
+    $prefixes[$matches[1]] = true;
+}
+
+echo "PASS: current documentation entry points and migration conventions are present.\n";

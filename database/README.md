@@ -12,7 +12,8 @@ database/
     ├── 001_baseline_schema.sql
     ├── 002_seed_rbac.sql
     ├── 003_seed_system_settings.sql
-    └── 004_postgresql_runtime_compatibility.sql
+    ├── 004_postgresql_runtime_compatibility.sql
+    └── 005_student_identity_authentication.sql
 ├── seeds/                    Manual development-only data imports
 │   └── development-demo.sql
 └── archive/mariadb/          Superseded MariaDB files; not used at runtime

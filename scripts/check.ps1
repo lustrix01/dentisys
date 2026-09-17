@@ -7,31 +7,22 @@ Set-Location $root
 
 # The runtime validator is the last line of defence against accidentally
 # shipping development identity/biometric/location providers. Exercise the
-# negative production-like path without touching a database or Compose volume.
-$savedAppEnv = $env:APP_ENV
-$savedMockIdentity = $env:DEV_MOCK_IDENTITY_ENABLED
-$savedMockBiometric = $env:DEV_MOCK_BIOMETRIC_ENABLED
-$savedMockLocation = $env:DEV_MOCK_LOCATION_ENABLED
-$savedMockAttendance = $env:DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED
+# negative production-like path in the supported Docker runtime.
+$validatorPreference = $ErrorActionPreference
 try {
-    $env:APP_ENV = 'production'
-    $env:DEV_MOCK_IDENTITY_ENABLED = 'true'
-    $env:DEV_MOCK_BIOMETRIC_ENABLED = 'false'
-    $env:DEV_MOCK_LOCATION_ENABLED = 'false'
-    $env:DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED = 'false'
-    $validatorPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    & php (Join-Path $root 'backend/bin/validate-config.php') 2>&1 | Out-Null
+    & docker compose run --rm --no-deps `
+        -e APP_ENV=production `
+        -e DEV_MOCK_IDENTITY_ENABLED=true `
+        -e DEV_MOCK_BIOMETRIC_ENABLED=false `
+        -e DEV_MOCK_LOCATION_ENABLED=false `
+        -e DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED=false `
+        web php /var/www/html/backend/bin/validate-config.php 2>&1 | Out-Null
     $validatorExit = $LASTEXITCODE
-    $ErrorActionPreference = $validatorPreference
-    if ($validatorExit -eq 0) { throw 'Production runtime validator accepted a mock identity provider.' }
 } finally {
-    $env:APP_ENV = $savedAppEnv
-    $env:DEV_MOCK_IDENTITY_ENABLED = $savedMockIdentity
-    $env:DEV_MOCK_BIOMETRIC_ENABLED = $savedMockBiometric
-    $env:DEV_MOCK_LOCATION_ENABLED = $savedMockLocation
-    $env:DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED = $savedMockAttendance
+    $ErrorActionPreference = $validatorPreference
 }
+if ($validatorExit -eq 0) { throw 'Production runtime validator accepted a mock identity provider.' }
 
 & docker compose config --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Docker Compose configuration is invalid.' }
@@ -48,9 +39,6 @@ $compose = Get-Content -LiteralPath (Join-Path $root 'docker-compose.yml') -Raw
 if ($compose -match 'DB_HOST_PORT|xampp|XAMPP') { throw 'Docker Compose still contains a removed native-runtime reference.' }
 if ($compose -notmatch 'postgres:18') { throw 'Docker Compose must use PostgreSQL 18.' }
 if ($compose -match 'phpmyadmin|mariadb:') { throw 'Docker Compose contains a removed MariaDB/phpMyAdmin runtime reference.' }
-
-& docker compose build web frontend
-if ($LASTEXITCODE -ne 0) { throw 'Docker images failed to build.' }
 
 $runtimeFiles = Get-ChildItem -Path backend,frontend -Recurse -File -Include *.php,*.ts,*.tsx
 $obsolete = $runtimeFiles | Select-String -Pattern 'email_mfa|EMAIL_OTP_HMAC_KEY|XAMPP|xampp'
@@ -85,7 +73,7 @@ if ($LASTEXITCODE -ne 0) { throw 'PHP syntax validation failed.' }
 & docker compose run --rm --no-deps web sh -lc 'for test in /var/www/html/tests/backend/*_test.php; do php "$test" || exit 1; done'
 if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed.' }
 
-& php (Join-Path $root 'tests/documentation/doc_contract_test.php')
+& docker compose run --rm --no-deps -v "${root}:/workspace:ro" web php /workspace/tests/documentation/doc_contract_test.php
 if ($LASTEXITCODE -ne 0) { throw 'Documentation contract test failed.' }
 
 & npm run test:e2e

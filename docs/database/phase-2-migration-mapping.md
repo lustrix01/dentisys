@@ -1,12 +1,12 @@
 # Phase 2 Migration Mapping
 
+> Historical Phase 2 baseline mapping. It is not the current migration inventory; use [`database/README.md`](../../database/README.md) and `database/migrations/` for active PostgreSQL state.
+
 ## Overview
 
 Phase 2 reduces the DentiSys database from 46 business tables (Phase 1C) to 15 application tables, while meeting SAD and IAS requirements for auditability, TOTP MFA, RBAC, JWT sessions, rate limiting, input validation, and ACL documentation.
 
 **Total physical tables**: 16 (15 application + 1 `_schema_migrations`)
-
-Exact count: 16 total physical tables. Migration `006_remove_email_code_2fa.sql` retires email-code 2FA data and schema support while preserving the 15-table application baseline.
 
 **Clean-install-only baseline**: 001_baseline_schema.sql, 002_seed_rbac.sql, 003_seed_system_settings.sql
 
@@ -33,9 +33,9 @@ Exact count: 16 total physical tables. Migration `006_remove_email_code_2fa.sql`
 | faculty_approval | merged into user_accounts.status + audit_events | Decision history in audit |
 | auth_throttle (runtime) | N/A — filesystem rate limiter | Runtime counters not stored in DB |
 
-## Legacy Migration Classification
+## Baseline Migration Classification
 
-Superseded Phase 1A/1B/1C migrations were removed during the PostgreSQL cutover. The active PostgreSQL migration directory contains:
+Superseded Phase 1A/1B/1C migrations were removed during the PostgreSQL cutover. At the Phase 2 baseline, the migration set contained:
 
 - 001_baseline_schema.sql — 15 application tables + _schema_migrations
 - 002_seed_rbac.sql — 125 static RBAC grants

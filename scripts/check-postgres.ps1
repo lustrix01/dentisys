@@ -9,6 +9,8 @@ Set-Location $root
 
 $project = 'dentisys-integration'
 $composeFiles = @('-p', $project, '-f', 'docker-compose.yml', '-f', 'docker-compose.test.yml')
+$expectedMigrations = @(Get-ChildItem -LiteralPath (Join-Path $root 'database\migrations') -File -Filter '*.sql' | Sort-Object Name | ForEach-Object Name)
+if ($expectedMigrations.Count -eq 0) { throw 'No active PostgreSQL migrations were found.' }
 $env:DB_ADMIN_USER = 'postgres'
 $env:DB_ADMIN_PASS = 'integration-postgres-admin'
 $env:DB_NAME = 'dentisys'
@@ -40,6 +42,20 @@ function Invoke-PsqlScalarDatabase {
     $output = & docker compose @composeFiles exec -T db psql -U postgres -d $Database -Atc $Query
     if ($LASTEXITCODE -ne 0) { throw "PostgreSQL query failed for database ${Database}: $Query" }
     return ($output | Out-String).Trim()
+}
+
+function Get-AppliedMigrations {
+    $versions = Invoke-PsqlScalar 'SELECT version FROM _schema_migrations ORDER BY version;'
+    return @($versions -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Assert-MigrationLedgerMatchesActiveFiles {
+    param([string[]] $Applied, [string] $Context)
+
+    $difference = @(Compare-Object -ReferenceObject $expectedMigrations -DifferenceObject $Applied)
+    if ($difference.Count -ne 0) {
+        throw "Migration ledger does not match active migration files $Context. Expected [$($expectedMigrations -join ', ')], found [$($Applied -join ', ')]."
+    }
 }
 
 try {
@@ -86,15 +102,18 @@ try {
 
     Invoke-Compose @('exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'dentisys', '-v', 'ON_ERROR_STOP=1', '-f', '/postgres/test-fixtures/live-stack.sql')
 
-    $ledger = Invoke-PsqlScalar 'SELECT count(*) FROM _schema_migrations;'
-    if ($ledger -ne '5') { throw "Expected five applied migrations, found $ledger." }
+    $ledger = Get-AppliedMigrations
+    Assert-MigrationLedgerMatchesActiveFiles -Applied $ledger -Context 'after initialization'
     $grant = Invoke-PsqlScalar "SELECT has_schema_privilege('dentisys', 'public', 'USAGE');"
     if ($grant -ne 't') { throw 'Application role does not have the expected schema grant.' }
 
     # Re-run the migration runner and require the ledger to remain unchanged.
     Invoke-Compose @('exec', '-T', 'db', 'sh', '/docker-entrypoint-initdb.d/001-migrations.sh')
-    $ledgerAfter = Invoke-PsqlScalar 'SELECT count(*) FROM _schema_migrations;'
-    if ($ledgerAfter -ne '5') { throw "Migration runner was not idempotent (found $ledgerAfter rows)." }
+    $ledgerAfter = Get-AppliedMigrations
+    Assert-MigrationLedgerMatchesActiveFiles -Applied $ledgerAfter -Context 'after rerunning migrations'
+    if (@(Compare-Object -ReferenceObject $ledger -DifferenceObject $ledgerAfter).Count -ne 0) {
+        throw 'Migration runner was not idempotent.'
+    }
 
     # Exercise the manual development seed exactly as an operator would, without
     # making it part of normal startup.
