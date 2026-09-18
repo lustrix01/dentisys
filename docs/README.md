@@ -1,5 +1,6 @@
 # DentiSys Documentation
 
+- [Authoritative product specification](../spec.md)
 - [Architecture](architecture.md)
 - [Supported local development environment](development-environment.md)
 - [Unfinished same-host single-server deployment foundation](single-server.md)

@@ -20,6 +20,7 @@ $root = dirname(__DIR__, 2);
 foreach ([
     "{$root}/README.md",
     "{$root}/AGENTS.md",
+    "{$root}/spec.md",
     "{$root}/docs/README.md",
     "{$root}/docs/features.md",
     "{$root}/docs/roadmap.md",

@@ -2,9 +2,9 @@
 
 ## Planned identity work
 
-- Replace password sign-in with Google-only sign-in.
-- Validate Google verified-email claims against a configurable allowlist that supports multiple domains.
-- Reuse the existing post-primary-factor authenticator 2FA boundary after Google identity verification.
+- Add Google Sign-In alongside existing institutional email + password authentication, resolving both methods to the same DentiSys account.
+- Add Google-assisted registration where applicable; it still requires creation of a DentiSys password and preserves existing approval, eligibility, account-control, MFA, and DentiSys session boundaries.
+- Validate Google identity against a configurable institutional allowlist that supports multiple domains.
 
 ## Planned product work
 

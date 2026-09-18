@@ -4,10 +4,20 @@
 - Keep the stack small: React/Vite, plain PHP with Composer dependencies, PostgreSQL, Mailpit, and optional development-only pgAdmin.
 - Do not delete or reuse a persisted database volume without explicit approval. Schema changes are additive, ordered migrations.
 - Current sign-in is password plus optional authenticator-app 2FA with recovery codes. Do not reintroduce email-code 2FA.
-- Google-only sign-in, configurable multi-domain allowlists, facial biometrics, image publishing, and demonstration deployment are roadmap work unless explicitly requested.
+- Google Sign-In alongside password authentication, Google-assisted registration, configurable multi-domain allowlists, facial biometrics, image publishing, and demonstration deployment are approved or planned future work; they are not all implemented.
 - Preserve existing routes, styles, assets, localStorage keys, roles, and workflows unless the task requires a behavior change.
 - Keep secrets out of version control. Docker Compose reads local values from root `.env`; backend runtime configuration comes from container environment variables.
 - Avoid unrelated refactors and formatting churn. Keep future image publishing seams lightweight; do not add registry, VPS, TLS, CI/CD, Traefik, Watchtower, or cloud deployment files without approval.
+
+## Product specification
+
+- `spec.md` is the authoritative source for approved DentiSys product behavior and durable product decisions.
+- Before planning or implementing work that affects specified behavior, read the relevant sections of `spec.md` and preserve unaffected rules.
+- Do not modify, remove, reinterpret, supersede, or add authoritative specification decisions without explicit Owner approval. A conflicting request does not itself authorize changing `spec.md`.
+- Stop and surface conflicts to the Owner. Agents may propose an exact specification amendment but must not apply it before approval.
+- Read only the sections relevant to the current task rather than mechanically loading the entire specification for unrelated or trivial work.
+- If uncertainty could affect product behavior, requirements, scope, or `spec.md`, do not guess. Ask the Owner.
+- After the Owner resolves the uncertainty, record any durable product decision or guardrail in `spec.md`, with explicit Owner approval before modifying the specification.
 
 ## Implementation simplicity
 

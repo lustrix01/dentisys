@@ -1,6 +1,6 @@
 # IAS Module A: Identity and Access Fortification
 
-> Implementation update: DentiSys now uses optional authenticator-app 2FA and recovery codes. Email-code verification and MFA method selection are retired; Google-only sign-in remains planned.
+> Implementation update: DentiSys now uses optional authenticator-app 2FA and recovery codes. Email-code verification and MFA method selection are retired; Google Sign-In is approved alongside password authentication but is not implemented in this phase.
 
 ## P03 Student identity and sessions
 
@@ -11,7 +11,7 @@ Unauthenticated endpoints are `POST /api/auth/student/signup` and `POST /api/aut
 ### Explicit identity decisions
 
 - **Provisioning/link invariant:** P03 provisions one Pending Activation `user_accounts` row and sets `students.student_account_user_id`; it never backfills `students.user_id`. Signup requires an active enrollment only at provisioning time. Existing conflicting links are a safe no-op. P06 owns legacy Secretary reconciliation.
-- **Google OIDC:** unresolved/planned; no Google button, callback, provider, schema, or dependency is introduced.
+- **Google OIDC:** approved future authentication direction; no Google button, callback, provider, schema, or dependency is introduced in this phase.
 - **Student/Secretary relationship:** one canonical Student account may not be converted to admin/faculty; a legacy Secretary-only `students.user_id` link remains valid and separate. Secretary activation rejects a Student canonical link, and P03 does not merge or migrate the two identities.
 
 ## TOTP Enrollment and Verification Flow

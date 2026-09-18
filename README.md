@@ -119,4 +119,5 @@ For the normal developer loop, start the application with `.\scripts\start-dev.p
 
 ## Documentation
 
+- [Authoritative product specification](spec.md)
 Start with [the documentation index](docs/README.md).
