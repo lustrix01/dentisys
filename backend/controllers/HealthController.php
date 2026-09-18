@@ -84,6 +84,28 @@ function health_payload(): array
             ];
         }
 
+        $requiredMigrations = [
+            '005_student_identity_authentication.sql',
+            '006_google_sign_in_phase_1.sql',
+            '007_assessment_transmutation.sql',
+        ];
+        $migrationStmt = $pdo->prepare(
+            'SELECT version FROM _schema_migrations WHERE version IN (?, ?, ?)'
+        );
+        $migrationStmt->execute($requiredMigrations);
+        $appliedMigrations = $migrationStmt->fetchAll(PDO::FETCH_COLUMN);
+        if (count(array_diff($requiredMigrations, $appliedMigrations)) > 0) {
+            $payload['status'] = 'error';
+            $payload['database'] = 'up';
+            $payload['error_code'] = 'schema_outdated';
+            $payload['message'] = 'Database migrations are pending. Run .\\scripts\\migrate.ps1 before starting DentiSys.';
+
+            return [
+                'statusCode' => 503,
+                'body' => $payload,
+            ];
+        }
+
         $payload['database'] = 'up';
 
         return [

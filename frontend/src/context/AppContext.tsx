@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Student, AttendanceRecord, SystemSettings, RemedialExam, GradeComponents, EnrolledSubject, AttendanceStatus, Assessment, AssessmentScore, GradingComponentConfig, RetentionLog } from '../types';
 import { recordAudit } from '../services/auditService';
-import { computeSubjectGrade, computeOverallGWA, percentageToGWA } from '../utils/gradeHelper';
-import { getFacultyAssessmentsApi, getFacultyAttendanceApi, getFacultyStudentsApi } from '../services/apiClient';
+import { computeSubjectGrade, computeOverallGWA, percentageToGWA, effectiveAssessmentPercentage } from '../utils/gradeHelper';
+import { getFacultyAssessmentScoresApi, getFacultyAssessmentsApi, getFacultyAttendanceApi, getFacultyStudentsApi } from '../services/apiClient';
 import { useAuth } from './AuthContext';
 
 interface AppContextProps {
@@ -63,6 +63,10 @@ const defaultSettings: SystemSettings = {
     attendance: 10,
   },
   theme: 'light',
+  transmutationDefaults: {
+    minimumPercentage: 50,
+    maximumPercentage: 100,
+  },
 };
 
 const initialAssessments: Assessment[] = [];
@@ -153,13 +157,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   useEffect(() => {
+    let ignore = false;
     localStorage.setItem('dentisys_mock_version', 'v3');
     if (phase !== 'authenticated' || user?.role !== 'faculty') {
       setStudents([]);
-      return;
+      setAssessmentScores([]);
+      return () => {
+        ignore = true;
+      };
     }
-    Promise.all([getFacultyStudentsApi(), getFacultyAssessmentsApi(), getFacultyAttendanceApi()])
-      .then(([data, assessmentData, attendanceData]) => {
+    setAssessmentScores([]);
+    const syncFacultyData = async () => {
+      try {
+        const [data, assessmentData, attendanceData] = await Promise.all([
+          getFacultyStudentsApi(),
+          getFacultyAssessmentsApi(),
+          getFacultyAttendanceApi(),
+        ]);
+        if (ignore) return;
+
         if (Array.isArray(data)) {
           const mapped: Student[] = data.map(s => ({
             id: String(s.id),
@@ -178,13 +194,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }));
           setStudents(mapped);
         }
-        setAssessments(assessmentData as Assessment[]);
+        const loadedAssessments = Array.isArray(assessmentData) ? assessmentData as Assessment[] : [];
+        setAssessments(loadedAssessments);
         setAttendanceRecords(attendanceData.records as AttendanceRecord[]);
-      })
-      .catch((err) => {
-        console.warn('Backend student sync warning:', err);
-      });
-  }, [phase, user?.role]);
+
+        const scoreCollections = await Promise.all(loadedAssessments.map(async assessment => {
+          try {
+            const response = await getFacultyAssessmentScoresApi(assessment.id);
+            return response.scores.map(score => ({
+              id: score.id,
+              assessmentId: assessment.id,
+              studentId: score.studentId,
+              score: Number(score.score),
+              remarks: score.remarks,
+              submittedAt: score.submittedAt,
+            }));
+          } catch (err) {
+            console.warn(`Backend score sync warning for assessment ${assessment.id}:`, err);
+            return [];
+          }
+        }));
+        if (ignore) return;
+        setAssessmentScores(scoreCollections.flat());
+      } catch (err) {
+        if (!ignore) console.warn('Backend student sync warning:', err);
+      }
+    };
+    void syncFacultyData();
+    return () => {
+      ignore = true;
+    };
+  }, [phase, user?.role, user?.user_id]);
 
   useEffect(() => {
     localStorage.setItem('dentisys_students', JSON.stringify(students));
@@ -223,8 +263,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     scores: AssessmentScore[],
     assList: Assessment[],
     compList: GradingComponentConfig[],
-    attendanceRate: number
-  ): GradeComponents => {
+    attendanceRate: number,
+    attList: AttendanceRecord[]
+  ): GradeComponents | null => {
     const subjectAssessments = assList.filter(a => a.subjectCode === subjectCode && a.status !== 'Archived');
     
     const getWeightAndMax = (category: string) => {
@@ -250,13 +291,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       catSums[cat] = { earned: 0, max: 0 };
     });
 
+    let incompleteTransmutation = false;
     subjectAssessments.forEach(ass => {
       const studentScore = scores.find(s => s.assessmentId === ass.id && s.studentId === studentId);
       if (studentScore && studentScore.score !== undefined) {
-        catSums[ass.type].earned += studentScore.score;
+        const linkedAttendance = ass.transmutationEnabled
+          ? attList.find(record => record.studentId === studentId
+            && record.classId === ass.classId
+            && record.date === ass.attendanceSessionDate
+            && record.sessionCode === ass.attendanceSessionCode)
+          : undefined;
+        const effectivePercentage = effectiveAssessmentPercentage(
+          studentScore.score,
+          ass.maxScore,
+          ass,
+          linkedAttendance?.status,
+        );
+        if (effectivePercentage === null && ass.transmutationEnabled) {
+          incompleteTransmutation = true;
+          return;
+        }
+        catSums[ass.type].earned += ((effectivePercentage ?? 0) / 100) * ass.maxScore;
         catSums[ass.type].max += ass.maxScore;
       }
     });
+
+    if (incompleteTransmutation) return null;
 
     const catPercentages: Record<string, number> = {};
     categories.forEach(cat => {
@@ -343,9 +403,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           scList,
           assList,
           compList,
-          attRate
+          attRate,
+          attList
         );
 
+        if (components === null) {
+          return subj;
+        }
         let computedGrade = computeSubjectGrade(components, settings.weights);
 
         const isClinicalViolation = subj.isClinical && computedGrade > settings.retentionThreshold;

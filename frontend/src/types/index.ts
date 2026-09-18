@@ -47,6 +47,8 @@ export interface AttendanceRecord {
   id: string;
   studentId: string;
   date: string;         // YYYY-MM-DD
+  classId?: string;
+  sessionCode?: string | null;
   subjectCode: string;
   status: AttendanceStatus;
   verificationType?: 'facial_geofence' | 'manual_override' | 'standard';
@@ -105,6 +107,11 @@ export interface Assessment {
   instructions?: string;
   remarks?: string;
   status: 'Active' | 'Closed' | 'Archived';
+  transmutationEnabled?: boolean;
+  transmutationMinimumPercentage?: number;
+  transmutationMaximumPercentage?: number;
+  attendanceSessionDate?: string | null;
+  attendanceSessionCode?: string | null;
   createdAt: string;
 }
 
@@ -133,6 +140,10 @@ export interface SystemSettings {
     attendance: number;
   };
   theme: 'light' | 'dark';
+  transmutationDefaults: {
+    minimumPercentage: number;
+    maximumPercentage: number;
+  };
 }
 
 export interface DashboardStats {

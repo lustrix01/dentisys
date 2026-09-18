@@ -35,7 +35,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
-import { gwaToDescription } from '../../utils/gradeHelper';
+import { effectiveAssessmentPercentage, gwaToDescription } from '../../utils/gradeHelper';
 
 import { getFacultyReportsSummaryApi } from '../../services/apiClient';
 
@@ -206,14 +206,25 @@ export const Reports: React.FC = () => {
     return activeAss.flatMap(ass => {
       const scores = assessmentScores.filter(s => s.assessmentId === ass.id);
       if (scores.length === 0) return [];
-      const avg = scores.reduce((acc, curr) => acc + curr.score, 0) / scores.length;
-      const avgPct = Math.round((avg / ass.maxScore) * 100);
+      const effectiveValues = scores
+        .map(score => {
+          const attendance = ass.transmutationEnabled
+            ? attendanceRecords.find(record => record.studentId === score.studentId
+              && record.classId === ass.classId
+              && record.date === ass.attendanceSessionDate
+              && record.sessionCode === ass.attendanceSessionCode)
+            : undefined;
+          return effectiveAssessmentPercentage(score.score, ass.maxScore, ass, attendance?.status);
+        })
+        .filter((value): value is number => value !== null);
+      if (effectiveValues.length === 0) return [];
+      const avgPct = Math.round(effectiveValues.reduce((acc, value) => acc + value, 0) / effectiveValues.length);
       return [{
         name: ass.title.length > 15 ? ass.title.substring(0, 15) + '...' : ass.title,
         average: avgPct
       }];
     }).slice(0, 5);
-  }, [assessments, assessmentScores, assignedSubjects]);
+  }, [assessments, assessmentScores, attendanceRecords, assignedSubjects]);
 
   return (
     <div className="space-y-6">

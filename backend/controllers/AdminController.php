@@ -469,6 +469,7 @@ function handle_admin_settings_get(): void
         $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_KEY_PAIR) : [];
         $retention = isset($rows['retention_policy']) ? json_decode($rows['retention_policy'], true) : [];
         $grading = isset($rows['grading_defaults']) ? json_decode($rows['grading_defaults'], true) : [];
+        $transmutation = $grading['transmutation_defaults'] ?? [];
         $themeStmt = $pdo->prepare("SELECT theme FROM user_accounts WHERE user_id = ?");
         $themeStmt->execute([$authCtx['user_id']]);
         $settings = [
@@ -476,6 +477,10 @@ function handle_admin_settings_get(): void
             'retentionThreshold' => (float) ($retention['retention_threshold'] ?? 2.5),
             'weights' => $grading['default_weights'] ?? [
                 'practicum' => 40, 'exams' => 30, 'quizzes' => 20, 'attendance' => 10,
+            ],
+            'transmutationDefaults' => [
+                'minimumPercentage' => (float) ($transmutation['minimum_percentage'] ?? 50),
+                'maximumPercentage' => (float) ($transmutation['maximum_percentage'] ?? 100),
             ],
         ];
 
@@ -503,12 +508,43 @@ function handle_admin_settings_update(): void
         $theme = (string) ($settings['theme'] ?? 'light');
         $threshold = (float) ($settings['retentionThreshold'] ?? 2.5);
         $weights = $settings['weights'] ?? [];
+        if ($weights instanceof \stdClass) {
+            $weights = get_object_vars($weights);
+        }
+        $existingGradingStmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults' LIMIT 1");
+        $existingGrading = json_decode((string) ($existingGradingStmt->fetchColumn() ?: '{}'), true);
+        $existingTransmutation = $existingGrading['transmutation_defaults'] ?? [];
+        $transmutation = $settings['transmutationDefaults'] ?? [
+            'minimumPercentage' => $existingTransmutation['minimum_percentage'] ?? 50,
+            'maximumPercentage' => $existingTransmutation['maximum_percentage'] ?? 100,
+        ];
+        if ($transmutation instanceof \stdClass) {
+            $transmutation = get_object_vars($transmutation);
+        }
+        $transmutationIsArray = is_array($transmutation);
+        if (!$transmutationIsArray) {
+            $transmutation = [];
+        }
+        $minimumRaw = $transmutation['minimumPercentage'] ?? 50;
+        $maximumRaw = $transmutation['maximumPercentage'] ?? 100;
+        $transmutationNumbersAreValid = is_numeric($minimumRaw) && is_numeric($maximumRaw);
+        $minimumTransmutation = is_numeric($minimumRaw) ? (float) $minimumRaw : 0.0;
+        $maximumTransmutation = is_numeric($maximumRaw) ? (float) $maximumRaw : 0.0;
+        $settings['transmutationDefaults'] = [
+            'minimumPercentage' => $minimumTransmutation,
+            'maximumPercentage' => $maximumTransmutation,
+        ];
         if (!in_array($theme, ['light', 'dark'], true)
             || $threshold < 1.0 || $threshold > 5.0
             || !is_array($weights)
             || abs(array_sum(array_map('floatval', $weights)) - 100.0) > 0.001
+            || !$transmutationIsArray || !$transmutationNumbersAreValid
+            || !is_finite($minimumTransmutation) || !is_finite($maximumTransmutation)
+            || $minimumTransmutation < 0 || $minimumTransmutation > 100
+            || $maximumTransmutation < 0 || $maximumTransmutation > 100
+            || $minimumTransmutation > $maximumTransmutation
         ) {
-            safe_error_response('Theme, retention threshold, and grading weights totaling 100 are required.', 422);
+            safe_error_response('Theme, retention threshold, grading weights totaling 100, and valid transmutation bounds are required.', 422);
             return;
         }
         $pdo->beginTransaction();
@@ -533,6 +569,16 @@ function handle_admin_settings_update(): void
             (float) ($weights['quizzes'] ?? 0), (float) ($weights['exams'] ?? 0),
             (float) ($weights['practicum'] ?? 0), (float) ($weights['attendance'] ?? 0),
             $threshold, $authCtx['user_id'],
+        ]);
+        $transmutationStmt = $pdo->prepare(
+            "UPDATE system_settings
+             SET setting_value = jsonb_set(setting_value, '{transmutation_defaults}',
+                    jsonb_build_object('minimum_percentage', ?::numeric, 'maximum_percentage', ?::numeric), true),
+                 updated_at = CURRENT_TIMESTAMP(6), updated_by_user_id = ?
+             WHERE setting_key = 'grading_defaults'"
+        );
+        $transmutationStmt->execute([
+            $minimumTransmutation, $maximumTransmutation, $authCtx['user_id'],
         ]);
         $pdo->commit();
 

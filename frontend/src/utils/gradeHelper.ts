@@ -1,4 +1,23 @@
-import { GradeComponents, EnrolledSubject } from '../types';
+import { Assessment, AttendanceStatus, GradeComponents, EnrolledSubject } from '../types';
+
+export const effectiveAssessmentPercentage = (
+  rawScore: number,
+  maxScore: number,
+  assessment: Pick<Assessment, 'transmutationEnabled' | 'transmutationMinimumPercentage' | 'transmutationMaximumPercentage'>,
+  attendanceStatus?: AttendanceStatus | null,
+): number | null => {
+  if (maxScore <= 0) return null;
+  const rawPercentage = (rawScore / maxScore) * 100;
+  if (!assessment.transmutationEnabled) return rawPercentage;
+  if (!attendanceStatus) return null;
+  if (attendanceStatus === 'absent') return 0;
+  const minimum = assessment.transmutationMinimumPercentage ?? 50;
+  const maximum = assessment.transmutationMaximumPercentage ?? 100;
+  if (attendanceStatus === 'present' || attendanceStatus === 'late' || attendanceStatus === 'excused') {
+    return minimum + (rawPercentage / 100) * (maximum - minimum);
+  }
+  return null;
+};
 
 /**
  * Converts a raw percentage score (50-100) to the Philippine academic scale (1.0 to 5.0).

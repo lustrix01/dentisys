@@ -446,6 +446,49 @@ function faculty_percentage_to_gwa(float $percentage): float
     return 5.0;
 }
 
+function faculty_transmutation_defaults(PDO $pdo): array
+{
+    $stmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults' LIMIT 1");
+    $grading = json_decode((string) ($stmt->fetchColumn() ?: '{}'), true);
+    $defaults = $grading['transmutation_defaults'] ?? [];
+    $minimum = (float) ($defaults['minimum_percentage'] ?? 50);
+    $maximum = (float) ($defaults['maximum_percentage'] ?? 100);
+    if (!is_finite($minimum) || !is_finite($maximum) || $minimum < 0 || $maximum > 100 || $minimum > $maximum) {
+        throw new RuntimeException('Persisted transmutation defaults are invalid.');
+    }
+    return [
+        'minimumPercentage' => $minimum,
+        'maximumPercentage' => $maximum,
+    ];
+}
+
+function faculty_effective_assessment_percentage(
+    float $rawScore,
+    float $maxScore,
+    bool $enabled,
+    float $minimumPercentage,
+    float $maximumPercentage,
+    ?string $attendanceStatus
+): ?float {
+    if ($maxScore <= 0) {
+        throw new InvalidArgumentException('Assessment maximum score must be positive.');
+    }
+    $rawPercentage = ($rawScore / $maxScore) * 100;
+    if (!$enabled) {
+        return $rawPercentage;
+    }
+    if ($attendanceStatus === null) {
+        return null;
+    }
+    if ($attendanceStatus === 'absent') {
+        return 0.0;
+    }
+    if (in_array($attendanceStatus, ['present', 'late', 'excused'], true)) {
+        return $minimumPercentage + (($rawPercentage / 100) * ($maximumPercentage - $minimumPercentage));
+    }
+    throw new InvalidArgumentException('Attendance status is invalid for transmutation.');
+}
+
 function handle_faculty_assessments_get(): void
 {
     try {
@@ -456,6 +499,9 @@ function handle_faculty_assessments_get(): void
         $stmt = $pdo->prepare(
             "SELECT a.assessment_id, a.title, a.type, a.grading_period, a.max_score,
                     a.weight, a.due_date, a.instructions, a.status, a.created_at,
+                    a.transmutation_enabled, a.transmutation_minimum_percentage,
+                    a.transmutation_maximum_percentage, a.attendance_session_date,
+                    a.attendance_session_code,
                     cs.cs_id, cs.cs_name, c.course_code
              FROM assessments a
              JOIN class_sections cs ON cs.cs_id = a.cs_id
@@ -474,6 +520,11 @@ function handle_faculty_assessments_get(): void
             'dueDate' => $row['due_date'],
             'instructions' => $row['instructions'],
             'status' => $row['status'],
+            'transmutationEnabled' => filter_var($row['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN),
+            'transmutationMinimumPercentage' => (float) $row['transmutation_minimum_percentage'],
+            'transmutationMaximumPercentage' => (float) $row['transmutation_maximum_percentage'],
+            'attendanceSessionDate' => $row['attendance_session_date'],
+            'attendanceSessionCode' => $row['attendance_session_code'],
             'classId' => (string) $row['cs_id'],
             'className' => $row['cs_name'],
             'subjectCode' => $row['course_code'],
@@ -507,10 +558,16 @@ function handle_faculty_assessments_save(): void
         }
 
         $persisted = [];
+        $transmutationDefaults = faculty_transmutation_defaults($pdo);
         $pdo->beginTransaction();
         foreach ($items as $item) {
+            if ($item instanceof \stdClass) {
+                $item = get_object_vars($item);
+            }
             if (!is_array($item)) {
-                continue;
+                $pdo->rollBack();
+                safe_error_response('Assessment entry is invalid.', 422);
+                return;
             }
             $csId = faculty_owned_class_id($pdo, (int) $authCtx['user_id'], $item['classId'] ?? '');
             if ($csId <= 0) {
@@ -535,19 +592,97 @@ function handle_faculty_assessments_save(): void
                 return;
             }
             $assessmentId = ctype_digit((string) ($item['id'] ?? '')) ? (int) $item['id'] : 0;
+            $existing = null;
+            if ($assessmentId > 0) {
+                $existingStmt = $pdo->prepare(
+                    "SELECT a.transmutation_enabled, a.transmutation_minimum_percentage,
+                            a.transmutation_maximum_percentage, a.attendance_session_date,
+                            a.attendance_session_code
+                     FROM assessments a
+                     JOIN class_sections cs ON cs.cs_id = a.cs_id
+                     WHERE a.assessment_id = ? AND cs.instructor_user_id = ?"
+                );
+                $existingStmt->execute([$assessmentId, $authCtx['user_id']]);
+                $existing = $existingStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                if (!$existing) {
+                    $pdo->rollBack();
+                    safe_error_response('Assessment not found.', 404);
+                    return;
+                }
+            }
+            $transmutationEnabled = array_key_exists('transmutationEnabled', $item)
+                ? filter_var($item['transmutationEnabled'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE)
+                : ($existing ? filter_var($existing['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN) : false);
+            $minimumPercentage = array_key_exists('transmutationMinimumPercentage', $item)
+                ? (float) $item['transmutationMinimumPercentage']
+                : (float) ($existing['transmutation_minimum_percentage'] ?? $transmutationDefaults['minimumPercentage']);
+            $maximumPercentage = array_key_exists('transmutationMaximumPercentage', $item)
+                ? (float) $item['transmutationMaximumPercentage']
+                : (float) ($existing['transmutation_maximum_percentage'] ?? $transmutationDefaults['maximumPercentage']);
+            $attendanceSessionDate = array_key_exists('attendanceSessionDate', $item)
+                ? trim((string) ($item['attendanceSessionDate'] ?? ''))
+                : (string) ($existing['attendance_session_date'] ?? '');
+            $attendanceSessionCode = array_key_exists('attendanceSessionCode', $item)
+                ? trim((string) ($item['attendanceSessionCode'] ?? ''))
+                : (string) ($existing['attendance_session_code'] ?? '');
+            $attendanceSessionDate = $attendanceSessionDate !== '' ? $attendanceSessionDate : null;
+            $attendanceSessionCode = $attendanceSessionCode !== '' ? $attendanceSessionCode : null;
+            $sessionDate = $attendanceSessionDate === null
+                ? null
+                : DateTimeImmutable::createFromFormat('!Y-m-d', $attendanceSessionDate);
+            if ((array_key_exists('transmutationMinimumPercentage', $item)
+                    && !is_numeric($item['transmutationMinimumPercentage']))
+                || (array_key_exists('transmutationMaximumPercentage', $item)
+                    && !is_numeric($item['transmutationMaximumPercentage']))
+                || ($attendanceSessionCode !== null && strlen($attendanceSessionCode) > 100)
+                || $transmutationEnabled === null
+                || !is_finite($minimumPercentage) || !is_finite($maximumPercentage)
+                || $minimumPercentage < 0 || $maximumPercentage > 100
+                || $minimumPercentage > $maximumPercentage
+                || (($attendanceSessionDate === null) !== ($attendanceSessionCode === null))
+                || ($attendanceSessionDate !== null && (!$sessionDate || $sessionDate->format('Y-m-d') !== $attendanceSessionDate))
+            ) {
+                $pdo->rollBack();
+                safe_error_response('Transmutation bounds and attendance linkage are invalid.', 422);
+                return;
+            }
+            if ($transmutationEnabled && ($attendanceSessionDate === null || $attendanceSessionCode === null)) {
+                $pdo->rollBack();
+                safe_error_response('Enabled transmutation requires a linked attendance session.', 422);
+                return;
+            }
+            if ($attendanceSessionDate !== null && $attendanceSessionCode !== null) {
+                $sessionStmt = $pdo->prepare(
+                    "SELECT 1
+                     FROM attendance_records ar
+                     JOIN enrollments e ON e.enrollment_id = ar.enrollment_id
+                     WHERE e.cs_id = ? AND ar.session_date = ? AND ar.session_code = ?
+                     LIMIT 1"
+                );
+                $sessionStmt->execute([$csId, $attendanceSessionDate, $attendanceSessionCode]);
+                if (!$sessionStmt->fetchColumn()) {
+                    $pdo->rollBack();
+                    safe_error_response('Attendance session is not available for the assessment class.', 422);
+                    return;
+                }
+            }
             if ($assessmentId > 0) {
                 $stmt = $pdo->prepare(
                     "UPDATE assessments AS a
                      SET cs_id = ?, title = ?, type = ?, grading_period = ?,
                          max_score = ?, weight = ?, due_date = ?, instructions = ?,
-                         status = ?
+                         status = ?, transmutation_enabled = ?,
+                         transmutation_minimum_percentage = ?, transmutation_maximum_percentage = ?,
+                         attendance_session_date = ?, attendance_session_code = ?
                      FROM class_sections AS cs
                      WHERE a.assessment_id = ? AND cs.cs_id = a.cs_id AND cs.instructor_user_id = ?"
                 );
                 $stmt->execute([
                     $csId, $title, $type, $period, $maxScore, $weight,
                     $item['dueDate'] ?? null, $item['instructions'] ?? null,
-                    $item['status'] ?? 'Active', $assessmentId, $authCtx['user_id'],
+                    $item['status'] ?? 'Active', $transmutationEnabled ? 'true' : 'false',
+                    $minimumPercentage, $maximumPercentage, $attendanceSessionDate, $attendanceSessionCode,
+                    $assessmentId, $authCtx['user_id'],
                 ]);
                 if ($stmt->rowCount() === 0) {
                     $exists = $pdo->prepare(
@@ -567,13 +702,16 @@ function handle_faculty_assessments_save(): void
             } else {
                 $stmt = $pdo->prepare(
                     "INSERT INTO assessments
-                     (cs_id, title, type, grading_period, max_score, weight, due_date, instructions, status)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING assessment_id"
+                     (cs_id, title, type, grading_period, max_score, weight, due_date, instructions, status,
+                      transmutation_enabled, transmutation_minimum_percentage, transmutation_maximum_percentage,
+                      attendance_session_date, attendance_session_code)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING assessment_id"
                 );
                 $stmt->execute([
                     $csId, $title, $type, $period, $maxScore, $weight,
                     $item['dueDate'] ?? null, $item['instructions'] ?? null,
-                    $item['status'] ?? 'Active',
+                    $item['status'] ?? 'Active', $transmutationEnabled ? 'true' : 'false',
+                    $minimumPercentage, $maximumPercentage, $attendanceSessionDate, $attendanceSessionCode,
                 ]);
                 $assessmentId = (int) $stmt->fetchColumn();
             }
@@ -724,6 +862,14 @@ function handle_faculty_scores_save(): void
         );
         $saved = 0;
         foreach ($scores as $scoreRow) {
+            if ($scoreRow instanceof \stdClass) {
+                $scoreRow = get_object_vars($scoreRow);
+            }
+            if (!is_array($scoreRow)) {
+                $pdo->rollBack();
+                safe_error_response('Every score must be a valid score entry.', 422);
+                return;
+            }
             $studentId = (int) ($scoreRow['studentId'] ?? 0);
             $score = (float) ($scoreRow['score'] ?? -1);
             if ($studentId <= 0 || $score < 0 || $score > (float) $row['max_score']) {
@@ -776,13 +922,21 @@ function handle_faculty_grades_compute(): void
         $warningUpperBound = min(5.0, $retentionThreshold + 0.5);
 
         $sql = "SELECT e.enrollment_id, e.student_id, e.cs_id,
-                       SUM((sc.score / NULLIF(a.max_score, 0)) * COALESCE(a.weight, 0)) AS weighted_points,
-                       SUM(CASE WHEN sc.score_id IS NOT NULL THEN COALESCE(a.weight, 0) ELSE 0 END) AS completed_weight,
-                       MAX(att.attendance_percentage) AS attendance_percentage
+                       a.assessment_id, a.weight, a.max_score, a.transmutation_enabled,
+                       a.transmutation_minimum_percentage, a.transmutation_maximum_percentage,
+                       a.attendance_session_date, a.attendance_session_code,
+                       sc.score_id, sc.score,
+                       linked_att.record_id AS linked_attendance_record_id,
+                       linked_att.status AS linked_attendance_status,
+                       att.attendance_percentage
                 FROM enrollments e
                 JOIN class_sections cs ON cs.cs_id = e.cs_id
                 LEFT JOIN assessments a ON a.cs_id = e.cs_id AND a.status <> 'Archived'
                 LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = e.student_id
+                LEFT JOIN attendance_records linked_att
+                       ON linked_att.enrollment_id = e.enrollment_id
+                      AND linked_att.session_date = a.attendance_session_date
+                      AND linked_att.session_code = a.attendance_session_code
                 LEFT JOIN (
                     SELECT enrollment_id,
                            AVG(CASE
@@ -799,23 +953,78 @@ function handle_faculty_grades_compute(): void
             $sql .= " AND e.cs_id = :cs_id";
             $params[':cs_id'] = $csId;
         }
-        $sql .= " GROUP BY e.enrollment_id, e.student_id, e.cs_id";
+        $sql .= " ORDER BY e.enrollment_id, a.assessment_id";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $results = [];
         $pdo->beginTransaction();
+        $grouped = [];
         foreach ($rows as $row) {
-            $completedWeight = (float) ($row['completed_weight'] ?? 0);
+            $enrollmentId = (string) $row['enrollment_id'];
+            if (!isset($grouped[$enrollmentId])) {
+                $grouped[$enrollmentId] = [
+                    'enrollmentId' => $enrollmentId,
+                    'studentId' => (string) $row['student_id'],
+                    'attendancePercentage' => $row['attendance_percentage'] !== null
+                        ? (float) $row['attendance_percentage'] : null,
+                    'assessments' => [],
+                ];
+            }
+            if ($row['assessment_id'] !== null && $row['score_id'] !== null) {
+                $grouped[$enrollmentId]['assessments'][] = $row;
+            }
+        }
+        $updateWithBreakdown = $pdo->prepare(
+            "UPDATE enrollments
+             SET final_percentage = ?, final_gwa = ?, retention_state = ?, grade_components_json = ?
+             WHERE enrollment_id = ?"
+        );
+        foreach ($grouped as $group) {
+            $weightedPoints = 0.0;
+            $completedWeight = 0.0;
+            $missingAssessments = [];
+            foreach ($group['assessments'] as $assessment) {
+                $enabled = filter_var($assessment['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN);
+                $effectivePercentage = faculty_effective_assessment_percentage(
+                    (float) $assessment['score'],
+                    (float) $assessment['max_score'],
+                    $enabled,
+                    (float) $assessment['transmutation_minimum_percentage'],
+                    (float) $assessment['transmutation_maximum_percentage'],
+                    $assessment['linked_attendance_status'] !== null
+                        ? (string) $assessment['linked_attendance_status'] : null
+                );
+                if ($effectivePercentage === null) {
+                    $missingAssessments[] = [
+                        'assessmentId' => (string) $assessment['assessment_id'],
+                        'attendanceSessionDate' => $assessment['attendance_session_date'],
+                        'attendanceSessionCode' => $assessment['attendance_session_code'],
+                    ];
+                    continue;
+                }
+                $weight = (float) ($assessment['weight'] ?? 0);
+                $weightedPoints += ($effectivePercentage / 100) * $weight;
+                $completedWeight += $weight;
+            }
+            if ($missingAssessments !== []) {
+                $results[] = [
+                    'status' => 'incomplete_attendance',
+                    'enrollmentId' => $group['enrollmentId'],
+                    'studentId' => $group['studentId'],
+                    'missingAssessments' => $missingAssessments,
+                ];
+                continue;
+            }
             if ($completedWeight <= 0) {
                 continue;
             }
-            $assessmentPercentage = ((float) $row['weighted_points'] / $completedWeight) * 100;
-            $hasAttendance = $row['attendance_percentage'] !== null;
+            $assessmentPercentage = ($weightedPoints / $completedWeight) * 100;
+            $hasAttendance = $group['attendancePercentage'] !== null;
             $effectiveAttendanceWeight = $hasAttendance ? $attendanceWeight : 0.0;
             $assessmentWeight = 100.0 - $effectiveAttendanceWeight;
-            $attendancePercentage = $hasAttendance ? (float) $row['attendance_percentage'] : null;
+            $attendancePercentage = $hasAttendance ? (float) $group['attendancePercentage'] : null;
             $percentage = round(
                 ($assessmentPercentage * $assessmentWeight / 100)
                 + (($attendancePercentage ?? 0) * $effectiveAttendanceWeight / 100),
@@ -832,21 +1041,17 @@ function handle_faculty_grades_compute(): void
                 'attendanceWeight' => $effectiveAttendanceWeight,
                 'retentionThreshold' => $retentionThreshold,
             ];
-            $updateWithBreakdown = $pdo->prepare(
-                "UPDATE enrollments
-                 SET final_percentage = ?, final_gwa = ?, retention_state = ?, grade_components_json = ?
-                 WHERE enrollment_id = ?"
-            );
             $updateWithBreakdown->execute([
                 $percentage,
                 $gwa,
                 $retention,
                 json_encode($breakdown, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                $row['enrollment_id'],
+                $group['enrollmentId'],
             ]);
             $results[] = [
-                'enrollmentId' => (string) $row['enrollment_id'],
-                'studentId' => (string) $row['student_id'],
+                'status' => 'computed',
+                'enrollmentId' => $group['enrollmentId'],
+                'studentId' => $group['studentId'],
                 'percentage' => $percentage,
                 'gwa' => $gwa,
                 'retentionState' => $retention,
@@ -891,6 +1096,7 @@ function handle_faculty_attendance_get(): void
             'studentId' => (string) $row['student_id'],
             'studentNumber' => $row['student_number'],
             'date' => $row['session_date'],
+            'sessionCode' => $row['session_code'],
             'subjectCode' => $row['course_code'],
             'classId' => (string) $row['cs_id'],
             'className' => $row['cs_name'],
@@ -1203,10 +1409,12 @@ function handle_faculty_settings_get(): void
         $stmt = $pdo->prepare("SELECT theme FROM user_accounts WHERE user_id = ?");
         $stmt->execute([$authCtx['user_id']]);
         $theme = $stmt->fetchColumn();
+        $transmutationDefaults = faculty_transmutation_defaults($pdo);
         json_response([
             'status' => 'ok',
             'settings' => [
                 'theme' => in_array($theme, ['light', 'dark'], true) ? $theme : 'light',
+                'transmutationDefaults' => $transmutationDefaults,
             ],
         ], 200);
     } catch (\Throwable $e) {

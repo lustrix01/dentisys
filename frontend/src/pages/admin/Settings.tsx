@@ -27,6 +27,9 @@ export const Settings: React.FC = () => {
   const [theme, setTheme] = useState(settings.theme);
   const [threshold, setThreshold] = useState(settings.retentionThreshold);
   const [weights, setWeights] = useState(settings.weights);
+  const [transmutationDefaults, setTransmutationDefaults] = useState(
+    settings.transmutationDefaults ?? { minimumPercentage: 50, maximumPercentage: 100 },
+  );
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
@@ -39,6 +42,7 @@ export const Settings: React.FC = () => {
           if (res.settings.retentionThreshold)
             setThreshold(res.settings.retentionThreshold);
           if (res.settings.weights) setWeights(res.settings.weights);
+          if (res.settings.transmutationDefaults) setTransmutationDefaults(res.settings.transmutationDefaults);
         }
       })
       .catch(() => {});
@@ -53,7 +57,13 @@ export const Settings: React.FC = () => {
       setError(`Weights must total 100%. Current total: ${total}%.`);
       return;
     }
-    const newSettings = { theme, retentionThreshold: threshold, weights };
+    if (transmutationDefaults.minimumPercentage < 0
+      || transmutationDefaults.maximumPercentage > 100
+      || transmutationDefaults.minimumPercentage > transmutationDefaults.maximumPercentage) {
+      setError('Transmutation bounds must be between 0% and 100%, with minimum not exceeding maximum.');
+      return;
+    }
+    const newSettings = { theme, retentionThreshold: threshold, weights, transmutationDefaults };
     try {
       await updateAdminSettingsApi(newSettings);
       updateSettings(newSettings);
@@ -224,6 +234,32 @@ export const Settings: React.FC = () => {
                   </div>
                 </label>
               ))}
+            </div>
+            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Assessment transmutation defaults</h3>
+              <p className="text-[10px] text-slate-400 mt-1 mb-4">New assessments start with these bounded transformation values.</p>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {([
+                  ['minimumPercentage', 'Minimum percentage'],
+                  ['maximumPercentage', 'Maximum percentage'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    {label}
+                    <div className="relative mt-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={transmutationDefaults[key]}
+                        onChange={(event) => setTransmutationDefaults({ ...transmutationDefaults, [key]: Number(event.target.value) || 0 })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100"
+                      />
+                      <span className="absolute right-3.5 top-2.5 text-xs text-slate-400">%</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button

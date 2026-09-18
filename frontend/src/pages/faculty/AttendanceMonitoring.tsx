@@ -21,7 +21,7 @@ import { Student, AttendanceRecord, AttendanceStatus } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
-import { overrideFacultyAttendanceApi } from '../../services/apiClient';
+import { computeFacultyGradesApi, overrideFacultyAttendanceApi } from '../../services/apiClient';
 
 type EditableStatus = Exclude<AttendanceStatus, 'excused'>;
 
@@ -296,6 +296,12 @@ export const AttendanceMonitoring: React.FC = () => {
         status: correctStatus,
         reason: cleanedReason,
       });
+      let recomputeDeferred = false;
+      try {
+        await computeFacultyGradesApi(selectedCorrectionRecord.classId);
+      } catch {
+        recomputeDeferred = true;
+      }
       if (overrideAttendanceRecord) {
         overrideAttendanceRecord({
           recordId: selectedCorrectionRecord.id,
@@ -314,7 +320,9 @@ export const AttendanceMonitoring: React.FC = () => {
       setCorrectionReason('');
       setNotification({
         type: 'success',
-        message: 'Attendance override ledger updated successfully!'
+        message: recomputeDeferred
+          ? 'Attendance override saved; persisted grade recomputation could not complete yet.'
+          : 'Attendance override ledger updated successfully!'
       });
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Correction rejected.');

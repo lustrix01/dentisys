@@ -31,12 +31,14 @@ import { requestConfirmation, showFeedback } from '../../components/FeedbackCent
 import { percentageToGWA, gwaToDescription, computeSubjectGrade } from '../../utils/gradeHelper';
 import { recordAudit } from '../../services/auditService';
 
-import { deleteFacultyAssessmentApi, getFacultyAssessmentsApi, saveFacultyAssessmentScoresApi, saveFacultyAssessmentsApi } from '../../services/apiClient';
+import { computeFacultyGradesApi, deleteFacultyAssessmentApi, getFacultyClassesApi, getFacultySettingsApi, saveFacultyAssessmentScoresApi, saveFacultyAssessmentsApi } from '../../services/apiClient';
+import type { FacultyClassItem } from '../../services/apiClient';
 
 export const GradeComputation: React.FC = () => {
   const { user } = useAuth();
   const { 
     students, 
+    attendanceRecords,
     settings, 
     assessments, 
     assessmentScores, 
@@ -53,13 +55,29 @@ export const GradeComputation: React.FC = () => {
   const location = useLocation();
 
   const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = ['CLINIC-A'];
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState(assignedSubjects[0] || 'CLIN401');
+  const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
+  const availableClasses = useMemo(
+    () => facultyClasses.filter(classItem =>
+      classItem.courseCode === selectedSubjectCode
+      && classItem.status.trim().toLowerCase() === 'active'
+    ),
+    [facultyClasses, selectedSubjectCode],
+  );
+  const [selectedClassId, setSelectedClassId] = useState('');
 
   const [loading, setLoading] = useState(true);
+  const [transmutationDefaults, setTransmutationDefaults] = useState({ minimumPercentage: 50, maximumPercentage: 100 });
 
   useEffect(() => {
-    getFacultyAssessmentsApi()
-      .then(() => setLoading(false))
+    Promise.all([getFacultyClassesApi(), getFacultySettingsApi()])
+      .then(([classesResponse, settingsResponse]) => {
+        setFacultyClasses(Array.isArray(classesResponse.classes) ? classesResponse.classes : []);
+        if (settingsResponse.settings?.transmutationDefaults) {
+          setTransmutationDefaults(settingsResponse.settings.transmutationDefaults);
+        }
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, []);
 
@@ -80,8 +98,11 @@ export const GradeComputation: React.FC = () => {
   }, [location]);
 
   // General Filter Selectors
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState(assignedSubjects[0] || 'CLIN401');
-  const [selectedClassId, setSelectedClassId] = useState(assignedClasses[0] || 'CLINIC-A');
+  useEffect(() => {
+    if (!availableClasses.some(classItem => classItem.id === selectedClassId)) {
+      setSelectedClassId(availableClasses[0]?.id ?? '');
+    }
+  }, [availableClasses, selectedClassId]);
 
   // Filter students under active subject/class scope
   const activeStudents = useMemo(() => {
@@ -113,6 +134,30 @@ export const GradeComputation: React.FC = () => {
   const [assInstructions, setAssInstructions] = useState('');
   const [assRemarks, setAssRemarks] = useState('');
   const [assStatus, setAssStatus] = useState<'Active' | 'Closed'>('Active');
+  const [assTransmutationEnabled, setAssTransmutationEnabled] = useState(false);
+  const [assTransmutationMinimum, setAssTransmutationMinimum] = useState(50);
+  const [assTransmutationMaximum, setAssTransmutationMaximum] = useState(100);
+  const [assAttendanceDate, setAssAttendanceDate] = useState('');
+  const [assAttendanceCode, setAssAttendanceCode] = useState('');
+
+  const attendanceSessionOptions = useMemo(() => {
+    const grouped = new Map<string, Set<string>>();
+    attendanceRecords
+      .filter(record => record.classId === assClassId && !!record.sessionCode)
+      .forEach(record => {
+        const codes = grouped.get(record.date) ?? new Set<string>();
+        codes.add(record.sessionCode as string);
+        grouped.set(record.date, codes);
+      });
+    return Array.from(grouped.entries())
+      .sort(([left], [right]) => right.localeCompare(left))
+      .map(([date, codes]) => ({ date, codes: Array.from(codes).sort() }));
+  }, [attendanceRecords, assClassId]);
+
+  const attendanceCodesForDate = useMemo(
+    () => attendanceSessionOptions.find(option => option.date === assAttendanceDate)?.codes ?? [],
+    [attendanceSessionOptions, assAttendanceDate],
+  );
 
   const activeAssessments = useMemo(() => {
     return assessments.filter(a =>
@@ -125,7 +170,9 @@ export const GradeComputation: React.FC = () => {
   const openNewAssessmentModal = () => {
     setEditingAssessment(null);
     setAssTitle('');
-    setAssClassId(selectedClassId || 'CLINIC-A');
+    setAssClassId(availableClasses.some(classItem => classItem.id === selectedClassId)
+      ? selectedClassId
+      : (availableClasses[0]?.id ?? ''));
     setAssType('Quiz');
     setAssPeriod('Midterm');
     setAssMaxScore(50);
@@ -133,13 +180,20 @@ export const GradeComputation: React.FC = () => {
     setAssInstructions('');
     setAssRemarks('');
     setAssStatus('Active');
+    setAssTransmutationEnabled(false);
+    setAssTransmutationMinimum(transmutationDefaults.minimumPercentage);
+    setAssTransmutationMaximum(transmutationDefaults.maximumPercentage);
+    setAssAttendanceDate('');
+    setAssAttendanceCode('');
     setIsAssessmentModalOpen(true);
   };
 
   const openEditAssessmentModal = (ass: Assessment) => {
     setEditingAssessment(ass);
     setAssTitle(ass.title);
-    setAssClassId(ass.classId || selectedClassId || 'CLINIC-A');
+    setAssClassId(availableClasses.some(classItem => classItem.id === ass.classId)
+      ? ass.classId
+      : selectedClassId);
     setAssType(ass.type);
     setAssPeriod(ass.gradingPeriod);
     setAssMaxScore(ass.maxScore);
@@ -147,12 +201,29 @@ export const GradeComputation: React.FC = () => {
     setAssInstructions(ass.instructions || '');
     setAssRemarks(ass.remarks || '');
     setAssStatus(ass.status === 'Archived' ? 'Active' : ass.status);
+    setAssTransmutationEnabled(ass.transmutationEnabled ?? false);
+    setAssTransmutationMinimum(ass.transmutationMinimumPercentage ?? transmutationDefaults.minimumPercentage);
+    setAssTransmutationMaximum(ass.transmutationMaximumPercentage ?? transmutationDefaults.maximumPercentage);
+    setAssAttendanceDate(ass.attendanceSessionDate || '');
+    setAssAttendanceCode(ass.attendanceSessionCode || '');
     setIsAssessmentModalOpen(true);
   };
 
   const handleAssessmentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assTitle) return;
+    if (!availableClasses.some(classItem => classItem.id === assClassId)) {
+      showFeedback('Select an active class or section for the selected course.', 'error');
+      return;
+    }
+    if (assTransmutationEnabled && (!assAttendanceDate || !assAttendanceCode)) {
+      showFeedback('Select a deterministic attendance date and session code before enabling transmutation.', 'error');
+      return;
+    }
+    if (assTransmutationMinimum < 0 || assTransmutationMaximum > 100 || assTransmutationMinimum > assTransmutationMaximum) {
+      showFeedback('Transmutation bounds must be between 0% and 100%, with minimum not exceeding maximum.', 'error');
+      return;
+    }
 
     const candidate = editingAssessment
       ? {
@@ -166,6 +237,11 @@ export const GradeComputation: React.FC = () => {
         instructions: assInstructions,
         remarks: assRemarks,
         status: assStatus as 'Active' | 'Closed' | 'Archived',
+        transmutationEnabled: assTransmutationEnabled,
+        transmutationMinimumPercentage: assTransmutationMinimum,
+        transmutationMaximumPercentage: assTransmutationMaximum,
+        attendanceSessionDate: assAttendanceDate || null,
+        attendanceSessionCode: assAttendanceCode || null,
       }
       : {
         title: assTitle,
@@ -178,18 +254,30 @@ export const GradeComputation: React.FC = () => {
         instructions: assInstructions,
         remarks: assRemarks,
         status: assStatus as 'Active' | 'Closed' | 'Archived',
+        transmutationEnabled: assTransmutationEnabled,
+        transmutationMinimumPercentage: assTransmutationMinimum,
+        transmutationMaximumPercentage: assTransmutationMaximum,
+        attendanceSessionDate: assAttendanceDate || null,
+        attendanceSessionCode: assAttendanceCode || null,
       };
     try {
       const response = await saveFacultyAssessmentsApi([candidate]);
-      const persistedId = response.assessments?.[0]?.id;
+      const persistedAssessment = response.assessments?.[0];
+      if (response.assessments?.length !== 1
+        || !persistedAssessment?.id
+        || persistedAssessment.classId !== assClassId
+        || persistedAssessment.title !== assTitle) {
+        throw new Error('The server did not confirm this assessment for the selected class. Please try again.');
+      }
       if (editingAssessment) {
         updateAssessment(candidate as Assessment);
-      } else if (persistedId) {
+      } else {
         addAssessment({
           ...candidate,
-          id: persistedId,
+          id: persistedAssessment.id,
         });
       }
+      setSelectedClassId(assClassId);
       showFeedback(response.message, 'success');
       setIsAssessmentModalOpen(false);
     } catch (requestError) {
@@ -254,6 +342,17 @@ export const GradeComputation: React.FC = () => {
     return !isNaN(num) && num >= 0 && num <= maxScore;
   };
 
+  const refreshPersistedGrades = async (classId: string): Promise<void> => {
+    try {
+      const response = await computeFacultyGradesApi(classId);
+      if (response.results.some(result => result.status === 'incomplete_attendance')) {
+        showFeedback('Scores saved. Some grades remain incomplete until linked attendance is available.', 'info');
+      }
+    } catch {
+      showFeedback('Scores saved, but persisted grade recomputation could not complete.', 'info');
+    }
+  };
+
   // Auto-save on input blur
   const handleScoreBlur = async (studentId: string) => {
     if (!autoSaveEnabled || !selectedAssessmentId || !activeAssessment) return;
@@ -272,6 +371,7 @@ export const GradeComputation: React.FC = () => {
     try {
       await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
       saveAssessmentScores(selectedAssessmentId, saveList);
+      await refreshPersistedGrades(activeAssessment.classId);
     } catch (requestError) {
       showFeedback(requestError instanceof Error ? requestError.message : 'Auto-save failed.', 'error');
     }
@@ -306,6 +406,7 @@ export const GradeComputation: React.FC = () => {
     try {
       await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
       saveAssessmentScores(selectedAssessmentId, saveList);
+      await refreshPersistedGrades(activeAssessment.classId);
       setIsScoresSavedAlert(true);
       setTimeout(() => setIsScoresSavedAlert(false), 3000);
     } catch (requestError) {
@@ -616,11 +717,11 @@ export const GradeComputation: React.FC = () => {
             onChange={(e) => setSelectedClassId(e.target.value)}
             className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
           >
-            {assignedClasses.map((clsId: string) => {
-              const section = students.flatMap(s => s.classSections || []).find(item => item.classId === clsId);
-              const label = section?.className || clsId;
-              return <option key={clsId} value={clsId}>{label}</option>;
-            })}
+            {availableClasses.length === 0
+              ? <option value="">No active sections assigned</option>
+              : availableClasses.map(classItem => (
+                <option key={classItem.id} value={classItem.id}>{classItem.csName}</option>
+              ))}
           </select>
         </div>
       </Card>
@@ -851,6 +952,7 @@ export const GradeComputation: React.FC = () => {
 
             <button
               onClick={openNewAssessmentModal}
+              disabled={availableClasses.length === 0}
               className="flex items-center gap-1 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs transition-colors shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -1341,11 +1443,13 @@ export const GradeComputation: React.FC = () => {
             <select
               value={assClassId}
               onChange={(e) => setAssClassId(e.target.value)}
+              required
+              disabled={availableClasses.length === 0}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
             >
-              {assignedClasses.map((clsId) => (
-                <option key={clsId} value={clsId}>
-                  {clsId}
+              {availableClasses.map(classItem => (
+                <option key={classItem.id} value={classItem.id}>
+                  {classItem.csName}
                 </option>
               ))}
             </select>
@@ -1413,6 +1517,87 @@ export const GradeComputation: React.FC = () => {
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+            <label className="flex items-center justify-between gap-3 text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span>Enable attendance-linked transmutation</span>
+              <input
+                type="checkbox"
+                checked={assTransmutationEnabled}
+                onChange={(event) => setAssTransmutationEnabled(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-clinical-600 focus:ring-clinical-500"
+              />
+            </label>
+            {assTransmutationEnabled && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Minimum percentage
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={assTransmutationMinimum}
+                      onChange={(event) => setAssTransmutationMinimum(Number(event.target.value) || 0)}
+                      className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                    />
+                  </label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Maximum percentage
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={assTransmutationMaximum}
+                      onChange={(event) => setAssTransmutationMaximum(Number(event.target.value) || 0)}
+                      className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                    />
+                  </label>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Preview: 0% raw -&gt; {assTransmutationMinimum.toFixed(2)}%, 50% raw -&gt; {(assTransmutationMinimum + (assTransmutationMaximum - assTransmutationMinimum) / 2).toFixed(2)}%, 100% raw -&gt; {assTransmutationMaximum.toFixed(2)}%. Absent -&gt; 0%.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Attendance session date
+                    <select
+                      required={assTransmutationEnabled}
+                      value={assAttendanceDate}
+                      onChange={(event) => {
+                        const date = event.target.value;
+                        const codes = attendanceSessionOptions.find(option => option.date === date)?.codes ?? [];
+                        setAssAttendanceDate(date);
+                        setAssAttendanceCode(codes.length === 1 ? codes[0] : '');
+                      }}
+                      className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                    >
+                      <option value="">Select date</option>
+                      {attendanceSessionOptions.map(option => (
+                        <option key={option.date} value={option.date}>{option.date}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Attendance session code
+                    <select
+                      required={assTransmutationEnabled}
+                      value={assAttendanceCode}
+                      onChange={(event) => setAssAttendanceCode(event.target.value)}
+                      className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                    >
+                      <option value="">Select code</option>
+                      {attendanceCodesForDate.map(code => <option key={code} value={code}>{code}</option>)}
+                    </select>
+                  </label>
+                </div>
+                {attendanceSessionOptions.length === 0 && (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400">No coded attendance sessions are available for this class yet. Save the assessment disabled and link it later.</p>
+                )}
+              </>
+            )}
           </div>
 
           <div className="space-y-1.5">

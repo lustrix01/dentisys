@@ -2,8 +2,9 @@ import { test as base, expect, Page, Route } from '@playwright/test';
 
 type RuntimeConfig = {
   environment: 'test';
+  allowed_email_domains: string[];
   providers: {
-    identity: { primary: 'password'; development_mock_enabled: boolean };
+    identity: { password: { enabled: boolean }; google: { enabled: boolean; client_id: string | null }; development_mock: { enabled: boolean } };
     email: { active: 'mailpit' };
     biometrics: { active: 'disabled' | 'development-mock' };
     location: { active: 'disabled' | 'development-mock' };
@@ -13,8 +14,9 @@ type RuntimeConfig = {
 
 const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   environment: 'test',
+  allowed_email_domains: ['bicol-u.edu.ph'],
   providers: {
-    identity: { primary: 'password', development_mock_enabled: false },
+    identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } },
     email: { active: 'mailpit' },
     biometrics: { active: 'disabled' },
     location: { active: 'disabled' },
@@ -23,7 +25,7 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
 };
 
 const KNOWN_API_PATHS = new Set([
-  '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/register', '/api/auth/mfa/enroll/start',
+  '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/register', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh',
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
@@ -77,6 +79,8 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/secretary/dashboard/kpis') return { status: 'ok', kpis: { todayRecords: 0, overriddenCount: 0, assignedStudents: 0, attendanceRate: 0 }, assignedClass: { classId: '1', className: 'CLIN401', classroomName: 'BU Dental Room 101' }, recentActivity: [] };
   if (pathname.endsWith('/dashboard/kpis')) return { status: 'ok', kpis: {}, classes: [], gwaBuckets: [], statusCounts: {}, classAttendance: [] };
   if (pathname.endsWith('/reports/summary')) return { status: 'ok', reports: { students: [], attendance: [], totalCount: 0, summary: { totalStudents: 0, averageGWA: 0, atRiskCount: 0, retentionPassRate: 0 } } };
+  if (pathname.endsWith('/admin/settings')) return { status: 'ok', settings: { theme: 'light', retentionThreshold: 2.5, weights: { quizzes: 20, exams: 30, practicum: 40, attendance: 10 }, transmutationDefaults: { minimumPercentage: 50, maximumPercentage: 100 } } };
+  if (pathname.endsWith('/faculty/settings')) return { status: 'ok', settings: { theme: 'light', transmutationDefaults: { minimumPercentage: 50, maximumPercentage: 100 } } };
   if (pathname.endsWith('/faculty/students') || pathname.endsWith('/faculty/assessments')) return [];
   if (pathname.endsWith('/faculty/courses')) return { status: 'ok', courses: [] };
   if (pathname.endsWith('/faculty/classes')) return { status: 'ok', classes: [] };

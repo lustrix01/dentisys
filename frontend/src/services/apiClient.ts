@@ -49,11 +49,19 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
   },
   401: {
     'Invalid credentials.': 'Invalid email or password.',
+    'Incorrect ownership password.': 'Incorrect account password.',
+    'Invalid Google identity.': 'Google identity could not be verified.',
     'Invalid enrollment stage.': 'Enrollment session expired. Please log in again.',
     'Authentication required.': 'Your session has expired. Please log in again.',
   },
   429: {
     'Too many requests.': 'Too many attempts. Please wait and try again.',
+  },
+  404: {
+    'No existing DentiSys account was found.': 'No existing DentiSys account was found.',
+  },
+  409: {
+    'This DentiSys account is linked to another Google identity.': 'This account is already linked to another Google identity.',
   },
 };
 
@@ -174,6 +182,21 @@ export function login(email: string, password: string): Promise<LoginResponse> {
   return request<LoginResponse>('POST', '/auth/login', { email, password });
 }
 
+export interface GoogleLoginResponse extends LoginResponse {
+  type: 'direct_login' | 'two_factor_required' | 'account_link_required';
+  account_link_required?: boolean;
+  email?: string;
+  link_challenge_token?: string;
+}
+
+export function loginWithGoogle(credential: string): Promise<GoogleLoginResponse> {
+  return request<GoogleLoginResponse>('POST', '/auth/google', { credential });
+}
+
+export function linkGoogleAccount(linkChallengeToken: string, password: string): Promise<GoogleLoginResponse> {
+  return request<GoogleLoginResponse>('POST', '/auth/google/link', { password }, linkChallengeToken);
+}
+
 export function requestStudentActivation(email: string): Promise<{ status: string; message: string }> {
   return request('POST', '/auth/student/signup', { email });
 }
@@ -232,10 +255,12 @@ export function getMe(): Promise<SafeUser> {
 export interface RuntimeConfigPayload {
   status: 'ok';
   environment: string;
+  allowed_email_domains: string[];
   providers: {
     identity: {
-      primary: 'password';
-      development_mock_enabled: boolean;
+      password: { enabled: boolean };
+      google: { enabled: boolean; client_id: string | null };
+      development_mock: { enabled: boolean };
     };
     email: {
       active: 'mailpit' | 'smtp';
@@ -441,6 +466,7 @@ export function getAdminSettingsApi(): Promise<{
     theme: 'light' | 'dark';
     retentionThreshold: number;
     weights: { practicum: number; exams: number; quizzes: number; attendance: number };
+    transmutationDefaults: { minimumPercentage: number; maximumPercentage: number };
   };
 }> {
   return request('GET', '/admin/settings');
@@ -573,6 +599,8 @@ export function getFacultyAttendanceApi(): Promise<{ status: string; records: Ar
   id: string;
   studentId: string;
   date: string;
+  classId: string;
+  sessionCode: string | null;
   subjectCode: string;
   status: 'present' | 'absent' | 'late' | 'excused';
   overrideReason?: string;
@@ -655,6 +683,7 @@ export function getFacultySettingsApi(): Promise<{
   status: string;
   settings: {
     theme: 'light' | 'dark';
+    transmutationDefaults: { minimumPercentage: number; maximumPercentage: number };
   };
 }> {
   return request('GET', '/faculty/settings');

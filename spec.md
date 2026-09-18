@@ -408,6 +408,25 @@ New authentication paths SHOULD use the same security boundaries where applicabl
 
 # 5. Current Product Features
 
+## GRD-001 - Assessment transmutation
+
+**Status: CURRENT**
+
+Assessments may optionally enable grade transmutation. Admin may edit the institution-wide transmutation minimum and maximum percentages, initially 50% and 100%. New assessments snapshot the current institution-wide defaults; later default changes affect future assessments by default and do not silently modify existing assessments. Faculty may explicitly customize an assessment's stored minimum and maximum percentages.
+
+Raw assessment points remain authoritative historical scores and are never replaced by a transmuted result. An enabled assessment must be deterministically linked to an attendance event in its class using the attendance session date and a nonblank session code.
+
+For an enabled assessment, present, late, and excused attendance apply the bounded transformation:
+
+```text
+effectivePercentage = minimum
+    + rawPercentage / 100 * (maximum - minimum)
+```
+
+Absent attendance produces an effective percentage of 0%. Missing attendance is incomplete/unresolved and must not be treated as absent or use a raw-percentage fallback. Disabled assessments continue using the normal raw percentage. Attendance corrections affect subsequent effective-grade computation without modifying the stored raw score. Assessment-linked transmutation remains separate from the existing independent attendance grading component.
+
+---
+
 The following capabilities are currently part of DentiSys and MUST NOT be removed as incidental scope.
 
 | Capability                              | Status   |
