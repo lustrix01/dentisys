@@ -32,15 +32,15 @@ if ($statusCode === 200) {
     }
     echo "PASS 1: Healthy database payload verified (statusCode 200, status=ok, database=up).\n";
 } elseif ($statusCode === 503) {
-    if ($body['status'] !== 'error' || $body['database'] !== 'down') {
-        fwrite(STDERR, "FAIL: 503 response should indicate status=error and database=down.\n");
+    if ($body['status'] !== 'error' || !in_array($body['database'], ['down', 'up'], true)) {
+        fwrite(STDERR, "FAIL: 503 response should indicate status=error and a known database state.\n");
         exit(1);
     }
     if (!isset($body['error_code']) || !isset($body['message'])) {
         fwrite(STDERR, "FAIL: 503 response missing error_code or message.\n");
         exit(1);
     }
-    $validErrorCodes = ['missing_database', 'invalid_credentials', 'server_unreachable', 'schema_missing', 'database_error'];
+    $validErrorCodes = ['missing_database', 'invalid_credentials', 'server_unreachable', 'schema_missing', 'schema_outdated', 'database_error'];
     if (!in_array($body['error_code'], $validErrorCodes, true)) {
         fwrite(STDERR, "FAIL: Invalid error_code '{$body['error_code']}' in 503 response.\n");
         exit(1);

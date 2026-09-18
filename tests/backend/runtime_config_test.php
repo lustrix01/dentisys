@@ -38,7 +38,8 @@ if (!is_array($payload) || ($payload['environment'] ?? null) !== 'test') {
     exit(1);
 }
 
-if (($payload['providers']['identity']['development_mock_enabled'] ?? null) !== true
+if (($payload['providers']['identity']['development_mock']['enabled'] ?? null) !== true
+    || ($payload['providers']['identity']['password']['enabled'] ?? null) !== true
     || ($payload['providers']['biometrics']['active'] ?? null) !== 'disabled'
     || ($payload['providers']['location']['active'] ?? null) !== 'development-mock'
     || ($payload['features']['browser_attendance_prototype'] ?? null) !== true) {
@@ -47,6 +48,10 @@ if (($payload['providers']['identity']['development_mock_enabled'] ?? null) !== 
 }
 if (($payload['features']['student_auth_enabled'] ?? null) !== true) {
     fwrite(STDERR, "FAIL: runtime configuration payload does not expose Student authentication state.\n");
+    exit(1);
+}
+if (($payload['allowed_email_domains'] ?? null) !== ['bicol-u.edu.ph']) {
+    fwrite(STDERR, "FAIL: runtime configuration payload does not expose normalized institutional domains.\n");
     exit(1);
 }
 

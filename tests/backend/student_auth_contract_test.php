@@ -47,6 +47,7 @@ $identityEnd = strpos($identitySource, 'function require_student_identity');
 student_contract_assert(is_string($identitySource) && $identityStart !== false && $identityEnd !== false, 'Central Student identity helper is present');
 $identityBody = substr((string) $identitySource, (int) $identityStart, (int) $identityEnd - (int) $identityStart);
 student_contract_assert(!str_contains($identityBody, 'enrollments'), 'Post-activation Student identity helper does not require enrollment');
+student_contract_assert(!str_contains($identityBody, 'student_auth_is_enabled'), 'Established Student eligibility is independent of the onboarding feature gate');
 student_contract_assert(str_contains($identitySource, "status = 'Active'"), 'Central Student identity helper checks active account status');
 student_contract_assert(str_contains($identitySource, 'student_account_user_id'), 'Central Student identity helper uses canonical account linkage');
 student_contract_assert(str_contains((string) $identitySource, "student_auth_eligibility_denied"), 'Central Student eligibility denials use the approved audit action');

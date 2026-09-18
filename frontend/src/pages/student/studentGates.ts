@@ -15,7 +15,7 @@ export function isDevelopmentMockStudent(
     && user.authentication_source === 'development_mock'
     && (config.environment === 'development' || config.environment === 'test')
     && config.features.student_auth_enabled
-    && config.providers.identity.development_mock_enabled;
+    && config.providers.identity.development_mock.enabled;
 }
 
 export type StudentPrototypeSurface =

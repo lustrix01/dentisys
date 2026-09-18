@@ -120,9 +120,11 @@ Revocation clears template_reference and image_references, sets revoke_at. Raw t
 | user_id | INT UNSIGNED | FK→user_accounts RESTRICT |
 | issued_token_version | INT UNSIGNED | NOT NULL (compared to user_accounts.token_version) |
 | expires_at, revoked_at | DATETIME(6) | lifecycle |
-| authentication_source | TEXT | NOT NULL, `password` or `development_mock`; server-issued provenance |
+| authentication_source | TEXT | NOT NULL, `password`, `google`, or `development_mock`; server-issued provenance |
 
 Session identity and lifecycle only. Refresh token digests stored in security_tokens.
+
+`user_accounts.google_subject` is nullable and uniquely indexed for non-null values. It stores only the stable Google `sub` identifier after explicit password/MFA linking; Google ID tokens and OAuth tokens are not persisted.
 
 ## security_tokens
 

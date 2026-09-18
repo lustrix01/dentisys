@@ -1,10 +1,9 @@
 # Roadmap
 
-## Planned identity work
+## Identity work
 
-- Add Google Sign-In alongside existing institutional email + password authentication, resolving both methods to the same DentiSys account.
+- Google Sign-In Phase 1 is implemented for existing institutional accounts with explicit password/MFA linking and multi-domain allowlisting.
 - Add Google-assisted registration where applicable; it still requires creation of a DentiSys password and preserves existing approval, eligibility, account-control, MFA, and DentiSys session boundaries.
-- Validate Google identity against a configurable institutional allowlist that supports multiple domains.
 
 ## Planned product work
 

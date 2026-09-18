@@ -4,6 +4,7 @@ import { getRuntimeConfigApi, type RuntimeConfigPayload } from '../services/apiC
 export interface RuntimeConfig {
   status: 'ok';
   environment: string;
+  allowed_email_domains: string[];
   providers: RuntimeConfigPayload['providers'];
   features: RuntimeConfigPayload['features'];
 }
@@ -11,8 +12,13 @@ export interface RuntimeConfig {
 const DISABLED_CONFIG: RuntimeConfig = {
   status: 'ok',
   environment: 'unknown',
+  allowed_email_domains: ['bicol-u.edu.ph'],
   providers: {
-    identity: { primary: 'password', development_mock_enabled: false },
+    identity: {
+      password: { enabled: true },
+      google: { enabled: false, client_id: null },
+      development_mock: { enabled: false },
+    },
     email: { active: 'smtp' },
     biometrics: { active: 'disabled' },
     location: { active: 'disabled' },
@@ -26,10 +32,21 @@ function normalizeRuntimeConfig(payload: RuntimeConfigPayload): RuntimeConfig {
   return {
     status: 'ok',
     environment: typeof payload.environment === 'string' ? payload.environment : 'unknown',
+    allowed_email_domains: Array.isArray(payload.allowed_email_domains)
+      ? payload.allowed_email_domains.filter((domain): domain is string => typeof domain === 'string')
+      : ['bicol-u.edu.ph'],
     providers: {
       identity: {
-        primary: 'password',
-        development_mock_enabled: payload.providers?.identity?.development_mock_enabled === true,
+        password: { enabled: payload.providers?.identity?.password?.enabled !== false },
+        google: {
+          enabled: payload.providers?.identity?.google?.enabled === true,
+          client_id: typeof payload.providers?.identity?.google?.client_id === 'string'
+            ? payload.providers.identity.google.client_id
+            : null,
+        },
+        development_mock: {
+          enabled: payload.providers?.identity?.development_mock?.enabled === true,
+        },
       },
       email: {
         active: payload.providers?.email?.active === 'mailpit' ? 'mailpit' : 'smtp',

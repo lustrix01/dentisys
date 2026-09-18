@@ -10,6 +10,6 @@
 ## Deliberate boundaries
 
 - Email-code verification is retired. System email remains available for non-authentication features.
-- Google Sign-In, Google-assisted registration, and configurable multi-domain access are approved product direction but not implemented.
+- Google Sign-In is implemented for existing eligible accounts with explicit password/MFA linking, backend claim policy, and `google` session provenance. Google-assisted registration remains planned and unimplemented. Institutional access supports normalized multi-domain allowlists with a legacy singular fallback.
 - Facial biometrics are not yet a complete production flow.
 - Image publishing, deployment automation, cloud infrastructure, TLS, and CI/CD are not part of this repository today.

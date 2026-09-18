@@ -80,10 +80,6 @@ function auth_assert_student_eligible(PDO $pdo, array $config, int $userId, bool
         throw new AuthException('Student authentication is unavailable.');
     };
 
-    if (!student_auth_is_enabled($config)) {
-        $deny($pdo, $config, $userId, 'student_auth_disabled');
-    }
-
     $lockSql = $lock ? ' FOR UPDATE' : '';
     $stmt = $pdo->prepare(
         "SELECT ua.user_id, ua.login_email, ua.role, ua.display_name, ua.status,

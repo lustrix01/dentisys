@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/controllers/HealthController.php';
 require_once dirname(__DIR__) . '/controllers/RuntimeConfigController.php';
 require_once dirname(__DIR__) . '/controllers/AuthController.php';
+require_once dirname(__DIR__) . '/controllers/GoogleAuthController.php';
 require_once dirname(__DIR__) . '/controllers/StudentAuthController.php';
 require_once dirname(__DIR__) . '/controllers/MfaController.php';
 require_once dirname(__DIR__) . '/controllers/UserController.php';
@@ -29,6 +30,18 @@ return [
         'method' => 'POST',
         'path' => '/api/auth/login',
         'handler' => 'handle_login',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/google',
+        'handler' => 'handle_google_login',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/google/link',
+        'handler' => 'handle_google_link',
         'has_params' => false,
     ],
     [

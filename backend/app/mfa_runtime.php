@@ -367,7 +367,14 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
             throw new MfaException('Verification code already used.');
         }
 
-        $credentials = auth_issue_credentials($pdo, $locked, $config, $context);
+        $credentials = auth_issue_credentials(
+            $pdo,
+            $locked,
+            $config,
+            $context,
+            (string) ($tokenClaims['authentication_source'] ?? 'password'),
+            isset($tokenClaims['pending_google_subject']) ? (string) $tokenClaims['pending_google_subject'] : null
+        );
 
         audit_finish_operation($pdo, $auditCtx, [
             'module_code' => 'mfa',
@@ -472,7 +479,14 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
         );
         $stmt->execute([$matchedRow['token_id']]);
 
-        $credentials = auth_issue_credentials($pdo, $locked, $config, $context);
+        $credentials = auth_issue_credentials(
+            $pdo,
+            $locked,
+            $config,
+            $context,
+            (string) ($tokenClaims['authentication_source'] ?? 'password'),
+            isset($tokenClaims['pending_google_subject']) ? (string) $tokenClaims['pending_google_subject'] : null
+        );
 
         audit_finish_operation($pdo, $auditCtx, [
             'module_code' => 'mfa',

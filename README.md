@@ -69,6 +69,17 @@ Demo users and academic/clinical records are intentionally separate from startup
 
 The seed is transaction-wrapped and non-destructive: it does not change schema, drop or truncate data, and skips rows already present.
 
+These are committed local development/demo credentials only. Do not reuse them outside development or testing. Normal DentiSys startup and migrations do not create these accounts; they exist only after [`database/seeds/development-demo.sql`](database/seeds/development-demo.sql) has been applied.
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@bicol-u.edu.ph` | `Admin123!` |
+| Faculty | `faculty@bicol-u.edu.ph` | `Faculty123!` |
+| Secretary | `secretary@bicol-u.edu.ph` | `Secretary123!` |
+| Student | `student@bicol-u.edu.ph` | `Student123!` |
+
+The seed contains additional fixtures. See the [development environment guide](docs/development-environment.md) for detailed local testing guidance.
+
 ### 7. Daily development commands
 
 ```powershell

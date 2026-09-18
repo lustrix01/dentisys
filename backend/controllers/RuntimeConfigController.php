@@ -14,10 +14,19 @@ function handle_runtime_config(): void
     json_response([
         'status' => 'ok',
         'environment' => (string) ($config['app']['env'] ?? 'unknown'),
+        'allowed_email_domains' => array_values($config['app']['allowed_email_domains'] ?? []),
         'providers' => [
             'identity' => [
-                'primary' => (string) ($providers['identity']['primary'] ?? 'password'),
-                'development_mock_enabled' => (bool) ($mocks['identity'] ?? false),
+                'password' => [
+                    'enabled' => (bool) ($providers['identity']['password']['enabled'] ?? true),
+                ],
+                'google' => [
+                    'enabled' => (bool) ($providers['identity']['google']['enabled'] ?? false),
+                    'client_id' => $providers['identity']['google']['client_id'] ?? null,
+                ],
+                'development_mock' => [
+                    'enabled' => (bool) ($mocks['identity'] ?? false),
+                ],
             ],
             'email' => [
                 'active' => (string) ($providers['email']['active'] ?? 'smtp'),

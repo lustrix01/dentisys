@@ -5,7 +5,7 @@ const ENABLED_RUNTIME_CONFIG = {
   status: 'ok',
   environment: 'test',
   providers: {
-    identity: { primary: 'password', development_mock_enabled: true },
+    identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: true } },
     email: { active: 'mailpit' },
     biometrics: { active: 'development-mock' },
     location: { active: 'development-mock' },
@@ -66,7 +66,7 @@ test.describe('P02 development safety seams', () => {
       ...ENABLED_RUNTIME_CONFIG,
       providers: {
         ...ENABLED_RUNTIME_CONFIG.providers,
-        identity: { primary: 'password', development_mock_enabled: true },
+        identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: true } },
         biometrics: { active: 'disabled' as const },
         location: { active: 'disabled' as const },
       },
@@ -100,7 +100,7 @@ test.describe('P02 development safety seams', () => {
 
   test('secretary session prototype uses the stable inside-location fixture', async ({ page }) => {
     await page.route('**/api/runtime-config', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...ENABLED_RUNTIME_CONFIG, providers: { ...ENABLED_RUNTIME_CONFIG.providers, identity: { primary: 'password', development_mock_enabled: false }, biometrics: { active: 'disabled' } } }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...ENABLED_RUNTIME_CONFIG, providers: { ...ENABLED_RUNTIME_CONFIG.providers, identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, biometrics: { active: 'disabled' } } }) });
     });
     await page.route('**/api/auth/login', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ type: 'direct_login', access_token: 'secretary-token' }) });

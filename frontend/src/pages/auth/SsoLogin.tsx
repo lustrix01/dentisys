@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowLeft, MapPin, Phone } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -7,8 +7,23 @@ import {
   login as apiLogin,
   getMe,
   createDevelopmentMockStudentSession,
+  loginWithGoogle,
+  linkGoogleAccount,
   setAccessToken as setApiAccessToken,
 } from '../../services/apiClient';
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: { client_id: string; ux_mode?: 'popup'; callback: (response: { credential: string }) => void }) => void;
+          renderButton: (element: HTMLElement, options: Record<string, unknown>) => void;
+        };
+      };
+    };
+  }
+}
 
 export function SsoLogin() {
   const navigate = useNavigate();
@@ -17,7 +32,9 @@ export function SsoLogin() {
   const { beginLogin, storeTwoFactorChallenge, setAccessToken, setUser, setAuthenticated } = useAuth();
   const runtimeConfig = useRuntimeConfig();
   const mockIdentityEnabled = runtimeConfig.features.student_auth_enabled
-    && runtimeConfig.providers.identity.development_mock_enabled;
+    && runtimeConfig.providers.identity.development_mock.enabled;
+  const googleEnabled = runtimeConfig.providers.identity.google.enabled
+    && Boolean(runtimeConfig.providers.identity.google.client_id);
   const activated = searchParams.get('activated') === '1';
 
   const [email, setEmail] = useState(initialEmail);
@@ -26,6 +43,10 @@ export function SsoLogin() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [useFallbackSvg, setUseFallbackSvg] = useState(false);
+  const [linkChallengeToken, setLinkChallengeToken] = useState<string | null>(null);
+  const [linkPassword, setLinkPassword] = useState('');
+  const [googleLoadState, setGoogleLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const googleButtonRef = useRef<HTMLDivElement>(null);
 
   const completeServerAuthentication = async (accessToken: string) => {
     setApiAccessToken(accessToken);
@@ -34,6 +55,99 @@ export function SsoLogin() {
     setUser(user);
     setAuthenticated();
     navigate(user.role === 'student' ? '/student/dashboard' : '/', { replace: true });
+  };
+
+  const handleGoogleCredential = async (credential: string) => {
+    beginLogin();
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await loginWithGoogle(credential);
+      if (result.type === 'direct_login' && result.access_token) {
+        await completeServerAuthentication(result.access_token);
+      } else if (result.type === 'two_factor_required' && result.two_factor_challenge_token) {
+        storeTwoFactorChallenge(result.two_factor_challenge_token);
+        navigate('/2fa/verify');
+      } else if (result.type === 'account_link_required' && result.link_challenge_token) {
+        setEmail(result.email ?? email);
+        setLinkChallengeToken(result.link_challenge_token);
+      } else {
+        setError('Unexpected authentication response.');
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Google Sign-In failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!googleEnabled || !runtimeConfig.providers.identity.google.client_id || !googleButtonRef.current) return;
+    setGoogleLoadState('loading');
+    const render = () => {
+      try {
+        if (!window.google || !googleButtonRef.current) {
+          setGoogleLoadState('error');
+          return;
+        }
+        window.google.accounts.id.initialize({
+          client_id: runtimeConfig.providers.identity.google.client_id as string,
+          ux_mode: 'popup',
+          callback: ({ credential }) => { void handleGoogleCredential(credential); },
+        });
+        googleButtonRef.current.innerHTML = '';
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          width: 360,
+          text: 'signin_with',
+        });
+        setGoogleLoadState('ready');
+      } catch {
+        setGoogleLoadState('error');
+      }
+    };
+    const handleScriptError = () => setGoogleLoadState('error');
+    if (window.google) {
+      render();
+      return;
+    }
+    const existing = document.getElementById('google-gis-client');
+    const script = existing instanceof HTMLScriptElement ? existing : document.createElement('script');
+    script.id = 'google-gis-client';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = render;
+    script.onerror = handleScriptError;
+    if (!existing) document.head.appendChild(script);
+    return () => {
+      script.onload = null;
+      script.onerror = null;
+    };
+  }, [googleEnabled, runtimeConfig.providers.identity.google.client_id]);
+
+  const handleGoogleLink = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!linkChallengeToken || !linkPassword) return;
+    setIsLoading(true);
+    setError('');
+    try {
+      const result = await linkGoogleAccount(linkChallengeToken, linkPassword);
+      if (result.type === 'direct_login' && result.access_token) {
+        await completeServerAuthentication(result.access_token);
+      } else if (result.type === 'two_factor_required' && result.two_factor_challenge_token) {
+        storeTwoFactorChallenge(result.two_factor_challenge_token);
+        navigate('/2fa/verify');
+      } else {
+        setError('Unexpected linking response.');
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Account linking failed.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDevelopmentMockSignIn = async () => {
@@ -200,6 +314,25 @@ export function SsoLogin() {
                   </div>
                 )}
 
+                {linkChallengeToken && (
+                  <form onSubmit={handleGoogleLink} className="mb-4 rounded-xl border border-accent-200 bg-accent-50 p-4 dark:border-accent-900/40 dark:bg-accent-950/20">
+                    <p className="text-xs font-semibold text-accent-800 dark:text-accent-200">
+                      Confirm your DentiSys password to link this Google account.
+                    </p>
+                    <input
+                      type="password"
+                      required
+                      value={linkPassword}
+                      onChange={(event) => setLinkPassword(event.target.value)}
+                      placeholder="DentiSys password"
+                      className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-900"
+                    />
+                    <button type="submit" disabled={isLoading} className="mt-3 w-full rounded-xl bg-accent-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+                      Confirm and link Google
+                    </button>
+                  </form>
+                )}
+
                 {/* Error Message */}
               {error && (
                 <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl text-xs font-medium text-rose-600 dark:text-rose-400 flex items-center gap-2">
@@ -217,6 +350,43 @@ export function SsoLogin() {
                 >
                   Development mock Student sign-in
                 </button>
+              )}
+
+              {!linkChallengeToken && (
+                <div className="mb-4 flex min-h-12 flex-col items-center justify-center gap-2" aria-live="polite">
+                  {googleEnabled ? (
+                    <>
+                      <div
+                        ref={googleButtonRef}
+                        className={googleLoadState === 'ready' ? 'flex justify-center' : 'hidden'}
+                        aria-label="Sign in with Google"
+                      />
+                      {googleLoadState === 'loading' && (
+                        <div role="status" className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          Loading Google Sign-In…
+                        </div>
+                      )}
+                      {googleLoadState === 'error' && (
+                        <div role="alert" className="text-center text-xs font-semibold text-rose-600 dark:text-rose-400">
+                          Google Sign-In could not be loaded. Use email and password instead.
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                      >
+                        Continue with Google
+                      </button>
+                      <p className="text-center text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        Google Sign-In is not configured in this environment.
+                      </p>
+                    </>
+                  )}
+                </div>
               )}
 
               {/* Divider */}

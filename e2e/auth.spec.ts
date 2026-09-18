@@ -1,4 +1,45 @@
 import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
+
+const GOOGLE_RUNTIME_CONFIG = {
+  status: 'ok',
+  environment: 'test',
+  allowed_email_domains: ['bicol-u.edu.ph'],
+  providers: {
+    identity: {
+      password: { enabled: true },
+      google: { enabled: true, client_id: 'client.apps.googleusercontent.com' },
+      development_mock: { enabled: false },
+    },
+    email: { active: 'mailpit' },
+    biometrics: { active: 'disabled' },
+    location: { active: 'disabled' },
+  },
+  features: { browser_attendance_prototype: false, student_auth_enabled: false },
+};
+
+async function installMockGoogleIdentityServices(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const state = { callback: null as null | ((response: { credential: string }) => void) };
+    (window as unknown as { __mockGoogle: typeof state }).__mockGoogle = state;
+    (window as unknown as { google: unknown }).google = {
+      accounts: {
+        id: {
+          initialize: (options: { callback: (response: { credential: string }) => void }) => {
+            state.callback = options.callback;
+          },
+          renderButton: (element: HTMLElement) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = 'Continue with Google';
+            button.onclick = () => state.callback?.({ credential: 'mock-google-credential' });
+            element.appendChild(button);
+          },
+        },
+      },
+    };
+  });
+}
 
 test.describe('Auth Module E2E Tests', () => {
   test('login page renders correctly with brand title and form elements', async ({ page }) => {
@@ -14,6 +55,10 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(emailInput).toBeVisible();
     await expect(passwordInput).toBeVisible();
     await expect(submitButton).toBeVisible();
+    const unavailableGoogle = page.getByRole('button', { name: 'Continue with Google' });
+    await expect(unavailableGoogle).toBeVisible();
+    await expect(unavailableGoogle).toBeDisabled();
+    await expect(page.getByText('Google Sign-In is not configured in this environment.')).toBeVisible();
   });
 
   test('sign up page loads correctly', async ({ page }) => {
@@ -161,6 +206,86 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
+test('mocked Google direct login completes normal authentication', async ({ page }) => {
+    await installMockGoogleIdentityServices(page);
+    await page.route('**/api/runtime-config', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_RUNTIME_CONFIG) });
+    });
+    await page.route('**/api/auth/google', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ type: 'direct_login', access_token: 'mock-google-access-token' }),
+      });
+    });
+    await page.route('**/api/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 20, user_id: 20, login_email: 'google@bicol-u.edu.ph', display_name: 'Google Faculty', role: 'faculty', authentication_source: 'google' }),
+      });
+    });
+
+    await page.goto('/login');
+    const googleButton = page.getByRole('button', { name: 'Continue with Google' });
+    await expect(googleButton).toBeVisible();
+    await googleButton.click();
+    await expect(page).toHaveURL('/');
+  });
+
+  test('mocked Google first-time linking prompts for DentiSys password and completes login', async ({ page }) => {
+    await installMockGoogleIdentityServices(page);
+    await page.route('**/api/runtime-config', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_RUNTIME_CONFIG) });
+    });
+    await page.route('**/api/auth/google', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ type: 'account_link_required', account_link_required: true, email: 'faculty@bicol-u.edu.ph', link_challenge_token: 'mock-link-challenge' }),
+      });
+    });
+    await page.route('**/api/auth/google/link', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ type: 'direct_login', access_token: 'mock-linked-google-access-token' }),
+      });
+    });
+    await page.route('**/api/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 21, user_id: 21, login_email: 'faculty@bicol-u.edu.ph', display_name: 'Linked Faculty', role: 'faculty', authentication_source: 'google' }),
+      });
+    });
+
+    await page.goto('/login');
+    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await expect(page.getByText('Confirm your DentiSys password to link this Google account.')).toBeVisible();
+    await page.getByPlaceholder('DentiSys password').fill('Faculty123!');
+    await page.getByRole('button', { name: 'Confirm and link Google' }).click();
+    await expect(page).toHaveURL('/');
+  });
+
+  test('mocked Google domain policy error is surfaced to the user', async ({ page }) => {
+    await installMockGoogleIdentityServices(page);
+    await page.route('**/api/runtime-config', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_RUNTIME_CONFIG) });
+    });
+    await page.route('**/api/auth/google', async (route) => {
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'error', code: 'GOOGLE_DOMAIN_NOT_ALLOWED', message: 'Google Workspace domain is not allowed.' }),
+      });
+    });
+
+    await page.goto('/login');
+    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await expect(page.getByText('Google Workspace domain is not allowed.')).toBeVisible();
+  });
+
   test('complete faculty account creation and password reset lifecycle', async ({ page }) => {
     const testEmail = 'testfaculty_reset@bicol-u.edu.ph';
     const testPassword = 'NewFacultyPass123!';
@@ -277,4 +402,18 @@ test.describe('Auth Module E2E Tests', () => {
     });
     expect([401, 502]).toContain(response.status());
   });
+});
+
+test('configured Google Sign-In reports GIS script load failure without blocking password login', async ({ page }) => {
+  await page.route('**/api/runtime-config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_RUNTIME_CONFIG) });
+  });
+  await page.route('**/gsi/client', async (route) => {
+    await route.abort();
+  });
+
+  await page.goto('/login');
+  await expect(page.getByRole('alert')).toContainText('Google Sign-In could not be loaded.');
+  await expect(page.locator('input[type="email"]')).toBeVisible();
+  await expect(page.locator('input[type="password"]')).toBeVisible();
 });

@@ -133,10 +133,10 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         }
     }
 
-    return auth_issue_two_factor_challenge($config, $user);
+    return auth_issue_two_factor_challenge($config, $user, 'password');
 }
 
-function auth_issue_two_factor_challenge(array $config, array $user): array
+function auth_issue_two_factor_challenge(array $config, array $user, string $authenticationSource = 'password', ?string $pendingGoogleSubject = null): array
 {
     $jti = jwt_generate_jti();
     $now = time();
@@ -147,6 +147,8 @@ function auth_issue_two_factor_challenge(array $config, array $user): array
         'token_type' => 'mfa_challenge',
         'token_version' => (int) $user['token_version'],
         'method' => 'authenticator',
+        'authentication_source' => $authenticationSource,
+        'pending_google_subject' => $pendingGoogleSubject,
         'iat' => $now,
         'exp' => $now + 300,
     ], $jwtKey);
@@ -600,8 +602,20 @@ function auth_runtime_logout(PDO $pdo, array $config, array $context, string $re
     }
 }
 
-function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, array $context, string $authenticationSource = 'password'): array
+function auth_issue_credentials(PDO $pdo, array $lockedUser, array $config, array $context, string $authenticationSource = 'password', ?string $pendingGoogleSubject = null): array
 {
+    if ($pendingGoogleSubject !== null) {
+        if ($authenticationSource !== 'google' || $pendingGoogleSubject === '' || strlen($pendingGoogleSubject) > 255) {
+            throw new AuthException('Invalid pending Google identity.');
+        }
+        $bind = $pdo->prepare(
+            'UPDATE user_accounts SET google_subject = ? WHERE user_id = ? AND google_subject IS NULL'
+        );
+        $bind->execute([$pendingGoogleSubject, (int) $lockedUser['user_id']]);
+        if ($bind->rowCount() !== 1) {
+            throw new AuthException('Google identity is already linked.');
+        }
+    }
     $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
     $sessionExpiry = $now->add(new DateInterval('P7D'));
     $refreshExpiry = $sessionExpiry->modify('-1 second');

@@ -64,7 +64,7 @@ function auth_create_session(
         throw new AuthException('Device ID exceeds 100 characters.');
     }
 
-    if (!in_array($authenticationSource, ['password', 'development_mock'], true)) {
+    if (!in_array($authenticationSource, ['password', 'google', 'development_mock'], true)) {
         throw new AuthException('Invalid authentication source.');
     }
 

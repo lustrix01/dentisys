@@ -179,7 +179,7 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
             status: 'ok',
             environment: 'test',
             providers: {
-              identity: { primary: 'password', development_mock_enabled: true },
+              identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: true } },
               email: { active: 'mailpit' },
               biometrics: { active: 'development-mock' },
               location: { active: 'development-mock' },

@@ -4,7 +4,7 @@ const ENABLED_RUNTIME_CONFIG = {
   status: 'ok',
   environment: 'test',
   providers: {
-    identity: { primary: 'password', development_mock_enabled: false },
+    identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } },
     email: { active: 'mailpit' },
     biometrics: { active: 'disabled' },
     location: { active: 'disabled' },
@@ -84,7 +84,7 @@ test.describe('P03 Student identity and authentication', () => {
         ...ENABLED_RUNTIME_CONFIG,
         providers: {
           ...ENABLED_RUNTIME_CONFIG.providers,
-          identity: { primary: 'password', development_mock_enabled: true },
+          identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: true } },
           biometrics: { active: 'development-mock' },
           location: { active: 'development-mock' },
         },
@@ -148,7 +148,7 @@ test.describe('P03 Student identity and authentication', () => {
         ...ENABLED_RUNTIME_CONFIG,
         providers: {
           ...ENABLED_RUNTIME_CONFIG.providers,
-          identity: { primary: 'password', development_mock_enabled: true },
+          identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: true } },
           biometrics: { active: 'development-mock' },
           location: { active: 'development-mock' },
         },
@@ -213,7 +213,7 @@ test.describe('P03 Student identity and authentication', () => {
       ...ENABLED_RUNTIME_CONFIG,
       providers: {
         ...ENABLED_RUNTIME_CONFIG.providers,
-        identity: { primary: 'password', development_mock_enabled: true },
+          identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: true } },
         biometrics: { active: 'development-mock' as const },
         location: { active: 'development-mock' as const },
       },
@@ -242,7 +242,7 @@ test.describe('P03 Student identity and authentication', () => {
       ...ENABLED_RUNTIME_CONFIG,
       providers: {
         ...ENABLED_RUNTIME_CONFIG.providers,
-        identity: { primary: 'password', development_mock_enabled: true },
+          identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: true } },
         biometrics: { active: 'disabled' as const },
         location: { active: 'development-mock' as const },
       },

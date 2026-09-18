@@ -71,7 +71,7 @@ function RoleDashboard() {
 }
 
 function isRealStudent(user: { role: string; authentication_source?: string } | null): boolean {
-  return user?.role === 'student' && user.authentication_source === 'password';
+  return user?.role === 'student' && (user.authentication_source === 'password' || user.authentication_source === 'google');
 }
 
 function StudentDashboardRoute() {

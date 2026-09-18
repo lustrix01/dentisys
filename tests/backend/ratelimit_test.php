@@ -157,9 +157,53 @@ assert_throws(fn() => challenge_state_consume($stExpiredAfter, $jti3, 'mfa_chall
 $missingJti = 'a' . str_repeat('0', 31);
 assert_throws(fn() => challenge_state_attempt($st, $missingJti, 'mfa_challenge', 'verify'), 'not found', 'Missing challenge rejected');
 
+// Google link challenges use the same bounded state store and semantics.
+$googleStorage = make_storage();
+$googleJti = str_repeat('d', 32);
+challenge_state_init($googleStorage, $googleJti, 'google_link_challenge', 'complete_link', 2, 60);
+challenge_state_attempt($googleStorage, $googleJti, 'google_link_challenge', 'complete_link');
+challenge_state_attempt($googleStorage, $googleJti, 'google_link_challenge', 'complete_link');
+assert_throws(
+    fn() => challenge_state_attempt($googleStorage, $googleJti, 'google_link_challenge', 'complete_link'),
+    'exhausted',
+    'Google link challenge attempt limit is enforced'
+);
+
+$googleConsumeStorage = make_storage();
+$googleConsumeJti = str_repeat('e', 32);
+challenge_state_init($googleConsumeStorage, $googleConsumeJti, 'google_link_challenge', 'complete_link', 2, 60);
+challenge_state_consume($googleConsumeStorage, $googleConsumeJti, 'google_link_challenge', 'complete_link');
+assert_same(true, true, 'Google link challenge can be consumed');
+assert_throws(
+    fn() => challenge_state_consume($googleConsumeStorage, $googleConsumeJti, 'google_link_challenge', 'complete_link'),
+    'already been consumed',
+    'Google link challenge rejects replay consumption'
+);
+
+$googleExpiredStorage = make_storage();
+$googleExpiredJti = str_repeat('f', 32);
+challenge_state_init($googleExpiredStorage, $googleExpiredJti, 'google_link_challenge', 'complete_link', 2, 30);
+$googleExpiredAfter = [
+    'dir' => $googleExpiredStorage['dir'],
+    'clock' => fn(): int => 1000000100,
+];
+assert_throws(
+    fn() => challenge_state_attempt($googleExpiredAfter, $googleExpiredJti, 'google_link_challenge', 'complete_link'),
+    'expired',
+    'Google link challenge expires for attempts'
+);
+assert_throws(
+    fn() => challenge_state_consume($googleExpiredAfter, $googleExpiredJti, 'google_link_challenge', 'complete_link'),
+    'expired',
+    'Google link challenge expires for consumption'
+);
+
 clean_storage($st);
 clean_storage($st2);
 clean_storage($stExpired);
 clean_storage($stExpired);
+clean_storage($googleStorage);
+clean_storage($googleConsumeStorage);
+clean_storage($googleExpiredStorage);
 
 echo "\n=== ALL RATE LIMITER AND CHALLENGE STATE TESTS PASSED ===\n";

@@ -175,7 +175,7 @@ function challenge_state_key(string $challengeJti, string $tokenType, string $op
         throw new \InvalidArgumentException('Challenge JTI must be 32 lowercase hex characters.');
     }
 
-    if (!in_array($tokenType, ['mfa_enrollment', 'mfa_challenge'], true)) {
+    if (!in_array($tokenType, ['mfa_enrollment', 'mfa_challenge', 'google_link_challenge'], true)) {
         throw new \InvalidArgumentException('Invalid challenge token type.');
     }
 

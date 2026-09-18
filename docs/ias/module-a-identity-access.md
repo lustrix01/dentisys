@@ -1,17 +1,17 @@
 # IAS Module A: Identity and Access Fortification
 
-> Implementation update: DentiSys now uses optional authenticator-app 2FA and recovery codes. Email-code verification and MFA method selection are retired; Google Sign-In is approved alongside password authentication but is not implemented in this phase.
+> Implementation update: DentiSys now uses optional authenticator-app 2FA and recovery codes. Email-code verification and MFA method selection are retired. Google Sign-In is available alongside password authentication for existing accounts only; explicit password ownership, existing MFA/recovery, and DentiSys sessions remain authoritative.
 
 ## P03 Student identity and sessions
 
-Student authentication is password-based in this phase and uses the existing server-issued access/refresh session machinery. `auth_sessions.authentication_source` records `password` or the explicitly development-only `development_mock` source. Access-token verification calls `auth_assert_student_eligible()` to re-check the canonical Student identity invariant (role, account status, Student status, institutional-email match, and exactly one canonical link) without requiring a current enrollment. Enrollment is checked only by signup eligibility, activation-token consumption, and `require_owned_enrollment()` object scoping.
+Student authentication uses the existing server-issued access/refresh session machinery for password and Google provenance. `auth_sessions.authentication_source` records `password`, `google`, or the explicitly development-only `development_mock` source. Access-token verification calls `auth_assert_student_eligible()` to re-check the canonical Student identity invariant (role, account status, Student status, institutional-email match, and exactly one canonical link) without requiring a current enrollment. Enrollment is checked only by signup eligibility, activation-token consumption, and `require_owned_enrollment()` object scoping.
 
 Unauthenticated endpoints are `POST /api/auth/student/signup` and `POST /api/auth/student/activate`. Signup is email-only, non-enumerating, rate-limited, and issues a 24-hour one-time activation token only for an active Student with an active enrollment and no conflicting identity links. A pending canonical Student account may receive a resend; the previous live token is revoked first. Activation validates password policy before any token-dependent lookup, consumes the token atomically, and never returns the raw token. Password reset, MFA enrollment/verification/recovery, refresh rotation, and logout retain their existing server-side lifecycle and re-check Student eligibility where an account is acted upon.
 
 ### Explicit identity decisions
 
 - **Provisioning/link invariant:** P03 provisions one Pending Activation `user_accounts` row and sets `students.student_account_user_id`; it never backfills `students.user_id`. Signup requires an active enrollment only at provisioning time. Existing conflicting links are a safe no-op. P06 owns legacy Secretary reconciliation.
-- **Google OIDC:** approved future authentication direction; no Google button, callback, provider, schema, or dependency is introduced in this phase.
+- **Google Sign-In:** GIS ID tokens are verified server-side with `Google\Auth\AccessToken`, expected audience/issuer/expiry/subject/email/domain/Workspace checks, and `google` session provenance. An unlinked existing account requires explicit password confirmation and existing MFA before the nullable unique `google_subject` is atomically bound. Google-assisted registration remains out of scope.
 - **Student/Secretary relationship:** one canonical Student account may not be converted to admin/faculty; a legacy Secretary-only `students.user_id` link remains valid and separate. Secretary activation rejects a Student canonical link, and P03 does not merge or migrate the two identities.
 
 ## TOTP Enrollment and Verification Flow

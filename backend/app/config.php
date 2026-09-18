@@ -86,6 +86,36 @@ function config_email_provider(string $value): string
     return $normalized;
 }
 
+function config_allowed_email_domains(array $overrides): array
+{
+    $pluralPresent = (getenv('ALLOWED_EMAIL_DOMAINS') !== false && trim((string) getenv('ALLOWED_EMAIL_DOMAINS')) !== '')
+        || array_key_exists('ALLOWED_EMAIL_DOMAINS', $overrides);
+    $raw = $pluralPresent
+        ? (string) config_value('ALLOWED_EMAIL_DOMAINS', $overrides, '')
+        : (string) config_value('ALLOWED_EMAIL_DOMAIN', $overrides, 'bicol-u.edu.ph');
+
+    $domains = array_values(array_unique(array_map(
+        static fn(string $domain): string => strtolower(trim($domain)),
+        explode(',', $raw)
+    )));
+    if ($domains === [] || in_array('', $domains, true)) {
+        throw new RuntimeException('Configuration value "ALLOWED_EMAIL_DOMAINS" must contain at least one domain.');
+    }
+
+    foreach ($domains as $domain) {
+        if (strlen($domain) > 253
+            || str_contains($domain, '@')
+            || str_contains($domain, '://')
+            || str_contains($domain, '/')
+            || str_contains($domain, ':')
+            || !preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/', $domain)) {
+            throw new RuntimeException(sprintf('Configuration value "ALLOWED_EMAIL_DOMAINS" contains malformed domain "%s".', $domain));
+        }
+    }
+
+    return $domains;
+}
+
 function config_app_base_url(string $value, bool $required): string
 {
     $url = rtrim(trim($value), '/');
@@ -144,6 +174,8 @@ function app_config(?array $overrides = null): array
         (string) config_value('APP_BASE_URL', $values, $isDevelopment ? 'http://localhost:5173' : ''),
         $appEnv === 'single-server'
     );
+    $allowedEmailDomains = config_allowed_email_domains($values);
+    $googleClientId = trim((string) config_value('GOOGLE_CLIENT_ID', $values, ''));
 
     return [
         'debug' => filter_var(config_value('APP_DEBUG', $values, false), FILTER_VALIDATE_BOOLEAN),
@@ -158,7 +190,9 @@ function app_config(?array $overrides = null): array
             'env' => $appEnv,
             'base_url' => $baseUrl,
             'is_https' => filter_var(config_value('APP_IS_HTTPS', $values, 'false'), FILTER_VALIDATE_BOOLEAN),
-            'allowed_email_domain' => strtolower((string) config_value('ALLOWED_EMAIL_DOMAIN', $values, 'bicol-u.edu.ph')),
+            'allowed_email_domains' => $allowedEmailDomains,
+            // Kept as a compatibility projection for existing non-policy callers.
+            'allowed_email_domain' => $allowedEmailDomains[0],
         ],
         'cors' => [
             'allowed_origins' => (string) config_value('CORS_ALLOWED_ORIGINS', $values, 'http://localhost:5173'),
@@ -184,8 +218,12 @@ function app_config(?array $overrides = null): array
         ],
         'providers' => [
             'identity' => [
-                'primary' => 'password',
-                'development_mock_enabled' => $mockFlags['identity'],
+                'password' => ['enabled' => true],
+                'google' => [
+                    'enabled' => $googleClientId !== '',
+                    'client_id' => $googleClientId !== '' ? $googleClientId : null,
+                ],
+                'development_mock' => ['enabled' => $mockFlags['identity']],
             ],
             'email' => [
                 'active' => $emailProvider,

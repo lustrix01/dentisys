@@ -9,7 +9,8 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-docker compose up --build -d
+docker compose up -d --wait db
 docker compose exec -T db sh /docker-entrypoint-initdb.d/001-migrations.sh
+docker compose up --build -d
 echo "Development stack started: frontend http://localhost:5173, API http://localhost:8080, Mailpit http://localhost:8025, pgAdmin http://127.0.0.1:5050"
 echo "Existing database data was preserved. To add demo data manually, paste database/seeds/development-demo.sql into pgAdmin Query Tool."

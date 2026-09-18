@@ -22,10 +22,12 @@ require_once __DIR__ . '/ratelimit.php';
 require_once __DIR__ . '/audit.php';
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/google_auth.php';
 require_once __DIR__ . '/student_auth.php';
 require_once __DIR__ . '/auth_runtime.php';
 require_once __DIR__ . '/mfa_runtime.php';
 require_once __DIR__ . '/../controllers/AuthController.php';
+require_once __DIR__ . '/../controllers/GoogleAuthController.php';
 require_once __DIR__ . '/../controllers/MfaController.php';
 require_once __DIR__ . '/../controllers/SessionController.php';
 

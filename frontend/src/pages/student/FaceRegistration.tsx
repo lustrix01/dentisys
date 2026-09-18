@@ -23,7 +23,7 @@ export const FaceRegistration: React.FC = () => {
   const { students } = useApp();
   const runtimeConfig = useRuntimeConfig();
   const simulationEnabled = user?.authentication_source === 'development_mock'
-    && runtimeConfig.providers.identity.development_mock_enabled
+    && runtimeConfig.providers.identity.development_mock.enabled
     && runtimeConfig.providers.biometrics.active === 'development-mock';
 
   const currentStudent = students.find(
