@@ -245,6 +245,27 @@ Production or production-like behavior MUST NOT silently accept development mock
 
 Adding Google authentication MUST NOT weaken existing mock-identity safeguards.
 
+## AUTH-010 — Existing-account Google linking
+**Status: APPROVED**
+
+An existing DentiSys account MUST NOT be silently linked to a Google identity based only on a matching email address.
+
+On first Google sign-in for an existing unlinked account:
+
+1. DentiSys verifies the Google identity and approved institutional domain.
+2. DentiSys may locate the existing account using the verified institutional email.
+3. The user MUST confirm ownership of that DentiSys account using the existing DentiSys password.
+4. Existing MFA MUST also be completed when enabled.
+5. Only after successful ownership confirmation may the verified Google `sub` be bound to the DentiSys account.
+
+After binding:
+
+- future Google sign-ins use the stored Google `sub`;
+- email + password login remains supported;
+- a different Google `sub` MUST NOT silently replace the existing binding.
+
+For Google-assisted new registration, the verified Google `sub` may be bound as part of the explicit registration flow because the user is intentionally creating the account, but creation of a DentiSys password remains required.
+
 ---
 
 # 3. Registration and Account Lifecycle
