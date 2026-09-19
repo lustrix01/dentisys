@@ -40,15 +40,16 @@ services:
       # Production-like deployments use docker-compose.web.yml with explicit APP_ENV.
       APP_ENV: ${APP_ENV:-development}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:5173}
-      DB_HOST: db
-      DB_PORT: 5432
+      APP_IS_HTTPS: ${APP_IS_HTTPS:-false}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-dentisys}
       DB_USER: ${DB_USER:-dentisys}
       DB_PASS: ${DB_PASS:-local-development-password}
-      SMTP_HOST: mailpit
-      SMTP_PORT: 1025
-      SMTP_ENCRYPTION: none
-      SMTP_VERIFY_PEER: "false"
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_ENCRYPTION: ${SMTP_ENCRYPTION:-none}
+      SMTP_VERIFY_PEER: "${SMTP_VERIFY_PEER:-false}"
       SMTP_FROM: ${SMTP_FROM:-noreply@dentisys.local}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-mailpit}
       DEV_MOCK_IDENTITY_ENABLED: ${DEV_MOCK_IDENTITY_ENABLED:-false}
