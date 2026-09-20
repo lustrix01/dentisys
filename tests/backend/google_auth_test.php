@@ -10,6 +10,10 @@ require_once __DIR__ . '/../../backend/app/ratelimit.php';
 require_once __DIR__ . '/../../backend/app/google_auth.php';
 require_once __DIR__ . '/../../backend/controllers/GoogleAuthController.php';
 
+foreach (['APP_ENV', 'GOOGLE_CLIENT_ID', 'ALLOWED_EMAIL_DOMAINS', 'ALLOWED_EMAIL_DOMAIN'] as $name) {
+    putenv($name);
+}
+
 function google_test_assert(bool $condition, string $message): void
 {
     if (!$condition) {
@@ -46,6 +50,7 @@ foreach ([
     'expired' => ['exp' => time() - 1],
     'missing subject' => ['sub' => ''],
     'unverified email' => ['email_verified' => false],
+    'disallowed email domain' => ['email' => 'student@other.edu'],
     'missing hosted domain' => ['hd' => null],
     'disallowed hosted domain' => ['hd' => 'other.edu'],
 ] as $label => $override) {
@@ -55,6 +60,15 @@ foreach ([
     } catch (GoogleIdentityException $e) {
         google_test_assert(true, "{$label} is rejected");
     }
+}
+
+$disabledGoogleConfig = $config;
+$disabledGoogleConfig['providers']['identity']['google']['client_id'] = '';
+try {
+    google_verify_id_token($disabledGoogleConfig, 'fixture', static fn(): array => $validClaims);
+    google_test_assert(false, 'Google verification is rejected when Google is not configured');
+} catch (GoogleIdentityException $e) {
+    google_test_assert($e->reason() === 'not_configured', 'Google verification reports not configured when the client ID is absent');
 }
 
 putenv('ALLOWED_EMAIL_DOMAINS');
