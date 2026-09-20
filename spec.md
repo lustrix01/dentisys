@@ -264,42 +264,33 @@ After binding:
 - email + password login remains supported;
 - a different Google `sub` MUST NOT silently replace the existing binding.
 
-For Google-assisted new registration, the verified Google `sub` may be bound as part of the explicit registration flow because the user is intentionally creating the account, but creation of a DentiSys password remains required.
+During authorized invitation acceptance, the verified Google `sub` may be bound to the invited account only after the verified institutional email matches the invitation. Invitation authority is required before Google verification can be used, and password creation remains required.
 
 ---
 
 # 3. Registration and Account Lifecycle
 
-## REG-001 — Registration methods
+## REG-001 — Invitation-only Faculty and Student onboarding
 
 **Status: APPROVED**
 
-Where DentiSys permits user-driven registration, registration may begin through:
+There is no public Faculty or Student signup. A Faculty account may be established only through an Admin-authorized invitation. A Student account may be established only through a Faculty-authorized invitation tied to the canonical Student record and applicable eligibility checks.
 
-1. the existing DentiSys registration flow; or
-2. Google-assisted registration.
+The invitation authorizes account establishment. Google verification may optionally verify the invited identity but MUST NOT create an invitation or independently begin account creation. Secretary invitation and activation remain governed by REG-006.
 
-Both create the same type of DentiSys account.
-
-Google-assisted registration is not a separate account class.
-
-## REG-002 — Traditional registration
+## REG-002 — Password-backed invitation acceptance
 
 **Status: CURRENT**
 
-Traditional registration continues to require the information required by the applicable role workflow, including a DentiSys password.
+Faculty and Student invitation acceptance MUST require creation of a DentiSys password. Existing institutional email validation and role-specific identity and eligibility requirements remain authoritative.
 
-Existing validation, approval, activation, and eligibility rules remain authoritative.
-
-## REG-003 — Google-assisted registration requires password
+## REG-003 — Optional Google verification during invitation acceptance
 
 **Status: APPROVED**
 
-Google-assisted registration is **not passwordless**.
+Google-assisted invitation acceptance is **not passwordless**. Google is optional and MUST only verify the identity named by an already valid invitation. The verified email MUST match the invited institutional email; a conflicting Google subject MUST be rejected without linking or changing another account.
 
-Before registration is completed, the user MUST create a DentiSys password.
-
-A completed Google-assisted account MUST subsequently support both:
+Before acceptance is completed, the user MUST create a DentiSys password. A completed Google-linked account MUST subsequently support both:
 
 * Google Sign-In;
 * institutional email + DentiSys password.
@@ -307,15 +298,13 @@ A completed Google-assisted account MUST subsequently support both:
 Conceptually:
 
 ```text
-Google verification
+authorized invitation
       ->
-remaining DentiSys registration
+optional matching Google verification
       ->
 create DentiSys password
       ->
-existing approval/activation rules
-      ->
-one dual-login DentiSys account
+active invited account
 ```
 
 ## REG-004 — Google cannot bypass account controls
@@ -324,23 +313,21 @@ one dual-login DentiSys account
 
 Successful Google verification MUST NOT by itself:
 
-* create an authorized account;
+* create an invitation or authorized account by itself;
 * grant a role;
 * approve an account;
 * activate an account;
 * bypass an invitation;
 * establish Student eligibility;
-* bypass required registration data.
+* bypass required invitation acceptance or password creation.
 
 Existing role-specific lifecycle rules remain authoritative.
 
-## REG-005 — Faculty lifecycle
+## REG-005 — Faculty invitation lifecycle
 
 **Status: CURRENT**
 
-Faculty registration and the existing Faculty approval process remain supported.
-
-Adding Google authentication MUST preserve the approval boundary.
+Only an Admin may invite a Faculty member. The Admin invitation itself is the Faculty approval. A valid invitation acceptance with required identity setup and password creation MUST make the Faculty account Active; no separate approval step follows. A person without a valid Faculty invitation MUST NOT create a Faculty account.
 
 ## REG-006 — Secretary lifecycle
 
@@ -354,11 +341,9 @@ Google authentication MUST NOT bypass the invitation/activation requirement.
 
 **Status: CURRENT**
 
-Student account access remains tied to the canonical Student identity and existing Student eligibility/activation rules.
+Only an authorized Faculty member may invite a Student from an assigned class. The invitation MUST be tied to the canonical Student record. Student account access remains tied to that identity and existing active-status/enrollment eligibility checks at invitation and acceptance. A Student email alone MUST NOT authorize onboarding. After valid invitation acceptance, eligibility checks, and password creation, the Student account becomes Active.
 
-Authentication method MUST NOT bypass Student identity or eligibility checks.
-
-Google-assisted Student onboarding, when implemented, MUST preserve these existing requirements.
+Optional Google verification during acceptance MUST match the invited Student institutional email and MUST NOT substitute for the Faculty invitation or Student eligibility.
 
 ---
 
@@ -438,15 +423,15 @@ The following capabilities are currently part of DentiSys and MUST NOT be remove
 | Access/refresh sessions and rotation    | CURRENT  |
 | Authentication/session audit behavior   | CURRENT  |
 | Authentication rate limiting            | CURRENT  |
-| Faculty registration and approval       | CURRENT  |
+| Faculty invitation and activation       | CURRENT  |
 | Secretary invitation and activation     | CURRENT  |
-| Student identity/signup/activation      | CURRENT  |
+| Student identity/invitation/activation  | CURRENT  |
 | Academic workflows                      | CURRENT  |
 | Attendance workflows                    | CURRENT  |
 | Reporting                               | CURRENT  |
 | Email history and notification delivery | CURRENT  |
 | Google Sign-In                          | APPROVED |
-| Google-assisted registration            | APPROVED |
+| Google verification during invitation acceptance | APPROVED |
 | Multi-domain institutional allowlist    | APPROVED |
 
 Detailed implementation status belongs in `docs/features.md`, not here.
@@ -591,7 +576,8 @@ Upon Owner approval of this specification:
 
 * Any roadmap statement describing Google as a **replacement** for password authentication is superseded.
 * The approved direction is **password authentication + Google Sign-In**.
-* Google-assisted registration MUST still establish a DentiSys password.
+* Faculty and Student account establishment MUST require an authorized invitation and DentiSys password.
+* Google may verify an invited identity during acceptance, but MUST NOT provide invitation authority or enable public signup.
 * Google-linked users MUST retain email + password login capability.
 
 Affected roadmap/documentation should be aligned before or together with implementation of Google authentication.
