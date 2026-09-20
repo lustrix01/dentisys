@@ -129,7 +129,7 @@ export const validatePasswordRequirements = (password: string): PasswordCriteria
 export const logSystemEmail = (emailEntry: {
   recipient: string;
   subject: string;
-  type: 'Privacy Consent' | 'At-Risk Notification' | 'Class Secretary Invitation' | 'Faculty Registration Approved' | 'Faculty Registration Rejected';
+  type: 'Privacy Consent' | 'At-Risk Notification' | 'Class Secretary Invitation';
   status: 'Sent' | 'Failed' | 'Pending';
 }) => {
   try {
