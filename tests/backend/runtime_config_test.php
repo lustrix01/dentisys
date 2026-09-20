@@ -14,6 +14,8 @@ $environmentKeys = [
     'DEV_MOCK_LOCATION_ENABLED',
     'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED',
     'STUDENT_AUTH_ENABLED',
+    'ALLOWED_EMAIL_DOMAINS',
+    'ALLOWED_EMAIL_DOMAIN',
 ];
 $savedEnvironment = [];
 foreach ($environmentKeys as $key) {
@@ -28,6 +30,8 @@ putenv('DEV_MOCK_BIOMETRIC_ENABLED=false');
 putenv('DEV_MOCK_LOCATION_ENABLED=true');
 putenv('DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED=true');
 putenv('STUDENT_AUTH_ENABLED=true');
+putenv('ALLOWED_EMAIL_DOMAINS=BICOL-U.EDU.PH, Example.edu, bicol-u.edu.ph');
+putenv('ALLOWED_EMAIL_DOMAIN');
 ob_start();
 handle_runtime_config();
 $body = (string) ob_get_clean();
@@ -50,7 +54,7 @@ if (($payload['features']['student_auth_enabled'] ?? null) !== true) {
     fwrite(STDERR, "FAIL: runtime configuration payload does not expose Student authentication state.\n");
     exit(1);
 }
-if (($payload['allowed_email_domains'] ?? null) !== ['bicol-u.edu.ph']) {
+if (($payload['allowed_email_domains'] ?? null) !== ['bicol-u.edu.ph', 'example.edu']) {
     fwrite(STDERR, "FAIL: runtime configuration payload does not expose normalized institutional domains.\n");
     exit(1);
 }
