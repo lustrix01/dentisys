@@ -34,6 +34,8 @@ import { showFeedback } from '../../components/FeedbackCenter';
 import { 
   getFacultyClassesApi, 
   getFacultyCoursesApi, 
+  getFacultyStudentsApi,
+  createStudentInvitation,
   FacultyClassItem,
   CourseCatalogItem
 } from '../../services/apiClient';
@@ -45,6 +47,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [studentsList, setStudentsList] = useState<Student[]>([]);
   const [courses, setCourses] = useState<CourseCatalogItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isSendingInvitations, setIsSendingInvitations] = useState(false);
 
   // Active view tab: 'classes' or 'roster'
   const [activeTab, setActiveTab] = useState<'classes' | 'roster'>('classes');
@@ -96,10 +99,13 @@ export const ClassesAndRosters: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [clsRes, crsRes] = await Promise.all([
+      const [clsRes, crsRes, rosterRes] = await Promise.all([
         getFacultyClassesApi().catch(() => ({ status: 'success', classes: [] })),
-        getFacultyCoursesApi().catch(() => ({ status: 'success', courses: [] }))
+        getFacultyCoursesApi().catch(() => ({ status: 'success', courses: [] })),
+        getFacultyStudentsApi().catch(() => []),
       ]);
+
+      if (rosterRes.length > 0) setStudentsList(rosterRes as unknown as Student[]);
 
       if (clsRes.classes && clsRes.classes.length > 0) {
         setClasses(clsRes.classes);
@@ -334,17 +340,51 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
   // Handler: Send Email Invitation to Student
-  const handleSendStudentEmailInvite = (student: Student) => {
-    setNotification({
-      type: 'success',
-      message: `Email invitation dispatched to ${student.name} (${student.email})!`
-    });
+  const invitationClassId = (student: Student): string | null => {
+    if (!/^\d+$/.test(student.id)) return null;
+    const sections = student.classSections ?? [];
+    const selected = sections.find(section => section.classId === selectedClassFilterId);
+    const target = selectedClassFilterId === 'all' ? sections[0] : selected;
+    return target && /^\d+$/.test(target.classId) ? target.classId : null;
   };
 
-  const handleSendAllStudentInvites = () => {
+  const handleSendStudentEmailInvite = async (student: Student) => {
+    const classId = invitationClassId(student);
+    if (!classId) {
+      setNotification({ type: 'info', message: `${student.name} has no server-authoritative class enrollment to invite from.` });
+      return;
+    }
+    setIsSendingInvitations(true);
+    try {
+      const response = await createStudentInvitation({ studentId: student.id, classId });
+      setNotification({ type: response.delivery_status === 'Failed' ? 'info' : 'success', message: response.message });
+    } catch (error) {
+      setNotification({ type: 'info', message: error instanceof Error ? error.message : `Unable to invite ${student.name}.` });
+    } finally {
+      setIsSendingInvitations(false);
+    }
+  };
+
+  const handleSendAllStudentInvites = async () => {
+    setIsSendingInvitations(true);
+    const results = await Promise.all(filteredStudents.map(async student => {
+      const classId = invitationClassId(student);
+      if (!classId) return { issued: false, deliveryFailed: false };
+      try {
+        const response = await createStudentInvitation({ studentId: student.id, classId });
+        return { issued: true, deliveryFailed: response.delivery_status === 'Failed' };
+      } catch {
+        return { issued: false, deliveryFailed: false };
+      }
+    }));
+    const invited = results.filter(result => result.issued).length;
+    const deliveryFailed = results.filter(result => result.deliveryFailed).length;
+    setIsSendingInvitations(false);
     setNotification({
-      type: 'success',
-      message: `Email invitations dispatched to all ${filteredStudents.length} students on the class roster!`
+      type: invited === results.length && deliveryFailed === 0 ? 'success' : 'info',
+      message: deliveryFailed > 0
+        ? `Issued ${invited} of ${results.length} Student invitations; ${deliveryFailed} email deliveries failed. Review the roster and retry any that failed.`
+        : `Issued ${invited} of ${results.length} Student invitations. Review the roster and retry any that failed.`,
     });
   };
 
@@ -361,7 +401,7 @@ export const ClassesAndRosters: React.FC = () => {
             Create classes, import iBU student rosters (PDF/CSV), manage students, and send email invitations.
           </p>
           <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-2">
-            Development preview: roster changes and invitations are browser-local until a later authoritative workflow is approved.
+            Development preview: roster edits and imports are browser-local. Invitations are validated and issued by the server against canonical Student and class records.
           </p>
         </div>
 
@@ -565,7 +605,7 @@ export const ClassesAndRosters: React.FC = () => {
               <p className="text-xs text-slate-400">
                 {selectedClassFilterId !== 'all' 
                   ? `Showing enrolled students for selected class section.`
-                  : `Add, edit, or remove student accounts and dispatch registration email invitations.`}
+                  : `Add, edit, or remove roster entries and invite eligible Students to activate their accounts.`}
               </p>
             </div>
 
@@ -585,7 +625,8 @@ export const ClassesAndRosters: React.FC = () => {
 
               <button
                 onClick={handleSendAllStudentInvites}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                disabled={isSendingInvitations || filteredStudents.length === 0}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Mail className="w-3.5 h-3.5" />
                 <span>Send Invites to All</span>
@@ -634,7 +675,8 @@ export const ClassesAndRosters: React.FC = () => {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleSendStudentEmailInvite(st)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-accent-600 hover:text-white dark:hover:bg-accent-600 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer"
+                            disabled={isSendingInvitations}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-accent-600 hover:text-white dark:hover:bg-accent-600 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                             title="Send Email Invitation"
                           >
                             <Send className="w-3 h-3" />

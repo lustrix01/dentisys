@@ -235,7 +235,7 @@ test('faculty can create a student and enrollment with returned identifiers', as
   expect(students.some((student: { id: string }) => student.id === created.student.id)).toBeTruthy();
 });
 
-test('Student signup, Mailpit activation, password login, and exact identity shape', async ({ page }) => {
+test('Faculty-issued Student invitation, Mailpit acceptance, password login, and exact identity shape', async ({ page }) => {
   const facultyCredentials = await login(page, facultyEmail, facultyPassword);
   const classesResponse = await page.request.get('/api/faculty/classes', {
     headers: { Authorization: `Bearer ${facultyCredentials.access_token}` },
@@ -258,15 +258,19 @@ test('Student signup, Mailpit activation, password login, and exact identity sha
   });
   expect(create.ok(), await create.text()).toBeTruthy();
 
-  const signup = await page.request.post('/api/auth/student/signup', { data: { email } });
-  const signupPayload = await jsonResponse(signup);
-  expect(signup.status()).toBe(202);
-  expect(signupPayload.message).toMatch(/If an eligible Student record matches/i);
+  const emailOnlyAttempt = await page.request.post('/api/auth/student/signup', { data: { email } });
+  expect(emailOnlyAttempt.status()).toBe(404);
+
+  const invitation = await page.request.post('/api/faculty/student-invitations', {
+    headers: { Authorization: `Bearer ${facultyCredentials.access_token}` },
+    data: { studentId: String((await jsonResponse(create)).student.id), classId },
+  });
+  expect(invitation.ok(), await invitation.text()).toBeTruthy();
 
   const mailpitMessages = await page.request.get('http://127.0.0.1:18025/api/v1/messages');
   const mailpitPayload = await jsonResponse(mailpitMessages);
   const activationMessage = (mailpitPayload.messages as Array<{ ID: string; Subject: string; To?: Array<{ Address?: string }> }>).find(message =>
-    message.Subject === 'DentiSys Student Account Activation'
+    message.Subject === 'DentiSys Student Invitation'
     && message.To?.some(recipient => recipient.Address?.toLowerCase() === email.toLowerCase())
   );
   expect(activationMessage).toBeTruthy();
@@ -274,6 +278,10 @@ test('Student signup, Mailpit activation, password login, and exact identity sha
   const detailPayload = await jsonResponse(messageDetail);
   const activationToken = JSON.stringify(detailPayload).match(/activate-student\?token=([A-Za-z0-9_-]{43})/)?.[1];
   expect(activationToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+  const inspection = await page.request.get(`/api/auth/student/invitation?token=${activationToken}`);
+  const invitationPayload = await jsonResponse(inspection);
+  expect(invitationPayload.invitation).toEqual(expect.objectContaining({ email, className: expect.any(String) }));
 
   const activation = await page.request.post('/api/auth/student/activate', {
     data: { token: activationToken, password: studentPassword },

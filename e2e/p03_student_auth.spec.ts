@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
 
 const ENABLED_RUNTIME_CONFIG = {
   status: 'ok',
@@ -12,6 +13,34 @@ const ENABLED_RUNTIME_CONFIG = {
   features: { browser_attendance_prototype: false, student_auth_enabled: true },
 };
 
+const GOOGLE_ENABLED_RUNTIME_CONFIG = {
+  ...ENABLED_RUNTIME_CONFIG,
+  providers: {
+    ...ENABLED_RUNTIME_CONFIG.providers,
+    identity: { password: { enabled: true }, google: { enabled: true, client_id: 'client.apps.googleusercontent.com' }, development_mock: { enabled: false } },
+  },
+};
+
+async function installMockGoogleIdentityServices(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const state = { callback: null as null | ((response: { credential: string }) => void) };
+    (window as unknown as { google: unknown }).google = {
+      accounts: {
+        id: {
+          initialize: (options: { callback: (response: { credential: string }) => void }) => { state.callback = options.callback; },
+          renderButton: (element: HTMLElement) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = 'Continue with Google';
+            button.onclick = () => state.callback?.({ credential: 'mock-student-google-credential' });
+            element.appendChild(button);
+          },
+        },
+      },
+    };
+  });
+}
+
 test.describe('P03 Student identity and authentication', () => {
   test('legacy development login paths redirect to the canonical login page', async ({ page }) => {
     await page.goto('/login/dev');
@@ -21,37 +50,73 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page.getByRole('button', { name: /Development mock Student sign-in/i })).toHaveCount(0);
   });
 
-  test('Student signup is feature-gated and uses a generic response', async ({ page }) => {
-    await page.route('**/api/runtime-config', async route => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ENABLED_RUNTIME_CONFIG) });
-    });
-    await page.route('**/api/auth/student/signup', async route => {
-      await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({
-        status: 'ok',
-        message: 'If an eligible Student record matches that email, activation instructions will be sent.',
-      }) });
-    });
+  test('Student public signup redirects to invitation-only login', async ({ page }) => {
     await page.goto('/signup/student');
-    await page.getByLabel(/Institutional email/i).fill('student@bicol-u.edu.ph');
-    await page.getByRole('button', { name: /Request activation link/i }).click();
-    await expect(page.getByText(/If an eligible Student record matches/i)).toBeVisible();
+    await expect(page).toHaveURL('/login?invitationRequired=1');
+    await expect(page.getByText(/accounts are created through invitations/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /request activation/i })).toHaveCount(0);
   });
 
   test('activation scrubs the token from the URL before submitting the password', async ({ page }) => {
     await page.route('**/api/runtime-config', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(ENABLED_RUNTIME_CONFIG) });
     });
+    await page.route('**/api/auth/student/invitation**', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', invitation: { studentName: 'Test Student', studentNumber: 'P03-TEST', email: 'test.student@bicol-u.edu.ph', className: 'CLIN401-SecA', expiresAt: '2026-09-25T00:00:00Z' },
+      }) });
+    });
     await page.route('**/api/auth/student/activate', async route => {
       const payload = route.request().postDataJSON() as { token?: string };
       expect(payload.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(payload.password).toBe('Student123!');
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Student account activated. You may now sign in.' }) });
     });
     await page.goto('/activate-student?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
     await expect(page).toHaveURL('/activate-student');
+    await expect(page.getByText('Test Student')).toBeVisible();
+    await expect(page.getByText('Class: CLIN401-SecA')).toBeVisible();
+    await expect(page.getByText('Student account activation is unavailable.')).toHaveCount(0);
     await page.getByLabel(/^Password$/i).fill('Student123!');
     await page.getByLabel(/Confirm password/i).fill('Student123!');
-    await page.getByRole('button', { name: /Activate account/i }).click();
+    await page.getByRole('button', { name: /Accept invitation and activate/i }).click();
     await expect(page).toHaveURL('/login?activated=1');
+  });
+
+  test('disabled Student authentication retains the unavailable activation state', async ({ page }) => {
+    await page.route('**/api/runtime-config', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        ...ENABLED_RUNTIME_CONFIG,
+        features: { ...ENABLED_RUNTIME_CONFIG.features, student_auth_enabled: false },
+      }) });
+    });
+    await page.goto('/activate-student?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    await expect(page.getByRole('alert')).toContainText('Student account activation is unavailable.');
+  });
+
+  test('Google mismatch during Student invitation acceptance is reported without leaving the reusable invitation page', async ({ page }) => {
+    await installMockGoogleIdentityServices(page);
+    await page.route('**/api/runtime-config', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_ENABLED_RUNTIME_CONFIG) });
+    });
+    await page.route('**/api/auth/student/invitation**', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', invitation: { studentName: 'Test Student', studentNumber: 'P03-TEST', email: 'test.student@bicol-u.edu.ph', className: 'CLIN401-SecA', expiresAt: '2026-09-25T00:00:00Z' },
+      }) });
+    });
+    let submittedPayload: Record<string, unknown> | null = null;
+    await page.route('**/api/auth/student/activate', async route => {
+      submittedPayload = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'Google identity does not match the invited Student email.' }) });
+    });
+    await page.goto('/activate-student?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await page.getByLabel(/^Password$/i).fill('Student123!');
+    await page.getByLabel(/Confirm password/i).fill('Student123!');
+    await page.getByRole('button', { name: /Accept invitation and activate/i }).click();
+    await expect(page.getByRole('alert')).toContainText(/does not match the invited Student email/i);
+    await expect(page).toHaveURL('/activate-student');
+    expect(submittedPayload).toMatchObject({ credential: 'mock-student-google-credential', token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' });
   });
 
   test('real password-authenticated Student is isolated from every prototype surface', async ({ page }) => {

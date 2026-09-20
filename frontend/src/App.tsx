@@ -50,9 +50,8 @@ import { Settings as DeanSettings } from './pages/admin/Settings';
 import { Profile as SecretaryProfile } from './pages/secretary/Profile';
 import { Settings as SecretarySettings } from './pages/secretary/Settings';
 import { SsoLogin } from './pages/auth/SsoLogin';
-import { StudentSignup } from './pages/auth/StudentSignup';
 import { ActivateStudent } from './pages/auth/ActivateStudent';
-import { SignUp } from './pages/auth/SignUp';
+import { ActivateFaculty } from './pages/auth/ActivateFaculty';
 import { ActivateSecretary } from './pages/auth/ActivateSecretary';
 import { ForgotPassword } from './pages/auth/ForgotPassword';
 import { ResetPassword } from './pages/auth/ResetPassword';
@@ -164,9 +163,10 @@ function App() {
             <Route path="/recovery-codes" element={<RecoveryCodes />} />
 
             {/* Auth routes */}
-            <Route path="/signup" element={<SignUp />} />
-            <Route path="/register" element={<SignUp />} />
-            <Route path="/signup/student" element={<StudentSignup />} />
+            <Route path="/signup" element={<Navigate to="/login?invitationRequired=1" replace />} />
+            <Route path="/register" element={<Navigate to="/login?invitationRequired=1" replace />} />
+            <Route path="/signup/student" element={<Navigate to="/login?invitationRequired=1" replace />} />
+            <Route path="/activate-faculty" element={<ActivateFaculty />} />
             <Route path="/activate-student" element={<ActivateStudent />} />
             <Route path="/activate-secretary" element={<ActivateSecretary />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />

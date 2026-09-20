@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { activateStudent, getStudentInvitation, StudentInvitation } from '../../services/apiClient';
+import { activateFacultyInvitation, getFacultyInvitation } from '../../services/apiClient';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 
-export function ActivateStudent() {
+export function ActivateFaculty() {
   const runtimeConfig = useRuntimeConfig();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [token] = useState(() => searchParams.get('token') || '');
-  const [invitation, setInvitation] = useState<StudentInvitation | null>(null);
+  const [invitation, setInvitation] = useState<{ name: string; email: string; expiresAt: string } | null>(null);
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [credential, setCredential] = useState('');
@@ -27,29 +27,18 @@ export function ActivateStudent() {
 
   useEffect(() => {
     let active = true;
-    if (runtimeConfig.loading) {
-      setError('');
-      setLoading(true);
-      return () => { active = false; };
-    }
-    setError('');
-    if (!runtimeConfig.features.student_auth_enabled) {
-      setError('Student account activation is unavailable.');
-      setLoading(false);
-      return () => { active = false; };
-    }
     if (!token) {
-      setError('This Student invitation link is missing its token.');
+      setError('This Faculty invitation link is missing its token.');
       setLoading(false);
       return () => { active = false; };
     }
-    void getStudentInvitation(token).then(response => {
+    void getFacultyInvitation(token).then(response => {
       if (active) setInvitation(response.invitation);
     }).catch(err => {
-      if (active) setError(err instanceof Error ? err.message : 'This Student invitation is invalid or expired.');
+      if (active) setError(err instanceof Error ? err.message : 'This Faculty invitation is invalid or expired.');
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [runtimeConfig.features.student_auth_enabled, runtimeConfig.loading, token]);
+  }, [token]);
 
   useEffect(() => {
     if (!googleEnabled || !invitation || !googleClientId || !googleButtonRef.current) return;
@@ -90,11 +79,11 @@ export function ActivateStudent() {
     setSubmitting(true);
     setError('');
     try {
-      await activateStudent(token, password, credential || undefined);
+      await activateFacultyInvitation(token, password, credential || undefined);
       navigate('/login?activated=1', { replace: true });
     } catch (err) {
       setCredential('');
-      setError(err instanceof Error ? err.message : 'Unable to accept Student invitation.');
+      setError(err instanceof Error ? err.message : 'Unable to accept Faculty invitation.');
     } finally {
       setSubmitting(false);
     }
@@ -103,16 +92,16 @@ export function ActivateStudent() {
   return (
     <main className="min-h-screen flex items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
       <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-        <p className="text-xs font-bold uppercase tracking-wider text-accent-600">Student invitation</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-accent-600">Faculty invitation</p>
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-white">Set your DentiSys password</h1>
         {loading && <p className="mt-4 text-sm text-slate-500">Checking invitation…</p>}
         {error && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">{error}</p>}
         {invitation && !loading && (
           <>
             <div className="mt-5 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800">
-              <p className="font-semibold text-slate-800 dark:text-slate-100">{invitation.studentName} <span className="font-normal text-slate-500">({invitation.studentNumber})</span></p>
+              <p className="font-semibold text-slate-800 dark:text-slate-100">{invitation.name}</p>
               <p className="mt-1 text-slate-600 dark:text-slate-300">{invitation.email}</p>
-              <p className="mt-1 text-xs text-slate-500">Class: {invitation.className}</p>
+              <p className="mt-2 text-xs text-slate-500">The Admin invitation is your approval. Your account becomes active when setup is complete.</p>
             </div>
             <label className="mt-5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
               Password

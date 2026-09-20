@@ -169,15 +169,15 @@ export const Dashboard: React.FC = () => {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <button
-                onClick={() => navigate('/admin/approvals')}
+                onClick={() => navigate('/admin/faculty-invite')}
                 className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-accent-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
               >
-                <span className="text-[10px] font-bold text-accent-600 dark:text-accent-400 uppercase tracking-wider block">Approvals</span>
+                <span className="text-[10px] font-bold text-accent-600 dark:text-accent-400 uppercase tracking-wider block">Onboarding</span>
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-accent-600 transition-colors">
-                  Faculty Approvals
+                  Faculty Invitations
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Review applicant faculty
+                  Authorize and track Faculty account setup
                 </p>
               </button>
 
@@ -270,13 +270,13 @@ export const Dashboard: React.FC = () => {
 
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
-                  Faculty Approvals
+                  Faculty Invitations
                 </span>
                 <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  New Faculty Applications Pending
+                  Invitation Status
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Review applicant credentials under the Faculty Approvals panel.
+                  Track pending, expired, and accepted Admin invitations.
                 </p>
               </div>
             </div>

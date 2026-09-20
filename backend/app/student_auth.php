@@ -17,11 +17,6 @@ function student_auth_mock_is_available(array $config): bool
         && (($config['mocks']['identity'] ?? false) === true);
 }
 
-function student_auth_email_fingerprint(string $email): string
-{
-    return hash('sha256', 'dentisys:student-signup-email:' . strtolower(trim($email)));
-}
-
 /**
  * Persist a bounded Student eligibility denial on an independent connection.
  * The independent transaction prevents a denial event from disappearing when
@@ -189,15 +184,15 @@ function student_auth_activation_email(array $student, string $link): string
     $name = htmlspecialchars(trim((string) ($student['first_name'] . ' ' . $student['last_name'])));
     $safeLink = htmlspecialchars($link);
     return "<p>Hello {$name},</p>"
-        . '<p>A DentiSys Student account activation was requested for your institutional email.</p>'
+        . '<p>A Faculty member has invited you to activate your DentiSys Student account.</p>'
         . "<p><a href=\"{$safeLink}\">Activate your Student account</a></p>"
-        . '<p>This link expires in 24 hours. If you did not request it, you may ignore this message.</p>';
+        . '<p>This invitation expires in 24 hours. If it was unexpected, please contact your Faculty member.</p>';
 }
 
 function student_auth_activation_context(PDO $pdo, string $tokenDigest): ?array
 {
     $stmt = $pdo->prepare(
-        "SELECT token_id, user_id, related_student_id, token_digest,
+        "SELECT token_id, user_id, related_student_id, related_cs_id, token_digest,
                 issued_at, expires_at, used_at, revoked_at
            FROM security_tokens
           WHERE purpose = 'student_activation' AND token_digest = ?
@@ -214,5 +209,19 @@ function student_auth_active_enrollment(PDO $pdo, int $studentId, bool $lock = f
     $suffix = $lock ? ' FOR UPDATE' : '';
     $stmt = $pdo->prepare("SELECT enrollment_id FROM enrollments WHERE student_id = ? AND status = 'Active' LIMIT 1{$suffix}");
     $stmt->execute([$studentId]);
+    return $stmt->fetchColumn() !== false;
+}
+
+function student_auth_active_class_enrollment(PDO $pdo, int $studentId, int $classId, bool $lock = false): bool
+{
+    $suffix = $lock ? ' FOR UPDATE' : '';
+    $stmt = $pdo->prepare(
+        "SELECT e.enrollment_id FROM enrollments e
+          JOIN class_sections cs ON cs.cs_id = e.cs_id
+          WHERE e.student_id = ? AND e.cs_id = ? AND e.status = 'Active'
+            AND lower(cs.status) = 'active'
+          LIMIT 1{$suffix}"
+    );
+    $stmt->execute([$studentId, $classId]);
     return $stmt->fetchColumn() !== false;
 }

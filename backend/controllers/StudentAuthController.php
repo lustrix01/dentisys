@@ -67,197 +67,269 @@ function student_auth_credentials_response(array $credentials): void
     auth_controller_emit($response);
 }
 
-function handle_student_signup(): void
+function handle_student_invitation_create(): void
 {
     $context = student_auth_context();
     try {
         $config = app_config();
         if (!student_auth_is_enabled($config)) {
-            student_auth_unavailable_response();
+            student_auth_error_response('Student account activation is unavailable.', 503);
             return;
         }
-
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        if ($authCtx['role'] !== 'faculty') {
+            student_auth_error_response('Only Faculty can invite Students.', 403);
+            return;
+        }
         $body = request_body();
         if (!$body['has_body']) {
             student_auth_error_response('Request body required.', 400);
             return;
         }
         $data = $body['data'];
-        if (array_diff(array_keys($data), ['email']) !== [] || !array_key_exists('email', $data)) {
+        if (array_diff(array_keys($data), ['studentId', 'classId']) !== []) {
             student_auth_error_response('Invalid request.', 400);
             return;
         }
-        $email = validate_institutional_email((string) $data['email']);
+        $studentId = filter_var($data['studentId'] ?? null, FILTER_VALIDATE_INT);
+        $classId = filter_var($data['classId'] ?? null, FILTER_VALIDATE_INT);
+        if (!$studentId || !$classId || $studentId < 1 || $classId < 1) {
+            student_auth_error_response('Canonical Student and class identifiers are required.', 422);
+            return;
+        }
 
-        $rateStorage = ['dir' => $config['rate_limit']['storage_dir']];
-        $ipScope = bin2hex(hash('sha256', 'ip:' . $context['ip_address'], true));
-        $emailScope = bin2hex(hash('sha256', 'student-signup:' . $email, true));
-        rate_limit_check($rateStorage, $ipScope, 'post_student_signup', 60, 20);
-        rate_limit_check($rateStorage, $emailScope, 'post_student_signup_email', 3600, 5);
-
-        $pdo = create_pdo($config);
-        student_auth_audit($pdo, $config, $context, 'student_signup_requested', 'Success', [
-            'target_type' => 'student_signup_request',
-            'target_id' => student_auth_email_fingerprint($email),
-            'description' => 'Student signup request received for an institutional email.',
-            'reason' => 'request_received',
-        ]);
         $pdo->beginTransaction();
-        $rawToken = null;
-        $student = null;
-        $accountId = null;
         try {
             $studentStmt = $pdo->prepare(
-                "SELECT student_id, student_number, first_name, last_name, bu_email, status,
-                        student_account_user_id, user_id
-                   FROM students
-                  WHERE lower(bu_email) = lower(?)
-                  FOR UPDATE"
+                "SELECT s.student_id, s.student_number, s.first_name, s.last_name, s.bu_email, s.status,
+                        s.student_account_user_id, s.user_id, cs.cs_id, cs.cs_name
+                   FROM students s
+                   JOIN enrollments e ON e.student_id = s.student_id
+                   JOIN class_sections cs ON cs.cs_id = e.cs_id
+                  WHERE s.student_id = ? AND cs.cs_id = ? AND e.status = 'Active'
+                    AND lower(cs.status) = 'active' AND cs.instructor_user_id = ?
+                  FOR UPDATE OF s, e, cs"
             );
-            $studentStmt->execute([$email]);
-            $students = $studentStmt->fetchAll(PDO::FETCH_ASSOC);
-
-            if (count($students) === 1) {
-                $student = $students[0];
-                $hasEnrollment = student_auth_active_enrollment($pdo, (int) $student['student_id'], true);
-                $eligible = strtolower((string) $student['status']) === 'active'
-                    && $student['bu_email'] !== null
-                    && $hasEnrollment;
-
-                // Account is locked only after Student and enrollment rows.
-                $account = null;
-                if ($eligible && $student['student_account_user_id'] !== null) {
-                    $accountStmt = $pdo->prepare(
-                        "SELECT user_id, login_email, role, status, display_name
-                           FROM user_accounts
-                          WHERE user_id = ?
-                          FOR UPDATE"
-                    );
-                    $accountStmt->execute([(int) $student['student_account_user_id']]);
-                    $account = $accountStmt->fetch(PDO::FETCH_ASSOC) ?: null;
-                }
-
-                if ($eligible && $student['student_account_user_id'] === null && $student['user_id'] === null) {
-                    $accountByEmail = $pdo->prepare(
-                        "SELECT user_id, login_email, role, status, display_name
-                           FROM user_accounts
-                          WHERE lower(login_email) = lower(?)
-                          FOR UPDATE"
-                    );
-                    $accountByEmail->execute([$email]);
-                    $account = $accountByEmail->fetch(PDO::FETCH_ASSOC) ?: null;
-                    $eligible = $account === null;
-                }
-
-                $canIssue = $eligible
-                    && $student['student_account_user_id'] === null
-                    && $student['user_id'] === null
-                    && $account === null;
-                $canResend = $eligible
-                    && $account !== null
-                    && (int) $student['student_account_user_id'] === (int) $account['user_id']
-                    && $student['user_id'] === null
-                    && $account['role'] === 'student'
-                    && $account['status'] === 'Pending Activation'
-                    && strtolower(trim((string) $account['login_email'])) === strtolower(trim($email));
-
-                if ($canIssue) {
-                    $placeholder = base64url_encode(random_bytes(32));
-                    $passwordHash = password_hash($placeholder, PASSWORD_DEFAULT);
-                    $displayName = trim((string) $student['first_name'] . ' ' . (string) $student['last_name']);
-                    $insert = $pdo->prepare(
-                        "INSERT INTO user_accounts
-                            (login_email, password_hash, role, display_name, status, created_at)
-                         VALUES (?, ?, 'student', ?, 'Pending Activation', CURRENT_TIMESTAMP(6))
-                         RETURNING user_id"
-                    );
-                    $insert->execute([$email, $passwordHash, $displayName]);
-                    $accountId = (int) $insert->fetchColumn();
-                    $link = $pdo->prepare(
-                        "UPDATE students SET student_account_user_id = ? WHERE student_id = ? AND student_account_user_id IS NULL"
-                    );
-                    $link->execute([$accountId, $student['student_id']]);
-                    if ($link->rowCount() !== 1) {
-                        throw new DomainException('Student link changed during activation request.');
-                    }
-                    $rawToken = student_auth_activation_raw_token();
-                    $digest = hash('sha256', $rawToken, true);
-                    $expires = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-                        ->add(new DateInterval('P1D'))
-                        ->format('Y-m-d H:i:s.u');
-                    $tokenStmt = $pdo->prepare(
-                        "INSERT INTO security_tokens
-                            (purpose, user_id, related_student_id, token_digest, issued_at, expires_at)
-                         VALUES ('student_activation', ?, ?, ?, CURRENT_TIMESTAMP(6), ?)"
-                    );
-                    $tokenStmt->bindValue(1, $accountId, PDO::PARAM_INT);
-                    $tokenStmt->bindValue(2, (int) $student['student_id'], PDO::PARAM_INT);
-                    pdo_bind_binary($tokenStmt, 3, $digest);
-                    $tokenStmt->bindValue(4, $expires, PDO::PARAM_STR);
-                    $tokenStmt->execute();
-                } elseif ($canResend) {
-                    $accountId = (int) $account['user_id'];
-                    $revoke = $pdo->prepare(
-                        "UPDATE security_tokens
-                            SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Replaced by Student activation resend'
-                          WHERE purpose = 'student_activation'
-                            AND user_id = ?
-                            AND used_at IS NULL
-                            AND revoked_at IS NULL"
-                    );
-                    $revoke->execute([$accountId]);
-
-                    $rawToken = student_auth_activation_raw_token();
-                    $digest = hash('sha256', $rawToken, true);
-                    $expires = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
-                        ->add(new DateInterval('P1D'))
-                        ->format('Y-m-d H:i:s.u');
-                    $tokenStmt = $pdo->prepare(
-                        "INSERT INTO security_tokens
-                            (purpose, user_id, related_student_id, token_digest, issued_at, expires_at)
-                         VALUES ('student_activation', ?, ?, ?, CURRENT_TIMESTAMP(6), ?)"
-                    );
-                    $tokenStmt->bindValue(1, $accountId, PDO::PARAM_INT);
-                    $tokenStmt->bindValue(2, (int) $student['student_id'], PDO::PARAM_INT);
-                    pdo_bind_binary($tokenStmt, 3, $digest);
-                    $tokenStmt->bindValue(4, $expires, PDO::PARAM_STR);
-                    $tokenStmt->execute();
-                }
+            $studentStmt->execute([(int) $studentId, (int) $classId, (int) $authCtx['user_id']]);
+            $student = $studentStmt->fetch(PDO::FETCH_ASSOC);
+            if ($student === false || strtolower((string) $student['status']) !== 'active') {
+                throw new DomainException('Student must be active and enrolled in a class assigned to this Faculty member.');
             }
+            if ($student['user_id'] !== null) {
+                throw new DomainException('This canonical Student record is linked to a Secretary account and cannot be invited as a Student.');
+            }
+            $email = validate_institutional_email((string) ($student['bu_email'] ?? ''));
+            $account = null;
+            if ($student['student_account_user_id'] !== null) {
+                $accountStmt = $pdo->prepare(
+                    'SELECT user_id, login_email, role, status, display_name, google_subject FROM user_accounts WHERE user_id = ? FOR UPDATE'
+                );
+                $accountStmt->execute([(int) $student['student_account_user_id']]);
+                $account = $accountStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                if ($account === null || $account['role'] !== 'student'
+                    || $account['status'] !== 'Pending Activation'
+                    || strtolower(trim((string) $account['login_email'])) !== strtolower(trim($email))) {
+                    throw new DomainException('This Student identity is already linked to an account that cannot be re-invited. Manual reconciliation is required.');
+                }
+                if (!empty($account['google_subject'])) {
+                    $evidence = $pdo->prepare(
+                        "SELECT COUNT(*) FROM security_tokens
+                          WHERE purpose = 'student_activation' AND user_id = ? AND related_student_id = ?"
+                    );
+                    $evidence->execute([(int) $account['user_id'], (int) $student['student_id']]);
+                    if ((int) $evidence->fetchColumn() < 1) {
+                        throw new DomainException('This pending Student account has a Google identity that cannot be safely cleared. Manual reconciliation is required.');
+                    }
+                    $clearGoogle = $pdo->prepare('UPDATE user_accounts SET google_subject = NULL WHERE user_id = ?');
+                    $clearGoogle->execute([(int) $account['user_id']]);
+                }
+            } else {
+                $emailCheck = $pdo->prepare('SELECT user_id FROM user_accounts WHERE lower(login_email) = lower(?) FOR UPDATE');
+                $emailCheck->execute([$email]);
+                if ($emailCheck->fetchColumn() !== false) {
+                    throw new DomainException('An account already exists for this institutional email. Manual reconciliation is required.');
+                }
+                $placeholderHash = password_hash(student_auth_activation_raw_token(), PASSWORD_DEFAULT);
+                $displayName = trim((string) $student['first_name'] . ' ' . (string) $student['last_name']);
+                $insertAccount = $pdo->prepare(
+                    "INSERT INTO user_accounts (login_email, password_hash, role, display_name, status, created_at)
+                     VALUES (?, ?, 'student', ?, 'Pending Activation', CURRENT_TIMESTAMP(6)) RETURNING user_id"
+                );
+                $insertAccount->execute([$email, $placeholderHash, $displayName]);
+                $accountId = (int) $insertAccount->fetchColumn();
+                $linkStudent = $pdo->prepare(
+                    'UPDATE students SET student_account_user_id = ? WHERE student_id = ? AND student_account_user_id IS NULL AND user_id IS NULL'
+                );
+                $linkStudent->execute([$accountId, (int) $student['student_id']]);
+                if ($linkStudent->rowCount() !== 1) {
+                    throw new DomainException('Student identity changed while issuing the invitation.');
+                }
+                $account = [
+                    'user_id' => $accountId,
+                    'login_email' => $email,
+                    'role' => 'student',
+                    'status' => 'Pending Activation',
+                    'display_name' => $displayName,
+                ];
+            }
+
+            $accountId = (int) $account['user_id'];
+            $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+            $nowSql = $now->format('Y-m-d H:i:s.u');
+            $expiresSql = $now->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u');
+            $revoke = $pdo->prepare(
+                "UPDATE security_tokens SET revoked_at = ?, revocation_reason = 'Replaced by a Faculty-authorized Student invitation'
+                  WHERE purpose = 'student_activation' AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL"
+            );
+            $revoke->execute([$nowSql, $accountId]);
+            $rawToken = student_auth_activation_raw_token();
+            $digest = hash('sha256', $rawToken, true);
+            $tokenStmt = $pdo->prepare(
+                "INSERT INTO security_tokens (purpose, user_id, related_student_id, related_cs_id, token_digest, issued_at, expires_at)
+                 VALUES ('student_activation', ?, ?, ?, ?, ?, ?) RETURNING token_id"
+            );
+            $tokenStmt->bindValue(1, $accountId, PDO::PARAM_INT);
+            $tokenStmt->bindValue(2, (int) $student['student_id'], PDO::PARAM_INT);
+            $tokenStmt->bindValue(3, (int) $classId, PDO::PARAM_INT);
+            pdo_bind_binary($tokenStmt, 4, $digest);
+            $tokenStmt->bindValue(5, $nowSql, PDO::PARAM_STR);
+            $tokenStmt->bindValue(6, $expiresSql, PDO::PARAM_STR);
+            $tokenStmt->execute();
+            $tokenId = (int) $tokenStmt->fetchColumn();
+
+            $invitationLink = app_url($config, '/activate-student', ['token' => $rawToken]);
+            $subject = 'DentiSys Student Invitation';
+            $messageBody = student_auth_activation_email($student, $invitationLink);
+            $outbox = $pdo->prepare(
+                "INSERT INTO email_outbox
+                 (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)
+                 VALUES (?, ?, ?, ?, 'Student Invitation', ?, 'Pending', ?) RETURNING email_id"
+            );
+            $outbox->execute([
+                $authCtx['user_id'], $email,
+                trim((string) $student['first_name'] . ' ' . (string) $student['last_name']),
+                $subject, $messageBody, uuid_v4_string(),
+            ]);
+            $emailId = (int) $outbox->fetchColumn();
+
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditContext = audit_begin_operation($pdo);
+            audit_finish_operation($pdo, $auditContext, [
+                'module_code' => 'faculty', 'action_code' => 'student_invited', 'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'], 'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'], 'actor_display_name' => $authCtx['display_name'],
+                'session_id' => $authCtx['session_id'], 'scope_cs_id' => (int) $classId,
+                'target_type' => 'security_token', 'target_id' => (string) $tokenId,
+                'description' => "Faculty invited canonical Student {$student['student_number']} to {$student['cs_name']}.",
+                'reason' => null, 'http_method' => $context['http_method'], 'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'], 'ip_address' => $context['ip_address'], 'user_agent' => $context['user_agent'],
+            ], $macKey);
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
 
-        if ($rawToken !== null && $student !== null) {
-            $link = app_url($config, '/activate-student', ['token' => $rawToken]);
-            send_email(
-                $email,
-                'DentiSys Student Account Activation',
-                student_auth_activation_email($student, $link),
-                $config,
-                true
-            );
-            student_auth_audit($pdo, $config, $context, 'student_activation_issued', 'Success', [
-                'actor_user_id' => null,
-                'target_type' => 'user_account',
-                'target_id' => (string) $accountId,
-                'description' => 'Student activation instructions issued.',
-            ]);
-        }
-
+        $sent = send_email($email, $subject, $messageBody, $config, true);
+        $finish = $pdo->prepare(
+            'UPDATE email_outbox SET status = ?, sent_at = ?, failure_reason = ? WHERE email_id = ?'
+        );
+        $finish->execute([
+            $sent ? 'Sent' : 'Failed',
+            $sent ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null,
+            $sent ? null : 'SMTP delivery failed or is not configured.',
+            $emailId,
+        ]);
+        $link = $invitationLink;
+        $showDevLink = !empty($config['show_dev_invitation_link']);
         student_auth_success_response([
             'status' => 'ok',
-            'message' => 'If an eligible Student record matches that email, activation instructions will be sent.',
-        ], 202);
+            'invitation' => [
+                'studentId' => (string) $studentId,
+                'classId' => (string) $classId,
+                'email' => $email,
+                'expiresAt' => $expiresSql,
+            ],
+            'invitation_link' => $showDevLink ? $link : null,
+            'delivery_status' => $sent ? 'Sent' : 'Failed',
+            'message' => $sent ? 'Student invitation issued and sent.' : 'Student invitation issued, but email delivery failed.',
+        ], 201);
     } catch (ValidationException $e) {
         student_auth_validation_response($e->getErrors());
-    } catch (RateLimitException $e) {
-        student_auth_error_response('Too many requests.', 429);
+    } catch (DomainException $e) {
+        student_auth_error_response($e->getMessage(), 409);
+    } catch (AuthException | ChallengeException | \RuntimeException $e) {
+        student_auth_error_response('Authentication required.', 401);
+    } catch (PDOException $e) {
+        if ((string) $e->getCode() === '23505') {
+            student_auth_error_response('This Student invitation conflicts with another account or live token.', 409);
+            return;
+        }
+        error_log('Student invitation error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
+        student_auth_error_response('Unable to issue Student invitation.', 500);
     } catch (Throwable $e) {
-        error_log('Student signup error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
-        student_auth_error_response('Internal server error.', 500);
+        error_log('Student invitation error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
+        student_auth_error_response('Unable to issue Student invitation.', 500);
+    }
+}
+
+function handle_student_invitation_get(): void
+{
+    try {
+        $config = app_config();
+        if (!student_auth_is_enabled($config)) {
+            student_auth_error_response('Student account activation is unavailable.', 503);
+            return;
+        }
+        $token = is_string($_GET['token'] ?? null) ? $_GET['token'] : '';
+        if (!preg_match(STUDENT_ACTIVATION_TOKEN_PATTERN, $token)) {
+            student_auth_error_response('Invalid or expired Student invitation.', 400);
+            return;
+        }
+        $pdo = create_pdo($config);
+        $tokenRow = student_auth_activation_context($pdo, hash('sha256', $token, true));
+        if ($tokenRow === null || $tokenRow['related_cs_id'] === null
+            || $tokenRow['used_at'] !== null || $tokenRow['revoked_at'] !== null
+            || new DateTimeImmutable((string) $tokenRow['expires_at'], new DateTimeZone('UTC')) <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
+            student_auth_error_response('Invalid or expired Student invitation.', 400);
+            return;
+        }
+        $stmt = $pdo->prepare(
+            "SELECT s.student_id, s.student_number, s.first_name, s.last_name, s.bu_email,
+                    ua.login_email, cs.cs_name
+               FROM students s
+               JOIN user_accounts ua ON ua.user_id = ?
+               JOIN class_sections cs ON cs.cs_id = ?
+              WHERE s.student_id = ? AND s.student_account_user_id = ua.user_id
+                AND s.user_id IS NULL AND ua.role = 'student' AND ua.status = 'Pending Activation'
+                AND lower(s.status) = 'active' AND lower(s.bu_email) = lower(ua.login_email)"
+        );
+        $stmt->execute([(int) $tokenRow['user_id'], (int) $tokenRow['related_cs_id'], (int) $tokenRow['related_student_id']]);
+        $student = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($student === false || !student_auth_active_class_enrollment($pdo, (int) $tokenRow['related_student_id'], (int) $tokenRow['related_cs_id'])) {
+            student_auth_error_response('Invalid or expired Student invitation.', 400);
+            return;
+        }
+        try {
+            validate_institutional_email((string) $student['bu_email']);
+        } catch (ValidationException) {
+            student_auth_error_response('Invalid or expired Student invitation.', 400);
+            return;
+        }
+        student_auth_success_response([
+            'status' => 'ok',
+            'invitation' => [
+                'studentName' => trim((string) $student['first_name'] . ' ' . (string) $student['last_name']),
+                'studentNumber' => (string) $student['student_number'],
+                'email' => (string) $student['login_email'],
+                'className' => (string) $student['cs_name'],
+                'expiresAt' => (string) $tokenRow['expires_at'],
+            ],
+        ], 200);
+    } catch (Throwable $e) {
+        error_log('Student invitation inspection error: ' . sanitize_for_log($e));
+        student_auth_error_response('Unable to inspect Student invitation.', 500);
     }
 }
 
@@ -277,9 +349,10 @@ function handle_student_activate(): void
             return;
         }
         $data = $body['data'];
-        if (array_diff(array_keys($data), ['token', 'password']) !== []
+        if (array_diff(array_keys($data), ['token', 'password', 'credential']) !== []
             || !array_key_exists('token', $data)
-            || !array_key_exists('password', $data)) {
+            || !array_key_exists('password', $data)
+            || (isset($data['credential']) && !is_string($data['credential']))) {
             student_auth_error_response('Invalid request.', 400);
             return;
         }
@@ -304,9 +377,42 @@ function handle_student_activate(): void
         $tokenDigest = hash('sha256', $token, true);
         $pdo = create_pdo($config);
         $contextRow = student_auth_activation_context($pdo, $tokenDigest);
-        if ($contextRow === null) {
+        if ($contextRow === null || $contextRow['related_cs_id'] === null
+            || $contextRow['used_at'] !== null || $contextRow['revoked_at'] !== null
+            || new DateTimeImmutable((string) $contextRow['expires_at'], new DateTimeZone('UTC')) <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
             student_auth_error_response('Invalid or expired activation token.', 400);
             return;
+        }
+
+        $identityStmt = $pdo->prepare(
+            "SELECT ua.login_email
+               FROM user_accounts ua
+               JOIN students s ON s.student_account_user_id = ua.user_id
+              WHERE ua.user_id = ? AND s.student_id = ? AND s.user_id IS NULL
+                AND ua.role = 'student' AND ua.status = 'Pending Activation'
+                AND lower(s.status) = 'active' AND lower(s.bu_email) = lower(ua.login_email)"
+        );
+        $identityStmt->execute([(int) $contextRow['user_id'], (int) $contextRow['related_student_id']]);
+        $invitedEmail = $identityStmt->fetchColumn();
+        if (!is_string($invitedEmail)
+            || !student_auth_active_class_enrollment($pdo, (int) $contextRow['related_student_id'], (int) $contextRow['related_cs_id'])) {
+            student_auth_error_response('Invalid or expired activation token.', 400);
+            return;
+        }
+        try {
+            $invitedEmail = validate_institutional_email($invitedEmail);
+        } catch (ValidationException) {
+            student_auth_error_response('Invalid or expired activation token.', 400);
+            return;
+        }
+        $googleSubject = null;
+        if (isset($data['credential'])) {
+            $claims = google_verify_id_token($config, $data['credential']);
+            if (strtolower(trim($claims['email'])) !== strtolower(trim($invitedEmail))) {
+                student_auth_error_response('Google identity does not match the invited Student email.', 409);
+                return;
+            }
+            $googleSubject = $claims['sub'];
         }
 
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
@@ -320,11 +426,11 @@ function handle_student_activate(): void
             $student = $studentStmt->fetch(PDO::FETCH_ASSOC);
 
             $hasEnrollment = $student !== false
-                ? student_auth_active_enrollment($pdo, (int) $student['student_id'], true)
+                ? student_auth_active_class_enrollment($pdo, (int) $student['student_id'], (int) $contextRow['related_cs_id'], true)
                 : false;
 
             $accountStmt = $pdo->prepare(
-                "SELECT user_id, login_email, role, display_name, status
+                "SELECT user_id, login_email, role, display_name, status, google_subject
                    FROM user_accounts WHERE user_id = ? FOR UPDATE"
             );
             $accountStmt->execute([(int) $contextRow['user_id']]);
@@ -338,11 +444,22 @@ function handle_student_activate(): void
             $tokenStmt->execute([(int) $contextRow['token_id']]);
             $lockedToken = $tokenStmt->fetch(PDO::FETCH_ASSOC);
 
+            $institutionalEmailValid = false;
+            if ($student !== false && $student['bu_email'] !== null) {
+                try {
+                    $institutionalEmailValid = validate_institutional_email((string) $student['bu_email'])
+                        === strtolower(trim((string) $student['bu_email']));
+                } catch (ValidationException) {
+                    $institutionalEmailValid = false;
+                }
+            }
+
             $valid = $student !== false
                 && $account !== false
                 && $lockedToken !== false
                 && (int) $lockedToken['user_id'] === (int) $account['user_id']
                 && (int) $lockedToken['related_student_id'] === (int) $student['student_id']
+                && (int) $lockedToken['related_cs_id'] === (int) $contextRow['related_cs_id']
                 && $lockedToken['used_at'] === null
                 && $lockedToken['revoked_at'] === null
                 && new DateTimeImmutable((string) $lockedToken['expires_at'], new DateTimeZone('UTC')) > new DateTimeImmutable('now', new DateTimeZone('UTC'))
@@ -353,6 +470,7 @@ function handle_student_activate(): void
                 && strtolower((string) $student['status']) === 'active'
                 && $student['bu_email'] !== null
                 && strtolower(trim((string) $student['bu_email'])) === strtolower(trim((string) $account['login_email']))
+                && $institutionalEmailValid
                 && $hasEnrollment;
 
             if (!$valid) {
@@ -361,15 +479,26 @@ function handle_student_activate(): void
                 return;
             }
 
+            if ($googleSubject !== null) {
+                $subjectStmt = $pdo->prepare('SELECT user_id FROM user_accounts WHERE google_subject = ? AND user_id <> ? FOR UPDATE');
+                $subjectStmt->execute([$googleSubject, (int) $account['user_id']]);
+                if ($subjectStmt->fetchColumn() !== false) {
+                    throw new DomainException('This Google identity is already linked to another account.');
+                }
+            }
+
             $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
             $update = $pdo->prepare(
-                "UPDATE user_accounts SET password_hash = ?, status = 'Active', updated_at = ? WHERE user_id = ?"
+                "UPDATE user_accounts SET password_hash = ?, google_subject = ?, status = 'Active', updated_at = ? WHERE user_id = ?"
             );
-            $update->execute([$passwordHash, $nowSql, $account['user_id']]);
+            $update->execute([$passwordHash, $googleSubject, $nowSql, $account['user_id']]);
             $used = $pdo->prepare(
-                "UPDATE security_tokens SET used_at = ? WHERE token_id = ? AND used_at IS NULL"
+                "UPDATE security_tokens SET used_at = ? WHERE token_id = ? AND used_at IS NULL AND revoked_at IS NULL"
             );
             $used->execute([$nowSql, $lockedToken['token_id']]);
+            if ($used->rowCount() !== 1) {
+                throw new DomainException('Invalid or expired activation token.');
+            }
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
@@ -389,6 +518,17 @@ function handle_student_activate(): void
             'status' => 'ok',
             'message' => 'Student account activated. You may now sign in.',
         ], 200);
+    } catch (GoogleIdentityException $e) {
+        student_auth_error_response($e->getMessage(), google_auth_identity_error_status($e->reason()));
+    } catch (DomainException $e) {
+        student_auth_error_response($e->getMessage(), 409);
+    } catch (PDOException $e) {
+        if ((string) $e->getCode() === '23505') {
+            student_auth_error_response('This Google identity is already linked to another account.', 409);
+            return;
+        }
+        error_log('Student activation error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
+        student_auth_error_response('Internal server error.', 500);
     } catch (Throwable $e) {
         error_log('Student activation error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
         student_auth_error_response('Internal server error.', 500);

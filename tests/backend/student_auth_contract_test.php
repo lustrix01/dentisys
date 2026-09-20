@@ -51,15 +51,26 @@ student_contract_assert(!str_contains($identityBody, 'student_auth_is_enabled'),
 student_contract_assert(str_contains($identitySource, "status = 'Active'"), 'Central Student identity helper checks active account status');
 student_contract_assert(str_contains($identitySource, 'student_account_user_id'), 'Central Student identity helper uses canonical account linkage');
 student_contract_assert(str_contains((string) $identitySource, "student_auth_eligibility_denied"), 'Central Student eligibility denials use the approved audit action');
-student_contract_assert(student_auth_email_fingerprint(' Student@Bicol-U.edu.ph ') === student_auth_email_fingerprint('student@bicol-u.edu.ph'), 'Signup audit fingerprint normalizes institutional email');
-
 $controllerSource = file_get_contents(__DIR__ . '/../../backend/controllers/StudentAuthController.php');
-student_contract_assert(substr_count((string) $controllerSource, 'student_auth_active_enrollment') >= 2, 'Signup and activation retain active-enrollment gates');
-student_contract_assert(str_contains((string) $controllerSource, "student_signup_requested"), 'Student signup records the approved request audit action');
+$routesSource = file_get_contents(__DIR__ . '/../../backend/routes/api.php');
+student_contract_assert(!str_contains((string) $routesSource, "'path' => '/api/auth/student/signup'"), 'Public Student self-signup has no API route');
+student_contract_assert(!str_contains((string) $routesSource, "'path' => '/api/auth/register'"), 'Public account registration has no API route');
+student_contract_assert(str_contains((string) $routesSource, "'path' => '/api/faculty/student-invitations'"), 'Faculty Student-invitation route is registered');
+student_contract_assert(!str_contains((string) $controllerSource, 'function student_auth_start_activation'), 'Legacy email-only Student provisioning helper is removed');
+student_contract_assert(!str_contains((string) $controllerSource, 'function handle_student_signup'), 'Retired Student signup handler is removed');
 student_contract_assert(str_contains((string) $identitySource, 'require_owned_enrollment'), 'Owned-enrollment helper remains available for object scoping');
-$signupActivationSource = substr((string) $controllerSource, 0, (int) strpos((string) $controllerSource, 'function handle_development_mock_student_session'));
-student_contract_assert(!preg_match('/\b(?:json_response|safe_error_response|validation_error_response)\s*\(/', $signupActivationSource), 'Student signup and activation use no-store response wrappers on every branch');
-student_contract_assert(str_contains((string) $controllerSource, "student['user_id'] === null"), 'Student signup canIssue explicitly rejects legacy Secretary links');
+$invitationStart = substr((string) $controllerSource, (int) strpos((string) $controllerSource, 'function handle_student_invitation_create'), (int) strpos((string) $controllerSource, 'function handle_student_invitation_get') - (int) strpos((string) $controllerSource, 'function handle_student_invitation_create'));
+student_contract_assert(str_contains($invitationStart, 'cs.instructor_user_id = ?'), 'Student invitation requires Faculty ownership of the specified class');
+student_contract_assert(str_contains($invitationStart, "e.status = 'Active'"), 'Student invitation requires the exact active class enrollment');
+student_contract_assert(str_contains($invitationStart, 'related_cs_id'), 'Student invitation token is bound to the authorized class');
+student_contract_assert(str_contains($invitationStart, "student['user_id'] !== null"), 'Student invitation rejects legacy Secretary-linked identities');
+$activationStart = (int) strpos((string) $controllerSource, 'function handle_student_activate');
+$mockStart = (int) strpos((string) $controllerSource, 'function handle_development_mock_student_session');
+$activationSource = substr((string) $controllerSource, $activationStart, $mockStart - $activationStart);
+student_contract_assert(str_contains($activationSource, "['related_cs_id'] === null"), 'Legacy Student tokens without class authorization are rejected');
+student_contract_assert(str_contains($activationSource, 'student_auth_active_class_enrollment'), 'Student activation rechecks the exact active class enrollment');
+student_contract_assert(str_contains($activationSource, 'student_account_user_id'), 'Student activation rechecks the canonical Student-account link');
+student_contract_assert(!preg_match('/\b(?:json_response|safe_error_response|validation_error_response)\s*\(/', $activationSource), 'Student activation uses no-store response wrappers on every branch');
 
 $authSource = file_get_contents(__DIR__ . '/../../backend/app/auth.php');
 $runtimeSource = file_get_contents(__DIR__ . '/../../backend/app/auth_runtime.php');

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { getRuntimeConfigApi, type RuntimeConfigPayload } from '../services/apiClient';
 
 export interface RuntimeConfig {
+  loading: boolean;
   status: 'ok';
   environment: string;
   allowed_email_domains: string[];
@@ -10,6 +11,7 @@ export interface RuntimeConfig {
 }
 
 const DISABLED_CONFIG: RuntimeConfig = {
+  loading: false,
   status: 'ok',
   environment: 'unknown',
   allowed_email_domains: ['bicol-u.edu.ph'],
@@ -26,10 +28,16 @@ const DISABLED_CONFIG: RuntimeConfig = {
   features: { browser_attendance_prototype: false, student_auth_enabled: false },
 };
 
-const RuntimeConfigContext = createContext<RuntimeConfig>(DISABLED_CONFIG);
+const INITIAL_CONFIG: RuntimeConfig = {
+  ...DISABLED_CONFIG,
+  loading: true,
+};
+
+const RuntimeConfigContext = createContext<RuntimeConfig>(INITIAL_CONFIG);
 
 function normalizeRuntimeConfig(payload: RuntimeConfigPayload): RuntimeConfig {
   return {
+    loading: false,
     status: 'ok',
     environment: typeof payload.environment === 'string' ? payload.environment : 'unknown',
     allowed_email_domains: Array.isArray(payload.allowed_email_domains)
@@ -66,7 +74,7 @@ function normalizeRuntimeConfig(payload: RuntimeConfigPayload): RuntimeConfig {
 }
 
 export function RuntimeConfigProvider({ children }: { children: React.ReactNode }) {
-  const [config, setConfig] = useState<RuntimeConfig>(DISABLED_CONFIG);
+  const [config, setConfig] = useState<RuntimeConfig>(INITIAL_CONFIG);
 
   useEffect(() => {
     let active = true;

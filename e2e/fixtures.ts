@@ -25,12 +25,12 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
 };
 
 const KNOWN_API_PATHS = new Set([
-  '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/register', '/api/auth/mfa/enroll/start',
+  '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh',
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
-  '/api/auth/student/signup', '/api/auth/student/activate', '/api/auth/development/mock-student-session',
-  '/api/admin/users/faculty', '/api/admin/users/approval', '/api/admin/dashboard/kpis', '/api/admin/retention/criteria',
+  '/api/auth/student/invitation', '/api/auth/student/activate', '/api/auth/development/mock-student-session',
+  '/api/admin/faculty-invitations', '/api/admin/faculty-invitations/reissue', '/api/faculty/student-invitations', '/api/admin/dashboard/kpis', '/api/admin/retention/criteria',
   '/api/admin/retention/criteria', '/api/admin/audit-logs', '/api/admin/profile', '/api/admin/settings', '/api/admin/reports/summary',
   '/api/secretary/invite', '/api/secretary/invitation', '/api/secretary/invitations', '/api/secretary/invitations/revoke',
   '/api/secretary/activate', '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/override',
@@ -44,7 +44,7 @@ const KNOWN_API_PATHS = new Set([
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
-  '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/mfa/settings', '/api/admin/users/faculty',
+  '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
   '/api/admin/dashboard/kpis', '/api/admin/audit-logs', '/api/secretary/invitation', '/api/secretary/invitations',
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/profile', '/api/secretary/settings',
   '/api/faculty/dashboard/kpis', '/api/faculty/students', '/api/faculty/assessments',
@@ -53,6 +53,7 @@ const GET_ONLY_API_PATHS = new Set([
 ]);
 
 const MULTI_METHOD_API_PATHS = new Set([
+  '/api/admin/faculty-invitations',
   '/api/admin/retention/criteria', '/api/admin/profile', '/api/admin/settings',
   '/api/secretary/profile', '/api/secretary/settings', '/api/faculty/scores', '/api/faculty/profile',
   '/api/faculty/settings', '/api/faculty/classes',
@@ -87,7 +88,6 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname.endsWith('/faculty/attendance') || pathname.endsWith('/secretary/attendance')) return { status: 'ok', records: [] };
   if (pathname.endsWith('/email-logs')) return { status: 'ok', logs: [] };
   if (pathname.endsWith('/retention/criteria') || pathname.endsWith('/retention')) return { status: 'ok', criteria: [], records: [], retention: [] };
-  if (pathname.endsWith('/admin/users/faculty')) return [];
   if (pathname.endsWith('/mfa/settings')) return { status: 'ok', two_factor: { enabled: false, authenticator_enabled: false, recovery_code_count: 0 } };
   if (method === 'GET') return [];
   return { status: 'ok', message: 'Deterministic mocked response.' };

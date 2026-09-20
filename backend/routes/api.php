@@ -8,7 +8,7 @@ require_once dirname(__DIR__) . '/controllers/AuthController.php';
 require_once dirname(__DIR__) . '/controllers/GoogleAuthController.php';
 require_once dirname(__DIR__) . '/controllers/StudentAuthController.php';
 require_once dirname(__DIR__) . '/controllers/MfaController.php';
-require_once dirname(__DIR__) . '/controllers/UserController.php';
+require_once dirname(__DIR__) . '/controllers/FacultyInvitationController.php';
 require_once dirname(__DIR__) . '/controllers/SecretaryController.php';
 require_once dirname(__DIR__) . '/controllers/PasswordResetController.php';
 require_once dirname(__DIR__) . '/controllers/AdminController.php';
@@ -45,9 +45,9 @@ return [
         'has_params' => false,
     ],
     [
-        'method' => 'POST',
-        'path' => '/api/auth/student/signup',
-        'handler' => 'handle_student_signup',
+        'method' => 'GET',
+        'path' => '/api/auth/student/invitation',
+        'handler' => 'handle_student_invitation_get',
         'has_params' => false,
     ],
     [
@@ -63,9 +63,15 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'GET',
+        'path' => '/api/auth/faculty/invitation',
+        'handler' => 'handle_auth_faculty_invitation_get',
+        'has_params' => false,
+    ],
+    [
         'method' => 'POST',
-        'path' => '/api/auth/register',
-        'handler' => 'handle_register',
+        'path' => '/api/auth/faculty/activate',
+        'handler' => 'handle_auth_faculty_invitation_accept',
         'has_params' => false,
     ],
     [
@@ -128,17 +134,23 @@ return [
         'handler' => 'handle_logout',
         'has_params' => false,
     ],
-    // User & Admin Approval Workflow
+    // Admin-authorized Faculty invitation workflow
     [
         'method' => 'GET',
-        'path' => '/api/admin/users/faculty',
-        'handler' => 'handle_admin_list_faculty',
+        'path' => '/api/admin/faculty-invitations',
+        'handler' => 'handle_admin_faculty_invitations_list',
         'has_params' => false,
     ],
     [
         'method' => 'POST',
-        'path' => '/api/admin/users/approval',
-        'handler' => 'handle_admin_faculty_approval',
+        'path' => '/api/admin/faculty-invitations',
+        'handler' => 'handle_admin_faculty_invitation_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/admin/faculty-invitations/reissue',
+        'handler' => 'handle_admin_faculty_invitation_reissue',
         'has_params' => false,
     ],
     // Class Secretary Workflow
@@ -299,6 +311,12 @@ return [
         'method' => 'POST',
         'path' => '/api/faculty/students',
         'handler' => 'handle_faculty_student_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/student-invitations',
+        'handler' => 'handle_student_invitation_create',
         'has_params' => false,
     ],
     [

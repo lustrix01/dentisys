@@ -24,6 +24,8 @@ require_once $root . '/backend/app/security.php';
 require_once $root . '/backend/app/student_auth.php';
 require_once $root . '/backend/app/google_auth.php';
 require_once $root . '/backend/controllers/GoogleAuthController.php';
+require_once $root . '/backend/controllers/FacultyInvitationController.php';
+require_once $root . '/backend/controllers/StudentAuthController.php';
 require_once $root . '/backend/controllers/HealthController.php';
 
 function expect_true(bool $condition, string $label): void
@@ -105,6 +107,7 @@ $expectedMigrations = [
     '005_student_identity_authentication.sql',
     '006_google_sign_in_phase_1.sql',
     '007_assessment_transmutation.sql',
+    '008_invite_only_onboarding.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -369,63 +372,16 @@ try {
 }
 expect_true($deleteRejected, 'Deleting the canonical Student row cannot orphan a role-Student account');
 
-// Legacy Secretary-linked records are eligibility-blind no-ops: exercise the
-// public signup endpoint and verify neither identity nor token state changes.
+// Email knowledge alone must not expose any Student onboarding operation.
 $legacyBefore = $pdo->query("SELECT user_id, student_account_user_id FROM students WHERE student_id = 24")->fetch(PDO::FETCH_ASSOC);
 $legacyTokenCountBefore = (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'student_activation' AND related_student_id = 24")->fetchColumn();
 $legacyAccountCountBefore = (int) $pdo->query("SELECT COUNT(*) FROM user_accounts")->fetchColumn();
-$httpContext = stream_context_create([
-    'http' => [
-        'method' => 'POST',
-        'header' => "Content-Type: application/json\r\nAccept: application/json\r\n",
-        'content' => json_encode(['email' => 'secretary@bicol-u.edu.ph'], JSON_THROW_ON_ERROR),
-        'ignore_errors' => true,
-        'timeout' => 10,
-    ],
-]);
-$httpBody = @file_get_contents('http://127.0.0.1/api/auth/student/signup', false, $httpContext);
-$httpStatus = 0;
-foreach ($http_response_header ?? [] as $headerLine) {
-    if (preg_match('/^HTTP\/\S+\s+(\d{3})/', $headerLine, $match)) {
-        $httpStatus = (int) $match[1];
-        break;
-    }
-}
-expect_same(202, $httpStatus, 'Legacy Secretary-linked signup returns generic HTTP 202');
-expect_true(is_string($httpBody) && str_contains($httpBody, 'If an eligible Student record matches that email'), 'Legacy Secretary-linked signup returns the generic body');
-expect_true((bool) array_filter($http_response_header ?? [], static fn(string $header): bool => stripos($header, 'Cache-Control: no-store') === 0), 'Student signup response carries Cache-Control: no-store');
+[$emailOnlyStatus] = integration_http_json('/api/auth/student/signup', '', ['email' => 'secretary@bicol-u.edu.ph']);
+expect_same(404, $emailOnlyStatus, 'Email-only Student self-signup endpoint is retired');
 $legacyAfter = $pdo->query("SELECT user_id, student_account_user_id FROM students WHERE student_id = 24")->fetch(PDO::FETCH_ASSOC);
-expect_same($legacyBefore, $legacyAfter, 'Legacy Secretary link and canonical NULL remain unchanged after signup');
-expect_same($legacyTokenCountBefore, (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'student_activation' AND related_student_id = 24")->fetchColumn(), 'Legacy Secretary-linked signup creates no activation token');
-expect_same($legacyAccountCountBefore, (int) $pdo->query("SELECT COUNT(*) FROM user_accounts")->fetchColumn(), 'Legacy Secretary-linked signup creates no account');
-$signupAudit = $pdo->query("SELECT target_id, description, reason
-                              FROM audit_events
-                             WHERE action_code = 'student_signup_requested'
-                             ORDER BY event_id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
-expect_true($signupAudit !== false, 'Valid institutional Student signup appends a request audit event');
-expect_same(student_auth_email_fingerprint('secretary@bicol-u.edu.ph'), $signupAudit['target_id'] ?? null, 'Signup audit records only the normalized-email fingerprint');
-expect_true(!str_contains((string) ($signupAudit['description'] ?? ''), 'secretary@bicol-u.edu.ph'), 'Signup audit does not store the raw institutional email');
-expect_same('request_received', $signupAudit['reason'] ?? null, 'Signup audit uses a bounded request reason code');
-
-$invalidContext = stream_context_create([
-    'http' => [
-        'method' => 'POST',
-        'header' => "Content-Type: application/json\r\nAccept: application/json\r\n",
-        'content' => json_encode(['unexpected' => 'field'], JSON_THROW_ON_ERROR),
-        'ignore_errors' => true,
-        'timeout' => 10,
-    ],
-]);
-@file_get_contents('http://127.0.0.1/api/auth/student/signup', false, $invalidContext);
-$invalidStatus = 0;
-foreach ($http_response_header ?? [] as $headerLine) {
-    if (preg_match('/^HTTP\/\S+\s+(\d{3})/', $headerLine, $match)) {
-        $invalidStatus = (int) $match[1];
-        break;
-    }
-}
-expect_same(400, $invalidStatus, 'Student signup validation failure preserves HTTP 400');
-expect_true((bool) array_filter($http_response_header ?? [], static fn(string $header): bool => stripos($header, 'Cache-Control: no-store') === 0), 'Student signup validation failure carries Cache-Control: no-store');
+expect_same($legacyBefore, $legacyAfter, 'Email-only onboarding leaves legacy Secretary identity links unchanged');
+expect_same($legacyTokenCountBefore, (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'student_activation' AND related_student_id = 24")->fetchColumn(), 'Email-only onboarding creates no Student invitation token');
+expect_same($legacyAccountCountBefore, (int) $pdo->query("SELECT COUNT(*) FROM user_accounts")->fetchColumn(), 'Email-only onboarding creates no account');
 
 // Remove only the isolated fixtures. Final role/link states are valid before
 // deletion, so the deferred identity triggers permit this cleanup.
@@ -472,6 +428,289 @@ $googleContext = [
     'endpoint' => '/api/auth/google',
 ];
 
+// Faculty invitations are Admin-authorized and replace public registration.
+[$facultyLoginStatus, $facultyLoginBody] = integration_http_json('/api/auth/login', '', [
+    'email' => 'faculty@bicol-u.edu.ph',
+    'password' => $demoPasswords['faculty@bicol-u.edu.ph'],
+]);
+expect_same(200, $facultyLoginStatus, 'Faculty integration login succeeds');
+$facultyAccessToken = (string) ($facultyLoginBody['access_token'] ?? '');
+
+$facultyInvitationEmail = 'invite-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+[$facultyInvitationStatus, $facultyInvitationBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
+    'name' => 'Dr. Invitation Faculty',
+    'email' => $facultyInvitationEmail,
+]);
+expect_same(201, $facultyInvitationStatus, 'Admin can issue a Faculty invitation');
+expect_same(null, $facultyInvitationBody['invitation_link'] ?? null, 'Test environment does not expose raw invitation tokens');
+expect_same('Sent', $facultyInvitationBody['delivery_status'] ?? null, 'Faculty invitation reports successful email delivery separately from issuance');
+$facultyInvitationAccountStmt = $pdo->prepare('SELECT user_id, role, status FROM user_accounts WHERE login_email = ?');
+$facultyInvitationAccountStmt->execute([$facultyInvitationEmail]);
+$facultyInvitationAccount = $facultyInvitationAccountStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('faculty', $facultyInvitationAccount['role'] ?? null, 'Faculty invitation fixes the Faculty role');
+expect_same('Pending Activation', $facultyInvitationAccount['status'] ?? null, 'Invited Faculty cannot log in before acceptance');
+$facultyInvitationTokenStmt = $pdo->prepare(
+    "SELECT octet_length(token_digest) AS digest_length, used_at, revoked_at,
+            (expires_at - issued_at) >= INTERVAL '6 days 23 hours' AS seven_day_lifetime
+       FROM security_tokens WHERE purpose = 'faculty_invitation' AND user_id = ?
+       ORDER BY token_id DESC LIMIT 1"
+);
+$facultyInvitationTokenStmt->execute([(int) $facultyInvitationAccount['user_id']]);
+$facultyInvitationToken = $facultyInvitationTokenStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(32, (int) ($facultyInvitationToken['digest_length'] ?? 0), 'Faculty invitation persists only a 32-byte digest');
+expect_true(in_array($facultyInvitationToken['seven_day_lifetime'] ?? null, [true, 't', '1', 1], true), 'Faculty invitation uses a seven-day expiry');
+$legacyFacultyName = 'Dr. Invitation Faculty, DMD';
+$pdo->prepare('UPDATE user_accounts SET display_name = ?, status = ? WHERE user_id = ?')->execute([$legacyFacultyName, 'Pending Approval', (int) $facultyInvitationAccount['user_id']]);
+[$facultyReissueStatus] = integration_http_json('/api/admin/faculty-invitations/reissue', $adminAccessToken, [
+    'id' => (string) $facultyInvitationAccount['user_id'],
+]);
+expect_same(201, $facultyReissueStatus, 'Admin can reissue an unaccepted Faculty invitation with a legacy display name');
+$reissuedFacultyAccountStmt = $pdo->prepare('SELECT login_email, display_name, status FROM user_accounts WHERE user_id = ?');
+$reissuedFacultyAccountStmt->execute([(int) $facultyInvitationAccount['user_id']]);
+$reissuedFacultyAccount = $reissuedFacultyAccountStmt->fetch(PDO::FETCH_ASSOC);
+expect_same($facultyInvitationEmail, $reissuedFacultyAccount['login_email'] ?? null, 'Faculty reissue preserves the stored email identity');
+expect_same($legacyFacultyName, $reissuedFacultyAccount['display_name'] ?? null, 'Faculty reissue preserves the stored display name');
+expect_same('Pending Activation', $reissuedFacultyAccount['status'] ?? null, 'Faculty reissue returns the account to pending activation');
+[$facultyReissueMismatchStatus] = integration_http_json('/api/admin/faculty-invitations/reissue', $adminAccessToken, [
+    'id' => (string) $facultyInvitationAccount['user_id'],
+    'email' => 'different-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph',
+]);
+expect_same(400, $facultyReissueMismatchStatus, 'Faculty reissue rejects browser-supplied identity changes');
+$facultyTokenStatesStmt = $pdo->prepare(
+    "SELECT COUNT(*) FILTER (WHERE used_at IS NULL AND revoked_at IS NULL) AS live_count,
+            COUNT(*) FILTER (WHERE revoked_at IS NOT NULL) AS revoked_count
+       FROM security_tokens WHERE purpose = 'faculty_invitation' AND user_id = ?"
+);
+$facultyTokenStatesStmt->execute([(int) $facultyInvitationAccount['user_id']]);
+$facultyTokenStates = $facultyTokenStatesStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(1, (int) ($facultyTokenStates['live_count'] ?? 0), 'Faculty reissue leaves exactly one unconsumed live token');
+expect_same(1, (int) ($facultyTokenStates['revoked_count'] ?? 0), 'Faculty reissue revokes the previous invitation');
+[$facultyListStatus, $facultyListBody] = integration_http_get_json('/api/admin/faculty-invitations', $adminAccessToken);
+expect_same(200, $facultyListStatus, 'Admin can view Faculty invitation state');
+$listedFacultyInvitation = array_values(array_filter($facultyListBody['invitations'] ?? [], static fn(array $item): bool => $item['email'] === $facultyInvitationEmail))[0] ?? null;
+expect_same('Pending', $listedFacultyInvitation['status'] ?? null, 'Faculty invitation list reports the current pending state');
+$listedLegacyFaculty = array_values(array_filter($facultyListBody['invitations'] ?? [], static fn(array $item): bool => $item['email'] === 'faculty@bicol-u.edu.ph'))[0] ?? null;
+expect_same('Not invited', $listedLegacyFaculty['status'] ?? null, 'Legacy Active Faculty is not falsely labeled as having accepted an invitation');
+[$nonAdminInviteStatus] = integration_http_json('/api/admin/faculty-invitations', $facultyAccessToken, [
+    'name' => 'Unauthorized Faculty',
+    'email' => 'unauthorized-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph',
+]);
+expect_same(403, $nonAdminInviteStatus, 'Faculty cannot issue Admin-authorized Faculty invitations');
+[$activeFacultyConflictStatus] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
+    'name' => 'Existing Faculty',
+    'email' => 'faculty@bicol-u.edu.ph',
+]);
+expect_same(409, $activeFacultyConflictStatus, 'Admin invitation does not overwrite an Active Faculty account');
+[$publicFacultySignupStatus] = integration_http_json('/api/auth/register', '', ['name' => 'Public Signup', 'email' => 'public-signup@bicol-u.edu.ph', 'password' => 'PublicPass123!']);
+expect_same(404, $publicFacultySignupStatus, 'Public Faculty registration endpoint is retired');
+
+$knownFacultyToken = base64url_encode(random_bytes(32));
+$knownFacultyDigest = hash('sha256', $knownFacultyToken, true);
+$acceptFacultyEmail = 'accept-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$acceptFacultyInsert = $pdo->prepare(
+    "INSERT INTO user_accounts (login_email, password_hash, role, display_name, status, created_at)
+     VALUES (?, ?, 'faculty', 'Dr. Acceptance Faculty', 'Pending Activation', CURRENT_TIMESTAMP(6))
+     RETURNING user_id"
+);
+$acceptFacultyInsert->execute([$acceptFacultyEmail, password_hash(base64url_encode(random_bytes(32)), PASSWORD_DEFAULT)]);
+$acceptFacultyId = (int) $acceptFacultyInsert->fetchColumn();
+$acceptFacultyTokenInsert = $pdo->prepare(
+    "INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)
+     VALUES ('faculty_invitation', ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '7 days')"
+);
+$acceptFacultyTokenInsert->bindValue(1, $acceptFacultyId, PDO::PARAM_INT);
+pdo_bind_binary($acceptFacultyTokenInsert, 2, $knownFacultyDigest);
+$acceptFacultyTokenInsert->execute();
+[$facultyInspectStatus, $facultyInspectBody] = integration_http_get_json('/api/auth/faculty/invitation?token=' . rawurlencode($knownFacultyToken), '');
+expect_same(200, $facultyInspectStatus, 'Valid Faculty invitation is inspectable');
+expect_same($acceptFacultyEmail, $facultyInspectBody['invitation']['email'] ?? null, 'Inspection shows the invited Faculty identity');
+[$facultyAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $knownFacultyToken, 'password' => 'FacultyInvitePass123!']);
+expect_same(200, $facultyAcceptStatus, 'Faculty invitation acceptance activates with a required password');
+$acceptedFacultyStmt = $pdo->prepare('SELECT role, status, password_hash FROM user_accounts WHERE user_id = ?');
+$acceptedFacultyStmt->execute([$acceptFacultyId]);
+$acceptedFaculty = $acceptedFacultyStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('faculty', $acceptedFaculty['role'] ?? null, 'Faculty acceptance preserves the invited role');
+expect_same('Active', $acceptedFaculty['status'] ?? null, 'Faculty acceptance requires no second approval');
+expect_true(password_verify('FacultyInvitePass123!', (string) ($acceptedFaculty['password_hash'] ?? '')), 'Faculty acceptance stores the created DentiSys password');
+[$facultyReplayStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $knownFacultyToken, 'password' => 'AnotherFacultyPass123!']);
+expect_same(400, $facultyReplayStatus, 'Consumed Faculty invitation cannot be reused');
+[$unknownFacultyTokenStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => base64url_encode(random_bytes(32)), 'password' => 'AnotherFacultyPass123!']);
+expect_same(400, $unknownFacultyTokenStatus, 'Unknown Faculty invitation cannot be accepted');
+[$acceptedFacultyLoginStatus] = integration_http_json('/api/auth/login', '', ['email' => $acceptFacultyEmail, 'password' => 'FacultyInvitePass123!']);
+expect_same(200, $acceptedFacultyLoginStatus, 'Activated Faculty can log in with the created password');
+[$acceptedFacultyListStatus, $acceptedFacultyListBody] = integration_http_get_json('/api/admin/faculty-invitations', $adminAccessToken);
+expect_same(200, $acceptedFacultyListStatus, 'Admin can inspect accepted Faculty invitation state');
+$listedAcceptedFaculty = array_values(array_filter($acceptedFacultyListBody['invitations'] ?? [], static fn(array $item): bool => $item['email'] === $acceptFacultyEmail))[0] ?? null;
+expect_same('Accepted', $listedAcceptedFaculty['status'] ?? null, 'Faculty accepted through the invitation lifecycle is labeled Accepted');
+
+$expiredFacultyToken = base64url_encode(random_bytes(32));
+$expiredFacultyDigest = hash('sha256', $expiredFacultyToken, true);
+$expiredFacultyEmail = 'expired-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$expiredFacultyInsert = $pdo->prepare(
+    "INSERT INTO user_accounts (login_email, password_hash, role, display_name, status, created_at)
+     VALUES (?, ?, 'faculty', 'Expired Invitation Faculty', 'Pending Activation', CURRENT_TIMESTAMP(6)) RETURNING user_id"
+);
+$expiredFacultyInsert->execute([$expiredFacultyEmail, password_hash(base64url_encode(random_bytes(32)), PASSWORD_DEFAULT)]);
+$expiredFacultyId = (int) $expiredFacultyInsert->fetchColumn();
+$expiredFacultyTokenInsert = $pdo->prepare(
+    "INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)
+     VALUES ('faculty_invitation', ?, ?, CURRENT_TIMESTAMP(6) - INTERVAL '8 days', CURRENT_TIMESTAMP(6) - INTERVAL '1 day')"
+);
+$expiredFacultyTokenInsert->bindValue(1, $expiredFacultyId, PDO::PARAM_INT);
+pdo_bind_binary($expiredFacultyTokenInsert, 2, $expiredFacultyDigest);
+$expiredFacultyTokenInsert->execute();
+[$expiredFacultyAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $expiredFacultyToken, 'password' => 'FacultyInvitePass123!']);
+expect_same(400, $expiredFacultyAcceptStatus, 'Expired Faculty invitation cannot be accepted');
+$revokeExpiredFacultyToken = $pdo->prepare('UPDATE security_tokens SET revoked_at = CURRENT_TIMESTAMP(6) WHERE purpose = ? AND token_digest = ?');
+$revokeExpiredFacultyToken->bindValue(1, 'faculty_invitation', PDO::PARAM_STR);
+pdo_bind_binary($revokeExpiredFacultyToken, 2, $expiredFacultyDigest);
+$revokeExpiredFacultyToken->execute();
+[$revokedFacultyAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $expiredFacultyToken, 'password' => 'FacultyInvitePass123!']);
+expect_same(400, $revokedFacultyAcceptStatus, 'Revoked Faculty invitation cannot be accepted');
+
+$studentClassStmt = $pdo->prepare(
+    "SELECT cs.cs_id FROM class_sections cs JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
+      WHERE ua.login_email = 'faculty@bicol-u.edu.ph' AND lower(cs.status) = 'active' ORDER BY cs.cs_id LIMIT 1"
+);
+$studentClassStmt->execute();
+$studentClassId = (int) $studentClassStmt->fetchColumn();
+expect_true($studentClassId > 0, 'Student invitation fixture uses a class owned by Faculty');
+$invitedStudentEmail = 'invite-student-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$invitedStudentNumber = 'INV-' . bin2hex(random_bytes(4));
+$invitedStudentInsert = $pdo->prepare(
+    'INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, ?, ?, ?, ?) RETURNING student_id'
+);
+$invitedStudentInsert->execute([$invitedStudentNumber, 'Invited', 'Student', $invitedStudentEmail, 'active']);
+$invitedStudentId = (int) $invitedStudentInsert->fetchColumn();
+$invitedEnrollmentInsert = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active')");
+$invitedEnrollmentInsert->execute([$invitedStudentId, $studentClassId]);
+[$emailOnlyStatus] = integration_http_json('/api/auth/student/signup', '', ['email' => $invitedStudentEmail]);
+expect_same(404, $emailOnlyStatus, 'Student email alone cannot begin onboarding');
+$uninvitedLinkStmt = $pdo->prepare('SELECT student_account_user_id FROM students WHERE student_id = ?');
+$uninvitedLinkStmt->execute([$invitedStudentId]);
+expect_same(null, $uninvitedLinkStmt->fetchColumn(), 'Email-only attempt leaves the canonical Student unlinked');
+[$adminStudentInviteStatus] = integration_http_json('/api/faculty/student-invitations', $adminAccessToken, ['studentId' => (string) $invitedStudentId, 'classId' => (string) $studentClassId]);
+expect_same(403, $adminStudentInviteStatus, 'Admin cannot issue a Faculty-authorized Student invitation');
+[$studentInviteStatus, $studentInviteBody] = integration_http_json('/api/faculty/student-invitations', $facultyAccessToken, ['studentId' => (string) $invitedStudentId, 'classId' => (string) $studentClassId]);
+expect_same(201, $studentInviteStatus, 'Owning Faculty can invite the canonical active Student');
+expect_same('Sent', $studentInviteBody['delivery_status'] ?? null, 'Student invitation reports successful email delivery separately from issuance');
+$studentEmailOutboxStmt = $pdo->prepare(
+    "SELECT eo.status, eo.email_type, eo.recipient_email
+       FROM email_outbox eo
+       JOIN user_accounts ua ON ua.user_id = eo.sender_user_id
+      WHERE ua.login_email = 'faculty@bicol-u.edu.ph' AND eo.recipient_email = ?
+      ORDER BY eo.email_id DESC LIMIT 1"
+);
+$studentEmailOutboxStmt->execute([$invitedStudentEmail]);
+$studentEmailOutbox = $studentEmailOutboxStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Sent', $studentEmailOutbox['status'] ?? null, 'Sent Student invitation is persisted in the Faculty email history ledger');
+expect_same('Student Invitation', $studentEmailOutbox['email_type'] ?? null, 'Student invitation history retains its email category');
+expect_same($invitedStudentEmail, $studentEmailOutbox['recipient_email'] ?? null, 'Student invitation history retains the canonical recipient');
+$pendingStudentStmt = $pdo->prepare(
+    'SELECT ua.user_id, ua.role, ua.status, s.student_account_user_id
+       FROM students s JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
+      WHERE s.student_id = ?'
+);
+$pendingStudentStmt->execute([$invitedStudentId]);
+$pendingStudent = $pendingStudentStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('student', $pendingStudent['role'] ?? null, 'Student invitation creates a Student account');
+expect_same('Pending Activation', $pendingStudent['status'] ?? null, 'Invited Student cannot log in before acceptance');
+expect_same((int) $pendingStudent['user_id'], (int) $pendingStudent['student_account_user_id'], 'Student invitation sets the canonical account link');
+$studentTokenStmt = $pdo->prepare(
+    "SELECT related_student_id, related_cs_id, octet_length(token_digest) AS digest_length,
+            (expires_at - issued_at) >= INTERVAL '23 hours' AS day_lifetime
+       FROM security_tokens WHERE purpose = 'student_activation' AND user_id = ? ORDER BY token_id DESC LIMIT 1"
+);
+$studentTokenStmt->execute([(int) $pendingStudent['user_id']]);
+$issuedStudentToken = $studentTokenStmt->fetch(PDO::FETCH_ASSOC);
+expect_same($invitedStudentId, (int) ($issuedStudentToken['related_student_id'] ?? 0), 'Student activation token binds the canonical Student');
+expect_same($studentClassId, (int) ($issuedStudentToken['related_cs_id'] ?? 0), 'Student activation token binds the authorized class');
+expect_same(32, (int) ($issuedStudentToken['digest_length'] ?? 0), 'Student invitation stores a token digest');
+expect_true(in_array($issuedStudentToken['day_lifetime'] ?? null, [true, 't', '1', 1], true), 'Student invitation uses a 24-hour expiry');
+$wrongSectionId = (int) $pdo->query("SELECT cs_id FROM class_sections WHERE cs_id <> {$studentClassId} ORDER BY cs_id LIMIT 1")->fetchColumn();
+if ($wrongSectionId > 0) {
+    $tokenCountBeforeWrongSection = (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'student_activation' AND user_id = " . (int) $pendingStudent['user_id'])->fetchColumn();
+    [$wrongSectionStatus] = integration_http_json('/api/faculty/student-invitations', $facultyAccessToken, ['studentId' => (string) $invitedStudentId, 'classId' => (string) $wrongSectionId]);
+    expect_same(409, $wrongSectionStatus, 'Faculty cannot invite through a class without the exact active enrollment');
+    expect_same($tokenCountBeforeWrongSection, (int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'student_activation' AND user_id = " . (int) $pendingStudent['user_id'])->fetchColumn(), 'Wrong-class request creates no Student invitation token');
+}
+[$studentReissueStatus] = integration_http_json('/api/faculty/student-invitations', $facultyAccessToken, ['studentId' => (string) $invitedStudentId, 'classId' => (string) $studentClassId]);
+expect_same(201, $studentReissueStatus, 'Faculty can reissue a pending Student invitation');
+expect_true((int) $pdo->query("SELECT COUNT(*) FROM security_tokens WHERE purpose = 'student_activation' AND user_id = " . (int) $pendingStudent['user_id'] . " AND revoked_at IS NOT NULL")->fetchColumn() > 0, 'Student reissue revokes obsolete activation tokens');
+
+// The API reissue above intentionally leaves one live token. Revoke that
+// fixture token before inserting a deterministic token for acceptance below.
+$pdo->prepare("UPDATE security_tokens SET revoked_at = CURRENT_TIMESTAMP(6) WHERE purpose = 'student_activation' AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL")
+    ->execute([(int) $pendingStudent['user_id']]);
+
+$knownStudentToken = base64url_encode(random_bytes(32));
+$knownStudentDigest = hash('sha256', $knownStudentToken, true);
+$knownStudentTokenInsert = $pdo->prepare(
+    "INSERT INTO security_tokens (purpose, user_id, related_student_id, related_cs_id, token_digest, issued_at, expires_at)
+     VALUES ('student_activation', ?, ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '24 hours')"
+);
+$knownStudentTokenInsert->bindValue(1, (int) $pendingStudent['user_id'], PDO::PARAM_INT);
+$knownStudentTokenInsert->bindValue(2, $invitedStudentId, PDO::PARAM_INT);
+$knownStudentTokenInsert->bindValue(3, $studentClassId, PDO::PARAM_INT);
+pdo_bind_binary($knownStudentTokenInsert, 4, $knownStudentDigest);
+$knownStudentTokenInsert->execute();
+[$studentInspectStatus, $studentInspectBody] = integration_http_get_json('/api/auth/student/invitation?token=' . rawurlencode($knownStudentToken), '');
+expect_same(200, $studentInspectStatus, 'Valid class-scoped Student invitation is inspectable');
+expect_same($invitedStudentEmail, $studentInspectBody['invitation']['email'] ?? null, 'Student inspection shows canonical institutional email');
+expect_same($invitedStudentNumber, $studentInspectBody['invitation']['studentNumber'] ?? null, 'Student inspection shows canonical Student number');
+[$studentAcceptStatus] = integration_http_json('/api/auth/student/activate', '', ['token' => $knownStudentToken, 'password' => 'StudentInvitePass123!']);
+expect_same(200, $studentAcceptStatus, 'Student accepts the Faculty invitation with a required password');
+$acceptedStudentStmt = $pdo->prepare(
+    'SELECT ua.status, ua.password_hash, s.student_account_user_id, s.user_id
+       FROM user_accounts ua JOIN students s ON s.student_account_user_id = ua.user_id
+      WHERE s.student_id = ?'
+);
+$acceptedStudentStmt->execute([$invitedStudentId]);
+$acceptedStudent = $acceptedStudentStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Active', $acceptedStudent['status'] ?? null, 'Eligible invited Student becomes Active');
+expect_true(password_verify('StudentInvitePass123!', (string) ($acceptedStudent['password_hash'] ?? '')), 'Student acceptance stores the created DentiSys password');
+expect_same(null, $acceptedStudent['user_id'] ?? null, 'Student acceptance does not rewrite a Secretary link');
+expect_same((int) $pendingStudent['user_id'], (int) $acceptedStudent['student_account_user_id'], 'Student acceptance preserves its canonical account relationship');
+[$acceptedStudentLoginStatus] = integration_http_json('/api/auth/login', '', ['email' => $invitedStudentEmail, 'password' => 'StudentInvitePass123!']);
+expect_same(200, $acceptedStudentLoginStatus, 'Activated Student can use password authentication');
+
+$unscopedEmail = 'unscoped-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$unscopedStudentInsert = $pdo->prepare(
+    'INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, ?, ?, ?, ?) RETURNING student_id'
+);
+$unscopedStudentInsert->execute(['LEG-' . bin2hex(random_bytes(4)), 'Legacy', 'Student', $unscopedEmail, 'active']);
+$unscopedStudentId = (int) $unscopedStudentInsert->fetchColumn();
+$unscopedEnrollment = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active')");
+$unscopedEnrollment->execute([$unscopedStudentId, $studentClassId]);
+[$unscopedInviteStatus] = integration_http_json('/api/faculty/student-invitations', $facultyAccessToken, ['studentId' => (string) $unscopedStudentId, 'classId' => (string) $studentClassId]);
+expect_same(201, $unscopedInviteStatus, 'Second active Student invitation fixture is created');
+$unscopedAccountStmt = $pdo->prepare('SELECT student_account_user_id FROM students WHERE student_id = ?');
+$unscopedAccountStmt->execute([$unscopedStudentId]);
+$unscopedAccountId = (int) $unscopedAccountStmt->fetchColumn();
+$pdo->prepare("UPDATE security_tokens SET revoked_at = CURRENT_TIMESTAMP(6) WHERE purpose = 'student_activation' AND user_id = ? AND used_at IS NULL AND revoked_at IS NULL")
+    ->execute([$unscopedAccountId]);
+$unscopedToken = base64url_encode(random_bytes(32));
+$unscopedDigest = hash('sha256', $unscopedToken, true);
+$unscopedTokenInsert = $pdo->prepare(
+    "INSERT INTO security_tokens (purpose, user_id, related_student_id, token_digest, issued_at, expires_at)
+     VALUES ('student_activation', ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '24 hours')"
+);
+$unscopedTokenInsert->bindValue(1, $unscopedAccountId, PDO::PARAM_INT);
+$unscopedTokenInsert->bindValue(2, $unscopedStudentId, PDO::PARAM_INT);
+pdo_bind_binary($unscopedTokenInsert, 3, $unscopedDigest);
+$unscopedTokenInsert->execute();
+[$unscopedActivationStatus] = integration_http_json('/api/auth/student/activate', '', ['token' => $unscopedToken, 'password' => 'StudentInvitePass123!']);
+expect_same(400, $unscopedActivationStatus, 'Legacy Student token without class scope is rejected');
+$unscopedStateStmt = $pdo->prepare('SELECT status FROM user_accounts WHERE user_id = ?');
+$unscopedStateStmt->execute([$unscopedAccountId]);
+expect_same('Pending Activation', $unscopedStateStmt->fetchColumn(), 'Rejected unscoped token leaves account pending');
+$unscopedUsedStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE purpose = ? AND token_digest = ?');
+$unscopedUsedStmt->bindValue(1, 'student_activation', PDO::PARAM_STR);
+pdo_bind_binary($unscopedUsedStmt, 2, $unscopedDigest);
+$unscopedUsedStmt->execute();
+expect_same(null, $unscopedUsedStmt->fetchColumn(), 'Rejected unscoped token remains unused');
 // Direct Google sessions persist provenance and remain visible to the normal
 // access-token and /api/auth/me paths.
 $directGoogleEmail = 'postgres-google-direct-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';

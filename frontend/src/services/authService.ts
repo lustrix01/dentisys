@@ -1,9 +1,5 @@
 import { recordAudit } from './auditService';
 import {
-  registerFacultyApi,
-  getFacultyRequestsApi,
-  approveFacultyApi,
-  rejectFacultyApi,
   inviteSecretaryApi,
   getSecretaryInvitationApi,
   activateSecretaryApi,
@@ -11,12 +7,11 @@ import {
   confirmPasswordResetApi,
   listSecretaryInvitationsApi,
   revokeSecretaryInvitationApi,
-  ApiError,
 } from './apiClient';
 import { normalizePersonName } from '../utils/nameNormalization';
 
 export type UserRole = 'admin' | 'faculty' | 'secretary';
-export type AccountStatus = 'Active' | 'Pending Approval' | 'Rejected' | 'Pending Invitation';
+export type AccountStatus = 'Active' | 'Pending Activation' | 'Pending Invitation';
 
 export interface RegisteredUser {
   id: string;
@@ -27,8 +22,6 @@ export interface RegisteredUser {
   title: string;
   status: AccountStatus;
   createdAt: string;
-  approvedAt?: string;
-  rejectedAt?: string;
   assignedSubjects?: string[];
   assignedClasses?: string[];
   assignedClassId?: string;
@@ -58,7 +51,6 @@ export interface PasswordCriteria {
   isValid: boolean;
 }
 
-const REGISTERED_USERS_KEY = 'dentisys_registered_users';
 const SECRETARY_INVITATIONS_KEY = 'dentisys_secretary_invitations';
 const EMAIL_LOGS_KEY = 'dentisys_email_logs';
 
@@ -132,70 +124,6 @@ export const validatePasswordRequirements = (password: string): PasswordCriteria
 };
 
 /**
- * Registers a new Faculty account via Backend API.
- */
-export const registerFaculty = async (
-  userData: { name: string; email: string; password: string }
-): Promise<{ success: boolean; message: string; user?: RegisteredUser }> => {
-  try {
-    const res = await registerFacultyApi({
-      ...userData,
-      name: normalizePersonName(userData.name),
-    });
-    return {
-      success: true,
-      message: res.message,
-    };
-  } catch (err) {
-    let msg = 'Registration failed.';
-    if (err instanceof ApiError) {
-      if (err.errors && typeof err.errors === 'object') {
-        const errObj = err.errors as Record<string, unknown>;
-        if (errObj.email) {
-          msg = Array.isArray(errObj.email) ? String(errObj.email[0]) : String(errObj.email);
-        } else {
-          msg = err.message;
-        }
-      } else if (typeof err.errors === 'string' && err.errors.trim()) {
-        msg = err.errors;
-      } else {
-        msg = err.message;
-      }
-    } else if (err instanceof Error) {
-      msg = err.message;
-    }
-    return { success: false, message: msg };
-  }
-};
-
-/**
- * Retrieves faculty registration requests via Backend API.
- */
-export const fetchFacultyRegistrationRequests = async (): Promise<RegisteredUser[]> => {
-  try {
-    const users = await getFacultyRequestsApi();
-    return users.map((u) => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      role: u.role,
-      title: u.title,
-      status: u.status as AccountStatus,
-      createdAt: u.createdAt,
-      approvedAt: u.approvedAt,
-      rejectedAt: u.rejectedAt,
-    }));
-  } catch (err) {
-    console.error('Failed to fetch faculty requests', err);
-    return [];
-  }
-};
-
-export const getFacultyRegistrationRequests = (): RegisteredUser[] => {
-  return [];
-};
-
-/**
  * Helper to log system emails into Email Management history.
  */
 export const logSystemEmail = (emailEntry: {
@@ -220,37 +148,6 @@ export const logSystemEmail = (emailEntry: {
     console.error('Failed to log system email', err);
   }
 };
-
-/**
- * Dean approves a faculty account via Backend API.
- */
-export const approveFacultyAccount = async (
-  email: string,
-): Promise<{ success: boolean; message: string }> => {
-  try {
-    const res = await approveFacultyApi(email);
-    return { success: true, message: res.message };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to approve faculty account.';
-    return { success: false, message: msg };
-  }
-};
-
-/**
- * Dean rejects a faculty account via Backend API.
- */
-export const rejectFacultyAccount = async (
-  email: string,
-): Promise<{ success: boolean; message: string }> => {
-  try {
-    const res = await rejectFacultyApi(email);
-    return { success: true, message: res.message };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to reject faculty account.';
-    return { success: false, message: msg };
-  }
-};
-
 
 /**
  * Class Secretary Invitations Management.

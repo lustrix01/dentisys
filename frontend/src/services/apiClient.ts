@@ -62,6 +62,8 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
   },
   409: {
     'This DentiSys account is linked to another Google identity.': 'This account is already linked to another Google identity.',
+    'Google identity does not match the invited Faculty email.': 'Google identity does not match the invited Faculty email.',
+    'Google identity does not match the invited Student email.': 'Google identity does not match the invited Student email.',
   },
 };
 
@@ -71,6 +73,19 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
     if (dataObj.errors) {
       if (typeof dataObj.errors === 'string' && dataObj.errors.trim()) {
         return dataObj.errors;
+      }
+      if (Array.isArray(dataObj.errors)) {
+        for (const validationError of dataObj.errors) {
+          if (typeof validationError === 'string' && validationError.trim()) {
+            return validationError;
+          }
+          if (validationError && typeof validationError === 'object') {
+            const message = (validationError as Record<string, unknown>).message;
+            if (typeof message === 'string' && message.trim()) {
+              return message;
+            }
+          }
+        }
       }
       if (typeof dataObj.errors === 'object' && dataObj.errors !== null) {
         const errMap = dataObj.errors as Record<string, unknown>;
@@ -99,6 +114,7 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   }
   if (status === 400) return 'Please check your input and try again.';
   if (status === 422) return backendMessage || 'Please correct the highlighted fields.';
+  if (status === 409) return backendMessage || 'This request conflicts with the current account state.';
   if (status === 401) return 'Authentication failed. Please log in again.';
   if (status === 403) return 'Access denied. Contact the administrator.';
   if (status === 429) return 'Too many attempts. Please wait and try again.';
@@ -197,12 +213,29 @@ export function linkGoogleAccount(linkChallengeToken: string, password: string):
   return request<GoogleLoginResponse>('POST', '/auth/google/link', { password }, linkChallengeToken);
 }
 
-export function requestStudentActivation(email: string): Promise<{ status: string; message: string }> {
-  return request('POST', '/auth/student/signup', { email });
+export interface StudentInvitation {
+  studentName: string;
+  studentNumber: string;
+  email: string;
+  className: string;
+  expiresAt: string;
 }
 
-export function activateStudent(token: string, password: string): Promise<{ status: string; message: string }> {
-  return request('POST', '/auth/student/activate', { token, password });
+export function getStudentInvitation(token: string): Promise<{ status: string; invitation: StudentInvitation }> {
+  return request('GET', `/auth/student/invitation?token=${encodeURIComponent(token)}`);
+}
+
+export function createStudentInvitation(data: { studentId: string; classId: string }): Promise<{
+  status: string;
+  invitation: { studentId: string; classId: string; email: string; expiresAt: string };
+  delivery_status: string;
+  message: string;
+}> {
+  return request('POST', '/faculty/student-invitations', data);
+}
+
+export function activateStudent(token: string, password: string, credential?: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/student/activate', { token, password, ...(credential ? { credential } : {}) });
 }
 
 export function createDevelopmentMockStudentSession(): Promise<LoginResponse> {
@@ -318,30 +351,48 @@ export function healthCheck(): Promise<HealthPayload> {
   return request<HealthPayload>('GET', '/health');
 }
 
-export function registerFacultyApi(data: { name: string; email: string; password: string }): Promise<{ status: string; message: string }> {
-  return request<{ status: string; message: string }>('POST', '/auth/register', data);
-}
-
-export function getFacultyRequestsApi(): Promise<Array<{
+export interface FacultyInvitation {
   id: string;
   email: string;
   name: string;
-  role: 'faculty' | 'admin' | 'secretary';
-  title: string;
   status: string;
-  createdAt: string;
-  approvedAt?: string;
-  rejectedAt?: string;
-}>> {
-  return request('GET', '/admin/users/faculty');
+  invitedAt: string | null;
+  expiresAt: string | null;
 }
 
-export function approveFacultyApi(email: string): Promise<{ status: string; message: string }> {
-  return request<{ status: string; message: string }>('POST', '/admin/users/approval', { email, action: 'approve' });
+export function getFacultyInvitations(): Promise<{ status: string; invitations: FacultyInvitation[] }> {
+  return request('GET', '/admin/faculty-invitations');
 }
 
-export function rejectFacultyApi(email: string): Promise<{ status: string; message: string }> {
-  return request<{ status: string; message: string }>('POST', '/admin/users/approval', { email, action: 'reject' });
+export function createFacultyInvitation(data: { name: string; email: string }): Promise<{
+  status: string;
+  invitation: FacultyInvitation;
+  invitation_link?: string | null;
+  delivery_status: string;
+  message: string;
+}> {
+  return request('POST', '/admin/faculty-invitations', data);
+}
+
+export function reissueFacultyInvitation(id: string): Promise<{
+  status: string;
+  invitation: FacultyInvitation;
+  invitation_link?: string | null;
+  delivery_status: string;
+  message: string;
+}> {
+  return request('POST', '/admin/faculty-invitations/reissue', { id });
+}
+
+export function getFacultyInvitation(token: string): Promise<{
+  status: string;
+  invitation: { name: string; email: string; expiresAt: string };
+}> {
+  return request('GET', `/auth/faculty/invitation?token=${encodeURIComponent(token)}`);
+}
+
+export function activateFacultyInvitation(token: string, password: string, credential?: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/faculty/activate', { token, password, ...(credential ? { credential } : {}) });
 }
 
 export function inviteSecretaryApi(data: { student_name: string; student_number?: string; class_name: string; email: string }): Promise<{ status: string; token: string; invitation_link: string; message: string }> {
@@ -787,6 +838,7 @@ export function getFacultyEmailLogsApi(): Promise<{
   logs: Array<{
     id: string;
     recipient: string;
+    recipientEmail?: string;
     subject: string;
     type: string;
     sentAt: string;

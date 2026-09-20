@@ -26,6 +26,8 @@ import {
   revokeSecretaryInvitation,
   SecretaryInvitation,
 } from '../../services/authService';
+import { createStudentInvitation } from '../../services/apiClient';
+import { Student } from '../../types';
 
 type Tab = 'student_invites' | 'secretary' | 'history';
 
@@ -50,6 +52,7 @@ export const EmailManagement: React.FC = () => {
   const [previewStudentId, setPreviewStudentId] = useState('');
   
   const [logs, setLogs] = useState<EmailLog[]>(initialLogs);
+  const [studentInvitationStates, setStudentInvitationStates] = useState<Record<string, { status: 'Sent' | 'Failed' | 'Pending'; sentAt: string }>>({});
   const [secretaryInvs, setSecretaryInvs] = useState<SecretaryInvitation[]>([]);
   
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -66,22 +69,30 @@ export const EmailManagement: React.FC = () => {
     }
   };
 
-  const fetchEmailLogs = () => {
+  const fetchEmailLogs = async () => {
     setLoadingLogs(true);
-    import('../../services/apiClient')
-      .then(m => m.getFacultyEmailLogsApi())
-      .then(res => {
+    try {
+      const res = await import('../../services/apiClient').then(m => m.getFacultyEmailLogsApi());
         if (Array.isArray(res.logs)) {
           setLogs(res.logs as EmailLog[]);
+          const latestByEmail: Record<string, { status: 'Sent' | 'Failed' | 'Pending'; sentAt: string }> = {};
+          for (const log of res.logs) {
+            if (log.type !== 'Student Invitation' || !log.recipientEmail) continue;
+            const key = log.recipientEmail.toLowerCase();
+            if (!latestByEmail[key]) latestByEmail[key] = { status: log.status, sentAt: log.sentAt };
+          }
+          setStudentInvitationStates(latestByEmail);
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoadingLogs(false));
+    } catch {
+      // The immediate invitation result remains visible if a later refresh fails.
+    } finally {
+      setLoadingLogs(false);
+    }
   };
 
   useEffect(() => {
     void loadSecretaryInvitations();
-    fetchEmailLogs();
+    void fetchEmailLogs();
   }, [students]);
 
   // Filter students based on selected Class Section filter & search
@@ -106,6 +117,15 @@ export const EmailManagement: React.FC = () => {
     } else {
       setSelected(filteredStudents.map(s => s.id));
     }
+  };
+
+  const invitationClassId = (student: Student): string | null => {
+    if (!/^\d+$/.test(student.id)) return null;
+    const sections = student.classSections ?? [];
+    const target = selectedClassId === 'all'
+      ? sections[0]
+      : sections.find(section => section.classId === selectedClassId || section.className?.includes(selectedClassId));
+    return target && /^\d+$/.test(target.classId) ? target.classId : null;
   };
 
   // Send Email Action (Student Invites & Secretary Invites)
@@ -142,7 +162,7 @@ export const EmailManagement: React.FC = () => {
       }
 
       await loadSecretaryInvitations();
-      fetchEmailLogs();
+      await fetchEmailLogs();
       setSelected([]);
       setIsSending(false);
       if (count > 0) {
@@ -152,17 +172,34 @@ export const EmailManagement: React.FC = () => {
         });
       }
     } else if (tab === 'student_invites') {
-      // Send Student Class Enrollment Invitations
-      let count = selected.length;
-      setTimeout(() => {
-        setIsSending(false);
-        setSelected([]);
-        fetchEmailLogs();
-        setNotice({
-          type: 'success',
-          message: `Student class enrollment invitation dispatched to ${count} student${count === 1 ? '' : 's'} via email!`
-        });
-      }, 800);
+      let successCount = 0;
+      let failedCount = 0;
+      let deliveryFailedCount = 0;
+      for (const studentId of selected) {
+        const student = safeStudents.find((candidate) => candidate.id === studentId);
+        const classId = student ? invitationClassId(student) : null;
+        if (!student || !classId) {
+          failedCount++;
+          continue;
+        }
+        try {
+          const response = await createStudentInvitation({ studentId: student.id, classId });
+          successCount++;
+          if (response.delivery_status === 'Failed') deliveryFailedCount++;
+        } catch {
+          failedCount++;
+        }
+      }
+
+      setSelected([]);
+      await fetchEmailLogs();
+      setIsSending(false);
+      setNotice({
+        type: failedCount === 0 && deliveryFailedCount === 0 ? 'success' : 'error',
+        message: deliveryFailedCount > 0
+          ? `Student invitations: ${successCount} issued, ${deliveryFailedCount} email deliveries failed, ${failedCount} failed or skipped.`
+          : `Student invitations: ${successCount} issued, ${failedCount} failed or skipped.`,
+      });
     }
   };
 
@@ -171,7 +208,7 @@ export const EmailManagement: React.FC = () => {
     if (res.success) {
       setNotice({ type: 'success', message: 'Class Secretary invitation revoked.' });
       await loadSecretaryInvitations();
-      fetchEmailLogs();
+      await fetchEmailLogs();
     } else {
       setNotice({ type: 'error', message: res.message });
     }
@@ -398,9 +435,20 @@ export const EmailManagement: React.FC = () => {
                         </td>
 
                         <td className="py-3.5 px-4 text-center">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
-                            Enrolled & Ready
-                          </span>
+                          {(() => {
+                            const invitation = studentInvitationStates[student.email.toLowerCase()];
+                            const label = invitation
+                              ? invitation.status === 'Sent' ? 'Invitation Sent'
+                                : invitation.status === 'Failed' ? 'Invitation Issued · Delivery Failed'
+                                  : 'Invitation Pending'
+                              : 'Enrolled & Ready';
+                            const tone = invitation?.status === 'Failed'
+                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/60'
+                              : invitation
+                                ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200/60'
+                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60';
+                            return <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border ${tone}`}>{label}</span>;
+                          })()}
                         </td>
 
                         <td className="py-3.5 px-4 text-right">

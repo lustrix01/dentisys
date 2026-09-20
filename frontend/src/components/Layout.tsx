@@ -280,8 +280,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'My Profile', path: '/secretary/profile' });
     } else if (path === '/secretary/settings') {
       crumbs.push({ name: 'Settings', path: '/secretary/settings' });
-    } else if (path === '/admin/faculty-approval') {
-      crumbs.push({ name: 'Faculty Approval', path: '/admin/faculty-approval' });
+    } else if (path === '/admin/faculty-invite') {
+      crumbs.push({ name: 'Faculty Invitations', path: '/admin/faculty-invite' });
     } else if (path === '/admin/retention-criteria') {
       crumbs.push({ name: 'Retention Criteria', path: '/admin/retention-criteria' });
     } else if (path === '/admin/reports') {

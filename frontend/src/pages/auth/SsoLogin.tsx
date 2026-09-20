@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowLeft, MapPin, Phone } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
@@ -36,6 +36,7 @@ export function SsoLogin() {
   const googleEnabled = runtimeConfig.providers.identity.google.enabled
     && Boolean(runtimeConfig.providers.identity.google.client_id);
   const activated = searchParams.get('activated') === '1';
+  const invitationRequired = searchParams.get('invitationRequired') === '1';
 
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
@@ -304,7 +305,13 @@ export function SsoLogin() {
 
                 {activated && (
                   <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
-                    Student account activated. Sign in with your new password.
+                    Account activated. Sign in with your new password.
+                  </div>
+                )}
+
+                {invitationRequired && (
+                  <div className="mb-4 rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-800">
+                    DentiSys accounts are created through invitations. Open the invitation link sent to your institutional email to set up your account.
                   </div>
                 )}
 
@@ -474,13 +481,6 @@ export function SsoLogin() {
                   </p>
                 </div>
               </form>
-
-              {runtimeConfig.features.student_auth_enabled && (
-                <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">
-                  Need to activate a Student account? <Link to="/signup/student" className="font-bold text-accent-600 hover:underline">Request activation</Link>
-                </p>
-              )}
-
 
             </div>
           </div>
