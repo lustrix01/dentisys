@@ -4,13 +4,18 @@
 
 ## Endpoint-by-Endpoint Security Control Table (Design Reference)
 
-All endpoints are proposed and currently unimplemented — documented as the intended security contract for later stages.
+This security design reference includes the current invite-only onboarding endpoints. Other rows remain proposals for later stages unless an implementation is documented in the relevant module.
 
 | Endpoint | Method | Auth | Permission | Scope | Rate Limit | Audit Event |
 |---|---|---|---|---|---|---|
 | /api/health | GET | None | N/A | N/A | None | None |
 | /api/auth/login | POST | None | N/A | N/A | 5/15min/IP | login_success, login_failure |
-| /api/auth/register | POST | None | N/A | N/A | 3/60min/IP | registration_submitted |
+| /api/admin/faculty-invitations | GET/POST | Access token | Admin | system_wide | None configured | faculty_invited |
+| /api/faculty/student-invitations | POST | Access token | Faculty | owned active class enrollment | None configured | student_invited |
+| /api/auth/faculty/invitation | GET | None | N/A | invitation token | None | None |
+| /api/auth/faculty/activate | POST | None | N/A | invitation token | None | faculty_invitation_accepted |
+| /api/auth/student/invitation | GET | None | N/A | Student + class invitation token | None | None |
+| /api/auth/student/activate | POST | None | N/A | Student + class invitation token | None | student_activation_completed |
 | /api/auth/mfa/enroll/start | POST | enrollment_token | N/A | own | 10/5min/user | mfa_enrollment_start |
 | /api/auth/mfa/enroll/confirm | POST | enrollment_token | N/A | own | 10/5min/user | mfa_enrollment_confirm |
 | /api/auth/mfa/verify | POST | mfa_session_token | N/A | own | 10/5min/user | mfa_verification |
@@ -20,9 +25,6 @@ All endpoints are proposed and currently unimplemented — documented as the int
 | /api/auth/me | GET | Access token | N/A | own | 30/1min/user | (not audited) |
 | /api/auth/password/reset-request | POST | None | N/A | N/A | 3/15min/IP | password_reset_requested |
 | /api/auth/password/reset-confirm | POST | Reset token | N/A | N/A | 5/15min/IP | password_reset_completed |
-| /api/admin/faculty-approvals | GET | Access token | user_accounts.read | system_wide | 50/1min/user | faculty_approval_read |
-| /api/admin/faculty-approvals/{id}/approve | POST | Access token | user_accounts.update_status | system_wide | 20/1min/user | faculty_approved |
-| /api/admin/faculty-approvals/{id}/reject | POST | Access token | user_accounts.update_status | system_wide | 20/1min/user | faculty_rejected |
 | /api/students | GET/POST | Access token | students.read/create | assigned_class | 100/50/min | student_read/created |
 | /api/students/{id} | GET/PATCH | Access token | students.read/update | assigned_class | 50/min | student_read/updated |
 | /api/courses | GET | Access token | courses.read | assigned_course | 100/min | course_read |

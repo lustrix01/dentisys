@@ -38,7 +38,7 @@ The script validates the required configuration and starts `docker-compose.web.y
 
 Do not run this prototype alongside the development stack unless one stack uses a different published application port.
 
-P03 real Student authentication can be enabled in this private-LAN prototype with `STUDENT_AUTH_ENABLED=true`, provided production-grade SMTP and normal secret/TLS controls are configured. The development identity mock remains unavailable in production-like environments; browser-created Student credentials are never accepted. Google Sign-In can be enabled with `GOOGLE_CLIENT_ID` and `ALLOWED_EMAIL_DOMAINS`; Google-assisted registration remains out of scope.
+P03 real Student authentication can be enabled in this private-LAN prototype with `STUDENT_AUTH_ENABLED=true`, provided production-grade SMTP and normal secret/TLS controls are configured. The development identity mock remains unavailable in production-like environments; browser-created Student credentials are never accepted. Admin-issued Faculty invitations and Faculty-issued, class-scoped Student invitations govern onboarding. Google Sign-In can be enabled with `GOOGLE_CLIENT_ID` and `ALLOWED_EMAIL_DOMAINS`; Google is optional identity verification during invitation acceptance, and password creation remains required.
 
 ## Why this is not deployment-ready
 

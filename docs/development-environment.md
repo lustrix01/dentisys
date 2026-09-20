@@ -79,7 +79,7 @@ These committed credentials are for local development/testing only. They exist o
 | Secretary | `secretary@bicol-u.edu.ph` | `Secretary123!` | Active |
 | Student | `student@bicol-u.edu.ph` | `Student123!` | Active |
 
-Additional Faculty fixtures use `Faculty123!`: `dr.reyes@bicol-u.edu.ph`, `dr.cruz@bicol-u.edu.ph`, `dr.aquino@bicol-u.edu.ph`, and `dr.torres@bicol-u.edu.ph` are Active; `pending.faculty1@bicol-u.edu.ph` and `pending.faculty2@bicol-u.edu.ph` remain Pending Approval. See [`database/seeds/development-demo.sql`](../database/seeds/development-demo.sql) for the complete current fixture set.
+Additional Faculty fixtures use `Faculty123!`: `dr.reyes@bicol-u.edu.ph`, `dr.cruz@bicol-u.edu.ph`, `dr.aquino@bicol-u.edu.ph`, and `dr.torres@bicol-u.edu.ph` are Active. Legacy `pending.faculty1@bicol-u.edu.ph` and `pending.faculty2@bicol-u.edu.ph` fixtures remain inactive and are not activated automatically; an Admin must explicitly issue a new invitation before either can establish access. See [`database/seeds/development-demo.sql`](../database/seeds/development-demo.sql) for the complete current fixture set.
 
 ### Google Sign-In Phase 1 testing
 
@@ -102,7 +102,7 @@ Phase 1 does not auto-create DentiSys accounts, and Google does not replace the 
 
 ### P03 Student authentication fixture
 
-The optional development fixture includes `student@bicol-u.edu.ph / Student123!`, a canonical `student_account_user_id` link, and one active enrollment. An established eligible Student account can authenticate with email/password or Google whenever Google is configured; `STUDENT_AUTH_ENABLED` does not disable those normal login methods. The flag gates Student signup, activation, and the server-issued development mock session. The development mock endpoint is backend-issued and rejected outside development/test; the browser never fabricates Student credentials.
+The optional development fixture includes `student@bicol-u.edu.ph / Student123!`, a canonical `student_account_user_id` link, and one active enrollment. An established eligible Student account can authenticate with email/password or Google whenever Google is configured; `STUDENT_AUTH_ENABLED` does not disable those normal login methods. The flag gates Student invitation inspection/activation and the server-issued development mock session. Student onboarding begins only from a Faculty-issued invitation tied to the canonical Student and active class enrollment. The development mock endpoint is backend-issued and rejected outside development/test; the browser never fabricates Student credentials.
 
 Student activation mail is delivered to Mailpit when the feature is enabled. The activation URL contains a one-time raw token; the token is scrubbed from the browser address bar immediately and is not stored in localStorage, sessionStorage, or auth context.
 

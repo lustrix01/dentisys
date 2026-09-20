@@ -100,7 +100,7 @@
 | Requirement | Status | Evidence |
 |---|---|---|
 | Canonical Student account linkage without legacy Secretary backfill | Confirmed | Migration 005, `students.student_account_user_id`, deferred identity constraints |
-| Student signup and one-time activation | Confirmed | `StudentAuthController`, `/api/auth/student/signup`, `/api/auth/student/activate`, 24-hour hashed token |
+| Faculty-authorized Student invitation and one-time activation | Confirmed | `StudentAuthController`, `/api/faculty/student-invitations`, `/api/auth/student/invitation`, `/api/auth/student/activate`, class-scoped 24-hour hashed token |
 | Server-issued Student sessions and provenance | Confirmed | `auth_sessions.authentication_source`, centralized `auth_assert_student_eligible`, JWT role `student` |
 | Student self/enrollment authorization | Confirmed | `require_student_identity`, `require_owned_enrollment`, Student-only route group |
 | Password/MFA/refresh/logout/recovery compatibility | Confirmed | Existing auth/MFA/session/reset paths re-check Student identity and preserve token rotation/revocation |

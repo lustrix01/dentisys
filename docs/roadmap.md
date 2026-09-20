@@ -3,7 +3,7 @@
 ## Identity work
 
 - Google Sign-In Phase 1 is implemented for existing institutional accounts with explicit password/MFA linking and multi-domain allowlisting.
-- Add Google-assisted registration where applicable; it still requires creation of a DentiSys password and preserves existing approval, eligibility, account-control, MFA, and DentiSys session boundaries.
+- Faculty onboarding is Admin-invitation only; the invitation is the approval and acceptance with a DentiSys password activates the account. Faculty invite Students from an owned class roster, and Student acceptance requires the canonical Student identity and active enrollment. Google is optional identity verification during either invitation acceptance.
 
 ## Planned product work
 

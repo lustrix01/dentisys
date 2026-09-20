@@ -150,7 +150,7 @@ Student activation tokens use `purpose='student_activation'`, a 32-byte SHA-256 
 
 ## Student identity invariant
 
-An active Student login requires exactly one canonical `students.student_account_user_id` link to an Active `user_accounts` row with role `student`, matching institutional email, and active Student status. Enrollment is required for signup eligibility, activation-token consumption, and `require_owned_enrollment()` only; it is not a post-activation session prerequisite. A legacy `students.user_id` link is not migrated or interpreted as a Student login link by P03.
+An active Student login requires exactly one canonical `students.student_account_user_id` link to an Active `user_accounts` row with role `student`, matching institutional email, and active Student status. Enrollment is required when Faculty issue an invitation, during class-scoped activation-token consumption, and by `require_owned_enrollment()` object scoping; it is not a post-activation session prerequisite. A legacy `students.user_id` link is not migrated or interpreted as a Student login link by P03.
 
 ## audit_events
 

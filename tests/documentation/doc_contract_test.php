@@ -50,3 +50,5 @@ foreach ($migrations as $migration) {
 }
 
 echo "PASS: current documentation entry points and migration conventions are present.\n";
+
+require_once __DIR__ . '/../backend/invitation_onboarding_contract_test.php';
