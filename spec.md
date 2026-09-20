@@ -514,19 +514,197 @@ Disposable generated artifacts, meaningless scaffolding, or exact redundant copi
 
 ---
 
-# 8. Deferred Product Areas
+# 8. Approved Requirements and Deferred Implementation
 
-Items here are known future areas, not authorization to implement them.
+The biometric, attendance, and Secretary requirements in this section are approved product decisions. Their implementation remains deferred; these rules do not claim that the functionality is implemented or authorize implementation by themselves. Technical selections explicitly marked deferred remain unresolved until team research and later Owner approval. Existing CURRENT rules and unrelated approved behavior remain in force.
 
-## BIO-001 — Facial biometrics
+## BIO-001 — Attendance-only purpose and identity boundary
 
-**Status: DEFERRED**
+**Status: APPROVED**
 
-Facial-biometric work is planned but is not yet a complete production feature.
+**Implementation: DEFERRED**
 
-Future work includes unresolved implementation around consent, enrollment, storage, matching, attendance integration, auditability, and privacy controls.
+Facial biometrics is used only for attendance verification. It MUST NOT be used for DentiSys login, password replacement, account authentication replacement, Student identity discovery, civil or institutional identity proofing, classroom-wide recognition, or general-purpose face recognition.
 
-Do not infer missing requirements.
+The Student MUST already be authenticated to their own DentiSys account. Biometric verification answers only whether the live face matches the protected reference enrolled for that authenticated Student. It MUST use strict 1:1 verification.
+
+DentiSys MUST NOT perform 1:N identification, search all Students, identify an unknown face, return another Student as a possible match, perform classroom-wide identification, or search the Student population for duplicate faces. If another person accesses a Student account and enrolls their own face, biometrics does not discover or establish that person's actual identity. This is an intentional privacy boundary.
+
+The facial-recognition algorithm, model, library, and implementation remain unselected as specified by BIO-007.
+
+## BIO-002 — Student enrollment, consent, and manual alternative
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+Only the Student may enroll, revoke, or re-enroll their own facial biometric through their authenticated account. Faculty and Secretary MUST NOT enroll another Student. Admin may revoke a Student's enrollment and request or require re-enrollment, but MUST NOT perform replacement enrollment for the Student.
+
+Explicit, voluntary Student consent MUST precede any biometric capture or processing. A valid enrollment becomes active automatically after consent, eligibility, capture-quality, liveness/PAD, and applicable provider checks pass. Faculty, Secretary, or Admin approval is not required for routine successful enrollment; a routine approval queue is excluded.
+
+Students may refuse biometric processing or later revoke consent. Refusal or inability to use biometrics MUST NOT block DentiSys access, normal Student functionality, or legitimate attendance credit. Authorized manual attendance, with Secretary-assisted manual attendance as the primary fallback, MUST remain available for refusal, revocation, inability to enroll, repeated failure, camera or accessibility limitations, geofence limitations, and unavailable biometric infrastructure.
+
+The consent disclosure MUST state the attendance-only purpose; the biometric material processed; that raw facial images are not retained; that a protected reference is retained and expires every semester; revocation and deletion behavior; who may access enrollment status; the manual attendance alternative; and that revocation does not erase historical attendance. This scope applies to adult university Students.
+
+Before real Student deployment, final privacy and consent wording MUST be reviewed and approved by the research team, adviser, relevant University authority, and University Data Protection Officer. This named review is the required institutional gate for real Student deployment; implementation remains deferred until that gate and the technical approvals in BIO-007 are complete.
+
+## BIO-003 — Temporary captures, protected reference, and infrastructure boundary
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+Raw photographs, enrollment images, camera frames, verification images, and failed captures MUST NOT be retained after processing, including in development or debugging artifacts. Temporary facial images MAY exist only as necessary for capture-quality evaluation, liveness/PAD, template generation, and 1:1 verification, and MUST be discarded after processing. Enrollment MAY temporarily collect multiple samples when needed for accuracy; the exact count is deferred.
+
+Of the biometric material, only the protected reference required for future 1:1 verification may be retained. Normal UI and API access MUST NOT retrieve raw references, templates, embeddings, or equivalent biometric material.
+
+After collection by the authorized Student-owned browser/device, biometric data MUST remain within infrastructure controlled by the DentiSys deployment. The browser/device is an authorized capture endpoint and MAY hold a capture temporarily for transmission, but it MUST NOT persist biometric material beyond the active operation. Biometric processing MUST NOT be delegated to an unapproved third-party or cloud provider. The intended research deployment may use one server and a logically separate biometric component whose boundary permits later relocation to separate infrastructure without changing product behavior. This rule does not select a container, service protocol, database, filesystem, object store, or other storage engine.
+
+All biometric captures, temporary facial images, protected references, and temporary location data transmitted between a Student device, DentiSys, and the biometric component MUST use protected transport before real Student deployment.
+
+## BIO-004 — Biometric information protection rationale
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+Protected biometric references MUST be protected at rest and in transit, against unauthorized retrieval and modification, and through appropriately restricted access. The design MUST consider confidentiality, integrity, privacy, renewability, and revocability because a compromised biometric characteristic cannot simply be changed like a password.
+
+The design rationale MUST explicitly reference ISO/IEC 24745:2022, Information security, cybersecurity and privacy protection — Biometric information protection. The reference does not claim ISO certification, formal compliance, or audited conformance. The encryption algorithm, cipher, key-management implementation, KMS/provider, protected-template mechanism, and key-rotation implementation remain deferred under BIO-007.
+
+## BIO-005 — Expiration, revocation, replacement, and loss
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+An enrollment expires every semester. A Student MUST re-enroll to continue biometric attendance after expiration.
+
+Usable biometric material MUST be invalidated and deleted when the enrollment expires at semester end, the Student revokes consent, Admin revokes enrollment, the linked Student account is deleted, the Student becomes inactive, or re-enrollment replaces the old enrollment. Re-enrollment MUST replace the previous usable reference; old usable templates MUST NOT be retained for historical audit. An audit record may retain that expiration, revocation, deletion, or replacement occurred without retaining the biometric material.
+
+Biometric templates MUST NOT be included in normal DentiSys application backups. If biometric storage is lost, Students MUST re-enroll. System-wide disabling of biometrics and deletion of biometric data are separate operations. Incompatible templates from a future biometric engine require Student re-enrollment; template migration is not authorized unless separately approved. Legitimate historical attendance MUST remain preserved.
+
+## BIO-006 — Liveness, capture quality, outcomes, and retries
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+Production biometric attendance MUST use liveness or presentation-attack detection. Passive or automatic liveness is preferred when practical; an accessible active challenge MAY be used when needed. The exact method, model, library, and thresholds remain deferred.
+
+The system MUST reasonably resist printed facial photographs, a face image displayed on another screen, prerecorded or displayed facial video, and straightforward replay attacks. It MUST continue to support ordinary browser-accessible phone, tablet, and desktop cameras and MUST NOT require depth, infrared, or Face ID-equivalent hardware or claim equivalent assurance.
+
+Capture MUST be rejected when there is no face, more than one face, inadequate visibility, severe blur, unacceptable pose, severe occlusion, or another deferred quality failure. The system MUST provide understandable corrective guidance and MUST NOT automatically choose one face from a multiple-face capture.
+
+Production UI MUST provide readable generic outcomes such as “Face verified” and “Face could not be verified.” Normal users MUST NOT receive raw similarity scores, confidence scores, or biometric vectors. Development diagnostics MAY display transient scores only behind an explicit development configuration flag; scores MUST NOT be persisted as normal client or audit data.
+
+Students may make legitimate retries while biometric attendance remains open. There is no product-level hard retry count. Repeated failure MUST NOT lock the Student account or itself mark the Student Absent. The outcome MUST direct the Student to Secretary or Faculty for manual attendance.
+
+## BIO-007 — Deferred biometric technology selections
+
+**Status: APPROVED**
+
+**Technical selection: DEFERRED**
+
+The following are NOT selected: facial-recognition algorithm; embedding algorithm; machine-learning model; face-recognition library; inference framework or runtime; similarity metric; biometric matching threshold; liveness/PAD model, library, implementation, active-challenge method, and thresholds; capture-quality thresholds; exact enrollment capture count; encryption algorithm or cipher; key-management implementation; KMS/provider; protected-template mechanism; key-rotation implementation; exact biometric storage technology; and production CPU/GPU/hardware.
+
+Selection requires team research, technical validation, and later explicit Owner approval. No implementation task may introduce a facial-recognition model, library, dependency, numeric matching threshold, or capture-count requirement before that approval. Any future threshold MUST be selected through validation of the chosen technology and MUST NOT be configurable by Students, Faculty, Secretary, or Admin.
+
+## BIO-008 — Devices, connectivity, mock isolation, and rollout
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+The target is desktop/laptop browsers, Android browsers/devices, and iOS browsers/devices. Students use their own devices. Where supported, they may select an available camera, including front or rear cameras. Verification requires connectivity to the deployed DentiSys service. There is no offline biometric queue or later local synchronization; if the service cannot be reached, manual attendance applies.
+
+Docker remains the intended deployment model. No specific CPU/GPU is a product requirement, and the current research laptop is not a production requirement. The initial study supports classroom-scale use and multiple classrooms; school-wide event recognition is outside current scope. Verification SHOULD feel responsive, but no fixed maximum time is selected. Normal Faculty dashboard refresh is sufficient; live-update behavior is not required by this specification.
+
+After the BIO-002 institutional privacy/consent review and the later technical approvals required by BIO-007 are complete, real biometrics is available by default. Student enrollment and use remain voluntary and require consent. A development biometric mock MAY remain only behind explicit development configuration. Mock and real enrollment MUST remain separate; real biometric failure or unavailable infrastructure MUST fall back to manual attendance and MUST NOT silently use the mock.
+
+## BIO-009 — Audit, information minimization, and accepted limits
+
+**Status: APPROVED**
+
+Meaningful audit events MUST cover consent granted and revoked; enrollment started, succeeded, and failed; re-enrollment; verification success and failure; biometric revocation/deletion; attendance creation; repeated attendance attempts where relevant; Secretary manual attendance; Faculty correction; Secretary Excused requests; Faculty approval or rejection; and relevant provider or configuration changes.
+
+Audit data MUST NOT contain face images, camera frames, templates, embeddings, provider secrets, credentials, precise Student GPS coordinates, or persistent similarity/confidence scores. An authenticated 1:1 verification failure MAY be associated with the claimed Student account. Biometric match results MUST NOT be persisted in browser storage or other persistent client-side storage.
+
+The study aims to reasonably resist obvious photo, display, video, and replay attacks but does not promise to defeat credential sharing, sophisticated GPS spoofing, sophisticated deepfakes, or compromised Student devices. The design MUST preserve accessibility and MUST NOT make biometric attendance less practical than the manual alternative without later approval. Faculty retains final academic authority over attendance outcomes; a normal successful biometric attendance does not require Faculty approval inside DentiSys.
+
+1:N identification, classroom-wide recognition, unknown-person identification, shared kiosk/classroom architecture, biometric login, biometric identity proofing, school-wide event face recognition, advanced GPS anti-spoofing guarantees, guarantees against all sophisticated deepfakes, and guarantees against compromised devices are outside the approved current implementation. Kiosk or classroom architecture may be future research only.
+
+## BIO-010 — Secretary access to own Student self-service
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+A Secretary remains authorized under the Secretary role and enters the Secretary interface by default. That same account retains access to applicable Student self-service associated with the person’s own canonical Student identity, including their own biometric enrollment, revocation, re-enrollment, attendance capture, and other approved Student functions. No second account, second login, simultaneous-role redesign, role inheritance, or new account-linking mechanism is introduced. Secretary privileges MUST NOT permit enrollment for another Student. REG-006’s invitation and activation workflow remains unchanged.
+
+## ATT-001 — Attendance-session authority
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+Faculty may start and manage attendance sessions only for classes they are authorized to manage. Secretary may start and manage sessions only for classes available through the authorized Secretary attendance role. Secretary authority does not grant unrestricted access to every class. Authorization MUST be enforced server-side.
+
+Faculty-created and Secretary-created sessions use the same attendance-session functionality. Both authorized roles may configure the applicable timing, geofence setting, session location, and radius. When a session is created, eligible Students have an attendance state that remains unresolved until attendance is recorded or the attendance-resolution lifecycle resolves it; this requirement does not select a database representation.
+
+## ATT-002 — Geofencing and location privacy
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+Geofencing is enabled by default for new biometric attendance sessions. Authorized Faculty or Secretary may disable it per session, select the session location through a map interface, and configure the permitted radius. The default radius is 100 meters and radius values are configured and stored in meters.
+
+Student coordinates MAY be used temporarily to evaluate whether the Student is inside the permitted radius. Exact Student GPS coordinates MUST NOT be permanently stored and no Student location history may be created. Geofence passed/failed, configured session location and radius, and an audit timestamp may be retained. If enabled geofencing is denied or unavailable, automated biometric attendance cannot complete and manual fallback applies.
+
+## ATT-003 — Attendance timing and final absence resolution
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+A successful biometric attendance during the on-time window produces Present. A successful biometric attendance during the allowed late window produces Late. The exact window durations are not selected here.
+
+After biometric capture closes, Students cannot submit biometric attendance through that capture window and the UI directs them to Secretary or Faculty. A Student with no resolved attendance remains unresolved; closure MUST NOT automatically create Absent. Only after the entire applicable class/session for that day concludes does the attendance workflow explicitly resolve remaining eligible unresolved attendance to Absent.
+
+A later authorized correction may change Absent to Excused or another authorized status. Biometric closure and final attendance resolution are separate events.
+
+## ATT-004 — Unresolved attendance and grading
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+While attendance is unresolved, attendance-dependent grading and transmutation remain pending. GRD-001 MUST consume a resolved attendance status and MUST NOT infer Absent or zero merely because an attendance record is missing or unresolved.
+
+Once attendance resolves, the existing approved GRD-001 behavior applies. Later authorized corrections MUST affect subsequent effective-grade computation without changing the stored raw score. One attendance session may link to multiple assessments where existing class, date, and session-code rules allow it. GRD-001’s formula and unrelated grading rules remain unchanged.
+
+## ATT-005 — Duplicate prevention and attendance provenance
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+Each Student has one authoritative attendance result per attendance session. A successful biometric verification is valid only for one active attendance session/request and MUST NOT be reused for another request or session. A later successful attempt in the same session returns an understandable already-recorded outcome and creates no duplicate authoritative attendance row. Repeated attempts may be audited.
+
+Biometric verification and attendance are separate concepts. Attendance preserves how it was established, such as biometric, Faculty manual, or Secretary manual. Correcting attendance MUST preserve the original biometric outcome and the correction history. Revoking or deleting biometric material MUST NOT delete legitimate historical attendance; historical attendance may retain its verification method without retaining biometric material.
+
+## ATT-006 — Manual correction and Excused workflow
+
+**Status: APPROVED**
+
+**Implementation: DEFERRED**
+
+Successful automated biometric attendance requires no Faculty approval. Faculty may directly correct attendance through authorized attendance-management functionality.
+
+Secretary retains authorized ordinary manual attendance functionality. When a Student contacts the Secretary about an excuse, the Secretary may submit an Excused request in DentiSys; only Faculty may approve or reject that request. Secretary MUST NOT finalize Excused through a generic manual override. A rejection leaves the current attendance status unchanged. When a Student contacts Faculty directly, Faculty may apply an authorized correction directly.
+
+Students contact Secretary or Faculty outside DentiSys. Current scope has no Student-facing in-system excuse or dispute submission, no supporting-document upload requirement, and no specified dispute deadline. Manual correction audit MUST preserve the old status, new status, actor, timestamp, reason where applicable, and the original biometric outcome.
 
 ## DEL-001 — Image publishing and deployment
 
@@ -542,13 +720,15 @@ Do not add cloud infrastructure, TLS, deployment automation, registry configurat
 
 An **OPEN** item cannot be resolved by an agent without Owner input.
 
-Only add an item here when an implementation is blocked by a real unresolved product decision.
+Only add an item here when an implementation is blocked by a real unresolved product decision or an explicitly deferred technical selection requiring Owner approval.
 
 Do not invent speculative open questions.
 
-Current open decisions:
+Current open decisions and deferred technical selections:
 
-* None recorded.
+* BIO-007: facial-recognition algorithm, embedding algorithm, machine-learning model, face-recognition library, inference framework/runtime, similarity metric, matching threshold, liveness/PAD model/library/method/thresholds, capture-quality thresholds, exact enrollment capture count, encryption/cipher, key management/KMS, protected-template mechanism, key rotation, exact biometric storage technology, and production hardware.
+
+These technical items remain unresolved. Listing them does not select or approve any technology. The biometric product requirements in §8 are approved.
 
 ---
 
@@ -579,6 +759,7 @@ Upon Owner approval of this specification:
 * Faculty and Student account establishment MUST require an authorized invitation and DentiSys password.
 * Google may verify an invited identity during acceptance, but MUST NOT provide invitation authority or enable public signup.
 * Google-linked users MUST retain email + password login capability.
+* The previous BIO-001 placeholder wording, insofar as it left biometric product requirements unresolved, is superseded by BIO-001–BIO-010 and ATT-001–ATT-006. Those product requirements and boundaries are approved, while biometric implementation and the technical selections listed in BIO-007 and §9 remain deferred. This supersession does not claim biometric functionality is implemented or authorize implementation.
 
 Affected roadmap/documentation should be aligned before or together with implementation of Google authentication.
 
