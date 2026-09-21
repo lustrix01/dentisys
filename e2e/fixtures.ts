@@ -41,7 +41,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/faculty/attendance/override', '/api/faculty/retention', '/api/faculty/retention/remedial', '/api/faculty/retention/status',
   '/api/faculty/profile', '/api/faculty/settings', '/api/faculty/send-email', '/api/faculty/email-logs', '/api/faculty/reports/summary',
   '/api/faculty/classes', '/api/faculty/courses', '/api/faculty/classes/available-students', '/api/faculty/classes/enroll',
-  '/api/faculty/classes/unenroll',
+  '/api/faculty/classes/unenroll', '/api/faculty/grading-config',
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
@@ -67,6 +67,7 @@ function isKnownApiPath(pathname: string): boolean {
 
 function isKnownApiRequest(pathname: string, method: string): boolean {
   if (!isKnownApiPath(pathname)) return false;
+  if (pathname === '/api/faculty/grading-config') return method === 'GET' || method === 'PUT';
   if (MULTI_METHOD_API_PATHS.has(pathname)) return method === 'GET' || method === 'POST';
   if (GET_ONLY_API_PATHS.has(pathname)) return method === 'GET';
   return method === 'POST';
@@ -119,6 +120,22 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname.endsWith('/faculty/students') || pathname.endsWith('/faculty/assessments')) return [];
   if (pathname.endsWith('/faculty/courses')) return { status: 'ok', courses: [] };
   if (pathname.endsWith('/faculty/classes')) return { status: 'ok', classes: [] };
+  if (pathname === '/api/faculty/grading-config') {
+    if (method === 'GET') {
+      return { status: 'ok', configuration: null };
+    }
+    return {
+      status: 'ok',
+      configuration: {
+        id: '1',
+        course: { id: 1, code: 'CLIN401', name: 'Clinical Dentistry I' },
+        semester: '1st Semester',
+        schoolYear: '2026-2027',
+        version: 1,
+        categories: [],
+      },
+    };
+  }
   if (pathname.endsWith('/faculty/attendance') || pathname.endsWith('/secretary/attendance')) {
     return {
       status: 'ok',

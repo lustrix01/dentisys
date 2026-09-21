@@ -657,4 +657,516 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toHaveCount(0);
     expect(overrideCalled).toBe(false);
   });
+
+  test.describe('Faculty Grade Weights Editor', () => {
+    const mockFacultyClasses = [
+      {
+        id: '1',
+        csId: 1,
+        csName: 'CLIN401-A',
+        courseId: 101,
+        courseCode: 'CLIN401',
+        courseName: 'Clinical Dentistry I',
+        units: 3,
+        schoolYear: '2026-2027',
+        semester: '1st Semester',
+        yearLevel: 4,
+        block: 'A',
+        schedule: 'Mon/Wed 8-11AM',
+        enrolledCount: 25,
+        instructorName: 'Prof. Jane Doe',
+        status: 'Active',
+      },
+      {
+        id: '2',
+        csId: 2,
+        csName: 'CLIN401-B',
+        courseId: 101,
+        courseCode: 'CLIN401',
+        courseName: 'Clinical Dentistry I',
+        units: 3,
+        schoolYear: '2026-2027',
+        semester: '1st Semester',
+        yearLevel: 4,
+        block: 'B',
+        schedule: 'Tue/Thu 8-11AM',
+        enrolledCount: 24,
+        instructorName: 'Prof. Jane Doe',
+        status: 'Active',
+      },
+      {
+        id: '3',
+        csId: 3,
+        csName: 'CLIN402-A',
+        courseId: 102,
+        courseCode: 'CLIN402',
+        courseName: 'Clinical Dentistry II',
+        units: 3,
+        schoolYear: '2026-2027',
+        semester: '2nd Semester',
+        yearLevel: 4,
+        block: 'A',
+        schedule: 'Fri 1-5PM',
+        enrolledCount: 20,
+        instructorName: 'Prof. Jane Doe',
+        status: 'Active',
+      },
+    ];
+
+    test.beforeEach(async ({ page }) => {
+      await page.route('**/api/faculty/classes', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', classes: mockFacultyClasses }),
+        });
+      });
+    });
+
+    test('collapses duplicate sections into course offering and shows honest unconfigured empty state', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: null }),
+        });
+      });
+
+      await page.goto('/grades?tab=components');
+
+      // Offering dropdown should collapse CLIN401-A and CLIN401-B into 1 option with 2 sections
+      const offeringSelect = page.locator('#course-offering-select');
+      await expect(offeringSelect).toBeVisible();
+      await expect(offeringSelect.locator('option')).toHaveCount(2);
+      await expect(offeringSelect.locator('option').first()).toContainText('CLIN401 - Clinical Dentistry I (1st Semester, 2026-2027) · 2 Sections');
+      await expect(offeringSelect.locator('option').nth(1)).toContainText('CLIN402 - Clinical Dentistry II (2nd Semester, 2026-2027) · 1 Section');
+
+      // Honest empty state
+      await expect(page.getByText(/Unconfigured Course Offering/i)).toBeVisible();
+      await expect(page.getByText(/No grade weights have been configured for this course offering yet/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: /Add First Category/i })).toBeVisible();
+    });
+
+    test('supports adding dynamic categories, reordering, weight updates, and live percentage validation', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: null }),
+        });
+      });
+
+      await page.goto('/grades?tab=components');
+      await page.getByRole('button', { name: /Add First Category/i }).click();
+
+      // Row 1
+      const nameInputs = page.locator('input[placeholder*="Category name"]');
+      const weightInputs = page.locator('input[placeholder="0"]');
+
+      await nameInputs.nth(0).fill('Quizzes');
+      await weightInputs.nth(0).fill('35');
+
+      // Check sum shows 35% and invalid
+      await expect(page.getByText('35%')).toBeVisible();
+      await expect(page.getByText(/Must equal 100%/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeDisabled();
+
+      // Add Row 2
+      await page.getByRole('button', { name: /Add Category/i }).click();
+      await nameInputs.nth(1).fill('Midterm Exam');
+      await weightInputs.nth(1).fill('30');
+
+      // Add Row 3
+      await page.getByRole('button', { name: /Add Category/i }).click();
+      await nameInputs.nth(2).fill('Final Exam');
+      await weightInputs.nth(2).fill('35');
+
+      // Check sum shows 100% and valid
+      await expect(page.locator('text=Total Weight:').locator('..')).toContainText('100% / 100%');
+      await expect(page.getByText(/Valid 100%/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+
+      // Test decimal precision (e.g. 33.3333 + 33.3333 + 33.3334)
+      await weightInputs.nth(0).fill('33.3333');
+      await weightInputs.nth(1).fill('33.3333');
+      await weightInputs.nth(2).fill('33.3334');
+      await expect(page.locator('text=Total Weight:').locator('..')).toContainText('100% / 100%');
+      await expect(page.getByText(/Valid 100%/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+
+      // Test reordering: move Row 1 ('Quizzes') down
+      await page.locator('button[aria-label="Move category down"]').first().click();
+      await expect(nameInputs.nth(0)).toHaveValue('Midterm Exam');
+      await expect(nameInputs.nth(1)).toHaveValue('Quizzes');
+    });
+
+    test('first save sends canonical payload omitting version and category IDs', async ({ page }) => {
+      let putPayload: any = null;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: null }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config', async (route) => {
+        if (route.request().method() === 'PUT') {
+          putPayload = route.request().postDataJSON();
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              configuration: {
+                id: 'cfg-new',
+                course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+                semester: '1st Semester',
+                schoolYear: '2026-2027',
+                version: 1,
+                categories: [
+                  { id: 100, name: 'Quizzes', weight: '50', sortOrder: 1, inUse: false },
+                  { id: 101, name: 'Final Exam', weight: '50', sortOrder: 2, inUse: false },
+                ],
+              },
+            }),
+          });
+        }
+      });
+
+      await page.goto('/grades?tab=components');
+      await page.getByRole('button', { name: /Add First Category/i }).click();
+
+      const nameInputs = page.locator('input[placeholder*="Category name"]');
+      const weightInputs = page.locator('input[placeholder="0"]');
+
+      await nameInputs.nth(0).fill('Quizzes');
+      await weightInputs.nth(0).fill('50');
+
+      await page.getByRole('button', { name: /Add Category/i }).click();
+      await nameInputs.nth(1).fill('Final Exam');
+      await weightInputs.nth(1).fill('50');
+
+      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+
+      await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+      expect(putPayload).not.toBeNull();
+      expect(putPayload.courseId).toBe(101);
+      expect(putPayload.semester).toBe('1st Semester');
+      expect(putPayload.schoolYear).toBe('2026-2027');
+      expect(putPayload.version).toBeUndefined();
+      expect(putPayload.categories).toHaveLength(2);
+      expect(putPayload.categories[0].id).toBeUndefined();
+      expect(putPayload.categories[0].name).toBe('Quizzes');
+      expect(putPayload.categories[0].weight).toBe('50');
+      expect(putPayload.categories[0].sortOrder).toBe(1);
+      expect(putPayload.categories[1].id).toBeUndefined();
+      expect(putPayload.categories[1].name).toBe('Final Exam');
+      expect(putPayload.categories[1].weight).toBe('50');
+      expect(putPayload.categories[1].sortOrder).toBe(2);
+
+      // Should now display Version 1 badge
+      await expect(page.getByText(/Version 1/i)).toBeVisible();
+    });
+
+    test('update save sends version, preserves category IDs after Move Up and Move Down, and sets matching sortOrder', async ({ page }) => {
+      let putPayload: any = null;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-1',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 2,
+              categories: [
+                { id: 201, name: 'Quizzes', weight: '50', sortOrder: 1, inUse: true },
+                { id: 202, name: 'Exams', weight: '50', sortOrder: 2, inUse: false },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config', async (route) => {
+        if (route.request().method() === 'PUT') {
+          putPayload = route.request().postDataJSON();
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              configuration: {
+                id: 'cfg-1',
+                course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+                semester: '1st Semester',
+                schoolYear: '2026-2027',
+                version: 3,
+                categories: [
+                  { id: 202, name: 'Exams', weight: '30', sortOrder: 1, inUse: false },
+                  { id: 201, name: 'Quizzes', weight: '40', sortOrder: 2, inUse: true },
+                  { id: 203, name: 'Practicum', weight: '30', sortOrder: 3, inUse: false },
+                ],
+              },
+            }),
+          });
+        }
+      });
+
+      await page.goto('/grades?tab=components');
+      await expect(page.getByText(/Version 2/i)).toBeVisible();
+
+      const nameInputs = page.locator('input[placeholder*="Category name"]');
+      const weightInputs = page.locator('input[placeholder="0"]');
+
+      // In-use category delete button should be disabled
+      const deleteButtons = page.locator('button[aria-label^="Delete category"]');
+      await expect(deleteButtons.nth(0)).toBeDisabled();
+      await expect(deleteButtons.nth(1)).toBeEnabled();
+
+      // Modify weights
+      await weightInputs.nth(0).fill('40');
+      await weightInputs.nth(1).fill('30');
+
+      // Add a third category (new)
+      await page.getByRole('button', { name: /Add Category/i }).click();
+      await nameInputs.nth(2).fill('Practicum');
+      await weightInputs.nth(2).fill('30');
+
+      // Reorder categories: Move row 0 (Quizzes) down
+      await page.locator('button[aria-label="Move category down"]').first().click();
+      await expect(nameInputs.nth(0)).toHaveValue('Exams');
+      await expect(nameInputs.nth(1)).toHaveValue('Quizzes');
+
+      // Move row 1 back up, then down again to verify Move Up works
+      await page.locator('button[aria-label="Move category up"]').nth(1).click();
+      await expect(nameInputs.nth(0)).toHaveValue('Quizzes');
+      await page.locator('button[aria-label="Move category down"]').first().click();
+      await expect(nameInputs.nth(0)).toHaveValue('Exams');
+      await expect(nameInputs.nth(1)).toHaveValue('Quizzes');
+
+      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+
+      await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+      expect(putPayload).not.toBeNull();
+      expect(putPayload.version).toBe(2);
+      expect(putPayload.categories).toHaveLength(3);
+
+      // Row 0: Exams (stable id: 202, weight: 30, sortOrder: 1)
+      expect(putPayload.categories[0].id).toBe(202);
+      expect(putPayload.categories[0].name).toBe('Exams');
+      expect(putPayload.categories[0].weight).toBe('30');
+      expect(putPayload.categories[0].sortOrder).toBe(1);
+
+      // Row 1: Quizzes (stable id: 201, weight: 40, sortOrder: 2)
+      expect(putPayload.categories[1].id).toBe(201);
+      expect(putPayload.categories[1].name).toBe('Quizzes');
+      expect(putPayload.categories[1].weight).toBe('40');
+      expect(putPayload.categories[1].sortOrder).toBe(2);
+
+      // Row 2: Practicum (new category, id omitted, weight: 30, sortOrder: 3)
+      expect(putPayload.categories[2].id).toBeUndefined();
+      expect(putPayload.categories[2].name).toBe('Practicum');
+      expect(putPayload.categories[2].weight).toBe('30');
+      expect(putPayload.categories[2].sortOrder).toBe(3);
+
+      // New version badge
+      await expect(page.getByText(/Version 3/i)).toBeVisible();
+    });
+
+    test('handles 409 stale version conflict, preserves local edits, and supports reload confirmation', async ({ page }) => {
+      let getCallCount = 0;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        getCallCount++;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-1',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 1,
+              categories: [
+                { id: 1, name: 'Quizzes', weight: '50', sortOrder: 1, inUse: false },
+                { id: 2, name: 'Exams', weight: '50', sortOrder: 2, inUse: false },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config', async (route) => {
+        if (route.request().method() === 'PUT') {
+          await route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'error',
+              code: 'GRADING_CONFIGURATION_VERSION_CONFLICT',
+              message: 'The grading configuration is stale. Reload it before saving.',
+            }),
+          });
+        }
+      });
+
+      await page.goto('/grades?tab=components');
+      const weightInputs = page.locator('input[placeholder="0"]');
+      await weightInputs.nth(0).fill('60');
+      await weightInputs.nth(1).fill('40');
+
+      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+
+      // Conflict banner appears
+      await expect(page.getByText(/Version Conflict Detected/i)).toBeVisible();
+      await expect(page.getByText(/Another session or user modified this grading configuration/i)).toBeVisible();
+
+      // Local dirty edits must NOT be wiped out
+      await expect(weightInputs.nth(0)).toHaveValue('60');
+      await expect(weightInputs.nth(1)).toHaveValue('40');
+
+      // Click Reload Latest in conflict banner
+      const reloadBannerBtn = page.locator('button', { hasText: 'Reload Latest' }).last();
+      await reloadBannerBtn.click();
+
+      // Confirmation modal appears
+      await expect(page.getByText(/Discard unsaved changes?/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Confirm' })).toBeVisible();
+
+      // Confirm reload
+      await page.getByRole('button', { name: 'Confirm' }).click();
+
+      // Edits should be reset to server version
+      await expect(weightInputs.nth(0)).toHaveValue('50');
+      await expect(weightInputs.nth(1)).toHaveValue('50');
+      expect(getCallCount).toBeGreaterThanOrEqual(2);
+    });
+
+    test('handles 422 legacy assessment mapping error and renders affected assessments table while preserving rows', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: null }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config', async (route) => {
+        if (route.request().method() === 'PUT') {
+          await route.fulfill({
+            status: 422,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'error',
+              code: 'GRADING_CATEGORY_ASSIGNMENT_REQUIRED',
+              message: 'Existing assessments require matching grading categories before this configuration can be activated.',
+              assessments: [
+                { assessmentId: 42, title: 'Practical Exam 1', legacyType: 'Laboratory' },
+                { assessmentId: 43, title: 'Dental Radiography Lab', legacyType: 'Laboratory' },
+              ],
+            }),
+          });
+        }
+      });
+
+      await page.goto('/grades?tab=components');
+      await page.getByRole('button', { name: /Add First Category/i }).click();
+
+      const nameInputs = page.locator('input[placeholder*="Category name"]');
+      const weightInputs = page.locator('input[placeholder="0"]');
+
+      await nameInputs.nth(0).fill('Quizzes');
+      await weightInputs.nth(0).fill('100');
+
+      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+
+      // 422 warning banner appears
+      await expect(page.getByText(/Existing Assessments Require Matching Categories/i)).toBeVisible();
+      await expect(page.getByText('Practical Exam 1')).toBeVisible();
+      await expect(page.getByText('Dental Radiography Lab')).toBeVisible();
+      await expect(page.getByText('Laboratory').first()).toBeVisible();
+
+      // Local row remains intact and wasn't cleared
+      await expect(nameInputs.nth(0)).toHaveValue('Quizzes');
+      await expect(weightInputs.nth(0)).toHaveValue('100');
+    });
+
+    test('confirms before discarding unsaved changes when switching course offerings', async ({ page }) => {
+      let loadedCourseId = '';
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        const url = new URL(route.request().url());
+        loadedCourseId = url.searchParams.get('courseId') || '';
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: null }),
+        });
+      });
+
+      await page.goto('/grades?tab=components');
+      await expect(page.locator('#course-offering-select')).toBeVisible();
+
+      // Add a category to make it dirty
+      await page.getByRole('button', { name: /Add First Category/i }).click();
+      const nameInputs = page.locator('input[placeholder*="Category name"]');
+      await nameInputs.nth(0).fill('Dirty Category');
+
+      // Attempt to switch offering to CLIN402
+      const offeringSelect = page.locator('#course-offering-select');
+      await offeringSelect.selectOption({ index: 1 });
+
+      // Confirmation modal should appear
+      await expect(page.getByText(/Discard unsaved changes?/i)).toBeVisible();
+      await expect(page.getByText(/You have unsaved changes to grade weights/i)).toBeVisible();
+
+      // Click Cancel
+      await page.getByRole('button', { name: 'Cancel' }).click();
+
+      // Selection must remain CLIN401 and dirty edits preserved
+      await expect(offeringSelect).toHaveValue(/101:/);
+      await expect(nameInputs.nth(0)).toHaveValue('Dirty Category');
+
+      // Attempt switch again and Confirm
+      await offeringSelect.selectOption({ index: 1 });
+      await expect(page.getByText(/Discard unsaved changes?/i)).toBeVisible();
+      await page.getByRole('button', { name: 'Confirm' }).click();
+
+      // Now switched to CLIN402
+      await expect(offeringSelect).toHaveValue(/102:/);
+      expect(loadedCourseId).toBe('102');
+    });
+
+    test('maintains strict localStorage isolation without reading or writing dentisys_grading_components', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: null }),
+        });
+      });
+
+      await page.addInitScript(() => {
+        window.localStorage.setItem('dentisys_grading_components', JSON.stringify([
+          { subjectCode: 'CLIN401', category: 'IsolatedLegacyCat', weight: 99, maxScore: 100 },
+        ]));
+      });
+
+      await page.goto('/grades?tab=components');
+
+      // The legacy category from localStorage must NOT be used by Grade Weights Editor
+      await expect(page.getByText('IsolatedLegacyCat')).toHaveCount(0);
+      await expect(page.getByText(/Unconfigured Course Offering/i)).toBeVisible();
+    });
+  });
+
 });

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { 
-  Calculator, 
-  User, 
-  BookOpen, 
-  Settings, 
-  Save, 
-  AlertTriangle, 
+import {
+  Calculator,
+  User,
+  BookOpen,
+  Settings,
+  Save,
+  AlertTriangle,
   CheckCircle,
   Plus,
   Search,
@@ -20,35 +20,55 @@ import {
   Check,
   FileText,
   FileSpreadsheet,
-  ClipboardCheck
+  ClipboardCheck,
+  ChevronUp,
+  ChevronDown,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore, GradingComponentConfig } from '../../types';
+import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { percentageToGWA, gwaToDescription, computeSubjectGrade } from '../../utils/gradeHelper';
 import { recordAudit } from '../../services/auditService';
 
-import { computeFacultyGradesApi, deleteFacultyAssessmentApi, getFacultyClassesApi, getFacultySettingsApi, saveFacultyAssessmentScoresApi, saveFacultyAssessmentsApi } from '../../services/apiClient';
-import type { FacultyClassItem } from '../../services/apiClient';
+import {
+  computeFacultyGradesApi,
+  deleteFacultyAssessmentApi,
+  getFacultyClassesApi,
+  getFacultySettingsApi,
+  saveFacultyAssessmentScoresApi,
+  saveFacultyAssessmentsApi,
+  getFacultyGradingConfigApi,
+  saveFacultyGradingConfigApi,
+  parseWeightUnits,
+  formatWeightUnitsToPercent,
+  TOTAL_WEIGHT_UNITS,
+  ApiError
+} from '../../services/apiClient';
+import type {
+  FacultyClassItem,
+  FacultyGradingConfiguration,
+  FacultyGradingCategoryAssignmentRequiredItem,
+  FacultyGradingConfigSavePayload
+} from '../../services/apiClient';
 
 export const GradeComputation: React.FC = () => {
   const { user } = useAuth();
-  const { 
-    students, 
+  const {
+    students,
     attendanceRecords,
-    settings, 
-    assessments, 
-    assessmentScores, 
-    gradingComponents,
+    settings,
+    assessments,
+    assessmentScores,
     addAssessment,
     updateAssessment,
     deleteAssessment,
     archiveAssessment,
     saveAssessmentScores,
-    updateSubjectGradingComponents,
     updateStudentGrade
   } = useApp();
 
@@ -123,7 +143,7 @@ export const GradeComputation: React.FC = () => {
   // ----------------------------------------------------
   const [isAssessmentModalOpen, setIsAssessmentModalOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
-  
+
   // Assessment Form State
   const [assTitle, setAssTitle] = useState('');
   const [assClassId, setAssClassId] = useState('CLINIC-A');
@@ -385,7 +405,7 @@ export const GradeComputation: React.FC = () => {
 
     Object.entries(scoresInputState).forEach(([studentId, val]) => {
       if (val.score === '') return;
-      
+
       const num = parseFloat(val.score);
       if (isNaN(num) || num < 0 || num > activeAssessment.maxScore) {
         hasErrors = true;
@@ -423,74 +443,329 @@ export const GradeComputation: React.FC = () => {
   }, [activeStudents, scoreSearch]);
 
   // ----------------------------------------------------
-  // 3. GRADE COMPONENTS TAB STATE
+  // 3. GRADE WEIGHTS EDITOR STATE (AUTHORITATIVE BACKEND)
   // ----------------------------------------------------
-  const [componentWeights, setComponentWeights] = useState<Record<string, { weight: string; maxScore: string }>>({});
-  const [isComponentsSaved, setIsComponentsSaved] = useState(false);
+  interface FacultyOffering {
+    key: string;
+    courseId: number;
+    courseCode: string;
+    courseName: string;
+    canonicalSemester: string;
+    canonicalSchoolYear: string;
+    sectionNames: string[];
+  }
 
-  const categoriesList = ['Quiz', 'Activity', 'Assignment', 'Laboratory', 'Midterm Exam', 'Final Exam', 'Attendance'];
+  interface EditorCategoryRow {
+    tempId: string;
+    id?: number;
+    name: string;
+    weight: string;
+    sortOrder: number;
+    inUse: boolean;
+  }
+
+  const facultyOfferings = useMemo<FacultyOffering[]>(() => {
+    const map = new Map<string, FacultyOffering>();
+    for (const c of facultyClasses) {
+      if (!c || (c.status || '').trim().toLowerCase() !== 'active') continue;
+      const normSem = (c.semester || '').trim().toUpperCase();
+      const normSY = (c.schoolYear || '').trim().toUpperCase();
+      const courseIdKey = c.courseId !== undefined && c.courseId !== null ? String(c.courseId) : String(c.id || '');
+      const key = `${courseIdKey}:${normSem}:${normSY}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          courseId: c.courseId !== undefined && c.courseId !== null ? Number(c.courseId) : (Number(c.id) || 0),
+          courseCode: c.courseCode || 'Course',
+          courseName: c.courseName || c.courseCode || 'Course',
+          canonicalSemester: c.semester || '',
+          canonicalSchoolYear: c.schoolYear || '',
+          sectionNames: [c.csName || String(c.csId || c.id || '')],
+        });
+      } else {
+        const existing = map.get(key)!;
+        const secName = c.csName || String(c.csId || c.id || '');
+        if (secName && !existing.sectionNames.includes(secName)) {
+          existing.sectionNames.push(secName);
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [facultyClasses]);
+
+  const [selectedOfferingKey, setSelectedOfferingKey] = useState<string>('');
+  const [loadedConfig, setLoadedConfig] = useState<FacultyGradingConfiguration | null>(null);
+  const [categoryRows, setCategoryRows] = useState<EditorCategoryRow[]>([]);
+  const [savedCategoryRows, setSavedCategoryRows] = useState<EditorCategoryRow[]>([]);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [conflictError, setConflictError] = useState(false);
+  const [mappingError, setMappingError] = useState<FacultyGradingCategoryAssignmentRequiredItem[] | null>(null);
+
+  // Initialize selected offering key
+  useEffect(() => {
+    if (facultyOfferings.length === 0) return;
+    if (!selectedOfferingKey || !facultyOfferings.some(o => o.key === selectedOfferingKey)) {
+      const match = facultyOfferings.find(o => o.courseCode === selectedSubjectCode);
+      setSelectedOfferingKey(match ? match.key : facultyOfferings[0].key);
+    }
+  }, [facultyOfferings, selectedSubjectCode, selectedOfferingKey]);
+
+  const currentOffering = useMemo(() => {
+    return facultyOfferings.find(o => o.key === selectedOfferingKey) || null;
+  }, [facultyOfferings, selectedOfferingKey]);
 
   useEffect(() => {
-    const weights: Record<string, { weight: string; maxScore: string }> = {};
-    categoriesList.forEach(cat => {
-      const config = gradingComponents.find(c => c.subjectCode === selectedSubjectCode && c.category === cat);
-      const defaults: Record<string, { weight: number; maxScore: number }> = {
-        'Quiz': { weight: 15, maxScore: 50 },
-        'Activity': { weight: 15, maxScore: 50 },
-        'Assignment': { weight: 10, maxScore: 100 },
-        'Laboratory': { weight: 30, maxScore: 100 },
-        'Midterm Exam': { weight: 10, maxScore: 100 },
-        'Final Exam': { weight: 10, maxScore: 100 },
-        'Attendance': { weight: 10, maxScore: 100 }
-      };
-      weights[cat] = {
-        weight: config ? config.weight.toString() : defaults[cat].weight.toString(),
-        maxScore: config ? config.maxScore.toString() : defaults[cat].maxScore.toString()
-      };
-    });
-    setComponentWeights(weights);
-    setIsComponentsSaved(false);
-  }, [selectedSubjectCode, gradingComponents]);
+    if (activeSubTab === 'components' && currentOffering && currentOffering.courseCode && currentOffering.courseCode !== selectedSubjectCode) {
+      setSelectedSubjectCode(currentOffering.courseCode);
+    }
+  }, [activeSubTab, currentOffering, selectedSubjectCode]);
 
-  const handleComponentChange = (cat: string, val: string, field: 'weight' | 'maxScore') => {
-    setComponentWeights(prev => ({
-      ...prev,
-      [cat]: {
-        ...prev[cat],
-        [field]: val
+  const loadGradingConfig = async (offering: FacultyOffering) => {
+    setConfigLoading(true);
+    setConfigError(null);
+    setConflictError(false);
+    setMappingError(null);
+    try {
+      const res = await getFacultyGradingConfigApi({
+        courseId: offering.courseId,
+        semester: offering.canonicalSemester,
+        schoolYear: offering.canonicalSchoolYear,
+      });
+      setLoadedConfig(res.configuration);
+      if (res.configuration && Array.isArray(res.configuration.categories) && res.configuration.categories.length > 0) {
+        const rows: EditorCategoryRow[] = res.configuration.categories.map((cat, idx) => ({
+          tempId: String(cat.id ?? `cat-${idx}`),
+          id: cat.id ?? undefined,
+          name: cat.name,
+          weight: String(cat.weight),
+          sortOrder: cat.sortOrder ?? (idx + 1),
+          inUse: Boolean(cat.inUse),
+        }));
+        setCategoryRows(rows);
+        setSavedCategoryRows(rows);
+      } else {
+        setCategoryRows([]);
+        setSavedCategoryRows([]);
       }
-    }));
-    setIsComponentsSaved(false);
+    } catch (err) {
+      setConfigError(err instanceof Error ? err.message : 'Failed to load grade configuration.');
+    } finally {
+      setConfigLoading(false);
+    }
   };
 
-  const weightsSum = useMemo(() => {
-    let sum = 0;
-    Object.values(componentWeights).forEach(w => {
-      const num = parseInt(w.weight);
-      if (!isNaN(num)) sum += num;
-    });
-    return sum;
-  }, [componentWeights]);
+  useEffect(() => {
+    if (activeSubTab !== 'components') return;
+    if (!currentOffering) return;
+    loadGradingConfig(currentOffering);
+  }, [activeSubTab, currentOffering?.key]);
 
-  const handleSaveComponents = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (weightsSum !== 100) {
-      showFeedback(`The sum of weights must equal exactly 100%. Current total: ${weightsSum}%.`, 'error');
+  const isDirty = useMemo(() => {
+    if (categoryRows.length !== savedCategoryRows.length) return true;
+    for (let i = 0; i < categoryRows.length; i++) {
+      const curr = categoryRows[i];
+      const saved = savedCategoryRows[i];
+      if (
+        curr.id !== saved.id ||
+        curr.name !== saved.name ||
+        curr.weight !== saved.weight ||
+        curr.sortOrder !== saved.sortOrder
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }, [categoryRows, savedCategoryRows]);
+
+  const handleSelectOffering = async (newKey: string) => {
+    if (newKey === selectedOfferingKey) return;
+    if (isDirty) {
+      const confirmed = await requestConfirmation(
+        'You have unsaved changes to grade weights. Switching courses will discard them. Continue?',
+        'Discard unsaved changes?'
+      );
+      if (!confirmed) return;
+    }
+    setSelectedOfferingKey(newKey);
+  };
+
+  const handleReload = async () => {
+    if (isDirty) {
+      const confirmed = await requestConfirmation(
+        'You have unsaved changes. Reloading will discard them and fetch the latest saved configuration from the server. Continue?',
+        'Discard unsaved changes?'
+      );
+      if (!confirmed) return;
+    }
+    if (currentOffering) {
+      await loadGradingConfig(currentOffering);
+    }
+  };
+
+  const handleAddCategory = () => {
+    const newRow: EditorCategoryRow = {
+      tempId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: '',
+      weight: '',
+      sortOrder: categoryRows.length + 1,
+      inUse: false,
+    };
+    setCategoryRows(prev => [...prev, newRow]);
+  };
+
+  const handleUpdateCategory = (tempId: string, field: 'name' | 'weight', val: string) => {
+    setCategoryRows(prev =>
+      prev.map(r => (r.tempId === tempId ? { ...r, [field]: val } : r))
+    );
+  };
+
+  const handleMoveCategory = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= categoryRows.length) return;
+    setCategoryRows(prev => {
+      const next = [...prev];
+      const item = next[index];
+      next[index] = next[targetIndex];
+      next[targetIndex] = item;
+      return next.map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
+    });
+  };
+
+  const handleRemoveCategory = (tempId: string) => {
+    const target = categoryRows.find(r => r.tempId === tempId);
+    if (!target) return;
+    if (target.inUse) {
+      showFeedback('Cannot remove category that has associated assessments.', 'error');
+      return;
+    }
+    setCategoryRows(prev => {
+      const filtered = prev.filter(r => r.tempId !== tempId);
+      return filtered.map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
+    });
+  };
+
+  const weightCalculation = useMemo(() => {
+    let sumUnits = 0;
+    let allValid = true;
+    for (const row of categoryRows) {
+      const trimmed = row.weight.trim();
+      if (trimmed === '') {
+        allValid = false;
+        continue;
+      }
+      const units = parseWeightUnits(trimmed);
+      if (units === null) {
+        allValid = false;
+      } else {
+        sumUnits += units;
+      }
+    }
+    const isExact100 = allValid && sumUnits === TOTAL_WEIGHT_UNITS;
+    const displayPercent = formatWeightUnitsToPercent(sumUnits);
+    return {
+      sumUnits,
+      allValid,
+      isExact100,
+      displayPercent,
+    };
+  }, [categoryRows]);
+
+  const validationError = useMemo(() => {
+    if (categoryRows.length === 0) {
+      return 'At least one grading category is required.';
+    }
+    const trimmedNames = categoryRows.map(r => r.name.trim());
+    if (trimmedNames.some(n => !n)) {
+      return 'All category names must be filled out.';
+    }
+    const lowerNames = trimmedNames.map(n => n.toLowerCase());
+    if (new Set(lowerNames).size !== lowerNames.length) {
+      return 'Category names must be unique.';
+    }
+    for (const row of categoryRows) {
+      const trimmed = row.weight.trim();
+      if (!trimmed) {
+        return 'All category weights must be filled out.';
+      }
+      const units = parseWeightUnits(trimmed);
+      if (units === null) {
+        return `Invalid weight "${row.weight}". Enter a number between 0 and 100 with up to 4 decimal places.`;
+      }
+    }
+    if (!weightCalculation.isExact100) {
+      return `Total weights must equal exactly 100%. Current total: ${weightCalculation.displayPercent}%.`;
+    }
+    return null;
+  }, [categoryRows, weightCalculation]);
+
+  const handleSaveGradingConfig = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!currentOffering) return;
+    if (configSaving) return;
+
+    if (validationError) {
+      showFeedback(validationError, 'error');
       return;
     }
 
-    const configs: GradingComponentConfig[] = Object.entries(componentWeights).map(([cat, val]) => ({
-      subjectCode: selectedSubjectCode,
-      category: cat as any,
-      weight: parseInt(val.weight) || 0,
-      maxScore: parseInt(val.maxScore) || 100
-    }));
+    setConfigSaving(true);
+    setConfigError(null);
+    setConflictError(false);
+    setMappingError(null);
 
-    updateSubjectGradingComponents(selectedSubjectCode, configs);
-    setIsComponentsSaved(true);
-    setTimeout(() => {
-      setIsComponentsSaved(false);
-    }, 3000);
+    const payload: FacultyGradingConfigSavePayload = {
+      courseId: currentOffering.courseId,
+      semester: currentOffering.canonicalSemester,
+      schoolYear: currentOffering.canonicalSchoolYear,
+      categories: categoryRows.map((row, idx) => ({
+        ...(row.id ? { id: row.id } : {}),
+        name: row.name.trim(),
+        weight: row.weight.trim(),
+        sortOrder: idx + 1,
+      })),
+    };
+
+    if (loadedConfig?.version !== undefined && loadedConfig.version !== null) {
+      payload.version = loadedConfig.version;
+    }
+
+    try {
+      const res = await saveFacultyGradingConfigApi(payload);
+      setLoadedConfig(res.configuration);
+      const updatedRows: EditorCategoryRow[] = res.configuration.categories.map((cat, idx) => ({
+        tempId: String(cat.id ?? `cat-${idx}`),
+        id: cat.id ?? undefined,
+        name: cat.name,
+        weight: String(cat.weight),
+        sortOrder: cat.sortOrder ?? (idx + 1),
+        inUse: Boolean(cat.inUse),
+      }));
+      setCategoryRows(updatedRows);
+      setSavedCategoryRows(updatedRows);
+      showFeedback('Grade weights saved successfully.', 'success');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setConflictError(true);
+          showFeedback('Version conflict: another session updated these grade weights. Please reload the latest configuration.', 'error');
+        } else if (err.status === 422 && (err.code === 'GRADING_CATEGORY_ASSIGNMENT_REQUIRED' || Array.isArray(err.details?.assessments))) {
+          const assessments = (Array.isArray(err.details?.assessments) ? err.details.assessments : []) as FacultyGradingCategoryAssignmentRequiredItem[];
+          setMappingError(assessments);
+          showFeedback(err.message || 'Existing assessments require matching category assignments.', 'error');
+        } else {
+          setConfigError(err.message);
+          showFeedback(err.message, 'error');
+        }
+      } else {
+        const msg = err instanceof Error ? err.message : 'Failed to save grade configuration.';
+        setConfigError(msg);
+        showFeedback(msg, 'error');
+      }
+    } finally {
+      setConfigSaving(false);
+    }
   };
 
   // ----------------------------------------------------
@@ -532,7 +807,7 @@ export const GradeComputation: React.FC = () => {
     let headers = 'Student ID,Name,Midterm Grade,Final Grade,Overall GWA,Status\n';
     let rows = sortedSummaryStudents.map(student => {
       const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
-      const gradeVal = subj ? subj.grade.toFixed(2) : '5.00';
+      const gradeVal = subj && typeof subj.grade === 'number' ? subj.grade.toFixed(2) : '5.00';
       const statusText = student.status.toUpperCase();
       return `${student.studentId},"${student.name}",${gradeVal},${gradeVal},${gradeVal},${statusText}`;
     }).join('\n');
@@ -653,7 +928,7 @@ export const GradeComputation: React.FC = () => {
 
       // Update base components quizzes / exams / practicum relative to imported score
       const updatedComponents: GradeComponents = { ...currentSubj.components };
-      
+
       if (importPeriod === 'Midterm') {
         updatedComponents.exams = row.score; // Map to exams components
       } else if (importPeriod === 'Final') {
@@ -681,7 +956,7 @@ export const GradeComputation: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-      
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-205 dark:border-slate-800 pb-4">
         <div>
@@ -696,7 +971,8 @@ export const GradeComputation: React.FC = () => {
       </div>
 
       {/* Class and Subject Selector Bar */}
-      <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
+      {activeSubTab !== 'components' && (
+        <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
         <div className="w-full md:flex-1">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
@@ -725,6 +1001,7 @@ export const GradeComputation: React.FC = () => {
           </select>
         </div>
       </Card>
+      )}
 
       {/* Navigation Sub-Tabs */}
       <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
@@ -895,10 +1172,10 @@ export const GradeComputation: React.FC = () => {
                               onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
                               onBlur={() => handleScoreBlur(student.id)}
                               className={`w-24 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${
-                                !isValid 
-                                  ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50' 
-                                  : row.score === '' 
-                                  ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950' 
+                                !isValid
+                                  ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
+                                  : row.score === ''
+                                  ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
                                   : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
                               }`}
                             />
@@ -1060,75 +1337,317 @@ export const GradeComputation: React.FC = () => {
           TAB 3: GRADE WEIGHTS EDITOR
       ---------------------------------------------------- */}
       {activeSubTab === 'components' && (
-        <Card className="max-w-2xl mx-auto">
+        <Card className="max-w-3xl mx-auto">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="w-5 h-5 text-clinical-550" />
-              Configure Grading Weights & Schema
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSaveComponents} className="space-y-5">
-              <div className="p-4 rounded-2xl bg-amber-550/10 border border-amber-550/20 text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                ⚠️ **Grade Weighting Policy:** The sum of weights across all categories must equal exactly **100%**. These component percentages will overwrite GWA mappings for clinical evaluations.
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-clinical-550" />
+                  Grade Weights & Schema Editor
+                </CardTitle>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                  Configure dynamic grading categories and percentage weights for your course offering.
+                </p>
               </div>
 
-              <div className="divide-y divide-slate-150 dark:divide-slate-800">
-                {categoriesList.map(cat => {
-                  const entry = componentWeights[cat] || { weight: '0', maxScore: '100' };
-                  return (
-                    <div key={cat} className="py-3.5 flex items-center justify-between gap-4">
-                      <div>
-                        <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">{cat}</h4>
-                        <span className="text-[10px] text-slate-400">Class category weight scale</span>
-                      </div>
-
-                      <div className="flex items-center space-x-3">
-                        <div className="flex items-center space-x-1.5">
-                          <label className="text-[10px] text-slate-400 uppercase font-bold">Weight (%):</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={entry.weight}
-                            onChange={(e) => handleComponentChange(cat, e.target.value, 'weight')}
-                            className="w-16 px-2.5 py-1.5 rounded-lg border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-center"
-                          />
-                        </div>
-
-                        <div className="flex items-center space-x-1.5">
-                          <label className="text-[10px] text-slate-400 uppercase font-bold">Default Max:</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={entry.maxScore}
-                            onChange={(e) => handleComponentChange(cat, e.target.value, 'maxScore')}
-                            className="w-16 px-2.5 py-1.5 rounded-lg border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-center"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="pt-4 border-t border-slate-150 dark:border-slate-800/80 flex items-center justify-between">
-                <div className="text-xs">
-                  <span className="text-slate-400">Sum of Weights: </span>
-                  <span className={`font-extrabold text-sm ${weightsSum === 100 ? 'text-emerald-500' : 'text-rose-500 font-extrabold'}`}>
-                    {weightsSum}%
-                  </span>
-                </div>
-
+              {currentOffering && (
                 <button
-                  type="submit"
-                  className="flex items-center gap-1 px-5 py-3 rounded-2xl bg-clinical-500 hover:bg-clinical-600 text-white font-semibold text-xs shadow-md"
+                  type="button"
+                  onClick={handleReload}
+                  disabled={configLoading || configSaving}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 text-xs font-semibold text-slate-650 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 shadow-sm disabled:opacity-50"
+                  title="Reload latest configuration from server"
                 >
-                  <Save className="w-4 h-4" />
-                  <span>{isComponentsSaved ? 'Grading Weights Saved!' : 'Save Components Schema'}</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${configLoading ? 'animate-spin' : ''}`} />
+                  Reload Latest
+                </button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Course Offering Selector */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+              <label htmlFor="course-offering-select" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                Course Offering (Faculty Assignment)
+              </label>
+
+              {loading ? (
+                <div className="text-xs text-slate-400 animate-pulse">Loading teaching assignments...</div>
+              ) : facultyOfferings.length === 0 ? (
+                <div className="text-xs text-slate-500">No active teaching assignments found. You can only edit grade weights for courses you currently teach.</div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <select
+                    id="course-offering-select"
+                    value={selectedOfferingKey}
+                    onChange={(e) => handleSelectOffering(e.target.value)}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  >
+                    {facultyOfferings.map(offering => (
+                      <option key={offering.key} value={offering.key}>
+                        {offering.courseCode} - {offering.courseName} ({offering.canonicalSemester}, {offering.canonicalSchoolYear}) · {offering.sectionNames.length} {offering.sectionNames.length === 1 ? 'Section' : 'Sections'}
+                      </option>
+                    ))}
+                  </select>
+
+                  {loadedConfig && (
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 border border-clinical-200 dark:border-clinical-800 text-clinical-700 dark:text-clinical-300 text-[10px] font-bold">
+                        Version {loadedConfig.version}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Conflict Alert (409) */}
+            {conflictError && (
+              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                  <div>
+                    <div className="font-bold">Version Conflict Detected</div>
+                    <div className="text-[11px] mt-0.5">
+                      Another session or user modified this grading configuration. Your local changes cannot overwrite the newer version.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleReload}
+                  className="shrink-0 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Reload Latest
                 </button>
               </div>
-            </form>
+            )}
+
+            {/* Mapping Error Alert (422) */}
+            {mappingError && mappingError.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 space-y-3 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <div>
+                    <div className="font-bold">Existing Assessments Require Matching Categories</div>
+                    <div className="text-[11px] mt-0.5">
+                      This course offering contains active assessments that require matching category names before this configuration can be activated. Please create categories matching each legacy type below:
+                    </div>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-amber-500/20 bg-white/60 dark:bg-slate-900/60">
+                  <table className="min-w-full divide-y divide-amber-500/20 text-xs">
+                    <thead>
+                      <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-left">
+                        <th className="px-3 py-2">Assessment ID</th>
+                        <th className="px-3 py-2">Title</th>
+                        <th className="px-3 py-2">Required Legacy Type</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-500/20">
+                      {mappingError.map(item => (
+                        <tr key={item.assessmentId}>
+                          <td className="px-3 py-1.5 font-mono text-[11px]">{item.assessmentId}</td>
+                          <td className="px-3 py-1.5 font-semibold text-slate-800 dark:text-slate-100">{item.title}</td>
+                          <td className="px-3 py-1.5">
+                            <span className="px-2 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-bold text-[10px]">
+                              {item.legacyType}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* General Error Alert */}
+            {configError && !conflictError && (
+              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{configError}</span>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {configLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+                <RefreshCw className="w-6 h-6 animate-spin text-clinical-550" />
+                <span className="text-xs">Loading course grade configuration...</span>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveGradingConfig} className="space-y-5">
+                {/* Policy Banner / Empty State Banner */}
+                {loadedConfig === null && categoryRows.length === 0 ? (
+                  <div className="p-4 rounded-2xl bg-clinical-500/10 border border-clinical-500/20 text-xs text-clinical-800 dark:text-clinical-300 space-y-2">
+                    <div className="font-bold flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-clinical-600 dark:text-clinical-400" />
+                      Unconfigured Course Offering
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-slate-650 dark:text-slate-350">
+                      No grade weights have been configured for this course offering yet. Add dynamic categories totaling exactly <strong>100%</strong> to establish the initial grading schema.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                    <span>
+                      Grade weighting policy: Total weights across all categories must sum to exactly <strong>100%</strong>. Weights support decimal precision up to 4 places (e.g. 33.3333%).
+                    </span>
+                  </div>
+                )}
+
+                {/* Categories Table / Rows */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Grading Categories ({categoryRows.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAddCategory}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-clinical-50 dark:bg-clinical-950/40 text-clinical-600 dark:text-clinical-400 hover:bg-clinical-100 font-bold text-xs transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Category
+                    </button>
+                  </div>
+
+                  {categoryRows.length === 0 ? (
+                    <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                      <p className="text-xs text-slate-400">No categories added yet.</p>
+                      <button
+                        type="button"
+                        onClick={handleAddCategory}
+                        className="mt-2 inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-clinical-600 text-white font-bold text-xs hover:bg-clinical-700"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add First Category
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-150 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
+                      {categoryRows.map((row, index) => (
+                        <div key={row.tempId} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                          {/* Reorder Buttons */}
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              type="button"
+                              aria-label="Move category up"
+                              onClick={() => handleMoveCategory(index, 'up')}
+                              disabled={index === 0}
+                              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Move category down"
+                              onClick={() => handleMoveCategory(index, 'down')}
+                              disabled={index === categoryRows.length - 1}
+                              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Category Name Input */}
+                          <div className="flex-1">
+                            <input
+                              type="text"
+                              value={row.name}
+                              placeholder="Category name (e.g. Quizzes, Final Exam)"
+                              onChange={(e) => handleUpdateCategory(row.tempId, 'name', e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                            />
+                          </div>
+
+                          {/* Category Weight Input */}
+                          <div className="flex items-center gap-1.5 w-28">
+                            <input
+                              type="text"
+                              value={row.weight}
+                              placeholder="0"
+                              onChange={(e) => handleUpdateCategory(row.tempId, 'weight', e.target.value)}
+                              className="w-20 px-2.5 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                            />
+                            <span className="text-xs font-bold text-slate-400">%</span>
+                          </div>
+
+                          {/* Remove Button */}
+                          <div>
+                            <button
+                              type="button"
+                              aria-label={`Delete category ${row.name || 'unnamed'}`}
+                              onClick={() => handleRemoveCategory(row.tempId)}
+                              disabled={row.inUse}
+                              title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
+                              className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Total Bar and Action Buttons */}
+                <div className="pt-4 border-t border-slate-150 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs">
+                      <span className="text-slate-400">Total Weight: </span>
+                      <span
+                        className={`font-extrabold text-sm ${
+                          weightCalculation.isExact100 ? 'text-emerald-500' : 'text-rose-500'
+                        }`}
+                      >
+                        {weightCalculation.displayPercent}
+                      </span>
+                      <span className="text-slate-400 text-xs"> / 100%</span>
+                    </div>
+
+                    {weightCalculation.isExact100 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                        <CheckCircle className="w-3 h-3" />
+                        Valid 100%
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
+                        <AlertTriangle className="w-3 h-3" />
+                        Must equal 100%
+                      </span>
+                    )}
+
+                    {isDirty && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                        Unsaved Changes
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="submit"
+                      disabled={configSaving || !weightCalculation.isExact100 || categoryRows.length === 0}
+                      className="flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>
+                        {configSaving
+                          ? 'Saving...'
+                          : loadedConfig
+                          ? 'Save Grade Weights'
+                          : 'Save Initial Schema'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1217,19 +1736,19 @@ export const GradeComputation: React.FC = () => {
                           <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
                           <span className="text-[10px] text-slate-400">{student.studentId}</span>
                         </td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj ? subj.components.exams.toFixed(1) : '80.0'}%</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.quizzes === 'number' ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.practicum === 'number' ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.exams === 'number' ? subj.components.exams.toFixed(1) : '80.0'}%</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.attendance === 'number' ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
                         <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                          {subj ? subj.grade.toFixed(2) : '2.50'}
+                          {subj && typeof subj.grade === 'number' ? subj.grade.toFixed(2) : '2.50'}
                         </td>
                         <td className="px-5 py-3">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                            isFailed 
-                              ? 'bg-rose-100 text-rose-700' 
-                              : isFailsRetention 
-                              ? 'bg-amber-100 text-amber-700' 
+                            isFailed
+                              ? 'bg-rose-100 text-rose-700'
+                              : isFailsRetention
+                              ? 'bg-amber-100 text-amber-700'
                               : 'bg-emerald-100 text-emerald-700'
                           }`}>
                             {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
@@ -1390,11 +1909,11 @@ export const GradeComputation: React.FC = () => {
                 <tr key={student.id}>
                   <td className="border border-slate-300 px-4 py-2 font-mono">{student.studentId}</td>
                   <td className="border border-slate-300 px-4 py-2 font-bold">{student.name}</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj ? subj.components.exams.toFixed(1) : '80.0'}%</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center font-extrabold">{subj ? subj.grade.toFixed(2) : '2.50'}</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.quizzes === 'number' ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.practicum === 'number' ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.exams === 'number' ? subj.components.exams.toFixed(1) : '80.0'}%</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.attendance === 'number' ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center font-extrabold">{subj && typeof subj.grade === 'number' ? subj.grade.toFixed(2) : '2.50'}</td>
                 </tr>
               );
             })}
@@ -1406,7 +1925,7 @@ export const GradeComputation: React.FC = () => {
             <div className="h-0.5 w-full bg-slate-400 mb-1" />
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Dean of Dentistry Seal</p>
           </div>
-          
+
           <div className="text-center w-48">
             <p className="font-bold">{user?.display_name}</p>
             <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />

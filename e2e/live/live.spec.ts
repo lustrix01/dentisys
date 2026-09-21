@@ -555,3 +555,148 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
 
   console.log('LIVE FACULTY ATTENDANCE MONITORING WORKFLOW VALIDATED SUCCESSFULLY FOR STUDENT:', studentFullName);
 });
+
+test('authoritative faculty grade weights: load offering, configure dynamic categories, verify version and PostgreSQL persistence across reload', async ({ page }) => {
+  // 1. Authenticate as faculty
+  const credentials = await login(page, facultyEmail, facultyPassword);
+  expect(credentials.access_token).toBeTruthy();
+
+  // 2. Fetch classes to determine active offering
+  const classesRes = await page.request.get('/api/faculty/classes', {
+    headers: { Authorization: `Bearer ${credentials.access_token}` },
+  });
+  const classesData = await jsonResponse(classesRes);
+  expect(classesData.status).toBe('ok');
+  const activeClasses = (classesData.classes || []).filter((c: any) => (c.status || '').toLowerCase() === 'active');
+  expect(activeClasses.length).toBeGreaterThan(0);
+
+  // 3. Navigate to Grade Weights Editor
+  await page.goto('/grades?tab=components');
+  await expect(page.locator('#course-offering-select')).toBeVisible();
+
+  // 4. Wait for configuration to load
+  await page.waitForResponse(
+    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
+  );
+
+  // Check if categories already exist or if it's unconfigured
+  await expect(
+    page.getByText(/Unconfigured Course Offering/i).or(page.locator('input[placeholder*="Category name"]').first())
+  ).toBeVisible();
+
+  const hasUnconfiguredBanner = await page.getByText(/Unconfigured Course Offering/i).isVisible();
+
+  if (hasUnconfiguredBanner) {
+    // Add 3 dynamic categories totaling 100%
+    await page.getByRole('button', { name: /Add First Category/i }).click();
+    const nameInputs = page.locator('input[placeholder*="Category name"]');
+    const weightInputs = page.locator('input[placeholder="0"]');
+
+    await nameInputs.nth(0).fill('Quizzes');
+    await weightInputs.nth(0).fill('30');
+
+    await page.getByRole('button', { name: /Add Category/i }).click();
+    await nameInputs.nth(1).fill('Midterm Exam');
+    await weightInputs.nth(1).fill('30');
+
+    await page.getByRole('button', { name: /Add Category/i }).click();
+    await nameInputs.nth(2).fill('Final Exam');
+    await weightInputs.nth(2).fill('40');
+
+    await expect(page.getByText(/Valid 100%/i)).toBeVisible();
+
+    const savePromise = page.waitForResponse(
+      response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
+    );
+    await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+
+    const saveRes = await savePromise;
+    expect([200, 201]).toContain(saveRes.status());
+    const saveData = await saveRes.json();
+    expect(saveData.status).toBe('ok');
+    expect(saveData.configuration.version).toBe(1);
+    expect(saveData.configuration.categories).toHaveLength(3);
+
+    await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+    await expect(page.getByText(/Version 1/i)).toBeVisible();
+  }
+
+  // 5. Update existing configuration: rename a category and re-save
+  const nameInputs = page.locator('input[placeholder*="Category name"]');
+  const initialFirstName = await nameInputs.nth(0).inputValue();
+  const updatedFirstName = initialFirstName.startsWith('Updated ') ? initialFirstName.replace('Updated ', '') : `Updated ${initialFirstName}`;
+
+  await nameInputs.nth(0).fill(updatedFirstName);
+
+  const updatePromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
+  );
+  await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+
+  const updateRes = await updatePromise;
+  expect(updateRes.status()).toBe(200);
+  const updateData = await updateRes.json();
+  expect(updateData.status).toBe('ok');
+  expect(updateData.configuration.categories[0].name).toBe(updatedFirstName);
+
+  await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+
+  // 6. Hard reload with cleared localStorage to verify PostgreSQL persistence
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  await expect(page.locator('#course-offering-select')).toBeVisible();
+  await page.waitForResponse(
+    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
+  );
+
+  const reloadedFirstName = await page.locator('input[placeholder*="Category name"]').nth(0).inputValue();
+  expect(reloadedFirstName).toBe(updatedFirstName);
+
+  // 7. Reorder categories and verify persistence in PostgreSQL
+  const reorderNameInputs = page.locator('input[placeholder*="Category name"]');
+  const firstCatNameBefore = await reorderNameInputs.nth(0).inputValue();
+  const secondCatNameBefore = await reorderNameInputs.nth(1).inputValue();
+
+  // Move row 0 down: row 0 becomes secondCatNameBefore, row 1 becomes firstCatNameBefore
+  await page.locator('button[aria-label="Move category down"]').first().click();
+  await expect(reorderNameInputs.nth(0)).toHaveValue(secondCatNameBefore);
+  await expect(reorderNameInputs.nth(1)).toHaveValue(firstCatNameBefore);
+
+  const reorderSavePromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
+  );
+  await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+
+  const reorderSaveRes = await reorderSavePromise;
+  expect(reorderSaveRes.status()).toBe(200);
+  const reorderSaveData = await reorderSaveRes.json();
+  expect(reorderSaveData.status).toBe('ok');
+  expect(reorderSaveData.configuration.categories[0].name).toBe(secondCatNameBefore);
+  expect(reorderSaveData.configuration.categories[0].sortOrder).toBe(1);
+  expect(reorderSaveData.configuration.categories[1].name).toBe(firstCatNameBefore);
+  expect(reorderSaveData.configuration.categories[1].sortOrder).toBe(2);
+
+  await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+
+  // 8. Hard reload with cleared localStorage to verify PostgreSQL persistence of reordered sortOrder
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  await expect(page.locator('#course-offering-select')).toBeVisible();
+  const reloadGetPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
+  );
+  const reloadGetRes = await reloadGetPromise;
+  const reloadGetData = await reloadGetRes.json();
+  expect(reloadGetData.configuration.categories[0].name).toBe(secondCatNameBefore);
+  expect(reloadGetData.configuration.categories[0].sortOrder).toBe(1);
+  expect(reloadGetData.configuration.categories[1].name).toBe(firstCatNameBefore);
+  expect(reloadGetData.configuration.categories[1].sortOrder).toBe(2);
+
+  const postReloadInputs = page.locator('input[placeholder*="Category name"]');
+  await expect(postReloadInputs.nth(0)).toHaveValue(secondCatNameBefore);
+  await expect(postReloadInputs.nth(1)).toHaveValue(firstCatNameBefore);
+
+  console.log('LIVE FACULTY GRADE WEIGHTS WORKFLOW VALIDATED SUCCESSFULLY IN POSTGRESQL');
+});

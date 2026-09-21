@@ -31,12 +31,14 @@ export class ApiError extends Error {
   errors?: unknown;
   code?: string;
   requestId?: string;
-  constructor(status: number, message: string, errors?: unknown, code?: string, requestId?: string) {
+  details?: Record<string, unknown>;
+  constructor(status: number, message: string, errors?: unknown, code?: string, requestId?: string, details?: Record<string, unknown>) {
     super(message);
     this.status = status;
     this.errors = errors;
     this.code = code;
     this.requestId = requestId;
+    this.details = details;
   }
 }
 
@@ -188,7 +190,11 @@ async function request<T>(
       responseData && typeof responseData === 'object' && 'requestId' in responseData
         ? String((responseData as Record<string, unknown>).requestId)
         : undefined;
-    throw new ApiError(errorStatus, mapError(errorStatus, backendMessage, responseData), errorsPayload, code, requestId);
+    const details =
+      responseData && typeof responseData === 'object'
+        ? (responseData as Record<string, unknown>)
+        : undefined;
+    throw new ApiError(errorStatus, mapError(errorStatus, backendMessage, responseData), errorsPayload, code, requestId, details);
   }
 
   return responseData as T;
@@ -1082,6 +1088,99 @@ export function unenrollStudentFromClassApi(data: {
   studentId: number;
 }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/classes/unenroll', data);
+}
+
+// ---------------------------------------------------------------------------
+// Authoritative Faculty Grade Weights / Grading Configuration
+// ---------------------------------------------------------------------------
+
+export const TOTAL_WEIGHT_UNITS = 1_000_000;
+export const UNITS_PER_PERCENT = 10_000;
+
+export function parseWeightUnits(value: string | number): number | null {
+  const text = String(value).trim();
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(text)) {
+    return null;
+  }
+  const [whole, fraction = ''] = text.split('.');
+  const units = parseInt(whole, 10) * UNITS_PER_PERCENT + parseInt(fraction.padEnd(4, '0'), 10);
+  return units > 0 && units <= TOTAL_WEIGHT_UNITS ? units : null;
+}
+
+export function formatWeightUnitsToPercent(units: number): string {
+  const percent = units / UNITS_PER_PERCENT;
+  return Number.isInteger(percent) ? `${percent}%` : `${percent.toFixed(2).replace(/\.?0+$/, '')}%`;
+}
+
+export interface FacultyGradingCategoryItem {
+  id?: number | null;
+  name: string;
+  weight: number | string;
+  sortOrder?: number;
+  inUse?: boolean;
+}
+
+export interface FacultyGradingCourseSummary {
+  id: number;
+  code: string;
+  name: string;
+}
+
+export interface FacultyGradingConfiguration {
+  id: string;
+  course: FacultyGradingCourseSummary;
+  semester: string;
+  schoolYear: string;
+  version: number;
+  categories: FacultyGradingCategoryItem[];
+}
+
+export interface FacultyGradingConfigGetResponse {
+  status: string;
+  configuration: FacultyGradingConfiguration | null;
+}
+
+export interface FacultyGradingCategoryAssignmentRequiredItem {
+  assessmentId: number;
+  title: string;
+  legacyType: string;
+}
+
+export interface FacultyGradingConfigSavePayload {
+  courseId: number;
+  semester: string;
+  schoolYear: string;
+  version?: number;
+  categories: Array<{
+    id?: number;
+    name: string;
+    weight: number | string;
+    sortOrder: number;
+  }>;
+}
+
+export interface FacultyGradingConfigSaveResponse {
+  status: string;
+  configuration: FacultyGradingConfiguration;
+}
+
+export function getFacultyGradingConfigApi(params: {
+  courseId: number | string;
+  semester: string;
+  schoolYear: string;
+}): Promise<FacultyGradingConfigGetResponse> {
+  const query = new URLSearchParams({
+    courseId: String(params.courseId),
+    semester: params.semester,
+    schoolYear: params.schoolYear,
+  });
+  return request<FacultyGradingConfigGetResponse>('GET', `/faculty/grading-config?${query.toString()}`);
+}
+
+export function saveFacultyGradingConfigApi(
+  payload: FacultyGradingConfigSavePayload
+): Promise<FacultyGradingConfigSaveResponse> {
+  return request<FacultyGradingConfigSaveResponse>('PUT', '/faculty/grading-config', payload);
 }
 
 // RFC 6238 TOTP Helpers & Per-User Secret Generation
