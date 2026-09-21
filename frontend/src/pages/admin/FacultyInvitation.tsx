@@ -92,7 +92,10 @@ export const FacultyInvitation: React.FC = () => {
 
       <Card className="p-6">
         <CardHeader className="mb-4 border-b border-slate-100 p-0 pb-4 dark:border-slate-800">
-          <CardTitle className="flex items-center gap-2 text-base"><UserPlus className="h-5 w-5 text-accent-600" />Invite Faculty</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <UserPlus className="h-5 w-5 text-accent-600" />
+            <span>Issue New Faculty Invitation</span>
+          </CardTitle>
         </CardHeader>
         <form onSubmit={event => { event.preventDefault(); void issueInvitation(); }} className="grid grid-cols-1 gap-4 sm:grid-cols-12">
           <label className="space-y-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-5">
@@ -121,12 +124,20 @@ export const FacultyInvitation: React.FC = () => {
         </CardHeader>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-xs">
-            <thead><tr className="border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800"><th className="px-4 py-3">Faculty</th><th className="px-4 py-3">Institutional email</th><th className="px-4 py-3">Invited</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Action</th></tr></thead>
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                <th className="px-4 py-3">Faculty</th>
+                <th className="px-4 py-3">Institutional email</th>
+                <th className="px-4 py-3">Invited</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Action</th>
+              </tr>
+            </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {loading ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">Loading invitations…</td></tr>
                 : filteredInvitations.length === 0 ? <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400">No Faculty invitations found.</td></tr>
                   : filteredInvitations.map(invitation => (
-                    <tr key={invitation.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                    <tr key={invitation.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3.5 font-bold text-slate-800 dark:text-slate-100">{invitation.name}</td>
                       <td className="px-4 py-3.5 font-mono text-slate-600 dark:text-slate-300">{invitation.email}</td>
                       <td className="px-4 py-3.5 text-slate-500">{invitation.invitedAt ? new Date(invitation.invitedAt).toLocaleString() : '—'}</td>

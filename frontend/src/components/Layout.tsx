@@ -210,9 +210,9 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         items.push(
           { name: 'My Classes', path: '/student/classes', icon: BookOpen },
           { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
-          { name: 'My Profile', path: '/student/profile', icon: UserCircle },
         );
       }
+      items.push({ name: 'My Profile', path: '/student/profile', icon: UserCircle });
       return items;
     }
     
@@ -376,14 +376,16 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
                   </Link>
 
-                  <Link
-                    to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
-                    onClick={() => setIsProfileOpen(false)}
-                    className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
-                  >
-                    <SettingsIcon className="w-4 h-4 text-slate-400" />
-                    <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
-                  </Link>
+                  {currentUser.role !== 'student' && (
+                    <Link
+                      to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                    >
+                      <SettingsIcon className="w-4 h-4 text-slate-400" />
+                      <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
+                    </Link>
+                  )}
 
                   <button
                     onClick={handleLogout}
@@ -634,14 +636,16 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
                     </Link>
 
-                    <Link
-                      to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
-                      onClick={() => setIsProfileOpen(false)}
-                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
-                    >
-                      <SettingsIcon className="w-4 h-4 text-slate-400" />
-                      <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
-                    </Link>
+                    {currentUser.role !== 'student' && (
+                      <Link
+                        to={currentUser.role === 'admin' ? '/admin/settings' : currentUser.role === 'secretary' ? '/secretary/settings' : '/faculty/settings'}
+                        onClick={() => setIsProfileOpen(false)}
+                        className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
+                      >
+                        <SettingsIcon className="w-4 h-4 text-slate-400" />
+                        <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
+                      </Link>
+                    )}
 
                     <button
                       onClick={handleLogout}
@@ -661,7 +665,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Scrollable Content Body */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8">
-          {currentUser.role === 'student' && !studentPrototypeEnabled && (
+          {currentUser.role === 'student' && isDevelopmentMockStudent(user, config) && !studentPrototypeEnabled && (
             <div className="mb-6 p-4 rounded-2xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
               Student attendance and biometric workflows are development-only browser prototypes. No authoritative attendance record or facial template is written while the explicit P02 providers are disabled.
             </div>
@@ -682,73 +686,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 };
 
 const RealStudentLayout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, logout } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login', { replace: true });
-  };
-
-  const navItems = [
-    { name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
-    { name: 'My Profile', path: '/student/profile', icon: UserCircle },
-  ];
-
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col md:flex-row">
-      <aside className="w-full md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <div className="flex items-center gap-3 mb-8">
-          <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-10 h-10 rounded-full object-cover" />
-          <div>
-            <h1 className="font-heading font-extrabold text-xl">DentiSYS</h1>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Student Portal</p>
-          </div>
-        </div>
-
-        <nav className="space-y-1.5" aria-label="Student navigation">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-colors ${active
-                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
-              >
-                <Icon className="h-5 w-5" />
-                <span>{item.name}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="mt-8 border-t border-slate-200 pt-5 dark:border-slate-800">
-          <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-200">{user?.display_name}</p>
-          <p className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-400">{user?.login_email}</p>
-          <button
-            type="button"
-            onClick={() => void handleLogout()}
-            className="mt-4 w-full rounded-xl border border-rose-200 px-3 py-2.5 text-xs font-bold text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30"
-          >
-            <LogOut className="mr-2 inline h-4 w-4" />
-            Sign Out
-          </button>
-        </div>
-      </aside>
-
-      <main className="min-w-0 flex-1">
-        <header className="border-b border-slate-200 bg-white/80 px-6 py-4 dark:border-slate-800 dark:bg-slate-900/80">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Authenticated Student account</p>
-          <p className="mt-1 text-sm font-bold text-slate-800 dark:text-slate-100">{user?.login_email}</p>
-        </header>
-        <div className="p-6">{children}</div>
-      </main>
-    </div>
-  );
+  return <AppBackedLayout>{children}</AppBackedLayout>;
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
