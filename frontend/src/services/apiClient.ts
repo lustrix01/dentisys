@@ -660,10 +660,102 @@ export function getFacultyAttendanceApi(): Promise<{ status: string; records: Ar
   return request('GET', '/faculty/attendance');
 }
 
+export interface FacultyAttendanceWorksheetRosterItem {
+  id: string | null;
+  enrollmentId: string;
+  studentId: string;
+  studentNumber: string;
+  studentName: string;
+  date: string;
+  sessionCode: string | null;
+  attendanceSessionId: string | null;
+  status: 'present' | 'absent' | 'late' | 'excused' | null;
+  verificationMethod: string | null;
+  timeRecorded: string | null;
+  overrideReason: string | null;
+  overrideAt: string | null;
+}
+
+export interface FacultyAttendanceWorksheet {
+  classSection: {
+    id: string;
+    name: string;
+    block: string;
+    semester: string;
+    schoolYear: string;
+    status: string;
+  };
+  course: {
+    id: number;
+    code: string;
+    name: string;
+    units: number;
+  };
+  date: string;
+  attendanceSession: Record<string, unknown> | null;
+  attendanceSessions: Array<Record<string, unknown>>;
+  roster: FacultyAttendanceWorksheetRosterItem[];
+}
+
+export interface FacultyAttendanceWorksheetResponse {
+  status: string;
+  worksheet: FacultyAttendanceWorksheet;
+}
+
+export interface FacultyAttendanceInitialEntryPayload {
+  csId: number;
+  enrollmentId: number;
+  sessionDate: string;
+  status: 'present' | 'absent' | 'late' | 'excused';
+  reason?: string;
+}
+
+export interface FacultyAttendanceCorrectionPayload {
+  recordId: string | number;
+  status: 'present' | 'absent' | 'late' | 'excused';
+  reason: string;
+}
+
+export interface FacultyAttendanceMutationResponse {
+  status: string;
+  operation: 'created' | 'updated' | 'unchanged';
+  changed?: boolean;
+  message?: string;
+  recordId?: string;
+  attendanceSessionId?: string | null;
+}
+
+export function getFacultyAttendanceWorksheetApi(params: {
+  csId: number;
+  date: string;
+  sessionId?: number;
+}): Promise<FacultyAttendanceWorksheetResponse> {
+  const query = new URLSearchParams({
+    csId: String(params.csId),
+    date: params.date,
+  });
+  if (params.sessionId) {
+    query.set('sessionId', String(params.sessionId));
+  }
+  return request('GET', `/faculty/attendance?${query.toString()}`);
+}
+
+export function recordFacultyInitialAttendanceApi(
+  data: FacultyAttendanceInitialEntryPayload
+): Promise<FacultyAttendanceMutationResponse> {
+  return request('POST', '/faculty/attendance/override', data);
+}
+
+export function correctFacultyAttendanceApi(
+  data: FacultyAttendanceCorrectionPayload
+): Promise<FacultyAttendanceMutationResponse> {
+  return request('POST', '/faculty/attendance/override', data);
+}
+
 export function overrideFacultyAttendanceApi(data: {
   recordId: string;
-  status: 'present' | 'late' | 'absent';
-  reason: string;
+  status: 'present' | 'late' | 'absent' | 'excused';
+  reason?: string;
 }): Promise<{ status: string; message: string; recordId: string }> {
   return request('POST', '/faculty/attendance/override', data);
 }

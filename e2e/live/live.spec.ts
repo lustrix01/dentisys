@@ -409,3 +409,149 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
 
   console.log('LIVE BROWSER VALIDATION PASSED FOR SESSION ID:', authoritativeSessionId);
 });
+
+test('faculty authoritative attendance monitoring workflow on live PostgreSQL stack', async ({ page }) => {
+  // 1. Authenticate as faculty
+  const facultyCreds = await login(page, facultyEmail, facultyPassword);
+
+  // 2. Fetch classes from API to identify target class section
+  const classesRes = await page.request.get('/api/faculty/classes', {
+    headers: { Authorization: `Bearer ${facultyCreds.access_token}` },
+  });
+  const classesPayload = await jsonResponse(classesRes);
+  expect(classesPayload.classes.length).toBeGreaterThan(0);
+  const targetClass = classesPayload.classes[0];
+  const targetCourseId = String(targetClass.courseId);
+  const targetCsId = String(targetClass.id ?? targetClass.csId);
+
+  // 3. Create a fresh enrolled student in this section to guarantee an unrecorded attendance row
+  const suffix = Date.now().toString(36);
+  const create = await page.request.post('/api/faculty/students', {
+    headers: { Authorization: `Bearer ${facultyCreds.access_token}` },
+    data: {
+      studentNumber: `ATT-${suffix}`,
+      firstName: 'LiveAttendance',
+      lastName: `Student-${suffix}`,
+      email: `attendance.${suffix}@bicol-u.edu.ph`,
+      yearLevel: 1,
+      classId: targetCsId,
+    },
+  });
+  const createdData = await jsonResponse(create);
+  expect(createdData.status).toBe('ok');
+  const studentFullName = `LiveAttendance Student-${suffix}`;
+
+  // 4. Navigate directly to /attendance
+  await page.goto('/attendance');
+
+  // Verify header and initial empty worksheet state
+  await expect(page.getByRole('main').getByRole('heading', { name: /Attendance Monitoring/i })).toBeVisible();
+  await expect(page.getByText(/Please select an Assigned Course and Class Section/i)).toBeVisible();
+
+  // Clear any legacy localStorage to verify Attendance Monitoring does not write to it
+  await page.evaluate(() => localStorage.removeItem('dentisys_attendance'));
+
+  // 5. Select Course and Section
+  const courseSelect = page.locator('select').first();
+  await courseSelect.selectOption(targetCourseId);
+
+  const sectionSelect = page.locator('select').nth(1);
+  await sectionSelect.selectOption(targetCsId);
+
+  // Wait for worksheet to load from PostgreSQL
+  await expect(page.getByText(/Please select an Assigned Course and Class Section/i)).toHaveCount(0);
+  const studentRow = page.locator('tbody tr').filter({ hasText: studentFullName });
+  await expect(studentRow).toBeVisible();
+
+  // Initial state: student status is 'Not recorded'
+  await expect(studentRow.locator('td').nth(1).getByText('Not recorded')).toBeVisible();
+
+  // 6. Initial Entry: click Present
+  const initialOverridePromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/attendance/override') && response.request().method() === 'POST'
+  );
+  await studentRow.getByRole('button', { name: 'Present' }).click();
+
+  const initialOverrideRes = await initialOverridePromise;
+  expect(initialOverrideRes.status()).toBe(200);
+  const initialOverrideData = await initialOverrideRes.json();
+  expect(initialOverrideData.status).toBe('ok');
+  expect(initialOverrideData.operation).toBe('created');
+  expect(initialOverrideData.recordId).toBeTruthy();
+
+  // Toast appears and row status updates to Present
+  await expect(page.getByText(new RegExp(`Recorded ${studentFullName} as present`, 'i'))).toBeVisible();
+  await expect(studentRow.locator('td').nth(1).getByText('Present', { exact: true })).toBeVisible();
+
+  // Verify localStorage does not store this student's attendance override
+  const localData = await page.evaluate(() => localStorage.getItem('dentisys_attendance'));
+  if (localData) {
+    const parsed = JSON.parse(localData);
+    expect(parsed.some((r: any) => r.studentName === studentFullName)).toBe(false);
+  }
+
+  // 7. Refresh/recovery semantics: reload browser and re-select section
+  // Even if localStorage is cleared completely, state restores from PostgreSQL
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.locator('select').first().selectOption(targetCourseId);
+  await page.locator('select').nth(1).selectOption(targetCsId);
+
+  // Verify row still displays Present from PostgreSQL
+  const studentRowAfterReload = page.locator('tbody tr').filter({ hasText: studentFullName });
+  await expect(studentRowAfterReload).toBeVisible();
+  await expect(studentRowAfterReload.locator('td').nth(1).getByText('Present', { exact: true })).toBeVisible();
+
+  // 8. Correction workflow: change status to Late
+  await studentRowAfterReload.getByRole('button', { name: 'Late' }).click();
+
+  // Modal appears
+  await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toBeVisible();
+  await expect(page.getByText(/PRESENT → LATE/i)).toBeVisible();
+
+  // Submitting without reason triggers in-app validation error
+  await page.getByRole('button', { name: 'Save Correction' }).click();
+  await expect(page.getByText(/justification reason is required/i)).toBeVisible();
+
+  // Enter valid reason and submit correction
+  const correctionReason = 'Traffic delay verified by instructor';
+  await page.fill('textarea', correctionReason);
+
+  const correctionPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/attendance/override') && response.request().method() === 'POST'
+  );
+  await page.getByRole('button', { name: 'Save Correction' }).click();
+
+  const correctionRes = await correctionPromise;
+  expect(correctionRes.status()).toBe(200);
+  const correctionData = await correctionRes.json();
+  expect(correctionData.status).toBe('ok');
+  expect(correctionData.operation).toBe('updated');
+
+  // Modal closes, toast appears, row status updates to Late
+  await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toHaveCount(0);
+  await expect(page.getByText(new RegExp(`Attendance corrected for ${studentFullName}`, 'i'))).toBeVisible();
+  await expect(studentRowAfterReload.locator('td').nth(1).getByText('Late', { exact: true })).toBeVisible();
+
+  // 9. Refresh browser again to confirm correction persists in PostgreSQL
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.locator('select').first().selectOption(targetCourseId);
+  await page.locator('select').nth(1).selectOption(targetCsId);
+
+  const studentRowAfterCorrectionReload = page.locator('tbody tr').filter({ hasText: studentFullName });
+  await expect(studentRowAfterCorrectionReload.locator('td').nth(1).getByText('Late', { exact: true })).toBeVisible();
+
+  // 10. No-op verification: clicking Late again does NOT invoke override endpoint
+  let overrideCalledAgain = false;
+  page.on('request', (req) => {
+    if (req.url().includes('/api/faculty/attendance/override')) {
+      overrideCalledAgain = true;
+    }
+  });
+  await studentRowAfterCorrectionReload.getByRole('button', { name: 'Late' }).click();
+  await page.waitForTimeout(500);
+  expect(overrideCalledAgain).toBe(false);
+
+  console.log('LIVE FACULTY ATTENDANCE MONITORING WORKFLOW VALIDATED SUCCESSFULLY FOR STUDENT:', studentFullName);
+});

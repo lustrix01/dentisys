@@ -119,7 +119,23 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname.endsWith('/faculty/students') || pathname.endsWith('/faculty/assessments')) return [];
   if (pathname.endsWith('/faculty/courses')) return { status: 'ok', courses: [] };
   if (pathname.endsWith('/faculty/classes')) return { status: 'ok', classes: [] };
-  if (pathname.endsWith('/faculty/attendance') || pathname.endsWith('/secretary/attendance')) return { status: 'ok', records: [] };
+  if (pathname.endsWith('/faculty/attendance') || pathname.endsWith('/secretary/attendance')) {
+    return {
+      status: 'ok',
+      records: [],
+      worksheet: {
+        classSection: { id: '1', name: 'CLIN401-A', block: 'A', semester: '1st', schoolYear: '2025-2026', status: 'Active' },
+        course: { id: 1, code: 'CLIN401', name: 'Clinical Dentistry I', units: 3 },
+        date: new Date().toISOString().slice(0, 10),
+        attendanceSession: null,
+        attendanceSessions: [],
+        roster: [],
+      },
+    };
+  }
+  if (pathname.endsWith('/faculty/attendance/override')) {
+    return { status: 'ok', message: 'Attendance record updated and audited.', operation: 'updated', recordId: '1', attendanceSessionId: null };
+  }
   if (pathname.endsWith('/email-logs')) return { status: 'ok', logs: [] };
   if (pathname.endsWith('/retention/criteria') || pathname.endsWith('/retention')) return { status: 'ok', criteria: [], records: [], retention: [] };
   if (pathname.endsWith('/mfa/settings')) return { status: 'ok', two_factor: { enabled: false, authenticator_enabled: false, recovery_code_count: 0 } };
