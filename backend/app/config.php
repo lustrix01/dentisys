@@ -76,6 +76,32 @@ function config_environment(string $value): string
     return $normalized;
 }
 
+function config_timezone(string $value): string
+{
+    $timezone = trim($value);
+    if ($timezone === '') {
+        throw new RuntimeException('Configuration value "APP_TIMEZONE" must not be empty.');
+    }
+
+    try {
+        new DateTimeZone($timezone);
+    } catch (Throwable $e) {
+        throw new RuntimeException('Configuration value "APP_TIMEZONE" must be a valid IANA timezone.', 0, $e);
+    }
+
+    return $timezone;
+}
+
+function app_local_date(array $config, DateTimeImmutable $instant): string
+{
+    $timezone = (string) ($config['app']['operational_timezone'] ?? '');
+    if ($timezone === '') {
+        throw new RuntimeException('Application operational timezone is not configured.');
+    }
+
+    return $instant->setTimezone(new DateTimeZone($timezone))->format('Y-m-d');
+}
+
 function config_email_provider(string $value): string
 {
     $normalized = strtolower(trim($value));
@@ -176,6 +202,9 @@ function app_config(?array $overrides = null): array
     );
     $allowedEmailDomains = config_allowed_email_domains($values);
     $googleClientId = trim((string) config_value('GOOGLE_CLIENT_ID', $values, ''));
+    $operationalTimezone = config_timezone(
+        (string) config_value('APP_TIMEZONE', $values, 'Asia/Manila')
+    );
 
     return [
         'debug' => filter_var(config_value('APP_DEBUG', $values, false), FILTER_VALIDATE_BOOLEAN),
@@ -190,6 +219,7 @@ function app_config(?array $overrides = null): array
             'env' => $appEnv,
             'base_url' => $baseUrl,
             'is_https' => filter_var(config_value('APP_IS_HTTPS', $values, 'false'), FILTER_VALIDATE_BOOLEAN),
+            'operational_timezone' => $operationalTimezone,
             'allowed_email_domains' => $allowedEmailDomains,
             // Kept as a compatibility projection for existing non-policy callers.
             'allowed_email_domain' => $allowedEmailDomains[0],

@@ -198,6 +198,24 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/secretary/attendance/session',
+        'handler' => 'handle_secretary_attendance_session_start',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/secretary/attendance/session/active',
+        'handler' => 'handle_secretary_attendance_session_active',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/secretary/attendance/session/end',
+        'handler' => 'handle_secretary_attendance_session_end',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/secretary/attendance/override',
         'handler' => 'handle_secretary_attendance_override',
         'has_params' => false,

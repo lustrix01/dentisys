@@ -27,7 +27,7 @@ function assert_throws(callable $fn, string $needle, string $label): void
 }
 
 $original = [];
-foreach (['APP_ENV', 'APP_BASE_URL', 'SHOW_DEV_RESET_LINK', 'SHOW_DEV_INVITATION_LINK', 'EMAIL_PROVIDER', 'DEV_MOCK_IDENTITY_ENABLED', 'DEV_MOCK_BIOMETRIC_ENABLED', 'DEV_MOCK_LOCATION_ENABLED', 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', 'STUDENT_AUTH_ENABLED', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN', 'ALLOWED_EMAIL_DOMAINS', 'GOOGLE_CLIENT_ID'] as $key) {
+foreach (['APP_ENV', 'APP_BASE_URL', 'APP_TIMEZONE', 'SHOW_DEV_RESET_LINK', 'SHOW_DEV_INVITATION_LINK', 'EMAIL_PROVIDER', 'DEV_MOCK_IDENTITY_ENABLED', 'DEV_MOCK_BIOMETRIC_ENABLED', 'DEV_MOCK_LOCATION_ENABLED', 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', 'STUDENT_AUTH_ENABLED', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN', 'ALLOWED_EMAIL_DOMAINS', 'GOOGLE_CLIENT_ID'] as $key) {
     $original[$key] = getenv($key);
     putenv($key);
 }
@@ -41,6 +41,7 @@ assert_same('ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ=', $defaultConfig['audi
 assert_same('bicol-u.edu.ph', $defaultConfig['app']['allowed_email_domain'], 'application default allowed email domain');
 assert_same(['bicol-u.edu.ph'], $defaultConfig['app']['allowed_email_domains'], 'application default allowed email domains');
 assert_same('development', $defaultConfig['app']['env'], 'APP_ENV defaults to development');
+assert_same('Asia/Manila', $defaultConfig['app']['operational_timezone'], 'APP_TIMEZONE defaults to Asia/Manila');
 assert_same('mailpit', $defaultConfig['providers']['email']['active'], 'development defaults to Mailpit');
 assert_same(false, $defaultConfig['features']['student_auth_enabled'], 'Student authentication defaults to disabled');
 assert_same([
@@ -83,6 +84,12 @@ assert_throws(
     static fn() => app_config(['APP_ENV' => 'unknown']),
     'APP_ENV',
     'unknown APP_ENV is rejected'
+);
+assert_same('UTC', app_config(['APP_TIMEZONE' => 'UTC'])['app']['operational_timezone'], 'APP_TIMEZONE override is applied');
+assert_throws(
+    static fn() => app_config(['APP_TIMEZONE' => 'Not/AZone']),
+    'valid IANA timezone',
+    'invalid APP_TIMEZONE is rejected'
 );
 assert_throws(
     static fn() => app_config(['DEV_MOCK_LOCATION_ENABLED' => 'sometimes']),

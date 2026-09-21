@@ -593,6 +593,580 @@ function handle_secretary_dashboard_kpis(): void
     }
 }
 
+function secretary_attendance_session_now(): DateTimeImmutable
+{
+    // Session timestamps remain UTC. Calendar-date decisions project this
+    // instant through app_config()['app']['operational_timezone'] separately.
+    return new DateTimeImmutable('now', new DateTimeZone('UTC'));
+}
+
+function secretary_attendance_session_timestamp(?string $value): ?string
+{
+    if ($value === null || trim($value) === '') {
+        return null;
+    }
+
+    try {
+        return (new DateTimeImmutable($value, new DateTimeZone('UTC')))->format('Y-m-d\\TH:i:s.u\\Z');
+    } catch (\Throwable $e) {
+        return $value;
+    }
+}
+
+function secretary_attendance_session_bool(array $data, string $field, bool $default): bool
+{
+    if (!array_key_exists($field, $data) || $data[$field] === null) {
+        return $default;
+    }
+
+    $value = $data[$field];
+    if (is_bool($value)) {
+        return $value;
+    }
+    if (is_int($value) && ($value === 0 || $value === 1)) {
+        return $value === 1;
+    }
+    if (is_string($value)) {
+        $normalized = strtolower(trim($value));
+        if (in_array($normalized, ['true', '1', 'yes'], true)) {
+            return true;
+        }
+        if (in_array($normalized, ['false', '0', 'no'], true)) {
+            return false;
+        }
+    }
+
+    throw new ValidationException([[
+        'field' => $field,
+        'message' => 'Field must be a boolean.',
+    ]]);
+}
+
+function secretary_attendance_session_optional_float(
+    array $data,
+    string $field,
+    ?float $minimum = null,
+    ?float $maximum = null
+): ?float {
+    if (!array_key_exists($field, $data) || $data[$field] === null || $data[$field] === '') {
+        return null;
+    }
+
+    if (is_bool($data[$field]) || !is_numeric($data[$field])) {
+        throw new ValidationException([[
+            'field' => $field,
+            'message' => 'Field must be numeric.',
+        ]]);
+    }
+
+    $value = (float) $data[$field];
+    if (!is_finite($value)) {
+        throw new ValidationException([[
+            'field' => $field,
+            'message' => 'Field must be a finite number.',
+        ]]);
+    }
+    if ($minimum !== null && $value < $minimum) {
+        throw new ValidationException([[
+            'field' => $field,
+            'message' => "Field must be at least {$minimum}.",
+        ]]);
+    }
+    if ($maximum !== null && $value > $maximum) {
+        throw new ValidationException([[
+            'field' => $field,
+            'message' => "Field must be at most {$maximum}.",
+        ]]);
+    }
+
+    return $value;
+}
+
+function secretary_attendance_session_date(array $data, DateTimeImmutable $now, array $config): string
+{
+    $today = app_local_date($config, $now);
+    $rawDate = array_key_exists('sessionDate', $data)
+        ? $data['sessionDate']
+        : ($data['date'] ?? $today);
+
+    if (!is_string($rawDate) || trim($rawDate) === '') {
+        throw new ValidationException([[
+            'field' => 'sessionDate',
+            'message' => 'Session date must be a valid YYYY-MM-DD date.',
+        ]]);
+    }
+
+    $rawDate = trim($rawDate);
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $rawDate, new DateTimeZone('UTC'));
+    $errors = DateTimeImmutable::getLastErrors();
+    if (
+        !$date
+        || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+        || $date->format('Y-m-d') !== $rawDate
+    ) {
+        throw new ValidationException([[
+            'field' => 'sessionDate',
+            'message' => 'Session date must be a valid YYYY-MM-DD date.',
+        ]]);
+    }
+
+    if ($rawDate > $today) {
+        throw new ValidationException([[
+            'field' => 'sessionDate',
+            'message' => 'Future attendance session dates are not allowed.',
+        ]]);
+    }
+
+    return $rawDate;
+}
+
+function secretary_attendance_session_code(int $csId, string $sessionDate): string
+{
+    return 'CS' . $csId . '-' . str_replace('-', '', $sessionDate) . '-' . strtoupper(bin2hex(random_bytes(3)));
+}
+
+function secretary_attendance_session_fetch(
+    PDO $pdo,
+    int $secretaryUserId,
+    ?int $sessionId = null,
+    ?int $csId = null,
+    bool $forUpdate = false,
+    bool $activeOnly = false
+): ?array {
+    $where = [
+        'cs.secretary_user_id = :secretary_user_id',
+    ];
+    $params = [':secretary_user_id' => $secretaryUserId];
+
+    if ($sessionId !== null) {
+        $where[] = 's.session_id = :session_id';
+        $params[':session_id'] = $sessionId;
+    }
+    if ($csId !== null) {
+        $where[] = 'cs.cs_id = :cs_id';
+        $params[':cs_id'] = $csId;
+    }
+    if ($activeOnly) {
+        $where[] = "s.status = 'active'";
+    }
+
+    $sql = "SELECT s.session_id, s.cs_id, s.secretary_user_id, s.session_date,
+                   s.session_code, s.room, s.started_at, s.ended_at, s.status,
+                   s.geofence_enabled, s.geofence_latitude, s.geofence_longitude,
+                   s.geofence_radius_meters, s.biometric_required, s.created_at,
+                   s.updated_at, cs.cs_name, cs.block, c.course_id,
+                   c.course_code, c.name AS course_name, u.display_name AS instructor_name
+            FROM attendance_sessions s
+            JOIN class_sections cs ON cs.cs_id = s.cs_id
+            JOIN courses c ON c.course_id = cs.course_id
+            LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
+            WHERE " . implode(' AND ', $where) . "
+            ORDER BY s.started_at DESC
+            LIMIT 1";
+    if ($forUpdate) {
+        $sql .= ' FOR UPDATE OF s';
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row === false ? null : $row;
+}
+
+function secretary_attendance_session_map(array $row): array
+{
+    return [
+        'sessionId' => (string) $row['session_id'],
+        'csId' => (int) $row['cs_id'],
+        'classId' => (string) $row['cs_id'],
+        'className' => $row['cs_name'],
+        'classSection' => [
+            'id' => (string) $row['cs_id'],
+            'name' => $row['cs_name'],
+            'block' => $row['block'] ?? null,
+        ],
+        'course' => [
+            'id' => (int) $row['course_id'],
+            'code' => $row['course_code'],
+            'name' => $row['course_name'],
+        ],
+        'courseCode' => $row['course_code'],
+        'instructorName' => $row['instructor_name'] ?? null,
+        'sessionDate' => $row['session_date'],
+        'sessionCode' => $row['session_code'],
+        'room' => $row['room'],
+        'startedAt' => secretary_attendance_session_timestamp((string) $row['started_at']),
+        'endedAt' => secretary_attendance_session_timestamp($row['ended_at'] !== null ? (string) $row['ended_at'] : null),
+        'status' => strtolower((string) $row['status']),
+        'geofenceEnabled' => in_array($row['geofence_enabled'], [true, 't', '1', 1], true),
+        'geofenceLatitude' => $row['geofence_latitude'] !== null ? (float) $row['geofence_latitude'] : null,
+        'geofenceLongitude' => $row['geofence_longitude'] !== null ? (float) $row['geofence_longitude'] : null,
+        'geofenceRadiusMeters' => $row['geofence_radius_meters'] !== null ? (float) $row['geofence_radius_meters'] : null,
+        'biometricRequired' => in_array($row['biometric_required'], [true, 't', '1', 1], true),
+        'createdAt' => secretary_attendance_session_timestamp((string) $row['created_at']),
+        'updatedAt' => secretary_attendance_session_timestamp((string) $row['updated_at']),
+    ];
+}
+
+function handle_secretary_attendance_session_start(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = secretary_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+
+        $data = $body['data'];
+        $csId = (int) ($data['csId'] ?? $data['classSectionId'] ?? 0);
+        if ($csId <= 0) {
+            throw new ValidationException([['field' => 'csId', 'message' => 'A valid class section is required.']]);
+        }
+
+        $now = secretary_attendance_session_now();
+        $sessionDate = secretary_attendance_session_date($data, $now, $config);
+        $room = null;
+        if (array_key_exists('room', $data) && $data['room'] !== null && $data['room'] !== '') {
+            $room = validate_required_string($data, 'room', 1, 255);
+        }
+
+        $biometricRequired = secretary_attendance_session_bool(
+            $data,
+            array_key_exists('biometricRequired', $data) ? 'biometricRequired' : 'requireFace',
+            false
+        );
+        $geofenceEnabled = secretary_attendance_session_bool(
+            $data,
+            array_key_exists('geofenceEnabled', $data) ? 'geofenceEnabled' : 'requireGeo',
+            $biometricRequired
+        );
+        $latitude = secretary_attendance_session_optional_float($data, 'geofenceLatitude', -90, 90);
+        $longitude = secretary_attendance_session_optional_float($data, 'geofenceLongitude', -180, 180);
+        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters');
+        if (($latitude === null) !== ($longitude === null)) {
+            throw new ValidationException([[
+                'field' => 'geofenceLatitude',
+                'message' => 'Geofence latitude and longitude must be provided together.',
+            ]]);
+        }
+        if ($geofenceEnabled && $radius === null) {
+            $radius = 100.0;
+        }
+        if ($radius !== null && $radius <= 0) {
+            throw new ValidationException([[
+                'field' => 'geofenceRadiusMeters',
+                'message' => 'Geofence radius must be greater than zero.',
+            ]]);
+        }
+
+        $sessionCode = null;
+        if (array_key_exists('sessionCode', $data) && $data['sessionCode'] !== null && trim((string) $data['sessionCode']) !== '') {
+            $sessionCode = validate_required_string($data, 'sessionCode', 1, 100);
+        }
+        $sessionCode ??= secretary_attendance_session_code($csId, $sessionDate);
+        $nowSql = $now->format('Y-m-d H:i:s.u');
+
+        $pdo->beginTransaction();
+        try {
+            $scopeStmt = $pdo->prepare(
+                "SELECT cs.cs_id
+                 FROM class_sections cs
+                 WHERE cs.cs_id = ?
+                   AND cs.secretary_user_id = ?
+                   AND cs.status = 'Active'
+                 FOR UPDATE"
+            );
+            $scopeStmt->execute([$csId, $authCtx['user_id']]);
+            if ($scopeStmt->fetchColumn() === false) {
+                $pdo->rollBack();
+                safe_error_response('Class section is not assigned to this Secretary.', 403);
+                return;
+            }
+
+            $activeStmt = $pdo->prepare(
+                "SELECT session_id
+                 FROM attendance_sessions
+                 WHERE cs_id = ? AND status = 'active'
+                 FOR UPDATE"
+            );
+            $activeStmt->execute([$csId]);
+            if ($activeStmt->fetchColumn() !== false) {
+                $pdo->rollBack();
+                safe_error_response('An active attendance session already exists for this class section.', 409);
+                return;
+            }
+
+            $insert = $pdo->prepare(
+                "INSERT INTO attendance_sessions (
+                    cs_id, secretary_user_id, session_date, session_code, room,
+                    started_at, status, geofence_enabled, geofence_latitude,
+                    geofence_longitude, geofence_radius_meters, biometric_required,
+                    created_at, updated_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)
+                 RETURNING session_id"
+            );
+            $insert->execute([
+                $csId,
+                $authCtx['user_id'],
+                $sessionDate,
+                $sessionCode,
+                $room,
+                $nowSql,
+                $geofenceEnabled,
+                $latitude,
+                $longitude,
+                $radius,
+                $biometricRequired,
+                $nowSql,
+                $nowSql,
+            ]);
+            $sessionId = (int) $insert->fetchColumn();
+
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditCtx = audit_begin_operation($pdo);
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'secretary_attendance',
+                'action_code' => 'attendance_session_started',
+                'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'],
+                'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'],
+                'actor_display_name' => $authCtx['display_name'],
+                'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => $csId,
+                'target_type' => 'attendance_session',
+                'target_id' => (string) $sessionId,
+                'description' => "Started attendance session '{$sessionCode}' for class section #{$csId}.",
+                'reason' => null,
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey, null, [
+                'session_id' => $sessionId,
+                'cs_id' => $csId,
+                'session_date' => $sessionDate,
+                'session_code' => $sessionCode,
+                'status' => 'active',
+                'started_at' => $nowSql,
+            ]);
+
+            $pdo->commit();
+        } catch (\PDOException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $sqlState = $e->errorInfo[0] ?? (string) $e->getCode();
+            if ($sqlState === '23505') {
+                safe_error_response('An active attendance session or duplicate session code already exists for this class section.', 409);
+                return;
+            }
+            throw $e;
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $session = secretary_attendance_session_fetch($pdo, (int) $authCtx['user_id'], $sessionId);
+        if ($session === null) {
+            safe_error_response('Attendance session was created but could not be reloaded.', 500);
+            return;
+        }
+        json_response([
+            'status' => 'ok',
+            'session' => secretary_attendance_session_map($session),
+        ], 201);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (\Throwable $e) {
+        error_log('Secretary attendance session start error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_secretary_attendance_session_active(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = secretary_verify_auth($pdo, $config);
+
+        $requestedCsId = null;
+        if (isset($_GET['csId']) && $_GET['csId'] !== '') {
+            if (!ctype_digit((string) $_GET['csId']) || (int) $_GET['csId'] <= 0) {
+                validation_error_response([['field' => 'csId', 'message' => 'Class section ID must be a positive integer.']]);
+                return;
+            }
+            $requestedCsId = (int) $_GET['csId'];
+            $scopeStmt = $pdo->prepare(
+                "SELECT 1 FROM class_sections WHERE cs_id = ? AND secretary_user_id = ?"
+            );
+            $scopeStmt->execute([$requestedCsId, $authCtx['user_id']]);
+            if ($scopeStmt->fetchColumn() === false) {
+                safe_error_response('Class section is not assigned to this Secretary.', 403);
+                return;
+            }
+        }
+
+        $session = secretary_attendance_session_fetch(
+            $pdo,
+            (int) $authCtx['user_id'],
+            null,
+            $requestedCsId,
+            false,
+            true
+        );
+        if ($session === null || strtolower((string) $session['status']) !== 'active') {
+            json_response([
+                'status' => 'ok',
+                'activeSession' => null,
+            ], 200);
+            return;
+        }
+
+        json_response([
+            'status' => 'ok',
+            'activeSession' => secretary_attendance_session_map($session),
+        ], 200);
+    } catch (\Throwable $e) {
+        error_log('Secretary active attendance session error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_secretary_attendance_session_end(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = secretary_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+
+        $sessionId = (int) ($body['data']['sessionId'] ?? $body['data']['id'] ?? 0);
+        if ($sessionId <= 0) {
+            throw new ValidationException([['field' => 'sessionId', 'message' => 'A valid attendance session ID is required.']]);
+        }
+
+        $now = secretary_attendance_session_now();
+        $nowSql = $now->format('Y-m-d H:i:s.u');
+
+        $pdo->beginTransaction();
+        try {
+            $session = secretary_attendance_session_fetch(
+                $pdo,
+                (int) $authCtx['user_id'],
+                $sessionId,
+                null,
+                true
+            );
+            if ($session === null) {
+                $pdo->rollBack();
+                safe_error_response('Attendance session was not found in an assigned class.', 404);
+                return;
+            }
+            if (strtolower((string) $session['status']) !== 'active') {
+                $pdo->rollBack();
+                safe_error_response('Attendance session has already ended.', 409);
+                return;
+            }
+
+            $beforeState = [
+                'session_id' => $sessionId,
+                'cs_id' => (int) $session['cs_id'],
+                'status' => 'active',
+                'started_at' => (string) $session['started_at'],
+                'ended_at' => null,
+            ];
+            $update = $pdo->prepare(
+                "UPDATE attendance_sessions
+                 SET status = 'ended', ended_at = ?, updated_at = ?
+                 WHERE session_id = ? AND status = 'active'"
+            );
+            $update->execute([$nowSql, $nowSql, $sessionId]);
+            if ($update->rowCount() !== 1) {
+                $pdo->rollBack();
+                safe_error_response('Attendance session could not be ended.', 409);
+                return;
+            }
+
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditCtx = audit_begin_operation($pdo);
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'secretary_attendance',
+                'action_code' => 'attendance_session_ended',
+                'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'],
+                'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'],
+                'actor_display_name' => $authCtx['display_name'],
+                'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => (int) $session['cs_id'],
+                'target_type' => 'attendance_session',
+                'target_id' => (string) $sessionId,
+                'description' => "Ended attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.",
+                'reason' => null,
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey, $beforeState, [
+                'session_id' => $sessionId,
+                'cs_id' => (int) $session['cs_id'],
+                'status' => 'ended',
+                'started_at' => (string) $session['started_at'],
+                'ended_at' => $nowSql,
+            ]);
+
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        $session['status'] = 'ended';
+        $session['ended_at'] = $nowSql;
+        $session['updated_at'] = $nowSql;
+        json_response([
+            'status' => 'ok',
+            'session' => secretary_attendance_session_map($session),
+        ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (\Throwable $e) {
+        error_log('Secretary attendance session end error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
 function handle_secretary_attendance_get(): void
 {
     try {
@@ -601,7 +1175,7 @@ function handle_secretary_attendance_get(): void
         $authCtx = secretary_verify_auth($pdo, $config);
 
         $stmt = $pdo->prepare(
-            "SELECT r.record_id, r.enrollment_id, r.session_date, r.session_code, r.status,
+            "SELECT r.record_id, r.enrollment_id, r.attendance_session_id, r.session_date, r.session_code, r.status,
                     r.override_reason, r.override_at, s.student_id, s.student_number,
                     s.first_name, s.last_name, cs.cs_id, cs.cs_name, c.course_code
              FROM attendance_records r
@@ -618,6 +1192,7 @@ function handle_secretary_attendance_get(): void
         $mapped = array_map(function ($r) {
             return [
                 'id' => (string) $r['record_id'],
+                'attendanceSessionId' => $r['attendance_session_id'] !== null ? (string) $r['attendance_session_id'] : null,
                 'studentId' => (string) $r['student_id'],
                 'studentNumber' => $r['student_number'],
                 'studentName' => trim($r['first_name'] . ' ' . $r['last_name']),

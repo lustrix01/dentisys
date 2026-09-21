@@ -1079,7 +1079,7 @@ function handle_faculty_attendance_get(): void
         $authCtx = faculty_verify_auth($pdo, $config);
 
         $stmt = $pdo->prepare(
-            "SELECT r.record_id, r.session_date, r.session_code, r.status, r.verification_method,
+            "SELECT r.record_id, r.attendance_session_id, r.session_date, r.session_code, r.status, r.verification_method,
                     r.override_reason, r.override_at, s.student_id, s.student_number,
                     cs.cs_id, cs.cs_name, c.course_code
              FROM attendance_records r
@@ -1093,6 +1093,7 @@ function handle_faculty_attendance_get(): void
         $stmt->execute([$authCtx['user_id']]);
         $records = array_map(static fn(array $row): array => [
             'id' => (string) $row['record_id'],
+            'attendanceSessionId' => $row['attendance_session_id'] !== null ? (string) $row['attendance_session_id'] : null,
             'studentId' => (string) $row['student_id'],
             'studentNumber' => $row['student_number'],
             'date' => $row['session_date'],

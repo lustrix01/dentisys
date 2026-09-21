@@ -108,6 +108,7 @@ $expectedMigrations = [
     '006_google_sign_in_phase_1.sql',
     '007_assessment_transmutation.sql',
     '008_invite_only_onboarding.sql',
+    '009_persistent_attendance_sessions.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -193,6 +194,210 @@ foreach ($demoPasswords as $demoEmail => $demoPassword) {
 expect_same(200, $adminLoginStatus, 'Admin settings integration login returns HTTP 200');
 $adminAccessToken = (string) ($adminLoginBody['access_token'] ?? '');
 expect_true($adminAccessToken !== '', 'Admin settings integration login returns an access token');
+
+// Persistent Secretary attendance-session lifecycle coverage.
+[$secretaryLoginStatus, $secretaryLoginBody] = integration_http_json('/api/auth/login', '', [
+    'email' => 'secretary@bicol-u.edu.ph',
+    'password' => $demoPasswords['secretary@bicol-u.edu.ph'],
+]);
+expect_same(200, $secretaryLoginStatus, 'Secretary session integration login returns HTTP 200');
+$secretaryAccessToken = (string) ($secretaryLoginBody['access_token'] ?? '');
+expect_true($secretaryAccessToken !== '', 'Secretary session integration login returns an access token');
+
+$secretaryClassStmt = $pdo->prepare(
+    "SELECT cs_id
+     FROM class_sections
+     WHERE secretary_user_id = (
+         SELECT user_id FROM user_accounts WHERE login_email = 'secretary@bicol-u.edu.ph'
+     )
+       AND status = 'Active'
+     ORDER BY cs_id
+     LIMIT 1"
+);
+$secretaryClassStmt->execute();
+$secretarySessionClassId = (int) $secretaryClassStmt->fetchColumn();
+expect_true($secretarySessionClassId > 0, 'Seeded Secretary has an active assigned class for session tests');
+
+$sessionConfig = app_config();
+$sessionNowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$sessionLocalTimezone = new DateTimeZone($sessionConfig['app']['operational_timezone']);
+$sessionDate = app_local_date($sessionConfig, $sessionNowUtc);
+[$activeBeforeStatus, $activeBeforeBody] = integration_http_get_json(
+    '/api/secretary/attendance/session/active?csId=' . $secretarySessionClassId,
+    $secretaryAccessToken
+);
+expect_same(200, $activeBeforeStatus, 'Secretary active-session lookup returns HTTP 200 when no session exists');
+expect_same(null, $activeBeforeBody['activeSession'] ?? null, 'Secretary active-session lookup returns null when no session exists');
+
+$sessionCode = 'INTEGRATION-SESSION-' . strtoupper(bin2hex(random_bytes(4)));
+[$startSessionStatus, $startSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'csId' => $secretarySessionClassId,
+    'sessionDate' => $sessionDate,
+    'sessionCode' => $sessionCode,
+    'room' => 'Integration Attendance Room',
+    'biometricRequired' => true,
+    'geofenceEnabled' => true,
+    'geofenceLatitude' => 13.1436,
+    'geofenceLongitude' => 123.7438,
+]);
+expect_same(201, $startSessionStatus, 'Authorized Secretary can start an attendance session');
+$startedSession = $startSessionBody['session'] ?? [];
+$attendanceSessionId = (int) ($startedSession['sessionId'] ?? 0);
+expect_true($attendanceSessionId > 0, 'Started attendance session returns an authoritative database ID');
+expect_same($sessionCode, $startedSession['sessionCode'] ?? null, 'Started attendance session preserves the server-persisted session code');
+expect_same('active', $startedSession['status'] ?? null, 'Started attendance session returns active status');
+expect_same((string) $secretarySessionClassId, (string) ($startedSession['classId'] ?? ''), 'Started attendance session is tied to the requested class section');
+
+$sessionRowStmt = $pdo->prepare(
+    'SELECT session_id, cs_id, secretary_user_id, session_date, session_code, status,
+            ended_at, geofence_enabled, geofence_latitude, geofence_longitude,
+            geofence_radius_meters, biometric_required
+       FROM attendance_sessions
+      WHERE session_id = ?'
+);
+$sessionRowStmt->execute([$attendanceSessionId]);
+$sessionRow = $sessionRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($sessionRow), 'Started attendance session persists in PostgreSQL');
+expect_same((string) $secretarySessionClassId, (string) ($sessionRow['cs_id'] ?? ''), 'Persisted session retains its class section');
+expect_same($sessionCode, $sessionRow['session_code'] ?? null, 'Persisted session retains its session code');
+expect_same('active', $sessionRow['status'] ?? null, 'Persisted session status is active');
+expect_same(null, $sessionRow['ended_at'] ?? null, 'Persisted active session has no end timestamp');
+expect_same('100.00', $sessionRow['geofence_radius_meters'] ?? null, 'Biometric geofencing defaults to a 100-meter radius');
+
+[$activeSessionStatus, $activeSessionBody] = integration_http_get_json(
+    '/api/secretary/attendance/session/active?csId=' . $secretarySessionClassId,
+    $secretaryAccessToken
+);
+expect_same(200, $activeSessionStatus, 'Secretary active-session lookup returns HTTP 200 for an active session');
+expect_same((string) $attendanceSessionId, (string) ($activeSessionBody['activeSession']['sessionId'] ?? ''), 'Active-session lookup returns the authoritative session ID');
+expect_same($sessionCode, $activeSessionBody['activeSession']['sessionCode'] ?? null, 'Active-session lookup returns the persisted session code');
+
+[$duplicateSessionStatus, $duplicateSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'csId' => $secretarySessionClassId,
+    'sessionDate' => $sessionDate,
+    'sessionCode' => $sessionCode . '-DUPLICATE',
+]);
+expect_same(409, $duplicateSessionStatus, 'Second active session for the same class is rejected');
+expect_same('error', $duplicateSessionBody['status'] ?? null, 'Duplicate active session returns the standard error payload');
+
+$futureDate = $sessionNowUtc->setTimezone($sessionLocalTimezone)->modify('+1 day')->format('Y-m-d');
+[$futureSessionStatus, $futureSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'csId' => $secretarySessionClassId,
+    'sessionDate' => $futureDate,
+]);
+expect_same(422, $futureSessionStatus, 'Future attendance session date is rejected server-side');
+expect_same('VALIDATION_ERROR', $futureSessionBody['code'] ?? null, 'Future attendance session date uses the validation error contract');
+
+$unassignedClassStmt = $pdo->prepare(
+    "SELECT cs_id
+     FROM class_sections
+     WHERE cs_id <> ? AND secretary_user_id IS NULL AND status = 'Active'
+     ORDER BY cs_id
+     LIMIT 1"
+);
+$unassignedClassStmt->execute([$secretarySessionClassId]);
+$unassignedClassId = (int) $unassignedClassStmt->fetchColumn();
+expect_true($unassignedClassId > 0, 'Integration fixture exposes an unassigned class for authorization testing');
+[$unassignedSessionStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'csId' => $unassignedClassId,
+    'sessionDate' => $sessionDate,
+]);
+expect_same(403, $unassignedSessionStatus, 'Secretary cannot start a session for an unassigned class');
+
+[$invalidSectionStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'csId' => 999999,
+    'sessionDate' => $sessionDate,
+]);
+expect_same(403, $invalidSectionStatus, 'Secretary cannot start a session for an invalid or unauthorized class section');
+
+$sessionEnrollmentStmt = $pdo->prepare(
+    'SELECT enrollment_id FROM enrollments WHERE cs_id = ? ORDER BY enrollment_id LIMIT 1'
+);
+$sessionEnrollmentStmt->execute([$secretarySessionClassId]);
+$sessionEnrollmentId = (int) $sessionEnrollmentStmt->fetchColumn();
+expect_true($sessionEnrollmentId > 0, 'Assigned Secretary class has an enrollment for attendance-linkage testing');
+
+$sessionAttendanceStmt = $pdo->prepare(
+    "INSERT INTO attendance_records
+        (enrollment_id, attendance_session_id, session_date, session_code, status, verification_method, secretary_user_id)
+     VALUES (?, ?, ?, ?, 'present', 'integration_fixture',
+             (SELECT secretary_user_id FROM class_sections WHERE cs_id = ?))
+     RETURNING record_id"
+);
+$sessionAttendanceStmt->execute([
+    $sessionEnrollmentId,
+    $attendanceSessionId,
+    $sessionDate,
+    $sessionCode,
+    $secretarySessionClassId,
+]);
+$sessionAttendanceRecordId = (int) $sessionAttendanceStmt->fetchColumn();
+expect_true($sessionAttendanceRecordId > 0, 'Attendance record can reference the persistent session');
+
+$linkedAttendanceStmt = $pdo->prepare(
+    'SELECT attendance_session_id FROM attendance_records WHERE record_id = ?'
+);
+$linkedAttendanceStmt->execute([$sessionAttendanceRecordId]);
+expect_same((string) $attendanceSessionId, (string) $linkedAttendanceStmt->fetchColumn(), 'Attendance record preserves the session foreign-key linkage');
+
+$invalidForeignKeyRejected = false;
+try {
+    $invalidSessionAttendanceStmt = $pdo->prepare(
+        "INSERT INTO attendance_records (enrollment_id, attendance_session_id, session_date, session_code, status)
+         VALUES (?, 999999, ?, ?, 'present')"
+    );
+    $invalidSessionAttendanceStmt->execute([$sessionEnrollmentId, $sessionDate, $sessionCode . '-INVALID']);
+} catch (PDOException $e) {
+    $invalidForeignKeyRejected = ($e->errorInfo[0] ?? (string) $e->getCode()) === '23503';
+}
+expect_true($invalidForeignKeyRejected, 'Invalid attendance-session foreign keys are rejected by PostgreSQL');
+
+[$endSessionStatus, $endSessionBody] = integration_http_json('/api/secretary/attendance/session/end', $secretaryAccessToken, [
+    'sessionId' => (string) $attendanceSessionId,
+]);
+expect_same(200, $endSessionStatus, 'Authorized Secretary can end an active attendance session');
+expect_same('ended', $endSessionBody['session']['status'] ?? null, 'Ended session response reports ended status');
+expect_true(($endSessionBody['session']['endedAt'] ?? null) !== null, 'Ended session response includes an authoritative end timestamp');
+
+$sessionRowStmt->execute([$attendanceSessionId]);
+$endedSessionRow = $sessionRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('ended', $endedSessionRow['status'] ?? null, 'Ended session persists ended status in PostgreSQL');
+expect_true(($endedSessionRow['ended_at'] ?? null) !== null, 'Ended session persists its end timestamp');
+
+[$activeAfterEndStatus, $activeAfterEndBody] = integration_http_get_json(
+    '/api/secretary/attendance/session/active?csId=' . $secretarySessionClassId,
+    $secretaryAccessToken
+);
+expect_same(200, $activeAfterEndStatus, 'Active-session lookup remains available after ending a session');
+expect_same(null, $activeAfterEndBody['activeSession'] ?? null, 'Ended session no longer appears as active');
+
+[$repeatEndStatus] = integration_http_json('/api/secretary/attendance/session/end', $secretaryAccessToken, [
+    'sessionId' => (string) $attendanceSessionId,
+]);
+expect_same(409, $repeatEndStatus, 'Ending an already-ended session returns a conflict');
+
+[$secretaryAttendanceStatus, $secretaryAttendanceBody] = integration_http_get_json('/api/secretary/attendance', $secretaryAccessToken);
+expect_same(200, $secretaryAttendanceStatus, 'Secretary attendance reads remain available after session linkage');
+$linkedAttendanceRows = array_values(array_filter(
+    $secretaryAttendanceBody['records'] ?? [],
+    static fn(array $record): bool => (string) ($record['id'] ?? '') === (string) $sessionAttendanceRecordId,
+));
+expect_same(1, count($linkedAttendanceRows), 'Secretary attendance reads return the linked attendance record');
+expect_same((string) $attendanceSessionId, $linkedAttendanceRows[0]['attendanceSessionId'] ?? null, 'Secretary attendance reads expose the session linkage');
+
+$sessionAuditStmt = $pdo->prepare(
+    "SELECT action_code, target_type, target_id, scope_cs_id
+     FROM audit_events
+     WHERE target_type = 'attendance_session' AND target_id = ?
+     ORDER BY sequence_number"
+);
+$sessionAuditStmt->execute([(string) $attendanceSessionId]);
+$sessionAuditRows = $sessionAuditStmt->fetchAll(PDO::FETCH_ASSOC);
+expect_same(2, count($sessionAuditRows), 'Session start and end each create an audit event');
+expect_same('attendance_session_started', $sessionAuditRows[0]['action_code'] ?? null, 'Session start audit action is recorded');
+expect_same('attendance_session_ended', $sessionAuditRows[1]['action_code'] ?? null, 'Session end audit action is recorded');
+expect_same((string) $secretarySessionClassId, (string) ($sessionAuditRows[0]['scope_cs_id'] ?? ''), 'Session audit is scoped to the assigned class section');
+echo "PASS: Persistent Secretary attendance-session integration coverage completed.\n";
 
 $originalAdminGradingDefaultsJson = (string) $pdo->query(
     "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"
