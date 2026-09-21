@@ -5,6 +5,8 @@ const adminEmail = process.env.E2E_ADMIN_EMAIL ?? 'admin@bicol-u.edu.ph';
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? 'Admin123!';
 const facultyEmail = process.env.E2E_FACULTY_EMAIL ?? 'faculty@bicol-u.edu.ph';
 const facultyPassword = process.env.E2E_FACULTY_PASSWORD ?? 'Faculty123!';
+const secretaryEmail = process.env.E2E_SECRETARY_EMAIL ?? 'secretary@bicol-u.edu.ph';
+const secretaryPassword = process.env.E2E_SECRETARY_PASSWORD ?? 'Secretary123!';
 const studentPassword = process.env.E2E_STUDENT_PASSWORD ?? 'Student123!';
 
 function decodeBase32(value: string): Buffer {
@@ -305,4 +307,105 @@ test('Faculty-issued Student invitation, Mailpit acceptance, password login, and
     headers: { Authorization: `Bearer ${studentCredentials.access_token}` },
   });
   expect(logout.ok(), await logout.text()).toBeTruthy();
+});
+
+test('secretary authoritative session lifecycle on live PostgreSQL stack', async ({ page }) => {
+  // 1. Authenticate as secretary
+  await login(page, secretaryEmail, secretaryPassword);
+
+  // 2. Navigate directly to /secretary/start-session
+  await page.goto('/secretary/start-session');
+
+  // Wait for initial active session resolution to finish loading
+  await expect(page.getByText('Resolving active attendance session status...')).toHaveCount(0);
+
+  // 4. Verify initial state: form is present, no active session banner
+  await expect(page.getByRole('heading', { name: /Start Class Session & Attendance Control/i })).toBeVisible();
+  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+
+  // Verify assigned class is shown (CLINIC-4B)
+  await expect(page.getByText('CLINIC-4B')).toBeVisible();
+
+  // Verify localStorage has no active session key
+  const localSessionBefore = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
+  expect(localSessionBefore).toBeNull();
+
+  // 5. Start class session
+  const startPromise = page.waitForResponse(
+    response => response.url().includes('/api/secretary/attendance/session') && response.request().method() === 'POST'
+  );
+  await page.getByRole('button', { name: /Start Class Session Now/i }).click();
+
+  const startResponse = await startPromise;
+  expect(startResponse.status()).toBe(201);
+  const startPayload = await startResponse.json();
+  expect(startPayload.status).toBe('ok');
+  expect(startPayload.session.sessionId).toBeTruthy();
+  expect(startPayload.session.status).toBe('active');
+  const authoritativeSessionId = String(startPayload.session.sessionId);
+  const authoritativeSessionCode = startPayload.session.sessionCode;
+
+  // 6. Verify UI transitions to active state
+  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
+  await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /End Class Session/i })).toBeVisible();
+
+  // Verify localStorage was NOT used as authoritative storage
+  const localSessionAfterStart = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
+  expect(localSessionAfterStart).toBeNull();
+
+  // 7. Test refresh/recovery semantics: reload browser
+  const reloadLookupPromise = page.waitForResponse(
+    response => response.url().includes('/api/secretary/attendance/session/active') && response.request().method() === 'GET'
+  );
+  await page.reload();
+  const reloadResponse = await reloadLookupPromise;
+  expect(reloadResponse.status()).toBe(200);
+  const reloadPayload = await reloadResponse.json();
+  expect(reloadPayload.activeSession).toBeTruthy();
+  expect(String(reloadPayload.activeSession.sessionId)).toBe(authoritativeSessionId);
+
+  // Active session card restored after reload
+  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
+  await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /End Class Session/i })).toBeVisible();
+
+  // 8. Test navigation away and back
+  await page.click('a[href="/"]');
+  await expect(page).toHaveURL('/');
+  await page.click('a[href="/secretary/start-session"]');
+  await expect(page).toHaveURL('/secretary/start-session');
+
+  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
+  await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
+
+  // 9. End active session
+  await page.getByRole('button', { name: /End Class Session/i }).click();
+
+  // Confirm modal is shown
+  await expect(page.getByText(/End Attendance Session/i).first()).toBeVisible();
+  await expect(page.getByText(/Are you sure you want to end the active attendance session/i)).toBeVisible();
+
+  const endPromise = page.waitForResponse(
+    response => response.url().includes('/api/secretary/attendance/session/end') && response.request().method() === 'POST'
+  );
+  await page.getByRole('button', { name: /Confirm End Session/i }).click();
+
+  const endResponse = await endPromise;
+  expect(endResponse.status()).toBe(200);
+  const endPayload = await endResponse.json();
+  expect(endPayload.status).toBe('ok');
+  expect(endPayload.session.status).toBe('ended');
+
+  // 10. Verify UI returns to inactive state
+  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+
+  // 11. Refresh browser again to confirm inactive state persists
+  await page.reload();
+  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+
+  console.log('LIVE BROWSER VALIDATION PASSED FOR SESSION ID:', authoritativeSessionId);
 });

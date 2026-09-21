@@ -824,6 +824,70 @@ export function updateSecretarySettingsApi(settings: { theme: 'light' | 'dark' }
   return request('POST', '/secretary/settings', settings);
 }
 
+// Secretary Attendance Session API Methods & Types
+export interface SecretaryAttendanceSession {
+  sessionId: string;
+  csId: number;
+  classId: string;
+  className: string;
+  classSection: {
+    id: string;
+    name: string;
+    block?: string | null;
+  };
+  course: {
+    id: number;
+    code: string;
+    name: string;
+  };
+  courseCode: string;
+  instructorName?: string | null;
+  sessionDate: string;
+  sessionCode: string;
+  room?: string | null;
+  startedAt: string;
+  endedAt?: string | null;
+  status: 'active' | 'ended';
+  geofenceEnabled: boolean;
+  geofenceLatitude?: number | null;
+  geofenceLongitude?: number | null;
+  geofenceRadiusMeters?: number | null;
+  biometricRequired: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StartSecretaryAttendanceSessionPayload {
+  csId: number;
+  sessionDate?: string;
+  sessionCode?: string;
+  room?: string;
+  biometricRequired?: boolean;
+  geofenceEnabled?: boolean;
+  geofenceLatitude?: number;
+  geofenceLongitude?: number;
+  geofenceRadiusMeters?: number;
+}
+
+export function startSecretaryAttendanceSessionApi(
+  data: StartSecretaryAttendanceSessionPayload
+): Promise<{ status: string; session: SecretaryAttendanceSession }> {
+  return request('POST', '/secretary/attendance/session', data);
+}
+
+export function getSecretaryActiveAttendanceSessionApi(
+  csId?: number
+): Promise<{ status: string; activeSession: SecretaryAttendanceSession | null }> {
+  const query = csId ? `?csId=${csId}` : '';
+  return request('GET', `/secretary/attendance/session/active${query}`);
+}
+
+export function endSecretaryAttendanceSessionApi(data: {
+  sessionId: string;
+}): Promise<{ status: string; session: SecretaryAttendanceSession }> {
+  return request('POST', '/secretary/attendance/session/end', data);
+}
+
 export function sendFacultyEmailApi(data: {
   studentIds: string[];
   emailType: string;

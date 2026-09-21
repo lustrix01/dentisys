@@ -203,3 +203,295 @@ test.describe('Class Secretary Invitation and Activation Workflow', () => {
     expect(body.dev_invitation_link).toContain('/activate-secretary?token=');
   });
 });
+
+test.describe('Authoritative Secretary Attendance Session Workflow', () => {
+  const mockActiveSession = {
+    sessionId: '42',
+    csId: 8,
+    classId: '8',
+    className: 'CLINIC-4B',
+    classSection: { id: '8', name: 'CLINIC-4B', block: 'B' },
+    course: { id: 2, code: 'CLIN402', name: 'Clinical Dentistry II' },
+    courseCode: 'CLIN402',
+    instructorName: 'Dr. Fernando Cruz',
+    sessionDate: '2026-09-21',
+    sessionCode: 'CS8-20260921-ABC123',
+    room: 'Dental Clinic Lab 2',
+    startedAt: '2026-09-21T01:00:00.000000Z',
+    status: 'active' as const,
+    geofenceEnabled: true,
+    geofenceLatitude: 13.1436,
+    geofenceLongitude: 123.7438,
+    geofenceRadiusMeters: 200,
+    biometricRequired: true,
+    createdAt: '2026-09-21T01:00:00.000000Z',
+    updatedAt: '2026-09-21T01:00:00.000000Z',
+  };
+
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/api/auth/login', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ type: 'direct_login', access_token: 'mock-secretary-token' }),
+      });
+    });
+
+    await page.route('**/api/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 300,
+          login_email: 'secretary@bicol-u.edu.ph',
+          display_name: 'Bea Alonzo',
+          role: 'secretary',
+        }),
+      });
+    });
+
+    await page.route('**/api/auth/refresh', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          access_token: 'mock-secretary-token',
+          user: { id: 300, login_email: 'secretary@bicol-u.edu.ph', role: 'secretary' },
+        }),
+      });
+    });
+
+    await page.route('**/api/secretary/dashboard/kpis', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          kpis: { assignedStudents: 24, attendanceRate: 95, todayRecords: 0, overriddenCount: 0 },
+          recentActivity: [],
+          assignedClass: {
+            classId: '8',
+            className: 'CLINIC-4B',
+            classroomName: 'Dental Clinic Lab 2',
+          },
+        }),
+      });
+    });
+
+    await page.goto('/login');
+    await page.fill('input[type="email"]', 'secretary@bicol-u.edu.ph');
+    await page.fill('input[type="password"]', 'Password123!');
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL('/');
+  });
+
+  test('initial state: active lookup returns null -> Start Session state shown', async ({ page }) => {
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', activeSession: null }),
+      });
+    });
+
+    await page.goto('/secretary/start-session');
+    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
+    await expect(page.getByText('Session Configuration')).toBeVisible();
+    await expect(page.getByText('CLINIC-4B')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+    await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
+  });
+
+  test('initial state: active lookup returns session -> active-session state shown', async ({ page }) => {
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', activeSession: mockActiveSession }),
+      });
+    });
+
+    await page.goto('/secretary/start-session');
+    await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
+    await expect(page.getByText('Active Attendance Register Open')).toBeVisible();
+    await expect(page.getByText('CLIN402 — CLINIC-4B')).toBeVisible();
+    await expect(page.getByText('CS8-20260921-ABC123')).toBeVisible();
+    await expect(page.getByRole('button', { name: /End Class Session/i })).toBeVisible();
+    await expect(page.getByText('Session Configuration')).toHaveCount(0);
+  });
+
+  test('start: submitting invokes backend start API, renders authoritative session, and does not write to localStorage', async ({ page }) => {
+    let startApiPayload: Record<string, unknown> | null = null;
+
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', activeSession: null }),
+      });
+    });
+
+    await page.route('**/api/secretary/attendance/session', async (route) => {
+      if (route.request().method() === 'POST') {
+        startApiPayload = route.request().postDataJSON();
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            session: {
+              ...mockActiveSession,
+              sessionId: '99',
+              sessionCode: 'CS8-20260921-XYZ999',
+            },
+          }),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await page.goto('/secretary/start-session');
+    await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+
+    await page.getByRole('button', { name: /Start Class Session Now/i }).click();
+
+    await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
+    await expect(page.getByText('Code: CS8-20260921-XYZ999', { exact: true })).toBeVisible();
+    expect(startApiPayload).not.toBeNull();
+    expect((startApiPayload as Record<string, unknown>)?.csId).toBe(8);
+    expect((startApiPayload as Record<string, unknown>)?.geofenceLatitude).toBeUndefined();
+    expect((startApiPayload as Record<string, unknown>)?.geofenceLongitude).toBeUndefined();
+
+    const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
+    expect(storedItem).toBeNull();
+  });
+
+  test('refresh/recovery semantics: component reconstructs state from active lookup rather than browser persistence', async ({ page }) => {
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          activeSession: {
+            ...mockActiveSession,
+            sessionId: '101',
+            sessionCode: 'CS8-RELOAD-101',
+          },
+        }),
+      });
+    });
+
+    await page.goto('/secretary/start-session');
+    await expect(page.getByText('CS8-RELOAD-101')).toBeVisible();
+
+    // Ensure localStorage is empty
+    await page.evaluate(() => localStorage.clear());
+
+    // Reload browser page
+    await page.reload();
+
+    await expect(page.getByText('CS8-RELOAD-101')).toBeVisible();
+    const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
+    expect(storedItem).toBeNull();
+  });
+
+  test('end: end action invokes backend endpoint and returns UI to inactive state', async ({ page }) => {
+    let endApiCalled = false;
+    let endPayload: Record<string, unknown> | null = null;
+
+    let currentSession: typeof mockActiveSession | null = { ...mockActiveSession };
+
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', activeSession: currentSession }),
+      });
+    });
+
+    await page.route('**/api/secretary/attendance/session/end', async (route) => {
+      endApiCalled = true;
+      endPayload = route.request().postDataJSON();
+      currentSession = null;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          session: {
+            ...mockActiveSession,
+            status: 'ended',
+            endedAt: '2026-09-21T02:00:00.000000Z',
+          },
+        }),
+      });
+    });
+
+    await page.goto('/secretary/start-session');
+    await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
+
+    // Open confirmation modal
+    await page.getByRole('button', { name: /End Class Session/i }).click();
+    await expect(page.getByText('Are you sure you want to end the active attendance session')).toBeVisible();
+
+    // Confirm end session
+    await page.getByRole('button', { name: /Confirm End Session/i }).click();
+
+    expect(endApiCalled).toBe(true);
+    expect((endPayload as Record<string, unknown>)?.sessionId).toBe('42');
+
+    // Form should return to inactive state
+    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
+    await expect(page.getByText('Session Configuration')).toBeVisible();
+    await expect(page.getByText(/Attendance register closed/i)).toBeVisible();
+  });
+
+  test('errors: 409 conflict does not create local session', async ({ page }) => {
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', activeSession: null }),
+      });
+    });
+
+    await page.route('**/api/secretary/attendance/session', async (route) => {
+      await route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'error',
+          message: 'An active attendance session already exists for this class section.',
+        }),
+      });
+    });
+
+    await page.goto('/secretary/start-session');
+    await page.getByRole('button', { name: /Start Class Session Now/i }).click();
+
+    await expect(page.getByText('An active attendance session already exists for this class section.')).toBeVisible();
+    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
+    await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
+
+    const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
+    expect(storedItem).toBeNull();
+  });
+
+  test('errors: lookup failure is not interpreted as no session', async ({ page }) => {
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'error', message: 'Internal server error while resolving session.' }),
+      });
+    });
+
+    await page.goto('/secretary/start-session');
+    await expect(page.getByText('Unable to load attendance session')).toBeVisible();
+    await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
+    await expect(page.getByText('Session Configuration')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
+  });
+});
