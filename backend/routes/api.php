@@ -381,6 +381,18 @@ return [
     ],
     [
         'method' => 'GET',
+        'path' => '/api/faculty/grading-config',
+        'handler' => 'handle_faculty_grading_config_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'PUT',
+        'path' => '/api/faculty/grading-config',
+        'handler' => 'handle_faculty_grading_config_save',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
         'path' => '/api/faculty/attendance',
         'handler' => 'handle_faculty_attendance_get',
         'has_params' => false,

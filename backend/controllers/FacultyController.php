@@ -432,6 +432,704 @@ function faculty_owned_class_id(PDO $pdo, int $facultyId, mixed $classRef): int
     return (int) ($stmt->fetchColumn() ?: 0);
 }
 
+final class FacultyGradingConfigurationException extends RuntimeException
+{
+    public function __construct(
+        string $message,
+        public readonly int $statusCode = 422,
+        public readonly string $errorCode = 'GRADING_CONFIGURATION_INVALID',
+        public readonly array $details = []
+    ) {
+        parent::__construct($message, $statusCode);
+    }
+}
+
+function faculty_grading_configuration_error(FacultyGradingConfigurationException $e): void
+{
+    $payload = [
+        'status' => 'error',
+        'code' => $e->errorCode,
+        'message' => $e->getMessage(),
+        'requestId' => function_exists('request_id') ? request_id() : null,
+    ];
+    foreach ($e->details as $key => $value) {
+        $payload[$key] = $value;
+    }
+    emit_response(build_json_response($payload, $e->statusCode));
+}
+
+function faculty_grading_required_text(mixed $value, string $field, int $maxLength): string
+{
+    if (!is_scalar($value)) {
+        throw new FacultyGradingConfigurationException("{$field} is required.");
+    }
+    $text = trim((string) $value);
+    if ($text === '' || strlen($text) > $maxLength) {
+        throw new FacultyGradingConfigurationException("{$field} is required and must be at most {$maxLength} characters.");
+    }
+    return $text;
+}
+
+function faculty_grading_normalize_semester(mixed $value): string
+{
+    return strtoupper(faculty_grading_required_text($value, 'semester', 50));
+}
+
+function faculty_grading_normalize_school_year(mixed $value): string
+{
+    return strtoupper(faculty_grading_required_text($value, 'schoolYear', 20));
+}
+
+function faculty_grading_positive_id(mixed $value, string $field): int
+{
+    if (is_int($value) && $value > 0) {
+        return $value;
+    }
+    if (is_string($value) && ctype_digit($value) && (int) $value > 0) {
+        return (int) $value;
+    }
+    if (is_float($value) && is_finite($value) && $value > 0 && floor($value) === $value) {
+        return (int) $value;
+    }
+    throw new FacultyGradingConfigurationException("{$field} must be a positive integer.");
+}
+
+function faculty_grading_version(mixed $value): int
+{
+    if (is_int($value) && $value >= 0) {
+        return $value;
+    }
+    if (is_string($value) && ctype_digit($value)) {
+        return (int) $value;
+    }
+    if (is_float($value) && is_finite($value) && $value >= 0 && floor($value) === $value) {
+        return (int) $value;
+    }
+    throw new FacultyGradingConfigurationException('version must be a nonnegative integer.');
+}
+
+function faculty_grading_weight_basis_points(mixed $value): ?int
+{
+    if (is_int($value)) {
+        return $value > 0 && $value <= 100 ? $value * 10000 : null;
+    }
+    if (is_float($value) && is_finite($value)) {
+        $value = rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
+    }
+    if (!is_string($value)) {
+        return null;
+    }
+    $text = trim($value);
+    if (!preg_match('/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,4})?$/', $text)) {
+        return null;
+    }
+    [$whole, $fraction] = array_pad(explode('.', $text, 2), 2, '');
+    $basisPoints = ((int) $whole * 10000) + (int) str_pad($fraction, 4, '0');
+    return $basisPoints > 0 && $basisPoints <= 1000000 ? $basisPoints : null;
+}
+
+function faculty_grading_category_id(mixed $value): ?int
+{
+    if ($value === null || $value === '') {
+        return null;
+    }
+    if (is_int($value) && $value > 0) {
+        return $value;
+    }
+    if (is_string($value) && ctype_digit($value) && (int) $value > 0) {
+        return (int) $value;
+    }
+    return null;
+}
+
+function faculty_grading_category_name_key(mixed $value): string
+{
+    $name = trim((string) $value);
+    return function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
+}
+
+function faculty_grading_normalize_categories(mixed $value): array
+{
+    if (!is_array($value) || $value === []) {
+        throw new FacultyGradingConfigurationException('At least one grading category is required.');
+    }
+
+    $categories = [];
+    $ids = [];
+    $names = [];
+    $sortOrders = [];
+    $totalBasisPoints = 0;
+
+    foreach (array_values($value) as $index => $rawCategory) {
+        if ($rawCategory instanceof \stdClass) {
+            $rawCategory = get_object_vars($rawCategory);
+        }
+        if (!is_array($rawCategory)) {
+            throw new FacultyGradingConfigurationException('Each grading category must be an object.');
+        }
+
+        $categoryId = faculty_grading_category_id($rawCategory['id'] ?? null);
+        if ($categoryId !== null) {
+            if (isset($ids[$categoryId])) {
+                throw new FacultyGradingConfigurationException('Category identifiers must be unique.');
+            }
+            $ids[$categoryId] = true;
+        }
+
+        $name = faculty_grading_required_text($rawCategory['name'] ?? '', 'Category name', 255);
+        $nameKey = faculty_grading_category_name_key($name);
+        if (isset($names[$nameKey])) {
+            throw new FacultyGradingConfigurationException('Category names must be unique.');
+        }
+        $names[$nameKey] = true;
+
+        $weightBasisPoints = faculty_grading_weight_basis_points($rawCategory['weight'] ?? null);
+        if ($weightBasisPoints === null) {
+            throw new FacultyGradingConfigurationException('Category weights must be positive numbers between 0 and 100.');
+        }
+        $totalBasisPoints += $weightBasisPoints;
+
+        $sortOrder = $rawCategory['sortOrder'] ?? ($index + 1);
+        if (is_string($sortOrder) && ctype_digit($sortOrder)) {
+            $sortOrder = (int) $sortOrder;
+        }
+        if (!is_int($sortOrder) || $sortOrder <= 0 || isset($sortOrders[$sortOrder])) {
+            throw new FacultyGradingConfigurationException('Category sortOrder values must be unique positive integers.');
+        }
+        $sortOrders[$sortOrder] = true;
+
+        $categories[] = [
+            'id' => $categoryId,
+            'name' => $name,
+            'weight' => number_format($weightBasisPoints / 10000, 4, '.', ''),
+            'weightBasisPoints' => $weightBasisPoints,
+            'sortOrder' => $sortOrder,
+        ];
+    }
+
+    if ($totalBasisPoints !== 1000000) {
+        throw new FacultyGradingConfigurationException('Category weights must total exactly 100%.');
+    }
+
+    return $categories;
+}
+
+function faculty_grading_require_offering(PDO $pdo, int $facultyId, mixed $courseValue, mixed $semesterValue, mixed $schoolYearValue): array
+{
+    $courseId = faculty_grading_positive_id($courseValue, 'courseId');
+    $semester = faculty_grading_normalize_semester($semesterValue);
+    $schoolYear = faculty_grading_normalize_school_year($schoolYearValue);
+    $stmt = $pdo->prepare(
+        "SELECT c.course_id, c.course_code, c.name AS course_name
+           FROM class_sections cs
+           JOIN courses c ON c.course_id = cs.course_id
+          WHERE cs.instructor_user_id = ?
+            AND cs.course_id = ?
+            AND UPPER(cs.semester) = ?
+            AND UPPER(cs.school_year) = ?
+            AND cs.status = 'Active'
+          ORDER BY cs.cs_id
+          LIMIT 1"
+    );
+    $stmt->execute([$facultyId, $courseId, $semester, $schoolYear]);
+    $course = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$course) {
+        throw new FacultyGradingConfigurationException(
+            'Faculty is not assigned to the requested course, semester, and school year.',
+            403,
+            'FACULTY_COURSE_ACCESS_DENIED'
+        );
+    }
+
+    return [
+        'facultyUserId' => $facultyId,
+        'courseId' => (int) $course['course_id'],
+        'courseCode' => $course['course_code'],
+        'courseName' => $course['course_name'],
+        'semester' => $semester,
+        'schoolYear' => $schoolYear,
+    ];
+}
+
+function faculty_grading_find_config(PDO $pdo, array $offering, bool $forUpdate = false): ?array
+{
+    $sql = "SELECT config_id, faculty_user_id, course_id, semester, school_year, version,
+                   created_at, updated_at, updated_by_user_id
+              FROM grading_configs
+             WHERE faculty_user_id = ? AND course_id = ? AND semester = ? AND school_year = ?";
+    if ($forUpdate) {
+        $sql .= ' FOR UPDATE';
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([
+        $offering['facultyUserId'],
+        $offering['courseId'],
+        $offering['semester'],
+        $offering['schoolYear'],
+    ]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+function faculty_grading_offering_for_class(PDO $pdo, int $facultyId, int $csId): array
+{
+    $stmt = $pdo->prepare(
+        'SELECT course_id, semester, school_year
+           FROM class_sections
+          WHERE cs_id = ? AND instructor_user_id = ?'
+    );
+    $stmt->execute([$csId, $facultyId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) {
+        throw new FacultyGradingConfigurationException(
+            'Class is not assigned to this faculty member.',
+            403,
+            'FACULTY_SECTION_ACCESS_DENIED'
+        );
+    }
+    return faculty_grading_require_offering(
+        $pdo,
+        $facultyId,
+        $row['course_id'],
+        $row['semester'],
+        $row['school_year'],
+    );
+}
+
+function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT gc.category_id, gc.name, gc.weight, gc.sort_order,
+                EXISTS (
+                    SELECT 1
+                      FROM assessments a
+                      JOIN class_sections cs ON cs.cs_id = a.cs_id
+                     WHERE a.grading_category_id = gc.category_id
+                       AND cs.instructor_user_id = ?
+                       AND cs.course_id = ?
+                       AND UPPER(cs.semester) = ?
+                       AND UPPER(cs.school_year) = ?
+                ) AS in_use
+           FROM grading_categories gc
+          WHERE gc.config_id = ?
+          ORDER BY gc.sort_order, gc.category_id"
+    );
+    $stmt->execute([
+        $offering['facultyUserId'],
+        $offering['courseId'],
+        $offering['semester'],
+        $offering['schoolYear'],
+        (int) $configRow['config_id'],
+    ]);
+    $categories = array_map(static fn(array $row): array => [
+        'id' => (int) $row['category_id'],
+        'name' => $row['name'],
+        'weight' => (float) $row['weight'],
+        'sortOrder' => (int) $row['sort_order'],
+        'inUse' => filter_var($row['in_use'], FILTER_VALIDATE_BOOLEAN),
+    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+    return [
+        'id' => (string) $configRow['config_id'],
+        'course' => [
+            'id' => (int) $offering['courseId'],
+            'code' => $offering['courseCode'],
+            'name' => $offering['courseName'],
+        ],
+        'semester' => $offering['semester'],
+        'schoolYear' => $offering['schoolYear'],
+        'version' => (int) $configRow['version'],
+        'categories' => $categories,
+    ];
+}
+
+function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, array $categories): array
+{
+    $categoryIndexesByName = [];
+    foreach ($categories as $index => $category) {
+        $categoryIndexesByName[faculty_grading_category_name_key($category['name'])] = $index;
+    }
+
+    // Lock the offering sections before inspecting assessments. New assessment
+    // inserts reference these rows and therefore cannot race the first-save
+    // transition into an uncategorized authoritative state.
+    $sectionLock = $pdo->prepare(
+        "SELECT cs_id
+           FROM class_sections
+          WHERE instructor_user_id = ?
+            AND course_id = ?
+            AND UPPER(semester) = ?
+            AND UPPER(school_year) = ?
+            AND status = 'Active'
+          ORDER BY cs_id
+          FOR UPDATE"
+    );
+    $sectionLock->execute([
+        $offering['facultyUserId'],
+        $offering['courseId'],
+        $offering['semester'],
+        $offering['schoolYear'],
+    ]);
+
+    $assessmentStmt = $pdo->prepare(
+        "SELECT a.assessment_id, a.title, a.type
+           FROM assessments a
+           JOIN class_sections cs ON cs.cs_id = a.cs_id
+          WHERE cs.instructor_user_id = ?
+            AND cs.course_id = ?
+            AND UPPER(cs.semester) = ?
+            AND UPPER(cs.school_year) = ?
+            AND cs.status = 'Active'
+            AND a.status = 'Active'
+            AND a.grading_category_id IS NULL
+          ORDER BY a.assessment_id
+          FOR UPDATE OF a"
+    );
+    $assessmentStmt->execute([
+        $offering['facultyUserId'],
+        $offering['courseId'],
+        $offering['semester'],
+        $offering['schoolYear'],
+    ]);
+
+    $mappings = [];
+    $unmatched = [];
+    foreach ($assessmentStmt->fetchAll(PDO::FETCH_ASSOC) as $assessment) {
+        $legacyType = (string) ($assessment['type'] ?? '');
+        $categoryIndex = $categoryIndexesByName[faculty_grading_category_name_key($legacyType)] ?? null;
+        if ($categoryIndex === null) {
+            $unmatched[] = [
+                'assessmentId' => (int) $assessment['assessment_id'],
+                'title' => (string) $assessment['title'],
+                'legacyType' => $assessment['type'],
+            ];
+            continue;
+        }
+        $mappings[] = [
+            'assessmentId' => (int) $assessment['assessment_id'],
+            'categoryIndex' => $categoryIndex,
+        ];
+    }
+
+    if ($unmatched !== []) {
+        throw new FacultyGradingConfigurationException(
+            'Existing assessments require matching grading categories before this configuration can be activated.',
+            422,
+            'GRADING_CATEGORY_ASSIGNMENT_REQUIRED',
+            ['assessments' => $unmatched]
+        );
+    }
+
+    return $mappings;
+}
+
+function faculty_grading_apply_legacy_assessment_mappings(PDO $pdo, array $mappings, array $categoryIds): void
+{
+    if ($mappings === []) {
+        return;
+    }
+
+    $update = $pdo->prepare(
+        'UPDATE assessments
+            SET grading_category_id = ?
+          WHERE assessment_id = ?
+            AND grading_category_id IS NULL'
+    );
+    foreach ($mappings as $mapping) {
+        $categoryId = $categoryIds[$mapping['categoryIndex']] ?? null;
+        if ($categoryId === null) {
+            throw new FacultyGradingConfigurationException(
+                'Existing assessments could not be linked to the new grading categories.'
+            );
+        }
+        $update->execute([$categoryId, $mapping['assessmentId']]);
+        if ($update->rowCount() !== 1) {
+            throw new FacultyGradingConfigurationException(
+                'Existing assessments changed while the grading configuration was being created.'
+            );
+        }
+    }
+}
+
+function faculty_grading_audit_state(array $snapshot): array
+{
+    $auditState = $snapshot;
+    $auditState['categories'] = array_map(static function (array $category): array {
+        $category['weight'] = number_format((float) $category['weight'], 4, '.', '');
+        return $category;
+    }, $snapshot['categories'] ?? []);
+    return $auditState;
+}
+
+function handle_faculty_grading_config_get(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $offering = faculty_grading_require_offering(
+            $pdo,
+            (int) $authCtx['user_id'],
+            $_GET['courseId'] ?? null,
+            $_GET['semester'] ?? null,
+            $_GET['schoolYear'] ?? null,
+        );
+        $configRow = faculty_grading_find_config($pdo, $offering);
+        json_response([
+            'status' => 'ok',
+            'configuration' => $configRow ? faculty_grading_snapshot($pdo, $offering, $configRow) : null,
+        ], 200);
+    } catch (FacultyGradingConfigurationException $e) {
+        faculty_grading_configuration_error($e);
+    } catch (\Throwable $e) {
+        error_log('Faculty grading configuration get error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_faculty_grading_config_save(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+    $pdo = null;
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body']) {
+            throw new FacultyGradingConfigurationException('Request body required.', 400, 'BAD_REQUEST');
+        }
+        $data = $body['data'];
+        $offering = faculty_grading_require_offering(
+            $pdo,
+            (int) $authCtx['user_id'],
+            $data['courseId'] ?? null,
+            $data['semester'] ?? null,
+            $data['schoolYear'] ?? null,
+        );
+        $categories = faculty_grading_normalize_categories($data['categories'] ?? null);
+        $requestedVersion = null;
+        if (array_key_exists('version', $data) && $data['version'] !== null && $data['version'] !== '') {
+            $requestedVersion = faculty_grading_version($data['version']);
+        }
+
+        $pdo->beginTransaction();
+        $existing = faculty_grading_find_config($pdo, $offering, true);
+        $beforeState = null;
+        $isCreate = $existing === null;
+        if ($existing !== null) {
+            if ($requestedVersion === null || $requestedVersion !== (int) $existing['version']) {
+                throw new FacultyGradingConfigurationException(
+                    'The grading configuration is stale. Reload it before saving.',
+                    409,
+                    'GRADING_CONFIGURATION_VERSION_CONFLICT'
+                );
+            }
+            $beforeState = faculty_grading_snapshot($pdo, $offering, $existing);
+        } elseif ($requestedVersion !== null && $requestedVersion !== 0) {
+            throw new FacultyGradingConfigurationException(
+                'The grading configuration was created concurrently. Reload it before saving.',
+                409,
+                'GRADING_CONFIGURATION_VERSION_CONFLICT'
+            );
+        }
+
+        $legacyAssessmentMappings = $existing === null
+            ? faculty_grading_legacy_assessment_mappings($pdo, $offering, $categories)
+            : [];
+
+        if ($existing === null) {
+            $insertConfig = $pdo->prepare(
+                "INSERT INTO grading_configs
+                    (faculty_user_id, course_id, semester, school_year, version, updated_by_user_id)
+                 VALUES (?, ?, ?, ?, 1, ?)
+                 ON CONFLICT (faculty_user_id, course_id, semester, school_year) DO NOTHING
+                 RETURNING config_id, faculty_user_id, course_id, semester, school_year,
+                           version, created_at, updated_at, updated_by_user_id"
+            );
+            $insertConfig->execute([
+                $offering['facultyUserId'],
+                $offering['courseId'],
+                $offering['semester'],
+                $offering['schoolYear'],
+                $authCtx['user_id'],
+            ]);
+            $existing = $insertConfig->fetch(PDO::FETCH_ASSOC) ?: null;
+            if ($existing === null) {
+                throw new FacultyGradingConfigurationException(
+                    'The grading configuration was created concurrently. Reload it before saving.',
+                    409,
+                    'GRADING_CONFIGURATION_VERSION_CONFLICT'
+                );
+            }
+        }
+
+        $configId = (int) $existing['config_id'];
+        $existingCategoryStmt = $pdo->prepare('SELECT category_id FROM grading_categories WHERE config_id = ?');
+        $existingCategoryStmt->execute([$configId]);
+        $existingCategoryIds = array_map('intval', $existingCategoryStmt->fetchAll(PDO::FETCH_COLUMN));
+        $incomingCategoryIds = array_values(array_filter(
+            array_map(static fn(array $category): ?int => $category['id'], $categories),
+            static fn(?int $categoryId): bool => $categoryId !== null
+        ));
+        $existingCategoryIdSet = array_fill_keys($existingCategoryIds, true);
+        foreach ($incomingCategoryIds as $categoryId) {
+            if (!isset($existingCategoryIdSet[$categoryId])) {
+                throw new FacultyGradingConfigurationException('Category identifier does not belong to this configuration.');
+            }
+        }
+
+        $removedCategoryIds = array_values(array_diff($existingCategoryIds, $incomingCategoryIds));
+        if ($removedCategoryIds !== []) {
+            $placeholders = implode(',', array_fill(0, count($removedCategoryIds), '?'));
+            $inUseStmt = $pdo->prepare(
+                "SELECT COUNT(*)
+                   FROM assessments a
+                   JOIN class_sections cs ON cs.cs_id = a.cs_id
+                  WHERE a.grading_category_id IN ({$placeholders})
+                    AND cs.instructor_user_id = ?
+                    AND cs.course_id = ?
+                    AND UPPER(cs.semester) = ?
+                    AND UPPER(cs.school_year) = ?"
+            );
+            $inUseStmt->execute(array_merge($removedCategoryIds, [
+                $offering['facultyUserId'],
+                $offering['courseId'],
+                $offering['semester'],
+                $offering['schoolYear'],
+            ]));
+            if ((int) $inUseStmt->fetchColumn() > 0) {
+                throw new FacultyGradingConfigurationException(
+                    'A grading category referenced by an assessment cannot be deleted.',
+                    409,
+                    'GRADING_CATEGORY_IN_USE'
+                );
+            }
+            $deleteCategory = $pdo->prepare("DELETE FROM grading_categories WHERE config_id = ? AND category_id IN ({$placeholders})");
+            $deleteCategory->execute(array_merge([$configId], $removedCategoryIds));
+        }
+
+        if ($existingCategoryIds !== []) {
+            $temporaryName = $pdo->prepare(
+                "UPDATE grading_categories SET name = ? WHERE config_id = ? AND category_id = ?"
+            );
+            foreach ($categories as $category) {
+                if ($category['id'] !== null) {
+                    $temporaryName->execute([
+                        '__grading_pending_' . $category['id'],
+                        $configId,
+                        $category['id'],
+                    ]);
+                }
+            }
+        }
+
+        $categoryIds = [];
+        $insertCategory = $pdo->prepare(
+            "INSERT INTO grading_categories (config_id, name, weight, sort_order)
+             VALUES (?, ?, ?, ?) RETURNING category_id"
+        );
+        $updateCategory = $pdo->prepare(
+            "UPDATE grading_categories
+                SET name = ?, weight = ?, sort_order = ?
+              WHERE config_id = ? AND category_id = ?"
+        );
+        foreach ($categories as $category) {
+            if ($category['id'] === null) {
+                $insertCategory->execute([$configId, $category['name'], $category['weight'], $category['sortOrder']]);
+                $categoryIds[] = (int) $insertCategory->fetchColumn();
+            } else {
+                $updateCategory->execute([
+                    $category['name'],
+                    $category['weight'],
+                    $category['sortOrder'],
+                    $configId,
+                    $category['id'],
+                ]);
+                if ($updateCategory->rowCount() !== 1) {
+                    throw new FacultyGradingConfigurationException('Category update failed.');
+                }
+                $categoryIds[] = $category['id'];
+            }
+        }
+
+        if ($isCreate) {
+            faculty_grading_apply_legacy_assessment_mappings($pdo, $legacyAssessmentMappings, $categoryIds);
+        }
+
+        $newVersion = $isCreate ? 1 : ((int) $existing['version'] + 1);
+        $updateConfig = $pdo->prepare(
+            "UPDATE grading_configs
+                SET version = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP(6)
+              WHERE config_id = ? AND version = ?"
+        );
+        $expectedVersion = $isCreate ? 1 : (int) $existing['version'];
+        $updateConfig->execute([$newVersion, $authCtx['user_id'], $configId, $expectedVersion]);
+        if ($updateConfig->rowCount() !== 1) {
+            throw new FacultyGradingConfigurationException(
+                'The grading configuration is stale. Reload it before saving.',
+                409,
+                'GRADING_CONFIGURATION_VERSION_CONFLICT'
+            );
+        }
+
+        $afterRow = faculty_grading_find_config($pdo, $offering, true);
+        $afterState = faculty_grading_snapshot($pdo, $offering, $afterRow);
+        $auditBeforeState = $beforeState !== null ? faculty_grading_audit_state($beforeState) : null;
+        $auditAfterState = faculty_grading_audit_state($afterState);
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        $auditCtx = audit_begin_operation($pdo);
+        audit_finish_operation($pdo, $auditCtx, [
+            'module_code' => 'faculty_grading',
+            'action_code' => 'grading_config_update',
+            'event_status' => 'Success',
+            'actor_user_id' => $authCtx['user_id'],
+            'actor_username' => $authCtx['login_email'],
+            'actor_role' => $authCtx['role'],
+            'actor_display_name' => $authCtx['display_name'],
+            'session_id' => $authCtx['session_id'],
+            'target_type' => 'grading_config',
+            'target_id' => (string) $configId,
+            'description' => sprintf(
+                'Updated Grade Weights for %s, %s, %s.',
+                $offering['courseCode'],
+                $offering['semester'],
+                $offering['schoolYear']
+            ),
+            'reason' => null,
+            'http_method' => $context['http_method'],
+            'endpoint' => $context['endpoint'],
+            'request_id' => $context['request_id'],
+            'ip_address' => $context['ip_address'],
+            'user_agent' => $context['user_agent'],
+        ], $macKey, $auditBeforeState, $auditAfterState);
+        $pdo->commit();
+
+        json_response([
+            'status' => 'ok',
+            'configuration' => $afterState,
+        ], $isCreate ? 201 : 200);
+    } catch (FacultyGradingConfigurationException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        faculty_grading_configuration_error($e);
+    } catch (\Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('Faculty grading configuration save error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
 function faculty_percentage_to_gwa(float $percentage): float
 {
     if ($percentage >= 97) return 1.0;
@@ -497,7 +1195,7 @@ function handle_faculty_assessments_get(): void
         $authCtx = faculty_verify_auth($pdo, $config);
 
         $stmt = $pdo->prepare(
-            "SELECT a.assessment_id, a.title, a.type, a.grading_period, a.max_score,
+            "SELECT a.assessment_id, a.title, a.type, a.grading_category_id, a.grading_period, a.max_score,
                     a.weight, a.due_date, a.instructions, a.status, a.created_at,
                     a.transmutation_enabled, a.transmutation_minimum_percentage,
                     a.transmutation_maximum_percentage, a.attendance_session_date,
@@ -514,6 +1212,7 @@ function handle_faculty_assessments_get(): void
             'id' => (string) $row['assessment_id'],
             'title' => $row['title'],
             'type' => $row['type'],
+            'gradingCategoryId' => $row['grading_category_id'] !== null ? (string) $row['grading_category_id'] : null,
             'gradingPeriod' => $row['grading_period'],
             'maxScore' => (float) $row['max_score'],
             'weight' => $row['weight'] !== null ? (float) $row['weight'] : null,
@@ -585,17 +1284,11 @@ function handle_faculty_assessments_save(): void
                 safe_error_response('Assessment title, valid period, and positive maximum score are required.', 422);
                 return;
             }
-            $allowedTypes = ['Quiz', 'Activity', 'Assignment', 'Laboratory', 'Midterm Exam', 'Final Exam', 'Others'];
-            if (!in_array($type, $allowedTypes, true)) {
-                $pdo->rollBack();
-                safe_error_response('Assessment type is invalid.', 422);
-                return;
-            }
             $assessmentId = ctype_digit((string) ($item['id'] ?? '')) ? (int) $item['id'] : 0;
             $existing = null;
             if ($assessmentId > 0) {
                 $existingStmt = $pdo->prepare(
-                    "SELECT a.transmutation_enabled, a.transmutation_minimum_percentage,
+                    "SELECT a.grading_category_id, a.transmutation_enabled, a.transmutation_minimum_percentage,
                             a.transmutation_maximum_percentage, a.attendance_session_date,
                             a.attendance_session_code
                      FROM assessments a
@@ -607,6 +1300,40 @@ function handle_faculty_assessments_save(): void
                 if (!$existing) {
                     $pdo->rollBack();
                     safe_error_response('Assessment not found.', 404);
+                    return;
+                }
+            }
+            $offering = faculty_grading_offering_for_class($pdo, (int) $authCtx['user_id'], $csId);
+            $gradingConfig = faculty_grading_find_config($pdo, $offering);
+            $categoryWasSupplied = array_key_exists('gradingCategoryId', $item);
+            $gradingCategoryId = $categoryWasSupplied
+                ? faculty_grading_category_id($item['gradingCategoryId'])
+                : faculty_grading_category_id($existing['grading_category_id'] ?? null);
+            if ($categoryWasSupplied && $gradingCategoryId === null) {
+                $pdo->rollBack();
+                safe_error_response('A valid grading category is required.', 422);
+                return;
+            }
+            if ($gradingConfig !== null) {
+                if ($gradingCategoryId === null) {
+                    $pdo->rollBack();
+                    safe_error_response('A saved grading configuration requires a stable grading category.', 422);
+                    return;
+                }
+                $categoryStmt = $pdo->prepare(
+                    'SELECT 1 FROM grading_categories WHERE config_id = ? AND category_id = ?'
+                );
+                $categoryStmt->execute([(int) $gradingConfig['config_id'], $gradingCategoryId]);
+                if (!$categoryStmt->fetchColumn()) {
+                    $pdo->rollBack();
+                    safe_error_response('Grading category does not belong to this course configuration.', 422);
+                    return;
+                }
+            } elseif (!$categoryWasSupplied && $gradingCategoryId === null) {
+                $allowedTypes = ['Quiz', 'Activity', 'Assignment', 'Laboratory', 'Midterm Exam', 'Final Exam', 'Others'];
+                if (!in_array($type, $allowedTypes, true)) {
+                    $pdo->rollBack();
+                    safe_error_response('Assessment type is invalid.', 422);
                     return;
                 }
             }
@@ -669,7 +1396,7 @@ function handle_faculty_assessments_save(): void
             if ($assessmentId > 0) {
                 $stmt = $pdo->prepare(
                     "UPDATE assessments AS a
-                     SET cs_id = ?, title = ?, type = ?, grading_period = ?,
+                     SET cs_id = ?, title = ?, type = ?, grading_category_id = ?, grading_period = ?,
                          max_score = ?, weight = ?, due_date = ?, instructions = ?,
                          status = ?, transmutation_enabled = ?,
                          transmutation_minimum_percentage = ?, transmutation_maximum_percentage = ?,
@@ -678,7 +1405,7 @@ function handle_faculty_assessments_save(): void
                      WHERE a.assessment_id = ? AND cs.cs_id = a.cs_id AND cs.instructor_user_id = ?"
                 );
                 $stmt->execute([
-                    $csId, $title, $type, $period, $maxScore, $weight,
+                    $csId, $title, $type, $gradingCategoryId, $period, $maxScore, $weight,
                     $item['dueDate'] ?? null, $item['instructions'] ?? null,
                     $item['status'] ?? 'Active', $transmutationEnabled ? 'true' : 'false',
                     $minimumPercentage, $maximumPercentage, $attendanceSessionDate, $attendanceSessionCode,
@@ -702,13 +1429,13 @@ function handle_faculty_assessments_save(): void
             } else {
                 $stmt = $pdo->prepare(
                     "INSERT INTO assessments
-                     (cs_id, title, type, grading_period, max_score, weight, due_date, instructions, status,
+                     (cs_id, title, type, grading_category_id, grading_period, max_score, weight, due_date, instructions, status,
                       transmutation_enabled, transmutation_minimum_percentage, transmutation_maximum_percentage,
                       attendance_session_date, attendance_session_code)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING assessment_id"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING assessment_id"
                 );
                 $stmt->execute([
-                    $csId, $title, $type, $period, $maxScore, $weight,
+                    $csId, $title, $type, $gradingCategoryId, $period, $maxScore, $weight,
                     $item['dueDate'] ?? null, $item['instructions'] ?? null,
                     $item['status'] ?? 'Active', $transmutationEnabled ? 'true' : 'false',
                     $minimumPercentage, $maximumPercentage, $attendanceSessionDate, $attendanceSessionCode,
@@ -897,6 +1624,7 @@ function handle_faculty_scores_save(): void
 
 function handle_faculty_grades_compute(): void
 {
+    $pdo = null;
     try {
         $config = app_config();
         $pdo = create_pdo($config);
@@ -922,9 +1650,12 @@ function handle_faculty_grades_compute(): void
         $warningUpperBound = min(5.0, $retentionThreshold + 0.5);
 
         $sql = "SELECT e.enrollment_id, e.student_id, e.cs_id,
-                       a.assessment_id, a.weight, a.max_score, a.transmutation_enabled,
+                       a.assessment_id, a.title, a.grading_period, a.grading_category_id,
+                       a.weight, a.max_score, a.transmutation_enabled,
                        a.transmutation_minimum_percentage, a.transmutation_maximum_percentage,
                        a.attendance_session_date, a.attendance_session_code,
+                       gc.config_id, gcat.name AS grading_category_name,
+                       gcat.weight AS grading_category_weight,
                        sc.score_id, sc.score,
                        linked_att.record_id AS linked_attendance_record_id,
                        linked_att.status AS linked_attendance_status,
@@ -932,6 +1663,14 @@ function handle_faculty_grades_compute(): void
                 FROM enrollments e
                 JOIN class_sections cs ON cs.cs_id = e.cs_id
                 LEFT JOIN assessments a ON a.cs_id = e.cs_id AND a.status <> 'Archived'
+                LEFT JOIN grading_configs gc
+                       ON gc.faculty_user_id = cs.instructor_user_id
+                      AND gc.course_id = cs.course_id
+                      AND gc.semester = UPPER(cs.semester)
+                      AND gc.school_year = UPPER(cs.school_year)
+                LEFT JOIN grading_categories gcat
+                       ON gcat.config_id = gc.config_id
+                      AND gcat.category_id = a.grading_category_id
                 LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = e.student_id
                 LEFT JOIN attendance_records linked_att
                        ON linked_att.enrollment_id = e.enrollment_id
@@ -963,18 +1702,32 @@ function handle_faculty_grades_compute(): void
         $grouped = [];
         foreach ($rows as $row) {
             $enrollmentId = (string) $row['enrollment_id'];
-            if (!isset($grouped[$enrollmentId])) {
-                $grouped[$enrollmentId] = [
-                    'enrollmentId' => $enrollmentId,
-                    'studentId' => (string) $row['student_id'],
-                    'attendancePercentage' => $row['attendance_percentage'] !== null
-                        ? (float) $row['attendance_percentage'] : null,
-                    'assessments' => [],
-                ];
-            }
-            if ($row['assessment_id'] !== null && $row['score_id'] !== null) {
-                $grouped[$enrollmentId]['assessments'][] = $row;
-            }
+                if (!isset($grouped[$enrollmentId])) {
+                    $grouped[$enrollmentId] = [
+                        'enrollmentId' => $enrollmentId,
+                        'studentId' => (string) $row['student_id'],
+                        'configId' => $row['config_id'] !== null ? (int) $row['config_id'] : null,
+                        'attendancePercentage' => $row['attendance_percentage'] !== null
+                            ? (float) $row['attendance_percentage'] : null,
+                        'assessments' => [],
+                    ];
+                }
+                if ($row['config_id'] !== null
+                    && ($row['assessment_id'] !== null)
+                    && ($row['grading_category_id'] === null || $row['grading_category_weight'] === null)
+                ) {
+                    throw new FacultyGradingConfigurationException(
+                        sprintf(
+                            'Assessment #%s does not have a valid category in the authoritative grading configuration.',
+                            $row['assessment_id']
+                        ),
+                        422,
+                        'GRADING_ASSESSMENT_CATEGORY_INVALID'
+                    );
+                }
+                if ($row['assessment_id'] !== null && $row['score_id'] !== null) {
+                    $grouped[$enrollmentId]['assessments'][] = $row;
+                }
         }
         $updateWithBreakdown = $pdo->prepare(
             "UPDATE enrollments
@@ -982,6 +1735,102 @@ function handle_faculty_grades_compute(): void
              WHERE enrollment_id = ?"
         );
         foreach ($grouped as $group) {
+            if ($group['configId'] !== null) {
+                $categoryTotals = [];
+                $missingAssessments = [];
+                foreach ($group['assessments'] as $assessment) {
+                    $enabled = filter_var($assessment['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN);
+                    $effectivePercentage = faculty_effective_assessment_percentage(
+                        (float) $assessment['score'],
+                        (float) $assessment['max_score'],
+                        $enabled,
+                        (float) $assessment['transmutation_minimum_percentage'],
+                        (float) $assessment['transmutation_maximum_percentage'],
+                        $assessment['linked_attendance_status'] !== null
+                            ? (string) $assessment['linked_attendance_status'] : null
+                    );
+                    if ($effectivePercentage === null) {
+                        $missingAssessments[] = [
+                            'assessmentId' => (string) $assessment['assessment_id'],
+                            'attendanceSessionDate' => $assessment['attendance_session_date'],
+                            'attendanceSessionCode' => $assessment['attendance_session_code'],
+                        ];
+                        continue;
+                    }
+                    $categoryId = (string) $assessment['grading_category_id'];
+                    if (!isset($categoryTotals[$categoryId])) {
+                        $categoryTotals[$categoryId] = [
+                            'categoryId' => (int) $assessment['grading_category_id'],
+                            'name' => $assessment['grading_category_name'],
+                            'weight' => (float) $assessment['grading_category_weight'],
+                            'earnedPoints' => 0.0,
+                            'possiblePoints' => 0.0,
+                        ];
+                    }
+                    $categoryTotals[$categoryId]['earnedPoints'] +=
+                        ($effectivePercentage / 100) * (float) $assessment['max_score'];
+                    $categoryTotals[$categoryId]['possiblePoints'] += (float) $assessment['max_score'];
+                }
+                if ($missingAssessments !== []) {
+                    $results[] = [
+                        'status' => 'incomplete_attendance',
+                        'enrollmentId' => $group['enrollmentId'],
+                        'studentId' => $group['studentId'],
+                        'missingAssessments' => $missingAssessments,
+                    ];
+                    continue;
+                }
+                if ($categoryTotals === []) {
+                    continue;
+                }
+                $percentage = 0.0;
+                $categoryBreakdown = [];
+                foreach ($categoryTotals as $category) {
+                    if ($category['possiblePoints'] <= 0) {
+                        continue;
+                    }
+                    $ratio = $category['earnedPoints'] / $category['possiblePoints'];
+                    $contribution = $ratio * $category['weight'];
+                    $percentage += $contribution;
+                    $categoryBreakdown[] = [
+                        'categoryId' => $category['categoryId'],
+                        'name' => $category['name'],
+                        'earnedPoints' => round($category['earnedPoints'], 4),
+                        'possiblePoints' => round($category['possiblePoints'], 4),
+                        'ratio' => round($ratio, 6),
+                        'weight' => round($category['weight'], 4),
+                        'contribution' => round($contribution, 4),
+                    ];
+                }
+                $percentage = round($percentage, 2);
+                $gwa = faculty_percentage_to_gwa($percentage);
+                $retention = $gwa <= $retentionThreshold
+                    ? 'active'
+                    : ($gwa <= $warningUpperBound ? 'warning' : 'critical');
+                $breakdown = [
+                    'calculationMode' => 'authoritative_categories',
+                    'categories' => $categoryBreakdown,
+                    'retentionThreshold' => $retentionThreshold,
+                ];
+                $updateWithBreakdown->execute([
+                    $percentage,
+                    $gwa,
+                    $retention,
+                    json_encode($breakdown, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    $group['enrollmentId'],
+                ]);
+                $results[] = [
+                    'status' => 'computed',
+                    'enrollmentId' => $group['enrollmentId'],
+                    'studentId' => $group['studentId'],
+                    'percentage' => $percentage,
+                    'gwa' => $gwa,
+                    'retentionState' => $retention,
+                    'breakdown' => $breakdown,
+                ];
+                continue;
+            }
+
             $weightedPoints = 0.0;
             $completedWeight = 0.0;
             $missingAssessments = [];
@@ -1064,8 +1913,13 @@ function handle_faculty_grades_compute(): void
             'message' => 'Grades computed and persisted successfully.',
             'results' => $results,
         ], 200);
+    } catch (FacultyGradingConfigurationException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        faculty_grading_configuration_error($e);
     } catch (\Throwable $e) {
-        if (isset($pdo) && $pdo->inTransaction()) { $pdo->rollBack(); }
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty grades compute error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }

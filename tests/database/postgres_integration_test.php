@@ -42,7 +42,7 @@ function expect_same(mixed $expected, mixed $actual, string $label): void
     expect_true($expected === $actual, $label . ' (expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . ')');
 }
 
-function integration_http_json(string $path, string $accessToken, array $payload): array
+function integration_http_method_json(string $method, string $path, string $accessToken, array $payload): array
 {
     $headers = "Content-Type: application/json\r\nAccept: application/json\r\n";
     if ($accessToken !== '') {
@@ -50,7 +50,7 @@ function integration_http_json(string $path, string $accessToken, array $payload
     }
     $context = stream_context_create([
         'http' => [
-            'method' => 'POST',
+            'method' => $method,
             'header' => $headers,
             'content' => json_encode($payload, JSON_THROW_ON_ERROR),
             'ignore_errors' => true,
@@ -66,6 +66,16 @@ function integration_http_json(string $path, string $accessToken, array $payload
         }
     }
     return [$status, is_string($body) ? (json_decode($body, true) ?: []) : []];
+}
+
+function integration_http_json(string $path, string $accessToken, array $payload): array
+{
+    return integration_http_method_json('POST', $path, $accessToken, $payload);
+}
+
+function integration_http_put_json(string $path, string $accessToken, array $payload): array
+{
+    return integration_http_method_json('PUT', $path, $accessToken, $payload);
 }
 
 function integration_http_get_json(string $path, string $accessToken): array
@@ -109,6 +119,7 @@ $expectedMigrations = [
     '007_assessment_transmutation.sql',
     '008_invite_only_onboarding.sql',
     '009_persistent_attendance_sessions.sql',
+    '010_authoritative_grade_weights.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -640,6 +651,7 @@ $googleContext = [
 ]);
 expect_same(200, $facultyLoginStatus, 'Faculty integration login succeeds');
 $facultyAccessToken = (string) ($facultyLoginBody['access_token'] ?? '');
+$seedFacultyAccessToken = $facultyAccessToken;
 
 $facultyInvitationEmail = 'invite-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
 [$facultyInvitationStatus, $facultyInvitationBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
@@ -2133,6 +2145,506 @@ expect_same('error', $unownedAssessmentBody['status'] ?? null, 'Rejected unowned
 $unownedAssessmentCount = $pdo->prepare('SELECT COUNT(*) FROM assessments WHERE title = ?');
 $unownedAssessmentCount->execute([$unownedAssessmentTitle]);
 expect_same(0, (int) $unownedAssessmentCount->fetchColumn(), 'Rejected unowned assessment creates no database row');
+
+// First-save transition coverage. Existing active assessments remain
+// categoryless until the first authoritative configuration is saved, at which
+// point exact normalized legacy-type matching must link them atomically.
+$transitionFixtureSuffix = bin2hex(random_bytes(4));
+$transitionCourseCode = 'GWT' . strtoupper($transitionFixtureSuffix);
+$transitionCourseStmt = $pdo->prepare(
+    "INSERT INTO courses (course_code, name, units, semester, grading_config)
+     VALUES (?, 'Grade Weights Transition Course', 3.0, '1ST', '{}'::jsonb)
+     RETURNING course_id"
+);
+$transitionCourseStmt->execute([$transitionCourseCode]);
+$transitionCourseId = (int) $transitionCourseStmt->fetchColumn();
+$transitionClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, status)
+     VALUES (?, ?, ?, '1st', '2028-2029', 'Active')
+     RETURNING cs_id"
+);
+$transitionClassStmt->execute(['Grade Weights Transition ' . $transitionFixtureSuffix, $transitionCourseId, $userId]);
+$transitionClassId = (int) $transitionClassStmt->fetchColumn();
+$transitionStudentStmt = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, 'Transition', 'Student', ?, 'active')
+     RETURNING student_id"
+);
+$transitionStudentStmt->execute([
+    'GWT-' . $transitionFixtureSuffix,
+    'gwt-' . $transitionFixtureSuffix . '@bicol-u.edu.ph',
+]);
+$transitionStudentId = (int) $transitionStudentStmt->fetchColumn();
+$transitionEnrollmentStmt = $pdo->prepare(
+    "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled)
+     VALUES (?, ?, 'Active', CURRENT_DATE)
+     RETURNING enrollment_id"
+);
+$transitionEnrollmentStmt->execute([$transitionStudentId, $transitionClassId]);
+$transitionEnrollmentId = (int) $transitionEnrollmentStmt->fetchColumn();
+$transitionAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments (cs_id, title, type, grading_period, max_score, weight, status)
+     VALUES (?, ?, ?, 'Midterm', ?, ?, 'Active')
+     RETURNING assessment_id"
+);
+$transitionAssessmentIds = [];
+$transitionAssessmentStmt->execute([$transitionClassId, 'Legacy quiz lower ' . $transitionFixtureSuffix, 'quiz', 10, 999]);
+$transitionAssessmentIds[] = (int) $transitionAssessmentStmt->fetchColumn();
+$transitionAssessmentStmt->execute([$transitionClassId, 'Legacy activity ' . $transitionFixtureSuffix, 'Activity', 10, 1]);
+$transitionAssessmentIds[] = (int) $transitionAssessmentStmt->fetchColumn();
+$transitionAssessmentStmt->execute([$transitionClassId, 'Legacy quiz upper ' . $transitionFixtureSuffix, 'QUIZ', 20, 2]);
+$transitionAssessmentIds[] = (int) $transitionAssessmentStmt->fetchColumn();
+$transitionScoreStmt = $pdo->prepare(
+    'INSERT INTO assessment_scores (assessment_id, student_id, score, submitted_at, remarks)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP(6), ?)'
+);
+$transitionScoreStmt->execute([$transitionAssessmentIds[0], $transitionStudentId, 8, 'Legacy transition quiz']);
+$transitionScoreStmt->execute([$transitionAssessmentIds[1], $transitionStudentId, 10, 'Legacy transition activity']);
+$transitionScoreStmt->execute([$transitionAssessmentIds[2], $transitionStudentId, 16, 'Legacy transition quiz']);
+$transitionAuditCountStmt = $pdo->prepare(
+    "SELECT COUNT(*)
+       FROM audit_events
+      WHERE module_code = 'faculty_grading'
+        AND action_code = 'grading_config_update'"
+);
+$transitionAuditCountStmt->execute();
+$transitionAuditCountBefore = (int) $transitionAuditCountStmt->fetchColumn();
+
+[$transitionCreateStatus, $transitionCreateBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $transitionCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2028-2029',
+    'categories' => [
+        ['name' => 'Quiz', 'weight' => 50, 'sortOrder' => 1],
+        ['name' => 'Activity', 'weight' => 50, 'sortOrder' => 2],
+    ],
+]);
+expect_same(201, $transitionCreateStatus, 'First authoritative save maps every active legacy assessment transactionally');
+$transitionConfiguration = $transitionCreateBody['configuration'] ?? [];
+$transitionConfigId = (int) ($transitionConfiguration['id'] ?? 0);
+$transitionConfigVersion = (int) ($transitionConfiguration['version'] ?? 0);
+$transitionCategoriesByName = [];
+foreach (($transitionConfiguration['categories'] ?? []) as $transitionCategory) {
+    $transitionCategoriesByName[(string) ($transitionCategory['name'] ?? '')] = $transitionCategory;
+}
+$transitionQuizCategoryId = (int) ($transitionCategoriesByName['Quiz']['id'] ?? 0);
+$transitionActivityCategoryId = (int) ($transitionCategoriesByName['Activity']['id'] ?? 0);
+expect_true($transitionConfigId > 0 && $transitionConfigVersion === 1, 'Successful legacy transition creates version-one configuration');
+expect_true($transitionQuizCategoryId > 0 && $transitionActivityCategoryId > 0, 'Successful legacy transition creates stable category IDs');
+$transitionLinkedStmt = $pdo->prepare(
+    'SELECT assessment_id, type, grading_category_id
+       FROM assessments
+      WHERE assessment_id IN (?, ?, ?)
+      ORDER BY assessment_id'
+);
+$transitionLinkedStmt->execute($transitionAssessmentIds);
+$transitionLinkedRows = $transitionLinkedStmt->fetchAll(PDO::FETCH_ASSOC);
+expect_same(3, count($transitionLinkedRows), 'All legacy transition assessments remain present');
+expect_same((string) $transitionQuizCategoryId, (string) ($transitionLinkedRows[0]['grading_category_id'] ?? ''), 'Lowercase legacy type maps to the Quiz category');
+expect_same((string) $transitionActivityCategoryId, (string) ($transitionLinkedRows[1]['grading_category_id'] ?? ''), 'Legacy Activity type maps to the Activity category');
+expect_same((string) $transitionQuizCategoryId, (string) ($transitionLinkedRows[2]['grading_category_id'] ?? ''), 'Uppercase legacy type maps to the Quiz category');
+$transitionCategoryTotalStmt = $pdo->prepare(
+    'SELECT COALESCE(SUM(weight), 0) FROM grading_categories WHERE config_id = ?'
+);
+$transitionCategoryTotalStmt->execute([$transitionConfigId]);
+expect_same('100.0000', $transitionCategoryTotalStmt->fetchColumn(), 'Transition configuration category weights total exactly 100%');
+[$transitionComputeStatus, $transitionComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $transitionClassId,
+]);
+expect_same(200, $transitionComputeStatus, 'Configured grade computation succeeds immediately after legacy transition');
+expect_same('computed', $transitionComputeBody['results'][0]['status'] ?? null, 'Immediately transitioned enrollment has a computed grade');
+
+// Change the legacy text after stable linkage exists. Later saves must not
+// infer or replace the stable assessment category from that text.
+$pdo->prepare('UPDATE assessments SET type = ? WHERE assessment_id = ?')
+    ->execute(['Practical', $transitionAssessmentIds[0]]);
+[$transitionRenameStatus, $transitionRenameBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $transitionCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2028-2029',
+    'version' => $transitionConfigVersion,
+    'categories' => [
+        ['id' => $transitionQuizCategoryId, 'name' => 'Quizzes', 'weight' => 50, 'sortOrder' => 1],
+        ['id' => $transitionActivityCategoryId, 'name' => 'Activity', 'weight' => 50, 'sortOrder' => 2],
+    ],
+]);
+expect_same(200, $transitionRenameStatus, 'Category rename succeeds after stable transition linkage');
+$transitionConfigVersion = (int) ($transitionRenameBody['configuration']['version'] ?? 0);
+expect_same(2, $transitionConfigVersion, 'Transition category rename advances configuration version');
+$transitionLinkedStmt->execute($transitionAssessmentIds);
+$transitionLinkedRowsAfterRename = $transitionLinkedStmt->fetchAll(PDO::FETCH_ASSOC);
+expect_same((string) $transitionQuizCategoryId, (string) ($transitionLinkedRowsAfterRename[0]['grading_category_id'] ?? ''), 'Renaming a category preserves the stable Quiz assessment link');
+expect_same((string) $transitionActivityCategoryId, (string) ($transitionLinkedRowsAfterRename[1]['grading_category_id'] ?? ''), 'Renaming a category preserves the stable Activity assessment link');
+[$transitionComputeAfterRenameStatus] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $transitionClassId,
+]);
+expect_same(200, $transitionComputeAfterRenameStatus, 'Stable category linkage keeps computation valid after a category rename');
+
+// An unmatched legacy type must reject first-save atomically.
+$failedTransitionCourseCode = 'GWF' . strtoupper($transitionFixtureSuffix);
+$failedTransitionCourseStmt = $pdo->prepare(
+    "INSERT INTO courses (course_code, name, units, semester, grading_config)
+     VALUES (?, 'Grade Weights Failed Transition Course', 3.0, '1ST', '{}'::jsonb)
+     RETURNING course_id"
+);
+$failedTransitionCourseStmt->execute([$failedTransitionCourseCode]);
+$failedTransitionCourseId = (int) $failedTransitionCourseStmt->fetchColumn();
+$failedTransitionClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, status)
+     VALUES (?, ?, ?, '1st', '2028-2029', 'Active')
+     RETURNING cs_id"
+);
+$failedTransitionClassStmt->execute(['Grade Weights Failed Transition ' . $transitionFixtureSuffix, $failedTransitionCourseId, $userId]);
+$failedTransitionClassId = (int) $failedTransitionClassStmt->fetchColumn();
+$failedTransitionAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments (cs_id, title, type, grading_period, max_score, weight, status)
+     VALUES (?, ?, 'Practical', 'Midterm', 10, 1, 'Active')
+     RETURNING assessment_id"
+);
+$failedTransitionAssessmentStmt->execute([$failedTransitionClassId, 'Unmatched Practical ' . $transitionFixtureSuffix]);
+$failedTransitionAssessmentId = (int) $failedTransitionAssessmentStmt->fetchColumn();
+$transitionAuditCountStmt->execute();
+$failedTransitionAuditCountBefore = (int) $transitionAuditCountStmt->fetchColumn();
+[$failedTransitionStatus, $failedTransitionBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $failedTransitionCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2028-2029',
+    'categories' => [
+        ['name' => 'Laboratory', 'weight' => 50, 'sortOrder' => 1],
+        ['name' => 'Activity', 'weight' => 50, 'sortOrder' => 2],
+    ],
+]);
+expect_same(422, $failedTransitionStatus, 'Unmatched legacy type rejects first authoritative save');
+expect_same('GRADING_CATEGORY_ASSIGNMENT_REQUIRED', $failedTransitionBody['code'] ?? null, 'Unmatched transition returns the explicit assignment-required code');
+expect_same((string) $failedTransitionAssessmentId, (string) ($failedTransitionBody['assessments'][0]['assessmentId'] ?? ''), 'Assignment-required error identifies the unmatched assessment');
+expect_same('Practical', $failedTransitionBody['assessments'][0]['legacyType'] ?? null, 'Assignment-required error preserves the legacy assessment type');
+$failedTransitionConfigCountStmt = $pdo->prepare('SELECT COUNT(*) FROM grading_configs WHERE course_id = ?');
+$failedTransitionConfigCountStmt->execute([$failedTransitionCourseId]);
+expect_same(0, (int) $failedTransitionConfigCountStmt->fetchColumn(), 'Failed transition leaves no grading configuration');
+$failedTransitionCategoryCountStmt = $pdo->prepare(
+    'SELECT COUNT(*)
+       FROM grading_categories gc
+       JOIN grading_configs g ON g.config_id = gc.config_id
+      WHERE g.course_id = ?'
+);
+$failedTransitionCategoryCountStmt->execute([$failedTransitionCourseId]);
+expect_same(0, (int) $failedTransitionCategoryCountStmt->fetchColumn(), 'Failed transition leaves no submitted categories');
+$failedTransitionLinkStmt = $pdo->prepare('SELECT grading_category_id FROM assessments WHERE assessment_id = ?');
+$failedTransitionLinkStmt->execute([$failedTransitionAssessmentId]);
+expect_same(null, $failedTransitionLinkStmt->fetchColumn(), 'Failed transition leaves assessment linkage unchanged');
+$transitionAuditCountStmt->execute();
+expect_same($failedTransitionAuditCountBefore, (int) $transitionAuditCountStmt->fetchColumn(), 'Failed transition creates no successful configuration audit event');
+
+$pdo->beginTransaction();
+$transitionAllAssessmentIds = $transitionAssessmentIds;
+$transitionAssessmentPlaceholders = implode(',', array_fill(0, count($transitionAllAssessmentIds), '?'));
+$pdo->prepare("DELETE FROM assessment_scores WHERE assessment_id IN ({$transitionAssessmentPlaceholders})")
+    ->execute($transitionAllAssessmentIds);
+$pdo->prepare("DELETE FROM assessments WHERE assessment_id IN ({$transitionAssessmentPlaceholders})")
+    ->execute($transitionAllAssessmentIds);
+$pdo->prepare('DELETE FROM assessments WHERE assessment_id = ?')->execute([$failedTransitionAssessmentId]);
+$pdo->prepare('DELETE FROM enrollments WHERE enrollment_id = ?')->execute([$transitionEnrollmentId]);
+$pdo->prepare('DELETE FROM students WHERE student_id = ?')->execute([$transitionStudentId]);
+$pdo->prepare('DELETE FROM grading_configs WHERE config_id = ?')->execute([$transitionConfigId]);
+$pdo->prepare('DELETE FROM class_sections WHERE cs_id IN (?, ?)')->execute([$transitionClassId, $failedTransitionClassId]);
+$pdo->prepare('DELETE FROM courses WHERE course_id IN (?, ?)')->execute([$transitionCourseId, $failedTransitionCourseId]);
+$pdo->commit();
+echo "PASS: Grade-weight legacy transition coverage completed.\n";
+
+// Authoritative grade-weight configuration coverage. This uses a distinct
+// course offering so the legacy assessment/transmutation fixtures above remain
+// unchanged while the normalized Faculty/course/term/year lifecycle is tested.
+$weightFixtureSuffix = bin2hex(random_bytes(4));
+$weightCourseCode = 'GW' . strtoupper($weightFixtureSuffix);
+$weightCourseStmt = $pdo->prepare(
+    "INSERT INTO courses (course_code, name, units, semester, grading_config)
+     VALUES (?, 'Grade Weights Integration Course', 3.0, '1ST', '{}'::jsonb)
+     RETURNING course_id"
+);
+$weightCourseStmt->execute([$weightCourseCode]);
+$weightCourseId = (int) $weightCourseStmt->fetchColumn();
+$weightClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, status)
+     VALUES (?, ?, ?, '1st', '2027-2028', 'Active')
+     RETURNING cs_id"
+);
+$weightClassStmt->execute(['Grade Weights Primary ' . $weightFixtureSuffix, $weightCourseId, $userId]);
+$weightClassId = (int) $weightClassStmt->fetchColumn();
+$weightClassStmt->execute(['Grade Weights Shared ' . $weightFixtureSuffix, $weightCourseId, $userId]);
+$weightSharedClassId = (int) $weightClassStmt->fetchColumn();
+$weightForeignClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, status)
+     VALUES (?, ?, ?, '1st', '2027-2028', 'Active')
+     RETURNING cs_id"
+);
+$weightForeignClassStmt->execute(['Grade Weights Foreign ' . $weightFixtureSuffix, $weightCourseId, $seedFacultyId]);
+$weightForeignClassId = (int) $weightForeignClassStmt->fetchColumn();
+
+$weightConfigPath = '/api/faculty/grading-config?' . http_build_query([
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+]);
+[$weightInitialGetStatus, $weightInitialGetBody] = integration_http_get_json($weightConfigPath, $facultyAccessToken);
+expect_same(200, $weightInitialGetStatus, 'Unconfigured Faculty offering returns HTTP 200');
+expect_same(null, $weightInitialGetBody['configuration'] ?? null, 'Unconfigured Faculty offering is explicit rather than fabricated');
+
+[$weightInvalidTotalStatus, $weightInvalidTotalBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'categories' => [
+        ['name' => 'Short Quiz', 'weight' => 60, 'sortOrder' => 1],
+        ['name' => 'Exam', 'weight' => 30, 'sortOrder' => 2],
+    ],
+]);
+expect_same(422, $weightInvalidTotalStatus, 'Grade-weight save rejects totals other than exactly 100%');
+expect_same('error', $weightInvalidTotalBody['status'] ?? null, 'Invalid grade-weight total returns a structured error');
+
+[$weightInvalidNameStatus] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'categories' => [
+        ['name' => '', 'weight' => 60, 'sortOrder' => 1],
+        ['name' => 'Exam', 'weight' => 40, 'sortOrder' => 2],
+    ],
+]);
+expect_same(422, $weightInvalidNameStatus, 'Grade-weight save rejects blank category names');
+
+[$weightCreateStatus, $weightCreateBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'categories' => [
+        ['name' => 'Quiz', 'weight' => 60, 'sortOrder' => 1],
+        ['name' => 'Exam', 'weight' => 40, 'sortOrder' => 2],
+    ],
+]);
+expect_same(201, $weightCreateStatus, 'Faculty can create an authoritative grade-weight configuration');
+$weightConfiguration = $weightCreateBody['configuration'] ?? [];
+$weightConfigId = (int) ($weightConfiguration['id'] ?? 0);
+$weightConfigVersion = (int) ($weightConfiguration['version'] ?? 0);
+$weightCategoriesByName = [];
+foreach (($weightConfiguration['categories'] ?? []) as $weightCategory) {
+    $weightCategoriesByName[(string) ($weightCategory['name'] ?? '')] = $weightCategory;
+}
+$weightQuizCategoryId = (int) ($weightCategoriesByName['Quiz']['id'] ?? 0);
+$weightExamCategoryId = (int) ($weightCategoriesByName['Exam']['id'] ?? 0);
+expect_true($weightConfigId > 0 && $weightConfigVersion === 1, 'Created grade-weight configuration has a stable ID and initial version');
+expect_true($weightQuizCategoryId > 0 && $weightExamCategoryId > 0, 'Created grade-weight categories have stable database IDs');
+
+[$weightSharedGetStatus, $weightSharedGetBody] = integration_http_get_json($weightConfigPath, $facultyAccessToken);
+expect_same(200, $weightSharedGetStatus, 'Second section reads the Faculty/course/term/year configuration');
+expect_same((string) $weightConfigId, (string) ($weightSharedGetBody['configuration']['id'] ?? ''), 'Sections under one Faculty/course/term/year share one configuration');
+
+[$weightForeignGetStatus, $weightForeignGetBody] = integration_http_get_json($weightConfigPath, $seedFacultyAccessToken);
+expect_same(200, $weightForeignGetStatus, 'A different Faculty can inspect its own unconfigured offering');
+expect_same(null, $weightForeignGetBody['configuration'] ?? null, 'Configuration ownership is scoped to Faculty as well as course and term');
+[$weightForeignCreateStatus, $weightForeignCreateBody] = integration_http_put_json('/api/faculty/grading-config', $seedFacultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'categories' => [
+        ['name' => 'Quiz', 'weight' => 20, 'sortOrder' => 1],
+        ['name' => 'Exam', 'weight' => 80, 'sortOrder' => 2],
+    ],
+]);
+expect_same(201, $weightForeignCreateStatus, 'A different Faculty can create its own same-course configuration');
+expect_true(
+    (string) ($weightForeignCreateBody['configuration']['id'] ?? '') !== (string) $weightConfigId,
+    'Different Faculty ownership creates a distinct configuration'
+);
+
+[$weightStaleStatus, $weightStaleBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'version' => 999,
+    'categories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Quiz', 'weight' => 60, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 40, 'sortOrder' => 2],
+    ],
+]);
+expect_same(409, $weightStaleStatus, 'Grade-weight save rejects a stale configuration version');
+expect_same('GRADING_CONFIGURATION_VERSION_CONFLICT', $weightStaleBody['code'] ?? null, 'Stale grade-weight save returns the version conflict code');
+
+[$weightRenameStatus, $weightRenameBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'version' => $weightConfigVersion,
+    'categories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 60, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 40, 'sortOrder' => 2],
+    ],
+]);
+expect_same(200, $weightRenameStatus, 'Faculty can rename an unused grading category');
+$weightConfigVersion = (int) ($weightRenameBody['configuration']['version'] ?? 0);
+expect_same(2, $weightConfigVersion, 'Renaming a category advances the configuration version');
+
+[$weightReorderStatus, $weightReorderBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'version' => $weightConfigVersion,
+    'categories' => [
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 40, 'sortOrder' => 1],
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 60, 'sortOrder' => 2],
+    ],
+]);
+expect_same(200, $weightReorderStatus, 'Faculty can reorder existing grading categories');
+$weightConfigVersion = (int) ($weightReorderBody['configuration']['version'] ?? 0);
+expect_same(3, $weightConfigVersion, 'Reordering advances the configuration version');
+
+$weightStudentStmt = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, ?, 'Fixture', ?, 'active')
+     RETURNING student_id"
+);
+$weightStudentStmt->execute(['GW-' . $weightFixtureSuffix . '-A', 'Weights A', 'weights-a-' . $weightFixtureSuffix . '@bicol-u.edu.ph']);
+$weightStudentA = (int) $weightStudentStmt->fetchColumn();
+$weightStudentStmt->execute(['GW-' . $weightFixtureSuffix . '-B', 'Weights B', 'weights-b-' . $weightFixtureSuffix . '@bicol-u.edu.ph']);
+$weightStudentB = (int) $weightStudentStmt->fetchColumn();
+$weightEnrollmentStmt = $pdo->prepare(
+    "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled)
+     VALUES (?, ?, 'Active', CURRENT_DATE)
+     RETURNING enrollment_id"
+);
+$weightEnrollmentStmt->execute([$weightStudentA, $weightClassId]);
+$weightEnrollmentA = (int) $weightEnrollmentStmt->fetchColumn();
+$weightEnrollmentStmt->execute([$weightStudentB, $weightSharedClassId]);
+$weightEnrollmentB = (int) $weightEnrollmentStmt->fetchColumn();
+
+[$weightMissingCategoryStatus, $weightMissingCategoryBody] = integration_http_json('/api/faculty/assessments', $facultyAccessToken, [[
+    'title' => 'Rejected Missing Stable Category ' . $weightFixtureSuffix,
+    'type' => 'Legacy Type',
+    'classId' => (string) $weightClassId,
+    'gradingPeriod' => 'Midterm',
+    'maxScore' => 10,
+    'status' => 'Active',
+    'transmutationEnabled' => false,
+]]);
+expect_same(422, $weightMissingCategoryStatus, 'Saved configuration rejects an assessment without a stable category');
+expect_same('error', $weightMissingCategoryBody['status'] ?? null, 'Missing stable assessment category returns a structured error');
+
+[$weightApiAssessmentStatus, $weightApiAssessmentBody] = integration_http_json('/api/faculty/assessments', $facultyAccessToken, [[
+    'title' => 'Authoritative Quiz API ' . $weightFixtureSuffix,
+    'type' => 'Quiz',
+    'classId' => (string) $weightClassId,
+    'gradingCategoryId' => (string) $weightQuizCategoryId,
+    'gradingPeriod' => 'Midterm',
+    'maxScore' => 10,
+    'weight' => 1,
+    'status' => 'Active',
+    'transmutationEnabled' => false,
+]]);
+expect_same(200, $weightApiAssessmentStatus, 'Assessment save accepts a stable category from the authoritative configuration');
+$weightApiAssessmentId = (int) ($weightApiAssessmentBody['assessments'][0]['id'] ?? 0);
+expect_true($weightApiAssessmentId > 0, 'Category-linked assessment save returns a database ID');
+
+$weightAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments
+        (cs_id, title, type, grading_category_id, grading_period, max_score, weight, status)
+     VALUES (?, ?, ?, ?, 'Midterm', ?, ?, 'Active')
+     RETURNING assessment_id"
+);
+$weightAssessmentStmt->execute([$weightClassId, 'Authoritative Quiz Points ' . $weightFixtureSuffix, 'Quiz', $weightQuizCategoryId, 20, 999]);
+$weightQuizTwoId = (int) $weightAssessmentStmt->fetchColumn();
+$weightAssessmentStmt->execute([$weightClassId, 'Authoritative Exam Points ' . $weightFixtureSuffix, 'Exam', $weightExamCategoryId, 10, 2]);
+$weightExamId = (int) $weightAssessmentStmt->fetchColumn();
+$weightAssessmentStmt->execute([$weightClassId, 'Legacy Categoryless Assessment ' . $weightFixtureSuffix, 'Legacy', null, 5, 1]);
+$weightLegacyAssessmentId = (int) $weightAssessmentStmt->fetchColumn();
+$weightAssessmentStmt->execute([$weightSharedClassId, 'Shared Section Quiz ' . $weightFixtureSuffix, 'Quiz', $weightQuizCategoryId, 10, 1]);
+$weightSharedAssessmentId = (int) $weightAssessmentStmt->fetchColumn();
+$weightScoreStmt = $pdo->prepare(
+    'INSERT INTO assessment_scores (assessment_id, student_id, score, submitted_at, remarks)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP(6), ?)'
+);
+$weightScoreStmt->execute([$weightApiAssessmentId, $weightStudentA, 8, 'Authoritative category ratio fixture']);
+$weightScoreStmt->execute([$weightQuizTwoId, $weightStudentA, 16, 'Assessment weight must be ignored']);
+$weightScoreStmt->execute([$weightExamId, $weightStudentA, 5, 'Authoritative exam ratio fixture']);
+$weightScoreStmt->execute([$weightSharedAssessmentId, $weightStudentB, 5, 'Shared configuration fixture']);
+
+[$weightInvalidComputeStatus, $weightInvalidComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $weightClassId,
+]);
+expect_same(422, $weightInvalidComputeStatus, 'Grade computation rejects an active assessment without a valid category');
+expect_same('GRADING_ASSESSMENT_CATEGORY_INVALID', $weightInvalidComputeBody['code'] ?? null, 'Invalid assessment category computation error is explicit');
+$pdo->prepare("UPDATE assessments SET status = 'Archived' WHERE assessment_id = ?")->execute([$weightLegacyAssessmentId]);
+
+[$weightComputeStatus, $weightComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $weightClassId,
+]);
+expect_same(200, $weightComputeStatus, 'Authoritative grade computation returns HTTP 200');
+$weightPrimaryResult = null;
+foreach (($weightComputeBody['results'] ?? []) as $weightResult) {
+    if ((string) ($weightResult['enrollmentId'] ?? '') === (string) $weightEnrollmentA) {
+        $weightPrimaryResult = $weightResult;
+        break;
+    }
+}
+expect_same('computed', $weightPrimaryResult['status'] ?? null, 'Authoritative category computation returns a computed enrollment result');
+expect_same(68.0, (float) ($weightPrimaryResult['percentage'] ?? -1), 'Authoritative grade uses category point ratios and ignores assessment weights');
+expect_same('authoritative_categories', $weightPrimaryResult['breakdown']['calculationMode'] ?? null, 'Authoritative grade response identifies the category calculation mode');
+
+[$weightSharedComputeStatus, $weightSharedComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $weightSharedClassId,
+]);
+expect_same(200, $weightSharedComputeStatus, 'Shared-section authoritative grade computation returns HTTP 200');
+$weightSharedResult = $weightSharedComputeBody['results'][0] ?? [];
+expect_same(30.0, (float) ($weightSharedResult['percentage'] ?? -1), 'Second section reuses the same Faculty/course/term/year category configuration');
+
+[$weightAssessmentsGetStatus, $weightAssessmentsGetBody] = integration_http_get_json('/api/faculty/assessments', $facultyAccessToken);
+expect_same(200, $weightAssessmentsGetStatus, 'Assessment GET remains available after category linkage');
+$weightApiRead = array_values(array_filter(
+    $weightAssessmentsGetBody,
+    static fn(array $assessment): bool => (string) ($assessment['id'] ?? '') === (string) $weightApiAssessmentId,
+));
+expect_same((string) $weightQuizCategoryId, $weightApiRead[0]['gradingCategoryId'] ?? null, 'Assessment GET returns the stable grading category ID');
+
+[$weightDeleteInUseStatus, $weightDeleteInUseBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'version' => $weightConfigVersion,
+    'categories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 100, 'sortOrder' => 1],
+    ],
+]);
+expect_same(409, $weightDeleteInUseStatus, 'Grade-weight save blocks deletion of a category referenced by an assessment');
+expect_same('GRADING_CATEGORY_IN_USE', $weightDeleteInUseBody['code'] ?? null, 'In-use category deletion returns the conflict code');
+
+$weightAuditStmt = $pdo->prepare(
+    "SELECT actor_user_id, actor_display_name, target_type, target_id,
+            before_state_json, after_state_json, previous_event_mac, event_mac
+       FROM audit_events
+      WHERE module_code = 'faculty_grading'
+        AND action_code = 'grading_config_update'
+        AND target_id = ?
+      ORDER BY sequence_number DESC
+      LIMIT 1"
+);
+$weightAuditStmt->execute([(string) $weightConfigId]);
+$weightAudit = $weightAuditStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($weightAudit), 'Authoritative grade-weight save writes an audit event');
+expect_same((string) $userId, (string) ($weightAudit['actor_user_id'] ?? ''), 'Grade-weight audit preserves the authenticated Faculty actor');
+expect_same('grading_config', $weightAudit['target_type'] ?? null, 'Grade-weight audit targets the normalized configuration');
+expect_true((string) ($weightAudit['after_state_json'] ?? '') !== '', 'Grade-weight audit stores normalized after-state');
+expect_true(strlen((string) ($weightAudit['previous_event_mac'] ?? '')) > 0 && strlen((string) ($weightAudit['event_mac'] ?? '')) > 0, 'Grade-weight audit remains HMAC chained');
+
+$pdo->beginTransaction();
+$weightAllAssessmentIds = [$weightApiAssessmentId, $weightQuizTwoId, $weightExamId, $weightLegacyAssessmentId, $weightSharedAssessmentId];
+$weightAssessmentPlaceholders = implode(',', array_fill(0, count($weightAllAssessmentIds), '?'));
+$pdo->prepare("DELETE FROM assessment_scores WHERE assessment_id IN ({$weightAssessmentPlaceholders})")->execute($weightAllAssessmentIds);
+$pdo->prepare("DELETE FROM assessments WHERE assessment_id IN ({$weightAssessmentPlaceholders})")->execute($weightAllAssessmentIds);
+$pdo->prepare('DELETE FROM enrollments WHERE enrollment_id IN (?, ?)')->execute([$weightEnrollmentA, $weightEnrollmentB]);
+$pdo->prepare('DELETE FROM students WHERE student_id IN (?, ?)')->execute([$weightStudentA, $weightStudentB]);
+$pdo->prepare('DELETE FROM grading_configs WHERE course_id = ?')->execute([$weightCourseId]);
+$pdo->prepare('DELETE FROM class_sections WHERE cs_id IN (?, ?, ?)')->execute([$weightClassId, $weightSharedClassId, $weightForeignClassId]);
+$pdo->prepare('DELETE FROM courses WHERE course_id = ?')->execute([$weightCourseId]);
+$pdo->commit();
+echo "PASS: Authoritative grade-weight integration coverage completed.\n";
 
 $pdo->beginTransaction();
 $pdo->prepare('DELETE FROM assessment_scores WHERE assessment_id IN (?, ?)')->execute([$gradeAssessmentId, $rawAssessmentId]);
