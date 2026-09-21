@@ -1289,6 +1289,354 @@ $facultyMe = auth_runtime_me($pdo, $config, [
     'endpoint' => '/api/auth/me',
 ]);
 expect_true(isset($facultyMe['authentication_source']) && !array_key_exists('student', $facultyMe), 'Non-Student /api/auth/me omits nested Student identity');
+$generatedFacultyAccessToken = auth_issue_access_token(
+    ['user_id' => $locked['user_id'], 'role' => $locked['role'], 'token_version' => $locked['token_version']],
+    $session,
+    config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY')
+)['token'];
+
+// Authoritative Faculty Attendance Monitoring worksheet coverage. This uses
+// isolated real enrollments and sections so the read/mutation contract can be
+// verified without relying on browser-local attendance state.
+$attendanceFixtureSuffix = strtoupper(bin2hex(random_bytes(4)));
+$attendanceCourseId = (int) $pdo->query('SELECT course_id FROM courses ORDER BY course_id LIMIT 1')->fetchColumn();
+$attendanceSeedFacultyId = (int) $pdo->query(
+    "SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph'"
+)->fetchColumn();
+$attendanceSecretaryId = (int) $pdo->query(
+    "SELECT user_id FROM user_accounts WHERE login_email = 'secretary@bicol-u.edu.ph'"
+)->fetchColumn();
+$attendanceClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, block, status)
+     VALUES (?, ?, ?, '1ST', '2026-2027', 'FA', 'Active')
+     RETURNING cs_id"
+);
+$attendanceClassStmt->execute(['Attendance Fixture ' . $attendanceFixtureSuffix, $attendanceCourseId, $userId]);
+$attendanceClassId = (int) $attendanceClassStmt->fetchColumn();
+$attendanceClassStmt->execute(['Attendance Other Fixture ' . $attendanceFixtureSuffix, $attendanceCourseId, $attendanceSeedFacultyId]);
+$attendanceOtherClassId = (int) $attendanceClassStmt->fetchColumn();
+$attendanceStudentStmt = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, ?, ?, ?, 'active')
+     RETURNING student_id"
+);
+$attendanceStudentStmt->execute([
+    'ATT-' . $attendanceFixtureSuffix . '-A',
+    'Attendance',
+    'Alpha',
+    'attendance-alpha-' . strtolower($attendanceFixtureSuffix) . '@bicol-u.edu.ph',
+]);
+$attendanceStudentOneId = (int) $attendanceStudentStmt->fetchColumn();
+$attendanceStudentStmt->execute([
+    'ATT-' . $attendanceFixtureSuffix . '-B',
+    'Attendance',
+    'Beta',
+    'attendance-beta-' . strtolower($attendanceFixtureSuffix) . '@bicol-u.edu.ph',
+]);
+$attendanceStudentTwoId = (int) $attendanceStudentStmt->fetchColumn();
+$attendanceStudentStmt->execute([
+    'ATT-' . $attendanceFixtureSuffix . '-X',
+    'Attendance',
+    'Foreign',
+    'attendance-foreign-' . strtolower($attendanceFixtureSuffix) . '@bicol-u.edu.ph',
+]);
+$attendanceForeignStudentId = (int) $attendanceStudentStmt->fetchColumn();
+$attendanceEnrollmentStmt = $pdo->prepare(
+    "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled)
+     VALUES (?, ?, 'Active', CURRENT_DATE)
+     RETURNING enrollment_id"
+);
+$attendanceEnrollmentStmt->execute([$attendanceStudentOneId, $attendanceClassId]);
+$attendanceEnrollmentOneId = (int) $attendanceEnrollmentStmt->fetchColumn();
+$attendanceEnrollmentStmt->execute([$attendanceStudentTwoId, $attendanceClassId]);
+$attendanceEnrollmentTwoId = (int) $attendanceEnrollmentStmt->fetchColumn();
+$attendanceEnrollmentStmt->execute([$attendanceForeignStudentId, $attendanceOtherClassId]);
+$attendanceForeignEnrollmentId = (int) $attendanceEnrollmentStmt->fetchColumn();
+$attendanceToday = app_local_date($config, new DateTimeImmutable('now', new DateTimeZone('UTC')));
+$attendancePastDate = (new DateTimeImmutable($attendanceToday, new DateTimeZone('UTC')))->modify('-1 day')->format('Y-m-d');
+$attendanceFutureDate = (new DateTimeImmutable($attendanceToday, new DateTimeZone('UTC')))->modify('+1 day')->format('Y-m-d');
+
+[$attendanceCurrentReadStatus, $attendanceCurrentReadBody] = integration_http_get_json(
+    '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendanceToday,
+    $generatedFacultyAccessToken
+);
+expect_same(200, $attendanceCurrentReadStatus, 'Faculty can read an owned worksheet for the current application-local date');
+expect_same($attendanceToday, $attendanceCurrentReadBody['worksheet']['date'] ?? null, 'Worksheet read preserves the selected application-local date');
+
+[$attendanceFutureReadStatus, $attendanceFutureReadBody] = integration_http_get_json(
+    '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendanceFutureDate,
+    $generatedFacultyAccessToken
+);
+expect_same(422, $attendanceFutureReadStatus, 'Faculty worksheet rejects a future application-local date');
+expect_same('VALIDATION_ERROR', $attendanceFutureReadBody['code'] ?? null, 'Future worksheet date uses the validation error contract');
+
+[$attendancePastReadStatus, $attendancePastReadBody] = integration_http_get_json(
+    '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendancePastDate,
+    $generatedFacultyAccessToken
+);
+expect_same(200, $attendancePastReadStatus, 'Faculty can read an owned worksheet for a past date');
+expect_same((string) $attendanceClassId, $attendancePastReadBody['worksheet']['classSection']['id'] ?? null, 'Worksheet is scoped to the selected owned class section');
+expect_same(null, $attendancePastReadBody['worksheet']['attendanceSession'] ?? null, 'Worksheet reports no attendance session when none exists');
+expect_same(2, count($attendancePastReadBody['worksheet']['roster'] ?? []), 'Worksheet roster comes from the two real active enrollments');
+foreach (($attendancePastReadBody['worksheet']['roster'] ?? []) as $attendanceRosterRow) {
+    expect_same(null, $attendanceRosterRow['id'] ?? null, 'Missing attendance rows are represented without a record ID');
+    expect_same(null, $attendanceRosterRow['status'] ?? null, 'Missing attendance rows remain unresolved rather than becoming absent');
+}
+
+[$attendanceForeignReadStatus, $attendanceForeignReadBody] = integration_http_get_json(
+    '/api/faculty/attendance?csId=' . $attendanceOtherClassId . '&date=' . $attendancePastDate,
+    $generatedFacultyAccessToken
+);
+expect_same(403, $attendanceForeignReadStatus, 'Faculty cannot read another Faculty member\'s class section');
+expect_same('FACULTY_SECTION_ACCESS_DENIED', $attendanceForeignReadBody['code'] ?? null, 'Unowned worksheet read returns the ownership error code');
+
+[$attendanceCreateStatus, $attendanceCreateBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'csId' => (string) $attendanceClassId,
+    'enrollmentId' => (string) $attendanceEnrollmentOneId,
+    'sessionDate' => $attendancePastDate,
+    'status' => 'present',
+]);
+expect_same(200, $attendanceCreateStatus, 'Faculty can create an initial attendance row without a correction reason');
+expect_same('created', $attendanceCreateBody['operation'] ?? null, 'Missing attendance mutation reports a created record');
+$attendanceRecordOneId = (int) ($attendanceCreateBody['recordId'] ?? 0);
+expect_true($attendanceRecordOneId > 0, 'Created attendance row returns its authoritative record ID');
+$attendanceRecordOneStmt = $pdo->prepare(
+    'SELECT enrollment_id, session_date, attendance_session_id, status, verification_method FROM attendance_records WHERE record_id = ?'
+);
+$attendanceRecordOneStmt->execute([$attendanceRecordOneId]);
+$attendanceRecordOne = $attendanceRecordOneStmt->fetch(PDO::FETCH_ASSOC);
+expect_same((string) $attendanceEnrollmentOneId, (string) ($attendanceRecordOne['enrollment_id'] ?? ''), 'Created attendance row belongs to the selected enrollment');
+expect_same($attendancePastDate, $attendanceRecordOne['session_date'] ?? null, 'Created attendance row persists the selected worksheet date');
+expect_same(null, $attendanceRecordOne['attendance_session_id'] ?? null, 'No Secretary session is fabricated for an unlinked attendance row');
+expect_same('present', $attendanceRecordOne['status'] ?? null, 'Created attendance row persists the requested status');
+expect_same('manual_faculty', $attendanceRecordOne['verification_method'] ?? null, 'Faculty-created attendance preserves manual provenance');
+
+$attendanceInitialAuditStmt = $pdo->prepare(
+    "SELECT reason, before_state_json, after_state_json
+       FROM audit_events
+      WHERE action_code = 'faculty_attendance_change' AND target_id = ?
+      ORDER BY sequence_number ASC
+      LIMIT 1"
+);
+$attendanceInitialAuditStmt->execute([$attendanceRecordOneId]);
+$attendanceInitialAudit = $attendanceInitialAuditStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(null, $attendanceInitialAudit['reason'] ?? null, 'Initial attendance does not fabricate a correction reason');
+expect_same(null, json_decode((string) ($attendanceInitialAudit['before_state_json'] ?? ''), true), 'Initial attendance audit before-state is null');
+$attendanceInitialAfter = json_decode((string) ($attendanceInitialAudit['after_state_json'] ?? ''), true);
+expect_same('present', $attendanceInitialAfter['status'] ?? null, 'Initial attendance audit after-state records present');
+
+[$attendanceFreshReadStatus, $attendanceFreshReadBody] = integration_http_get_json(
+    '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendancePastDate,
+    $generatedFacultyAccessToken
+);
+expect_same(200, $attendanceFreshReadStatus, 'Fresh worksheet read succeeds after the Faculty save');
+$attendanceFreshOne = array_values(array_filter(
+    $attendanceFreshReadBody['worksheet']['roster'] ?? [],
+    static fn(array $row): bool => (string) ($row['enrollmentId'] ?? '') === (string) $attendanceEnrollmentOneId
+))[0] ?? null;
+expect_same((string) $attendanceRecordOneId, $attendanceFreshOne['id'] ?? null, 'Fresh worksheet read returns the persisted attendance record');
+expect_same('present', $attendanceFreshOne['status'] ?? null, 'Fresh worksheet read returns the persisted attendance status');
+
+$attendanceAuditCountStmt = $pdo->prepare(
+    "SELECT COUNT(*)
+       FROM audit_events
+      WHERE action_code = 'faculty_attendance_change' AND scope_cs_id = ?"
+);
+$attendanceAuditCountStmt->execute([$attendanceClassId]);
+$attendanceAuditCountBeforeNoOp = (int) $attendanceAuditCountStmt->fetchColumn();
+[$attendanceNoOpStatus, $attendanceNoOpBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'recordId' => (string) $attendanceRecordOneId,
+    'status' => 'present',
+]);
+expect_same(200, $attendanceNoOpStatus, 'Submitting the existing attendance status is a successful no-op');
+expect_same('unchanged', $attendanceNoOpBody['operation'] ?? null, 'No-op attendance response identifies the unchanged record');
+expect_same(false, $attendanceNoOpBody['changed'] ?? null, 'No-op attendance response reports no mutation');
+$attendanceAuditCountStmt->execute([$attendanceClassId]);
+expect_same($attendanceAuditCountBeforeNoOp, (int) $attendanceAuditCountStmt->fetchColumn(), 'No-op attendance does not append an audit event');
+
+[$attendanceCorrectionMissingReasonStatus, $attendanceCorrectionMissingReasonBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'recordId' => (string) $attendanceRecordOneId,
+    'status' => 'absent',
+]);
+expect_same(422, $attendanceCorrectionMissingReasonStatus, 'Existing attendance correction requires a reason');
+expect_same('VALIDATION_ERROR', $attendanceCorrectionMissingReasonBody['code'] ?? null, 'Missing correction reason uses the validation error contract');
+[$attendanceCorrectionStatus, $attendanceCorrectionBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'recordId' => (string) $attendanceRecordOneId,
+    'status' => 'absent',
+    'reason' => 'Faculty corrected the persisted status',
+]);
+expect_same(200, $attendanceCorrectionStatus, 'Existing attendance correction succeeds with a reason');
+expect_same('updated', $attendanceCorrectionBody['operation'] ?? null, 'Existing attendance correction reports an update');
+$attendanceCorrectionAuditStmt = $pdo->prepare(
+    "SELECT reason, before_state_json, after_state_json
+       FROM audit_events
+      WHERE action_code = 'faculty_attendance_change' AND target_id = ?
+      ORDER BY sequence_number DESC
+      LIMIT 1"
+);
+$attendanceCorrectionAuditStmt->execute([$attendanceRecordOneId]);
+$attendanceCorrectionAudit = $attendanceCorrectionAuditStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Faculty corrected the persisted status', $attendanceCorrectionAudit['reason'] ?? null, 'Correction reason is preserved in audit context');
+$attendanceCorrectionBefore = json_decode((string) ($attendanceCorrectionAudit['before_state_json'] ?? ''), true);
+$attendanceCorrectionAfter = json_decode((string) ($attendanceCorrectionAudit['after_state_json'] ?? ''), true);
+expect_same('present', $attendanceCorrectionBefore['status'] ?? null, 'Correction audit before-state records present');
+expect_same('absent', $attendanceCorrectionAfter['status'] ?? null, 'Correction audit after-state records absent');
+
+$attendanceSessionCode = 'FAC-ATT-' . $attendanceFixtureSuffix;
+$attendanceSessionInsert = $pdo->prepare(
+    "INSERT INTO attendance_sessions (cs_id, secretary_user_id, session_date, session_code, status, ended_at)
+     VALUES (?, ?, ?, ?, 'ended', CURRENT_TIMESTAMP(6))
+     RETURNING session_id"
+);
+$attendanceSessionInsert->execute([$attendanceClassId, $attendanceSecretaryId, $attendancePastDate, $attendanceSessionCode]);
+$attendanceSessionId = (int) $attendanceSessionInsert->fetchColumn();
+expect_true($attendanceSessionId > 0, 'Faculty worksheet fixture has an authoritative Secretary-created session');
+$attendanceSessionInsert->execute([$attendanceClassId, $attendanceSecretaryId, $attendancePastDate, $attendanceSessionCode . '-TWO']);
+$attendanceSessionTwoId = (int) $attendanceSessionInsert->fetchColumn();
+expect_true($attendanceSessionTwoId > 0, 'Faculty worksheet fixture has a second Secretary-created session on the same date');
+
+[$attendanceMultipleSessionReadStatus, $attendanceMultipleSessionReadBody] = integration_http_get_json(
+    '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendancePastDate,
+    $generatedFacultyAccessToken
+);
+expect_same(200, $attendanceMultipleSessionReadStatus, 'Faculty worksheet read succeeds when multiple sessions exist for a date');
+expect_same(null, $attendanceMultipleSessionReadBody['worksheet']['attendanceSession'] ?? null, 'Multiple sessions are not collapsed into a singular implicit session');
+expect_same(2, count($attendanceMultipleSessionReadBody['worksheet']['attendanceSessions'] ?? []), 'Worksheet exposes all matching sessions for the selected date');
+
+[$attendanceLinkedCreateStatus, $attendanceLinkedCreateBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'csId' => (string) $attendanceClassId,
+    'enrollmentId' => (string) $attendanceEnrollmentTwoId,
+    'sessionDate' => $attendancePastDate,
+    'sessionId' => (string) $attendanceSessionId,
+    'status' => 'present',
+]);
+expect_same(200, $attendanceLinkedCreateStatus, 'Faculty can create an attendance row linked to an existing Secretary session');
+$attendanceLinkedRecordId = (int) ($attendanceLinkedCreateBody['recordId'] ?? 0);
+expect_same((string) $attendanceSessionId, (string) ($attendanceLinkedCreateBody['attendanceSessionId'] ?? ''), 'Linked attendance response returns the existing session ID');
+
+[$attendanceLinkedUpdateStatus, $attendanceLinkedUpdateBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'recordId' => (string) $attendanceLinkedRecordId,
+    'csId' => (string) $attendanceClassId,
+    'enrollmentId' => (string) $attendanceEnrollmentTwoId,
+    'sessionDate' => $attendancePastDate,
+    'sessionId' => (string) $attendanceSessionId,
+    'status' => 'late',
+    'reason' => 'Faculty corrected linked record',
+]);
+expect_same(200, $attendanceLinkedUpdateStatus, 'Faculty can update an existing linked attendance record');
+expect_same('updated', $attendanceLinkedUpdateBody['operation'] ?? null, 'Existing attendance mutation reports an update');
+$attendanceLinkedRowStmt = $pdo->prepare(
+    'SELECT COUNT(*) AS row_count, MAX(attendance_session_id) AS session_id, MAX(status) AS status FROM attendance_records WHERE enrollment_id = ? AND session_date = ?'
+);
+$attendanceLinkedRowStmt->execute([$attendanceEnrollmentTwoId, $attendancePastDate]);
+$attendanceLinkedRow = $attendanceLinkedRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('1', (string) ($attendanceLinkedRow['row_count'] ?? ''), 'Updating a linked attendance row creates no duplicate record');
+expect_same((string) $attendanceSessionId, (string) ($attendanceLinkedRow['session_id'] ?? ''), 'Faculty mutation preserves the existing attendance-session linkage');
+expect_same('late', $attendanceLinkedRow['status'] ?? null, 'Faculty mutation persists the corrected linked status');
+
+[$attendanceSessionReadStatus, $attendanceSessionReadBody] = integration_http_get_json(
+    '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendancePastDate . '&sessionId=' . $attendanceSessionId,
+    $generatedFacultyAccessToken
+);
+expect_same(200, $attendanceSessionReadStatus, 'Faculty can read a worksheet for an explicit attendance session');
+expect_same((string) $attendanceSessionId, $attendanceSessionReadBody['worksheet']['attendanceSession']['sessionId'] ?? null, 'Explicit worksheet read returns the selected session');
+$attendanceSessionTwo = array_values(array_filter(
+    $attendanceSessionReadBody['worksheet']['roster'] ?? [],
+    static fn(array $row): bool => (string) ($row['enrollmentId'] ?? '') === (string) $attendanceEnrollmentTwoId
+))[0] ?? null;
+expect_same('late', $attendanceSessionTwo['status'] ?? null, 'Explicit session worksheet returns the corrected status');
+expect_same((string) $attendanceSessionId, $attendanceSessionTwo['attendanceSessionId'] ?? null, 'Explicit session worksheet returns the linked session ID');
+
+[$attendanceMismatchedSessionStatus, $attendanceMismatchedSessionBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'csId' => (string) $attendanceClassId,
+    'enrollmentId' => (string) $attendanceEnrollmentOneId,
+    'sessionDate' => $attendanceToday,
+    'sessionId' => (string) $attendanceSessionId,
+    'status' => 'present',
+]);
+expect_same(422, $attendanceMismatchedSessionStatus, 'Explicit session from another worksheet date is rejected');
+expect_same('ATTENDANCE_SESSION_MISMATCH', $attendanceMismatchedSessionBody['code'] ?? null, 'Mismatched explicit session uses the session error contract');
+
+$attendanceUnlinkedSessionInsert = $pdo->prepare(
+    "INSERT INTO attendance_sessions (cs_id, secretary_user_id, session_date, session_code, status, ended_at)
+     VALUES (?, ?, ?, ?, 'ended', CURRENT_TIMESTAMP(6))
+     RETURNING session_id"
+);
+$attendanceUnlinkedSessionInsert->execute([$attendanceClassId, $attendanceSecretaryId, $attendanceToday, $attendanceSessionCode . '-TODAY']);
+$attendanceTodaySessionId = (int) $attendanceUnlinkedSessionInsert->fetchColumn();
+[$attendanceUnlinkedAfterSessionStatus, $attendanceUnlinkedAfterSessionBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'csId' => (string) $attendanceClassId,
+    'enrollmentId' => (string) $attendanceEnrollmentOneId,
+    'sessionDate' => $attendanceToday,
+    'status' => 'present',
+]);
+expect_same(200, $attendanceUnlinkedAfterSessionStatus, 'New attendance without sessionId succeeds when a Secretary session exists');
+$attendanceUnlinkedAfterSessionId = (int) ($attendanceUnlinkedAfterSessionBody['recordId'] ?? 0);
+$attendanceUnlinkedAfterSessionStmt = $pdo->prepare('SELECT attendance_session_id FROM attendance_records WHERE record_id = ?');
+$attendanceUnlinkedAfterSessionStmt->execute([$attendanceUnlinkedAfterSessionId]);
+expect_same(null, $attendanceUnlinkedAfterSessionStmt->fetchColumn(), 'New attendance without sessionId remains unlinked');
+
+[$attendanceInvalidStatus, $attendanceInvalidBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'recordId' => (string) $attendanceLinkedRecordId,
+    'status' => 'unknown',
+    'reason' => 'Invalid status test',
+]);
+expect_same(422, $attendanceInvalidStatus, 'Invalid attendance status is rejected');
+expect_same('VALIDATION_ERROR', $attendanceInvalidBody['code'] ?? null, 'Invalid attendance status uses the validation error contract');
+
+[$attendanceForeignStudentStatus, $attendanceForeignStudentBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'csId' => (string) $attendanceClassId,
+    'studentId' => (string) $attendanceForeignStudentId,
+    'sessionDate' => $attendancePastDate,
+    'status' => 'present',
+    'reason' => 'Wrong section student test',
+]);
+expect_same(404, $attendanceForeignStudentStatus, 'Student from another section is rejected by the Faculty mutation');
+expect_same('ENROLLMENT_NOT_FOUND', $attendanceForeignStudentBody['code'] ?? null, 'Wrong-section Student mutation returns the enrollment error code');
+
+[$attendanceOtherFacultyStatus, $attendanceOtherFacultyBody] = integration_http_get_json(
+    '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendancePastDate,
+    $facultyAccessToken
+);
+expect_same(403, $attendanceOtherFacultyStatus, 'Unrelated Faculty cannot read another Faculty\'s worksheet');
+expect_same('FACULTY_SECTION_ACCESS_DENIED', $attendanceOtherFacultyBody['code'] ?? null, 'Unrelated Faculty worksheet access is denied server-side');
+[$attendanceOtherFacultyMutationStatus, $attendanceOtherFacultyMutationBody] = integration_http_json('/api/faculty/attendance/override', $facultyAccessToken, [
+    'recordId' => (string) $attendanceRecordOneId,
+    'status' => 'absent',
+    'reason' => 'Unrelated faculty mutation test',
+]);
+expect_same(403, $attendanceOtherFacultyMutationStatus, 'Unrelated Faculty cannot mutate another Faculty\'s attendance record');
+expect_same('FACULTY_SECTION_ACCESS_DENIED', $attendanceOtherFacultyMutationBody['code'] ?? null, 'Unrelated Faculty mutation is denied server-side');
+
+$facultyAttendanceAuditStmt = $pdo->prepare(
+    "SELECT actor_user_id, scope_cs_id, target_type, target_id, before_state_json, after_state_json
+       FROM audit_events
+      WHERE action_code = 'faculty_attendance_change' AND scope_cs_id = ?
+      ORDER BY sequence_number DESC"
+);
+$facultyAttendanceAuditStmt->execute([$attendanceClassId]);
+$facultyAttendanceAuditRows = $facultyAttendanceAuditStmt->fetchAll(PDO::FETCH_ASSOC);
+expect_true(count($facultyAttendanceAuditRows) >= 3, 'Faculty attendance create and update mutations append audit events');
+$linkedAuditFound = false;
+foreach ($facultyAttendanceAuditRows as $facultyAttendanceAuditRow) {
+    if ((string) ($facultyAttendanceAuditRow['target_id'] ?? '') !== (string) $attendanceLinkedRecordId) {
+        continue;
+    }
+    $beforeAudit = json_decode((string) $facultyAttendanceAuditRow['before_state_json'], true);
+    $afterAudit = json_decode((string) $facultyAttendanceAuditRow['after_state_json'], true);
+    if (is_array($beforeAudit) && is_array($afterAudit)
+        && ($beforeAudit['status'] ?? null) === 'present'
+        && ($afterAudit['status'] ?? null) === 'late'
+    ) {
+        expect_same((string) $userId, (string) $facultyAttendanceAuditRow['actor_user_id'], 'Faculty attendance audit preserves the authenticated actor');
+        expect_same((string) $attendanceClassId, (string) $facultyAttendanceAuditRow['scope_cs_id'], 'Faculty attendance audit preserves the class-section scope');
+        expect_same('attendance_record', $facultyAttendanceAuditRow['target_type'] ?? null, 'Faculty attendance audit targets the attendance record');
+        expect_same((string) $attendanceEnrollmentTwoId, (string) ($afterAudit['enrollmentId'] ?? ''), 'Faculty attendance audit identifies the enrollment target');
+        $linkedAuditFound = true;
+        break;
+    }
+}
+expect_true($linkedAuditFound, 'Faculty attendance audit preserves before and after status state');
 
 $digestStmt = $pdo->prepare('SELECT token_digest FROM security_tokens WHERE token_id = ?');
 $digestStmt->execute([$refresh['token_id']]);
@@ -1797,12 +2145,21 @@ $pdo->prepare('DELETE FROM assessments WHERE assessment_id IN (?, ?, ?, ?)')->ex
     (int) $disabledAssessmentId,
     (int) $enabledAssessmentId,
 ]);
-$pdo->prepare('DELETE FROM class_sections WHERE cs_id IN (?, ?, ?)')->execute([
+// Faculty attendance mutations are audited with a class-section scope. The
+// append-only audit foreign key intentionally prevents deleting those sections;
+// archive all disposable sections and preserve their truthful history. The
+// old timestamp keeps later live tests selecting the seeded active sections.
+$pdo->prepare(
+    "UPDATE class_sections
+        SET status = 'Archived', created_at = TIMESTAMP '2000-01-01 00:00:00'
+      WHERE cs_id IN (?, ?, ?, ?, ?)"
+)->execute([
+    $attendanceClassId,
+    $attendanceOtherClassId,
     $gradeClassId,
     $gradeOtherClassId,
     $unownedGradeClassId,
 ]);
-$pdo->prepare('DELETE FROM courses WHERE course_id = ?')->execute([$gradeCourseId]);
 $pdo->prepare(
     "UPDATE system_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP(6)
      WHERE setting_key = 'grading_defaults'"

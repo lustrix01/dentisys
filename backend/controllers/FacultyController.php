@@ -1071,45 +1071,301 @@ function handle_faculty_grades_compute(): void
     }
 }
 
+function faculty_attendance_error_response(string $message, int $statusCode, string $code): void
+{
+    emit_response(build_error_response($message, $statusCode, $code));
+}
+
+function faculty_attendance_query_value(array $query, string $field): ?string
+{
+    if (!array_key_exists($field, $query) || !is_scalar($query[$field])) {
+        return null;
+    }
+
+    $value = trim((string) $query[$field]);
+    return $value === '' ? null : $value;
+}
+
+function faculty_attendance_positive_int(mixed $value): ?int
+{
+    if (is_int($value) && $value > 0) {
+        return $value;
+    }
+    if (is_string($value) && ctype_digit($value) && (int) $value > 0) {
+        return (int) $value;
+    }
+    if (is_float($value) && is_finite($value) && $value > 0 && floor($value) === $value) {
+        return (int) $value;
+    }
+    return null;
+}
+
+function faculty_attendance_validate_date(string $value, array $config, string $field = 'date'): string
+{
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value, new DateTimeZone('UTC'));
+    $errors = DateTimeImmutable::getLastErrors();
+    if (!$date
+        || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+        || $date->format('Y-m-d') !== $value
+    ) {
+        throw new ValidationException([[
+            'field' => $field,
+            'message' => 'Worksheet date must be a valid YYYY-MM-DD date.',
+        ]]);
+    }
+
+    $today = app_local_date($config, new DateTimeImmutable('now', new DateTimeZone('UTC')));
+    if ($value > $today) {
+        throw new ValidationException([[
+            'field' => $field,
+            'message' => 'Worksheet date cannot be in the future.',
+        ]]);
+    }
+
+    return $value;
+}
+
+function faculty_attendance_session_payload(?array $session): ?array
+{
+    if ($session === null) {
+        return null;
+    }
+
+    return [
+        'sessionId' => (string) $session['session_id'],
+        'classId' => (string) $session['cs_id'],
+        'sessionDate' => $session['session_date'],
+        'sessionCode' => $session['session_code'],
+        'room' => $session['room'],
+        'status' => $session['status'],
+        'startedAt' => $session['started_at'],
+        'endedAt' => $session['ended_at'],
+        'geofenceEnabled' => (bool) $session['geofence_enabled'],
+        'geofenceRadiusMeters' => $session['geofence_radius_meters'] !== null ? (float) $session['geofence_radius_meters'] : null,
+        'biometricRequired' => (bool) $session['biometric_required'],
+    ];
+}
+
+function faculty_attendance_record_payload(array $row): array
+{
+    return [
+        'id' => $row['record_id'] !== null ? (string) $row['record_id'] : null,
+        'enrollmentId' => (string) $row['enrollment_id'],
+        'studentId' => (string) $row['student_id'],
+        'studentNumber' => $row['student_number'],
+        'studentName' => trim(implode(' ', array_filter([
+            $row['first_name'] ?? null,
+            $row['middle_name'] ?? null,
+            $row['last_name'] ?? null,
+        ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))),
+        'date' => $row['session_date'],
+        'sessionCode' => $row['session_code'],
+        'attendanceSessionId' => $row['attendance_session_id'] !== null ? (string) $row['attendance_session_id'] : null,
+        'status' => $row['status'],
+        'verificationMethod' => $row['verification_method'],
+        'timeRecorded' => $row['time_recorded'],
+        'overrideReason' => $row['override_reason'],
+        'overrideAt' => $row['override_at'],
+    ];
+}
+
 function handle_faculty_attendance_get(): void
 {
     try {
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
+        $query = is_array($_GET ?? null) ? $_GET : [];
+        $hasWorksheetQuery = array_key_exists('csId', $query)
+            || array_key_exists('date', $query)
+            || array_key_exists('sessionId', $query);
 
-        $stmt = $pdo->prepare(
-            "SELECT r.record_id, r.attendance_session_id, r.session_date, r.session_code, r.status, r.verification_method,
-                    r.override_reason, r.override_at, s.student_id, s.student_number,
-                    cs.cs_id, cs.cs_name, c.course_code
-             FROM attendance_records r
-             JOIN enrollments e ON e.enrollment_id = r.enrollment_id
-             JOIN students s ON s.student_id = e.student_id
-             JOIN class_sections cs ON cs.cs_id = e.cs_id
+        if (!$hasWorksheetQuery) {
+            $stmt = $pdo->prepare(
+                "SELECT r.record_id, r.attendance_session_id, r.session_date, r.session_code, r.status, r.verification_method,
+                        r.override_reason, r.override_at, s.student_id, s.student_number,
+                        cs.cs_id, cs.cs_name, c.course_code
+                 FROM attendance_records r
+                 JOIN enrollments e ON e.enrollment_id = r.enrollment_id
+                 JOIN students s ON s.student_id = e.student_id
+                 JOIN class_sections cs ON cs.cs_id = e.cs_id
+                 JOIN courses c ON c.course_id = cs.course_id
+                 WHERE cs.instructor_user_id = ?
+                 ORDER BY r.session_date DESC, r.record_id DESC"
+            );
+            $stmt->execute([$authCtx['user_id']]);
+            $records = array_map(static fn(array $row): array => [
+                'id' => (string) $row['record_id'],
+                'attendanceSessionId' => $row['attendance_session_id'] !== null ? (string) $row['attendance_session_id'] : null,
+                'studentId' => (string) $row['student_id'],
+                'studentNumber' => $row['student_number'],
+                'date' => $row['session_date'],
+                'sessionCode' => $row['session_code'],
+                'subjectCode' => $row['course_code'],
+                'classId' => (string) $row['cs_id'],
+                'className' => $row['cs_name'],
+                'status' => $row['status'],
+                'verificationMethod' => $row['verification_method'],
+                'overrideReason' => $row['override_reason'],
+                'overrideAt' => $row['override_at'],
+            ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+            json_response([
+                'status' => 'ok',
+                'records' => $records,
+            ], 200);
+            return;
+        }
+
+        $csId = faculty_attendance_positive_int(faculty_attendance_query_value($query, 'csId'));
+        $dateValue = faculty_attendance_query_value($query, 'date');
+        if ($csId === null || $dateValue === null) {
+            faculty_attendance_error_response('csId and date are required for a worksheet read.', 422, 'VALIDATION_ERROR');
+            return;
+        }
+        $worksheetDate = faculty_attendance_validate_date($dateValue, $config);
+        $sessionId = faculty_attendance_positive_int(faculty_attendance_query_value($query, 'sessionId'));
+        if (array_key_exists('sessionId', $query) && $sessionId === null) {
+            faculty_attendance_error_response('sessionId must be a positive integer when supplied.', 422, 'VALIDATION_ERROR');
+            return;
+        }
+
+        $classStmt = $pdo->prepare(
+            "SELECT cs.cs_id, cs.cs_name, cs.course_id, cs.block, cs.semester, cs.school_year, cs.status,
+                    c.course_code, c.name AS course_name, c.units
+             FROM class_sections cs
              JOIN courses c ON c.course_id = cs.course_id
-             WHERE cs.instructor_user_id = ?
-             ORDER BY r.session_date DESC, r.record_id DESC"
+             WHERE cs.cs_id = ? AND cs.instructor_user_id = ?"
         );
-        $stmt->execute([$authCtx['user_id']]);
-        $records = array_map(static fn(array $row): array => [
-            'id' => (string) $row['record_id'],
-            'attendanceSessionId' => $row['attendance_session_id'] !== null ? (string) $row['attendance_session_id'] : null,
-            'studentId' => (string) $row['student_id'],
-            'studentNumber' => $row['student_number'],
-            'date' => $row['session_date'],
-            'sessionCode' => $row['session_code'],
-            'subjectCode' => $row['course_code'],
-            'classId' => (string) $row['cs_id'],
-            'className' => $row['cs_name'],
-            'status' => $row['status'],
-            'verificationMethod' => $row['verification_method'],
-            'overrideReason' => $row['override_reason'],
-            'overrideAt' => $row['override_at'],
-        ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+        $classStmt->execute([$csId, $authCtx['user_id']]);
+        $class = $classStmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($class)) {
+            faculty_attendance_error_response('Class section is not assigned to this Faculty member.', 403, 'FACULTY_SECTION_ACCESS_DENIED');
+            return;
+        }
+
+        $sessionStmt = $pdo->prepare(
+            "SELECT session_id, cs_id, session_date, session_code, room, status, started_at, ended_at,
+                    geofence_enabled, geofence_radius_meters, biometric_required
+             FROM attendance_sessions
+             WHERE cs_id = ? AND session_date = ?
+             ORDER BY started_at ASC, session_id ASC"
+        );
+        $sessionStmt->execute([$csId, $worksheetDate]);
+        $matchingSessions = $sessionStmt->fetchAll(PDO::FETCH_ASSOC);
+        $selectedSession = null;
+        if ($sessionId !== null) {
+            foreach ($matchingSessions as $matchingSession) {
+                if ((int) $matchingSession['session_id'] === $sessionId) {
+                    $selectedSession = $matchingSession;
+                    break;
+                }
+            }
+            if ($selectedSession === null) {
+                faculty_attendance_error_response('Attendance session was not found for this class and date.', 404, 'ATTENDANCE_SESSION_NOT_FOUND');
+                return;
+            }
+        } elseif (count($matchingSessions) === 1) {
+            // A single session is unambiguous and remains compatible with the
+            // previous response shape. Multiple sessions are never collapsed.
+            $selectedSession = $matchingSessions[0];
+        }
+
+        if ($sessionId !== null) {
+            $rosterStmt = $pdo->prepare(
+                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                        r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
+                        r.verification_method, r.time_recorded, r.override_reason, r.override_at
+                 FROM enrollments e
+                 JOIN students s ON s.student_id = e.student_id
+                 LEFT JOIN attendance_records r
+                   ON r.enrollment_id = e.enrollment_id
+                  AND r.attendance_session_id = ?
+                  AND r.session_date = ?
+                 WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
+                 ORDER BY s.last_name, s.first_name, e.enrollment_id"
+            );
+            $rosterStmt->execute([$sessionId, $worksheetDate, $csId]);
+        } elseif ($selectedSession !== null) {
+            $rosterStmt = $pdo->prepare(
+                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                        r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
+                        r.verification_method, r.time_recorded, r.override_reason, r.override_at
+                 FROM enrollments e
+                 JOIN students s ON s.student_id = e.student_id
+                 LEFT JOIN LATERAL (
+                     SELECT r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
+                            r.verification_method, r.time_recorded, r.override_reason, r.override_at
+                     FROM attendance_records r
+                     WHERE r.enrollment_id = e.enrollment_id
+                       AND r.session_date = ?
+                       AND (r.attendance_session_id = ? OR r.attendance_session_id IS NULL)
+                     ORDER BY CASE WHEN r.attendance_session_id = ? THEN 0 ELSE 1 END, r.record_id DESC
+                     LIMIT 1
+                 ) r ON TRUE
+                 WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
+                 ORDER BY s.last_name, s.first_name, e.enrollment_id"
+            );
+            $rosterStmt->execute([$worksheetDate, (int) $selectedSession['session_id'], (int) $selectedSession['session_id'], $csId]);
+        } else {
+            $rosterStmt = $pdo->prepare(
+                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                        r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
+                        r.verification_method, r.time_recorded, r.override_reason, r.override_at
+                 FROM enrollments e
+                 JOIN students s ON s.student_id = e.student_id
+                 LEFT JOIN LATERAL (
+                     SELECT r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
+                            r.verification_method, r.time_recorded, r.override_reason, r.override_at
+                     FROM attendance_records r
+                     WHERE r.enrollment_id = e.enrollment_id AND r.session_date = ?
+                     ORDER BY r.record_id DESC
+                     LIMIT 1
+                 ) r ON TRUE
+                 WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
+                 ORDER BY s.last_name, s.first_name, e.enrollment_id"
+            );
+            $rosterStmt->execute([$worksheetDate, $csId]);
+        }
+
+        $roster = array_map(
+            static function (array $row) use ($worksheetDate): array {
+                if ($row['session_date'] === null) {
+                    $row['session_date'] = $worksheetDate;
+                }
+                return faculty_attendance_record_payload($row);
+            },
+            $rosterStmt->fetchAll(PDO::FETCH_ASSOC)
+        );
         json_response([
             'status' => 'ok',
-            'records' => $records,
+            'worksheet' => [
+                'classSection' => [
+                    'id' => (string) $class['cs_id'],
+                    'name' => $class['cs_name'],
+                    'block' => $class['block'],
+                    'semester' => $class['semester'],
+                    'schoolYear' => $class['school_year'],
+                    'status' => $class['status'],
+                ],
+                'course' => [
+                    'id' => (int) $class['course_id'],
+                    'code' => $class['course_code'],
+                    'name' => $class['course_name'],
+                    'units' => (float) $class['units'],
+                ],
+                'date' => $worksheetDate,
+                'attendanceSession' => $selectedSession !== null
+                    ? faculty_attendance_session_payload($selectedSession)
+                    : null,
+                'attendanceSessions' => array_map(
+                    static fn(array $matchingSession): array => faculty_attendance_session_payload($matchingSession),
+                    $matchingSessions
+                ),
+                'roster' => $roster,
+            ],
         ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Faculty attendance get error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
@@ -1162,6 +1418,14 @@ function handle_faculty_attendance_session_create(): void
 
 function handle_faculty_attendance_override(): void
 {
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
     try {
         $config = app_config();
         $pdo = create_pdo($config);
@@ -1174,29 +1438,367 @@ function handle_faculty_attendance_override(): void
         }
 
         $data = $body['data'];
-        $recordId = (int) ($data['recordId'] ?? 0);
-        $status = (string) ($data['status'] ?? '');
-        $reason = trim((string) ($data['reason'] ?? ''));
-        if ($recordId <= 0 || !in_array($status, ['present', 'absent', 'late', 'excused'], true) || strlen($reason) < 8) {
-            safe_error_response('Record, valid status, and an override reason of at least 8 characters are required.', 422);
+        if (!is_array($data)) {
+            faculty_attendance_error_response('Request body must be a JSON object.', 422, 'VALIDATION_ERROR');
             return;
         }
-        $stmt = $pdo->prepare(
-            "UPDATE attendance_records AS r
-             SET status = ?, verification_method = 'manual_faculty', override_reason = ?,
-                 override_by_user_id = ?, override_at = CURRENT_TIMESTAMP(6)
-             FROM enrollments AS e
-             JOIN class_sections AS cs ON cs.cs_id = e.cs_id
-             WHERE r.record_id = ? AND e.enrollment_id = r.enrollment_id AND cs.instructor_user_id = ?"
-        );
-        $stmt->execute([$status, $reason, $authCtx['user_id'], $recordId, $authCtx['user_id']]);
-        if ($stmt->rowCount() === 0) {
-            safe_error_response('Attendance record not found in an assigned class.', 404);
+
+        $recordId = faculty_attendance_positive_int($data['recordId'] ?? null) ?? 0;
+        $csId = faculty_attendance_positive_int($data['csId'] ?? null);
+        $enrollmentId = faculty_attendance_positive_int($data['enrollmentId'] ?? null);
+        $studentId = faculty_attendance_positive_int($data['studentId'] ?? null);
+        $status = $data['status'] ?? null;
+        $reason = null;
+        if (array_key_exists('reason', $data)) {
+            if (!is_string($data['reason'])) {
+                faculty_attendance_error_response('Reason must be a string when supplied.', 422, 'VALIDATION_ERROR');
+                return;
+            }
+            $reason = trim($data['reason']);
+            if (strlen($reason) > 500) {
+                faculty_attendance_error_response('Reason must not exceed 500 characters.', 422, 'VALIDATION_ERROR');
+                return;
+            }
+        }
+        if (!is_string($status) || !in_array($status, ['present', 'absent', 'late', 'excused'], true)) {
+            faculty_attendance_error_response('Status must be one of: present, absent, late, excused.', 422, 'VALIDATION_ERROR');
             return;
         }
-        json_response(['status' => 'ok', 'message' => 'Manual attendance override persisted successfully.', 'recordId' => (string) $recordId], 200);
+
+        $rawDate = null;
+        if (array_key_exists('sessionDate', $data)) {
+            $rawDate = $data['sessionDate'];
+        } elseif (array_key_exists('date', $data)) {
+            $rawDate = $data['date'];
+        }
+        if ($rawDate !== null && !is_string($rawDate)) {
+            faculty_attendance_error_response('sessionDate must be a YYYY-MM-DD string.', 422, 'VALIDATION_ERROR');
+            return;
+        }
+        $requestedDate = $rawDate !== null ? faculty_attendance_validate_date(trim($rawDate), $config, 'sessionDate') : null;
+        $requestedSessionId = null;
+        $sessionIdProvided = array_key_exists('sessionId', $data) || array_key_exists('attendanceSessionId', $data);
+        $sessionValue = array_key_exists('sessionId', $data)
+            ? $data['sessionId']
+            : ($data['attendanceSessionId'] ?? null);
+        if ($sessionIdProvided) {
+            $requestedSessionId = faculty_attendance_positive_int($sessionValue);
+            if ($requestedSessionId === null) {
+                faculty_attendance_error_response('sessionId must be a positive integer when supplied.', 422, 'VALIDATION_ERROR');
+                return;
+            }
+            if (array_key_exists('sessionId', $data) && array_key_exists('attendanceSessionId', $data)
+                && faculty_attendance_positive_int($data['attendanceSessionId']) !== $requestedSessionId
+            ) {
+                faculty_attendance_error_response('sessionId and attendanceSessionId must identify the same session.', 422, 'VALIDATION_ERROR');
+                return;
+            }
+        }
+
+        $pdo->beginTransaction();
+        $target = null;
+        $created = false;
+
+        if ($recordId > 0) {
+            $recordStmt = $pdo->prepare(
+                "SELECT r.record_id, r.enrollment_id, r.session_date, r.session_code, r.attendance_session_id,
+                        r.status, r.verification_method, r.time_recorded, r.override_reason, r.override_at,
+                        e.student_id, e.cs_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                        cs.cs_name, cs.instructor_user_id, c.course_code
+                 FROM attendance_records r
+                 JOIN enrollments e ON e.enrollment_id = r.enrollment_id
+                 JOIN students s ON s.student_id = e.student_id
+                 JOIN class_sections cs ON cs.cs_id = e.cs_id
+                 JOIN courses c ON c.course_id = cs.course_id
+                 WHERE r.record_id = ?
+                 FOR UPDATE"
+            );
+            $recordStmt->execute([$recordId]);
+            $target = $recordStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            if ($target === null) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance record was not found.', 404, 'ATTENDANCE_RECORD_NOT_FOUND');
+                return;
+            }
+            if ((int) $target['instructor_user_id'] !== (int) $authCtx['user_id']) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance record is not in a class assigned to this Faculty member.', 403, 'FACULTY_SECTION_ACCESS_DENIED');
+                return;
+            }
+            if ($csId !== null && $csId !== (int) $target['cs_id']) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance record does not belong to the selected class section.', 422, 'ATTENDANCE_RECORD_MISMATCH');
+                return;
+            }
+            if ($enrollmentId !== null && $enrollmentId !== (int) $target['enrollment_id']) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance record does not belong to the selected enrollment.', 422, 'ATTENDANCE_RECORD_MISMATCH');
+                return;
+            }
+            if ($studentId !== null && $studentId !== (int) $target['student_id']) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance record does not belong to the selected Student.', 422, 'ATTENDANCE_RECORD_MISMATCH');
+                return;
+            }
+            if ($requestedDate !== null && $requestedDate !== (string) $target['session_date']) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance record does not belong to the selected worksheet date.', 422, 'ATTENDANCE_RECORD_MISMATCH');
+                return;
+            }
+            $requestedDate = faculty_attendance_validate_date((string) $target['session_date'], $config, 'sessionDate');
+            $csId = (int) $target['cs_id'];
+            $enrollmentId = (int) $target['enrollment_id'];
+            $studentId = (int) $target['student_id'];
+        } else {
+            if ($csId === null || $requestedDate === null || ($enrollmentId === null && $studentId === null)) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('csId, sessionDate, and enrollmentId or studentId are required when creating attendance.', 422, 'VALIDATION_ERROR');
+                return;
+            }
+
+            $classOwnerStmt = $pdo->prepare(
+                'SELECT 1 FROM class_sections WHERE cs_id = ? AND instructor_user_id = ?'
+            );
+            $classOwnerStmt->execute([$csId, $authCtx['user_id']]);
+            if (!$classOwnerStmt->fetchColumn()) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Class section is not assigned to this Faculty member.', 403, 'FACULTY_SECTION_ACCESS_DENIED');
+                return;
+            }
+
+            $enrollmentSql =
+                "SELECT e.enrollment_id, e.student_id, e.cs_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                        cs.cs_name, cs.instructor_user_id, c.course_code
+                 FROM enrollments e
+                 JOIN students s ON s.student_id = e.student_id
+                 JOIN class_sections cs ON cs.cs_id = e.cs_id
+                 JOIN courses c ON c.course_id = cs.course_id
+                 WHERE e.cs_id = ? AND cs.instructor_user_id = ?";
+            $enrollmentParams = [$csId, $authCtx['user_id']];
+            if ($enrollmentId !== null) {
+                $enrollmentSql .= ' AND e.enrollment_id = ?';
+                $enrollmentParams[] = $enrollmentId;
+            } else {
+                $enrollmentSql .= ' AND e.student_id = ?';
+                $enrollmentParams[] = $studentId;
+            }
+            $enrollmentSql .= " AND LOWER(e.status) = 'active' FOR UPDATE";
+            $enrollmentStmt = $pdo->prepare($enrollmentSql);
+            $enrollmentStmt->execute($enrollmentParams);
+            $enrollment = $enrollmentStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            if ($enrollment === null) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Student enrollment was not found in the selected class section.', 404, 'ENROLLMENT_NOT_FOUND');
+                return;
+            }
+            if ($studentId !== null && $studentId !== (int) $enrollment['student_id']) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('The selected Student does not match the enrollment.', 422, 'ENROLLMENT_MISMATCH');
+                return;
+            }
+            $target = array_merge($enrollment, [
+                'record_id' => null,
+                'session_date' => $requestedDate,
+                'session_code' => null,
+                'attendance_session_id' => null,
+                'status' => null,
+                'verification_method' => null,
+                'time_recorded' => null,
+                'override_reason' => null,
+                'override_at' => null,
+            ]);
+
+            $existingSql =
+                "SELECT r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
+                        r.verification_method, r.time_recorded, r.override_reason, r.override_at
+                 FROM attendance_records r
+                 WHERE r.enrollment_id = ? AND r.session_date = ?";
+            $existingParams = [(int) $enrollment['enrollment_id'], $requestedDate];
+            if ($requestedSessionId !== null) {
+                $existingSql .= ' AND (r.attendance_session_id = ? OR r.attendance_session_id IS NULL)';
+                $existingParams[] = $requestedSessionId;
+                $existingSql .= ' ORDER BY CASE WHEN r.attendance_session_id = ? THEN 0 ELSE 1 END, r.record_id DESC';
+                $existingParams[] = $requestedSessionId;
+            } else {
+                $existingSql .= ' ORDER BY r.record_id DESC';
+            }
+            $existingSql .= ' LIMIT 1 FOR UPDATE';
+            $existingStmt = $pdo->prepare($existingSql);
+            $existingStmt->execute($existingParams);
+            $existing = $existingStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            if ($existing !== null) {
+                $target = array_merge($target, $existing);
+                $recordId = (int) $existing['record_id'];
+            }
+        }
+
+        if ($requestedSessionId !== null) {
+            $sessionStmt = $pdo->prepare(
+                "SELECT session_id, cs_id, session_date, session_code
+                 FROM attendance_sessions
+                 WHERE session_id = ? AND cs_id = ? AND session_date = ?"
+            );
+            $sessionStmt->execute([$requestedSessionId, $csId, $requestedDate]);
+            $requestedSession = $sessionStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+            if ($requestedSession === null) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance session does not belong to the selected class and date.', 422, 'ATTENDANCE_SESSION_MISMATCH');
+                return;
+            }
+            if ($target['record_id'] !== null
+                && $target['attendance_session_id'] !== null
+                && (int) $target['attendance_session_id'] !== $requestedSessionId
+            ) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Existing attendance session linkage cannot be reassigned.', 409, 'ATTENDANCE_SESSION_MISMATCH');
+                return;
+            }
+        }
+
+        $beforeState = $target['record_id'] !== null ? [
+            'recordId' => (int) $target['record_id'],
+            'enrollmentId' => (int) $target['enrollment_id'],
+            'studentId' => (int) $target['student_id'],
+            'studentNumber' => $target['student_number'],
+            'csId' => (int) $target['cs_id'],
+            'className' => $target['cs_name'],
+            'courseCode' => $target['course_code'],
+            'sessionDate' => $target['session_date'],
+            'attendanceSessionId' => $target['attendance_session_id'] !== null ? (int) $target['attendance_session_id'] : null,
+            'sessionCode' => $target['session_code'],
+            'status' => $target['status'],
+        ] : null;
+        $hasPersistedStatus = $target['record_id'] !== null && $target['status'] !== null;
+        if ($hasPersistedStatus && (string) $target['status'] === $status) {
+            $recordIdValue = (string) $target['record_id'];
+            $sessionIdValue = $target['attendance_session_id'] !== null
+                ? (string) $target['attendance_session_id']
+                : null;
+            $pdo->rollBack();
+            json_response([
+                'status' => 'ok',
+                'message' => 'Attendance record is unchanged.',
+                'operation' => 'unchanged',
+                'changed' => false,
+                'recordId' => $recordIdValue,
+                'attendanceSessionId' => $sessionIdValue,
+            ], 200);
+            return;
+        }
+        if ($hasPersistedStatus && ($reason === null || $reason === '')) {
+            $pdo->rollBack();
+            faculty_attendance_error_response('A non-empty reason is required when changing an existing attendance status.', 422, 'VALIDATION_ERROR');
+            return;
+        }
+        $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+
+        if ($target['record_id'] === null) {
+            $sessionCode = null;
+            if ($requestedSessionId !== null) {
+                $sessionCode = $requestedSession['session_code'];
+            }
+            $insert = $pdo->prepare(
+                "INSERT INTO attendance_records
+                    (enrollment_id, attendance_session_id, session_date, session_code, status,
+                     verification_method, time_recorded, override_reason, override_by_user_id, override_at)
+                 VALUES (?, ?, ?, ?, ?, 'manual_faculty', ?, ?, ?, ?)
+                 RETURNING record_id"
+            );
+            $insert->execute([
+                (int) $target['enrollment_id'],
+                $requestedSessionId,
+                $requestedDate,
+                $sessionCode,
+                $status,
+                $nowSql,
+                $reason,
+                (int) $authCtx['user_id'],
+                $nowSql,
+            ]);
+            $target['record_id'] = (int) $insert->fetchColumn();
+            $target['session_date'] = $requestedDate;
+            $target['session_code'] = $sessionCode;
+            $target['attendance_session_id'] = $requestedSessionId;
+            $target['status'] = $status;
+            $target['verification_method'] = 'manual_faculty';
+            $target['time_recorded'] = $nowSql;
+            $target['override_reason'] = $reason;
+            $target['override_at'] = $nowSql;
+            $created = true;
+        } else {
+            $update = $pdo->prepare(
+                "UPDATE attendance_records
+                 SET status = ?, verification_method = 'manual_faculty', override_reason = ?,
+                     override_by_user_id = ?, override_at = ?
+                 WHERE record_id = ?"
+            );
+            $update->execute([$status, $reason, (int) $authCtx['user_id'], $nowSql, (int) $target['record_id']]);
+            $target['status'] = $status;
+            $target['verification_method'] = 'manual_faculty';
+            $target['override_reason'] = $reason;
+            $target['override_at'] = $nowSql;
+        }
+
+        $afterState = [
+            'recordId' => (int) $target['record_id'],
+            'enrollmentId' => (int) $target['enrollment_id'],
+            'studentId' => (int) $target['student_id'],
+            'studentNumber' => $target['student_number'],
+            'csId' => (int) $target['cs_id'],
+            'className' => $target['cs_name'],
+            'courseCode' => $target['course_code'],
+            'sessionDate' => $target['session_date'],
+            'attendanceSessionId' => $target['attendance_session_id'] !== null ? (int) $target['attendance_session_id'] : null,
+            'sessionCode' => $target['session_code'],
+            'status' => $target['status'],
+        ];
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        $auditCtx = audit_begin_operation($pdo);
+        audit_finish_operation($pdo, $auditCtx, [
+            'module_code' => 'faculty_attendance',
+            'action_code' => 'faculty_attendance_change',
+            'event_status' => 'Success',
+            'actor_user_id' => $authCtx['user_id'],
+            'actor_username' => $authCtx['login_email'],
+            'actor_role' => $authCtx['role'],
+            'actor_display_name' => $authCtx['display_name'],
+            'session_id' => $authCtx['session_id'],
+            'scope_cs_id' => (int) $target['cs_id'],
+            'target_type' => 'attendance_record',
+            'target_id' => (string) $target['record_id'],
+            'description' => sprintf(
+                'Faculty attendance %s for Student #%s in %s on %s: %s.',
+                $created ? 'recorded' : 'corrected',
+                $target['student_number'],
+                $target['class_name'] ?? $target['cs_name'],
+                $target['session_date'],
+                $status
+            ),
+            'reason' => $reason,
+            'http_method' => $context['http_method'],
+            'endpoint' => $context['endpoint'],
+            'request_id' => $context['request_id'],
+            'ip_address' => $context['ip_address'],
+            'user_agent' => $context['user_agent'],
+        ], $macKey, $beforeState, $afterState);
+        $pdo->commit();
+
+        json_response([
+            'status' => 'ok',
+            'message' => $created ? 'Attendance record created and audited.' : 'Attendance record updated and audited.',
+            'operation' => $created ? 'created' : 'updated',
+            'recordId' => (string) $target['record_id'],
+            'attendanceSessionId' => $target['attendance_session_id'] !== null ? (string) $target['attendance_session_id'] : null,
+        ], 200);
     } catch (\Throwable $e) {
+        if (isset($pdo) && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         error_log('Faculty attendance override error: ' . sanitize_for_log($e));
+        if ($e instanceof ValidationException) {
+            validation_error_response($e->getErrors());
+            return;
+        }
         safe_error_response('Internal server error.', 500);
     }
 }
