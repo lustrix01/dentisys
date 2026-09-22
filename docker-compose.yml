@@ -47,10 +47,12 @@ services:
       BIOMETRIC_MATCH_COUNT: ${BIOMETRIC_MATCH_COUNT:-}
       BIOMETRIC_BLINK_THRESHOLD: ${BIOMETRIC_BLINK_THRESHOLD:-}
       BIOMETRIC_HEAD_TURN_RATIO: ${BIOMETRIC_HEAD_TURN_RATIO:-}
-      MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH: ${MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH:-}
+      MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH: /app/models/face_landmarker.task
+      MEDIAPIPE_FACE_LANDMARKER_SHA256: ${MEDIAPIPE_FACE_LANDMARKER_SHA256:-}
       BIOMETRIC_STORAGE_DIR: /var/lib/dentisys-biometric
     volumes:
       - dentisys_biometric_data:/var/lib/dentisys-biometric
+      - ${MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH:-../dentisys-biometric-assets/face_landmarker.task}:/app/models/face_landmarker.task:ro
     expose:
       - "8000"
     healthcheck:

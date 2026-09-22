@@ -27,7 +27,7 @@ function assert_throws(callable $fn, string $needle, string $label): void
 }
 
 $original = [];
-foreach (['APP_ENV', 'APP_BASE_URL', 'APP_TIMEZONE', 'SHOW_DEV_RESET_LINK', 'SHOW_DEV_INVITATION_LINK', 'EMAIL_PROVIDER', 'DEV_MOCK_IDENTITY_ENABLED', 'DEV_MOCK_BIOMETRIC_ENABLED', 'DEV_MOCK_LOCATION_ENABLED', 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', 'STUDENT_AUTH_ENABLED', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN', 'ALLOWED_EMAIL_DOMAINS', 'GOOGLE_CLIENT_ID'] as $key) {
+foreach (['APP_ENV', 'APP_BASE_URL', 'APP_TIMEZONE', 'SHOW_DEV_RESET_LINK', 'SHOW_DEV_INVITATION_LINK', 'EMAIL_PROVIDER', 'DEV_MOCK_IDENTITY_ENABLED', 'DEV_MOCK_BIOMETRIC_ENABLED', 'DEV_MOCK_LOCATION_ENABLED', 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED', 'STUDENT_AUTH_ENABLED', 'DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SIGNING_KEY_B64', 'JWT_ACCESS_TTL', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'ALLOWED_EMAIL_DOMAIN', 'ALLOWED_EMAIL_DOMAINS', 'GOOGLE_CLIENT_ID', 'BIOMETRIC_SIDECAR_URL', 'BIOMETRIC_SIDECAR_SHARED_SECRET', 'BIOMETRIC_CHALLENGE_TTL_SECONDS'] as $key) {
     $original[$key] = getenv($key);
     putenv($key);
 }
@@ -153,6 +153,22 @@ $testConfig = app_config([
 assert_same(true, $testConfig['mocks']['identity'], 'test environment permits explicit mock identity');
 assert_same(true, $testConfig['mocks']['browser_attendance_prototype'], 'test environment permits explicit browser prototype');
 assert_same(true, $testConfig['features']['student_auth_enabled'], 'test environment permits Student authentication');
+assert_same('disabled', app_config([
+    'APP_ENV' => 'single-server',
+    'APP_BASE_URL' => 'https://dentisys.example.edu',
+    'BIOMETRIC_SIDECAR_URL' => 'http://biometric:8000',
+    'BIOMETRIC_SIDECAR_SHARED_SECRET' => str_repeat('s', 32),
+])['providers']['biometrics']['active'], 'single-server keeps real biometrics disabled');
+assert_same('sidecar', app_config([
+    'APP_ENV' => 'development',
+    'BIOMETRIC_SIDECAR_URL' => 'http://biometric:8000',
+    'BIOMETRIC_SIDECAR_SHARED_SECRET' => str_repeat('s', 32),
+])['providers']['biometrics']['active'], 'development can activate the private sidecar');
+assert_throws(
+    static fn() => app_config(['BIOMETRIC_CHALLENGE_TTL_SECONDS' => 0]),
+    'BIOMETRIC_CHALLENGE_TTL_SECONDS',
+    'non-positive biometric challenge TTL is rejected'
+);
 
 $multiDomain = app_config(['ALLOWED_EMAIL_DOMAINS' => ' BICOL-U.EDU.PH, example.edu, bicol-u.edu.ph ']);
 assert_same(['bicol-u.edu.ph', 'example.edu'], $multiDomain['app']['allowed_email_domains'], 'plural domains normalize and deduplicate');

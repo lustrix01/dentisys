@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import json
 import os
 import secrets
@@ -50,7 +51,7 @@ class Calibration:
     head_turn_ratio: float
 
 
-def required_float(name: str) -> float:
+def required_float(name: str, *, minimum: float = 0.0, maximum: float | None = None) -> float:
     raw = os.getenv(name, "").strip()
     if not raw:
         raise BiometricError("Biometric calibration is not configured.", "biometric_service_unavailable", 503)
@@ -58,7 +59,7 @@ def required_float(name: str) -> float:
         value = float(raw)
     except ValueError as exc:
         raise BiometricError("Biometric calibration is invalid.", "biometric_service_unavailable", 503) from exc
-    if not np.isfinite(value):
+    if not np.isfinite(value) or value <= minimum or (maximum is not None and value >= maximum):
         raise BiometricError("Biometric calibration is invalid.", "biometric_service_unavailable", 503)
     return value
 
@@ -76,10 +77,24 @@ def required_int(name: str) -> int:
     return value
 
 
+def required_sha256(name: str) -> str:
+    raw = os.getenv(name, "").strip().lower()
+    if len(raw) != 64 or any(character not in "0123456789abcdef" for character in raw):
+        raise BiometricError("Biometric model checksum is invalid.", "biometric_service_unavailable", 503)
+    return raw
+
+
+def shared_secret() -> str:
+    value = os.getenv("BIOMETRIC_SIDECAR_SHARED_SECRET", "").strip()
+    if len(value) < 32 or any(character.isspace() for character in value):
+        raise BiometricError("Biometric service is unavailable.", "biometric_service_unavailable", 503)
+    return value
+
+
 @lru_cache(maxsize=1)
 def calibration() -> Calibration:
-    return Calibration(
-        haar_scale_factor=required_float("BIOMETRIC_HAAR_SCALE_FACTOR"),
+    return validate_calibration(Calibration(
+        haar_scale_factor=required_float("BIOMETRIC_HAAR_SCALE_FACTOR", minimum=1.0),
         haar_min_neighbors=required_int("BIOMETRIC_HAAR_MIN_NEIGHBORS"),
         haar_min_face_px=required_int("BIOMETRIC_HAAR_MIN_FACE_PX"),
         quality_laplacian_variance=required_float("BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE"),
@@ -89,9 +104,17 @@ def calibration() -> Calibration:
         lbph_grid_y=required_int("BIOMETRIC_LBPH_GRID_Y"),
         lbph_threshold=required_float("BIOMETRIC_LBPH_THRESHOLD"),
         match_count=required_int("BIOMETRIC_MATCH_COUNT"),
-        blink_threshold=required_float("BIOMETRIC_BLINK_THRESHOLD"),
-        head_turn_ratio=required_float("BIOMETRIC_HEAD_TURN_RATIO"),
-    )
+        blink_threshold=required_float("BIOMETRIC_BLINK_THRESHOLD", maximum=1.0),
+        head_turn_ratio=required_float("BIOMETRIC_HEAD_TURN_RATIO", maximum=1.0),
+    ))
+
+
+def validate_calibration(config: Calibration) -> Calibration:
+    if config.lbph_grid_x <= 0 or config.lbph_grid_y <= 0:
+        raise BiometricError("Biometric calibration is invalid.", "biometric_service_unavailable", 503)
+    if config.match_count <= 1 or config.match_count > 30:
+        raise BiometricError("Biometric calibration is invalid.", "biometric_service_unavailable", 503)
+    return config
 
 
 def storage_key() -> bytes:
@@ -106,9 +129,9 @@ def storage_key() -> bytes:
 
 
 def sidecar_auth() -> None:
-    expected = os.getenv("BIOMETRIC_SIDECAR_SHARED_SECRET", "")
+    expected = shared_secret()
     provided = request.headers.get("X-DentiSys-Sidecar-Secret", "")
-    if not expected or not secrets.compare_digest(provided, expected):
+    if not secrets.compare_digest(provided, expected):
         raise BiometricError("Biometric service is unavailable.", "biometric_service_unavailable", 503)
 
 
@@ -150,6 +173,16 @@ def face_landmarker():
     model_path = os.getenv("MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH", "").strip()
     if not model_path or not Path(model_path).is_file():
         raise BiometricError("MediaPipe Face Landmarker is not configured.", "biometric_service_unavailable", 503)
+    expected_checksum = required_sha256("MEDIAPIPE_FACE_LANDMARKER_SHA256")
+    digest = hashlib.sha256()
+    try:
+        with Path(model_path).open("rb") as model_file:
+            for chunk in iter(lambda: model_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise BiometricError("MediaPipe Face Landmarker is not configured.", "biometric_service_unavailable", 503) from exc
+    if not secrets.compare_digest(digest.hexdigest(), expected_checksum):
+        raise BiometricError("MediaPipe Face Landmarker checksum does not match.", "biometric_service_unavailable", 503)
     options = vision.FaceLandmarkerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=model_path),
         running_mode=vision.RunningMode.IMAGE,
@@ -295,6 +328,10 @@ def handle_unexpected_error(error: Exception):
 
 @app.get("/health")
 def health():
+    validate_calibration(calibration())
+    shared_secret()
+    storage_key()
+    face_landmarker()
     return jsonify({"status": "ok", "service": "biometric"})
 
 

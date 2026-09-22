@@ -64,6 +64,7 @@ services:
       BIOMETRIC_BLINK_THRESHOLD: ${BIOMETRIC_BLINK_THRESHOLD:?Set biometric liveness calibration.}
       BIOMETRIC_HEAD_TURN_RATIO: ${BIOMETRIC_HEAD_TURN_RATIO:?Set biometric liveness calibration.}
       MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH: /app/models/face_landmarker.task
+      MEDIAPIPE_FACE_LANDMARKER_SHA256: ${MEDIAPIPE_FACE_LANDMARKER_SHA256:?Set the Face Landmarker SHA-256 checksum.}
       BIOMETRIC_STORAGE_DIR: /var/lib/dentisys-biometric
     volumes:
       - dentisys_biometric_data:/var/lib/dentisys-biometric
