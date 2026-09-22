@@ -77,6 +77,7 @@ $mapped = attendance_session_map([
     'updated_at' => '2026-09-22 00:00:00.000000',
 ], false);
 biometric_expect_true(!array_key_exists('geofenceLatitude', $mapped) && !array_key_exists('geofenceLongitude', $mapped), 'Student session payload does not expose the configured geofence center');
+biometric_expect_true(array_key_exists('id', $mapped) && is_int($mapped['id']) && $mapped['id'] === 7, 'Student session payload exposes a numeric id');
 biometric_expect_same('08:00', $mapped['openingTime'], 'Session payload exposes the configured opening time');
 
 $payload = student_biometric_payload([
@@ -88,6 +89,54 @@ $payload = student_biometric_payload([
 ], $config);
 biometric_expect_true(!array_key_exists('protectedObjectReference', $payload) && !array_key_exists('templateReference', $payload), 'Student biometric profile payload never exposes protected references');
 biometric_expect_same('active', $payload['enrollmentStatus'], 'Student biometric profile reports the authoritative enrollment state');
+$profileResponse = student_biometric_profile_response([
+    'consent_status' => 'approved',
+    'enrollment_status' => 'active',
+    'enrolled_at' => '2026-09-22 00:00:00.000000',
+    'reference_expires_on' => '2026-12-31',
+    'usable_sample_count' => 20,
+], $config);
+foreach (['consentGranted', 'enrollmentStatus', 'enrolledAt', 'expiresAt', 'usableSampleCount', 'requiredUsableSamples', 'manualFallbackAvailable'] as $field) {
+    biometric_expect_true(array_key_exists($field, $profileResponse), "Biometric profile response exposes {$field} at top level");
+}
+biometric_expect_true(!array_key_exists('protectedObjectReference', $profileResponse), 'Biometric profile response does not expose protected references at top level');
+
+$challengeResponse = student_biometric_challenge_response([
+    'challengeId' => '17',
+    'challengeToken' => 'opaque-token',
+    'actions' => ['blink', 'turn_left'],
+    'expiresAt' => '2026-09-22T08:02:00.000000Z',
+]);
+foreach (['challengeId', 'challengeToken', 'actions', 'expiresAt'] as $field) {
+    biometric_expect_true(array_key_exists($field, $challengeResponse), "Challenge response exposes {$field} at top level");
+}
+
+$presentResponse = student_attendance_record_response(
+    'present',
+    'recorded',
+    'Attendance recorded as Present.',
+    ['recordId' => '9', 'status' => 'present', 'verificationMethod' => 'biometric', 'recordedAt' => '2026-09-22T08:01:00.000000Z']
+);
+biometric_expect_same('present', $presentResponse['status'], 'Biometric attendance response exposes Present status at top level');
+biometric_expect_true(isset($presentResponse['message']) && $presentResponse['message'] !== '', 'Biometric attendance response exposes a top-level message');
+$alreadyResponse = student_attendance_record_response(
+    'already_recorded',
+    'already_recorded',
+    'Attendance was already recorded for this session.',
+    ['recordId' => '9', 'status' => 'present']
+);
+biometric_expect_same('already_recorded', $alreadyResponse['status'], 'Duplicate biometric attendance response exposes already_recorded status at top level');
+$logsResponse = student_attendance_logs_response([['recordId' => '9', 'status' => 'present']], 'Asia/Manila');
+biometric_expect_true(isset($logsResponse['records'], $logsResponse['total']) && $logsResponse['total'] === 1, 'Attendance logs response exposes records and total at top level');
+
+$manualTimingAccepted = true;
+attendance_session_require_timing_for_biometric(false, null, null, null);
+try {
+    attendance_session_require_timing_for_biometric(true, null, null, null);
+    $manualTimingAccepted = false;
+} catch (ValidationException) {
+}
+biometric_expect_true($manualTimingAccepted, 'Biometric-required sessions reject missing timing while manual sessions remain allowed');
 
 for ($i = 0; $i < 20; $i++) {
     $actions = student_biometric_actions();
@@ -124,7 +173,10 @@ foreach (['consent_required', 'biometric_not_enrolled', 'enrollment_expired', 's
     biometric_expect_true(str_contains($biometricSource, "'{$errorCode}'"), "Stable biometric error code {$errorCode} is represented");
 }
 biometric_expect_true(str_contains($controller, "status = 'revoked'") && str_contains($controller, "attendance_session_fetch_for_student"), 'Revocation blocks Student capture while preserving the session record path');
-biometric_expect_true(str_contains($controller, "'logs'") && str_contains($controller, "WHERE e.student_id = ?"), 'Student attendance logs are scoped to the authenticated Student identity');
+biometric_expect_true(str_contains($controller, 'function handle_student_attendance_logs') && str_contains($controller, 'WHERE e.student_id = ?'), 'Student attendance logs are scoped to the authenticated Student identity');
 biometric_expect_true(str_contains($controller, "biometric_enrollment_succeeded") && str_contains($controller, "biometric_enrollment_revoked"), 'Biometric profile lifecycle actions are audited');
+$facultyController = file_get_contents(dirname(__DIR__, 2) . '/backend/controllers/FacultyController.php');
+$secretaryController = file_get_contents(dirname(__DIR__, 2) . '/backend/controllers/SecretaryController.php');
+biometric_expect_true(str_contains($facultyController, 'attendance_session_require_timing_for_biometric') && str_contains($secretaryController, 'attendance_session_require_timing_for_biometric'), 'Faculty and Secretary session creation enforce timing for biometric-required sessions');
 
 fwrite(STDOUT, "PASS: Student biometric backend contract checks completed.\n");

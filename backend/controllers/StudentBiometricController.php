@@ -77,7 +77,7 @@ function handle_student_biometric_profile_get(): void
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        json_response(['status' => 'ok', 'biometric' => student_biometric_payload($row, $config)], 200);
+        json_response(student_biometric_profile_response($row, $config), 200);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }
@@ -167,7 +167,7 @@ function handle_student_biometric_consent(): void
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        json_response(['status' => 'ok', 'biometric' => student_biometric_payload($row, $config)], 200);
+        json_response(student_biometric_profile_response($row, $config), 200);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }
@@ -211,7 +211,7 @@ function handle_student_biometric_challenge(): void
         $challenge = student_biometric_issue_challenge(
             $pdo, $config, (int) $authCtx['user_id'], $identity['student_id'], $csId, $attendanceSessionId, $purpose
         );
-        json_response(['status' => 'ok', 'challenge' => $challenge], 201);
+        json_response(student_biometric_challenge_response($challenge), 201);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }
@@ -305,7 +305,7 @@ function handle_student_biometric_enrollment(): void
                 error_log('Previous biometric reference cleanup deferred: ' . sanitize_for_log($cleanupError));
             }
         }
-        json_response(['status' => 'ok', 'biometric' => student_biometric_payload($row, $config)], 201);
+        json_response(student_biometric_profile_response($row, $config), 201);
     } catch (Throwable $e) {
         if ($studentId > 0 && $previous !== null && $authCtx !== [] && $config !== []) {
             try {
@@ -351,7 +351,7 @@ function handle_student_biometric_revoke(): void
             $row = student_biometric_profile($pdo, $identity['student_id'], true);
             if ($row === null) {
                 $pdo->commit();
-                json_response(['status' => 'ok', 'biometric' => student_biometric_payload(null, $config)], 200);
+                json_response(student_biometric_profile_response(null, $config), 200);
                 return;
             }
             $before = student_biometric_snapshot($row);
@@ -374,7 +374,7 @@ function handle_student_biometric_revoke(): void
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
         }
-        json_response(['status' => 'ok', 'biometric' => student_biometric_payload($row, $config)], 200);
+        json_response(student_biometric_profile_response($row, $config), 200);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }
@@ -477,12 +477,14 @@ function handle_student_attendance_biometric(): void
             $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
             if ($existing !== false) {
                 $pdo->rollBack();
-                json_response([
-                    'status' => 'ok',
-                    'operation' => 'already_recorded',
-                    'code' => 'already_recorded',
-                    'attendance' => ['recordId' => (string) $existing['record_id'], 'status' => $existing['status']],
-                ], 200);
+                $attendance = ['recordId' => (string) $existing['record_id'], 'status' => $existing['status']];
+                $response = student_attendance_record_response(
+                    'already_recorded',
+                    'already_recorded',
+                    'Attendance was already recorded for this session.',
+                    $attendance
+                );
+                json_response($response, 200);
                 return;
             }
             $decision = attendance_session_timing_decision($session, attendance_session_now_utc(), $config);
@@ -536,10 +538,14 @@ function handle_student_attendance_biometric(): void
                 $existingStmt->execute([$sessionId, (int) $session['enrollment_id']]);
                 $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
                 $pdo->rollBack();
-                json_response([
-                    'status' => 'ok', 'operation' => 'already_recorded', 'code' => 'already_recorded',
-                    'attendance' => ['recordId' => (string) ($existing['record_id'] ?? ''), 'status' => $existing['status'] ?? null],
-                ], 200);
+                $attendance = ['recordId' => (string) ($existing['record_id'] ?? ''), 'status' => $existing['status'] ?? null];
+                $response = student_attendance_record_response(
+                    'already_recorded',
+                    'already_recorded',
+                    'Attendance was already recorded for this session.',
+                    $attendance
+                );
+                json_response($response, 200);
                 return;
             }
             attendance_session_record_audit(
@@ -548,10 +554,19 @@ function handle_student_attendance_biometric(): void
                 ['record_id' => (int) $recordId, 'student_id' => $studentId, 'status' => $decision['status'], 'verification_method' => 'biometric']
             );
             $pdo->commit();
-            json_response([
-                'status' => 'ok', 'operation' => 'recorded',
-                'attendance' => ['recordId' => (string) $recordId, 'status' => $decision['status'], 'verificationMethod' => 'biometric', 'recordedAt' => attendance_session_timestamp($nowSql)],
-            ], 201);
+            $attendance = [
+                'recordId' => (string) $recordId,
+                'status' => $decision['status'],
+                'verificationMethod' => 'biometric',
+                'recordedAt' => attendance_session_timestamp($nowSql),
+            ];
+            $response = student_attendance_record_response(
+                (string) $decision['status'],
+                'recorded',
+                $decision['status'] === 'late' ? 'Attendance recorded as Late.' : 'Attendance recorded as Present.',
+                $attendance
+            );
+            json_response($response, 201);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
             throw $e;
@@ -597,7 +612,7 @@ function handle_student_attendance_logs(): void
                 'room' => $row['room'],
             ];
         }, $stmt->fetchAll(PDO::FETCH_ASSOC));
-        json_response(['status' => 'ok', 'logs' => $logs, 'timezone' => $config['app']['operational_timezone']], 200);
+        json_response(student_attendance_logs_response($logs, $config['app']['operational_timezone']), 200);
     } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }

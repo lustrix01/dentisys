@@ -151,6 +151,57 @@ function student_biometric_payload(?array $row, array $config): array
     ];
 }
 
+function student_biometric_profile_response(?array $row, array $config): array
+{
+    $payload = student_biometric_payload($row, $config);
+    return [
+        'status' => 'ok',
+        'biometric' => $payload,
+    ] + $payload;
+}
+
+function student_biometric_challenge_response(array $challenge): array
+{
+    return [
+        'status' => 'ok',
+        'challenge' => $challenge,
+    ] + $challenge;
+}
+
+function student_attendance_record_response(
+    string $resultStatus,
+    string $operation,
+    string $message,
+    array $attendance
+): array {
+    return [
+        'status' => $resultStatus,
+        'ok' => true,
+        'responseStatus' => 'ok',
+        'operation' => $operation,
+        'code' => $resultStatus,
+        'message' => $message,
+        'recordId' => $attendance['recordId'] ?? null,
+        'attendanceStatus' => $resultStatus === 'already_recorded'
+            ? ($attendance['status'] ?? null)
+            : $resultStatus,
+        'verificationMethod' => $attendance['verificationMethod'] ?? null,
+        'recordedAt' => $attendance['recordedAt'] ?? null,
+        'attendance' => $attendance,
+    ];
+}
+
+function student_attendance_logs_response(array $records, string $timezone): array
+{
+    return [
+        'status' => 'ok',
+        'records' => $records,
+        'total' => count($records),
+        'logs' => $records,
+        'timezone' => $timezone,
+    ];
+}
+
 function student_biometric_expire_if_needed(
     PDO $pdo,
     array $config,

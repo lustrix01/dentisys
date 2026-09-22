@@ -84,6 +84,22 @@ function attendance_session_timing_from_request(array $data): array
     return [$opening, $present, $late];
 }
 
+function attendance_session_require_timing_for_biometric(
+    bool $biometricRequired,
+    ?string $opening,
+    ?string $present,
+    ?string $late
+): void {
+    if (!$biometricRequired || ($opening !== null && $present !== null && $late !== null)) {
+        return;
+    }
+
+    throw new ValidationException([[
+        'field' => 'openingTime',
+        'message' => 'Biometric-required sessions must provide openingTime, presentCutoff, and lateCutoff.',
+    ]]);
+}
+
 function attendance_session_request_bool(array $data, string $field, bool $default): bool
 {
     if (!array_key_exists($field, $data) || $data[$field] === null || $data[$field] === '') {
@@ -203,6 +219,7 @@ function attendance_session_fetch_for_student(
 function attendance_session_map(array $row, bool $includeLocation = false): array
 {
     $mapped = [
+        'id' => (int) $row['session_id'],
         'sessionId' => (string) $row['session_id'],
         'csId' => (int) $row['cs_id'],
         'classId' => (string) $row['cs_id'],

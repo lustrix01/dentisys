@@ -2280,6 +2280,12 @@ function handle_faculty_attendance_session_create(): void
             ? validate_required_string($data, 'room', 1, 255)
             : null;
         $biometricRequired = attendance_session_request_bool($data, 'biometricRequired', false);
+        attendance_session_require_timing_for_biometric(
+            $biometricRequired,
+            $openingTime,
+            $presentCutoff,
+            $lateCutoff
+        );
         $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', $biometricRequired);
         $latitude = attendance_session_request_float($data, 'geofenceLatitude', -90, 90);
         $longitude = attendance_session_request_float($data, 'geofenceLongitude', -180, 180);

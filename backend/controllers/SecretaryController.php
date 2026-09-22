@@ -855,6 +855,12 @@ function handle_secretary_attendance_session_start(): void
             array_key_exists('biometricRequired', $data) ? 'biometricRequired' : 'requireFace',
             false
         );
+        attendance_session_require_timing_for_biometric(
+            $biometricRequired,
+            $openingTime,
+            $presentCutoff,
+            $lateCutoff
+        );
         $geofenceEnabled = secretary_attendance_session_bool(
             $data,
             array_key_exists('geofenceEnabled', $data) ? 'geofenceEnabled' : 'requireGeo',
