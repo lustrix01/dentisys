@@ -134,7 +134,7 @@ ALTER TABLE security_tokens
     CHECK (purpose IN (
         'mfa_credential', 'mfa_recovery', 'password_reset',
         'access_token_blacklist', 'secretary_invitation', 'refresh',
-        'student_activation', 'biometric_challenge'
+        'student_activation', 'biometric_challenge', 'faculty_invitation'
     ));
 
 CREATE INDEX IF NOT EXISTS idx_security_tokens_biometric_challenge
