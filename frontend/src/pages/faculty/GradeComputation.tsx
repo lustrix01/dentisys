@@ -24,7 +24,11 @@ import {
   ChevronUp,
   ChevronDown,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  List,
+  Grid,
+  Zap,
+  RotateCcw
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -727,6 +731,140 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
+  // View Mode: 'single' (Activity view) vs 'matrix' (Full gradebook grid view)
+  const [scoreEntryMode, setScoreEntryMode] = useState<'single' | 'matrix'>('single');
+  const [matrixScoresState, setMatrixScoresState] = useState<Record<string, Record<string, string>>>({});
+  const [isMatrixSavedAlert, setIsMatrixSavedAlert] = useState(false);
+
+  // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
+  useEffect(() => {
+    const matrix: Record<string, Record<string, string>> = {};
+    activeStudents.forEach(student => {
+      matrix[student.id] = {};
+      activeAssessments.forEach(ass => {
+        const match = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
+        matrix[student.id][ass.id] = match ? match.score.toString() : '';
+      });
+    });
+    setMatrixScoresState(matrix);
+  }, [activeStudents, activeAssessments, assessmentScores]);
+
+  const handleMatrixScoreChange = (studentId: string, assessmentId: string, value: string) => {
+    setMatrixScoresState(prev => ({
+      ...prev,
+      [studentId]: {
+        ...(prev[studentId] || {}),
+        [assessmentId]: value,
+      }
+    }));
+    setIsMatrixSavedAlert(false);
+  };
+
+  const handleSaveMatrixScores = async () => {
+    let hasErrors = false;
+    let saveCount = 0;
+
+    for (const ass of activeAssessments) {
+      const saveList: { studentId: string; score: number; remarks?: string }[] = [];
+      activeStudents.forEach(student => {
+        const valStr = matrixScoresState[student.id]?.[ass.id] ?? '';
+        if (valStr !== '') {
+          const num = parseFloat(valStr);
+          if (isNaN(num) || num < 0 || num > ass.maxScore) {
+            hasErrors = true;
+          } else {
+            const existingMatch = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
+            saveList.push({
+              studentId: student.id,
+              score: num,
+              remarks: existingMatch?.remarks || ''
+            });
+          }
+        }
+      });
+
+      if (!hasErrors && saveList.length > 0) {
+        try {
+          await saveFacultyAssessmentScoresApi(ass.id, saveList);
+          saveAssessmentScores(ass.id, saveList);
+          saveCount += saveList.length;
+        } catch {
+          showFeedback(`Failed to save scores for ${ass.title}`, 'error');
+          return;
+        }
+      }
+    }
+
+    if (hasErrors) {
+      showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
+      return;
+    }
+
+    const targetClassId = selectedClassId || availableClasses[0]?.id;
+    if (targetClassId) {
+      await refreshPersistedGrades(targetClassId);
+    }
+    setIsMatrixSavedAlert(true);
+    showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
+    setTimeout(() => setIsMatrixSavedAlert(false), 3000);
+  };
+
+  // Helper stats for Single Assessment Mode
+  const activeAssessmentStats = useMemo(() => {
+    const defaultRes = { graded: 0, total: activeStudents.length, avg: 'N/A', max: 'N/A', min: 'N/A' };
+    if (!activeAssessment) return defaultRes;
+    const validScores: number[] = [];
+    activeStudents.forEach(student => {
+      const val = scoresInputState[student.id]?.score;
+      if (val && val !== '') {
+        const num = parseFloat(val);
+        if (!isNaN(num) && num >= 0 && num <= activeAssessment.maxScore) {
+          validScores.push(num);
+        }
+      }
+    });
+    const total = activeStudents.length;
+    const graded = validScores.length;
+    const avg = graded > 0 ? (validScores.reduce((a, b) => a + b, 0) / graded).toFixed(1) : 'N/A';
+    const max = graded > 0 ? Math.max(...validScores).toString() : 'N/A';
+    const min = graded > 0 ? Math.min(...validScores).toString() : 'N/A';
+    return { graded, total, avg, max, min };
+  }, [activeAssessment, activeStudents, scoresInputState]);
+
+  // Quick fill helper
+  const handleQuickFillEmpty = (fillValue: number) => {
+    if (!activeAssessment) return;
+    setScoresInputState(prev => {
+      const updated = { ...prev };
+      activeStudents.forEach(student => {
+        if (!updated[student.id]?.score || updated[student.id].score === '') {
+          updated[student.id] = {
+            ...updated[student.id],
+            score: Math.min(fillValue, activeAssessment.maxScore).toString(),
+          };
+        }
+      });
+      return updated;
+    });
+    setIsScoresSavedAlert(false);
+  };
+
+  const handleResetScoresInput = () => {
+    if (!selectedAssessmentId) return;
+    const initialInputs: Record<string, { score: string; remarks: string }> = {};
+    activeStudents.forEach(student => {
+      const match = assessmentScores.find(
+        s => s.assessmentId === selectedAssessmentId && s.studentId === student.id
+      );
+      initialInputs[student.id] = {
+        score: match ? match.score.toString() : '',
+        remarks: match?.remarks || ''
+      };
+    });
+    setScoresInputState(initialInputs);
+    setIsScoresSavedAlert(false);
+  };
+
   // Filter roster for scores entry
   const filteredScoreStudents = useMemo(() => {
     return activeStudents.filter(s =>
@@ -1350,163 +1488,354 @@ export const GradeComputation: React.FC = () => {
           TAB 1: STUDENT SCORES ENTRY
       ---------------------------------------------------- */}
       {activeSubTab === 'scores' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          <div className="lg:col-span-4 space-y-4">
-            <Card className="h-full flex flex-col justify-between">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <Calculator className="w-4.5 h-4.5 text-clinical-550" />
-                  Select Assessment Activity
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 flex-1">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Choose Assessment</label>
-                  {activeAssessments.length === 0 ? (
-                    <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-150 rounded-xl text-xs text-slate-450 text-center">
-                      No active assessments. Please create one under "Assessments Manager" first.
-                    </div>
-                  ) : (
-                    <select
-                      value={selectedAssessmentId}
-                      onChange={(e) => setSelectedAssessmentId(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none"
-                    >
-                      {activeAssessments.map(ass => (
-                        <option key={ass.id} value={ass.id}>
-                          {ass.title} ({ass.type} • Max: {ass.maxScore})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-
-                {activeAssessment && (
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-150 dark:border-slate-800 text-xs space-y-2">
-                    <h4 className="font-bold text-slate-800 dark:text-slate-200">Assessment Spec:</h4>
-                    <div><span className="text-slate-400 font-semibold">Type:</span> {activeAssessment.type}</div>
-                    <div><span className="text-slate-400 font-semibold">Grading Period:</span> {activeAssessment.gradingPeriod}</div>
-                    <div><span className="text-slate-400 font-semibold">Max Score:</span> {activeAssessment.maxScore} points</div>
-                    <div><span className="text-slate-400 font-semibold">Due Date:</span> {activeAssessment.dueDate}</div>
-                    {activeAssessment.instructions && (
-                      <div>
-                        <span className="text-slate-400 font-semibold">Instructions:</span>
-                        <p className="text-slate-550 dark:text-slate-400 italic mt-0.5">{activeAssessment.instructions}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex items-center space-x-2 pt-2 border-t border-slate-150 dark:border-slate-850">
-                  <input
-                    type="checkbox"
-                    id="autosave"
-                    checked={autoSaveEnabled}
-                    onChange={(e) => setAutoSaveEnabled(e.target.checked)}
-                    className="rounded border-slate-300 text-clinical-600 focus:ring-clinical-500"
-                  />
-                  <label htmlFor="autosave" className="text-xs text-slate-555 font-semibold">
-                    Enable Auto-Save on score input blur
-                  </label>
-                </div>
-              </CardContent>
-            </Card>
+        <div className="space-y-4">
+          {/* View Mode Switcher Header */}
+          <div className="flex justify-end items-center bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                onClick={() => setScoreEntryMode('single')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  scoreEntryMode === 'single'
+                    ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                Single Activity View
+              </button>
+              <button
+                onClick={() => setScoreEntryMode('matrix')}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  scoreEntryMode === 'matrix'
+                    ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <Grid className="w-3.5 h-3.5" />
+                Full Matrix View
+              </button>
+            </div>
           </div>
 
-          <div className="lg:col-span-8">
+          {scoreEntryMode === 'matrix' ? (
+            /* FULL GRADEBOOK MATRIX VIEW */
             <Card className="p-0 overflow-hidden">
               <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Roster Score Entries</h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Record student scores below. Unsaved scores are bordered in orange.</p>
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <Grid className="w-4 h-4 text-clinical-550" />
+                    Full Gradebook Matrix View
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Edit all course assessments side-by-side in a spreadsheet grid.</p>
                 </div>
 
-                <div className="relative w-full sm:w-56">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search student..."
-                    value={scoreSearch}
-                    onChange={(e) => setScoreSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
-                  />
-                </div>
-              </div>
-
-              <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {!selectedAssessmentId ? (
-                  <div className="py-12 text-center text-slate-400 text-xs font-semibold">
-                    Please select or create an assessment activity on the left pane.
-                  </div>
-                ) : filteredScoreStudents.length === 0 ? (
-                  <div className="py-12 text-center text-slate-400 text-xs font-semibold">
-                    No matching student records found.
-                  </div>
-                ) : (
-                  filteredScoreStudents.map(student => {
-                    const row = scoresInputState[student.id] || { score: '', remarks: '' };
-                    const isValid = validateSingleScore(row.score, activeAssessment?.maxScore || 100);
-
-                    return (
-                      <div key={student.id} className="px-5 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/30 dark:hover:bg-slate-900/10">
-                        <div className="min-w-0">
-                          <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">{student.name}</h4>
-                          <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
-                        </div>
-
-                        <div className="flex items-center space-x-2 self-start md:self-auto">
-                          {/* Score Input */}
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min="0"
-                              max={activeAssessment?.maxScore || 100}
-                              placeholder={`0 - ${activeAssessment?.maxScore || 100}`}
-                              value={row.score}
-                              onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
-                              onBlur={() => handleScoreBlur(student.id)}
-                              className={`w-24 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${
-                                !isValid
-                                  ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
-                                  : row.score === ''
-                                  ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
-                                  : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
-                              }`}
-                            />
-                            {!isValid && (
-                              <span className="absolute bottom-[-14px] left-0 text-[8px] font-bold text-rose-500">Exceeds max</span>
-                            )}
-                          </div>
-
-                          {/* Remarks */}
-                          <input
-                            type="text"
-                            placeholder="Remarks..."
-                            value={row.remarks}
-                            onChange={(e) => handleScoreChange(student.id, e.target.value, 'remarks')}
-                            onBlur={() => handleScoreBlur(student.id)}
-                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-xs w-36 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {selectedAssessmentId && filteredScoreStudents.length > 0 && (
-                <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-3">
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={handleManualSaveScores}
-                    className="flex items-center gap-1.5 px-5 py-3 rounded-2xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97"
+                    onClick={handleSaveMatrixScores}
+                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97"
                   >
                     <Save className="w-4 h-4" />
-                    <span>{isScoresSavedAlert ? 'Scores Saved Successfully!' : 'Save Scores Sheet'}</span>
+                    <span>{isMatrixSavedAlert ? 'All Matrix Scores Saved!' : 'Save All Matrix Scores'}</span>
                   </button>
                 </div>
-              )}
+              </div>
+
+              <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
+                <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800 border-collapse">
+                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
+                    <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left divide-x divide-slate-200 dark:divide-slate-800">
+                      <th className="px-4 py-3 min-w-[180px]">Student Details</th>
+                      {activeAssessments.map(ass => (
+                        <th key={ass.id} className="px-3 py-3 text-center min-w-[120px]">
+                          <div className="font-bold text-slate-700 dark:text-slate-200">{ass.title}</div>
+                          <div className="text-[9px] font-semibold text-clinical-600 dark:text-clinical-400 font-mono mt-0.5">
+                            {ass.type} • Max {ass.maxScore}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
+                    {filteredScoreStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={activeAssessments.length + 1} className="py-12 text-center text-slate-400 font-semibold">
+                          No matching student records found.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredScoreStudents.map(student => (
+                        <tr key={student.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/20 divide-x divide-slate-100 dark:divide-slate-800/40">
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">{student.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{student.studentId}</div>
+                          </td>
+                          {activeAssessments.map(ass => {
+                            const val = matrixScoresState[student.id]?.[ass.id] ?? '';
+                            const isValid = validateSingleScore(val, ass.maxScore);
+                            return (
+                              <td key={ass.id} className="px-2 py-2.5 text-center">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max={ass.maxScore}
+                                  placeholder={`0-${ass.maxScore}`}
+                                  value={val}
+                                  onChange={(e) => handleMatrixScoreChange(student.id, ass.id, e.target.value)}
+                                  className={`w-20 px-2 py-1 rounded-lg border text-xs text-center font-bold focus:outline-none ${
+                                    !isValid
+                                      ? 'border-rose-500 bg-rose-50/50 focus:ring-rose-500'
+                                      : val === ''
+                                      ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'
+                                      : 'border-clinical-500/30 bg-clinical-50/20 text-clinical-650 dark:text-clinical-400'
+                                  }`}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </Card>
-          </div>
+          ) : (
+            /* ENHANCED SINGLE ACTIVITY VIEW */
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              <div className="lg:col-span-4 space-y-4">
+                <Card className="h-full flex flex-col justify-between">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Calculator className="w-4.5 h-4.5 text-clinical-550" />
+                      Select Assessment Activity
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 flex-1">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Choose Assessment</label>
+                      {activeAssessments.length === 0 ? (
+                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-150 rounded-xl text-xs text-slate-450 text-center">
+                          No active assessments. Please create one under "Assessments Manager" first.
+                        </div>
+                      ) : (
+                        <select
+                          value={selectedAssessmentId}
+                          onChange={(e) => setSelectedAssessmentId(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none"
+                        >
+                          {activeAssessments.map(ass => (
+                            <option key={ass.id} value={ass.id}>
+                              {ass.title} ({ass.type} • Max: {ass.maxScore})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {activeAssessment && (
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-150 dark:border-slate-800 text-xs space-y-2">
+                        <h4 className="font-bold text-slate-800 dark:text-slate-200">Assessment Spec:</h4>
+                        <div><span className="text-slate-400 font-semibold">Type:</span> {activeAssessment.type}</div>
+                        <div><span className="text-slate-400 font-semibold">Grading Period:</span> {activeAssessment.gradingPeriod}</div>
+                        <div><span className="text-slate-400 font-semibold">Max Score:</span> {activeAssessment.maxScore} points</div>
+                        <div><span className="text-slate-400 font-semibold">Due Date:</span> {activeAssessment.dueDate}</div>
+                        {activeAssessment.instructions && (
+                          <div>
+                            <span className="text-slate-400 font-semibold">Instructions:</span>
+                            <p className="text-slate-550 dark:text-slate-400 italic mt-0.5">{activeAssessment.instructions}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* LIVE CLASS STATS SUMMARY */}
+                    {activeAssessment && (
+                      <div className="p-3.5 rounded-2xl bg-clinical-50/40 dark:bg-clinical-950/20 border border-clinical-100 dark:border-clinical-900/30 text-xs space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-clinical-600 dark:text-clinical-400 block">Class Stats Summary</span>
+                        <div className="grid grid-cols-2 gap-2 text-center">
+                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-150 dark:border-slate-800">
+                            <div className="text-[10px] text-slate-400 font-semibold">Graded</div>
+                            <div className="font-extrabold text-slate-800 dark:text-slate-200 text-xs">
+                              {activeAssessmentStats.graded} / {activeAssessmentStats.total}
+                            </div>
+                          </div>
+                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-150 dark:border-slate-800">
+                            <div className="text-[10px] text-slate-400 font-semibold">Class Avg</div>
+                            <div className="font-extrabold text-clinical-600 dark:text-clinical-400 text-xs">
+                              {activeAssessmentStats.avg} pts
+                            </div>
+                          </div>
+                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-150 dark:border-slate-800">
+                            <div className="text-[10px] text-slate-400 font-semibold">Highest Score</div>
+                            <div className="font-bold text-slate-700 dark:text-slate-300 text-xs">
+                              {activeAssessmentStats.max}
+                            </div>
+                          </div>
+                          <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-150 dark:border-slate-800">
+                            <div className="text-[10px] text-slate-400 font-semibold">Lowest Score</div>
+                            <div className="font-bold text-slate-700 dark:text-slate-300 text-xs">
+                              {activeAssessmentStats.min}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center space-x-2 pt-2 border-t border-slate-150 dark:border-slate-850">
+                      <input
+                        type="checkbox"
+                        id="autosave"
+                        checked={autoSaveEnabled}
+                        onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+                        className="rounded border-slate-300 text-clinical-600 focus:ring-clinical-500"
+                      />
+                      <label htmlFor="autosave" className="text-xs text-slate-555 font-semibold">
+                        Enable Auto-Save on score input blur
+                      </label>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-8 space-y-3">
+                {/* QUICK BATCH ACTIONS TOOLBAR */}
+                {selectedAssessmentId && activeAssessment && (
+                  <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                      Quick Actions:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleQuickFillEmpty(0)}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-650 dark:text-slate-300 hover:bg-slate-100 font-semibold text-[11px]"
+                      >
+                        Fill Empty with 0
+                      </button>
+                      <button
+                        onClick={() => handleQuickFillEmpty(activeAssessment.maxScore)}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-650 dark:text-slate-300 hover:bg-slate-100 font-semibold text-[11px]"
+                      >
+                        Fill Empty with Max ({activeAssessment.maxScore})
+                      </button>
+                      <button
+                        onClick={handleResetScoresInput}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-450 hover:text-slate-600 font-semibold text-[11px] flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <Card className="p-0 overflow-hidden">
+                  <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Roster Score Entries</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Use Enter / Down / Up arrow keys to quickly navigate between student score boxes.</p>
+                    </div>
+
+                    <div className="relative w-full sm:w-56">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search student..."
+                        value={scoreSearch}
+                        onChange={(e) => setScoreSearch(e.target.value)}
+                        className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {!selectedAssessmentId ? (
+                      <div className="py-12 text-center text-slate-400 text-xs font-semibold">
+                        Please select or create an assessment activity on the left pane.
+                      </div>
+                    ) : filteredScoreStudents.length === 0 ? (
+                      <div className="py-12 text-center text-slate-400 text-xs font-semibold">
+                        No matching student records found.
+                      </div>
+                    ) : (
+                      filteredScoreStudents.map((student, idx) => {
+                        const row = scoresInputState[student.id] || { score: '', remarks: '' };
+                        const isValid = validateSingleScore(row.score, activeAssessment?.maxScore || 100);
+
+                        return (
+                          <div key={student.id} className="px-5 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/30 dark:hover:bg-slate-900/10">
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-xs text-slate-800 dark:text-slate-200">{student.name}</h4>
+                              <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
+                            </div>
+
+                            <div className="flex items-center space-x-2 self-start md:self-auto">
+                              {/* Score Input with Arrow/Enter Keyboard Navigation */}
+                              <div className="relative">
+                                <input
+                                  id={`score-input-${idx}`}
+                                  type="number"
+                                  min="0"
+                                  max={activeAssessment?.maxScore || 100}
+                                  placeholder={`0 - ${activeAssessment?.maxScore || 100}`}
+                                  value={row.score}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === 'ArrowDown') {
+                                      e.preventDefault();
+                                      const next = document.getElementById(`score-input-${idx + 1}`);
+                                      if (next) (next as HTMLInputElement).focus();
+                                    } else if (e.key === 'ArrowUp') {
+                                      e.preventDefault();
+                                      const prev = document.getElementById(`score-input-${idx - 1}`);
+                                      if (prev) (prev as HTMLInputElement).focus();
+                                    }
+                                  }}
+                                  onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
+                                  onBlur={() => handleScoreBlur(student.id)}
+                                  className={`w-24 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${
+                                    !isValid
+                                      ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
+                                      : row.score === ''
+                                      ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
+                                      : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
+                                  }`}
+                                />
+                                {!isValid && (
+                                  <span className="absolute bottom-[-14px] left-0 text-[8px] font-bold text-rose-500">Exceeds max</span>
+                                )}
+                              </div>
+
+                              {/* Remarks */}
+                              <input
+                                type="text"
+                                placeholder="Remarks..."
+                                value={row.remarks}
+                                onChange={(e) => handleScoreChange(student.id, e.target.value, 'remarks')}
+                                onBlur={() => handleScoreBlur(student.id)}
+                                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-xs w-36 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {selectedAssessmentId && filteredScoreStudents.length > 0 && (
+                    <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-3">
+                      <button
+                        onClick={handleManualSaveScores}
+                        className="flex items-center gap-1.5 px-5 py-3 rounded-2xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>{isScoresSavedAlert ? 'Scores Saved Successfully!' : 'Save Scores Sheet'}</span>
+                      </button>
+                    </div>
+                  )}
+                </Card>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

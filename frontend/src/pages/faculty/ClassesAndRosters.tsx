@@ -23,7 +23,8 @@ import {
   CheckCircle2,
   UserPlus,
   Trash2,
-  Filter
+  Filter,
+  Pencil
 } from 'lucide-react';
 import { Student } from '../../types';
 import { Card } from '../../components/Card';
@@ -34,6 +35,7 @@ import {
   getFacultyCoursesApi,
   getFacultyStudentsApi,
   createFacultyClassApi,
+  updateFacultyClassApi,
   getAvailableStudentsForClassApi,
   enrollStudentsInClassApi,
   unenrollStudentFromClassApi,
@@ -42,6 +44,115 @@ import {
   FacultyClassItem,
   CourseCatalogItem
 } from '../../services/apiClient';
+
+const ROOM_OPTIONS = [
+  'Lecture Hall A',
+  'Lecture Hall B',
+  'Dental Clinic Lab 1',
+  'Dental Clinic Lab 2',
+  'Room 101',
+  'Room 102',
+  'Room 201',
+  'Room 202',
+  'Room 301',
+  'Room 302',
+  'Oral Anatomy Lab',
+  'Prosthodontics Lab',
+  'Periodontics Lab',
+  'Auditorium',
+  'Simulation Lab',
+];
+
+const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const TIME_OPTIONS = [
+  '07:00 AM', '07:30 AM', '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM',
+  '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
+  '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM',
+  '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM',
+  '07:00 PM'
+];
+
+interface ParsedSchedule {
+  days: number[]; // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+  startMin: number;
+  endMin: number;
+}
+
+function parseTimeToMinutes(timeStr: string): number | null {
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+}
+
+function parseScheduleTimeslot(scheduleStr: string): ParsedSchedule | null {
+  if (!scheduleStr || !scheduleStr.trim()) return null;
+  const parts = scheduleStr.trim().split(/\s+/);
+  if (parts.length < 2) return null;
+  const dayPart = parts[0];
+  const timePart = parts.slice(1).join(' ');
+  const timeSubParts = timePart.split('-');
+  if (timeSubParts.length !== 2) return null;
+
+  const startMin = parseTimeToMinutes(timeSubParts[0]);
+  const endMin = parseTimeToMinutes(timeSubParts[1]);
+  if (startMin === null || endMin === null || endMin <= startMin) return null;
+
+  const days: number[] = [];
+  const dayTokens = dayPart.split(/[/,-]/);
+  const dayMap: Record<string, number> = {
+    sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6
+  };
+  for (const token of dayTokens) {
+    const key = token.trim().toLowerCase();
+    if (dayMap[key] !== undefined) {
+      days.push(dayMap[key]);
+    }
+  }
+  if (days.length === 0) return null;
+  return { days, startMin, endMin };
+}
+
+function checkRoomScheduleConflict(
+  existingClasses: FacultyClassItem[],
+  targetRoom: string,
+  targetScheduleStr: string,
+  excludeClassId?: string | number
+): FacultyClassItem | null {
+  if (!targetRoom || !targetRoom.trim() || !targetScheduleStr || !targetScheduleStr.trim()) return null;
+  const targetSched = parseScheduleTimeslot(targetScheduleStr);
+  if (!targetSched) return null;
+
+  const cleanRoom = targetRoom.trim().toLowerCase();
+
+  for (const cls of existingClasses) {
+    if (excludeClassId !== undefined && (String(cls.id) === String(excludeClassId) || String(cls.csId) === String(excludeClassId))) {
+      continue;
+    }
+    const clsLec = (cls.lecRoom || '').trim().toLowerCase();
+    const clsLab = (cls.labRoom || '').trim().toLowerCase();
+    const roomMatches = (clsLec && clsLec === cleanRoom) || (clsLab && clsLab === cleanRoom);
+    if (!roomMatches) continue;
+
+    const clsSchedStr = cls.schedule || '';
+    const clsSched = parseScheduleTimeslot(clsSchedStr);
+    if (!clsSched) continue;
+
+    const hasCommonDay = targetSched.days.some(d => clsSched.days.includes(d));
+    if (!hasCommonDay) continue;
+
+    const overlaps = targetSched.startMin < clsSched.endMin && targetSched.endMin > clsSched.startMin;
+    if (overlaps) {
+      return cls;
+    }
+  }
+  return null;
+}
 
 export const ClassesAndRosters: React.FC = () => {
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
@@ -90,16 +201,47 @@ export const ClassesAndRosters: React.FC = () => {
   const [newSemester, setNewSemester] = useState('1st Semester');
   const [newYearLevel, setNewYearLevel] = useState(4);
   const [newSchedule, setNewSchedule] = useState('Mon/Wed 08:00 AM - 11:00 AM');
+  const [newSelectedDays, setNewSelectedDays] = useState<string[]>(['Mon', 'Wed']);
+  const [newStartTime, setNewStartTime] = useState('08:00 AM');
+  const [newEndTime, setNewEndTime] = useState('11:00 AM');
+  const [newScheduleError, setNewScheduleError] = useState<string | null>(null);
   const [newLecRoom, setNewLecRoom] = useState('Lecture Hall A');
   const [newLabRoom, setNewLabRoom] = useState('Dental Clinic Lab 1');
   const [isSubmittingClass, setIsSubmittingClass] = useState(false);
 
-  // Form States: Add Student Manually (fallback)
+  // Form States: Edit Class Section
+  const [editingClass, setEditingClass] = useState<FacultyClassItem | null>(null);
+  const [editSelectedCourseId, setEditSelectedCourseId] = useState<number>(0);
+  const [editCourseCode, setEditCourseCode] = useState('');
+  const [editCourseName, setEditCourseName] = useState('');
+  const [editBlock, setEditBlock] = useState('');
+  const [editYearLevel, setEditYearLevel] = useState(4);
+  const [editLecRoom, setEditLecRoom] = useState('');
+  const [editLabRoom, setEditLabRoom] = useState('');
+  const [editSemester, setEditSemester] = useState('1st Semester');
+  const [editSchoolYear, setEditSchoolYear] = useState('2025-2026');
+  const [editSchedule, setEditSchedule] = useState('');
+  const [editSelectedDays, setEditSelectedDays] = useState<string[]>(['Mon', 'Wed']);
+  const [editStartTime, setEditStartTime] = useState('08:00 AM');
+  const [editEndTime, setEditEndTime] = useState('11:00 AM');
+  const [editScheduleError, setEditScheduleError] = useState<string | null>(null);
+  const [isUpdatingClass, setIsUpdatingClass] = useState(false);
+
+  // Form States: Add Student Manually (C4 Split-Name Interface)
   const [studentIdInput, setStudentIdInput] = useState('');
-  const [studentNameInput, setStudentNameInput] = useState('');
+  const [studentFirstName, setStudentFirstName] = useState('');
+  const [studentMiddleName, setStudentMiddleName] = useState('');
+  const [studentLastName, setStudentLastName] = useState('');
   const [studentEmailInput, setStudentEmailInput] = useState('');
   const [studentYearInput, setStudentYearInput] = useState(4);
   const [isSubmittingNewStudent, setIsSubmittingNewStudent] = useState(false);
+
+  // Derived read-only composed name preview
+  const composedStudentName = useMemo(() => {
+    return [studentFirstName.trim(), studentMiddleName.trim(), studentLastName.trim()]
+      .filter(Boolean)
+      .join(' ');
+  }, [studentFirstName, studentMiddleName, studentLastName]);
 
   // Form States: Import iBU File Data
   const [ictoFileText, setIctoFileText] = useState('');
@@ -229,7 +371,9 @@ export const ClassesAndRosters: React.FC = () => {
 
     setEnrollTab('directory');
     setStudentIdInput('');
-    setStudentNameInput('');
+    setStudentFirstName('');
+    setStudentMiddleName('');
+    setStudentLastName('');
     setStudentEmailInput('');
     setStudentYearInput(4);
     setIsAddStudentOpen(true);
@@ -239,9 +383,130 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
+  // Handler: Open Edit Class Section Modal
+  const handleOpenEditClass = (cls: FacultyClassItem) => {
+    setEditingClass(cls);
+    setEditSelectedCourseId(cls.courseId || 0);
+    setEditCourseCode(cls.courseCode || '');
+    setEditCourseName(cls.courseName || '');
+    setEditBlock(cls.block || '');
+    setEditYearLevel(cls.yearLevel || 4);
+    setEditLecRoom(cls.lecRoom || '');
+    setEditLabRoom(cls.labRoom || '');
+    setEditSemester(cls.semester || '1st Semester');
+    setEditSchoolYear(cls.schoolYear || '2025-2026');
+
+    const sched = cls.schedule || '';
+    setEditSchedule(sched);
+    const parsed = parseScheduleTimeslot(sched);
+    if (parsed) {
+      const dayMapRev: Record<number, string> = {
+        0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat'
+      };
+      const days = parsed.days.map(d => dayMapRev[d]).filter(Boolean);
+      setEditSelectedDays(days.length > 0 ? days : ['Mon', 'Wed']);
+      const formatMin = (m: number) => {
+        let h = Math.floor(m / 60);
+        const mins = m % 60;
+        const p = h >= 12 ? 'PM' : 'AM';
+        if (h > 12) h -= 12;
+        if (h === 0) h = 12;
+        return `${String(h).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${p}`;
+      };
+      const sStr = formatMin(parsed.startMin);
+      const eStr = formatMin(parsed.endMin);
+      if (TIME_OPTIONS.includes(sStr)) setEditStartTime(sStr);
+      if (TIME_OPTIONS.includes(eStr)) setEditEndTime(eStr);
+    } else {
+      setEditSelectedDays(['Mon', 'Wed']);
+      setEditStartTime('08:00 AM');
+      setEditEndTime('11:00 AM');
+    }
+    setEditScheduleError(null);
+  };
+
+  // Handler: Update Class Section
+  const handleUpdateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClass) return;
+    setEditScheduleError(null);
+
+    if (!editSelectedCourseId) {
+      setEditScheduleError('Please select a valid course from catalog.');
+      return;
+    }
+    if (!editBlock.trim()) {
+      setEditScheduleError('Please enter a Section / Block.');
+      return;
+    }
+    if (!editLecRoom.trim() && !editLabRoom.trim()) {
+      setEditScheduleError('Please enter a Lecture Room or Laboratory Room venue.');
+      return;
+    }
+    if (!editSchedule.trim()) {
+      setEditScheduleError('Please specify a Class Schedule.');
+      return;
+    }
+
+    if (editLecRoom.trim()) {
+      const conflict = checkRoomScheduleConflict(classes, editLecRoom, editSchedule, editingClass.csId ?? editingClass.id);
+      if (conflict) {
+        setEditScheduleError(
+          `Room Schedule Conflict: Lecture Room "${editLecRoom}" is already occupied on "${editSchedule}" by ${conflict.courseCode} (${conflict.block || 'Sec'}). Please select a different timeslot or room.`
+        );
+        return;
+      }
+    }
+
+    if (editLabRoom.trim()) {
+      const conflict = checkRoomScheduleConflict(classes, editLabRoom, editSchedule, editingClass.csId ?? editingClass.id);
+      if (conflict) {
+        setEditScheduleError(
+          `Room Schedule Conflict: Lab Room "${editLabRoom}" is already occupied on "${editSchedule}" by ${conflict.courseCode} (${conflict.block || 'Sec'}). Please select a different timeslot or room.`
+        );
+        return;
+      }
+    }
+
+    setIsUpdatingClass(true);
+    try {
+      const rawId = editingClass.csId ?? editingClass.id;
+      const parsedCsId = typeof rawId === 'number' ? rawId : parseInt(String(rawId).replace(/\D+/g, ''), 10);
+      const targetCsId = isNaN(parsedCsId) || parsedCsId <= 0 ? 1 : parsedCsId;
+
+      const res = await updateFacultyClassApi({
+        csId: targetCsId,
+        csName: `${editCourseCode.trim()}-${editBlock.trim()}`,
+        courseId: editSelectedCourseId,
+        courseCode: editCourseCode.trim(),
+        courseName: editCourseName.trim(),
+        semester: editSemester,
+        schoolYear: editSchoolYear,
+        yearLevel: editYearLevel,
+        block: editBlock.trim(),
+        lecRoom: editLecRoom.trim(),
+        labRoom: editLabRoom.trim(),
+      });
+
+      if (res && res.status === 'ok') {
+        showFeedback(`Class ${editCourseCode} (${editBlock.trim()}) updated successfully!`, 'success');
+        setEditingClass(null);
+        await fetchData();
+      } else {
+        setEditScheduleError(res?.message || 'Failed to update class section.');
+      }
+    } catch (err: any) {
+      setEditScheduleError(err?.message || 'Failed to save class section updates to backend.');
+    } finally {
+      setIsUpdatingClass(false);
+    }
+  };
+
   // Handler: Create Class via authoritative API
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
+    setNewScheduleError(null);
+
     if (!newCourseId || newCourseId <= 0) {
       showFeedback('Please select a course from the catalog.', 'error');
       return;
@@ -251,6 +516,22 @@ export const ClassesAndRosters: React.FC = () => {
     if (!csName) {
       showFeedback('Please provide a class section name.', 'error');
       return;
+    }
+
+    if (newLecRoom.trim() && newSchedule.trim()) {
+      const conflict = checkRoomScheduleConflict(classes, newLecRoom, newSchedule);
+      if (conflict) {
+        setNewScheduleError(`Room Conflict: Lecture venue "${newLecRoom}" is occupied on "${newSchedule}" by ${conflict.courseCode} (${conflict.block || 'Sec'}).`);
+        return;
+      }
+    }
+
+    if (newLabRoom.trim() && newSchedule.trim()) {
+      const conflict = checkRoomScheduleConflict(classes, newLabRoom, newSchedule);
+      if (conflict) {
+        setNewScheduleError(`Room Conflict: Lab venue "${newLabRoom}" is occupied on "${newSchedule}" by ${conflict.courseCode} (${conflict.block || 'Sec'}).`);
+        return;
+      }
     }
 
     setIsSubmittingClass(true);
@@ -306,11 +587,11 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
-  // Handler: Register New Student & Enroll via authoritative API
+  // Handler: Register New Student & Enroll via authoritative API (C4 Split Names)
   const handleRegisterNewStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentIdInput.trim() || !studentNameInput.trim()) {
-      showFeedback('Please enter student ID number and full name.', 'error');
+    if (!studentIdInput.trim() || !studentFirstName.trim() || !studentLastName.trim() || !studentEmailInput.trim()) {
+      showFeedback('Please fill in Student ID, First Name, Last Name, and Email.', 'error');
       return;
     }
     if (!targetEnrollCsId || targetEnrollCsId <= 0) {
@@ -322,9 +603,9 @@ export const ClassesAndRosters: React.FC = () => {
     try {
       const res = await createStudentApi({
         studentId: studentIdInput.trim(),
-        name: studentNameInput.trim(),
-        firstName: studentNameInput.trim().split(' ')[0] || studentNameInput.trim(),
-        lastName: studentNameInput.trim().split(' ').slice(1).join(' ') || 'Student',
+        firstName: studentFirstName.trim(),
+        middleName: studentMiddleName.trim() || undefined,
+        lastName: studentLastName.trim(),
         email: studentEmailInput.trim().toLowerCase(),
         yearLevel: studentYearInput,
         classId: String(targetEnrollCsId),
@@ -333,7 +614,9 @@ export const ClassesAndRosters: React.FC = () => {
       showFeedback(res.message || `Student registered and enrolled successfully!`, 'success');
       setIsAddStudentOpen(false);
       setStudentIdInput('');
-      setStudentNameInput('');
+      setStudentFirstName('');
+      setStudentMiddleName('');
+      setStudentLastName('');
       setStudentEmailInput('');
       await fetchData();
     } catch (err: any) {
@@ -671,7 +954,16 @@ export const ClassesAndRosters: React.FC = () => {
                       <span>{cls.enrolledCount} Students</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        onClick={() => handleOpenEditClass(cls)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
+                        title="Edit Class Section Details"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+
                       <button
                         onClick={() => handleOpenAddStudent(cls)}
                         className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-600 hover:text-white transition-all cursor-pointer"
@@ -1000,16 +1292,46 @@ export const ClassesAndRosters: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={studentNameInput}
-                    onChange={(e) => setStudentNameInput(e.target.value)}
-                    placeholder="e.g. Juan Dela Cruz"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">First Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={studentFirstName}
+                      onChange={(e) => setStudentFirstName(e.target.value.replace(/[0-9]/g, ''))}
+                      placeholder="e.g. Juan"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
+                    <input
+                      type="text"
+                      value={studentMiddleName}
+                      onChange={(e) => setStudentMiddleName(e.target.value.replace(/[0-9]/g, ''))}
+                      placeholder="e.g. Santos"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={studentLastName}
+                      onChange={(e) => setStudentLastName(e.target.value.replace(/[0-9]/g, ''))}
+                      placeholder="e.g. Dela Cruz"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                  <span className="font-semibold text-slate-400">Composed Name Preview:</span>
+                  <span className="font-bold font-mono text-slate-800 dark:text-slate-100">
+                    {composedStudentName || '—'}
+                  </span>
                 </div>
 
                 <div>
@@ -1163,8 +1485,12 @@ export const ClassesAndRosters: React.FC = () => {
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Lecture Room</label>
                 <input
                   type="text"
+                  list="room-suggestions"
                   value={newLecRoom}
-                  onChange={(e) => setNewLecRoom(e.target.value)}
+                  onChange={(e) => {
+                    setNewLecRoom(e.target.value);
+                    setNewScheduleError(null);
+                  }}
                   placeholder="Lecture Hall A"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
@@ -1174,19 +1500,152 @@ export const ClassesAndRosters: React.FC = () => {
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Laboratory Room</label>
                 <input
                   type="text"
+                  list="room-suggestions"
                   value={newLabRoom}
-                  onChange={(e) => setNewLabRoom(e.target.value)}
+                  onChange={(e) => {
+                    setNewLabRoom(e.target.value);
+                    setNewScheduleError(null);
+                  }}
                   placeholder="Dental Clinic Lab 1"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </div>
             </div>
 
+            {/* Step-by-Step Schedule Controls */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  1. Select Day(s) *
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  {DAYS_LIST.map(day => {
+                    const isSelected = newSelectedDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          const updated = isSelected
+                            ? newSelectedDays.filter(d => d !== day)
+                            : DAYS_LIST.filter(d => d === day || newSelectedDays.includes(d));
+                          setNewSelectedDays(updated);
+                          if (updated.length > 0) {
+                            setNewSchedule(`${updated.join('/')} ${newStartTime} - ${newEndTime}`);
+                          }
+                          setNewScheduleError(null);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                  <span className="text-slate-400 font-semibold">Presets:</span>
+                  {[
+                    { label: 'Mon/Wed', days: ['Mon', 'Wed'] },
+                    { label: 'Tue/Thu', days: ['Tue', 'Thu'] },
+                    { label: 'Mon/Wed/Fri', days: ['Mon', 'Wed', 'Fri'] },
+                    { label: 'Sat', days: ['Sat'] },
+                  ].map(combo => (
+                    <button
+                      key={combo.label}
+                      type="button"
+                      onClick={() => {
+                        setNewSelectedDays(combo.days);
+                        setNewSchedule(`${combo.days.join('/')} ${newStartTime} - ${newEndTime}`);
+                        setNewScheduleError(null);
+                      }}
+                      className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors cursor-pointer"
+                    >
+                      {combo.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  2. Select Time Range *
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
+                    <select
+                      value={newStartTime}
+                      onChange={(e) => {
+                        setNewStartTime(e.target.value);
+                        if (newSelectedDays.length > 0) {
+                          setNewSchedule(`${newSelectedDays.join('/')} ${e.target.value} - ${newEndTime}`);
+                        }
+                        setNewScheduleError(null);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={`new-start-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">End Time</span>
+                    <select
+                      value={newEndTime}
+                      onChange={(e) => {
+                        setNewEndTime(e.target.value);
+                        if (newSelectedDays.length > 0) {
+                          setNewSchedule(`${newSelectedDays.join('/')} ${newStartTime} - ${e.target.value}`);
+                        }
+                        setNewScheduleError(null);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={`new-end-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Class Schedule (Generated / Editable) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newSchedule}
+                  onChange={(e) => {
+                    setNewSchedule(e.target.value);
+                    setNewScheduleError(null);
+                  }}
+                  placeholder="e.g. Mon/Wed 08:00 AM - 11:00 AM"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+            </div>
+
+            {newScheduleError && (
+              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">
+                <Info className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <span>{newScheduleError}</span>
+              </div>
+            )}
+
             <div className="pt-2 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setIsCreateClassOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
               >
                 Cancel
               </button>
@@ -1196,6 +1655,304 @@ export const ClassesAndRosters: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
               >
                 {isSubmittingClass ? 'Saving...' : 'Save Class Section'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Room Suggestion Datalist */}
+      <datalist id="room-suggestions">
+        {ROOM_OPTIONS.map(room => (
+          <option key={room} value={room} />
+        ))}
+      </datalist>
+
+      {/* Modal: Edit Class Section Details */}
+      {editingClass && (
+        <Modal
+          isOpen={!!editingClass}
+          onClose={() => {
+            setEditingClass(null);
+            setEditScheduleError(null);
+          }}
+          title="Edit Class Section Details"
+        >
+          <form onSubmit={handleUpdateClass} className="space-y-4 text-xs">
+            {/* Course Catalog Selection (Authoritative catalog only, no dynamic creation) */}
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Offering (from catalog)</label>
+              <select
+                value={editSelectedCourseId}
+                onChange={(e) => {
+                  const cId = Number(e.target.value);
+                  setEditSelectedCourseId(cId);
+                  const matched = courses.find(c => c.id === cId);
+                  if (matched) {
+                    setEditCourseCode(matched.courseCode);
+                    setEditCourseName(matched.name);
+                    setEditYearLevel(matched.yearLevel);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+              >
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.courseCode} - {c.name} ({c.units} Units, Year {c.yearLevel})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={editCourseCode}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium cursor-not-allowed"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={editCourseName}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block *</label>
+                <input
+                  type="text"
+                  required
+                  value={editBlock}
+                  onChange={(e) => setEditBlock(e.target.value)}
+                  placeholder="Section 4-A"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level *</label>
+                <select
+                  value={editYearLevel}
+                  onChange={(e) => setEditYearLevel(Number(e.target.value))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                >
+                  <option value={1}>Year 1</option>
+                  <option value={2}>Year 2</option>
+                  <option value={3}>Year 3</option>
+                  <option value={4}>Year 4</option>
+                  <option value={5}>Year 5</option>
+                  <option value={6}>Year 6</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={editSemester}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium cursor-not-allowed"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">School Year</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={editSchoolYear}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Lecture Room Venue</label>
+                <input
+                  type="text"
+                  list="room-suggestions"
+                  value={editLecRoom}
+                  onChange={(e) => {
+                    setEditLecRoom(e.target.value);
+                    setEditScheduleError(null);
+                  }}
+                  placeholder="Lecture Hall A"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Laboratory Room Venue</label>
+                <input
+                  type="text"
+                  list="room-suggestions"
+                  value={editLabRoom}
+                  onChange={(e) => {
+                    setEditLabRoom(e.target.value);
+                    setEditScheduleError(null);
+                  }}
+                  placeholder="Dental Clinic Lab 1"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Step-by-Step Schedule Builder */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  1. Select Day(s) *
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  {DAYS_LIST.map(day => {
+                    const isSelected = editSelectedDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          const updated = isSelected
+                            ? editSelectedDays.filter(d => d !== day)
+                            : DAYS_LIST.filter(d => d === day || editSelectedDays.includes(d));
+                          setEditSelectedDays(updated);
+                          if (updated.length > 0) {
+                            setEditSchedule(`${updated.join('/')} ${editStartTime} - ${editEndTime}`);
+                          }
+                          setEditScheduleError(null);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                  <span className="text-slate-400 font-semibold">Presets:</span>
+                  {[
+                    { label: 'Mon/Wed', days: ['Mon', 'Wed'] },
+                    { label: 'Tue/Thu', days: ['Tue', 'Thu'] },
+                    { label: 'Mon/Wed/Fri', days: ['Mon', 'Wed', 'Fri'] },
+                    { label: 'Sat', days: ['Sat'] },
+                  ].map(combo => (
+                    <button
+                      key={combo.label}
+                      type="button"
+                      onClick={() => {
+                        setEditSelectedDays(combo.days);
+                        setEditSchedule(`${combo.days.join('/')} ${editStartTime} - ${editEndTime}`);
+                        setEditScheduleError(null);
+                      }}
+                      className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors cursor-pointer"
+                    >
+                      {combo.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  2. Select Time Range *
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
+                    <select
+                      value={editStartTime}
+                      onChange={(e) => {
+                        setEditStartTime(e.target.value);
+                        if (editSelectedDays.length > 0) {
+                          setEditSchedule(`${editSelectedDays.join('/')} ${e.target.value} - ${editEndTime}`);
+                        }
+                        setEditScheduleError(null);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={`edit-start-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">End Time</span>
+                    <select
+                      value={editEndTime}
+                      onChange={(e) => {
+                        setEditEndTime(e.target.value);
+                        if (editSelectedDays.length > 0) {
+                          setEditSchedule(`${editSelectedDays.join('/')} ${editStartTime} - ${e.target.value}`);
+                        }
+                        setEditScheduleError(null);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={`edit-end-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Final Class Schedule (Editable) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editSchedule}
+                  onChange={(e) => {
+                    setEditSchedule(e.target.value);
+                    setEditScheduleError(null);
+                  }}
+                  placeholder="e.g. Mon/Wed 08:00 AM - 11:00 AM"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+            </div>
+
+            {editScheduleError && (
+              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">
+                <Info className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <span>{editScheduleError}</span>
+              </div>
+            )}
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingClass(null);
+                  setEditScheduleError(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingClass}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+              >
+                {isUpdatingClass ? 'Saving Changes...' : 'Save Changes'}
               </button>
             </div>
           </form>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, 
   Plus, 
@@ -12,7 +12,28 @@ import { Student } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
-import { saveFacultyRemedialApi, updateFacultyRetentionStatusApi } from '../../services/apiClient';
+import {
+  saveFacultyRemedialApi,
+  updateFacultyRetentionStatusApi,
+  getFacultyClassesApi,
+  getFacultyCoursesApi
+} from '../../services/apiClient';
+import type { FacultyClassItem, CourseCatalogItem } from '../../services/apiClient';
+
+export interface SubjectWatchlistItem {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentIdNum: string;
+  yearLevel: number;
+  subjectCode: string;
+  subjectName: string;
+  midtermGrade: number;
+  cause: string;
+  status: Student['status'];
+  hasPendingRemedial: boolean;
+  student: Student;
+}
 
 export const RetentionMonitoring: React.FC = () => {
   const { user } = useAuth();
@@ -27,6 +48,20 @@ export const RetentionMonitoring: React.FC = () => {
   
   const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
   const assignedClasses = ['Section 4-A', 'Section 4-B'];
+
+  // Dynamic Faculty Classes & Courses State for Course Filtering
+  const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
+  const [facultyCourses, setFacultyCourses] = useState<CourseCatalogItem[]>([]);
+  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('all');
+
+  useEffect(() => {
+    getFacultyClassesApi()
+      .then(res => { if (res?.classes) setFacultyClasses(res.classes); })
+      .catch(() => {});
+    getFacultyCoursesApi()
+      .then(res => { if (res?.courses) setFacultyCourses(res.courses); })
+      .catch(() => {});
+  }, []);
 
   // Selected class block state
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
@@ -59,6 +94,29 @@ export const RetentionMonitoring: React.FC = () => {
   // Safe students array
   const safeStudents = useMemo(() => students || [], [students]);
 
+  // Available courses for dropdown filtering
+  const availableCourseOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    facultyClasses.forEach(c => {
+      if (c.courseCode) {
+        map.set(c.courseCode.toUpperCase(), c.courseName || c.courseCode);
+      }
+    });
+    facultyCourses.forEach(c => {
+      if (c.courseCode) {
+        map.set(c.courseCode.toUpperCase(), c.name || c.courseCode);
+      }
+    });
+    safeStudents.forEach(s => {
+      (s.enrolledSubjects || []).forEach(sub => {
+        if (sub.code && !map.has(sub.code.toUpperCase())) {
+          map.set(sub.code.toUpperCase(), sub.name || sub.code);
+        }
+      });
+    });
+    return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
+  }, [facultyClasses, facultyCourses, safeStudents]);
+
   // Filter students based on selected class section filter
   const facultyStudents = useMemo(() => {
     return safeStudents.filter(s => {
@@ -67,12 +125,102 @@ export const RetentionMonitoring: React.FC = () => {
     });
   }, [safeStudents, selectedClassId]);
 
-  // Watchlist Calculations (Midterm GWA > 2.5 or warning/critical status)
-  const watchlistStudents = useMemo(() => {
-    return facultyStudents.filter(s => s.status === 'warning' || s.status === 'critical' || (s.overallGWA && s.overallGWA > 2.5));
-  }, [facultyStudents]);
+  const retentionThreshold = settings?.retentionThreshold ?? 2.50;
+
+  // Subject-level Watchlist Calculations (authoritative API data only, strictly no fake course/grade generation)
+  const subjectWatchlistItems = useMemo<SubjectWatchlistItem[]>(() => {
+    const items: SubjectWatchlistItem[] = [];
+    const assignedCourseCodes = new Set(
+      facultyClasses
+        .map(c => c.courseCode?.toUpperCase())
+        .filter((code): code is string => Boolean(code))
+    );
+
+    facultyStudents.forEach(student => {
+      const subs = student.enrolledSubjects || [];
+      if (subs.length > 0) {
+        subs.forEach(sub => {
+          const codeUpper = sub.code.toUpperCase();
+          if (assignedCourseCodes.size > 0 && !assignedCourseCodes.has(codeUpper)) {
+            return;
+          }
+
+          const subGrade = sub.grade || student.overallGWA || 0;
+          const subRemedials = (student.remedialExams || []).filter(r => r.subjectCode?.toUpperCase() === codeUpper);
+          const hasPendingRem = subRemedials.some(r => r.status === 'pending');
+          const hasFailedRem = subRemedials.some(r => r.status === 'failed');
+
+          const isAtRisk = subGrade > retentionThreshold || student.status === 'warning' || student.status === 'critical' || student.status === 'remedial' || subRemedials.length > 0;
+
+          if (isAtRisk) {
+            let cause = `Midterm subject grade (${subGrade.toFixed(2)}) exceeds ${retentionThreshold.toFixed(2)} limit`;
+            if (hasFailedRem) {
+              cause = `Failed Remedial Exam for ${sub.code} - Subject Retained`;
+            } else if (hasPendingRem) {
+              cause = `Pending Remedial Exam Scheduled for Final Grade`;
+            } else if (student.status === 'critical') {
+              cause = `Critical Retention Watchlist - Grade (${subGrade.toFixed(2)}) > ${retentionThreshold.toFixed(2)}`;
+            }
+
+            items.push({
+              id: `${student.id}-${sub.code}`,
+              studentId: student.id,
+              studentName: student.name || 'Unknown Student',
+              studentIdNum: student.studentId || '2024-000',
+              yearLevel: student.yearLevel || 4,
+              subjectCode: sub.code,
+              subjectName: sub.name,
+              midtermGrade: subGrade,
+              cause,
+              status: student.status || 'warning',
+              hasPendingRemedial: hasPendingRem,
+              student
+            });
+          }
+        });
+      } else {
+        const isAtRisk = (student.overallGWA && student.overallGWA > retentionThreshold) || student.status === 'warning' || student.status === 'critical' || student.status === 'remedial';
+        if (isAtRisk) {
+          const grade = student.overallGWA || 2.75;
+          let cause = `Overall GWA (${grade.toFixed(2)}) exceeds ${retentionThreshold.toFixed(2)} limit`;
+          if (student.status === 'critical') {
+            cause = `Critical Retention Watchlist - GWA (${grade.toFixed(2)}) > ${retentionThreshold.toFixed(2)}`;
+          }
+          items.push({
+            id: `${student.id}-GENERAL`,
+            studentId: student.id,
+            studentName: student.name || 'Unknown Student',
+            studentIdNum: student.studentId || '2024-000',
+            yearLevel: student.yearLevel || 4,
+            subjectCode: 'ALL',
+            subjectName: 'General Performance',
+            midtermGrade: grade,
+            cause,
+            status: student.status || 'warning',
+            hasPendingRemedial: (student.remedialExams || []).some(r => r.status === 'pending'),
+            student
+          });
+        }
+      }
+    });
+
+    return items;
+  }, [facultyStudents, facultyClasses, retentionThreshold]);
+
+  // Filter Watchlist items based on selected Course & Search Query
+  const filteredWatchlist = useMemo(() => {
+    return subjectWatchlistItems.filter(item => {
+      const matchesCourse = selectedCourseCode === 'all' || item.subjectCode.toUpperCase() === selectedCourseCode.toUpperCase();
+      const matchesSearch =
+        item.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.studentIdNum.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.subjectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.subjectCode.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCourse && matchesSearch;
+    });
+  }, [subjectWatchlistItems, selectedCourseCode, searchQuery]);
   
-  // List of all active remedial exams across faculty students
+  // List of all active remedial exams across faculty students, filtered by course
   const allRemedialExams = useMemo(() => {
     return facultyStudents.flatMap(s => 
       (s.remedialExams || []).map(rem => ({
@@ -81,15 +229,11 @@ export const RetentionMonitoring: React.FC = () => {
         studentIdNum: s.studentId || '2024-000',
         yearLevel: s.yearLevel || 4
       }))
-    );
-  }, [facultyStudents]);
-
-  const filteredWatchlist = useMemo(() => {
-    return watchlistStudents.filter(s => 
-      (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.studentId || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [watchlistStudents, searchQuery]);
+    ).filter(rem => {
+      if (selectedCourseCode === 'all') return true;
+      return rem.subjectCode?.toUpperCase() === selectedCourseCode.toUpperCase();
+    });
+  }, [facultyStudents, selectedCourseCode]);
 
   const filteredRemedials = useMemo(() => {
     return allRemedialExams.filter(rem => 
@@ -204,11 +348,13 @@ export const RetentionMonitoring: React.FC = () => {
     const student = safeStudents.find(s => s.id === selectedStudentId);
     
     if (student) {
+      const subjectName = availableCourseOptions.find(c => c.code === selectedSubjectCode)?.name
+        || (selectedSubjectCode === 'CLIN401' ? 'Clinical Dentistry I' : 'Clinical Dentistry II');
       const remedial = {
         studentId: selectedStudentId,
         studentName: student.name,
         subjectCode: selectedSubjectCode,
-        subjectName: selectedSubjectCode === 'CLIN401' ? 'Clinical Dentistry I' : 'Clinical Dentistry II',
+        subjectName,
         originalGrade: student.overallGWA || 2.75,
         examDate: scheduleDate,
         notes: scheduleNotes || 'Midterm Remedial Exam',
@@ -314,6 +460,7 @@ export const RetentionMonitoring: React.FC = () => {
             onClick={() => {
               setIsScheduleOpen(true);
               setSelectedStudentId('');
+              setSelectedSubjectCode(selectedCourseCode !== 'all' ? selectedCourseCode : 'CLIN401');
               setScheduleDate(new Date().toISOString().split('T')[0]);
               setScheduleNotes('');
             }}
@@ -347,7 +494,7 @@ export const RetentionMonitoring: React.FC = () => {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            Retention Watchlist ({watchlistStudents.length})
+            Retention Watchlist ({filteredWatchlist.length})
           </button>
 
           <button
@@ -375,6 +522,20 @@ export const RetentionMonitoring: React.FC = () => {
 
         {/* Filters & Search Bar Positioned Below */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+          {/* Course Filter Dropdown */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
+            <select
+              value={selectedCourseCode}
+              onChange={(e) => setSelectedCourseCode(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="all">All Courses</option>
+              {availableCourseOptions.map(({ code, name }) => (
+                <option key={code} value={code}>{code} - {name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Class Section Filter Dropdown */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
             <select
@@ -432,7 +593,9 @@ export const RetentionMonitoring: React.FC = () => {
               onClick={() => {
                 setIsScheduleOpen(true);
                 setSelectedStudentId('');
+                setSelectedSubjectCode(selectedCourseCode !== 'all' ? selectedCourseCode : 'CLIN401');
                 setScheduleDate(new Date().toISOString().split('T')[0]);
+                setScheduleNotes('');
               }}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
             >
@@ -446,7 +609,8 @@ export const RetentionMonitoring: React.FC = () => {
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4">Student Details</th>
-                  <th className="py-3 px-4 text-center">Midterm GWA</th>
+                  <th className="py-3 px-4">Subject</th>
+                  <th className="py-3 px-4 text-center">Subject Grade</th>
                   <th className="py-3 px-4">Retention Violation Cause</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -455,37 +619,51 @@ export const RetentionMonitoring: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {filteredWatchlist.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-10 text-center text-slate-400 font-medium">
-                      No students currently in retention watchlist under your assigned classes.
+                    <td colSpan={6} className="py-10 text-center text-slate-400 font-medium">
+                      No students currently in retention watchlist under the selected course and class filters.
                     </td>
                   </tr>
                 ) : (
-                  filteredWatchlist.map(student => (
-                    <tr key={student.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                  filteredWatchlist.map(item => (
+                    <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5 px-4">
-                        <span className="font-bold text-slate-800 dark:text-slate-100 block">{student.name}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">{student.studentId} • Year {student.yearLevel}</span>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center font-extrabold text-slate-800 dark:text-slate-100 font-mono text-sm">
-                        {student.overallGWA ? student.overallGWA.toFixed(2) : '2.75'}
+                        <span className="font-bold text-slate-800 dark:text-slate-100 block">{item.studentName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{item.studentIdNum} • Year {item.yearLevel}</span>
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-semibold text-[11px] border border-rose-200/60">
-                          Midterm GWA exceeds 2.5 passing limit
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold font-mono text-[11px] block w-fit">
+                          {item.subjectCode}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5 max-w-[180px] truncate">{item.subjectName}</span>
+                      </td>
+
+                      <td className="py-3.5 px-4 text-center font-extrabold font-mono text-sm">
+                        <span className={`px-2.5 py-1 rounded-lg ${
+                          item.midtermGrade > 2.75
+                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60'
+                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
+                        }`}>
+                          {item.midtermGrade.toFixed(2)}
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4">
-                        {getStatusBadge(student.status)}
+                        <span className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-semibold text-[11px] border border-rose-200/60 block w-fit">
+                          {item.cause}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        {getStatusBadge(item.status)}
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => {
-                              setSelectedStudentId(student.id);
+                              setSelectedStudentId(item.studentId);
+                              setSelectedSubjectCode(item.subjectCode !== 'ALL' ? item.subjectCode : 'CLIN401');
                               setScheduleDate(new Date().toISOString().split('T')[0]);
                               setIsScheduleOpen(true);
                             }}
@@ -497,8 +675,8 @@ export const RetentionMonitoring: React.FC = () => {
 
                           <button
                             onClick={() => {
-                              setOverrideStudentId(student.id);
-                              setOverrideStatus(student.status);
+                              setOverrideStudentId(item.studentId);
+                              setOverrideStatus(item.status);
                               setOverrideRemarks('');
                               setIsOverrideOpen(true);
                             }}
@@ -717,8 +895,16 @@ export const RetentionMonitoring: React.FC = () => {
                 onChange={(e) => setSelectedSubjectCode(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
               >
-                <option value="CLIN401">CLIN401 - Clinical Dentistry I</option>
-                <option value="CLIN402">CLIN402 - Clinical Dentistry II</option>
+                {availableCourseOptions.length > 0 ? (
+                  availableCourseOptions.map(({ code, name }) => (
+                    <option key={code} value={code}>{code} - {name}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="CLIN401">CLIN401 - Clinical Dentistry I</option>
+                    <option value="CLIN402">CLIN402 - Clinical Dentistry II</option>
+                  </>
+                )}
               </select>
             </div>
 
