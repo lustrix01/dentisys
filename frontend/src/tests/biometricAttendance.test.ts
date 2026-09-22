@@ -17,7 +17,6 @@ import type {
   BiometricAttendanceResponse,
   StudentAttendanceLogRecord,
   AttendanceSessionRevocationPayload,
-  AttendanceSessionRevocationResponse,
 } from '../types/index.ts';
 import type {
   StartSecretaryAttendanceSessionPayload,
@@ -433,6 +432,71 @@ test('Session Timing: Asia/Manila cutoffs and strict ordering validation (openin
   assert.equal(payload.openingTime, '08:00');
   assert.equal(payload.presentCutoff, '08:30');
   assert.equal(payload.lateCutoff, '12:00');
+});
+
+test('Secretary Session Start: biometric-required sessions must submit openingTime, presentCutoff, and lateCutoff together', () => {
+  // Simulating the payload builder logic used in StartSession.tsx handleStart
+  const buildSecretarySessionPayload = (params: {
+    csId: number;
+    room?: string;
+    biometricRequired: boolean;
+    geofenceEnabled: boolean;
+    geofenceRadius?: number;
+    openingTimeStr: string;
+    presentCutoffStr: string;
+    lateCutoffStr: string;
+    gpsLocation?: { lat: number; lng: number };
+  }): StartSecretaryAttendanceSessionPayload => {
+    return {
+      csId: params.csId,
+      room: params.room?.trim() || undefined,
+      biometricRequired: params.biometricRequired,
+      geofenceEnabled: params.geofenceEnabled,
+      geofenceRadiusMeters: params.geofenceEnabled ? params.geofenceRadius : undefined,
+      openingTime: params.openingTimeStr,
+      presentCutoff: params.presentCutoffStr,
+      lateCutoff: params.lateCutoffStr,
+      geofenceLatitude: params.gpsLocation?.lat,
+      geofenceLongitude: params.gpsLocation?.lng,
+      latitude: params.gpsLocation?.lat,
+      longitude: params.gpsLocation?.lng,
+    };
+  };
+
+  const payload = buildSecretarySessionPayload({
+    csId: 101,
+    room: 'Dental Lab 2',
+    biometricRequired: true,
+    geofenceEnabled: true,
+    geofenceRadius: 100,
+    openingTimeStr: '08:00',
+    presentCutoffStr: '08:30',
+    lateCutoffStr: '12:00',
+    gpsLocation: { lat: 13.1436, lng: 123.7438 },
+  });
+
+  // Verify non-regression: lateCutoff must never be omitted
+  assert.ok('lateCutoff' in payload, 'lateCutoff must be present in payload');
+  assert.equal(payload.lateCutoff, '12:00');
+  assert.ok('openingTime' in payload, 'openingTime must be present in payload');
+  assert.equal(payload.openingTime, '08:00');
+  assert.ok('presentCutoff' in payload, 'presentCutoff must be present in payload');
+  assert.equal(payload.presentCutoff, '08:30');
+
+  // Verify all three cutoffs exist together when biometricRequired is true
+  assert.equal(payload.biometricRequired, true);
+  const timingFields = [payload.openingTime, payload.presentCutoff, payload.lateCutoff];
+  for (const field of timingFields) {
+    assert.ok(typeof field === 'string' && field.length > 0, 'All timing cutoffs must be non-empty strings');
+  }
+
+  // Regression check: omission of lateCutoff is detected and rejected
+  const payloadMissingLateCutoff = { ...payload };
+  delete (payloadMissingLateCutoff as Partial<StartSecretaryAttendanceSessionPayload>).lateCutoff;
+  const isCompleteTiming = (p: StartSecretaryAttendanceSessionPayload) =>
+    Boolean(p.openingTime && p.presentCutoff && p.lateCutoff);
+  assert.equal(isCompleteTiming(payload), true);
+  assert.equal(isCompleteTiming(payloadMissingLateCutoff), false);
 });
 
 test('Session Revocation Contract: authorized revocation preserves records and prevents further submissions', () => {

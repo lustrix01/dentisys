@@ -211,6 +211,7 @@ export const StartSession: React.FC = () => {
         geofenceRadiusMeters: requireGeo ? geofenceRadius : undefined,
         openingTime: openingTimeStr,
         presentCutoff: presentCutoffStr,
+        lateCutoff: lateCutoffStr,
         geofenceLatitude: gpsLocation?.lat,
         geofenceLongitude: gpsLocation?.lng,
         latitude: gpsLocation?.lat,
