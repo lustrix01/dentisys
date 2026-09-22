@@ -890,6 +890,8 @@ export function getFacultyCoursesApi(): Promise<{ status: string; courses: Cours
 export function createFacultyClassApi(data: {
   csName: string;
   courseId: number;
+  courseCode?: string;
+  courseName?: string;
   semester: string;
   schoolYear: string;
   yearLevel: number;

@@ -364,6 +364,8 @@ export const ClassesAndRosters: React.FC = () => {
       const res = await createFacultyClassApi({
         csName: `${newCourseCode.trim().toUpperCase()}-${newBlock.trim()}`,
         courseId: courseIdToUse,
+        courseCode: newCourseCode.trim().toUpperCase(),
+        courseName: newCourseName.trim(),
         semester: '2nd Semester',
         schoolYear: selectedSchoolYear === 'all' ? '2025-2026' : selectedSchoolYear,
         yearLevel: newYearLevel,
@@ -1149,6 +1151,30 @@ export const ClassesAndRosters: React.FC = () => {
       {isCreateClassOpen && (
         <Modal isOpen={isCreateClassOpen} onClose={() => { setIsCreateClassOpen(false); setScheduleError(null); }} title="Create New Class Section">
           <form onSubmit={handleCreateClass} className="space-y-4 text-xs">
+
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select Course from Catalog (or enter custom course below)</label>
+              <select
+                value={selectedCourseId}
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  setSelectedCourseId(id);
+                  const matched = courses.find(c => c.id === id);
+                  if (matched) {
+                    setNewCourseCode(matched.courseCode);
+                    setNewCourseName(matched.name);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer mb-2"
+              >
+                <option value={0}>-- Select Course Preset --</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.courseCode} - {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code *</label>

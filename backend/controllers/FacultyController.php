@@ -1828,6 +1828,8 @@ function handle_faculty_class_create(): void
         $data = $body['data'];
         $csName = validate_required_string($data, 'csName', 2, 255);
         $courseId = (int) ($data['courseId'] ?? 0);
+        $courseCode = validate_optional_string($data, 'courseCode', 1, 50);
+        $courseName = validate_optional_string($data, 'courseName', 1, 255);
         $semester = validate_required_string($data, 'semester', 1, 20);
         $schoolYear = validate_required_string($data, 'schoolYear', 4, 20);
         $yearLevel = (int) ($data['yearLevel'] ?? 1);
@@ -1835,22 +1837,47 @@ function handle_faculty_class_create(): void
         $labRoom = validate_optional_string($data, 'labRoom', 1, 100);
         $lecRoom = validate_optional_string($data, 'lecRoom', 1, 100);
 
-        if ($courseId <= 0) {
-            safe_error_response('Valid courseId is required.', 400);
-            return;
-        }
-
-        $termCode = "{$schoolYear}-{$semester}";
-
         $pdo->beginTransaction();
         try {
+            $targetCourseId = 0;
+
+            if ($courseCode !== null && trim($courseCode) !== '') {
+                $codeUpper = strtoupper(trim($courseCode));
+                $cStmt = $pdo->prepare("SELECT course_id FROM courses WHERE UPPER(course_code) = ? LIMIT 1");
+                $cStmt->execute([$codeUpper]);
+                $existingId = $cStmt->fetchColumn();
+
+                if ($existingId) {
+                    $targetCourseId = (int) $existingId;
+                } else {
+                    $cName = ($courseName !== null && trim($courseName) !== '') ? trim($courseName) : $codeUpper;
+                    $insStmt = $pdo->prepare("
+                        INSERT INTO courses (course_code, name, units, is_clinical, grading_config)
+                        VALUES (?, ?, 3.0, 1, '{}'::jsonb)
+                        RETURNING course_id
+                    ");
+                    $insStmt->execute([$codeUpper, $cName]);
+                    $targetCourseId = (int) $insStmt->fetchColumn();
+                }
+            } elseif ($courseId > 0) {
+                $targetCourseId = $courseId;
+            }
+
+            if ($targetCourseId <= 0) {
+                $pdo->rollBack();
+                safe_error_response('Valid courseId or courseCode is required.', 400);
+                return;
+            }
+
+            $termCode = "{$schoolYear}-{$semester}";
+
             $stmt = $pdo->prepare("
                 INSERT INTO class_sections (
                     cs_name, course_id, instructor_user_id, semester, school_year, year_level, lab_room, lec_room, block, status, term_code, term_start_date, term_end_date, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, '2024-08-15', '2024-12-20', CURRENT_TIMESTAMP(6)) RETURNING cs_id
             ");
             $stmt->execute([
-                $csName, $courseId, $authCtx['user_id'], $semester, $schoolYear, $yearLevel, $labRoom, $lecRoom, $block, $termCode
+                $csName, $targetCourseId, $authCtx['user_id'], $semester, $schoolYear, $yearLevel, $labRoom, $lecRoom, $block, $termCode
             ]);
             $newCsId = (int) $stmt->fetchColumn();
 
