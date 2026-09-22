@@ -1923,6 +1923,161 @@ function handle_faculty_class_create(): void
     }
 }
 
+function handle_faculty_class_update(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+
+        $data = $body['data'];
+        $csId = (int) ($data['csId'] ?? 0);
+        if ($csId <= 0) {
+            safe_error_response('Valid csId is required.', 400);
+            return;
+        }
+
+        $checkStmt = $pdo->prepare("SELECT cs_id, course_id FROM class_sections WHERE cs_id = ? AND instructor_user_id = ?");
+        $checkStmt->execute([$csId, $authCtx['user_id']]);
+        $existingClass = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$existingClass) {
+            safe_error_response('Class section not found or access denied.', 404);
+            return;
+        }
+
+        $courseCode = validate_optional_string($data, 'courseCode', 1, 50);
+        $courseName = validate_optional_string($data, 'courseName', 1, 255);
+        $block = validate_optional_string($data, 'block', 1, 50);
+        $labRoom = validate_optional_string($data, 'labRoom', 1, 100);
+        $lecRoom = validate_optional_string($data, 'lecRoom', 1, 100);
+        $yearLevel = isset($data['yearLevel']) ? (int) $data['yearLevel'] : null;
+        $semester = validate_optional_string($data, 'semester', 1, 20);
+        $schoolYear = validate_optional_string($data, 'schoolYear', 4, 20);
+        $courseId = (int) ($data['courseId'] ?? 0);
+
+        $pdo->beginTransaction();
+        try {
+            $targetCourseId = (int) $existingClass['course_id'];
+
+            if ($courseCode !== null && trim($courseCode) !== '') {
+                $codeUpper = strtoupper(trim($courseCode));
+                $cStmt = $pdo->prepare("SELECT course_id FROM courses WHERE UPPER(course_code) = ? LIMIT 1");
+                $cStmt->execute([$codeUpper]);
+                $foundId = $cStmt->fetchColumn();
+
+                if ($foundId) {
+                    $targetCourseId = (int) $foundId;
+                    if ($courseName !== null && trim($courseName) !== '') {
+                        $uStmt = $pdo->prepare("UPDATE courses SET name = ? WHERE course_id = ?");
+                        $uStmt->execute([trim($courseName), $targetCourseId]);
+                    }
+                } else {
+                    $cName = ($courseName !== null && trim($courseName) !== '') ? trim($courseName) : $codeUpper;
+                    $insStmt = $pdo->prepare("
+                        INSERT INTO courses (course_code, name, units, is_clinical, grading_config)
+                        VALUES (?, ?, 3.0, 1, '{}'::jsonb)
+                        RETURNING course_id
+                    ");
+                    $insStmt->execute([$codeUpper, $cName]);
+                    $targetCourseId = (int) $insStmt->fetchColumn();
+                }
+            } elseif ($courseId > 0) {
+                $targetCourseId = $courseId;
+            }
+
+            $blockVal = ($block !== null && trim($block) !== '') ? trim($block) : 'A';
+            $lecRoomVal = ($lecRoom !== null && trim($lecRoom) !== '') ? trim($lecRoom) : '';
+            $labRoomVal = ($labRoom !== null && trim($labRoom) !== '') ? trim($labRoom) : '';
+            $yearLevelVal = ($yearLevel !== null && $yearLevel > 0) ? $yearLevel : 1;
+            $semesterVal = ($semester !== null && trim($semester) !== '') ? trim($semester) : '2nd Semester';
+            $schoolYearVal = ($schoolYear !== null && trim($schoolYear) !== '') ? trim($schoolYear) : '2025-2026';
+
+            $csNameInput = validate_optional_string($data, 'csName', 1, 255);
+            $csNameVal = ($csNameInput !== null && trim($csNameInput) !== '')
+                ? trim($csNameInput)
+                : (($courseCode !== null && trim($courseCode) !== '') ? (strtoupper(trim($courseCode)) . '-' . $blockVal) : 'CLASS');
+
+            $updStmt = $pdo->prepare("
+                UPDATE class_sections
+                SET cs_name = ?,
+                    course_id = ?,
+                    block = ?,
+                    lec_room = ?,
+                    lab_room = ?,
+                    year_level = ?,
+                    semester = ?,
+                    school_year = ?
+                WHERE cs_id = ? AND instructor_user_id = ?
+            ");
+            $updStmt->execute([
+                $csNameVal,
+                $targetCourseId,
+                $blockVal,
+                $lecRoomVal,
+                $labRoomVal,
+                $yearLevelVal,
+                $semesterVal,
+                $schoolYearVal,
+                $csId,
+                $authCtx['user_id'],
+            ]);
+
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditCtx = audit_begin_operation($pdo);
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'class_management',
+                'action_code' => 'class_update',
+                'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'],
+                'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'],
+                'actor_display_name' => $authCtx['display_name'],
+                'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => $csId,
+                'target_type' => 'class_section',
+                'target_id' => (string) $csId,
+                'description' => "Updated class section #{$csId}.",
+                'reason' => null,
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey);
+
+            $pdo->commit();
+
+            json_response([
+                'status' => 'ok',
+                'message' => 'Class section updated successfully.',
+            ], 200);
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (\Throwable $e) {
+        error_log('Faculty class update error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
 function handle_faculty_class_available_students(): void
 {
     try {

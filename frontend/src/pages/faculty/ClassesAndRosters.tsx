@@ -36,6 +36,7 @@ import {
   getFacultyCoursesApi, 
   getFacultyStudentsApi,
   createFacultyClassApi,
+  updateFacultyClassApi,
   createStudentApi,
   createStudentInvitation,
   FacultyClassItem,
@@ -225,6 +226,71 @@ export const ClassesAndRosters: React.FC = () => {
     setScheduleError(null);
   };
 
+  // Form States: Edit Class Section
+  const [editCourseCode, setEditCourseCode] = useState('');
+  const [editCourseName, setEditCourseName] = useState('');
+  const [editBlock, setEditBlock] = useState('');
+  const [editSchedule, setEditSchedule] = useState('');
+  const [editRoom, setEditRoom] = useState('');
+  const [editYearLevel, setEditYearLevel] = useState(1);
+  const [editSelectedCourseId, setEditSelectedCourseId] = useState<number>(0);
+  const [editScheduleError, setEditScheduleError] = useState<string | null>(null);
+  const [isUpdatingClass, setIsUpdatingClass] = useState(false);
+
+  // Edit Class Day-First Schedule Builder State
+  const [editSelectedDays, setEditSelectedDays] = useState<string[]>([]);
+  const [editStartTime, setEditStartTime] = useState<string>('08:00 AM');
+  const [editEndTime, setEditEndTime] = useState<string>('11:00 AM');
+
+  const updateEditScheduleFromPicker = (days: string[], start: string, end: string) => {
+    if (days.length === 0) {
+      setEditSchedule('');
+      return;
+    }
+    const dayStr = days.join('/');
+    const timeStr = `${start} - ${end}`;
+    setEditSchedule(`${dayStr} ${timeStr}`);
+    setEditScheduleError(null);
+  };
+
+  const handleStartEditClass = (cls: FacultyClassItem) => {
+    setEditingClass(cls);
+    setEditCourseCode(cls.courseCode);
+    setEditCourseName(cls.courseName);
+    setEditBlock(cls.block);
+    setEditRoom(cls.lecRoom || '');
+    const sched = cls.labRoom || cls.schedule || '';
+    setEditSchedule(sched);
+    setEditYearLevel(cls.yearLevel || 1);
+    setEditSelectedCourseId(cls.courseId || 0);
+    setEditScheduleError(null);
+
+    const parsed = parseScheduleTimeslot(sched);
+    if (parsed) {
+      const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const days = parsed.days.map(d => dayNames[d - 1]).filter(Boolean);
+      setEditSelectedDays(days);
+
+      const formatMinToTime = (min: number) => {
+        const h24 = Math.floor(min / 60);
+        const m = min % 60;
+        const period = h24 >= 12 ? 'PM' : 'AM';
+        let h12 = h24 % 12;
+        if (h12 === 0) h12 = 12;
+        const hStr = h12 < 10 ? `0${h12}` : `${h12}`;
+        const mStr = m < 10 ? `0${m}` : `${m}`;
+        return `${hStr}:${mStr} ${period}`;
+      };
+
+      setEditStartTime(formatMinToTime(parsed.startMinutes));
+      setEditEndTime(formatMinToTime(parsed.endMinutes));
+    } else {
+      setEditSelectedDays([]);
+      setEditStartTime('08:00 AM');
+      setEditEndTime('11:00 AM');
+    }
+  };
+
   // Form States: Add / Edit Student (Split Name Fields & No Numbers)
   const [studentIdInput, setStudentIdInput] = useState('');
   const [studentFirstName, setStudentFirstName] = useState('');
@@ -396,14 +462,75 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
 
-  // Handler: Update Class Details
-  const handleUpdateClass = (e: React.FormEvent) => {
+  // Handler: Update Class Details with Database Persistence & Conflict Check
+  const handleUpdateClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClass) return;
+    setEditScheduleError(null);
 
-    setClasses(classes.map(c => c.id === editingClass.id ? editingClass : c));
-    setEditingClass(null);
-    showFeedback(`Class ${editingClass.courseCode} updated!`, 'success');
+    if (!editCourseCode.trim() || !editCourseName.trim()) {
+      setEditScheduleError('Please enter Course Code and Course Title.');
+      return;
+    }
+    if (!editBlock.trim()) {
+      setEditScheduleError('Please enter a Section / Block.');
+      return;
+    }
+    if (!editRoom.trim()) {
+      setEditScheduleError('Please select a Room Venue.');
+      return;
+    }
+    if (!editSchedule.trim()) {
+      setEditScheduleError('Please select or specify a Class Schedule.');
+      return;
+    }
+
+    // Check Room Schedule Conflict against existing classes (excluding current editing class)
+    const conflictingClass = checkRoomScheduleConflict(classes, editRoom, editSchedule, editingClass.id);
+    if (conflictingClass) {
+      setEditScheduleError(
+        `Room Schedule Conflict: ${editRoom} is already occupied on "${editSchedule}" by ${conflictingClass.courseCode} (${conflictingClass.block || 'Sec'}). Please select a different timeslot or room.`
+      );
+      return;
+    }
+
+    setIsUpdatingClass(true);
+    try {
+      const courseIdToUse = editSelectedCourseId > 0
+        ? editSelectedCourseId
+        : (courses.find(c => c.courseCode.toLowerCase() === editCourseCode.trim().toLowerCase())?.id || courses[0]?.id || 1);
+
+      const rawId = editingClass.csId ?? editingClass.id;
+      const parsedCsId = typeof rawId === 'number' ? rawId : parseInt(String(rawId).replace(/\D+/g, ''), 10);
+      const targetCsId = isNaN(parsedCsId) || parsedCsId <= 0 ? 1 : parsedCsId;
+
+      const res = await updateFacultyClassApi({
+        csId: targetCsId,
+        csName: `${editCourseCode.trim().toUpperCase()}-${editBlock.trim()}`,
+        courseId: courseIdToUse,
+        courseCode: editCourseCode.trim().toUpperCase(),
+        courseName: editCourseName.trim(),
+        semester: editingClass.semester || '2nd Semester',
+        schoolYear: editingClass.schoolYear || '2025-2026',
+        yearLevel: editYearLevel,
+        block: editBlock.trim(),
+        lecRoom: editRoom.trim(),
+        labRoom: editSchedule.trim(),
+      });
+
+      if (res && res.status === 'ok') {
+        showFeedback(`Class ${editCourseCode.trim().toUpperCase()} (${editBlock.trim()}) updated successfully!`, 'success');
+        setEditingClass(null);
+        await fetchData();
+      } else {
+        setEditScheduleError(res?.message || 'Failed to update class section.');
+      }
+    } catch (err: any) {
+      console.error('Error updating class:', err);
+      setEditScheduleError(err?.message || 'Failed to save class section updates to database.');
+    } finally {
+      setIsUpdatingClass(false);
+    }
   };
 
   // State: Student Submitting Loading State
@@ -751,7 +878,7 @@ export const ClassesAndRosters: React.FC = () => {
                         {cls.block}
                       </span>
                       <button
-                        onClick={() => setEditingClass(cls)}
+                        onClick={() => handleStartEditClass(cls)}
                         className="p-1 text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors cursor-pointer"
                         title="Edit Class Details"
                       >
@@ -1382,79 +1509,231 @@ export const ClassesAndRosters: React.FC = () => {
 
       {/* Modal: Edit Class Section */}
       {editingClass && (
-        <Modal isOpen={!!editingClass} onClose={() => setEditingClass(null)} title="Edit Class Section Details">
+        <Modal isOpen={!!editingClass} onClose={() => { setEditingClass(null); setEditScheduleError(null); }} title="Edit Class Section Details">
           <form onSubmit={handleUpdateClass} className="space-y-4 text-xs">
+
             <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code</label>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select Course from Catalog (or enter custom course below)</label>
+              <select
+                value={editSelectedCourseId}
+                onChange={(e) => {
+                  const id = Number(e.target.value);
+                  setEditSelectedCourseId(id);
+                  const matched = courses.find(c => c.id === id);
+                  if (matched) {
+                    setEditCourseCode(matched.courseCode);
+                    setEditCourseName(matched.name);
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer mb-2"
+              >
+                <option value={0}>-- Select Course Preset --</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.courseCode} - {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code *</label>
               <input
                 type="text"
                 required
-                value={editingClass.courseCode}
-                onChange={(e) => setEditingClass({ ...editingClass, courseCode: e.target.value })}
+                value={editCourseCode}
+                onChange={(e) => setEditCourseCode(e.target.value)}
+                placeholder="e.g. DENT 301"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
               />
             </div>
 
             <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title</label>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title *</label>
               <input
                 type="text"
                 required
-                value={editingClass.courseName}
-                onChange={(e) => setEditingClass({ ...editingClass, courseName: e.target.value })}
+                value={editCourseName}
+                onChange={(e) => setEditCourseName(e.target.value)}
+                placeholder="e.g. Restorative Dentistry I"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block *</label>
                 <input
                   type="text"
-                  value={editingClass.block}
-                  onChange={(e) => setEditingClass({ ...editingClass, block: e.target.value })}
+                  required
+                  value={editBlock}
+                  onChange={(e) => setEditBlock(e.target.value)}
+                  placeholder="e.g. Section 3-A"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Room Venue</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Room Venue *</label>
                 <input
                   type="text"
-                  list="room-suggestions"
-                  value={editingClass.lecRoom || ''}
-                  onChange={(e) => setEditingClass({ ...editingClass, lecRoom: e.target.value })}
+                  required
+                  list="edit-room-suggestions"
+                  value={editRoom}
+                  onChange={(e) => {
+                    setEditRoom(e.target.value);
+                    setEditScheduleError(null);
+                  }}
                   placeholder="e.g. Dental Room 101"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                <datalist id="edit-room-suggestions">
+                  {ROOM_OPTIONS.map(room => (
+                    <option key={room} value={room} />
+                  ))}
+                </datalist>
               </div>
             </div>
 
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Class Schedule</label>
-              <input
-                type="text"
-                list="schedule-suggestions"
-                value={editingClass.schedule}
-                onChange={(e) => setEditingClass({ ...editingClass, schedule: e.target.value })}
-                placeholder="e.g. Mon/Wed 08:00 AM - 11:00 AM"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
+            {/* Step-by-Step Schedule Builder */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  1. Select Day(s) *
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  {DAYS_LIST.map(day => {
+                    const isSelected = editSelectedDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          let updated: string[];
+                          if (isSelected) {
+                            updated = editSelectedDays.filter(d => d !== day);
+                          } else {
+                            updated = DAYS_LIST.filter(d => d === day || editSelectedDays.includes(d));
+                          }
+                          setEditSelectedDays(updated);
+                          updateEditScheduleFromPicker(updated, editStartTime, editEndTime);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                  <span className="text-slate-400 font-semibold">Presets:</span>
+                  {[
+                    { label: 'Mon/Wed', days: ['Mon', 'Wed'] },
+                    { label: 'Tue/Thu', days: ['Tue', 'Thu'] },
+                    { label: 'Mon/Wed/Fri', days: ['Mon', 'Wed', 'Fri'] },
+                    { label: 'Sat', days: ['Sat'] },
+                  ].map(combo => (
+                    <button
+                      key={combo.label}
+                      type="button"
+                      onClick={() => {
+                        setEditSelectedDays(combo.days);
+                        updateEditScheduleFromPicker(combo.days, editStartTime, editEndTime);
+                      }}
+                      className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors cursor-pointer"
+                    >
+                      {combo.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  2. Select Time Range *
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
+                    <select
+                      value={editStartTime}
+                      onChange={(e) => {
+                        setEditStartTime(e.target.value);
+                        updateEditScheduleFromPicker(editSelectedDays, e.target.value, editEndTime);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={`edit-start-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">End Time</span>
+                    <select
+                      value={editEndTime}
+                      onChange={(e) => {
+                        setEditEndTime(e.target.value);
+                        updateEditScheduleFromPicker(editSelectedDays, editStartTime, e.target.value);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={`edit-end-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Final Class Schedule (Editable) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editSchedule}
+                  onChange={(e) => {
+                    setEditSchedule(e.target.value);
+                    setEditScheduleError(null);
+                  }}
+                  placeholder="e.g. Mon/Wed 08:00 AM - 11:00 AM"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+                />
+                <span className="text-[11px] text-slate-400 block mt-1">
+                  Select Day(s) & Time above to auto-generate, or type any custom schedule text directly.
+                </span>
+              </div>
             </div>
+
+            {editScheduleError && (
+              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">
+                <Info className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <span>{editScheduleError}</span>
+              </div>
+            )}
 
             <div className="pt-2 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setEditingClass(null)}
+                onClick={() => { setEditingClass(null); setEditScheduleError(null); }}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold shadow-md shadow-accent-600/20"
+                disabled={isUpdatingClass}
+                className="px-5 py-2 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold shadow-md shadow-accent-600/20 disabled:opacity-50"
               >
-                Save Changes
+                {isUpdatingClass ? 'Saving Changes...' : 'Save Changes'}
               </button>
             </div>
           </form>

@@ -902,6 +902,22 @@ export function createFacultyClassApi(data: {
   return request('POST', '/faculty/classes', data);
 }
 
+export function updateFacultyClassApi(data: {
+  csId: number;
+  csName?: string;
+  courseId?: number;
+  courseCode?: string;
+  courseName?: string;
+  semester?: string;
+  schoolYear?: string;
+  yearLevel?: number;
+  block?: string;
+  labRoom?: string;
+  lecRoom?: string;
+}): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/classes/update', data);
+}
+
 export function getAvailableStudentsForClassApi(csId: number): Promise<{
   status: string;
   students: Array<{
