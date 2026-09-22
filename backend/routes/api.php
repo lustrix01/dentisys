@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/controllers/RuntimeConfigController.php';
 require_once dirname(__DIR__) . '/controllers/AuthController.php';
 require_once dirname(__DIR__) . '/controllers/GoogleAuthController.php';
 require_once dirname(__DIR__) . '/controllers/StudentAuthController.php';
+require_once dirname(__DIR__) . '/controllers/StudentBiometricController.php';
 require_once dirname(__DIR__) . '/controllers/MfaController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyInvitationController.php';
 require_once dirname(__DIR__) . '/controllers/SecretaryController.php';
@@ -216,6 +217,12 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/secretary/attendance/session/revoke',
+        'handler' => 'handle_secretary_attendance_session_revoke',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/secretary/attendance/override',
         'handler' => 'handle_secretary_attendance_override',
         'has_params' => false,
@@ -401,6 +408,67 @@ return [
         'method' => 'POST',
         'path' => '/api/faculty/attendance/session',
         'handler' => 'handle_faculty_attendance_session_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/attendance/session/end',
+        'handler' => 'handle_faculty_attendance_session_end',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/attendance/session/revoke',
+        'handler' => 'handle_faculty_attendance_session_revoke',
+        'has_params' => false,
+    ],
+    // Student biometric attendance self-service
+    [
+        'method' => 'GET',
+        'path' => '/api/student/biometric/profile',
+        'handler' => 'handle_student_biometric_profile_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'PUT',
+        'path' => '/api/student/biometric/consent',
+        'handler' => 'handle_student_biometric_consent',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/student/biometric/liveness/challenge',
+        'handler' => 'handle_student_biometric_challenge',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/student/biometric/enrollment',
+        'handler' => 'handle_student_biometric_enrollment',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'DELETE',
+        'path' => '/api/student/biometric/profile',
+        'handler' => 'handle_student_biometric_revoke',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/student/attendance/sessions/active',
+        'handler' => 'handle_student_attendance_active_sessions',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/student/attendance/biometric',
+        'handler' => 'handle_student_attendance_biometric',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/student/attendance/logs',
+        'handler' => 'handle_student_attendance_logs',
         'has_params' => false,
     ],
     [

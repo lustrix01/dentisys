@@ -205,6 +205,11 @@ function app_config(?array $overrides = null): array
     $operationalTimezone = config_timezone(
         (string) config_value('APP_TIMEZONE', $values, 'Asia/Manila')
     );
+    $biometricSidecarUrl = rtrim(trim((string) config_value('BIOMETRIC_SIDECAR_URL', $values, '')), '/');
+    $biometricSidecarSecret = trim((string) config_value('BIOMETRIC_SIDECAR_SHARED_SECRET', $values, ''));
+    $biometricActive = ($biometricSidecarUrl !== '' && $biometricSidecarSecret !== '')
+        ? 'sidecar'
+        : ($mockFlags['biometrics'] ? 'development-mock' : 'disabled');
 
     return [
         'debug' => filter_var(config_value('APP_DEBUG', $values, false), FILTER_VALIDATE_BOOLEAN),
@@ -259,7 +264,11 @@ function app_config(?array $overrides = null): array
                 'active' => $emailProvider,
             ],
             'biometrics' => [
-                'active' => $mockFlags['biometrics'] ? 'development-mock' : 'disabled',
+                'active' => $biometricActive,
+                'sidecar_url' => $biometricSidecarUrl,
+                'sidecar_shared_secret' => $biometricSidecarSecret,
+                'request_timeout_seconds' => (int) config_value('BIOMETRIC_SIDECAR_TIMEOUT_SECONDS', $values, 20),
+                'challenge_ttl_seconds' => (int) config_value('BIOMETRIC_CHALLENGE_TTL_SECONDS', $values, 120),
             ],
             'location' => [
                 'active' => $mockFlags['location'] ? 'development-mock' : 'disabled',

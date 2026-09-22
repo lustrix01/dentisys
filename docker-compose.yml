@@ -28,6 +28,37 @@ services:
       timeout: 5s
       retries: 20
 
+  biometric:
+    build:
+      context: ./biometric-sidecar
+    image: ${BIOMETRIC_IMAGE:-dentisys-biometric:local}
+    environment:
+      BIOMETRIC_SIDECAR_SHARED_SECRET: ${BIOMETRIC_SIDECAR_SHARED_SECRET:-}
+      BIOMETRIC_STORAGE_KEY_B64: ${BIOMETRIC_STORAGE_KEY_B64:-}
+      BIOMETRIC_HAAR_SCALE_FACTOR: ${BIOMETRIC_HAAR_SCALE_FACTOR:-}
+      BIOMETRIC_HAAR_MIN_NEIGHBORS: ${BIOMETRIC_HAAR_MIN_NEIGHBORS:-}
+      BIOMETRIC_HAAR_MIN_FACE_PX: ${BIOMETRIC_HAAR_MIN_FACE_PX:-}
+      BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE: ${BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE:-}
+      BIOMETRIC_LBPH_RADIUS: ${BIOMETRIC_LBPH_RADIUS:-}
+      BIOMETRIC_LBPH_NEIGHBORS: ${BIOMETRIC_LBPH_NEIGHBORS:-}
+      BIOMETRIC_LBPH_GRID_X: ${BIOMETRIC_LBPH_GRID_X:-}
+      BIOMETRIC_LBPH_GRID_Y: ${BIOMETRIC_LBPH_GRID_Y:-}
+      BIOMETRIC_LBPH_THRESHOLD: ${BIOMETRIC_LBPH_THRESHOLD:-}
+      BIOMETRIC_MATCH_COUNT: ${BIOMETRIC_MATCH_COUNT:-}
+      BIOMETRIC_BLINK_THRESHOLD: ${BIOMETRIC_BLINK_THRESHOLD:-}
+      BIOMETRIC_HEAD_TURN_RATIO: ${BIOMETRIC_HEAD_TURN_RATIO:-}
+      MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH: ${MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH:-}
+      BIOMETRIC_STORAGE_DIR: /var/lib/dentisys-biometric
+    volumes:
+      - dentisys_biometric_data:/var/lib/dentisys-biometric
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   web:
     build:
       context: .
@@ -63,10 +94,15 @@ services:
       JWT_SIGNING_KEY_B64: ${JWT_SIGNING_KEY_B64:-ZGVudGlzeXMtZGV2LWp3dC1zaWduaW5nLWtleS0zMmI=}
       MFA_ENCRYPTION_KEY_B64: ${MFA_ENCRYPTION_KEY_B64:-ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI=}
       AUDIT_MAC_KEY_B64: ${AUDIT_MAC_KEY_B64:-ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ=}
+      BIOMETRIC_SIDECAR_URL: http://biometric:8000
+      BIOMETRIC_SIDECAR_SHARED_SECRET: ${BIOMETRIC_SIDECAR_SHARED_SECRET:-}
+      BIOMETRIC_CHALLENGE_TTL_SECONDS: ${BIOMETRIC_CHALLENGE_TTL_SECONDS:-120}
     depends_on:
       db:
         condition: service_healthy
       mailpit:
+        condition: service_healthy
+      biometric:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "php -r '$$r = @file_get_contents(\"http://127.0.0.1/healthcheck.php\"); $$j = json_decode((string) $$r, true); exit(($$j[\"status\"] ?? \"\") === \"ok\" && ($$j[\"database\"] ?? \"\") === \"up\" ? 0 : 1);'"]
@@ -96,3 +132,4 @@ services:
 volumes:
   dentisys_postgres_18_data:
   frontend_node_modules:
+  dentisys_biometric_data:

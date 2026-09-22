@@ -335,7 +335,7 @@ function audit_redact_state(array $state): array
         'token_digest', 'secret_hash',
         'secret', 'mfa_secret', 'recovery_code',
         'ciphertext', 'nonce', 'auth_tag',
-        'template_reference', 'image_references',
+        'template_reference', 'image_references', 'protected_object_reference',
         'message_body',
     ];
 

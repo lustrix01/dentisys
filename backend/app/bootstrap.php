@@ -24,6 +24,8 @@ require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/google_auth.php';
 require_once __DIR__ . '/student_auth.php';
+require_once __DIR__ . '/attendance_sessions.php';
+require_once __DIR__ . '/student_biometrics.php';
 require_once __DIR__ . '/auth_runtime.php';
 require_once __DIR__ . '/mfa_runtime.php';
 require_once __DIR__ . '/../controllers/AuthController.php';

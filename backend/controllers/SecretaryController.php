@@ -750,10 +750,12 @@ function secretary_attendance_session_fetch(
         $where[] = "s.status = 'active'";
     }
 
-    $sql = "SELECT s.session_id, s.cs_id, s.secretary_user_id, s.session_date,
+    $sql = "SELECT s.session_id, s.cs_id, s.secretary_user_id, s.owner_user_id, s.session_date,
                    s.session_code, s.room, s.started_at, s.ended_at, s.status,
                    s.geofence_enabled, s.geofence_latitude, s.geofence_longitude,
-                   s.geofence_radius_meters, s.biometric_required, s.created_at,
+                   s.geofence_radius_meters, s.biometric_required, s.opening_time,
+                   s.present_cutoff_time, s.late_cutoff_time, s.revoked_at,
+                   s.revoked_by_user_id, s.revocation_reason, s.created_at,
                    s.updated_at, cs.cs_name, cs.block, c.course_id,
                    c.course_code, c.name AS course_name, u.display_name AS instructor_name
             FROM attendance_sessions s
@@ -803,6 +805,12 @@ function secretary_attendance_session_map(array $row): array
         'geofenceLongitude' => $row['geofence_longitude'] !== null ? (float) $row['geofence_longitude'] : null,
         'geofenceRadiusMeters' => $row['geofence_radius_meters'] !== null ? (float) $row['geofence_radius_meters'] : null,
         'biometricRequired' => in_array($row['biometric_required'], [true, 't', '1', 1], true),
+        'openingTime' => $row['opening_time'] !== null ? substr((string) $row['opening_time'], 0, 5) : null,
+        'presentCutoff' => $row['present_cutoff_time'] !== null ? substr((string) $row['present_cutoff_time'], 0, 5) : null,
+        'lateCutoff' => $row['late_cutoff_time'] !== null ? substr((string) $row['late_cutoff_time'], 0, 5) : null,
+        'timingConfigured' => $row['opening_time'] !== null && $row['present_cutoff_time'] !== null && $row['late_cutoff_time'] !== null,
+        'revokedAt' => secretary_attendance_session_timestamp($row['revoked_at'] !== null ? (string) $row['revoked_at'] : null),
+        'revocationReason' => $row['revocation_reason'] ?? null,
         'createdAt' => secretary_attendance_session_timestamp((string) $row['created_at']),
         'updatedAt' => secretary_attendance_session_timestamp((string) $row['updated_at']),
     ];
@@ -840,6 +848,7 @@ function handle_secretary_attendance_session_start(): void
         if (array_key_exists('room', $data) && $data['room'] !== null && $data['room'] !== '') {
             $room = validate_required_string($data, 'room', 1, 255);
         }
+        [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
 
         $biometricRequired = secretary_attendance_session_bool(
             $data,
@@ -909,15 +918,17 @@ function handle_secretary_attendance_session_start(): void
 
             $insert = $pdo->prepare(
                 "INSERT INTO attendance_sessions (
-                    cs_id, secretary_user_id, session_date, session_code, room,
+                    cs_id, secretary_user_id, owner_user_id, session_date, session_code, room,
                     started_at, status, geofence_enabled, geofence_latitude,
                     geofence_longitude, geofence_radius_meters, biometric_required,
+                    opening_time, present_cutoff_time, late_cutoff_time,
                     created_at, updated_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  RETURNING session_id"
             );
             $insert->execute([
                 $csId,
+                $authCtx['user_id'],
                 $authCtx['user_id'],
                 $sessionDate,
                 $sessionCode,
@@ -928,6 +939,9 @@ function handle_secretary_attendance_session_start(): void
                 $longitude,
                 $radius,
                 $biometricRequired,
+                $openingTime,
+                $presentCutoff,
+                $lateCutoff,
                 $nowSql,
                 $nowSql,
             ]);
@@ -1115,6 +1129,8 @@ function handle_secretary_attendance_session_end(): void
                 return;
             }
 
+            $resolvedAbsentCount = attendance_session_resolve_absences($pdo, $sessionId, $now);
+
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
             audit_finish_operation($pdo, $auditCtx, [
@@ -1142,6 +1158,7 @@ function handle_secretary_attendance_session_end(): void
                 'status' => 'ended',
                 'started_at' => (string) $session['started_at'],
                 'ended_at' => $nowSql,
+                'resolved_absent_count' => $resolvedAbsentCount,
             ]);
 
             $pdo->commit();
@@ -1163,6 +1180,80 @@ function handle_secretary_attendance_session_end(): void
         validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Secretary attendance session end error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_secretary_attendance_session_revoke(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = secretary_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+        $sessionId = (int) ($body['data']['sessionId'] ?? 0);
+        $reason = array_key_exists('reason', $body['data']) ? trim((string) $body['data']['reason']) : null;
+        if ($sessionId <= 0) {
+            throw new ValidationException([['field' => 'sessionId', 'message' => 'A valid attendance session ID is required.']]);
+        }
+        if ($reason !== null && strlen($reason) > 500) {
+            throw new ValidationException([['field' => 'reason', 'message' => 'Reason must not exceed 500 characters.']]);
+        }
+        $now = attendance_session_now_utc();
+        $nowSql = $now->format('Y-m-d H:i:s.u');
+        $pdo->beginTransaction();
+        try {
+            $session = secretary_attendance_session_fetch($pdo, (int) $authCtx['user_id'], $sessionId, null, true);
+            if ($session === null) {
+                $pdo->rollBack();
+                safe_error_response('Attendance session was not found in an assigned class.', 404);
+                return;
+            }
+            if (strtolower((string) $session['status']) !== 'active') {
+                $pdo->rollBack();
+                safe_error_response('Attendance session is not active.', 409);
+                return;
+            }
+            $update = $pdo->prepare(
+                "UPDATE attendance_sessions
+                    SET status = 'revoked', revoked_at = ?, revoked_by_user_id = ?,
+                        revocation_reason = ?, updated_at = ?
+                  WHERE session_id = ? AND status = 'active'"
+            );
+            $update->execute([$nowSql, $authCtx['user_id'], $reason, $nowSql, $sessionId]);
+            attendance_session_record_audit(
+                $pdo, $config, $authCtx, $context, 'attendance_session_revoked', $sessionId, (int) $session['cs_id'],
+                "Revoked attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.", $reason,
+                ['session_id' => $sessionId, 'status' => 'active'],
+                ['session_id' => $sessionId, 'status' => 'revoked', 'revoked_at' => $nowSql]
+            );
+            $pdo->commit();
+            $session['status'] = 'revoked';
+            $session['revoked_at'] = $nowSql;
+            $session['revoked_by_user_id'] = $authCtx['user_id'];
+            $session['revocation_reason'] = $reason;
+            $session['updated_at'] = $nowSql;
+            json_response(['status' => 'ok', 'session' => secretary_attendance_session_map($session)], 200);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (Throwable $e) {
+        error_log('Secretary attendance session revoke error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
 }

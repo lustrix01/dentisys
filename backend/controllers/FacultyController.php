@@ -1997,6 +1997,12 @@ function faculty_attendance_session_payload(?array $session): ?array
         'geofenceEnabled' => (bool) $session['geofence_enabled'],
         'geofenceRadiusMeters' => $session['geofence_radius_meters'] !== null ? (float) $session['geofence_radius_meters'] : null,
         'biometricRequired' => (bool) $session['biometric_required'],
+        'openingTime' => $session['opening_time'] !== null ? substr((string) $session['opening_time'], 0, 5) : null,
+        'presentCutoff' => $session['present_cutoff_time'] !== null ? substr((string) $session['present_cutoff_time'], 0, 5) : null,
+        'lateCutoff' => $session['late_cutoff_time'] !== null ? substr((string) $session['late_cutoff_time'], 0, 5) : null,
+        'timingConfigured' => $session['opening_time'] !== null && $session['present_cutoff_time'] !== null && $session['late_cutoff_time'] !== null,
+        'revokedAt' => $session['revoked_at'] ?? null,
+        'revocationReason' => $session['revocation_reason'] ?? null,
     ];
 }
 
@@ -2099,7 +2105,9 @@ function handle_faculty_attendance_get(): void
 
         $sessionStmt = $pdo->prepare(
             "SELECT session_id, cs_id, session_date, session_code, room, status, started_at, ended_at,
-                    geofence_enabled, geofence_radius_meters, biometric_required
+                    geofence_enabled, geofence_radius_meters, biometric_required,
+                    opening_time, present_cutoff_time, late_cutoff_time, revoked_at,
+                    revocation_reason
              FROM attendance_sessions
              WHERE cs_id = ? AND session_date = ?
              ORDER BY started_at ASC, session_id ASC"
@@ -2228,6 +2236,14 @@ function handle_faculty_attendance_get(): void
 
 function handle_faculty_attendance_session_create(): void
 {
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
     try {
         $config = app_config();
         $pdo = create_pdo($config);
@@ -2238,34 +2254,259 @@ function handle_faculty_attendance_session_create(): void
             return;
         }
         $data = $body['data'];
+        $requestedCsId = faculty_attendance_positive_int($data['csId'] ?? ($data['classSectionId'] ?? null));
         $subjectCode = strtoupper(trim((string) ($data['subjectCode'] ?? '')));
-        $sessionDate = trim((string) ($data['date'] ?? ''));
-        $topic = trim((string) ($data['topic'] ?? ''));
-        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $sessionDate);
-        if ($subjectCode === '' || !$date || $date->format('Y-m-d') !== $sessionDate) {
-            safe_error_response('A valid subject and session date are required.', 422);
-            return;
-        }
+        $today = app_local_date($config, attendance_session_now_utc());
+        $sessionDate = trim((string) ($data['sessionDate'] ?? ($data['date'] ?? $today)));
+        $sessionDate = faculty_attendance_validate_date($sessionDate, $config, 'sessionDate');
         $classStmt = $pdo->prepare(
-            "SELECT cs.cs_id
-             FROM class_sections cs
-             JOIN courses c ON c.course_id = cs.course_id
-             WHERE cs.instructor_user_id = ? AND c.course_code = ? AND cs.status = 'Active'
-             ORDER BY cs.cs_id LIMIT 1"
+            "SELECT cs.cs_id, cs.secretary_user_id
+               FROM class_sections cs
+               JOIN courses c ON c.course_id = cs.course_id
+              WHERE cs.instructor_user_id = ?
+                AND (cs.cs_id = ? OR (? <> '' AND UPPER(c.course_code) = ?))
+                AND LOWER(cs.status) = 'active'
+              ORDER BY cs.cs_id LIMIT 1"
         );
-        $classStmt->execute([$authCtx['user_id'], $subjectCode]);
-        $csId = (int) ($classStmt->fetchColumn() ?: 0);
-        if ($csId <= 0) {
-            safe_error_response('Subject is not assigned to this faculty member.', 403);
+        $classStmt->execute([$authCtx['user_id'], $requestedCsId ?? 0, $subjectCode, $subjectCode]);
+        $class = $classStmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($class)) {
+            safe_error_response('Class section is not assigned to this faculty member.', 403);
             return;
         }
-        unset($topic, $csId);
-        safe_error_response(
-            'Attendance session scheduling is not configured. Record or override each student attendance entry explicitly.',
-            501
-        );
+        $csId = (int) $class['cs_id'];
+        [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
+        $room = array_key_exists('room', $data) && trim((string) $data['room']) !== ''
+            ? validate_required_string($data, 'room', 1, 255)
+            : null;
+        $biometricRequired = attendance_session_request_bool($data, 'biometricRequired', false);
+        $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', $biometricRequired);
+        $latitude = attendance_session_request_float($data, 'geofenceLatitude', -90, 90);
+        $longitude = attendance_session_request_float($data, 'geofenceLongitude', -180, 180);
+        $radius = attendance_session_request_float($data, 'geofenceRadiusMeters', 0.01, null);
+        if (($latitude === null) !== ($longitude === null)) {
+            throw new ValidationException([['field' => 'geofenceLatitude', 'message' => 'Geofence latitude and longitude must be provided together.']]);
+        }
+        if ($geofenceEnabled && $radius === null) {
+            $radius = 100.0;
+        }
+        $sessionCode = trim((string) ($data['sessionCode'] ?? ''));
+        if ($sessionCode === '') {
+            $sessionCode = attendance_session_code($csId, $sessionDate);
+        }
+        if (strlen($sessionCode) > 100) {
+            throw new ValidationException([['field' => 'sessionCode', 'message' => 'Session code must not exceed 100 characters.']]);
+        }
+        $now = attendance_session_now_utc();
+        $nowSql = $now->format('Y-m-d H:i:s.u');
+
+        $pdo->beginTransaction();
+        try {
+            $lock = $pdo->prepare("SELECT cs_id, secretary_user_id FROM class_sections WHERE cs_id = ? AND instructor_user_id = ? AND LOWER(status) = 'active' FOR UPDATE");
+            $lock->execute([$csId, $authCtx['user_id']]);
+            $lockedClass = $lock->fetch(PDO::FETCH_ASSOC);
+            if (!is_array($lockedClass)) {
+                $pdo->rollBack();
+                safe_error_response('Class section is not assigned to this Faculty member.', 403);
+                return;
+            }
+            $active = $pdo->prepare("SELECT 1 FROM attendance_sessions WHERE cs_id = ? AND status = 'active' FOR UPDATE");
+            $active->execute([$csId]);
+            if ($active->fetchColumn() !== false) {
+                $pdo->rollBack();
+                safe_error_response('An active attendance session already exists for this class section.', 409);
+                return;
+            }
+            $secretaryUserId = $lockedClass['secretary_user_id'] !== null
+                ? (int) $lockedClass['secretary_user_id']
+                : (int) $authCtx['user_id'];
+            $insert = $pdo->prepare(
+                "INSERT INTO attendance_sessions (
+                    cs_id, secretary_user_id, owner_user_id, session_date, session_code, room,
+                    started_at, status, geofence_enabled, geofence_latitude, geofence_longitude,
+                    geofence_radius_meters, biometric_required, opening_time, present_cutoff_time,
+                    late_cutoff_time, created_at, updated_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 RETURNING session_id"
+            );
+            $insert->execute([
+                $csId, $secretaryUserId, $authCtx['user_id'], $sessionDate, $sessionCode, $room,
+                $nowSql, $geofenceEnabled, $latitude, $longitude, $radius, $biometricRequired,
+                $openingTime, $presentCutoff, $lateCutoff, $nowSql, $nowSql,
+            ]);
+            $sessionId = (int) $insert->fetchColumn();
+            attendance_session_record_audit(
+                $pdo, $config, $authCtx, $context, 'attendance_session_created', $sessionId, $csId,
+                "Created attendance session '{$sessionCode}' for class section #{$csId}.", null, null,
+                ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => 'active', 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff]
+            );
+            $pdo->commit();
+        } catch (PDOException $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            if (($e->errorInfo[0] ?? (string) $e->getCode()) === '23505') {
+                safe_error_response('An active attendance session or duplicate session code already exists for this class section.', 409);
+                return;
+            }
+            throw $e;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+
+        $session = attendance_session_fetch_for_manager($pdo, (int) $authCtx['user_id'], 'faculty', $sessionId);
+        json_response(['status' => 'ok', 'session' => attendance_session_map($session ?? [], true)], 201);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Faculty attendance session create error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_faculty_attendance_session_revoke(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+        $sessionId = faculty_attendance_positive_int($body['data']['sessionId'] ?? null);
+        $reason = array_key_exists('reason', $body['data']) ? trim((string) $body['data']['reason']) : null;
+        if ($sessionId === null) {
+            throw new ValidationException([['field' => 'sessionId', 'message' => 'A valid attendance session ID is required.']]);
+        }
+        if ($reason !== null && strlen($reason) > 500) {
+            throw new ValidationException([['field' => 'reason', 'message' => 'Reason must not exceed 500 characters.']]);
+        }
+        $now = attendance_session_now_utc();
+        $nowSql = $now->format('Y-m-d H:i:s.u');
+        $pdo->beginTransaction();
+        try {
+            $session = attendance_session_fetch_for_manager($pdo, (int) $authCtx['user_id'], 'faculty', $sessionId, true);
+            if ($session === null) {
+                $pdo->rollBack();
+                safe_error_response('Attendance session was not found in an assigned class.', 404);
+                return;
+            }
+            if (strtolower((string) $session['status']) !== 'active') {
+                $pdo->rollBack();
+                safe_error_response('Attendance session is not active.', 409);
+                return;
+            }
+            $update = $pdo->prepare(
+                "UPDATE attendance_sessions
+                    SET status = 'revoked', revoked_at = ?, revoked_by_user_id = ?,
+                        revocation_reason = ?, updated_at = ?
+                  WHERE session_id = ? AND status = 'active'"
+            );
+            $update->execute([$nowSql, $authCtx['user_id'], $reason, $nowSql, $sessionId]);
+            attendance_session_record_audit(
+                $pdo, $config, $authCtx, $context, 'attendance_session_revoked', $sessionId, (int) $session['cs_id'],
+                "Revoked attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.", $reason,
+                ['session_id' => $sessionId, 'status' => 'active'],
+                ['session_id' => $sessionId, 'status' => 'revoked', 'revoked_at' => $nowSql]
+            );
+            $pdo->commit();
+            $session['status'] = 'revoked';
+            $session['revoked_at'] = $nowSql;
+            $session['revoked_by_user_id'] = $authCtx['user_id'];
+            $session['revocation_reason'] = $reason;
+            $session['updated_at'] = $nowSql;
+            json_response(['status' => 'ok', 'session' => attendance_session_map($session, true)], 200);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (Throwable $e) {
+        error_log('Faculty attendance session revoke error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_faculty_attendance_session_end(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+        $sessionId = faculty_attendance_positive_int($body['data']['sessionId'] ?? null);
+        if ($sessionId === null) {
+            throw new ValidationException([['field' => 'sessionId', 'message' => 'A valid attendance session ID is required.']]);
+        }
+
+        $now = attendance_session_now_utc();
+        $nowSql = $now->format('Y-m-d H:i:s.u');
+        $pdo->beginTransaction();
+        try {
+            $session = attendance_session_fetch_for_manager($pdo, (int) $authCtx['user_id'], 'faculty', $sessionId, true);
+            if ($session === null) {
+                $pdo->rollBack();
+                safe_error_response('Attendance session was not found in an assigned class.', 404);
+                return;
+            }
+            if (strtolower((string) $session['status']) !== 'active') {
+                $pdo->rollBack();
+                safe_error_response('Attendance session has already concluded.', 409);
+                return;
+            }
+            $update = $pdo->prepare(
+                "UPDATE attendance_sessions
+                    SET status = 'ended', ended_at = ?, updated_at = ?
+                  WHERE session_id = ? AND status = 'active'"
+            );
+            $update->execute([$nowSql, $nowSql, $sessionId]);
+            if ($update->rowCount() !== 1) {
+                $pdo->rollBack();
+                safe_error_response('Attendance session could not be ended.', 409);
+                return;
+            }
+            $resolvedAbsentCount = attendance_session_resolve_absences($pdo, $sessionId, $now);
+            attendance_session_record_audit(
+                $pdo, $config, $authCtx, $context, 'attendance_session_ended', $sessionId, (int) $session['cs_id'],
+                "Ended attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.", null,
+                ['session_id' => $sessionId, 'status' => 'active'],
+                ['session_id' => $sessionId, 'status' => 'ended', 'ended_at' => $nowSql, 'resolved_absent_count' => $resolvedAbsentCount]
+            );
+            $pdo->commit();
+            $session['status'] = 'ended';
+            $session['ended_at'] = $nowSql;
+            $session['updated_at'] = $nowSql;
+            json_response(['status' => 'ok', 'session' => attendance_session_map($session, true)], 200);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (Throwable $e) {
+        error_log('Faculty attendance session end error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
 }

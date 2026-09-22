@@ -32,12 +32,49 @@ services:
       JWT_SIGNING_KEY_B64: ${JWT_SIGNING_KEY_B64}
       MFA_ENCRYPTION_KEY_B64: ${MFA_ENCRYPTION_KEY_B64}
       AUDIT_MAC_KEY_B64: ${AUDIT_MAC_KEY_B64}
+      BIOMETRIC_SIDECAR_URL: http://biometric:8000
+      BIOMETRIC_SIDECAR_SHARED_SECRET: ${BIOMETRIC_SIDECAR_SHARED_SECRET:?Set BIOMETRIC_SIDECAR_SHARED_SECRET for the biometric sidecar.}
+    depends_on:
+      biometric:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "php -r '$$r = @file_get_contents(\"http://127.0.0.1/healthcheck.php\"); $$j = json_decode((string) $$r, true); exit(($$j[\"status\"] ?? \"\") === \"ok\" ? 0 : 1);'"]
       interval: 10s
       timeout: 5s
       retries: 12
     restart: unless-stopped
+
+  biometric:
+    build:
+      context: ./biometric-sidecar
+    image: ${BIOMETRIC_IMAGE:-dentisys-biometric:local}
+    environment:
+      BIOMETRIC_SIDECAR_SHARED_SECRET: ${BIOMETRIC_SIDECAR_SHARED_SECRET:?Set BIOMETRIC_SIDECAR_SHARED_SECRET for the biometric sidecar.}
+      BIOMETRIC_STORAGE_KEY_B64: ${BIOMETRIC_STORAGE_KEY_B64:?Set BIOMETRIC_STORAGE_KEY_B64 for the biometric sidecar.}
+      BIOMETRIC_HAAR_SCALE_FACTOR: ${BIOMETRIC_HAAR_SCALE_FACTOR:?Set biometric Haar calibration.}
+      BIOMETRIC_HAAR_MIN_NEIGHBORS: ${BIOMETRIC_HAAR_MIN_NEIGHBORS:?Set biometric Haar calibration.}
+      BIOMETRIC_HAAR_MIN_FACE_PX: ${BIOMETRIC_HAAR_MIN_FACE_PX:?Set biometric Haar calibration.}
+      BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE: ${BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE:?Set biometric quality calibration.}
+      BIOMETRIC_LBPH_RADIUS: ${BIOMETRIC_LBPH_RADIUS:?Set biometric LBPH calibration.}
+      BIOMETRIC_LBPH_NEIGHBORS: ${BIOMETRIC_LBPH_NEIGHBORS:?Set biometric LBPH calibration.}
+      BIOMETRIC_LBPH_GRID_X: ${BIOMETRIC_LBPH_GRID_X:?Set biometric LBPH calibration.}
+      BIOMETRIC_LBPH_GRID_Y: ${BIOMETRIC_LBPH_GRID_Y:?Set biometric LBPH calibration.}
+      BIOMETRIC_LBPH_THRESHOLD: ${BIOMETRIC_LBPH_THRESHOLD:?Set biometric LBPH calibration.}
+      BIOMETRIC_MATCH_COUNT: ${BIOMETRIC_MATCH_COUNT:?Set biometric matching calibration.}
+      BIOMETRIC_BLINK_THRESHOLD: ${BIOMETRIC_BLINK_THRESHOLD:?Set biometric liveness calibration.}
+      BIOMETRIC_HEAD_TURN_RATIO: ${BIOMETRIC_HEAD_TURN_RATIO:?Set biometric liveness calibration.}
+      MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH: /app/models/face_landmarker.task
+      BIOMETRIC_STORAGE_DIR: /var/lib/dentisys-biometric
+    volumes:
+      - dentisys_biometric_data:/var/lib/dentisys-biometric
+      - ${MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH:?Set the host path to the Face Landmarker model.}:/app/models/face_landmarker.task:ro
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   frontend:
     build:
@@ -51,3 +88,6 @@ services:
       web:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  dentisys_biometric_data:
