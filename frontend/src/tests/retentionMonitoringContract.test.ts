@@ -16,6 +16,7 @@ test('Retention API contract: reads use the existing authoritative GET endpoint'
   assert.match(apiClient, /classId: string;/);
   assert.match(apiClient, /studentNumber: string \| null;/);
   assert.match(apiClient, /subjectCode: string \| null;/);
+  assert.match(apiClient, /'archived'/);
 });
 
 test('Retention mutations are backend-first and do not use local mutation fallbacks', () => {
@@ -48,6 +49,9 @@ test('Retention actions never submit synthetic identifiers or fabricated academi
   assert.doesNotMatch(retentionPage, /originalGrade: [^\n]*(\|\||\?\?)/);
   assert.match(retentionPage, /GWA unavailable/);
   assert.match(retentionPage, /Student number unavailable/);
+  assert.match(retentionPage, /record\.state !== 'archived'/);
+  assert.match(retentionPage, /pendingExams/);
+  assert.match(retentionPage, /Outcome unavailable/);
 });
 
 test('Unsupported remedial deletion is explicitly unavailable', () => {

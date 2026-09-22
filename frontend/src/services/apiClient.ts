@@ -640,7 +640,7 @@ export function getFacultyDashboardKpisApi(): Promise<{
   return request('GET', '/faculty/dashboard/kpis');
 }
 
-export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial';
+export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial' | 'archived';
 
 export interface FacultyRetentionRecord {
   enrollmentId: string;
