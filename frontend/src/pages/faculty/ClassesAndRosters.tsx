@@ -63,96 +63,6 @@ const ROOM_OPTIONS = [
   'Simulation Lab',
 ];
 
-const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const TIME_OPTIONS = [
-  '07:00 AM', '07:30 AM', '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM',
-  '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
-  '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM',
-  '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM',
-  '07:00 PM'
-];
-
-interface ParsedSchedule {
-  days: number[]; // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
-  startMin: number;
-  endMin: number;
-}
-
-function parseTimeToMinutes(timeStr: string): number | null {
-  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return null;
-  let hours = parseInt(match[1], 10);
-  const minutes = parseInt(match[2], 10);
-  const period = match[3].toUpperCase();
-  if (period === 'PM' && hours !== 12) hours += 12;
-  if (period === 'AM' && hours === 12) hours = 0;
-  return hours * 60 + minutes;
-}
-
-function parseScheduleTimeslot(scheduleStr: string): ParsedSchedule | null {
-  if (!scheduleStr || !scheduleStr.trim()) return null;
-  const parts = scheduleStr.trim().split(/\s+/);
-  if (parts.length < 2) return null;
-  const dayPart = parts[0];
-  const timePart = parts.slice(1).join(' ');
-  const timeSubParts = timePart.split('-');
-  if (timeSubParts.length !== 2) return null;
-
-  const startMin = parseTimeToMinutes(timeSubParts[0]);
-  const endMin = parseTimeToMinutes(timeSubParts[1]);
-  if (startMin === null || endMin === null || endMin <= startMin) return null;
-
-  const days: number[] = [];
-  const dayTokens = dayPart.split(/[/,-]/);
-  const dayMap: Record<string, number> = {
-    sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6
-  };
-  for (const token of dayTokens) {
-    const key = token.trim().toLowerCase();
-    if (dayMap[key] !== undefined) {
-      days.push(dayMap[key]);
-    }
-  }
-  if (days.length === 0) return null;
-  return { days, startMin, endMin };
-}
-
-function checkRoomScheduleConflict(
-  existingClasses: FacultyClassItem[],
-  targetRoom: string,
-  targetScheduleStr: string,
-  excludeClassId?: string | number
-): FacultyClassItem | null {
-  if (!targetRoom || !targetRoom.trim() || !targetScheduleStr || !targetScheduleStr.trim()) return null;
-  const targetSched = parseScheduleTimeslot(targetScheduleStr);
-  if (!targetSched) return null;
-
-  const cleanRoom = targetRoom.trim().toLowerCase();
-
-  for (const cls of existingClasses) {
-    if (excludeClassId !== undefined && (String(cls.id) === String(excludeClassId) || String(cls.csId) === String(excludeClassId))) {
-      continue;
-    }
-    const clsLec = (cls.lecRoom || '').trim().toLowerCase();
-    const clsLab = (cls.labRoom || '').trim().toLowerCase();
-    const roomMatches = (clsLec && clsLec === cleanRoom) || (clsLab && clsLab === cleanRoom);
-    if (!roomMatches) continue;
-
-    const clsSchedStr = cls.schedule || '';
-    const clsSched = parseScheduleTimeslot(clsSchedStr);
-    if (!clsSched) continue;
-
-    const hasCommonDay = targetSched.days.some(d => clsSched.days.includes(d));
-    if (!hasCommonDay) continue;
-
-    const overlaps = targetSched.startMin < clsSched.endMin && targetSched.endMin > clsSched.startMin;
-    if (overlaps) {
-      return cls;
-    }
-  }
-  return null;
-}
 
 export const ClassesAndRosters: React.FC = () => {
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
@@ -200,11 +110,6 @@ export const ClassesAndRosters: React.FC = () => {
   const [newSchoolYear, setNewSchoolYear] = useState('2025-2026');
   const [newSemester, setNewSemester] = useState('1st Semester');
   const [newYearLevel, setNewYearLevel] = useState(4);
-  const [newSchedule, setNewSchedule] = useState('Mon/Wed 08:00 AM - 11:00 AM');
-  const [newSelectedDays, setNewSelectedDays] = useState<string[]>(['Mon', 'Wed']);
-  const [newStartTime, setNewStartTime] = useState('08:00 AM');
-  const [newEndTime, setNewEndTime] = useState('11:00 AM');
-  const [newScheduleError, setNewScheduleError] = useState<string | null>(null);
   const [newLecRoom, setNewLecRoom] = useState('Lecture Hall A');
   const [newLabRoom, setNewLabRoom] = useState('Dental Clinic Lab 1');
   const [isSubmittingClass, setIsSubmittingClass] = useState(false);
@@ -440,7 +345,6 @@ export const ClassesAndRosters: React.FC = () => {
   // Handler: Create Class via authoritative API
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    setNewScheduleError(null);
 
     if (!newCourseId || newCourseId <= 0) {
       showFeedback('Please select a course from the catalog.', 'error');
@@ -453,22 +357,6 @@ export const ClassesAndRosters: React.FC = () => {
       return;
     }
 
-    if (newLecRoom.trim() && newSchedule.trim()) {
-      const conflict = checkRoomScheduleConflict(classes, newLecRoom, newSchedule);
-      if (conflict) {
-        setNewScheduleError(`Room Conflict: Lecture venue "${newLecRoom}" is occupied on "${newSchedule}" by ${conflict.courseCode} (${conflict.block || 'Sec'}).`);
-        return;
-      }
-    }
-
-    if (newLabRoom.trim() && newSchedule.trim()) {
-      const conflict = checkRoomScheduleConflict(classes, newLabRoom, newSchedule);
-      if (conflict) {
-        setNewScheduleError(`Room Conflict: Lab venue "${newLabRoom}" is occupied on "${newSchedule}" by ${conflict.courseCode} (${conflict.block || 'Sec'}).`);
-        return;
-      }
-    }
-
     setIsSubmittingClass(true);
     try {
       const res = await createFacultyClassApi({
@@ -477,9 +365,9 @@ export const ClassesAndRosters: React.FC = () => {
         semester: newSemester,
         schoolYear: newSchoolYear,
         yearLevel: newYearLevel,
-        block: newBlock,
-        lecRoom: newLecRoom,
-        labRoom: newLabRoom,
+        block: newBlock.trim(),
+        lecRoom: newLecRoom.trim() || undefined,
+        labRoom: newLabRoom.trim() || undefined,
       });
 
       showFeedback(res.message || `Class section ${csName} created successfully!`, 'success');
@@ -1427,10 +1315,7 @@ export const ClassesAndRosters: React.FC = () => {
                   type="text"
                   list="room-suggestions"
                   value={newLecRoom}
-                  onChange={(e) => {
-                    setNewLecRoom(e.target.value);
-                    setNewScheduleError(null);
-                  }}
+                  onChange={(e) => setNewLecRoom(e.target.value)}
                   placeholder="Lecture Hall A"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
@@ -1442,144 +1327,12 @@ export const ClassesAndRosters: React.FC = () => {
                   type="text"
                   list="room-suggestions"
                   value={newLabRoom}
-                  onChange={(e) => {
-                    setNewLabRoom(e.target.value);
-                    setNewScheduleError(null);
-                  }}
+                  onChange={(e) => setNewLabRoom(e.target.value)}
                   placeholder="Dental Clinic Lab 1"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </div>
             </div>
-
-            {/* Step-by-Step Schedule Controls */}
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                  1. Select Day(s) *
-                </label>
-                <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                  {DAYS_LIST.map(day => {
-                    const isSelected = newSelectedDays.includes(day);
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => {
-                          const updated = isSelected
-                            ? newSelectedDays.filter(d => d !== day)
-                            : DAYS_LIST.filter(d => d === day || newSelectedDays.includes(d));
-                          setNewSelectedDays(updated);
-                          if (updated.length > 0) {
-                            setNewSchedule(`${updated.join('/')} ${newStartTime} - ${newEndTime}`);
-                          }
-                          setNewScheduleError(null);
-                        }}
-                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        {day}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-                  <span className="text-slate-400 font-semibold">Presets:</span>
-                  {[
-                    { label: 'Mon/Wed', days: ['Mon', 'Wed'] },
-                    { label: 'Tue/Thu', days: ['Tue', 'Thu'] },
-                    { label: 'Mon/Wed/Fri', days: ['Mon', 'Wed', 'Fri'] },
-                    { label: 'Sat', days: ['Sat'] },
-                  ].map(combo => (
-                    <button
-                      key={combo.label}
-                      type="button"
-                      onClick={() => {
-                        setNewSelectedDays(combo.days);
-                        setNewSchedule(`${combo.days.join('/')} ${newStartTime} - ${newEndTime}`);
-                        setNewScheduleError(null);
-                      }}
-                      className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors cursor-pointer"
-                    >
-                      {combo.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  2. Select Time Range *
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
-                    <select
-                      value={newStartTime}
-                      onChange={(e) => {
-                        setNewStartTime(e.target.value);
-                        if (newSelectedDays.length > 0) {
-                          setNewSchedule(`${newSelectedDays.join('/')} ${e.target.value} - ${newEndTime}`);
-                        }
-                        setNewScheduleError(null);
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-                    >
-                      {TIME_OPTIONS.map(t => (
-                        <option key={`new-start-${t}`} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">End Time</span>
-                    <select
-                      value={newEndTime}
-                      onChange={(e) => {
-                        setNewEndTime(e.target.value);
-                        if (newSelectedDays.length > 0) {
-                          setNewSchedule(`${newSelectedDays.join('/')} ${newStartTime} - ${e.target.value}`);
-                        }
-                        setNewScheduleError(null);
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-                    >
-                      {TIME_OPTIONS.map(t => (
-                        <option key={`new-end-${t}`} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  Class Schedule (Generated / Editable) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newSchedule}
-                  onChange={(e) => {
-                    setNewSchedule(e.target.value);
-                    setNewScheduleError(null);
-                  }}
-                  placeholder="e.g. Mon/Wed 08:00 AM - 11:00 AM"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
-                />
-              </div>
-            </div>
-
-            {newScheduleError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">
-                <Info className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <span>{newScheduleError}</span>
-              </div>
-            )}
 
             <div className="pt-2 flex justify-end gap-2">
               <button

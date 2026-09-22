@@ -1165,14 +1165,12 @@ export function getFacultyCoursesApi(): Promise<{ status: string; courses: Cours
 export function createFacultyClassApi(data: {
   csName: string;
   courseId: number;
-  courseCode?: string;
-  courseName?: string;
   semester: string;
   schoolYear: string;
   yearLevel: number;
   block?: string;
-  labRoom?: string;
   lecRoom?: string;
+  labRoom?: string;
 }): Promise<{ status: string; message: string; csId: number }> {
   return request('POST', '/faculty/classes', data);
 }
