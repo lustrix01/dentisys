@@ -756,7 +756,25 @@ export interface FacultyAttendanceWorksheet {
     units: number;
   };
   date: string;
-  attendanceSession: Record<string, unknown> | null;
+  attendanceSession: {
+    sessionId: string;
+    classId?: string;
+    sessionDate?: string;
+    sessionCode: string;
+    room?: string | null;
+    status: 'active' | 'ended' | 'revoked' | string;
+    startedAt?: string;
+    endedAt?: string | null;
+    geofenceEnabled?: boolean;
+    geofenceRadiusMeters?: number | null;
+    biometricRequired?: boolean;
+    openingTime?: string | null;
+    presentCutoff?: string | null;
+    lateCutoff?: string | null;
+    timingConfigured?: boolean;
+    revokedAt?: string | null;
+    revocationReason?: string | null;
+  } | null;
   attendanceSessions: Array<Record<string, unknown>>;
   roster: FacultyAttendanceWorksheetRosterItem[];
 }
@@ -825,10 +843,22 @@ export function overrideFacultyAttendanceApi(data: {
 }
 
 export function createFacultyAttendanceSessionApi(data: {
-  subjectCode: string;
-  date: string;
-  topic: string;
-}): Promise<{ status: string; message: string; sessionCode: string; createdCount: number }> {
+  csId?: number;
+  classSectionId?: number;
+  subjectCode?: string;
+  date?: string;
+  sessionDate?: string;
+  topic?: string;
+  room?: string;
+  openingTime?: string;
+  presentCutoff?: string;
+  lateCutoff?: string;
+  biometricRequired?: boolean;
+  geofenceEnabled?: boolean;
+  geofenceRadiusMeters?: number;
+  latitude?: number;
+  longitude?: number;
+}): Promise<{ status: string; message?: string; sessionCode?: string; createdCount?: number; session?: Record<string, unknown> }> {
   return request('POST', '/faculty/attendance/session', data);
 }
 
@@ -984,14 +1014,14 @@ export function updateSecretarySettingsApi(settings: { theme: 'light' | 'dark' }
 export interface SecretaryAttendanceSession {
   sessionId: string;
   csId: number;
-  classId: string;
-  className: string;
-  classSection: {
+  classId?: string;
+  className?: string;
+  classSection?: {
     id: string;
-    name: string;
+    name?: string | null;
     block?: string | null;
   };
-  course: {
+  course?: {
     id: number;
     code: string;
     name: string;
@@ -1003,12 +1033,18 @@ export interface SecretaryAttendanceSession {
   room?: string | null;
   startedAt: string;
   endedAt?: string | null;
-  status: 'active' | 'ended';
+  status: 'active' | 'ended' | 'revoked' | string;
+  openingTime?: string | null;
+  presentCutoff?: string | null;
+  lateCutoff?: string | null;
+  timingConfigured?: boolean;
   geofenceEnabled: boolean;
   geofenceLatitude?: number | null;
   geofenceLongitude?: number | null;
   geofenceRadiusMeters?: number | null;
   biometricRequired: boolean;
+  revokedAt?: string | null;
+  revocationReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1023,6 +1059,11 @@ export interface StartSecretaryAttendanceSessionPayload {
   geofenceLatitude?: number;
   geofenceLongitude?: number;
   geofenceRadiusMeters?: number;
+  latitude?: number;
+  longitude?: number;
+  openingTime?: string;
+  presentCutoff?: string;
+  lateCutoff?: string;
 }
 
 export function startSecretaryAttendanceSessionApi(
@@ -1042,6 +1083,20 @@ export function endSecretaryAttendanceSessionApi(data: {
   sessionId: string;
 }): Promise<{ status: string; session: SecretaryAttendanceSession }> {
   return request('POST', '/secretary/attendance/session/end', data);
+}
+
+export function revokeSecretaryAttendanceSessionApi(data: {
+  sessionId: string | number;
+  reason?: string | null;
+}): Promise<{ status: string; session: SecretaryAttendanceSession }> {
+  return request('POST', '/secretary/attendance/session/revoke', data);
+}
+
+export function revokeFacultyAttendanceSessionApi(data: {
+  sessionId: string | number;
+  reason?: string | null;
+}): Promise<{ status: string; session: Record<string, unknown> }> {
+  return request('POST', '/faculty/attendance/session/revoke', data);
 }
 
 export function sendFacultyEmailApi(data: {

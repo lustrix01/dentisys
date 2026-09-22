@@ -187,6 +187,7 @@ export interface LivenessChallengeRequest {
 
 export interface LivenessChallengeResponse {
   challengeId: string;
+  challengeToken?: string;
   actions: [LivenessAction, LivenessAction];
   expiresAt: string;
 }
@@ -218,6 +219,21 @@ export interface StudentActiveSession {
   geofenceEnabled?: boolean;
   isOpen?: boolean;
   attendedStatus?: 'present' | 'late' | 'already_recorded' | null;
+  openingTime?: string | null;
+  presentCutoff?: string | null;
+  lateCutoff?: string | null;
+  timingConfigured?: boolean;
+  status?: string;
+}
+
+export interface AttendanceSessionRevocationPayload {
+  sessionId: string | number;
+  reason?: string | null;
+}
+
+export interface AttendanceSessionRevocationResponse {
+  status: string;
+  session: Record<string, unknown>;
 }
 
 export interface StudentActiveSessionsResponse {

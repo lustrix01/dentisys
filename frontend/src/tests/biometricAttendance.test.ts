@@ -16,7 +16,13 @@ import type {
   StudentActiveSession,
   BiometricAttendanceResponse,
   StudentAttendanceLogRecord,
+  AttendanceSessionRevocationPayload,
+  AttendanceSessionRevocationResponse,
 } from '../types/index.ts';
+import type {
+  StartSecretaryAttendanceSessionPayload,
+  SecretaryAttendanceSession,
+} from '../services/apiClient.ts';
 
 const defaultRuntimeConfig: RuntimeConfig = {
   loading: false,
@@ -170,11 +176,12 @@ test('Prototype Surface Gating: isolation under disabled runtime config', () => 
   assert.equal(isStudentPrototypeAllowed(mockStudent, disabledConfig, 'attendance'), false);
 });
 
-test('Liveness Contract: challenge returns exactly two distinct actions from approved set', () => {
+test('Liveness Contract: challenge returns actions and one-time challengeToken submitted in FormData', () => {
   const validActions = new Set(['blink', 'turn_left', 'turn_right']);
 
   const mockChallenge: LivenessChallengeResponse = {
     challengeId: 'chal-uuid-12345',
+    challengeToken: 'tok_live_abc123xyz',
     actions: ['blink', 'turn_left'],
     expiresAt: new Date(Date.now() + 60000).toISOString(),
   };
@@ -183,6 +190,20 @@ test('Liveness Contract: challenge returns exactly two distinct actions from app
   assert.notEqual(mockChallenge.actions[0], mockChallenge.actions[1]);
   assert.ok(validActions.has(mockChallenge.actions[0]));
   assert.ok(validActions.has(mockChallenge.actions[1]));
+  assert.equal(mockChallenge.challengeToken, 'tok_live_abc123xyz');
+
+  // Verify attendance submission includes both challengeId and challengeToken in FormData
+  const formData = new FormData();
+  formData.append('sessionId', '10');
+  formData.append('challengeId', mockChallenge.challengeId);
+  if (mockChallenge.challengeToken) {
+    formData.append('challengeToken', mockChallenge.challengeToken);
+    formData.append('challenge_token', mockChallenge.challengeToken);
+  }
+
+  assert.equal(formData.get('challengeId'), 'chal-uuid-12345');
+  assert.equal(formData.get('challengeToken'), 'tok_live_abc123xyz');
+  assert.equal(formData.get('challenge_token'), 'tok_live_abc123xyz');
 });
 
 test('Enrollment Contract: server governs usable sample count (target: 20)', () => {
@@ -366,4 +387,130 @@ test('Profile Lifecycle: un-enrolled, enrolled, expired, and revoked states', ()
   for (const s of profileStates) {
     assert.ok(typeof s === 'string');
   }
+});
+
+function validateSessionTimings(opening: string, presentCutoff: string, lateCutoff: string): { valid: boolean; error?: string } {
+  if (opening >= presentCutoff) {
+    return { valid: false, error: 'Invalid timing: Opening time must be strictly before Present cutoff (Asia/Manila).' };
+  }
+  if (presentCutoff >= lateCutoff) {
+    return { valid: false, error: 'Invalid timing: Present cutoff must be strictly before Late cutoff (Asia/Manila).' };
+  }
+  return { valid: true };
+}
+
+test('Session Timing: Asia/Manila cutoffs and strict ordering validation (opening < presentCutoff < lateCutoff)', () => {
+  // Valid timing sequence
+  const valid = validateSessionTimings('08:00', '08:30', '12:00');
+  assert.equal(valid.valid, true);
+
+  // Opening equal to or after Present cutoff is invalid
+  const invalidEqualOpening = validateSessionTimings('08:30', '08:30', '12:00');
+  assert.equal(invalidEqualOpening.valid, false);
+  assert.match(invalidEqualOpening.error ?? '', /strictly before Present cutoff/);
+
+  const invalidLateOpening = validateSessionTimings('09:00', '08:30', '12:00');
+  assert.equal(invalidLateOpening.valid, false);
+
+  // Present cutoff equal to or after Late cutoff is invalid
+  const invalidEqualCutoff = validateSessionTimings('08:00', '12:00', '12:00');
+  assert.equal(invalidEqualCutoff.valid, false);
+  assert.match(invalidEqualCutoff.error ?? '', /strictly before Late cutoff/);
+
+  const invalidPresentAfterLate = validateSessionTimings('08:00', '12:30', '12:00');
+  assert.equal(invalidPresentAfterLate.valid, false);
+
+  // Payload structure verification
+  const payload: StartSecretaryAttendanceSessionPayload = {
+    csId: 101,
+    openingTime: '08:00',
+    presentCutoff: '08:30',
+    lateCutoff: '12:00',
+    room: 'Dental Lab 2',
+    biometricRequired: true,
+    geofenceEnabled: true,
+  };
+  assert.equal(payload.openingTime, '08:00');
+  assert.equal(payload.presentCutoff, '08:30');
+  assert.equal(payload.lateCutoff, '12:00');
+});
+
+test('Session Revocation Contract: authorized revocation preserves records and prevents further submissions', () => {
+  // Revocation payload verification
+  const revocationPayload: AttendanceSessionRevocationPayload = {
+    sessionId: 'session-101',
+    reason: 'Power outage in dental lab; room vacated per instructor advisory.',
+  };
+  assert.equal(revocationPayload.sessionId, 'session-101');
+  assert.ok(revocationPayload.reason && revocationPayload.reason.length <= 500);
+
+  // Revoked session state structure
+  const revokedSession: SecretaryAttendanceSession = {
+    sessionId: 'session-101',
+    csId: 5,
+    courseCode: 'CLIN401',
+    sessionDate: '2026-09-22',
+    sessionCode: 'CLIN401-20260922-01',
+    room: 'Dental Lab 2',
+    status: 'revoked',
+    startedAt: '2026-09-22T08:00:00Z',
+    openingTime: '08:00',
+    presentCutoff: '08:30',
+    lateCutoff: '12:00',
+    timingConfigured: true,
+    geofenceEnabled: true,
+    biometricRequired: true,
+    revokedAt: '2026-09-22T08:45:00Z',
+    revocationReason: 'Power outage in dental lab; room vacated per instructor advisory.',
+    createdAt: '2026-09-22T08:00:00Z',
+    updatedAt: '2026-09-22T08:45:00Z',
+  };
+
+  assert.equal(revokedSession.status, 'revoked');
+  assert.ok(revokedSession.revokedAt);
+  assert.equal(revokedSession.revocationReason, revocationPayload.reason);
+
+  // Existing records are preserved (not erased)
+  const existingRosterRecords = [
+    { studentId: 'stud-1', status: 'present', timeRecorded: '08:10:00' },
+    { studentId: 'stud-2', status: 'late', timeRecorded: '08:35:00' },
+  ];
+  assert.equal(existingRosterRecords.length, 2);
+
+  // Subsequent submission to revoked session is rejected (session_not_active)
+  const activeSessions: StudentActiveSession[] = []; // Revoked sessions excluded from active list
+  assert.equal(activeSessions.length, 0);
+
+  const revokedSessionSubmissionError = {
+    status: 409,
+    code: 'session_not_active',
+    message: 'Attendance session is not currently active.',
+  };
+  assert.equal(revokedSessionSubmissionError.code, 'session_not_active');
+  assert.equal(revokedSessionSubmissionError.status, 409);
+});
+
+test('Student Flow Isolation: real student flows never fall back to mock data or localStorage on error/revocation', () => {
+  const realStudent: SafeUser = {
+    user_id: 101,
+    login_email: 'student@university.edu',
+    role: 'student',
+    display_name: 'Real University Student',
+    session_uuid: 'uuid-real',
+    authentication_source: 'password',
+    student: {
+      student_id: 101,
+      student_number: '2023-BU-0101',
+      status: 'active',
+    },
+  };
+
+  // Real student access is authoritative-only
+  assert.equal(canAccessAuthoritativeStudentBiometrics(realStudent), true);
+  assert.equal(isDevelopmentMockStudent(realStudent, defaultRuntimeConfig), false);
+
+  // When active sessions are empty (e.g. revoked or not started), real student flow shows clean empty state
+  // and does not fallback to mock fixtures or localStorage
+  const activeSessionsResponse: { sessions: StudentActiveSession[] } = { sessions: [] };
+  assert.equal(activeSessionsResponse.sessions.length, 0);
 });

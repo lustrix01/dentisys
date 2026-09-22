@@ -254,6 +254,10 @@ export const FaceRegistration: React.FC = () => {
       const formData = new FormData();
       formData.append('challengeId', livenessChallenge.challengeId);
       formData.append('challenge_id', livenessChallenge.challengeId);
+      if (livenessChallenge.challengeToken) {
+        formData.append('challengeToken', livenessChallenge.challengeToken);
+        formData.append('challenge_token', livenessChallenge.challengeToken);
+      }
       const idempotencyKey = crypto.randomUUID();
       formData.append('idempotencyKey', idempotencyKey);
       formData.append('idempotency_key', idempotencyKey);

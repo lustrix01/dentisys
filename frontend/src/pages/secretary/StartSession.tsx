@@ -13,7 +13,8 @@ import {
   UserCheck,
   Navigation,
   Loader2,
-  X
+  X,
+  Ban,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { useApp } from '../../context/AppContext';
@@ -24,6 +25,7 @@ import {
   getSecretaryDashboardKpisApi,
   startSecretaryAttendanceSessionApi,
   endSecretaryAttendanceSessionApi,
+  revokeSecretaryAttendanceSessionApi,
   type SecretaryAttendanceSession,
   type StartSecretaryAttendanceSessionPayload,
 } from '../../services/apiClient';
@@ -46,11 +48,15 @@ export const StartSession: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
+  const [showRevokeModal, setShowRevokeModal] = useState(false);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [revoking, setRevoking] = useState(false);
 
-  // Form inputs for starting a new session
+  // Form inputs for starting a new session with distinct timing cutoffs in Asia/Manila
   const [customRoom, setCustomRoom] = useState('');
-  const [startTimeStr, setStartTimeStr] = useState('08:00');
-  const [endTimeStr, setEndTimeStr] = useState('12:00');
+  const [openingTimeStr, setOpeningTimeStr] = useState('08:00');
+  const [presentCutoffStr, setPresentCutoffStr] = useState('08:30');
+  const [lateCutoffStr, setLateCutoffStr] = useState('12:00');
   const [requireFace, setRequireFace] = useState(true);
   const [requireGeo, setRequireGeo] = useState(true);
   const [geofenceRadius, setGeofenceRadius] = useState(200);
@@ -77,7 +83,7 @@ export const StartSession: React.FC = () => {
     if (!start || !end) return 120;
     const [startH, startM] = start.split(':').map(Number);
     const [endH, endM] = end.split(':').map(Number);
-    let startTotalMins = (isNaN(startH) ? 8 : startH) * 60 + (isNaN(startM) ? 0 : startM);
+    const startTotalMins = (isNaN(startH) ? 8 : startH) * 60 + (isNaN(startM) ? 0 : startM);
     let endTotalMins = (isNaN(endH) ? 12 : endH) * 60 + (isNaN(endM) ? 0 : endM);
     if (endTotalMins <= startTotalMins) {
       endTotalMins += 24 * 60;
@@ -85,7 +91,7 @@ export const StartSession: React.FC = () => {
     return endTotalMins - startTotalMins;
   };
 
-  const calculatedMinutes = computeDurationMinutes(startTimeStr, endTimeStr);
+  const calculatedMinutes = computeDurationMinutes(openingTimeStr, lateCutoffStr);
   const calculatedHours = Math.floor(calculatedMinutes / 60);
   const calculatedRemainingMins = calculatedMinutes % 60;
   const formattedDurationLabel = `${calculatedHours > 0 ? `${calculatedHours} hr${calculatedHours > 1 ? 's' : ''}` : ''} ${calculatedRemainingMins > 0 ? `${calculatedRemainingMins} min${calculatedRemainingMins > 1 ? 's' : ''}` : ''} (${calculatedMinutes} mins total)`.trim();
@@ -107,7 +113,7 @@ export const StartSession: React.FC = () => {
         }
       }
 
-      if (activeResult?.activeSession && activeResult.activeSession.status === 'active') {
+      if (activeResult?.activeSession && (activeResult.activeSession.status === 'active' || activeResult.activeSession.status === 'revoked')) {
         setActiveSession(activeResult.activeSession);
       } else {
         setActiveSession(null);
@@ -177,6 +183,22 @@ export const StartSession: React.FC = () => {
       return;
     }
 
+    if (openingTimeStr >= presentCutoffStr) {
+      setNotification({
+        type: 'warning',
+        message: 'Invalid timing: Opening time must be strictly before Present cutoff (Asia/Manila).',
+      });
+      return;
+    }
+
+    if (presentCutoffStr >= lateCutoffStr) {
+      setNotification({
+        type: 'warning',
+        message: 'Invalid timing: Present cutoff must be strictly before Late cutoff (Asia/Manila).',
+      });
+      return;
+    }
+
     setSubmitting(true);
     setNotification(null);
 
@@ -187,6 +209,12 @@ export const StartSession: React.FC = () => {
         biometricRequired: requireFace,
         geofenceEnabled: requireGeo,
         geofenceRadiusMeters: requireGeo ? geofenceRadius : undefined,
+        openingTime: openingTimeStr,
+        presentCutoff: presentCutoffStr,
+        geofenceLatitude: gpsLocation?.lat,
+        geofenceLongitude: gpsLocation?.lng,
+        latitude: gpsLocation?.lat,
+        longitude: gpsLocation?.lng,
       };
 
       const res = await startSecretaryAttendanceSessionApi(payload);
@@ -226,6 +254,33 @@ export const StartSession: React.FC = () => {
       });
     } finally {
       setEnding(false);
+    }
+  };
+
+  const handleRevokeSession = async () => {
+    if (!activeSession) return;
+    setRevoking(true);
+
+    try {
+      const res = await revokeSecretaryAttendanceSessionApi({
+        sessionId: activeSession.sessionId,
+        reason: revokeReason.trim() || null,
+      });
+      setActiveSession(res.session);
+      setShowRevokeModal(false);
+      setRevokeReason('');
+      setNotification({
+        type: 'info',
+        message: `Class session for ${res.session.courseCode || res.session.className} has been REVOKED. Attendance already recorded is preserved; further submissions are blocked.`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to revoke session.';
+      setNotification({
+        type: 'warning',
+        message: msg,
+      });
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -346,56 +401,113 @@ export const StartSession: React.FC = () => {
         </div>
       )}
 
-      {/* 2. Sleek Active Session Status Card */}
+      {/* 2. Sleek Active / Revoked Session Status Card */}
       {activeSession ? (
-        <div className="rounded-2xl bg-white dark:bg-slate-900 p-6 border border-emerald-500/30 dark:border-emerald-500/40 shadow-xs">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-2xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-extrabold uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                Active Attendance Register Open
-              </div>
-              <h2 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-                {activeSession.courseCode} — {activeSession.className}
-              </h2>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
-                <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
-                  <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  {activeSession.room || 'Assigned Room'}
-                </span>
-                <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
-                  <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  Started at {formatStartedTime(activeSession.startedAt)} ({elapsedText} elapsed)
-                </span>
-                {activeSession.instructorName && (
-                  <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
-                    <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                    {activeSession.instructorName}
-                  </span>
+        activeSession.status === 'revoked' ? (
+          <div className="rounded-2xl bg-white dark:bg-slate-900 p-6 border border-rose-500/40 dark:border-rose-500/50 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 text-[10px] font-extrabold uppercase tracking-wider">
+                  <Ban className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                  Attendance Session Revoked
+                </div>
+                <h2 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
+                  {activeSession.courseCode} — {activeSession.className}
+                </h2>
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">
+                  Biometric capture is closed and further attendance submissions are blocked.
+                </p>
+                {activeSession.revocationReason && (
+                  <p className="text-xs text-slate-600 dark:text-slate-300 bg-rose-50/70 dark:bg-rose-950/30 p-2.5 rounded-xl border border-rose-200/80 dark:border-rose-900">
+                    <span className="font-bold">Revocation Reason:</span> {activeSession.revocationReason}
+                  </p>
                 )}
-                <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl font-mono text-[11px] font-bold">
-                  Code: {activeSession.sessionCode}
-                </span>
+                {activeSession.revokedAt && (
+                  <p className="text-[11px] text-slate-400">
+                    Revoked at: {formatStartedTime(activeSession.revokedAt)}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveSession(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Dismiss & Configure New Session
+                </button>
               </div>
             </div>
-
-            {/* End Session Button */}
-            <div className="flex flex-col sm:flex-row items-center gap-4 flex-shrink-0">
-              <div className="text-center sm:text-right bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Check-In Rate</span>
-                <span className="text-xl font-extrabold text-slate-800 dark:text-slate-100">{checkedInCount} / {totalEnrolled} ({attendanceRatePct}%)</span>
-              </div>
-
-              <button
-                onClick={() => setShowEndModal(true)}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-600/20 transition-all cursor-pointer"
-              >
-                <Square className="w-4 h-4 fill-white" />
-                <span>End Class Session</span>
-              </button>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+              ✓ <strong>Already-recorded attendance preserved:</strong> Any student attendance recorded prior to revocation remains intact in the attendance register. Unresolved students are not automatically marked Absent.
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="rounded-2xl bg-white dark:bg-slate-900 p-6 border border-emerald-500/30 dark:border-emerald-500/40 shadow-xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-2xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 text-[10px] font-extrabold uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  Active Attendance Register Open
+                </div>
+                <h2 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
+                  {activeSession.courseCode} — {activeSession.className}
+                </h2>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
+                    <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    {activeSession.room || 'Assigned Room'}
+                  </span>
+                  <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
+                    <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    Started at {formatStartedTime(activeSession.startedAt)} ({elapsedText} elapsed)
+                  </span>
+                  {activeSession.openingTime && activeSession.presentCutoff && (
+                    <span className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-xl font-mono text-[11px]">
+                      {activeSession.openingTime} (Open) → {activeSession.presentCutoff} (Present) → {activeSession.lateCutoff || 'Late'} (Late) Asia/Manila
+                    </span>
+                  )}
+                  {activeSession.instructorName && (
+                    <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
+                      <UserCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      {activeSession.instructorName}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl font-mono text-[11px] font-bold">
+                    Code: {activeSession.sessionCode}
+                  </span>
+                </div>
+              </div>
+
+              {/* End / Revoke Session Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 flex-shrink-0">
+                <div className="text-center sm:text-right bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Check-In Rate</span>
+                  <span className="text-xl font-extrabold text-slate-800 dark:text-slate-100">{checkedInCount} / {totalEnrolled} ({attendanceRatePct}%)</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowEndModal(true)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  <Square className="w-3.5 h-3.5 fill-white" />
+                  <span>End Session</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowRevokeModal(true)}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-600/20 transition-all cursor-pointer"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>Revoke Session</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )
       ) : null}
 
       {/* End Session Confirmation Modal */}
@@ -445,6 +557,89 @@ export const StartSession: React.FC = () => {
                   <>
                     <Square className="w-3.5 h-3.5 fill-white" />
                     <span>Confirm End Session</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revoke Session Confirmation Modal */}
+      {showRevokeModal && activeSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-extrabold text-base">
+                <Ban className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                <span>Revoke Attendance Session</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRevokeModal(false);
+                  setRevokeReason('');
+                }}
+                disabled={revoking}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 space-y-1.5">
+              <p className="font-bold">Important Session Revocation Rules:</p>
+              <ul className="list-disc list-inside space-y-1 text-[11px]">
+                <li>Revoking immediately closes biometric capture and blocks further student attendance submissions.</li>
+                <li><strong>All attendance already recorded is strictly preserved.</strong></li>
+                <li>Unresolved students are not automatically marked Absent.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                Revocation Reason (Optional, max 500 characters)
+              </label>
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={revokeReason}
+                onChange={(e) => setRevokeReason(e.target.value)}
+                placeholder="e.g. Schedule adjustment, instructor requested cancellation, or incorrect session parameters..."
+                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500"
+              />
+              <span className="text-[10px] text-slate-400 text-right block">
+                {revokeReason.length}/500
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRevokeModal(false);
+                  setRevokeReason('');
+                }}
+                disabled={revoking}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRevokeSession}
+                disabled={revoking}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/20 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {revoking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Revoking...</span>
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Confirm Revoke Session</span>
                   </>
                 )}
               </button>
@@ -537,34 +732,74 @@ export const StartSession: React.FC = () => {
                 />
               </div>
 
-              {/* Start Time & End Time Picker Controls */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-blue-500" />
-                    <span>Session Starting Time</span>
-                  </label>
-                  <input
-                    type="time"
-                    value={startTimeStr}
-                    onChange={(e) => setStartTimeStr(e.target.value)}
-                    required
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              {/* Session Timing Controls in Asia/Manila */}
+              <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-blue-500" />
+                      <span>Session Timing (Philippines Time — Asia/Manila, UTC+08:00)</span>
+                    </label>
+                    <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200/60 dark:border-blue-800/60">
+                      Asia/Manila
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    Server time is authoritative. Capture opens at Opening Time, awards Present until Present Cutoff, awards Late from Present Cutoff until Late Cutoff, and closes capture at Late Cutoff.
+                  </p>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-blue-500" />
-                    <span>Session Ending Time</span>
-                  </label>
-                  <input
-                    type="time"
-                    value={endTimeStr}
-                    onChange={(e) => setEndTimeStr(e.target.value)}
-                    required
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                      Opening Time
+                    </label>
+                    <input
+                      type="time"
+                      value={openingTimeStr}
+                      onChange={(e) => setOpeningTimeStr(e.target.value)}
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-[10px] text-slate-400 block">Capture opens</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                      Present Cutoff
+                    </label>
+                    <input
+                      type="time"
+                      value={presentCutoffStr}
+                      onChange={(e) => setPresentCutoffStr(e.target.value)}
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-[10px] text-slate-400 block">On-time deadline</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                      Late Cutoff
+                    </label>
+                    <input
+                      type="time"
+                      value={lateCutoffStr}
+                      onChange={(e) => setLateCutoffStr(e.target.value)}
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-[10px] text-slate-400 block">Capture closes</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
+                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
+                    <span className="font-bold">On-Time (Present):</span> {openingTimeStr} – {presentCutoffStr}
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300">
+                    <span className="font-bold">Late Window:</span> {presentCutoffStr} – {lateCutoffStr}
+                  </div>
                 </div>
               </div>
 
@@ -572,7 +807,7 @@ export const StartSession: React.FC = () => {
               <div className="p-3.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  Computed Session Duration:
+                  Total Session Capture Span:
                 </span>
                 <span className="font-extrabold text-blue-700 dark:text-blue-300 text-sm">{formattedDurationLabel}</span>
               </div>

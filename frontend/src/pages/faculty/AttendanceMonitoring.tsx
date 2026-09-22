@@ -7,6 +7,9 @@ import {
   Calendar,
   Layers,
   BookOpen,
+  Ban,
+  Clock,
+  MapPin,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
@@ -15,6 +18,7 @@ import {
   getFacultyAttendanceWorksheetApi,
   recordFacultyInitialAttendanceApi,
   correctFacultyAttendanceApi,
+  revokeFacultyAttendanceSessionApi,
   FacultyClassItem,
   FacultyAttendanceWorksheet,
   FacultyAttendanceWorksheetRosterItem,
@@ -58,6 +62,12 @@ export const AttendanceMonitoring: React.FC = () => {
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionError, setCorrectionError] = useState<string | null>(null);
   const [submittingCorrection, setSubmittingCorrection] = useState(false);
+
+  // Session Revocation Modal State
+  const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+  const [submittingRevocation, setSubmittingRevocation] = useState(false);
 
   // Load Faculty-owned classes on mount
   const loadClasses = useCallback(async () => {
@@ -248,6 +258,37 @@ export const AttendanceMonitoring: React.FC = () => {
       setCorrectionError(err instanceof Error ? err.message : 'Failed to save attendance correction.');
     } finally {
       setSubmittingCorrection(false);
+    }
+  };
+
+  // Submit Session Revocation (Revokes active session, preserves recorded attendance, blocks further submissions)
+  const handleRevokeSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!worksheet?.attendanceSession?.sessionId) return;
+
+    setSubmittingRevocation(true);
+    setRevokeError(null);
+    try {
+      await revokeFacultyAttendanceSessionApi({
+        sessionId: worksheet.attendanceSession.sessionId,
+        reason: revokeReason.trim() || null,
+      });
+
+      setIsRevokeModalOpen(false);
+      setRevokeReason('');
+      setNotification({
+        type: 'success',
+        message: 'Attendance session revoked. Already-recorded attendance was preserved; further submissions are blocked.',
+      });
+
+      const csIdNum = parseInt(selectedCsId, 10);
+      if (csIdNum > 0) {
+        await loadWorksheet(csIdNum, selectedDate);
+      }
+    } catch (err) {
+      setRevokeError(err instanceof Error ? err.message : 'Failed to revoke attendance session.');
+    } finally {
+      setSubmittingRevocation(false);
     }
   };
 
@@ -485,6 +526,74 @@ export const AttendanceMonitoring: React.FC = () => {
         </Card>
       ) : worksheet ? (
         <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-4">
+          {/* Attendance Session Information / Revocation Control */}
+          {worksheet.attendanceSession && (
+            worksheet.attendanceSession.status === 'revoked' ? (
+              <div className="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fade-in">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
+                      <Ban className="w-3 h-3 text-rose-600" />
+                      Session Revoked
+                    </span>
+                    <span className="font-mono text-slate-500 font-bold">
+                      Code: {worksheet.attendanceSession.sessionCode}
+                    </span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-300">
+                    Biometric capture is closed; further student submissions are blocked. All recorded attendance is preserved.
+                  </p>
+                  {worksheet.attendanceSession.revocationReason && (
+                    <p className="text-slate-500 dark:text-slate-400 italic">
+                      Reason: {worksheet.attendanceSession.revocationReason}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : worksheet.attendanceSession.status === 'active' ? (
+              <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fade-in">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-extrabold text-[10px] uppercase tracking-wider">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                      Live Attendance Session Active
+                    </span>
+                    <span className="font-mono text-slate-500 font-bold">
+                      Code: {worksheet.attendanceSession.sessionCode}
+                    </span>
+                    {worksheet.attendanceSession.room && (
+                      <span className="text-slate-500 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {worksheet.attendanceSession.room}
+                      </span>
+                    )}
+                  </div>
+                  {worksheet.attendanceSession.openingTime && worksheet.attendanceSession.presentCutoff && (
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                      <Clock className="w-3 h-3 text-blue-500" />
+                      <span>
+                        Timing (Asia/Manila): Open {worksheet.attendanceSession.openingTime} → Present Cutoff {worksheet.attendanceSession.presentCutoff} → Late Cutoff {worksheet.attendanceSession.lateCutoff || 'Late'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevokeError(null);
+                    setRevokeReason('');
+                    setIsRevokeModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm shadow-rose-600/20 cursor-pointer self-start sm:self-auto shrink-0"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>Revoke Session</span>
+                </button>
+              </div>
+            ) : null
+          )}
+
           {/* Controls Bar: Search & Status Filter */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="relative flex-1 max-w-sm">
@@ -724,6 +833,90 @@ export const AttendanceMonitoring: React.FC = () => {
               >
                 {submittingCorrection && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 <span>Save Correction</span>
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* 6. Session Revocation Modal */}
+      {isRevokeModalOpen && worksheet?.attendanceSession && (
+        <Modal
+          isOpen={isRevokeModalOpen}
+          onClose={() => {
+            setIsRevokeModalOpen(false);
+            setRevokeReason('');
+            setRevokeError(null);
+          }}
+          title="Revoke Attendance Session"
+        >
+          <form onSubmit={handleRevokeSession} className="space-y-4 text-xs">
+            {revokeError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-medium">
+                {revokeError}
+              </div>
+            )}
+
+            <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 space-y-1.5 text-rose-800 dark:text-rose-300">
+              <p className="font-bold">Important Session Revocation Rules:</p>
+              <ul className="list-disc list-inside space-y-1 text-[11px]">
+                <li>Revoking immediately closes biometric capture and blocks further student submissions.</li>
+                <li><strong>All attendance already recorded is strictly preserved.</strong></li>
+                <li>Unresolved students remain subject to normal final attendance resolution (not automatically marked Absent).</li>
+              </ul>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1 text-slate-700 dark:text-slate-300">
+              <div className="flex justify-between">
+                <span className="font-semibold">Session Code:</span>
+                <span className="font-mono font-bold">{worksheet.attendanceSession.sessionCode}</span>
+              </div>
+              {worksheet.attendanceSession.room && (
+                <div className="flex justify-between">
+                  <span className="font-semibold">Room:</span>
+                  <span>{worksheet.attendanceSession.room}</span>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Revocation Reason (Optional, max 500 characters)
+              </label>
+              <textarea
+                rows={3}
+                maxLength={500}
+                value={revokeReason}
+                onChange={(e) => setRevokeReason(e.target.value)}
+                placeholder="e.g. Schedule adjustment, instructor requested cancellation, or incorrect session parameters..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:border-rose-500"
+              />
+              <span className="text-[10px] text-slate-400 block mt-1 text-right">
+                {revokeReason.length}/500
+              </span>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRevokeModalOpen(false);
+                  setRevokeReason('');
+                  setRevokeError(null);
+                }}
+                disabled={submittingRevocation}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submittingRevocation}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-md shadow-rose-600/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {submittingRevocation && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <Ban className="w-3.5 h-3.5" />
+                <span>Confirm Revoke Session</span>
               </button>
             </div>
           </form>

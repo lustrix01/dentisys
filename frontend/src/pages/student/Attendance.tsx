@@ -301,6 +301,10 @@ export const Attendance: React.FC = () => {
       formData.append('attendance_session_id', String(currentSelectedSession.id));
       formData.append('challengeId', livenessChallenge.challengeId);
       formData.append('challenge_id', livenessChallenge.challengeId);
+      if (livenessChallenge.challengeToken) {
+        formData.append('challengeToken', livenessChallenge.challengeToken);
+        formData.append('challenge_token', livenessChallenge.challengeToken);
+      }
 
       const idempotencyKey = crypto.randomUUID();
       formData.append('idempotencyKey', idempotencyKey);
