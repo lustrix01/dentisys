@@ -638,7 +638,7 @@ After the BIO-002 institutional privacy/consent review and the remaining technic
 
 **Status: APPROVED**
 
-Meaningful audit events MUST cover consent granted and revoked; enrollment started, succeeded, and failed; re-enrollment; verification success and failure; biometric revocation/deletion; attendance creation; repeated attendance attempts where relevant; Secretary manual attendance; Faculty correction; Secretary Excused requests; Faculty approval or rejection; and relevant provider or configuration changes.
+Meaningful audit events MUST cover consent granted and revoked; enrollment started, succeeded, and failed; re-enrollment; verification success and failure; biometric revocation/deletion; attendance-session creation, timing/configuration changes, closure, and revocation; attendance creation; repeated attendance attempts where relevant; Secretary manual attendance; Faculty correction; Secretary Excused requests; Faculty approval or rejection; and relevant provider or configuration changes. An attendance-session revocation audit event MUST identify the actor and timestamp and MAY include the explanatory reason.
 
 Audit data MUST NOT contain face images, camera frames, templates, embeddings, provider secrets, credentials, precise Student GPS coordinates, or persistent similarity/confidence scores. An authenticated 1:1 verification failure MAY be associated with the claimed Student account. Biometric match results MUST NOT be persisted in browser storage or other persistent client-side storage.
 
@@ -662,7 +662,11 @@ A Secretary remains authorized under the Secretary role and enters the Secretary
 
 Faculty may start and manage attendance sessions only for classes they are authorized to manage. Secretary may start and manage sessions only for classes available through the authorized Secretary attendance role. Secretary authority does not grant unrestricted access to every class. Authorization MUST be enforced server-side.
 
-Faculty-created and Secretary-created sessions use the same attendance-session functionality. Both authorized roles may configure the applicable timing, geofence setting, session location, and radius. When a session is created, eligible Students have an attendance state that remains unresolved until attendance is recorded or the attendance-resolution lifecycle resolves it; this requirement does not select a database representation.
+Faculty-created and Secretary-created sessions use the same attendance-session functionality. Both authorized roles may configure the applicable opening time, Present cutoff, Late cutoff, geofence setting, session location, and radius. Session timing is interpreted in the application's `Asia/Manila` timezone; server time is authoritative, and browser/device clocks are never authoritative. The session creation timestamp does not determine when attendance opens.
+
+An authorized Faculty or Secretary may revoke an attendance session that they are authorized to manage. Revocation immediately closes biometric capture and prevents further attendance submissions. Already-recorded attendance is preserved, and unresolved attendance remains subject to the normal final attendance-resolution lifecycle rather than being automatically marked Absent by revocation. Revocation MUST be recorded in the audit trail with the actor and timestamp; an explanatory reason MAY be recorded. Revocation MUST NOT delete or rewrite existing attendance records.
+
+When a session is created, eligible Students have an attendance state that remains unresolved until attendance is recorded or the attendance-resolution lifecycle resolves it; this requirement does not select a database representation.
 
 ## ATT-002 — Geofencing and location privacy
 
@@ -680,11 +684,13 @@ Student coordinates MAY be used temporarily to evaluate whether the Student is i
 
 **Implementation: DEFERRED**
 
-A successful biometric attendance during the on-time window produces Present. A successful biometric attendance during the allowed late window produces Late. The exact window durations are not selected here.
+A successful biometric attendance during the configured Present window produces Present. The Present window begins at the configured opening time and ends immediately before the configured Present cutoff.
 
-After biometric capture closes, Students cannot submit biometric attendance through that capture window and the UI directs them to Secretary or Faculty. A Student with no resolved attendance remains unresolved; closure MUST NOT automatically create Absent. Only after the entire applicable class/session for that day concludes does the attendance workflow explicitly resolve remaining eligible unresolved attendance to Absent.
+A successful biometric attendance during the configured Late window produces Late. The Late window begins at the Present cutoff and ends immediately before the configured Late cutoff. The configured times are interpreted in `Asia/Manila` using authoritative server time. For example, a session created at 06:00 may open at 08:00, accept Present attendance until 09:00, and accept Late attendance from 09:00 until 12:00. The creation timestamp does not determine the attendance windows.
 
-A later authorized correction may change Absent to Excused or another authorized status. Biometric closure and final attendance resolution are separate events.
+At the configured Late cutoff, biometric capture closes. Students cannot submit biometric attendance before the opening time or after capture closes, and the UI directs them to Secretary or Faculty. A Student with no resolved attendance remains unresolved; capture closure or session revocation MUST NOT itself automatically create Absent. Only after the entire applicable class/session for that day concludes does the attendance workflow explicitly resolve remaining eligible unresolved attendance to Absent. If the applicable class/session concludes at the Late cutoff, as in the 08:00–12:00 example, the unresolved eligible attendance is resolved to Absent at that point.
+
+A later authorized correction may change Absent to Excused or another authorized status. A Student may pursue that correction through the existing authorized Faculty/Secretary correction and Excused workflows; this amendment does not create a new Student-facing in-system dispute workflow. Biometric closure, session revocation, and final attendance resolution are separate events.
 
 ## ATT-004 — Unresolved attendance and grading
 
