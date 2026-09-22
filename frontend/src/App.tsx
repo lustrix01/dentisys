@@ -41,7 +41,10 @@ import { Classes as StudentClasses } from './pages/student/Classes';
 import { RetentionMonitoring as StudentRetentionMonitoring } from './pages/student/RetentionMonitoring';
 import { Profile as StudentProfile } from './pages/student/Profile';
 import { RealStudentDashboard, RealStudentProfile, StudentUnavailable } from './pages/student/RealStudentSurfaces';
-import { isStudentPrototypeAllowed } from './pages/student/studentGates';
+import {
+  isStudentPrototypeAllowed,
+  canAccessAuthoritativeStudentBiometrics,
+} from './pages/student/studentGates';
 
 import { Profile as FacultyProfile } from './pages/faculty/Profile';
 import { Settings as FacultySettings } from './pages/faculty/Settings';
@@ -69,14 +72,10 @@ function RoleDashboard() {
   return <FacultyDashboard />;
 }
 
-function isRealStudent(user: { role: string; authentication_source?: string } | null): boolean {
-  return user?.role === 'student' && (user.authentication_source === 'password' || user.authentication_source === 'google');
-}
-
 function StudentDashboardRoute() {
   const { user } = useAuth();
   const runtimeConfig = useRuntimeConfig();
-  if (isRealStudent(user)) return <RealStudentDashboard />;
+  if (canAccessAuthoritativeStudentBiometrics(user)) return <RealStudentDashboard />;
   return isStudentPrototypeAllowed(user, runtimeConfig, 'dashboard')
     ? <StudentDashboard />
     : <StudentUnavailable title="Student Dashboard unavailable" />;
@@ -85,10 +84,37 @@ function StudentDashboardRoute() {
 function StudentProfileRoute() {
   const { user } = useAuth();
   const runtimeConfig = useRuntimeConfig();
-  if (isRealStudent(user)) return <RealStudentProfile />;
+  if (canAccessAuthoritativeStudentBiometrics(user)) return <RealStudentProfile />;
   return isStudentPrototypeAllowed(user, runtimeConfig, 'academic')
     ? <StudentProfile />
     : <StudentUnavailable title="Student Profile unavailable" />;
+}
+
+function StudentFaceRegistrationRoute() {
+  const { user } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  if (canAccessAuthoritativeStudentBiometrics(user)) return <StudentFaceRegistration />;
+  return isStudentPrototypeAllowed(user, runtimeConfig, 'face')
+    ? <StudentFaceRegistration />
+    : <StudentUnavailable title="Face Registration unavailable" />;
+}
+
+function StudentAttendanceRoute() {
+  const { user } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  if (canAccessAuthoritativeStudentBiometrics(user)) return <StudentAttendance />;
+  return isStudentPrototypeAllowed(user, runtimeConfig, 'attendance')
+    ? <StudentAttendance />
+    : <StudentUnavailable title="Daily Attendance unavailable" />;
+}
+
+function StudentAttendanceLogsRoute() {
+  const { user } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  if (canAccessAuthoritativeStudentBiometrics(user)) return <StudentAttendanceLogs />;
+  return isStudentPrototypeAllowed(user, runtimeConfig, 'attendance_logs')
+    ? <StudentAttendanceLogs />
+    : <StudentUnavailable title="Attendance Logs unavailable" />;
 }
 
 function StudentPrototypeRoute({
@@ -109,7 +135,7 @@ function StudentPrototypeRoute({
 
 function RoleAttendance() {
   const { user } = useAuth();
-  if (user?.role === 'student') return <StudentAttendance />;
+  if (user?.role === 'student') return <StudentAttendanceRoute />;
   return <AttendanceMonitoring />;
 }
 
@@ -195,11 +221,11 @@ function App() {
                   <Route path="/faculty/settings" element={<FacultySettings />} />
                 </Route>
 
-                <Route element={<ProtectedRoute allowedRoles={['student']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['student', 'secretary']} />}>
                   <Route path="/student/dashboard" element={<StudentDashboardRoute />} />
-                  <Route path="/student/attendance" element={<StudentPrototypeRoute prototype={StudentAttendance} title="Daily Attendance unavailable" surface="attendance" />} />
-                  <Route path="/student/attendance-logs" element={<StudentPrototypeRoute prototype={StudentAttendanceLogs} title="Attendance Logs unavailable" surface="attendance_logs" />} />
-                  <Route path="/student/face-registration" element={<StudentPrototypeRoute prototype={StudentFaceRegistration} title="Face Registration unavailable" surface="face" />} />
+                  <Route path="/student/attendance" element={<StudentAttendanceRoute />} />
+                  <Route path="/student/attendance-logs" element={<StudentAttendanceLogsRoute />} />
+                  <Route path="/student/face-registration" element={<StudentFaceRegistrationRoute />} />
                   <Route path="/student/classes" element={<StudentPrototypeRoute prototype={StudentClasses} title="My Classes unavailable" surface="academic" />} />
                   <Route path="/student/retention" element={<StudentPrototypeRoute prototype={StudentRetentionMonitoring} title="Retention Monitoring unavailable" surface="academic" />} />
                   <Route path="/student/profile" element={<StudentProfileRoute />} />

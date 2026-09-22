@@ -33,7 +33,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useRuntimeConfig } from '../context/RuntimeConfigContext';
-import { isDevelopmentMockStudent, isStudentPrototypeAllowed } from '../pages/student/studentGates';
+import { isDevelopmentMockStudent, isStudentPrototypeAllowed, canAccessAuthoritativeStudentBiometrics } from '../pages/student/studentGates';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -173,37 +173,40 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     }
     
     if (currentUser.role === 'secretary') {
-      return [
-        // Secretary Functions
-        { name: 'Dashboard', path: '/', icon: LayoutDashboard, sectionHeader: 'Secretary Functions' },
-        { name: 'Start Class Session', path: '/secretary/start-session', icon: Play },
+      const secretaryItems: NavItem[] = [
+        { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Start New Session', path: '/secretary/start-session', icon: Play },
         { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'Manual Override', path: '/secretary/override', icon: ClipboardPenLine },
         { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
         { name: 'Secretary Profile', path: '/secretary/profile', icon: UserCircle },
         { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
-
-        // Student Functions
-        { name: 'Student Dashboard', path: '/student/dashboard', icon: LayoutDashboard, sectionHeader: 'Student Functions' },
-        { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
-        { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
-        { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
-        { name: 'My Classes', path: '/student/classes', icon: BookOpen },
-        { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
       ];
+
+      // Student Functions: BIO-010 allows Secretary accounts self-service only for own linked Student identity
+      if (user?.student) {
+        secretaryItems.push(
+          { name: 'Student Dashboard', path: '/student/dashboard', icon: LayoutDashboard, sectionHeader: 'Student Functions' },
+          { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
+          { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
+          { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
+        );
+      }
+
+      return secretaryItems;
     }
 
     if (currentUser.role === 'student') {
       const items: NavItem[] = [
         { name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
       ];
-      if (isStudentPrototypeAllowed(user, config, 'attendance')) {
+      if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'attendance')) {
         items.push({ name: 'Daily Attendance', path: '/student/attendance', icon: Camera });
       }
-      if (isStudentPrototypeAllowed(user, config, 'attendance_logs')) {
+      if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'attendance_logs')) {
         items.push({ name: 'Attendance Logs', path: '/student/attendance-logs', icon: History });
       }
-      if (isStudentPrototypeAllowed(user, config, 'face')) {
+      if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'face')) {
         items.push({ name: 'Face Registration', path: '/student/face-registration', icon: UserCheck });
       }
       if (isStudentPrototypeAllowed(user, config, 'academic')) {

@@ -5,6 +5,20 @@ import type {
   MfaSuccessResponse,
   SafeUser,
 } from '../types/auth';
+import type {
+  StudentBiometricProfile,
+  BiometricConsentPayload,
+  BiometricConsentResponse,
+  LivenessChallengeRequest,
+  LivenessChallengeResponse,
+  BiometricEnrollmentResponse,
+  BiometricRevocationResponse,
+  StudentActiveSession,
+  StudentActiveSessionsResponse,
+  BiometricAttendanceResponse,
+  StudentAttendanceLogRecord,
+  StudentAttendanceLogsResponse,
+} from '../types';
 
 const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim();
 const API_BASE_URL = configuredBase
@@ -48,6 +62,16 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
     'Verification code required.': 'Please enter a verification code.',
     'Invalid verification code.': 'Invalid verification code. Please try again.',
     'Recovery code required.': 'Please enter a recovery code.',
+    'Consent required.': 'Biometric consent is required before proceeding.',
+    'Biometric not enrolled.': 'Face registration is required before taking session attendance.',
+    'Enrollment expired.': 'Your face registration has expired for this semester. Please re-enroll.',
+    'Session not active.': 'This attendance session is not currently open for check-in.',
+    'Liveness failed.': 'Liveness check could not be verified. Please follow the instructions and try again.',
+    'Biometric verification failed.': 'Face could not be verified. Please try again or seek manual attendance.',
+    'Geofence failed.': 'You are outside the designated attendance area for this session.',
+    'Already recorded.': 'Attendance has already been recorded for this session.',
+    'Challenge expired.': 'Liveness challenge expired. Please try again.',
+    'Challenge invalid.': 'Liveness challenge is invalid. Please try again.',
   },
   401: {
     'Invalid credentials.': 'Invalid email or password.',
@@ -61,15 +85,47 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
   },
   404: {
     'No existing DentiSys account was found.': 'No existing DentiSys account was found.',
+    'Biometric profile not found.': 'Face registration profile not found. Please complete enrollment first.',
+    'Attendance session not found.': 'Attendance session not found or has ended.',
   },
   409: {
     'This DentiSys account is linked to another Google identity.': 'This account is already linked to another Google identity.',
     'Google identity does not match the invited Faculty email.': 'Google identity does not match the invited Faculty email.',
     'Google identity does not match the invited Student email.': 'Google identity does not match the invited Student email.',
+    'Attendance already recorded.': 'Attendance has already been recorded for this session.',
+    'Biometric enrollment already active.': 'Biometric profile is already enrolled.',
+  },
+  503: {
+    'Biometric service unavailable.': 'Biometric service is temporarily unavailable. Please request manual attendance.',
   },
 };
 
 function mapError(status: number, backendMessage: string, responseData?: unknown): string {
+  if (responseData && typeof responseData === 'object') {
+    const dataObj = responseData as Record<string, unknown>;
+    const code = typeof dataObj.code === 'string' ? dataObj.code : undefined;
+    if (code) {
+      const codeMessages: Record<string, string> = {
+        consent_required: 'Biometric consent is required before proceeding.',
+        biometric_not_enrolled: 'Face registration is required before taking session attendance.',
+        not_enrolled: 'Face registration is required before taking session attendance.',
+        enrollment_expired: 'Your face registration has expired for this semester. Please re-enroll.',
+        session_not_active: 'This attendance session is not currently open for check-in.',
+        challenge_expired: 'Liveness challenge expired. Please try again.',
+        challenge_invalid: 'Liveness challenge is invalid. Please try again.',
+        challenge_used: 'Liveness challenge already used. Please request a new challenge.',
+        liveness_failed: 'Liveness check could not be verified. Please follow the instructions and try again.',
+        biometric_verification_failed: 'Face could not be verified. Please try again or seek manual attendance.',
+        geofence_failed: 'You are outside the designated attendance area for this session.',
+        already_recorded: 'Attendance has already been recorded for this session.',
+        biometric_service_unavailable: 'Biometric verification is temporarily unavailable. Please request manual attendance.',
+      };
+      if (codeMessages[code]) {
+        return codeMessages[code];
+      }
+    }
+  }
+
   if ((status === 400 || status === 422) && responseData && typeof responseData === 'object') {
     const dataObj = responseData as Record<string, unknown>;
     if (dataObj.errors) {
@@ -120,6 +176,7 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   if (status === 401) return 'Authentication failed. Please log in again.';
   if (status === 403) return 'Access denied. Contact the administrator.';
   if (status === 429) return 'Too many attempts. Please wait and try again.';
+  if (status === 503) return 'Service is temporarily unavailable. Please try again later.';
   if (status >= 500) return 'A server error occurred. Please try again later.';
   return 'An unexpected error occurred. Please try again.';
 }
@@ -134,7 +191,8 @@ async function request<T>(
     accept: 'application/json',
   };
 
-  if (body !== undefined) {
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isFormData) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -151,7 +209,7 @@ async function request<T>(
       method,
       headers,
       credentials: 'include',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? (isFormData ? (body as BodyInit) : JSON.stringify(body)) : undefined,
       signal: controller.signal,
     });
   } catch {
@@ -1185,6 +1243,83 @@ export function saveFacultyGradingConfigApi(
 
 // RFC 6238 TOTP Helpers & Per-User Secret Generation
 export { base32Decode, generateBase32Secret, computeTotpCode, verifyTotpCode } from '../utils/totp';
+
+// --- Authoritative Student Biometric & Attendance APIs ---
+
+export function getStudentBiometricProfile(): Promise<StudentBiometricProfile> {
+  return request<StudentBiometricProfile>('GET', '/student/biometric/profile');
+}
+
+export function updateStudentBiometricConsent(payload: BiometricConsentPayload): Promise<BiometricConsentResponse> {
+  return request<BiometricConsentResponse>('PUT', '/student/biometric/consent', payload);
+}
+
+export function createBiometricLivenessChallenge(payload: LivenessChallengeRequest): Promise<LivenessChallengeResponse> {
+  return request<LivenessChallengeResponse>('POST', '/student/biometric/liveness/challenge', payload);
+}
+
+export function submitBiometricEnrollment(formData: FormData): Promise<BiometricEnrollmentResponse> {
+  return request<BiometricEnrollmentResponse>('POST', '/student/biometric/enrollment', formData);
+}
+
+export function revokeStudentBiometricProfile(): Promise<BiometricRevocationResponse> {
+  return request<BiometricRevocationResponse>('DELETE', '/student/biometric/profile');
+}
+
+export async function getStudentActiveAttendanceSessions(): Promise<StudentActiveSessionsResponse> {
+  const raw = await request<unknown>('GET', '/student/attendance/sessions/active');
+  if (Array.isArray(raw)) {
+    return { sessions: raw as StudentActiveSession[] };
+  }
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    if (Array.isArray(obj.sessions)) {
+      return { sessions: obj.sessions as StudentActiveSession[] };
+    }
+    if (Array.isArray(obj.data)) {
+      return { sessions: obj.data as StudentActiveSession[] };
+    }
+  }
+  return { sessions: [] };
+}
+
+export function submitBiometricAttendance(formData: FormData): Promise<BiometricAttendanceResponse> {
+  return request<BiometricAttendanceResponse>('POST', '/student/attendance/biometric', formData);
+}
+
+export async function getStudentAttendanceLogs(params?: {
+  courseCode?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}): Promise<StudentAttendanceLogsResponse> {
+  const query = new URLSearchParams();
+  if (params?.courseCode && params.courseCode !== 'all') query.set('courseCode', params.courseCode);
+  if (params?.status && params.status !== 'all') query.set('status', params.status);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
+  const qs = query.toString() ? `?${query.toString()}` : '';
+  const raw = await request<unknown>('GET', `/student/attendance/logs${qs}`);
+  if (Array.isArray(raw)) {
+    return { records: raw as StudentAttendanceLogRecord[], total: raw.length };
+  }
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    if (Array.isArray(obj.records)) {
+      return {
+        records: obj.records as StudentAttendanceLogRecord[],
+        total: typeof obj.total === 'number' ? obj.total : obj.records.length,
+      };
+    }
+    if (Array.isArray(obj.data)) {
+      return {
+        records: obj.data as StudentAttendanceLogRecord[],
+        total: typeof obj.total === 'number' ? obj.total : obj.data.length,
+      };
+    }
+  }
+  return { records: [], total: 0 };
+}
 
 
 

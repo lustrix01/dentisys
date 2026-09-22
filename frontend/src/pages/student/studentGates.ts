@@ -56,3 +56,32 @@ export function isStudentPrototypeAllowed(
   return isDevelopmentMockStudent(user, config)
     && isStudentPrototypeSurfaceEnabled(config, surface);
 }
+
+/**
+ * Check if the user is an authenticated real Student (via password or Google).
+ */
+export function isRealStudent(
+  user: Pick<SafeUser, 'role' | 'authentication_source'> | null,
+): boolean {
+  return user?.role === 'student'
+    && (user.authentication_source === 'password' || user.authentication_source === 'google');
+}
+
+/**
+ * Check if the user is a Secretary with a linked Student identity per BIO-010.
+ */
+export function isSecretaryWithStudentContext(
+  user: Pick<SafeUser, 'role' | 'student'> | null,
+): boolean {
+  return user?.role === 'secretary' && Boolean(user?.student);
+}
+
+/**
+ * Check if the user is authorized to access authoritative Student biometric self-service
+ * (either a real Student, or a Secretary for their own linked Student profile).
+ */
+export function canAccessAuthoritativeStudentBiometrics(
+  user: Pick<SafeUser, 'role' | 'authentication_source' | 'student'> | null,
+): boolean {
+  return isRealStudent(user) || isSecretaryWithStudentContext(user);
+}

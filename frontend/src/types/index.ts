@@ -153,3 +153,103 @@ export interface DashboardStats {
   criticalStudentsCount: number;
   averageAttendanceRate: number;
 }
+
+export type LivenessAction = 'blink' | 'turn_left' | 'turn_right';
+
+export type BiometricEnrollmentStatus = 'unregistered' | 'enrolled' | 'expired' | 'revoked' | 'in_progress' | 'rejected';
+
+export interface StudentBiometricProfile {
+  consentGranted: boolean;
+  enrollmentStatus: BiometricEnrollmentStatus;
+  enrolledAt: string | null;
+  expiresAt: string | null;
+  usableSampleCount?: number | null;
+  requiredUsableSamples: number;
+  manualFallbackAvailable: boolean;
+  disclosureVersion?: string | null;
+}
+
+export interface BiometricConsentPayload {
+  granted: boolean;
+  disclosureVersion: string;
+}
+
+export interface BiometricConsentResponse {
+  consentGranted: boolean;
+  disclosureVersion: string;
+  consentedAt?: string;
+}
+
+export interface LivenessChallengeRequest {
+  purpose: 'enrollment' | 'attendance';
+  attendanceSessionId?: number;
+}
+
+export interface LivenessChallengeResponse {
+  challengeId: string;
+  actions: [LivenessAction, LivenessAction];
+  expiresAt: string;
+}
+
+export interface BiometricEnrollmentResponse {
+  enrollmentStatus: BiometricEnrollmentStatus;
+  usableSampleCount: number;
+  requiredUsableSamples: number;
+  enrolledAt?: string | null;
+  expiresAt?: string | null;
+  message?: string;
+}
+
+export interface BiometricRevocationResponse {
+  success: boolean;
+  enrollmentStatus: BiometricEnrollmentStatus;
+  revokedAt?: string;
+  message?: string;
+}
+
+export interface StudentActiveSession {
+  id: number;
+  courseCode: string;
+  courseName: string;
+  room?: string;
+  schedule?: string;
+  instructorName?: string;
+  geofenceRequired?: boolean;
+  geofenceEnabled?: boolean;
+  isOpen?: boolean;
+  attendedStatus?: 'present' | 'late' | 'already_recorded' | null;
+}
+
+export interface StudentActiveSessionsResponse {
+  sessions: StudentActiveSession[];
+}
+
+export interface BiometricAttendanceResponse {
+  status: 'present' | 'late' | 'already_recorded';
+  recordedAt?: string;
+  message: string;
+  session?: {
+    id: number;
+    courseCode: string;
+  };
+}
+
+export type AttendanceVerificationMethod = 'biometric' | 'faculty_manual' | 'secretary_manual';
+
+export interface StudentAttendanceLogRecord {
+  id: number;
+  sessionId?: number;
+  courseCode: string;
+  courseName: string;
+  room?: string;
+  instructorName?: string;
+  date: string;
+  time: string;
+  status: 'present' | 'late' | 'absent' | 'excused' | 'unresolved';
+  verificationMethod: AttendanceVerificationMethod;
+}
+
+export interface StudentAttendanceLogsResponse {
+  records: StudentAttendanceLogRecord[];
+  total?: number;
+}
