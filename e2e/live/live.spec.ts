@@ -700,3 +700,168 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
 
   console.log('LIVE FACULTY GRADE WEIGHTS WORKFLOW VALIDATED SUCCESSFULLY IN POSTGRESQL');
 });
+
+test('authoritative faculty assessment manager: create and edit assessments with stable grading category in PostgreSQL', async ({ page }) => {
+  // 1. Authenticate as faculty
+  const credentials = await login(page, facultyEmail, facultyPassword);
+  expect(credentials.access_token).toBeTruthy();
+
+  // 2. Fetch classes to determine active offering
+  const classesRes = await page.request.get('/api/faculty/classes', {
+    headers: { Authorization: `Bearer ${credentials.access_token}` },
+  });
+  const classesData = await jsonResponse(classesRes);
+  expect(classesData.status).toBe('ok');
+  const activeClasses = (classesData.classes || []).filter((c: any) => (c.status || '').toLowerCase() === 'active');
+  expect(activeClasses.length).toBeGreaterThan(0);
+
+  const activeClass = activeClasses[0];
+
+  // 3. Ensure Grade Weights configuration exists for that offering
+  const configRes = await page.request.get(
+    `/api/faculty/grading-config?courseId=${activeClass.courseId}&semester=${encodeURIComponent(activeClass.semester)}&schoolYear=${encodeURIComponent(activeClass.schoolYear)}`,
+    {
+      headers: { Authorization: `Bearer ${credentials.access_token}` },
+    }
+  );
+  const configData = await jsonResponse(configRes);
+  let existingConfig = configData.configuration;
+  if (!existingConfig || !existingConfig.categories || existingConfig.categories.length < 2) {
+    const savePayload: any = {
+      courseId: activeClass.courseId,
+      semester: activeClass.semester,
+      schoolYear: activeClass.schoolYear,
+      categories: [
+        { name: 'Quizzes', weight: '30', sortOrder: 1 },
+        { name: 'Midterm Exam', weight: '30', sortOrder: 2 },
+        { name: 'Final Exam', weight: '40', sortOrder: 3 },
+      ],
+    };
+    if (existingConfig?.version !== undefined && existingConfig.version !== null) {
+      savePayload.version = existingConfig.version;
+    }
+    const saveRes = await page.request.put('/api/faculty/grading-config', {
+      headers: { Authorization: `Bearer ${credentials.access_token}`, 'Content-Type': 'application/json' },
+      data: savePayload,
+    });
+    const saved = await jsonResponse(saveRes);
+    existingConfig = saved.configuration;
+  }
+
+  expect(existingConfig.categories.length).toBeGreaterThanOrEqual(2);
+  const firstCategory = existingConfig.categories[0];
+  const secondCategory = existingConfig.categories[1];
+
+  // 4. Navigate to Assessments Tab
+  await page.goto('/grades?tab=assessments');
+  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeEnabled();
+
+  // 5. Open Create Assessment Modal
+  const testTitle = `Live Assessment ${Date.now()}`;
+  await page.getByRole('button', { name: 'Add Assessment' }).click();
+
+  const modalForm = page.locator('form').last();
+  await expect(page.getByRole('heading', { name: 'Create New Assessment activity' })).toBeVisible();
+
+  // 6. Check category dropdown contains dynamic categories from PostgreSQL
+  const categorySelect = modalForm.locator('select').nth(1);
+  await expect(categorySelect).toContainText(firstCategory.name);
+  await expect(categorySelect).toContainText(secondCategory.name);
+
+  // Fill in title
+  await modalForm.locator('input[type="text"]').first().fill(testTitle);
+  // Select firstCategory
+  await categorySelect.selectOption(String(firstCategory.id));
+
+  // Save assessment
+  const createPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/assessments') && response.request().method() === 'POST'
+  );
+  const refreshPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/assessments') && response.request().method() === 'GET'
+  );
+  await modalForm.getByRole('button', { name: 'Confirm Assessment' }).click();
+
+  const createRes = await createPromise;
+  expect(createRes.status()).toBe(200);
+  await refreshPromise;
+
+  // Wait for table to reflect new assessment
+  const row = page.getByRole('row').filter({ hasText: testTitle });
+  await expect(row).toBeVisible();
+  // Category column renders the dynamic category name
+  await expect(row.locator('td').nth(1)).toContainText(firstCategory.name);
+
+  // 7. Verify in authoritative backend GET /api/faculty/assessments
+  const verifyRes = await page.request.get('/api/faculty/assessments', {
+    headers: { Authorization: `Bearer ${credentials.access_token}` },
+  });
+  const allAssessments = await jsonResponse(verifyRes);
+  const createdAss = allAssessments.find((a: any) => a.title === testTitle);
+  expect(createdAss).toBeTruthy();
+  expect(String(createdAss.gradingCategoryId)).toBe(String(firstCategory.id));
+  expect(createdAss.type).toBe(firstCategory.name);
+
+  // 8. Edit assessment to switch to secondCategory
+  await row.getByRole('button', { name: 'Edit' }).click();
+  const editModalForm = page.locator('form').last();
+  const editCategorySelect = editModalForm.locator('select').nth(1);
+  await expect(editCategorySelect).toHaveValue(String(firstCategory.id));
+
+  await editCategorySelect.selectOption(String(secondCategory.id));
+
+  const editPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/assessments') && response.request().method() === 'POST'
+  );
+  const editRefreshPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/assessments') && response.request().method() === 'GET'
+  );
+  await editModalForm.getByRole('button', { name: 'Confirm Assessment' }).click();
+
+  const editRes = await editPromise;
+  expect(editRes.status()).toBe(200);
+  await editRefreshPromise;
+
+  // Table updates with new category name
+  await expect(row.locator('td').nth(1)).toContainText(secondCategory.name);
+
+  // 9. Hard reload with cleared localStorage to verify PostgreSQL persistence and category name resolution
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+
+  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeEnabled();
+
+  const reloadedRow = page.getByRole('row').filter({ hasText: testTitle });
+  await expect(reloadedRow).toBeVisible();
+  await expect(reloadedRow.locator('td').nth(1)).toContainText(secondCategory.name);
+
+  // 10. Clean up: Delete the test assessment to keep PostgreSQL database clean
+  const deletePromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/assessments/delete') && response.request().method() === 'POST'
+  );
+  const deleteRefreshPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/assessments') && response.request().method() === 'GET'
+  );
+  await reloadedRow.getByRole('button', { name: 'Delete' }).click();
+
+  // Confirmation modal: click Confirm
+  await page.getByRole('button', { name: 'Confirm' }).click();
+
+  const deleteRes = await deletePromise;
+  expect(deleteRes.status()).toBe(200);
+  await deleteRefreshPromise;
+
+  // Verify removed from UI
+  await expect(page.getByRole('row').filter({ hasText: testTitle })).toHaveCount(0);
+
+  // Verify removed from PostgreSQL backend
+  const postDeleteRes = await page.request.get('/api/faculty/assessments', {
+    headers: { Authorization: `Bearer ${credentials.access_token}` },
+  });
+  const postDeleteAssessments = await jsonResponse(postDeleteRes);
+  expect(postDeleteAssessments.some((a: any) => a.title === testTitle)).toBe(false);
+
+  console.log('LIVE FACULTY ASSESSMENT MANAGER WORKFLOW VALIDATED SUCCESSFULLY IN POSTGRESQL');
+});

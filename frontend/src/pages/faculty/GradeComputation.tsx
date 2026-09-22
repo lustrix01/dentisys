@@ -68,6 +68,7 @@ export const GradeComputation: React.FC = () => {
     updateAssessment,
     deleteAssessment,
     archiveAssessment,
+    refreshAssessments,
     saveAssessmentScores,
     updateStudentGrade
   } = useApp();
@@ -92,14 +93,69 @@ export const GradeComputation: React.FC = () => {
   useEffect(() => {
     Promise.all([getFacultyClassesApi(), getFacultySettingsApi()])
       .then(([classesResponse, settingsResponse]) => {
-        setFacultyClasses(Array.isArray(classesResponse.classes) ? classesResponse.classes : []);
+        const loadedClasses = Array.isArray(classesResponse.classes) ? classesResponse.classes : [];
+        setFacultyClasses(loadedClasses);
+        if (loadedClasses.length > 0 && !loadedClasses.some(c => c.courseCode === selectedSubjectCode)) {
+          setSelectedSubjectCode(loadedClasses[0].courseCode);
+        }
         if (settingsResponse.settings?.transmutationDefaults) {
           setTransmutationDefaults(settingsResponse.settings.transmutationDefaults);
         }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [selectedSubjectCode]);
+
+  // ----------------------------------------------------
+  // SHARED OFFERINGS DERIVATION (courseId + semester + schoolYear)
+  // ----------------------------------------------------
+  interface FacultyOffering {
+    key: string;
+    courseId: number;
+    courseCode: string;
+    courseName: string;
+    canonicalSemester: string;
+    canonicalSchoolYear: string;
+    sectionNames: string[];
+    sections: FacultyClassItem[];
+  }
+
+  const facultyOfferings = useMemo<FacultyOffering[]>(() => {
+    const map = new Map<string, FacultyOffering>();
+    for (const c of facultyClasses) {
+      if (!c || (c.status || '').trim().toLowerCase() !== 'active') continue;
+      const normSem = (c.semester || '').trim().toUpperCase();
+      const normSY = (c.schoolYear || '').trim().toUpperCase();
+      const courseIdKey = c.courseId !== undefined && c.courseId !== null ? String(c.courseId) : (c.courseCode || String(c.id || ''));
+      const key = `${courseIdKey}:${normSem}:${normSY}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          courseId: c.courseId !== undefined && c.courseId !== null ? Number(c.courseId) : (Number(c.id) || 0),
+          courseCode: c.courseCode || 'Course',
+          courseName: c.courseName || c.courseCode || 'Course',
+          canonicalSemester: c.semester || '',
+          canonicalSchoolYear: c.schoolYear || '',
+          sectionNames: [c.csName || String(c.csId || c.id || '')],
+          sections: [c],
+        });
+      } else {
+        const existing = map.get(key)!;
+        const secName = c.csName || String(c.csId || c.id || '');
+        if (secName && !existing.sectionNames.includes(secName)) {
+          existing.sectionNames.push(secName);
+        }
+        if (!existing.sections.some(s => s.id === c.id)) {
+          existing.sections.push(c);
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [facultyClasses]);
+
+  const getOfferingForClass = (classItem: FacultyClassItem): FacultyOffering | undefined => {
+    return facultyOfferings.find(o => o.sections.some(s => s.id === classItem.id));
+  };
 
   // Parse active tab from URL query params
   const getInitialTab = () => {
@@ -141,13 +197,107 @@ export const GradeComputation: React.FC = () => {
   // ----------------------------------------------------
   // 1. ASSESSMENT MANAGER TAB STATE
   // ----------------------------------------------------
+  type OfferingConfigStatus = 'loading' | 'configured' | 'unconfigured' | 'error';
+
+  const [selectedAssessmentOfferingKey, setSelectedAssessmentOfferingKey] = useState<string>('');
+  const currentAssessmentOffering = useMemo(() => {
+    return facultyOfferings.find(o => o.key === selectedAssessmentOfferingKey) || null;
+  }, [facultyOfferings, selectedAssessmentOfferingKey]);
+
+  // Sync selectedAssessmentOfferingKey with selectedClassId / facultyOfferings
+  useEffect(() => {
+    if (facultyOfferings.length === 0) return;
+    if (!selectedAssessmentOfferingKey || !facultyOfferings.some(o => o.key === selectedAssessmentOfferingKey)) {
+      const matchByClass = facultyOfferings.find(o => o.sections.some(s => s.id === selectedClassId));
+      const matchBySubject = facultyOfferings.find(o => o.courseCode === selectedSubjectCode);
+      const initial = matchByClass || matchBySubject || facultyOfferings[0];
+      setSelectedAssessmentOfferingKey(initial.key);
+      if (initial.courseCode !== selectedSubjectCode) {
+        setSelectedSubjectCode(initial.courseCode);
+      }
+      if (initial.sections.length > 0 && !initial.sections.some(s => s.id === selectedClassId)) {
+        setSelectedClassId(initial.sections[0].id);
+      }
+    }
+  }, [facultyOfferings, selectedClassId, selectedSubjectCode, selectedAssessmentOfferingKey]);
+
+  // When switching to assessments tab, sync offering with selectedClassId if valid
+  useEffect(() => {
+    if (activeSubTab === 'assessments' && facultyOfferings.length > 0) {
+      const matchByClass = facultyOfferings.find(o => o.sections.some(s => s.id === selectedClassId));
+      if (matchByClass && matchByClass.key !== selectedAssessmentOfferingKey) {
+        setSelectedAssessmentOfferingKey(matchByClass.key);
+      }
+    }
+  }, [activeSubTab, selectedClassId, facultyOfferings, selectedAssessmentOfferingKey]);
+
+  const handleAssessmentOfferingChange = (key: string) => {
+    setSelectedAssessmentOfferingKey(key);
+    const offering = facultyOfferings.find(o => o.key === key);
+    if (offering) {
+      setSelectedSubjectCode(offering.courseCode);
+      if (offering.sections.length > 0) {
+        const currentStillValid = offering.sections.some(s => s.id === selectedClassId);
+        if (!currentStillValid) {
+          setSelectedClassId(offering.sections[0].id);
+        }
+      } else {
+        setSelectedClassId('');
+      }
+    }
+  };
+
+  // Assessment Manager Table Grading Config State
+  const [assessmentConfigStatus, setAssessmentConfigStatus] = useState<OfferingConfigStatus>('loading');
+  const [assessmentConfig, setAssessmentConfig] = useState<FacultyGradingConfiguration | null>(null);
+  const [assessmentConfigError, setAssessmentConfigError] = useState<string | null>(null);
+
+  const loadAssessmentOfferingConfig = async (offering: FacultyOffering) => {
+    setAssessmentConfigStatus('loading');
+    setAssessmentConfigError(null);
+    try {
+      const res = await getFacultyGradingConfigApi({
+        courseId: offering.courseId,
+        semester: offering.canonicalSemester,
+        schoolYear: offering.canonicalSchoolYear,
+      });
+      if (res.configuration && Array.isArray(res.configuration.categories) && res.configuration.categories.length > 0) {
+        setAssessmentConfig(res.configuration);
+        setAssessmentConfigStatus('configured');
+      } else if (res.configuration === null) {
+        setAssessmentConfig(null);
+        setAssessmentConfigStatus('unconfigured');
+      } else {
+        setAssessmentConfig(null);
+        setAssessmentConfigStatus('unconfigured');
+      }
+    } catch (err) {
+      setAssessmentConfig(null);
+      setAssessmentConfigStatus('error');
+      setAssessmentConfigError(err instanceof Error ? err.message : 'Failed to load grading configuration.');
+    }
+  };
+
+  // Re-fetch config when assessment tab is active or selected offering changes
+  useEffect(() => {
+    if (activeSubTab === 'assessments' && currentAssessmentOffering) {
+      loadAssessmentOfferingConfig(currentAssessmentOffering);
+    }
+  }, [activeSubTab, currentAssessmentOffering?.key]);
+
+  // Modal Grading Config State
   const [isAssessmentModalOpen, setIsAssessmentModalOpen] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
+  const [modalConfigStatus, setModalConfigStatus] = useState<OfferingConfigStatus>('loading');
+  const [modalConfig, setModalConfig] = useState<FacultyGradingConfiguration | null>(null);
+  const [modalConfigError, setModalConfigError] = useState<string | null>(null);
+  const [assGradingCategoryId, setAssGradingCategoryId] = useState<string>('');
+  const [modalCategoryWarning, setModalCategoryWarning] = useState<boolean>(false);
 
   // Assessment Form State
   const [assTitle, setAssTitle] = useState('');
   const [assClassId, setAssClassId] = useState('CLINIC-A');
-  const [assType, setAssType] = useState<'Quiz' | 'Activity' | 'Assignment' | 'Laboratory' | 'Midterm Exam' | 'Final Exam' | 'Others'>('Quiz');
+  const [assType, setAssType] = useState<string>('Quiz');
   const [assPeriod, setAssPeriod] = useState<'Midterm' | 'Final'>('Midterm');
   const [assMaxScore, setAssMaxScore] = useState(50);
   const [assDueDate, setAssDueDate] = useState('');
@@ -159,6 +309,36 @@ export const GradeComputation: React.FC = () => {
   const [assTransmutationMaximum, setAssTransmutationMaximum] = useState(100);
   const [assAttendanceDate, setAssAttendanceDate] = useState('');
   const [assAttendanceCode, setAssAttendanceCode] = useState('');
+
+  const loadModalConfigForOffering = async (offering: FacultyOffering): Promise<FacultyGradingConfiguration | null> => {
+    setModalConfigStatus('loading');
+    setModalConfigError(null);
+    try {
+      const res = await getFacultyGradingConfigApi({
+        courseId: offering.courseId,
+        semester: offering.canonicalSemester,
+        schoolYear: offering.canonicalSchoolYear,
+      });
+      if (res.configuration && Array.isArray(res.configuration.categories) && res.configuration.categories.length > 0) {
+        setModalConfig(res.configuration);
+        setModalConfigStatus('configured');
+        return res.configuration;
+      } else if (res.configuration === null) {
+        setModalConfig(null);
+        setModalConfigStatus('unconfigured');
+        return null;
+      } else {
+        setModalConfig(null);
+        setModalConfigStatus('unconfigured');
+        return null;
+      }
+    } catch (err) {
+      setModalConfig(null);
+      setModalConfigStatus('error');
+      setModalConfigError(err instanceof Error ? err.message : 'Failed to load grading configuration.');
+      return null;
+    }
+  };
 
   const attendanceSessionOptions = useMemo(() => {
     const grouped = new Map<string, Set<string>>();
@@ -180,20 +360,32 @@ export const GradeComputation: React.FC = () => {
   );
 
   const activeAssessments = useMemo(() => {
+    if (activeSubTab === 'assessments') {
+      const offeringSectionIds = currentAssessmentOffering?.sections.map(s => String(s.id)) ?? [];
+      return assessments.filter(a =>
+        offeringSectionIds.includes(String(a.classId)) &&
+        a.status !== 'Archived'
+      );
+    }
     return assessments.filter(a =>
       a.subjectCode === selectedSubjectCode &&
       a.classId === selectedClassId &&
       a.status !== 'Archived'
     );
-  }, [assessments, selectedSubjectCode, selectedClassId]);
+  }, [assessments, activeSubTab, currentAssessmentOffering, selectedSubjectCode, selectedClassId]);
 
-  const openNewAssessmentModal = () => {
+  const openNewAssessmentModal = async () => {
     setEditingAssessment(null);
-    setAssTitle('');
-    setAssClassId(availableClasses.some(classItem => classItem.id === selectedClassId)
+    const modalAvailableSections = availableClasses.length > 0
+      ? availableClasses
+      : (currentAssessmentOffering?.sections ?? []);
+    const initialClassId = modalAvailableSections.some(classItem => classItem.id === selectedClassId)
       ? selectedClassId
-      : (availableClasses[0]?.id ?? ''));
-    setAssType('Quiz');
+      : (modalAvailableSections[0]?.id ?? '');
+    setAssClassId(initialClassId);
+    setAssGradingCategoryId('');
+    setAssType('');
+    setModalCategoryWarning(false);
     setAssPeriod('Midterm');
     setAssMaxScore(50);
     setAssDueDate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
@@ -206,15 +398,30 @@ export const GradeComputation: React.FC = () => {
     setAssAttendanceDate('');
     setAssAttendanceCode('');
     setIsAssessmentModalOpen(true);
+
+    const initialClass = facultyClasses.find(c => c.id === initialClassId);
+    const offering = initialClass ? getOfferingForClass(initialClass) : currentAssessmentOffering;
+    if (offering) {
+      const cfg = await loadModalConfigForOffering(offering);
+      if (cfg && Array.isArray(cfg.categories) && cfg.categories.length > 0) {
+        setAssGradingCategoryId('');
+        setAssType('');
+      } else {
+        setAssType('Quiz');
+      }
+    } else {
+      setModalConfigStatus('unconfigured');
+      setAssType('Quiz');
+    }
   };
 
-  const openEditAssessmentModal = (ass: Assessment) => {
+  const openEditAssessmentModal = async (ass: Assessment) => {
     setEditingAssessment(ass);
     setAssTitle(ass.title);
-    setAssClassId(availableClasses.some(classItem => classItem.id === ass.classId)
+    const targetClassId = availableClasses.some(classItem => classItem.id === ass.classId)
       ? ass.classId
-      : selectedClassId);
-    setAssType(ass.type);
+      : selectedClassId;
+    setAssClassId(targetClassId);
     setAssPeriod(ass.gradingPeriod);
     setAssMaxScore(ass.maxScore);
     setAssDueDate(ass.dueDate);
@@ -226,16 +433,95 @@ export const GradeComputation: React.FC = () => {
     setAssTransmutationMaximum(ass.transmutationMaximumPercentage ?? transmutationDefaults.maximumPercentage);
     setAssAttendanceDate(ass.attendanceSessionDate || '');
     setAssAttendanceCode(ass.attendanceSessionCode || '');
+    setAssGradingCategoryId(ass.gradingCategoryId ? String(ass.gradingCategoryId) : '');
+    setAssType(ass.type || '');
+    setModalCategoryWarning(false);
     setIsAssessmentModalOpen(true);
+
+    const assClass = facultyClasses.find(c => c.id === ass.classId);
+    const offering = assClass ? getOfferingForClass(assClass) : currentAssessmentOffering;
+    if (offering) {
+      const cfg = await loadModalConfigForOffering(offering);
+      if (cfg && Array.isArray(cfg.categories) && cfg.categories.length > 0) {
+        const matchedCat = cfg.categories.find(c => String(c.id) === String(ass.gradingCategoryId));
+        if (matchedCat) {
+          setAssGradingCategoryId(String(matchedCat.id));
+          setAssType(matchedCat.name);
+          setModalCategoryWarning(false);
+        } else {
+          setAssGradingCategoryId('');
+          setAssType('');
+          setModalCategoryWarning(true);
+        }
+      } else {
+        setAssGradingCategoryId('');
+        setAssType(ass.type || 'Quiz');
+        setModalCategoryWarning(false);
+      }
+    } else {
+      setModalConfigStatus('unconfigured');
+      setAssGradingCategoryId('');
+      setAssType(ass.type || 'Quiz');
+      setModalCategoryWarning(false);
+    }
+  };
+
+  const handleModalClassChange = async (newClassId: string) => {
+    const prevClass = facultyClasses.find(c => c.id === assClassId);
+    const newClass = facultyClasses.find(c => c.id === newClassId);
+    setAssClassId(newClassId);
+
+    const prevOfferingKey = prevClass ? (getOfferingForClass(prevClass)?.key ?? '') : '';
+    const newOffering = newClass ? getOfferingForClass(newClass) : null;
+    const newOfferingKey = newOffering?.key ?? '';
+
+    if (prevOfferingKey && newOfferingKey && prevOfferingKey === newOfferingKey) {
+      // Same offering: preserve category selection
+      return;
+    }
+
+    // Different offering: clear category selection and load new offering's config
+    setAssGradingCategoryId('');
+    setAssType('');
+    setModalCategoryWarning(false);
+    if (newOffering) {
+      const cfg = await loadModalConfigForOffering(newOffering);
+      if (!cfg || !cfg.categories || cfg.categories.length === 0) {
+        setAssType('Quiz');
+      }
+    } else {
+      setModalConfigStatus('unconfigured');
+      setAssType('Quiz');
+    }
   };
 
   const handleAssessmentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!assTitle) return;
+    if (!assTitle.trim()) return;
     if (!availableClasses.some(classItem => classItem.id === assClassId)) {
       showFeedback('Select an active class or section for the selected course.', 'error');
       return;
     }
+    if (modalConfigStatus === 'loading') {
+      showFeedback('Please wait for grading configuration to load.', 'error');
+      return;
+    }
+    if (modalConfigStatus === 'error') {
+      showFeedback('Cannot save assessment while grading configuration is in an error state. Please retry loading configuration.', 'error');
+      return;
+    }
+    if (modalConfigStatus === 'configured') {
+      if (!assGradingCategoryId) {
+        showFeedback('Please select a valid grading category from the active configuration.', 'error');
+        return;
+      }
+    } else if (modalConfigStatus === 'unconfigured') {
+      if (!assType) {
+        showFeedback('Please select a valid category type.', 'error');
+        return;
+      }
+    }
+
     if (assTransmutationEnabled && (!assAttendanceDate || !assAttendanceCode)) {
       showFeedback('Select a deterministic attendance date and session code before enabling transmutation.', 'error');
       return;
@@ -245,10 +531,13 @@ export const GradeComputation: React.FC = () => {
       return;
     }
 
-    const candidate = editingAssessment
+    const targetClass = facultyClasses.find(c => c.id === assClassId);
+    const targetSubjectCode = targetClass?.courseCode || selectedSubjectCode;
+
+    const candidate: any = editingAssessment
       ? {
         ...editingAssessment,
-        title: assTitle,
+        title: assTitle.trim(),
         type: assType,
         classId: assClassId,
         gradingPeriod: assPeriod,
@@ -262,11 +551,14 @@ export const GradeComputation: React.FC = () => {
         transmutationMaximumPercentage: assTransmutationMaximum,
         attendanceSessionDate: assAttendanceDate || null,
         attendanceSessionCode: assAttendanceCode || null,
+        ...(modalConfigStatus === 'configured' && assGradingCategoryId
+          ? { gradingCategoryId: Number(assGradingCategoryId) }
+          : {}),
       }
       : {
-        title: assTitle,
+        title: assTitle.trim(),
         type: assType,
-        subjectCode: selectedSubjectCode,
+        subjectCode: targetSubjectCode,
         classId: assClassId,
         gradingPeriod: assPeriod,
         maxScore: assMaxScore,
@@ -279,26 +571,27 @@ export const GradeComputation: React.FC = () => {
         transmutationMaximumPercentage: assTransmutationMaximum,
         attendanceSessionDate: assAttendanceDate || null,
         attendanceSessionCode: assAttendanceCode || null,
+        ...(modalConfigStatus === 'configured' && assGradingCategoryId
+          ? { gradingCategoryId: Number(assGradingCategoryId) }
+          : {}),
       };
+
+    if (modalConfigStatus !== 'configured' || !assGradingCategoryId) {
+      delete candidate.gradingCategoryId;
+    }
+
     try {
       const response = await saveFacultyAssessmentsApi([candidate]);
       const persistedAssessment = response.assessments?.[0];
       if (response.assessments?.length !== 1
         || !persistedAssessment?.id
         || persistedAssessment.classId !== assClassId
-        || persistedAssessment.title !== assTitle) {
+        || persistedAssessment.title !== assTitle.trim()) {
         throw new Error('The server did not confirm this assessment for the selected class. Please try again.');
       }
-      if (editingAssessment) {
-        updateAssessment(candidate as Assessment);
-      } else {
-        addAssessment({
-          ...candidate,
-          id: persistedAssessment.id,
-        });
-      }
+      await refreshAssessments();
       setSelectedClassId(assClassId);
-      showFeedback(response.message, 'success');
+      showFeedback(response.message || 'Assessment saved successfully.', 'success');
       setIsAssessmentModalOpen(false);
     } catch (requestError) {
       showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment.', 'error');
@@ -445,16 +738,6 @@ export const GradeComputation: React.FC = () => {
   // ----------------------------------------------------
   // 3. GRADE WEIGHTS EDITOR STATE (AUTHORITATIVE BACKEND)
   // ----------------------------------------------------
-  interface FacultyOffering {
-    key: string;
-    courseId: number;
-    courseCode: string;
-    courseName: string;
-    canonicalSemester: string;
-    canonicalSchoolYear: string;
-    sectionNames: string[];
-  }
-
   interface EditorCategoryRow {
     tempId: string;
     id?: number;
@@ -463,35 +746,6 @@ export const GradeComputation: React.FC = () => {
     sortOrder: number;
     inUse: boolean;
   }
-
-  const facultyOfferings = useMemo<FacultyOffering[]>(() => {
-    const map = new Map<string, FacultyOffering>();
-    for (const c of facultyClasses) {
-      if (!c || (c.status || '').trim().toLowerCase() !== 'active') continue;
-      const normSem = (c.semester || '').trim().toUpperCase();
-      const normSY = (c.schoolYear || '').trim().toUpperCase();
-      const courseIdKey = c.courseId !== undefined && c.courseId !== null ? String(c.courseId) : String(c.id || '');
-      const key = `${courseIdKey}:${normSem}:${normSY}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          courseId: c.courseId !== undefined && c.courseId !== null ? Number(c.courseId) : (Number(c.id) || 0),
-          courseCode: c.courseCode || 'Course',
-          courseName: c.courseName || c.courseCode || 'Course',
-          canonicalSemester: c.semester || '',
-          canonicalSchoolYear: c.schoolYear || '',
-          sectionNames: [c.csName || String(c.csId || c.id || '')],
-        });
-      } else {
-        const existing = map.get(key)!;
-        const secName = c.csName || String(c.csId || c.id || '');
-        if (secName && !existing.sectionNames.includes(secName)) {
-          existing.sectionNames.push(secName);
-        }
-      }
-    }
-    return Array.from(map.values());
-  }, [facultyClasses]);
 
   const [selectedOfferingKey, setSelectedOfferingKey] = useState<string>('');
   const [loadedConfig, setLoadedConfig] = useState<FacultyGradingConfiguration | null>(null);
@@ -970,8 +1224,48 @@ export const GradeComputation: React.FC = () => {
         </div>
       </div>
 
-      {/* Class and Subject Selector Bar */}
-      {activeSubTab !== 'components' && (
+      {/* Assessments Manager Course Offering and Section Selector Bar */}
+      {activeSubTab === 'assessments' && (
+        <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
+          <div className="w-full md:flex-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course Offering</label>
+            <select
+              value={selectedAssessmentOfferingKey}
+              onChange={(e) => handleAssessmentOfferingChange(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            >
+              {facultyOfferings.length === 0 ? (
+                <option value="">No active course offerings</option>
+              ) : (
+                facultyOfferings.map(offering => (
+                  <option key={offering.key} value={offering.key}>
+                    {offering.courseCode} - {offering.courseName}
+                    {offering.canonicalSemester ? ` (${offering.canonicalSemester}, ${offering.canonicalSchoolYear})` : ''}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div className="w-full md:w-56">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            >
+              {(!currentAssessmentOffering || currentAssessmentOffering.sections.length === 0)
+                ? <option value="">No active sections assigned</option>
+                : currentAssessmentOffering.sections.map(classItem => (
+                  <option key={classItem.id} value={classItem.id}>{classItem.csName}</option>
+                ))}
+            </select>
+          </div>
+        </Card>
+      )}
+
+      {/* Legacy Class and Subject Selector Bar for other untouched tabs */}
+      {activeSubTab !== 'components' && activeSubTab !== 'assessments' && (
         <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
         <div className="w-full md:flex-1">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
@@ -1224,17 +1518,34 @@ export const GradeComputation: React.FC = () => {
           <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
             <div>
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Active Course Assessments</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">Manage assignments, quizzes, laboratories, and exams</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {currentAssessmentOffering
+                  ? `${currentAssessmentOffering.courseCode} · ${currentAssessmentOffering.courseName}`
+                  : 'Manage assignments, quizzes, laboratories, and exams'}
+              </p>
             </div>
 
-            <button
-              onClick={openNewAssessmentModal}
-              disabled={availableClasses.length === 0}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs transition-colors shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Assessment
-            </button>
+            <div className="flex items-center gap-2">
+              {assessmentConfigStatus === 'error' && (
+                <button
+                  type="button"
+                  onClick={() => currentAssessmentOffering && loadAssessmentOfferingConfig(currentAssessmentOffering)}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                  title="Retry loading configuration"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Retry Config
+                </button>
+              )}
+              <button
+                onClick={openNewAssessmentModal}
+                disabled={availableClasses.length === 0 && (!currentAssessmentOffering || currentAssessmentOffering.sections.length === 0)}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs transition-colors shadow-sm disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Assessment
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
@@ -1261,13 +1572,49 @@ export const GradeComputation: React.FC = () => {
                   activeAssessments.map(ass => (
                     <tr key={ass.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                       <td className="px-5 py-3.5">
-                        <div className="font-bold text-slate-800 dark:text-slate-200">{ass.title}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{ass.title}</span>
+                          {currentAssessmentOffering && currentAssessmentOffering.sections.length > 1 && (
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-mono">
+                              {facultyClasses.find(c => c.id === ass.classId)?.csName || ass.classId}
+                            </span>
+                          )}
+                        </div>
                         {ass.instructions && <span className="text-[10px] text-slate-400 line-clamp-1">{ass.instructions}</span>}
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-450 uppercase text-[9px] tracking-wide">
-                          {ass.type}
-                        </span>
+                        {(() => {
+                          if (assessmentConfigStatus === 'loading') {
+                            return (
+                              <span className="px-2 py-0.5 rounded-md font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 uppercase text-[9px] tracking-wide animate-pulse">
+                                Loading...
+                              </span>
+                            );
+                          }
+                          if (assessmentConfigStatus === 'configured' && assessmentConfig) {
+                            const matchedCategory = assessmentConfig.categories.find(
+                              c => String(c.id) === String(ass.gradingCategoryId)
+                            );
+                            if (matchedCategory) {
+                              return (
+                                <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-450 uppercase text-[9px] tracking-wide">
+                                  {matchedCategory.name}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 uppercase text-[9px] tracking-wide">
+                                <AlertTriangle className="w-3 h-3" />
+                                Unassigned Category
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-450 uppercase text-[9px] tracking-wide">
+                              {ass.type}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-slate-350">{ass.gradingPeriod}</td>
                       <td className="px-5 py-3.5 text-center font-extrabold text-slate-800 dark:text-slate-100">{ass.maxScore} pts</td>
@@ -1293,7 +1640,7 @@ export const GradeComputation: React.FC = () => {
                               if (await requestConfirmation(`Archive ${ass.title}?`, 'Archive assessment')) {
                                 try {
                                   await saveFacultyAssessmentsApi([{ ...ass, status: 'Archived' }]);
-                                  archiveAssessment(ass.id);
+                                  await refreshAssessments();
                                   showFeedback('Assessment archived.', 'success');
                                 } catch (requestError) {
                                   showFeedback(requestError instanceof Error ? requestError.message : 'Unable to archive assessment.', 'error');
@@ -1310,8 +1657,8 @@ export const GradeComputation: React.FC = () => {
                               if (await requestConfirmation(`Permanently delete ${ass.title}? This will delete all student scores for this assessment.`, 'Delete assessment')) {
                                 try {
                                   const response = await deleteFacultyAssessmentApi(ass.id);
-                                  deleteAssessment(ass.id);
-                                  showFeedback(response.message, 'success');
+                                  await refreshAssessments();
+                                  showFeedback(response.message || 'Assessment deleted.', 'success');
                                 } catch (requestError) {
                                   showFeedback(requestError instanceof Error ? requestError.message : 'Unable to delete assessment.', 'error');
                                 }
@@ -1961,12 +2308,12 @@ export const GradeComputation: React.FC = () => {
             </label>
             <select
               value={assClassId}
-              onChange={(e) => setAssClassId(e.target.value)}
+              onChange={(e) => handleModalClassChange(e.target.value)}
               required
-              disabled={availableClasses.length === 0}
+              disabled={availableClasses.length === 0 && (!currentAssessmentOffering || currentAssessmentOffering.sections.length === 0)}
               className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
             >
-              {availableClasses.map(classItem => (
+              {(availableClasses.length > 0 ? availableClasses : (currentAssessmentOffering?.sections ?? [])).map(classItem => (
                 <option key={classItem.id} value={classItem.id}>
                   {classItem.csName}
                 </option>
@@ -1979,19 +2326,76 @@ export const GradeComputation: React.FC = () => {
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Category Type
               </label>
-              <select
-                value={assType}
-                onChange={(e) => setAssType(e.target.value as any)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
-              >
-                <option value="Quiz">Quiz</option>
-                <option value="Activity">Activity</option>
-                <option value="Assignment">Assignment</option>
-                <option value="Laboratory">Laboratory</option>
-                <option value="Midterm Exam">Midterm Exam</option>
-                <option value="Final Exam">Final Exam</option>
-                <option value="Others">Others</option>
-              </select>
+              {modalConfigStatus === 'loading' && (
+                <div className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-400 text-xs flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
+                  <span>Loading grading categories...</span>
+                </div>
+              )}
+              {modalConfigStatus === 'error' && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-400 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 mt-0.5" />
+                    <div className="flex-1 font-medium">{modalConfigError || 'Failed to resolve grading configuration.'}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const c = facultyClasses.find(x => x.id === assClassId);
+                      const off = c ? getOfferingForClass(c) : currentAssessmentOffering;
+                      if (off) loadModalConfigForOffering(off);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Retry Loading Configuration
+                  </button>
+                </div>
+              )}
+              {modalConfigStatus === 'configured' && modalConfig && (
+                <div className="space-y-2">
+                  {modalCategoryWarning && (
+                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+                      <div>This assessment requires a valid grading category assignment under this configured offering. Please select one below.</div>
+                    </div>
+                  )}
+                  <select
+                    value={assGradingCategoryId}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      setAssGradingCategoryId(selectedId);
+                      const found = modalConfig.categories.find(c => String(c.id) === String(selectedId));
+                      setAssType(found ? found.name : '');
+                    }}
+                    required
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                  >
+                    <option value="">Select grading category</option>
+                    {modalConfig.categories.map(cat => (
+                      <option key={cat.id} value={String(cat.id)}>
+                        {cat.name} ({cat.weight}%)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {modalConfigStatus === 'unconfigured' && (
+                <select
+                  value={assType}
+                  onChange={(e) => setAssType(e.target.value)}
+                  required
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
+                >
+                  <option value="Quiz">Quiz</option>
+                  <option value="Activity">Activity</option>
+                  <option value="Assignment">Assignment</option>
+                  <option value="Laboratory">Laboratory</option>
+                  <option value="Midterm Exam">Midterm Exam</option>
+                  <option value="Final Exam">Final Exam</option>
+                  <option value="Others">Others</option>
+                </select>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -2171,7 +2575,12 @@ export const GradeComputation: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-4 py-2.5 rounded-xl bg-clinical-500 hover:bg-clinical-600 text-white font-semibold text-xs shadow-md"
+              disabled={
+                modalConfigStatus === 'loading' ||
+                modalConfigStatus === 'error' ||
+                (modalConfigStatus === 'configured' && !assGradingCategoryId)
+              }
+              className="px-4 py-2.5 rounded-xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md"
             >
               Confirm Assessment
             </button>

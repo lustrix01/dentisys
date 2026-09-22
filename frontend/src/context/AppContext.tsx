@@ -38,6 +38,7 @@ interface AppContextProps {
   updateAssessment: (assessment: Assessment) => void;
   deleteAssessment: (id: string) => void;
   archiveAssessment: (id: string) => void;
+  refreshAssessments: () => Promise<Assessment[]>;
   saveAssessmentScores: (assessmentId: string, scores: { studentId: string; score: number; remarks?: string }[]) => void;
   
   // Grading Components Actions
@@ -780,6 +781,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAssessments(prev => prev.map(a => a.id === id ? { ...a, status: 'Archived' } : a));
   };
 
+  const refreshAssessments = async (): Promise<Assessment[]> => {
+    try {
+      const data = await getFacultyAssessmentsApi();
+      const loaded = Array.isArray(data) ? (data as Assessment[]) : [];
+      setAssessments(loaded);
+      return loaded;
+    } catch (err) {
+      console.warn('Failed to refresh assessments from server:', err);
+      return [];
+    }
+  };
+
   const saveAssessmentScores = (assId: string, inputScores: { studentId: string; score: number; remarks?: string }[]) => {
     setAssessmentScores(prev => {
       const filtered = prev.filter(s => s.assessmentId !== assId);
@@ -886,6 +899,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateAssessment,
         deleteAssessment,
         archiveAssessment,
+        refreshAssessments,
         saveAssessmentScores,
         updateSubjectGradingComponents,
         overrideRetentionStatus,

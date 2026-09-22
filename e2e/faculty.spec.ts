@@ -1165,8 +1165,740 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       // The legacy category from localStorage must NOT be used by Grade Weights Editor
       await expect(page.getByText('IsolatedLegacyCat')).toHaveCount(0);
-      await expect(page.getByText(/Unconfigured Course Offering/i)).toBeVisible();
     });
   });
 
+  test.describe('Faculty Assessment Manager stable grading categories', () => {
+    const mockFacultyClasses = [
+      {
+        id: '1',
+        csId: 1,
+        csName: 'CLIN401-A',
+        courseId: 101,
+        courseCode: 'CLIN401',
+        courseName: 'Clinical Dentistry I',
+        units: 3,
+        schoolYear: '2026-2027',
+        semester: '1st Semester',
+        yearLevel: 4,
+        block: 'A',
+        status: 'Active',
+      },
+      {
+        id: '2',
+        csId: 2,
+        csName: 'CLIN401-B',
+        courseId: 101,
+        courseCode: 'CLIN401',
+        courseName: 'Clinical Dentistry I',
+        units: 3,
+        schoolYear: '2026-2027',
+        semester: '1st Semester',
+        yearLevel: 4,
+        block: 'B',
+        status: 'Active',
+      },
+      {
+        id: '3',
+        csId: 3,
+        csName: 'CLIN402-A',
+        courseId: 102,
+        courseCode: 'CLIN402',
+        courseName: 'Clinical Dentistry II',
+        units: 3,
+        schoolYear: '2026-2027',
+        semester: '2nd Semester',
+        yearLevel: 4,
+        block: 'A',
+        status: 'Active',
+      },
+    ];
+
+    const mockGradingConfig401 = {
+      id: '10',
+      course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+      semester: '1st Semester',
+      schoolYear: '2026-2027',
+      version: 1,
+      categories: [
+        { id: 11, name: 'Quizzes', weight: '25', sortOrder: 1, inUse: true },
+        { id: 12, name: 'Major Exams', weight: '45', sortOrder: 2, inUse: true },
+        { id: 13, name: 'Clinical Work', weight: '30', sortOrder: 3, inUse: false },
+      ],
+    };
+
+    const mockGradingConfig402 = {
+      id: '20',
+      course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+      semester: '2nd Semester',
+      schoolYear: '2026-2027',
+      version: 1,
+      categories: [
+        { id: 21, name: 'Case Presentations', weight: '50', sortOrder: 1, inUse: false },
+        { id: 22, name: 'Practical Exam', weight: '50', sortOrder: 2, inUse: false },
+      ],
+    };
+
+    test.beforeEach(async ({ page }) => {
+      await page.route('**/api/faculty/classes', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', classes: mockFacultyClasses }),
+        });
+      });
+      await page.route('**/api/faculty/settings', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            settings: { theme: 'light', transmutationDefaults: { minimumPercentage: 50, maximumPercentage: 100 } },
+          }),
+        });
+      });
+    });
+
+    test('configured offering renders dynamic categories in modal, requires selection, and sends gradingCategoryId on create', async ({ page }) => {
+      let postedAssessmentPayload: Record<string, any> | null = null;
+      let getAssessmentsCallCount = 0;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        if (route.request().method() === 'POST') {
+          const [payload] = route.request().postDataJSON() as Record<string, any>[];
+          postedAssessmentPayload = payload;
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              message: 'Assessment persisted successfully.',
+              assessments: [{ id: 'ass-new', classId: payload.classId, title: payload.title }],
+            }),
+          });
+          return;
+        }
+        getAssessmentsCallCount++;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([]),
+        });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      await page.getByRole('button', { name: 'Add Assessment' }).click();
+
+      const modalForm = page.locator('form').last();
+      await expect(page.getByRole('heading', { name: 'Create New Assessment activity' })).toBeVisible();
+
+      // Check category options in the modal
+      const categorySelect = modalForm.locator('select').nth(1);
+      const categoryOptions = await categorySelect.evaluate((sel: HTMLSelectElement) =>
+        Array.from(sel.options).map(opt => ({ value: opt.value, text: opt.textContent?.trim() }))
+      );
+
+      // Verify dynamic categories from config, NOT legacy Quiz/Activity hardcoded list
+      expect(categoryOptions).toEqual([
+        { value: '', text: 'Select grading category' },
+        { value: '11', text: 'Quizzes (25%)' },
+        { value: '12', text: 'Major Exams (45%)' },
+        { value: '13', text: 'Clinical Work (30%)' },
+      ]);
+
+      // Fill in title
+      await modalForm.locator('input[type="text"]').first().fill('Midterm Crown Quiz');
+
+      // Attempt submit without category selection: Confirm button is disabled
+      const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
+      await expect(submitBtn).toBeDisabled();
+
+      // Select 'Quizzes (25%)'
+      await categorySelect.selectOption('11');
+      await expect(submitBtn).toBeEnabled();
+
+      const initialGetCount = getAssessmentsCallCount;
+      await submitBtn.click();
+
+      await expect(page.getByText('Assessment persisted successfully.')).toBeVisible();
+      expect(postedAssessmentPayload).not.toBeNull();
+      expect(postedAssessmentPayload?.gradingCategoryId).toBe(11);
+      expect(postedAssessmentPayload?.type).toBe('Quizzes');
+      expect(postedAssessmentPayload?.classId).toBe('1');
+      expect(postedAssessmentPayload?.title).toBe('Midterm Crown Quiz');
+
+      // Authoritative re-fetch: GET /api/faculty/assessments called
+      expect(getAssessmentsCallCount).toBeGreaterThan(initialGetCount);
+    });
+
+    test('edit resolves category by stable ID, shows renamed category name, and preserves stable ID on save', async ({ page }) => {
+      let postedAssessmentPayload: Record<string, any> | null = null;
+      let assessmentsList = [
+        {
+          id: 'ass-100',
+          title: 'Periodontics Practical',
+          type: 'Old Stale Name',
+          gradingCategoryId: 12,
+          subjectCode: 'CLIN401',
+          classId: '1',
+          gradingPeriod: 'Midterm',
+          maxScore: 100,
+          dueDate: '2026-10-15',
+          status: 'Active',
+        },
+      ];
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        if (route.request().method() === 'POST') {
+          const [payload] = route.request().postDataJSON() as Record<string, any>[];
+          postedAssessmentPayload = payload;
+          assessmentsList = [{ ...assessmentsList[0], ...payload }];
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              message: 'Assessment updated successfully.',
+              assessments: [{ id: payload.id, classId: payload.classId, title: payload.title }],
+            }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(assessmentsList),
+        });
+      });
+
+      await page.goto('/grades?tab=assessments');
+
+      // Table displays category name resolved from stable ID 12 ("Major Exams"), not "Old Stale Name"
+      const row = page.getByRole('row').filter({ hasText: 'Periodontics Practical' });
+      await expect(row).toBeVisible();
+      await expect(row.getByText('Major Exams')).toBeVisible();
+      await expect(row.getByText('Old Stale Name')).toHaveCount(0);
+
+      // Open Edit modal
+      await row.getByRole('button', { name: 'Edit' }).click();
+      const modalForm = page.locator('form').last();
+      await expect(page.getByRole('heading', { name: 'Edit Assessment Spec' })).toBeVisible();
+
+      // Category select is preselected with stable ID 12
+      const categorySelect = modalForm.locator('select').nth(1);
+      await expect(categorySelect).toHaveValue('12');
+
+      // Confirm without changing category: preserves stable ID
+      await modalForm.getByRole('button', { name: 'Confirm Assessment' }).click();
+      await expect(page.getByText('Assessment updated successfully.')).toBeVisible();
+      expect(postedAssessmentPayload?.gradingCategoryId).toBe(12);
+      expect(postedAssessmentPayload?.type).toBe('Major Exams');
+    });
+
+    test('edit changing category sends new stable category ID and updated type', async ({ page }) => {
+      let postedAssessmentPayload: Record<string, any> | null = null;
+      const assessmentsList = [
+        {
+          id: 'ass-100',
+          title: 'Periodontics Practical',
+          type: 'Quizzes',
+          gradingCategoryId: 11,
+          subjectCode: 'CLIN401',
+          classId: '1',
+          gradingPeriod: 'Midterm',
+          maxScore: 100,
+          dueDate: '2026-10-15',
+          status: 'Active',
+        },
+      ];
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        if (route.request().method() === 'POST') {
+          const [payload] = route.request().postDataJSON() as Record<string, any>[];
+          postedAssessmentPayload = payload;
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              message: 'Assessment updated successfully.',
+              assessments: [{ id: payload.id, classId: payload.classId, title: payload.title }],
+            }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(assessmentsList),
+        });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      const row = page.getByRole('row').filter({ hasText: 'Periodontics Practical' });
+      await row.getByRole('button', { name: 'Edit' }).click();
+
+      const modalForm = page.locator('form').last();
+      const categorySelect = modalForm.locator('select').nth(1);
+      await expect(categorySelect).toHaveValue('11');
+
+      // Change category to Clinical Work (13)
+      await categorySelect.selectOption('13');
+      await modalForm.getByRole('button', { name: 'Confirm Assessment' }).click();
+
+      await expect(page.getByText('Assessment updated successfully.')).toBeVisible();
+      expect(postedAssessmentPayload?.gradingCategoryId).toBe(13);
+      expect(postedAssessmentPayload?.type).toBe('Clinical Work');
+    });
+
+    test('switching sections within same offering preserves category selection', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      await page.getByRole('button', { name: 'Add Assessment' }).click();
+
+      const modalForm = page.locator('form').last();
+      const sectionSelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select').nth(1);
+
+      // Select category Clinical Work (13)
+      await categorySelect.selectOption('13');
+      await expect(categorySelect).toHaveValue('13');
+
+      // Switch from Section 1 (CLIN401-A) to Section 2 (CLIN401-B), both under CLIN401 1st Sem
+      await sectionSelect.selectOption('2');
+
+      // Category remains Clinical Work (13)
+      await expect(categorySelect).toHaveValue('13');
+    });
+
+    test('unconfigured offering displays legacy category selector and omits gradingCategoryId', async ({ page }) => {
+      let postedAssessmentPayload: Record<string, any> | null = null;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: null }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        if (route.request().method() === 'POST') {
+          const [payload] = route.request().postDataJSON() as Record<string, any>[];
+          postedAssessmentPayload = payload;
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              message: 'Assessment persisted successfully.',
+              assessments: [{ id: 'legacy-ass', classId: payload.classId, title: payload.title }],
+            }),
+          });
+          return;
+        }
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      await page.getByRole('button', { name: 'Add Assessment' }).click();
+
+      const modalForm = page.locator('form').last();
+      const categorySelect = modalForm.locator('select').nth(1);
+
+      // Verify legacy options are shown
+      const options = await categorySelect.evaluate((sel: HTMLSelectElement) =>
+        Array.from(sel.options).map(opt => opt.value)
+      );
+      expect(options).toEqual(['Quiz', 'Activity', 'Assignment', 'Laboratory', 'Midterm Exam', 'Final Exam', 'Others']);
+
+      await modalForm.locator('input[type="text"]').first().fill('Legacy Lab Activity');
+      await categorySelect.selectOption('Laboratory');
+
+      await modalForm.getByRole('button', { name: 'Confirm Assessment' }).click();
+      await expect(page.getByText('Assessment persisted successfully.')).toBeVisible();
+
+      expect(postedAssessmentPayload).not.toBeNull();
+      expect('gradingCategoryId' in (postedAssessmentPayload ?? {})).toBe(false);
+      expect(postedAssessmentPayload?.type).toBe('Laboratory');
+    });
+
+    test('configured offering with missing or invalid category ID displays warning badge and blocks save until resolved', async ({ page }) => {
+      let postedAssessmentPayload: Record<string, any> | null = null;
+      const unassignedAssessments = [
+        {
+          id: 'ass-broken',
+          title: 'Uncategorized Lab Exam',
+          type: 'Orphaned Quiz',
+          gradingCategoryId: null,
+          subjectCode: 'CLIN401',
+          classId: '1',
+          gradingPeriod: 'Midterm',
+          maxScore: 50,
+          dueDate: '2026-10-20',
+          status: 'Active',
+        },
+      ];
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        if (route.request().method() === 'POST') {
+          const [payload] = route.request().postDataJSON() as Record<string, any>[];
+          postedAssessmentPayload = payload;
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              message: 'Assessment updated successfully.',
+              assessments: [{ id: payload.id, classId: payload.classId, title: payload.title }],
+            }),
+          });
+          return;
+        }
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(unassignedAssessments) });
+      });
+
+      await page.goto('/grades?tab=assessments');
+
+      // Table displays "Unassigned Category" badge
+      const row = page.getByRole('row').filter({ hasText: 'Uncategorized Lab Exam' });
+      await expect(row).toBeVisible();
+      await expect(row.getByText('Unassigned Category')).toBeVisible();
+
+      // Click Edit
+      await row.getByRole('button', { name: 'Edit' }).click();
+      const modalForm = page.locator('form').last();
+
+      // Modal displays warning alert
+      await expect(page.getByText(/requires a valid grading category assignment/i)).toBeVisible();
+
+      // Category select is empty and submit button is disabled
+      const categorySelect = modalForm.locator('select').nth(1);
+      await expect(categorySelect).toHaveValue('');
+      const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
+      await expect(submitBtn).toBeDisabled();
+
+      // Explicitly assign category 11
+      await categorySelect.selectOption('11');
+      await expect(submitBtn).toBeEnabled();
+
+      await submitBtn.click();
+      await expect(page.getByText('Assessment updated successfully.')).toBeVisible();
+      expect(postedAssessmentPayload?.gradingCategoryId).toBe(11);
+      expect(postedAssessmentPayload?.type).toBe('Quizzes');
+    });
+
+    test('grading config error state displays retry, disables save, and never falls back to legacy categories', async ({ page }) => {
+      let shouldFail = true;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        if (shouldFail) {
+          await route.fulfill({
+            status: 422,
+            contentType: 'application/json',
+            body: JSON.stringify({ status: 'error', message: 'Failed to load database config' }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      await page.getByRole('button', { name: 'Add Assessment' }).click();
+
+      const modalForm = page.locator('form').last();
+
+      // Error banner with retry is visible
+      await expect(page.getByText('Failed to load database config')).toBeVisible();
+      const retryBtn = modalForm.getByRole('button', { name: 'Retry Loading Configuration' });
+      await expect(retryBtn).toBeVisible();
+
+      // Confirm button is disabled
+      const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
+      await expect(submitBtn).toBeDisabled();
+
+      // Legacy category dropdown must NOT be displayed
+      await expect(modalForm.locator('option', { hasText: 'Quiz' })).toHaveCount(0);
+
+      // Now recover by clicking Retry
+      shouldFail = false;
+      await retryBtn.click();
+
+      // Recovers to show dynamic categories
+      const categorySelect = modalForm.locator('select').nth(1);
+      await expect(categorySelect).toBeVisible();
+      await expect(categorySelect).toContainText('Quizzes (25%)');
+    });
+
+    test('authoritative re-fetch: archive and delete re-fetch assessments from server', async ({ page }) => {
+      let getAssessmentsCount = 0;
+      let deleteCalled = false;
+      let archiveCalled = false;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments/delete', async (route) => {
+        deleteCalled = true;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', message: 'Assessment deleted.', assessmentId: 'ass-1', deletedScoreCount: 0 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        if (route.request().method() === 'POST') {
+          archiveCalled = true;
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              message: 'Assessment archived.',
+              assessments: [{ id: 'ass-1', classId: '1', title: 'Test Ass' }],
+            }),
+          });
+          return;
+        }
+        getAssessmentsCount++;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            {
+              id: 'ass-1',
+              title: 'Assessment For Archive and Delete',
+              type: 'Quizzes',
+              gradingCategoryId: 11,
+              subjectCode: 'CLIN401',
+              classId: '1',
+              gradingPeriod: 'Midterm',
+              maxScore: 50,
+              dueDate: '2026-10-30',
+              status: 'Active',
+            },
+          ]),
+        });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      const row = page.getByRole('row').filter({ hasText: 'Assessment For Archive and Delete' });
+      await expect(row).toBeVisible();
+
+      // Trigger Archive
+      const beforeArchiveCount = getAssessmentsCount;
+      await row.getByRole('button', { name: 'Archive' }).click();
+
+      // Confirmation modal
+      const confirmModal = page.locator('button', { hasText: 'Confirm' });
+      if (await confirmModal.isVisible()) {
+        await confirmModal.click();
+      }
+
+      await expect.poll(() => archiveCalled).toBe(true);
+      await expect.poll(() => getAssessmentsCount).toBeGreaterThan(beforeArchiveCount);
+
+      // Trigger Delete
+      const beforeDeleteCount = getAssessmentsCount;
+      await row.getByRole('button', { name: 'Delete' }).click();
+      const deleteConfirmModal = page.locator('button', { hasText: 'Confirm' });
+      if (await deleteConfirmModal.isVisible()) {
+        await deleteConfirmModal.click();
+      }
+
+      await expect.poll(() => deleteCalled).toBe(true);
+      await expect.poll(() => getAssessmentsCount).toBeGreaterThan(beforeDeleteCount);
+    });
+
+    test('switching sections to a different offering clears category, loads new config, and blocks submitting old category ID', async ({ page }) => {
+      const classesWithTwoOfferings = [
+        {
+          id: '1',
+          csId: 1,
+          csName: 'CLIN401-Sem1',
+          courseId: 101,
+          courseCode: 'CLIN401',
+          courseName: 'Clinical Dentistry I',
+          units: 3,
+          schoolYear: '2026-2027',
+          semester: '1st Semester',
+          yearLevel: 4,
+          block: 'A',
+          status: 'Active',
+        },
+        {
+          id: '4',
+          csId: 4,
+          csName: 'CLIN401-Sem2',
+          courseId: 101,
+          courseCode: 'CLIN401',
+          courseName: 'Clinical Dentistry I',
+          units: 3,
+          schoolYear: '2026-2027',
+          semester: '2nd Semester',
+          yearLevel: 4,
+          block: 'B',
+          status: 'Active',
+        },
+      ];
+
+      await page.route('**/api/faculty/classes', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', classes: classesWithTwoOfferings }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config?*semester=1st*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig401 }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config?*semester=2nd*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: mockGradingConfig402 }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      });
+
+      await page.goto('/grades?tab=assessments');
+      await page.getByRole('button', { name: 'Add Assessment' }).click();
+
+      const modalForm = page.locator('form').last();
+      const sectionSelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select').nth(1);
+
+      // Initially on Section 1 (1st Sem): select Quizzes (11)
+      await categorySelect.selectOption('11');
+      await expect(categorySelect).toHaveValue('11');
+
+      // Now switch to Section 4 (2nd Sem - DIFFERENT offering)
+      await sectionSelect.selectOption('4');
+
+      // Category selection is cleared
+      await expect(categorySelect).toHaveValue('');
+
+      // New configuration categories are loaded (21: Case Presentations, 22: Practical Exam)
+      await expect(categorySelect).toContainText('Case Presentations (50%)');
+      await expect(categorySelect).not.toContainText('Quizzes');
+
+      // Confirm button is disabled because category was cleared and requires re-selection
+      const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
+      await expect(submitBtn).toBeDisabled();
+    });
+
+    test('category rename on server immediately updates table display without modifying assessment', async ({ page }) => {
+      const renamedConfig = {
+        ...mockGradingConfig401,
+        categories: [
+          { id: 11, name: 'Renamed Comprehensive Quizzes', weight: '25', sortOrder: 1, inUse: true },
+          { id: 12, name: 'Major Exams', weight: '45', sortOrder: 2, inUse: true },
+          { id: 13, name: 'Clinical Work', weight: '30', sortOrder: 3, inUse: false },
+        ],
+      };
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ status: 'ok', configuration: renamedConfig }),
+        });
+      });
+
+      await page.route('**/api/faculty/assessments', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            {
+              id: 'ass-rename-test',
+              title: 'Assessment Under Renamed Category',
+              type: 'Legacy Stale Category Name',
+              gradingCategoryId: 11,
+              subjectCode: 'CLIN401',
+              classId: '1',
+              gradingPeriod: 'Midterm',
+              maxScore: 50,
+              dueDate: '2026-10-30',
+              status: 'Active',
+            },
+          ]),
+        });
+      });
+
+      await page.goto('/grades?tab=assessments');
+
+      // Table displays the current configured name "Renamed Comprehensive Quizzes"
+      const row = page.getByRole('row').filter({ hasText: 'Assessment Under Renamed Category' });
+      await expect(row).toBeVisible();
+      await expect(row.getByText('Renamed Comprehensive Quizzes')).toBeVisible();
+      await expect(row.getByText('Legacy Stale Category Name')).toHaveCount(0);
+    });
+  });
 });

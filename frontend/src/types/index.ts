@@ -97,7 +97,8 @@ export interface Student {
 export interface Assessment {
   id: string;
   title: string;
-  type: 'Quiz' | 'Activity' | 'Assignment' | 'Laboratory' | 'Midterm Exam' | 'Final Exam' | 'Others';
+  type: string;
+  gradingCategoryId?: string | number | null;
   subjectCode: string;
   classId: string;
   gradingPeriod: 'Midterm' | 'Final';
