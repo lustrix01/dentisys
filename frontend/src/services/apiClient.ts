@@ -1180,15 +1180,10 @@ export function createFacultyClassApi(data: {
 export function updateFacultyClassApi(data: {
   csId: number;
   csName?: string;
-  courseId?: number;
-  courseCode?: string;
-  courseName?: string;
-  semester?: string;
-  schoolYear?: string;
-  yearLevel?: number;
   block?: string;
-  labRoom?: string;
+  yearLevel?: number;
   lecRoom?: string;
+  labRoom?: string;
 }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/classes/update', data);
 }

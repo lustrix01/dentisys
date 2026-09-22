@@ -211,7 +211,6 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Form States: Edit Class Section
   const [editingClass, setEditingClass] = useState<FacultyClassItem | null>(null);
-  const [editSelectedCourseId, setEditSelectedCourseId] = useState<number>(0);
   const [editCourseCode, setEditCourseCode] = useState('');
   const [editCourseName, setEditCourseName] = useState('');
   const [editBlock, setEditBlock] = useState('');
@@ -220,11 +219,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [editLabRoom, setEditLabRoom] = useState('');
   const [editSemester, setEditSemester] = useState('1st Semester');
   const [editSchoolYear, setEditSchoolYear] = useState('2025-2026');
-  const [editSchedule, setEditSchedule] = useState('');
-  const [editSelectedDays, setEditSelectedDays] = useState<string[]>(['Mon', 'Wed']);
-  const [editStartTime, setEditStartTime] = useState('08:00 AM');
-  const [editEndTime, setEditEndTime] = useState('11:00 AM');
-  const [editScheduleError, setEditScheduleError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
 
   // Form States: Add Student Manually (C4 Split-Name Interface)
@@ -386,7 +381,6 @@ export const ClassesAndRosters: React.FC = () => {
   // Handler: Open Edit Class Section Modal
   const handleOpenEditClass = (cls: FacultyClassItem) => {
     setEditingClass(cls);
-    setEditSelectedCourseId(cls.courseId || 0);
     setEditCourseCode(cls.courseCode || '');
     setEditCourseName(cls.courseName || '');
     setEditBlock(cls.block || '');
@@ -395,108 +389,49 @@ export const ClassesAndRosters: React.FC = () => {
     setEditLabRoom(cls.labRoom || '');
     setEditSemester(cls.semester || '1st Semester');
     setEditSchoolYear(cls.schoolYear || '2025-2026');
-
-    const sched = cls.schedule || '';
-    setEditSchedule(sched);
-    const parsed = parseScheduleTimeslot(sched);
-    if (parsed) {
-      const dayMapRev: Record<number, string> = {
-        0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat'
-      };
-      const days = parsed.days.map(d => dayMapRev[d]).filter(Boolean);
-      setEditSelectedDays(days.length > 0 ? days : ['Mon', 'Wed']);
-      const formatMin = (m: number) => {
-        let h = Math.floor(m / 60);
-        const mins = m % 60;
-        const p = h >= 12 ? 'PM' : 'AM';
-        if (h > 12) h -= 12;
-        if (h === 0) h = 12;
-        return `${String(h).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${p}`;
-      };
-      const sStr = formatMin(parsed.startMin);
-      const eStr = formatMin(parsed.endMin);
-      if (TIME_OPTIONS.includes(sStr)) setEditStartTime(sStr);
-      if (TIME_OPTIONS.includes(eStr)) setEditEndTime(eStr);
-    } else {
-      setEditSelectedDays(['Mon', 'Wed']);
-      setEditStartTime('08:00 AM');
-      setEditEndTime('11:00 AM');
-    }
-    setEditScheduleError(null);
+    setEditError(null);
   };
 
   // Handler: Update Class Section
   const handleUpdateClass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClass) return;
-    setEditScheduleError(null);
+    setEditError(null);
 
-    if (!editSelectedCourseId) {
-      setEditScheduleError('Please select a valid course from catalog.');
+    const rawId = editingClass.csId ?? editingClass.id;
+    const parsedCsId = typeof rawId === 'number' ? rawId : parseInt(String(rawId).replace(/\D+/g, ''), 10);
+    if (isNaN(parsedCsId) || parsedCsId <= 0) {
+      const errMsg = 'Invalid class ID. Cannot update class section.';
+      setEditError(errMsg);
+      showFeedback(errMsg, 'error');
       return;
     }
+
     if (!editBlock.trim()) {
-      setEditScheduleError('Please enter a Section / Block.');
+      setEditError('Please enter a Section / Block.');
       return;
-    }
-    if (!editLecRoom.trim() && !editLabRoom.trim()) {
-      setEditScheduleError('Please enter a Lecture Room or Laboratory Room venue.');
-      return;
-    }
-    if (!editSchedule.trim()) {
-      setEditScheduleError('Please specify a Class Schedule.');
-      return;
-    }
-
-    if (editLecRoom.trim()) {
-      const conflict = checkRoomScheduleConflict(classes, editLecRoom, editSchedule, editingClass.csId ?? editingClass.id);
-      if (conflict) {
-        setEditScheduleError(
-          `Room Schedule Conflict: Lecture Room "${editLecRoom}" is already occupied on "${editSchedule}" by ${conflict.courseCode} (${conflict.block || 'Sec'}). Please select a different timeslot or room.`
-        );
-        return;
-      }
-    }
-
-    if (editLabRoom.trim()) {
-      const conflict = checkRoomScheduleConflict(classes, editLabRoom, editSchedule, editingClass.csId ?? editingClass.id);
-      if (conflict) {
-        setEditScheduleError(
-          `Room Schedule Conflict: Lab Room "${editLabRoom}" is already occupied on "${editSchedule}" by ${conflict.courseCode} (${conflict.block || 'Sec'}). Please select a different timeslot or room.`
-        );
-        return;
-      }
     }
 
     setIsUpdatingClass(true);
     try {
-      const rawId = editingClass.csId ?? editingClass.id;
-      const parsedCsId = typeof rawId === 'number' ? rawId : parseInt(String(rawId).replace(/\D+/g, ''), 10);
-      const targetCsId = isNaN(parsedCsId) || parsedCsId <= 0 ? 1 : parsedCsId;
-
       const res = await updateFacultyClassApi({
-        csId: targetCsId,
+        csId: parsedCsId,
         csName: `${editCourseCode.trim()}-${editBlock.trim()}`,
-        courseId: editSelectedCourseId,
-        courseCode: editCourseCode.trim(),
-        courseName: editCourseName.trim(),
-        semester: editSemester,
-        schoolYear: editSchoolYear,
-        yearLevel: editYearLevel,
         block: editBlock.trim(),
-        lecRoom: editLecRoom.trim(),
-        labRoom: editLabRoom.trim(),
+        yearLevel: editYearLevel,
+        lecRoom: editLecRoom.trim() || undefined,
+        labRoom: editLabRoom.trim() || undefined,
       });
 
-      if (res && res.status === 'ok') {
+      if (res && (res.status === 'ok' || res.status === 'success')) {
         showFeedback(`Class ${editCourseCode} (${editBlock.trim()}) updated successfully!`, 'success');
         setEditingClass(null);
         await fetchData();
       } else {
-        setEditScheduleError(res?.message || 'Failed to update class section.');
+        setEditError(res?.message || 'Failed to update class section.');
       }
     } catch (err: any) {
-      setEditScheduleError(err?.message || 'Failed to save class section updates to backend.');
+      setEditError(err?.message || 'Failed to save class section updates to backend.');
     } finally {
       setIsUpdatingClass(false);
     }
@@ -939,11 +874,16 @@ export const ClassesAndRosters: React.FC = () => {
                     <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                        <span>{cls.schedule || 'Schedule TBA'}</span>
+                        <span>{cls.semester || '1st Semester'} &bull; {cls.schoolYear || '2025-2026'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                        <span>Room: {cls.lecRoom || cls.labRoom || 'TBA'}</span>
+                        <span>
+                          {[
+                            cls.lecRoom ? `Lec: ${cls.lecRoom}` : null,
+                            cls.labRoom ? `Lab: ${cls.labRoom}` : null,
+                          ].filter(Boolean).join(' | ') || 'Venue TBA'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1674,36 +1614,11 @@ export const ClassesAndRosters: React.FC = () => {
           isOpen={!!editingClass}
           onClose={() => {
             setEditingClass(null);
-            setEditScheduleError(null);
+            setEditError(null);
           }}
           title="Edit Class Section Details"
         >
           <form onSubmit={handleUpdateClass} className="space-y-4 text-xs">
-            {/* Course Catalog Selection (Authoritative catalog only, no dynamic creation) */}
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Offering (from catalog)</label>
-              <select
-                value={editSelectedCourseId}
-                onChange={(e) => {
-                  const cId = Number(e.target.value);
-                  setEditSelectedCourseId(cId);
-                  const matched = courses.find(c => c.id === cId);
-                  if (matched) {
-                    setEditCourseCode(matched.courseCode);
-                    setEditCourseName(matched.name);
-                    setEditYearLevel(matched.yearLevel);
-                  }
-                }}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-              >
-                {courses.map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.courseCode} - {c.name} ({c.units} Units, Year {c.yearLevel})
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code</label>
@@ -1784,7 +1699,7 @@ export const ClassesAndRosters: React.FC = () => {
                   value={editLecRoom}
                   onChange={(e) => {
                     setEditLecRoom(e.target.value);
-                    setEditScheduleError(null);
+                    setEditError(null);
                   }}
                   placeholder="Lecture Hall A"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
@@ -1799,7 +1714,7 @@ export const ClassesAndRosters: React.FC = () => {
                   value={editLabRoom}
                   onChange={(e) => {
                     setEditLabRoom(e.target.value);
-                    setEditScheduleError(null);
+                    setEditError(null);
                   }}
                   placeholder="Dental Clinic Lab 1"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
@@ -1807,132 +1722,10 @@ export const ClassesAndRosters: React.FC = () => {
               </div>
             </div>
 
-            {/* Step-by-Step Schedule Builder */}
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                  1. Select Day(s) *
-                </label>
-                <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                  {DAYS_LIST.map(day => {
-                    const isSelected = editSelectedDays.includes(day);
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => {
-                          const updated = isSelected
-                            ? editSelectedDays.filter(d => d !== day)
-                            : DAYS_LIST.filter(d => d === day || editSelectedDays.includes(d));
-                          setEditSelectedDays(updated);
-                          if (updated.length > 0) {
-                            setEditSchedule(`${updated.join('/')} ${editStartTime} - ${editEndTime}`);
-                          }
-                          setEditScheduleError(null);
-                        }}
-                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-600 text-white shadow-xs'
-                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                        }`}
-                      >
-                        {day}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
-                  <span className="text-slate-400 font-semibold">Presets:</span>
-                  {[
-                    { label: 'Mon/Wed', days: ['Mon', 'Wed'] },
-                    { label: 'Tue/Thu', days: ['Tue', 'Thu'] },
-                    { label: 'Mon/Wed/Fri', days: ['Mon', 'Wed', 'Fri'] },
-                    { label: 'Sat', days: ['Sat'] },
-                  ].map(combo => (
-                    <button
-                      key={combo.label}
-                      type="button"
-                      onClick={() => {
-                        setEditSelectedDays(combo.days);
-                        setEditSchedule(`${combo.days.join('/')} ${editStartTime} - ${editEndTime}`);
-                        setEditScheduleError(null);
-                      }}
-                      className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors cursor-pointer"
-                    >
-                      {combo.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  2. Select Time Range *
-                </label>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
-                    <select
-                      value={editStartTime}
-                      onChange={(e) => {
-                        setEditStartTime(e.target.value);
-                        if (editSelectedDays.length > 0) {
-                          setEditSchedule(`${editSelectedDays.join('/')} ${e.target.value} - ${editEndTime}`);
-                        }
-                        setEditScheduleError(null);
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-                    >
-                      {TIME_OPTIONS.map(t => (
-                        <option key={`edit-start-${t}`} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">End Time</span>
-                    <select
-                      value={editEndTime}
-                      onChange={(e) => {
-                        setEditEndTime(e.target.value);
-                        if (editSelectedDays.length > 0) {
-                          setEditSchedule(`${editSelectedDays.join('/')} ${editStartTime} - ${e.target.value}`);
-                        }
-                        setEditScheduleError(null);
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-                    >
-                      {TIME_OPTIONS.map(t => (
-                        <option key={`edit-end-${t}`} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  Final Class Schedule (Editable) *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editSchedule}
-                  onChange={(e) => {
-                    setEditSchedule(e.target.value);
-                    setEditScheduleError(null);
-                  }}
-                  placeholder="e.g. Mon/Wed 08:00 AM - 11:00 AM"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
-                />
-              </div>
-            </div>
-
-            {editScheduleError && (
+            {editError && (
               <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">
                 <Info className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                <span>{editScheduleError}</span>
+                <span>{editError}</span>
               </div>
             )}
 
@@ -1941,7 +1734,7 @@ export const ClassesAndRosters: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setEditingClass(null);
-                  setEditScheduleError(null);
+                  setEditError(null);
                 }}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
               >

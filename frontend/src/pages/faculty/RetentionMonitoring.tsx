@@ -45,10 +45,6 @@ export const RetentionMonitoring: React.FC = () => {
     deleteRemedialExam,
     overrideRetentionStatus 
   } = useApp();
-  
-  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = ['Section 4-A', 'Section 4-B'];
-
   // Dynamic Faculty Classes & Courses State for Course Filtering
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   const [facultyCourses, setFacultyCourses] = useState<CourseCatalogItem[]>([]);
@@ -78,7 +74,7 @@ export const RetentionMonitoring: React.FC = () => {
   // Schedule Remedial modal states
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState('CLIN401');
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleNotes, setScheduleNotes] = useState('');
 
@@ -94,28 +90,36 @@ export const RetentionMonitoring: React.FC = () => {
   // Safe students array
   const safeStudents = useMemo(() => students || [], [students]);
 
-  // Available courses for dropdown filtering
+  // Available courses strictly derived from authoritative courses and classes
   const availableCourseOptions = useMemo(() => {
     const map = new Map<string, string>();
-    facultyClasses.forEach(c => {
-      if (c.courseCode) {
-        map.set(c.courseCode.toUpperCase(), c.courseName || c.courseCode);
-      }
-    });
     facultyCourses.forEach(c => {
       if (c.courseCode) {
         map.set(c.courseCode.toUpperCase(), c.name || c.courseCode);
       }
     });
-    safeStudents.forEach(s => {
-      (s.enrolledSubjects || []).forEach(sub => {
-        if (sub.code && !map.has(sub.code.toUpperCase())) {
-          map.set(sub.code.toUpperCase(), sub.name || sub.code);
-        }
-      });
+    facultyClasses.forEach(c => {
+      if (c.courseCode && !map.has(c.courseCode.toUpperCase())) {
+        map.set(c.courseCode.toUpperCase(), c.courseName || c.courseCode);
+      }
     });
     return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
-  }, [facultyClasses, facultyCourses, safeStudents]);
+  }, [facultyCourses, facultyClasses]);
+
+  // Available class sections strictly derived from authoritative classes
+  const availableClassOptions = useMemo(() => {
+    const set = new Set<string>();
+    facultyClasses.forEach(c => {
+      if (c.block) set.add(c.block);
+    });
+    return Array.from(set);
+  }, [facultyClasses]);
+
+  useEffect(() => {
+    if (!selectedSubjectCode && availableCourseOptions.length > 0) {
+      setSelectedSubjectCode(availableCourseOptions[0].code);
+    }
+  }, [availableCourseOptions, selectedSubjectCode]);
 
   // Filter students based on selected class section filter
   const facultyStudents = useMemo(() => {
@@ -128,6 +132,7 @@ export const RetentionMonitoring: React.FC = () => {
   const retentionThreshold = settings?.retentionThreshold ?? 2.50;
 
   // Subject-level Watchlist Calculations (authoritative API data only, strictly no fake course/grade generation)
+  // Subject-level Watchlist Calculations (authoritative API data only, strictly no fake course/grade generation)
   const subjectWatchlistItems = useMemo<SubjectWatchlistItem[]>(() => {
     const items: SubjectWatchlistItem[] = [];
     const assignedCourseCodes = new Set(
@@ -138,70 +143,55 @@ export const RetentionMonitoring: React.FC = () => {
 
     facultyStudents.forEach(student => {
       const subs = student.enrolledSubjects || [];
-      if (subs.length > 0) {
-        subs.forEach(sub => {
-          const codeUpper = sub.code.toUpperCase();
-          if (assignedCourseCodes.size > 0 && !assignedCourseCodes.has(codeUpper)) {
-            return;
-          }
+      if (subs.length === 0) {
+        return;
+      }
 
-          const subGrade = sub.grade || student.overallGWA || 0;
-          const subRemedials = (student.remedialExams || []).filter(r => r.subjectCode?.toUpperCase() === codeUpper);
-          const hasPendingRem = subRemedials.some(r => r.status === 'pending');
-          const hasFailedRem = subRemedials.some(r => r.status === 'failed');
+      subs.forEach(sub => {
+        const codeUpper = sub.code?.toUpperCase();
+        if (!codeUpper) return;
+        if (assignedCourseCodes.size > 0 && !assignedCourseCodes.has(codeUpper)) {
+          return;
+        }
 
-          const isAtRisk = subGrade > retentionThreshold || student.status === 'warning' || student.status === 'critical' || student.status === 'remedial' || subRemedials.length > 0;
+        // Must have an authoritative grade for the subject
+        if (typeof sub.grade !== 'number' || sub.grade <= 0) {
+          return;
+        }
 
-          if (isAtRisk) {
-            let cause = `Midterm subject grade (${subGrade.toFixed(2)}) exceeds ${retentionThreshold.toFixed(2)} limit`;
-            if (hasFailedRem) {
-              cause = `Failed Remedial Exam for ${sub.code} - Subject Retained`;
-            } else if (hasPendingRem) {
-              cause = `Pending Remedial Exam Scheduled for Final Grade`;
-            } else if (student.status === 'critical') {
-              cause = `Critical Retention Watchlist - Grade (${subGrade.toFixed(2)}) > ${retentionThreshold.toFixed(2)}`;
-            }
+        const subGrade = sub.grade;
+        const subRemedials = (student.remedialExams || []).filter(r => r.subjectCode?.toUpperCase() === codeUpper);
+        const hasPendingRem = subRemedials.some(r => r.status === 'pending');
+        const hasFailedRem = subRemedials.some(r => r.status === 'failed');
 
-            items.push({
-              id: `${student.id}-${sub.code}`,
-              studentId: student.id,
-              studentName: student.name || 'Unknown Student',
-              studentIdNum: student.studentId || '2024-000',
-              yearLevel: student.yearLevel || 4,
-              subjectCode: sub.code,
-              subjectName: sub.name,
-              midtermGrade: subGrade,
-              cause,
-              status: student.status || 'warning',
-              hasPendingRemedial: hasPendingRem,
-              student
-            });
-          }
-        });
-      } else {
-        const isAtRisk = (student.overallGWA && student.overallGWA > retentionThreshold) || student.status === 'warning' || student.status === 'critical' || student.status === 'remedial';
+        const isAtRisk = subGrade > retentionThreshold || student.status === 'warning' || student.status === 'critical' || student.status === 'remedial' || subRemedials.length > 0;
+
         if (isAtRisk) {
-          const grade = student.overallGWA || 2.75;
-          let cause = `Overall GWA (${grade.toFixed(2)}) exceeds ${retentionThreshold.toFixed(2)} limit`;
-          if (student.status === 'critical') {
-            cause = `Critical Retention Watchlist - GWA (${grade.toFixed(2)}) > ${retentionThreshold.toFixed(2)}`;
+          let cause = `Midterm subject grade (${subGrade.toFixed(2)}) exceeds ${retentionThreshold.toFixed(2)} limit`;
+          if (hasFailedRem) {
+            cause = `Failed Remedial Exam for ${sub.code} - Subject Retained`;
+          } else if (hasPendingRem) {
+            cause = `Pending Remedial Exam Scheduled for Final Grade`;
+          } else if (student.status === 'critical') {
+            cause = `Critical Retention Watchlist - Grade (${subGrade.toFixed(2)}) > ${retentionThreshold.toFixed(2)}`;
           }
+
           items.push({
-            id: `${student.id}-GENERAL`,
+            id: `${student.id}-${sub.code}`,
             studentId: student.id,
             studentName: student.name || 'Unknown Student',
             studentIdNum: student.studentId || '2024-000',
             yearLevel: student.yearLevel || 4,
-            subjectCode: 'ALL',
-            subjectName: 'General Performance',
-            midtermGrade: grade,
+            subjectCode: sub.code,
+            subjectName: sub.name || sub.code,
+            midtermGrade: subGrade,
             cause,
             status: student.status || 'warning',
-            hasPendingRemedial: (student.remedialExams || []).some(r => r.status === 'pending'),
+            hasPendingRemedial: hasPendingRem,
             student
           });
         }
-      }
+      });
     });
 
     return items;
@@ -348,14 +338,15 @@ export const RetentionMonitoring: React.FC = () => {
     const student = safeStudents.find(s => s.id === selectedStudentId);
     
     if (student) {
-      const subjectName = availableCourseOptions.find(c => c.code === selectedSubjectCode)?.name
-        || (selectedSubjectCode === 'CLIN401' ? 'Clinical Dentistry I' : 'Clinical Dentistry II');
+      const subjectName = availableCourseOptions.find(c => c.code === selectedSubjectCode)?.name || selectedSubjectCode;
+      const enrolledSub = (student.enrolledSubjects || []).find(s => s.code?.toUpperCase() === selectedSubjectCode.toUpperCase());
+      const originalGrade = enrolledSub?.grade || student.overallGWA || 0;
       const remedial = {
         studentId: selectedStudentId,
         studentName: student.name,
         subjectCode: selectedSubjectCode,
         subjectName,
-        originalGrade: student.overallGWA || 2.75,
+        originalGrade,
         examDate: scheduleDate,
         notes: scheduleNotes || 'Midterm Remedial Exam',
         status: 'pending',
@@ -460,7 +451,7 @@ export const RetentionMonitoring: React.FC = () => {
             onClick={() => {
               setIsScheduleOpen(true);
               setSelectedStudentId('');
-              setSelectedSubjectCode(selectedCourseCode !== 'all' ? selectedCourseCode : 'CLIN401');
+              setSelectedSubjectCode(selectedCourseCode !== 'all' ? selectedCourseCode : (availableCourseOptions[0]?.code || ''));
               setScheduleDate(new Date().toISOString().split('T')[0]);
               setScheduleNotes('');
             }}
@@ -544,7 +535,7 @@ export const RetentionMonitoring: React.FC = () => {
               className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
             >
               <option value="all">All Class Sections</option>
-              {assignedClasses.map((clsLabel: string) => (
+              {availableClassOptions.map((clsLabel: string) => (
                 <option key={clsLabel} value={clsLabel}>{clsLabel}</option>
               ))}
             </select>
@@ -593,7 +584,7 @@ export const RetentionMonitoring: React.FC = () => {
               onClick={() => {
                 setIsScheduleOpen(true);
                 setSelectedStudentId('');
-                setSelectedSubjectCode(selectedCourseCode !== 'all' ? selectedCourseCode : 'CLIN401');
+                setSelectedSubjectCode(selectedCourseCode !== 'all' ? selectedCourseCode : (availableCourseOptions[0]?.code || ''));
                 setScheduleDate(new Date().toISOString().split('T')[0]);
                 setScheduleNotes('');
               }}
@@ -640,7 +631,7 @@ export const RetentionMonitoring: React.FC = () => {
 
                       <td className="py-3.5 px-4 text-center font-extrabold font-mono text-sm">
                         <span className={`px-2.5 py-1 rounded-lg ${
-                          item.midtermGrade > 2.75
+                          item.midtermGrade > 3.0 || item.status === 'critical'
                             ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60'
                             : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
                         }`}>
@@ -663,7 +654,7 @@ export const RetentionMonitoring: React.FC = () => {
                           <button
                             onClick={() => {
                               setSelectedStudentId(item.studentId);
-                              setSelectedSubjectCode(item.subjectCode !== 'ALL' ? item.subjectCode : 'CLIN401');
+                              setSelectedSubjectCode(item.subjectCode !== 'ALL' ? item.subjectCode : (availableCourseOptions[0]?.code || ''));
                               setScheduleDate(new Date().toISOString().split('T')[0]);
                               setIsScheduleOpen(true);
                             }}
@@ -900,10 +891,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <option key={code} value={code}>{code} - {name}</option>
                   ))
                 ) : (
-                  <>
-                    <option value="CLIN401">CLIN401 - Clinical Dentistry I</option>
-                    <option value="CLIN402">CLIN402 - Clinical Dentistry II</option>
-                  </>
+                  <option value="" disabled>No courses available</option>
                 )}
               </select>
             </div>
