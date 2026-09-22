@@ -476,4 +476,16 @@ return [
         'handler' => 'handle_faculty_class_unenroll_student',
         'has_params' => false,
     ],
+    [
+        'method' => 'GET',
+        'path' => '/api/faculty/grading-config',
+        'handler' => 'handle_faculty_grading_config_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/grading-config',
+        'handler' => 'handle_faculty_grading_config_save',
+        'has_params' => false,
+    ],
 ];

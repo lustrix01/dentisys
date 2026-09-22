@@ -23,14 +23,16 @@ if (-not (Test-Path -LiteralPath $playwrightCli)) {
 $server = $null
 $exitCode = 1
 try {
+    $logOut = Join-Path $root 'frontend/vite-e2e-out.log'
+    $logErr = Join-Path $root 'frontend/vite-e2e-err.log'
     $server = Start-Process -FilePath 'node' -ArgumentList @(
-        $frontendVite,
+        "`"$frontendVite`"",
         '--config', 'frontend/vite.config.ts',
         'frontend',
         '--host', '127.0.0.1',
         '--port', '15174',
         '--strictPort'
-    ) -WorkingDirectory $root -WindowStyle Hidden -PassThru
+    ) -WorkingDirectory $root -RedirectStandardOutput $logOut -RedirectStandardError $logErr -WindowStyle Hidden -PassThru
 
     $ready = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {

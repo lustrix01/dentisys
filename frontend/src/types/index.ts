@@ -97,7 +97,7 @@ export interface Student {
 export interface Assessment {
   id: string;
   title: string;
-  type: 'Quiz' | 'Activity' | 'Assignment' | 'Laboratory' | 'Midterm Exam' | 'Final Exam' | 'Others';
+  type: 'Quiz' | 'Activity' | 'Assignment' | 'Laboratory' | 'Midterm Exam' | 'Final Exam' | 'Others' | string;
   subjectCode: string;
   classId: string;
   gradingPeriod: 'Midterm' | 'Final';
@@ -126,9 +126,10 @@ export interface AssessmentScore {
 
 export interface GradingComponentConfig {
   subjectCode: string;
-  category: 'Quiz' | 'Activity' | 'Assignment' | 'Laboratory' | 'Midterm Exam' | 'Final Exam' | 'Attendance';
+  category: string;
   weight: number; // 0-100 percentage
   maxScore: number;
+  period?: 'Midterm' | 'Final' | 'Both';
 }
 
 export interface SystemSettings {

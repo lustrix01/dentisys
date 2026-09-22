@@ -928,6 +928,31 @@ export function unenrollStudentFromClassApi(data: {
   return request('POST', '/faculty/classes/unenroll', data);
 }
 
+export function getFacultyGradingConfigApi(subjectCode: string): Promise<{
+  status: string;
+  config?: {
+    subjectCode: string;
+    termRatio: { midterm: number; final: number };
+    midtermCategories: Array<{ id: string; name: string; weight: string; maxScore: string }>;
+    finalCategories: Array<{ id: string; name: string; weight: string; maxScore: string }>;
+  } | null;
+}> {
+  return request('GET', `/faculty/grading-config?subjectCode=${encodeURIComponent(subjectCode)}`);
+}
+
+export function saveFacultyGradingConfigApi(data: {
+  subjectCode: string;
+  termRatio: { midterm: number; final: number };
+  midtermCategories: Array<{ id: string; name: string; weight: string; maxScore: string }>;
+  finalCategories: Array<{ id: string; name: string; weight: string; maxScore: string }>;
+}): Promise<{
+  status: string;
+  message: string;
+  config?: any;
+}> {
+  return request('POST', '/faculty/grading-config', data);
+}
+
 // RFC 6238 TOTP Helpers & Per-User Secret Generation
 export { base32Decode, generateBase32Secret, computeTotpCode, verifyTotpCode } from '../utils/totp';
 

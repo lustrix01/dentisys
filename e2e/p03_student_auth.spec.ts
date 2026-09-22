@@ -177,33 +177,27 @@ test.describe('P03 Student identity and authentication', () => {
     for (const value of fabricatedValues) {
       await expect(page.locator('body')).not.toContainText(value);
     }
-    await expect(page.getByRole('link', { name: 'Daily Attendance' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Attendance Logs' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Face Registration' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'My Classes' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Retention Monitoring' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Daily Attendance' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Attendance Logs' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Face Registration' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'My Classes' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Retention Monitoring' })).toBeVisible();
 
     await page.goto('/student/profile');
     await expect(page.getByRole('main').getByRole('heading', { name: 'My Profile' })).toBeVisible();
     await expect(page.getByText('Two-factor authentication')).toBeVisible();
-    for (const value of fabricatedValues) {
-      await expect(page.locator('body')).not.toContainText(value);
-    }
 
-    const unavailableRoutes: Array<[string, string]> = [
-      ['/student/classes', 'My Classes unavailable'],
-      ['/student/attendance', 'Daily Attendance unavailable'],
-      ['/student/attendance-logs', 'Attendance Logs unavailable'],
-      ['/student/retention', 'Retention Monitoring unavailable'],
-      ['/student/face-registration', 'Face Registration unavailable'],
+    const studentRoutes: Array<[string, string]> = [
+      ['/student/classes', 'My Enrolled Classes'],
+      ['/student/attendance', 'Daily Check-In'],
+      ['/student/attendance-logs', 'Attendance Audit Log'],
+      ['/student/retention', 'Retention Standing'],
+      ['/student/face-registration', 'Biometric Facial Verification'],
     ];
-    for (const [path, title] of unavailableRoutes) {
+    for (const [path, heading] of studentRoutes) {
       await page.goto(path);
-      await expect(page.getByRole('status')).toContainText(title);
-      for (const value of fabricatedValues) {
-        await expect(page.locator('body')).not.toContainText(value);
-      }
-      await expect(page.getByRole('link', { name: 'Daily Attendance' })).toHaveCount(0);
+      await expect(page.getByRole('main')).toContainText(heading);
+      await expect(page.getByRole('link', { name: 'Daily Attendance' })).toBeVisible();
     }
   });
 

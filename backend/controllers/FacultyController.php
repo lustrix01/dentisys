@@ -2120,4 +2120,166 @@ function handle_faculty_class_unenroll_student(): void
     }
 }
 
+function handle_faculty_grading_config_get(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
 
+        $subjectCode = trim((string) ($_GET['subjectCode'] ?? $_GET['subject_code'] ?? ''));
+        if ($subjectCode === '') {
+            safe_error_response('subjectCode parameter is required.', 422);
+            return;
+        }
+
+        $settingKey = 'grading_schema_' . $subjectCode;
+        $stmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
+        $stmt->execute([$settingKey]);
+        $val = $stmt->fetchColumn();
+
+        if ($val) {
+            $configData = json_decode((string) $val, true);
+            json_response(['status' => 'ok', 'config' => $configData], 200);
+            return;
+        }
+
+        $courseStmt = $pdo->prepare("SELECT grading_config FROM courses WHERE course_code = ? LIMIT 1");
+        $courseStmt->execute([$subjectCode]);
+        $courseVal = $courseStmt->fetchColumn();
+
+        if ($courseVal) {
+            $configData = json_decode((string) $courseVal, true);
+            json_response(['status' => 'ok', 'config' => $configData], 200);
+            return;
+        }
+
+        json_response([
+            'status' => 'ok',
+            'config' => null,
+        ], 200);
+    } catch (\Throwable $e) {
+        error_log('Faculty grading config get error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_faculty_grading_config_save(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+
+        $data = $body['data'];
+        $subjectCode = trim((string) ($data['subjectCode'] ?? ''));
+        $termRatio = $data['termRatio'] ?? null;
+        if ($termRatio instanceof \stdClass) {
+            $termRatio = (array) $termRatio;
+        }
+        $midtermCategories = $data['midtermCategories'] ?? null;
+        if ($midtermCategories instanceof \stdClass) {
+            $midtermCategories = (array) $midtermCategories;
+        }
+        $finalCategories = $data['finalCategories'] ?? null;
+        if ($finalCategories instanceof \stdClass) {
+            $finalCategories = (array) $finalCategories;
+        }
+
+        if ($subjectCode === '' || !is_array($termRatio) || !is_array($midtermCategories) || !is_array($finalCategories)) {
+            safe_error_response('subjectCode, termRatio, midtermCategories, and finalCategories are required.', 422);
+            return;
+        }
+
+        $normalizedMidterm = [];
+        foreach ($midtermCategories as $cat) {
+            $normalizedMidterm[] = (array) $cat;
+        }
+        $midtermCategories = $normalizedMidterm;
+
+        $normalizedFinal = [];
+        foreach ($finalCategories as $cat) {
+            $normalizedFinal[] = (array) $cat;
+        }
+        $finalCategories = $normalizedFinal;
+
+        $midtermRatio = (int) ($termRatio['midterm'] ?? 0);
+        $finalRatio = (int) ($termRatio['final'] ?? 0);
+        if ($midtermRatio + $finalRatio !== 100) {
+            safe_error_response('Overall Term Ratio must sum to 100%.', 422);
+            return;
+        }
+
+        $midtermSum = 0;
+        foreach ($midtermCategories as $cat) {
+            $name = trim((string) ($cat['name'] ?? ''));
+            if ($name === '') {
+                safe_error_response('Category names cannot be blank.', 422);
+                return;
+            }
+            $midtermSum += (int) ($cat['weight'] ?? 0);
+        }
+        if ($midtermSum !== 100) {
+            safe_error_response('Midterm categories weight must sum to 100%.', 422);
+            return;
+        }
+
+        $finalSum = 0;
+        foreach ($finalCategories as $cat) {
+            $name = trim((string) ($cat['name'] ?? ''));
+            if ($name === '') {
+                safe_error_response('Category names cannot be blank.', 422);
+                return;
+            }
+            $finalSum += (int) ($cat['weight'] ?? 0);
+        }
+        if ($finalSum !== 100) {
+            safe_error_response('Final categories weight must sum to 100%.', 422);
+            return;
+        }
+
+        $payload = json_encode([
+            'subjectCode' => $subjectCode,
+            'termRatio' => ['midterm' => $midtermRatio, 'final' => $finalRatio],
+            'midtermCategories' => $midtermCategories,
+            'finalCategories' => $finalCategories,
+            'updatedAt' => date('c'),
+            'updatedBy' => $authCtx['user_id'],
+        ]);
+
+        $settingKey = 'grading_schema_' . $subjectCode;
+
+        $upsertStmt = $pdo->prepare(
+            "INSERT INTO system_settings (setting_key, setting_value, is_internal, description, updated_at, updated_by_user_id)
+             VALUES (?, ?::jsonb, 0, ?, CURRENT_TIMESTAMP(6), ?)
+             ON CONFLICT (setting_key) DO UPDATE
+             SET setting_value = EXCLUDED.setting_value,
+                 updated_at = EXCLUDED.updated_at,
+                 updated_by_user_id = EXCLUDED.updated_by_user_id"
+        );
+        $upsertStmt->execute([
+            $settingKey,
+            $payload,
+            'Grading schema configuration for ' . $subjectCode,
+            $authCtx['user_id']
+        ]);
+
+        $updateCourseStmt = $pdo->prepare("UPDATE courses SET grading_config = ?::jsonb WHERE course_code = ?");
+        $updateCourseStmt->execute([$payload, $subjectCode]);
+
+        json_response([
+            'status' => 'ok',
+            'message' => 'Grading schema saved to database successfully.',
+            'config' => json_decode($payload, true)
+        ], 200);
+    } catch (\Throwable $e) {
+        error_log('Faculty grading config save error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}

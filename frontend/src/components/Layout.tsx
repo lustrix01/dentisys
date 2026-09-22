@@ -194,26 +194,15 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     }
 
     if (currentUser.role === 'student') {
-      const items: NavItem[] = [
+      return [
         { name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
+        { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
+        { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
+        { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
+        { name: 'My Classes', path: '/student/classes', icon: BookOpen },
+        { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
+        { name: 'My Profile', path: '/student/profile', icon: UserCircle },
       ];
-      if (isStudentPrototypeAllowed(user, config, 'attendance')) {
-        items.push({ name: 'Daily Attendance', path: '/student/attendance', icon: Camera });
-      }
-      if (isStudentPrototypeAllowed(user, config, 'attendance_logs')) {
-        items.push({ name: 'Attendance Logs', path: '/student/attendance-logs', icon: History });
-      }
-      if (isStudentPrototypeAllowed(user, config, 'face')) {
-        items.push({ name: 'Face Registration', path: '/student/face-registration', icon: UserCheck });
-      }
-      if (isStudentPrototypeAllowed(user, config, 'academic')) {
-        items.push(
-          { name: 'My Classes', path: '/student/classes', icon: BookOpen },
-          { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
-          { name: 'My Profile', path: '/student/profile', icon: UserCircle },
-        );
-      }
-      return items;
     }
     
     // Faculty (default)
@@ -752,9 +741,5 @@ const RealStudentLayout: React.FC<LayoutProps> = ({ children }) => {
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user } = useAuth();
-  const config = useRuntimeConfig();
-  return user?.role === 'student' && !isDevelopmentMockStudent(user, config)
-    ? <RealStudentLayout>{children}</RealStudentLayout>
-    : <AppBackedLayout>{children}</AppBackedLayout>;
+  return <AppBackedLayout>{children}</AppBackedLayout>;
 };

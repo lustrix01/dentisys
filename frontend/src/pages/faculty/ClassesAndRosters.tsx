@@ -35,10 +35,141 @@ import {
   getFacultyClassesApi, 
   getFacultyCoursesApi, 
   getFacultyStudentsApi,
+  createFacultyClassApi,
+  createStudentApi,
   createStudentInvitation,
   FacultyClassItem,
   CourseCatalogItem
 } from '../../services/apiClient';
+
+const ROOM_OPTIONS = [
+  'Dental Room 101',
+  'Dental Room 102',
+  'Lab Room 201',
+  'Lab Room 204',
+  'Lecture Hall A',
+  'Lecture Hall B',
+  'Operating Room A',
+  'Operating Room B',
+  'BU Dental Clinic'
+];
+
+const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const TIME_OPTIONS = [
+  '07:00 AM', '07:30 AM', '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM',
+  '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
+  '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM',
+  '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM'
+];
+
+const SCHEDULE_PRESETS = [
+  'Mon/Wed 08:00 AM - 11:00 AM',
+  'Mon/Wed 01:00 PM - 04:00 PM',
+  'Tue/Thu 08:00 AM - 11:00 AM',
+  'Tue/Thu 01:00 PM - 04:00 PM',
+  'Fri 08:00 AM - 12:00 PM',
+  'Fri 01:00 PM - 05:00 PM',
+  'Sat 08:00 AM - 12:00 PM',
+  'Sat 01:00 PM - 05:00 PM'
+];
+
+interface ParsedSchedule {
+  days: number[];
+  startMinutes: number;
+  endMinutes: number;
+}
+
+function parseTimeToMinutes(timeStr: string): number | null {
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+
+  if (period === 'PM' && hours < 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+}
+
+function parseScheduleTimeslot(scheduleStr: string): ParsedSchedule | null {
+  if (!scheduleStr || !scheduleStr.trim()) return null;
+
+  const parts = scheduleStr.trim().split(/\s+/);
+  if (parts.length < 4) return null;
+
+  const dayPart = parts[0];
+  const timePart = parts.slice(1).join(' ');
+
+  const timeSubParts = timePart.split('-');
+  if (timeSubParts.length !== 2) return null;
+
+  const startMin = parseTimeToMinutes(timeSubParts[0]);
+  const endMin = parseTimeToMinutes(timeSubParts[1]);
+
+  if (startMin === null || endMin === null || startMin >= endMin) return null;
+
+  const days: number[] = [];
+  const dayTokens = dayPart.split(/[/,-]/);
+  const dayMap: Record<string, number> = {
+    mon: 1, monday: 1,
+    tue: 2, tues: 2, tuesday: 2,
+    wed: 3, wednesday: 3,
+    thu: 4, thur: 4, thurs: 4, thursday: 4,
+    fri: 5, friday: 5,
+    sat: 6, saturday: 6,
+    sun: 7, sunday: 7
+  };
+
+  for (const token of dayTokens) {
+    const key = token.trim().toLowerCase();
+    if (dayMap[key]) {
+      if (!days.includes(dayMap[key])) {
+        days.push(dayMap[key]);
+      }
+    }
+  }
+
+  if (days.length === 0) return null;
+
+  return { days, startMinutes: startMin, endMinutes: endMin };
+}
+
+function checkRoomScheduleConflict(
+  existingClasses: FacultyClassItem[],
+  targetRoom: string,
+  targetScheduleStr: string,
+  excludeClassId?: string
+): FacultyClassItem | null {
+  if (!targetRoom || !targetScheduleStr) return null;
+
+  const targetSched = parseScheduleTimeslot(targetScheduleStr);
+  if (!targetSched) return null;
+
+  for (const cls of existingClasses) {
+    if (excludeClassId && cls.id === excludeClassId) continue;
+
+    const clsRoom = cls.lecRoom || '';
+    if (!clsRoom || clsRoom.trim().toLowerCase() !== targetRoom.trim().toLowerCase()) {
+      continue;
+    }
+
+    const clsSchedStr = cls.labRoom || cls.schedule || '';
+    const clsSched = parseScheduleTimeslot(clsSchedStr);
+    if (!clsSched) continue;
+
+    const hasCommonDay = targetSched.days.some(d => clsSched.days.includes(d));
+    if (!hasCommonDay) continue;
+
+    if (targetSched.startMinutes < clsSched.endMinutes && targetSched.endMinutes > clsSched.startMinutes) {
+      return cls;
+    }
+  }
+
+  return null;
+}
+
 
 export const ClassesAndRosters: React.FC = () => {
   const { students: initialGlobalStudents } = useApp();
@@ -67,17 +198,38 @@ export const ClassesAndRosters: React.FC = () => {
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
-  // Form States: New Class Creation
+  // Form States: New Class Creation & Day-First Schedule Picker
   const [newCourseCode, setNewCourseCode] = useState('');
   const [newCourseName, setNewCourseName] = useState('');
-  const [newBlock, setNewBlock] = useState('Section 3-A');
-  const [newSchedule, setNewSchedule] = useState('Mon/Wed 08:00 AM - 11:00 AM');
-  const [newRoom, setNewRoom] = useState('Dental Room 101');
-  const [newYearLevel, setNewYearLevel] = useState(3);
+  const [newBlock, setNewBlock] = useState('');
+  const [newSchedule, setNewSchedule] = useState('');
+  const [newRoom, setNewRoom] = useState('');
+  const [newYearLevel, setNewYearLevel] = useState(1);
+  const [selectedCourseId, setSelectedCourseId] = useState<number>(0);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [isSubmittingClass, setIsSubmittingClass] = useState(false);
 
-  // Form States: Add / Edit Student
+  // Day-First Schedule Builder State
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [startTime, setStartTime] = useState<string>('08:00 AM');
+  const [endTime, setEndTime] = useState<string>('11:00 AM');
+
+  const updateScheduleFromPicker = (days: string[], start: string, end: string) => {
+    if (days.length === 0) {
+      setNewSchedule('');
+      return;
+    }
+    const dayStr = days.join('/');
+    const timeStr = `${start} - ${end}`;
+    setNewSchedule(`${dayStr} ${timeStr}`);
+    setScheduleError(null);
+  };
+
+  // Form States: Add / Edit Student (Split Name Fields & No Numbers)
   const [studentIdInput, setStudentIdInput] = useState('');
-  const [studentNameInput, setStudentNameInput] = useState('');
+  const [studentFirstName, setStudentFirstName] = useState('');
+  const [studentMiddleName, setStudentMiddleName] = useState('');
+  const [studentLastName, setStudentLastName] = useState('');
   const [studentEmailInput, setStudentEmailInput] = useState('');
   const [studentYearInput, setStudentYearInput] = useState(3);
   const [studentClassSelect, setStudentClassSelect] = useState('Clinical Dentistry I (Sec A)');
@@ -88,73 +240,33 @@ export const ClassesAndRosters: React.FC = () => {
   // Notification Banner
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
 
-  // Sync initial global students
-  useEffect(() => {
-    if (initialGlobalStudents && initialGlobalStudents.length > 0) {
-      setStudentsList(initialGlobalStudents);
-    }
-  }, [initialGlobalStudents]);
-
-  // Fetch initial data
+  // Fetch initial data for logged-in faculty
   const fetchData = async () => {
     setLoading(true);
     try {
       const [clsRes, crsRes, rosterRes] = await Promise.all([
-        getFacultyClassesApi().catch(() => ({ status: 'success', classes: [] })),
+        getFacultyClassesApi().catch(() => null),
         getFacultyCoursesApi().catch(() => ({ status: 'success', courses: [] })),
-        getFacultyStudentsApi().catch(() => []),
+        getFacultyStudentsApi().catch(() => null),
       ]);
 
-      if (rosterRes.length > 0) setStudentsList(rosterRes as unknown as Student[]);
-
-      if (clsRes.classes && clsRes.classes.length > 0) {
-        setClasses(clsRes.classes);
+      if (rosterRes !== null && Array.isArray(rosterRes)) {
+        setStudentsList(rosterRes as unknown as Student[]);
       } else {
-        setClasses([
-          {
-            id: 'cls-1',
-            csId: 101,
-            csName: 'CLIN401-SecA',
-            courseId: 1,
-            courseCode: 'CLIN401',
-            courseName: 'Clinical Dentistry I',
-            units: 3,
-            schoolYear: '2025-2026',
-            semester: '1st Semester',
-            yearLevel: 4,
-            block: 'Section 4-A',
-            schedule: 'Mon/Wed 08:00 AM - 11:00 AM',
-            lecRoom: 'Lecture Hall A',
-            labRoom: 'Sim Lab 1',
-            enrolledCount: 24,
-            instructorName: 'Faculty Member',
-            status: 'Active'
-          },
-          {
-            id: 'cls-2',
-            csId: 102,
-            csName: 'CLIN402-SecB',
-            courseId: 2,
-            courseCode: 'CLIN402',
-            courseName: 'Clinical Dentistry II',
-            units: 4,
-            schoolYear: '2025-2026',
-            semester: '1st Semester',
-            yearLevel: 4,
-            block: 'Section 4-B',
-            schedule: 'Tue/Thu 01:00 PM - 05:00 PM',
-            lecRoom: 'Lecture Hall B',
-            labRoom: 'Dental Room 204',
-            enrolledCount: 18,
-            instructorName: 'Faculty Member',
-            status: 'Active'
-          }
-        ]);
+        setStudentsList([]);
       }
 
-      if (crsRes.courses) setCourses(crsRes.courses);
+      if (clsRes !== null && Array.isArray(clsRes.classes)) {
+        setClasses(clsRes.classes);
+      } else {
+        setClasses([]);
+      }
+
+      if (crsRes?.courses) setCourses(crsRes.courses);
     } catch (err) {
       console.error('Failed to load classes and rosters:', err);
+      setClasses([]);
+      setStudentsList([]);
     } finally {
       setLoading(false);
     }
@@ -180,21 +292,29 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Filtered student roster by Search and Class Filter
   const filteredStudents = useMemo(() => {
-    return studentsList.filter((student, idx) => {
+    return studentsList.filter((student) => {
       const query = searchQuery.toLowerCase();
-      const matchesSearch = (
+      const matchesSearch = !query || (
         student.name.toLowerCase().includes(query) ||
         student.studentId.toLowerCase().includes(query) ||
         student.email.toLowerCase().includes(query)
       );
 
-      const assignedClass = student.classSections && student.classSections.length > 0 
-        ? student.classSections[0].classId 
-        : (idx % 2 === 0 ? 'cls-1' : 'cls-2');
-      
-      const matchesClass = selectedClassFilterId === 'all' || assignedClass === selectedClassFilterId;
+      if (!matchesSearch) return false;
 
-      return matchesSearch && matchesClass;
+      if (selectedClassFilterId === 'all') return true;
+
+      const sections = student.classSections || [];
+      if (sections.length === 0) return true;
+
+      return sections.some(cs =>
+        cs.classId === selectedClassFilterId ||
+        cs.className === selectedClassFilterId ||
+        cs.classId === `cls-${selectedClassFilterId}` ||
+        `cls-${cs.classId}` === selectedClassFilterId ||
+        (selectedClassFilterId === 'cls-1' && cs.className.includes('Sec A')) ||
+        (selectedClassFilterId === 'cls-2' && cs.className.includes('Sec B'))
+      );
     });
   }, [studentsList, searchQuery, selectedClassFilterId]);
 
@@ -204,40 +324,75 @@ export const ClassesAndRosters: React.FC = () => {
     setActiveTab('roster');
   };
 
-  // Handler: Create Class Manually
-  const handleCreateClass = (e: React.FormEvent) => {
+  // Handler: Create Class Manually with Database Persistence & Conflict Check
+  const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCourseCode || !newCourseName) {
-      alert('Please fill in Course Code and Course Name.');
+    setScheduleError(null);
+
+    if (!newCourseCode.trim() || !newCourseName.trim()) {
+      setScheduleError('Please enter Course Code and Course Title.');
+      return;
+    }
+    if (!newBlock.trim()) {
+      setScheduleError('Please enter a Section / Block.');
+      return;
+    }
+    if (!newRoom.trim()) {
+      setScheduleError('Please select a Room Venue.');
+      return;
+    }
+    if (!newSchedule.trim()) {
+      setScheduleError('Please select or specify a Class Schedule.');
       return;
     }
 
-    const created: FacultyClassItem = {
-      id: `cls-${Date.now()}`,
-      csId: Math.floor(Math.random() * 1000) + 200,
-      csName: `${newCourseCode}-${newBlock}`,
-      courseId: 99,
-      courseCode: newCourseCode.trim().toUpperCase(),
-      courseName: newCourseName.trim(),
-      units: 3,
-      schoolYear: '2025-2026',
-      semester: '2nd Semester',
-      yearLevel: newYearLevel,
-      block: newBlock,
-      schedule: newSchedule,
-      lecRoom: newRoom,
-      labRoom: newRoom,
-      enrolledCount: 0,
-      instructorName: 'Faculty Member',
-      status: 'Active'
-    };
+    // Check Room Schedule Conflict against existing classes
+    const conflictingClass = checkRoomScheduleConflict(classes, newRoom, newSchedule);
+    if (conflictingClass) {
+      setScheduleError(
+        `Room Schedule Conflict: ${newRoom} is already occupied on "${newSchedule}" by ${conflictingClass.courseCode} (${conflictingClass.block || 'Sec'}). Please select a different timeslot or room.`
+      );
+      return;
+    }
 
-    setClasses([created, ...classes]);
-    setNewCourseCode('');
-    setNewCourseName('');
-    setIsCreateClassOpen(false);
-    showFeedback(`Class section ${created.courseCode} created successfully!`, 'success');
+    setIsSubmittingClass(true);
+    try {
+      const courseIdToUse = selectedCourseId > 0
+        ? selectedCourseId
+        : (courses.find(c => c.courseCode.toLowerCase() === newCourseCode.trim().toLowerCase())?.id || courses[0]?.id || 1);
+
+      const res = await createFacultyClassApi({
+        csName: `${newCourseCode.trim().toUpperCase()}-${newBlock.trim()}`,
+        courseId: courseIdToUse,
+        semester: '2nd Semester',
+        schoolYear: selectedSchoolYear === 'all' ? '2025-2026' : selectedSchoolYear,
+        yearLevel: newYearLevel,
+        block: newBlock.trim(),
+        lecRoom: newRoom.trim(),
+        labRoom: newSchedule.trim(),
+      });
+
+      if (res && res.status === 'ok') {
+        showFeedback(`Class section ${newCourseCode.trim().toUpperCase()} (${newBlock.trim()}) created successfully!`, 'success');
+        setNewCourseCode('');
+        setNewCourseName('');
+        setNewBlock('');
+        setNewRoom('');
+        setNewSchedule('');
+        setSelectedCourseId(0);
+        setIsCreateClassOpen(false);
+        await fetchData();
+      } else {
+        setScheduleError(res?.message || 'Failed to create class section.');
+      }
+    } catch (err: any) {
+      console.error('Error creating class:', err);
+      setScheduleError(err?.message || 'Failed to save class section to database.');
+    } finally {
+      setIsSubmittingClass(false);
+    }
   };
+
 
   // Handler: Update Class Details
   const handleUpdateClass = (e: React.FormEvent) => {
@@ -249,46 +404,81 @@ export const ClassesAndRosters: React.FC = () => {
     showFeedback(`Class ${editingClass.courseCode} updated!`, 'success');
   };
 
-  // Handler: Add Student Manually
-  const handleAddStudent = (e: React.FormEvent) => {
+  // State: Student Submitting Loading State
+  const [isSubmittingStudent, setIsSubmittingStudent] = useState(false);
+
+  // Helper to parse full name string into structured first, middle, and last name
+  const parseFullName = (fullName: string) => {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 1) {
+      return { first: parts[0] || '', middle: '', last: '' };
+    } else if (parts.length === 2) {
+      return { first: parts[0] || '', middle: '', last: parts[1] || '' };
+    } else {
+      return {
+        first: parts[0] || '',
+        middle: parts.slice(1, parts.length - 1).join(' '),
+        last: parts[parts.length - 1] || ''
+      };
+    }
+  };
+
+  // Handler: Add Student Manually with Database Persistence
+  const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentNameInput || !studentEmailInput) {
-      alert('Please enter student name and email address.');
+    if (!studentFirstName.trim() || !studentLastName.trim() || !studentEmailInput.trim()) {
+      alert('Please enter First Name, Last Name, and official Email address.');
       return;
     }
 
-    const targetClassId = selectedClass ? selectedClass.id : (classes[0]?.id || 'cls-1');
-    const targetClassName = selectedClass ? selectedClass.courseName : studentClassSelect;
+    if (classes.length === 0) {
+      alert('Please create a class section first before adding students.');
+      return;
+    }
 
-    const newStudent: Student = {
-      id: `st-${Date.now()}`,
-      studentId: studentIdInput.trim() || `2024-DENT-${Math.floor(1000 + Math.random() * 9000)}`,
-      name: studentNameInput.trim(),
-      email: studentEmailInput.trim().toLowerCase(),
-      yearLevel: (studentYearInput as 1 | 2 | 3 | 4) || 4,
-      status: 'active',
-      faceEnrolled: false,
-      consentStatus: 'approved',
-      enrolledSubjects: [],
-      overallGWA: 1.75,
-      clinicHoursCompleted: 0,
-      remedialExams: [],
-      classSections: [{ classId: targetClassId, className: targetClassName, enrollmentId: `enr-${Date.now()}` }]
-    };
+    const targetClass = classes.find(c => String(c.csId) === String(studentClassSelect) || String(c.id) === String(studentClassSelect) || c.courseName === studentClassSelect) || selectedClass || classes[0];
+    const targetCsId = targetClass ? (targetClass.csId || targetClass.id) : (classes[0].csId || classes[0].id);
 
-    setStudentsList([newStudent, ...studentsList]);
-    setStudentIdInput('');
-    setStudentNameInput('');
-    setStudentEmailInput('');
-    setIsAddStudentOpen(false);
-    showFeedback(`Student ${newStudent.name} added to ${targetClassName}!`, 'success');
+    setIsSubmittingStudent(true);
+    try {
+      const res = await createStudentApi({
+        studentId: studentIdInput.trim() || `2024-DENT-${Math.floor(1000 + Math.random() * 9000)}`,
+        firstName: studentFirstName.trim(),
+        middleName: studentMiddleName.trim() || undefined,
+        lastName: studentLastName.trim(),
+        email: studentEmailInput.trim().toLowerCase(),
+        yearLevel: studentYearInput,
+        classId: String(targetCsId),
+      });
+
+      if (res && (res.status === 'ok' || res.status === 'success')) {
+        showFeedback(`Student ${studentFirstName.trim()} ${studentLastName.trim()} added and saved to database!`, 'success');
+        setStudentIdInput('');
+        setStudentFirstName('');
+        setStudentMiddleName('');
+        setStudentLastName('');
+        setStudentEmailInput('');
+        setIsAddStudentOpen(false);
+        await fetchData();
+      } else {
+        alert(res?.message || 'Failed to add student to database.');
+      }
+    } catch (err: any) {
+      console.error('Error adding student:', err);
+      alert(err?.message || 'Failed to save student to database.');
+    } finally {
+      setIsSubmittingStudent(false);
+    }
   };
 
   // Handler: Open Edit Student Modal
   const handleOpenEditStudent = (st: Student) => {
     setEditingStudent(st);
     setStudentIdInput(st.studentId);
-    setStudentNameInput(st.name);
+    const parsed = parseFullName(st.name);
+    setStudentFirstName(parsed.first);
+    setStudentMiddleName(parsed.middle);
+    setStudentLastName(parsed.last);
     setStudentEmailInput(st.email);
     setStudentYearInput(st.yearLevel);
     setStudentClassSelect(st.classSections?.[0]?.className || 'Clinical Dentistry I');
@@ -298,13 +488,19 @@ export const ClassesAndRosters: React.FC = () => {
   const handleUpdateStudent = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingStudent) return;
+    if (!studentFirstName.trim() || !studentLastName.trim()) {
+      alert('Please enter First Name and Last Name.');
+      return;
+    }
+
+    const fullName = `${studentFirstName.trim()} ${studentMiddleName.trim() ? studentMiddleName.trim() + ' ' : ''}${studentLastName.trim()}`;
 
     const updated = studentsList.map(s => {
       if (s.id === editingStudent.id) {
         return {
           ...s,
           studentId: studentIdInput.trim(),
-          name: studentNameInput.trim(),
+          name: fullName,
           email: studentEmailInput.trim().toLowerCase(),
           yearLevel: (studentYearInput as 1 | 2 | 3 | 4) || 4,
           classSections: [{ classId: s.classSections?.[0]?.classId || 'cls-1', className: studentClassSelect, enrollmentId: `enr-${Date.now()}` }]
@@ -315,7 +511,7 @@ export const ClassesAndRosters: React.FC = () => {
 
     setStudentsList(updated);
     setEditingStudent(null);
-    showFeedback(`Student details for ${studentNameInput} updated!`, 'success');
+    showFeedback(`Student details for ${fullName} updated!`, 'success');
   };
 
   // Handler: Remove Student
@@ -524,74 +720,91 @@ export const ClassesAndRosters: React.FC = () => {
 
       {/* TAB 1: ASSIGNED CLASSES */}
       {activeTab === 'classes' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredClasses.map((cls) => (
-            <Card key={cls.id} className="p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
-                    {cls.courseCode} • Year {cls.yearLevel}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                      {cls.block}
+        filteredClasses.length === 0 ? (
+          <Card className="p-8 text-center space-y-3">
+            <BookMarked className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
+            <h3 className="text-base font-bold text-slate-700 dark:text-slate-200">No Assigned Classes Found</h3>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              You currently have no class sections assigned to your account. Click below to create a class section.
+            </p>
+            <button
+              onClick={() => setIsCreateClassOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Class</span>
+            </button>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredClasses.map((cls) => (
+              <Card key={cls.id} className="p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
+                      {cls.courseCode} • Year {cls.yearLevel}
                     </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                        {cls.block}
+                      </span>
+                      <button
+                        onClick={() => setEditingClass(cls)}
+                        className="p-1 text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors cursor-pointer"
+                        title="Edit Class Details"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
+                    {cls.courseName}
+                  </h3>
+
+                  <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
+                      <span>{cls.schedule}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
+                      <span>Room: {cls.lecRoom}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                    <Users className="w-4 h-4 text-slate-400" />
+                    <span>{cls.enrolledCount} Students</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setEditingClass(cls)}
-                      className="p-1 text-slate-400 hover:text-accent-600 dark:hover:text-accent-400 transition-colors cursor-pointer"
-                      title="Edit Class Details"
+                      onClick={() => {
+                        setSelectedClass(cls);
+                        setIsAddStudentOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-600 hover:text-white transition-all cursor-pointer"
                     >
-                      <Pencil className="w-3.5 h-3.5" />
+                      <UserPlus className="w-3 h-3" />
+                      <span>Add Student</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenClassRoster(cls)}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-accent-600 dark:text-accent-400 hover:underline cursor-pointer"
+                    >
+                      <span>View Roster</span>
+                      <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
-
-                <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-                  {cls.courseName}
-                </h3>
-
-                <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                    <span>{cls.schedule}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                    <span>Room: {cls.lecRoom}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                  <Users className="w-4 h-4 text-slate-400" />
-                  <span>{cls.enrolledCount} Students</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setSelectedClass(cls);
-                      setIsAddStudentOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-600 hover:text-white transition-all cursor-pointer"
-                  >
-                    <UserPlus className="w-3 h-3" />
-                    <span>Add Student</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleOpenClassRoster(cls)}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-accent-600 dark:text-accent-400 hover:underline cursor-pointer"
-                  >
-                    <span>View Roster</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+              </Card>
+            ))}
+          </div>
+        )
       )}
 
       {/* TAB 2: STUDENT ROSTER (WITH ENROLLED CLASS COLUMN) */}
@@ -613,7 +826,9 @@ export const ClassesAndRosters: React.FC = () => {
               <button
                 onClick={() => {
                   setStudentIdInput('');
-                  setStudentNameInput('');
+                  setStudentFirstName('');
+                  setStudentMiddleName('');
+                  setStudentLastName('');
                   setStudentEmailInput('');
                   setIsAddStudentOpen(true);
                 }}
@@ -647,10 +862,10 @@ export const ClassesAndRosters: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {filteredStudents.map((st, idx) => {
+                {filteredStudents.map((st) => {
                   const assignedClassLabel = st.classSections && st.classSections.length > 0 
-                    ? st.classSections[0].className 
-                    : (idx % 2 === 0 ? 'Clinical Dentistry I (Sec A)' : 'Clinical Dentistry II (Sec B)');
+                    ? st.classSections.map(cs => cs.className).join(', ')
+                    : 'Clinical Dentistry';
 
                   return (
                     <tr key={st.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -738,16 +953,41 @@ export const ClassesAndRosters: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={studentNameInput}
-                onChange={(e) => setStudentNameInput(e.target.value)}
-                placeholder="e.g. Juan Dela Cruz"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">First Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={studentFirstName}
+                  onChange={(e) => setStudentFirstName(e.target.value.replace(/[0-9]/g, ''))}
+                  placeholder="e.g. Juan"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
+                <input
+                  type="text"
+                  value={studentMiddleName}
+                  onChange={(e) => setStudentMiddleName(e.target.value.replace(/[0-9]/g, ''))}
+                  placeholder="e.g. Santos"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={studentLastName}
+                  onChange={(e) => setStudentLastName(e.target.value.replace(/[0-9]/g, ''))}
+                  placeholder="e.g. Dela Cruz"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
             </div>
 
             <div>
@@ -786,9 +1026,10 @@ export const ClassesAndRosters: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold shadow-md shadow-accent-600/20"
+                disabled={isSubmittingStudent}
+                className="px-5 py-2 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold shadow-md shadow-accent-600/20 disabled:opacity-50"
               >
-                Add Student
+                {isSubmittingStudent ? 'Saving Student...' : 'Add Student'}
               </button>
             </div>
           </form>
@@ -823,15 +1064,41 @@ export const ClassesAndRosters: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                value={studentNameInput}
-                onChange={(e) => setStudentNameInput(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">First Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={studentFirstName}
+                  onChange={(e) => setStudentFirstName(e.target.value.replace(/[0-9]/g, ''))}
+                  placeholder="First Name"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
+                <input
+                  type="text"
+                  value={studentMiddleName}
+                  onChange={(e) => setStudentMiddleName(e.target.value.replace(/[0-9]/g, ''))}
+                  placeholder="Middle Name"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={studentLastName}
+                  onChange={(e) => setStudentLastName(e.target.value.replace(/[0-9]/g, ''))}
+                  placeholder="Last Name"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
             </div>
 
             <div>
@@ -880,10 +1147,11 @@ export const ClassesAndRosters: React.FC = () => {
 
       {/* Modal: Create Class Manually */}
       {isCreateClassOpen && (
-        <Modal isOpen={isCreateClassOpen} onClose={() => setIsCreateClassOpen(false)} title="Create New Class Section">
+        <Modal isOpen={isCreateClassOpen} onClose={() => { setIsCreateClassOpen(false); setScheduleError(null); }} title="Create New Class Section">
           <form onSubmit={handleCreateClass} className="space-y-4 text-xs">
+
             <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code</label>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code *</label>
               <input
                 type="text"
                 required
@@ -895,7 +1163,7 @@ export const ClassesAndRosters: React.FC = () => {
             </div>
 
             <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title</label>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title *</label>
               <input
                 type="text"
                 required
@@ -906,54 +1174,180 @@ export const ClassesAndRosters: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block *</label>
                 <input
                   type="text"
+                  required
                   value={newBlock}
                   onChange={(e) => setNewBlock(e.target.value)}
-                  placeholder="Section 3-A"
+                  placeholder="e.g. Section 3-A"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Room Venue</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Room Venue *</label>
                 <input
                   type="text"
+                  required
+                  list="room-suggestions"
                   value={newRoom}
-                  onChange={(e) => setNewRoom(e.target.value)}
-                  placeholder="Dental Room 101"
+                  onChange={(e) => {
+                    setNewRoom(e.target.value);
+                    setScheduleError(null);
+                  }}
+                  placeholder="e.g. Dental Room 101"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                <datalist id="room-suggestions">
+                  {ROOM_OPTIONS.map(room => (
+                    <option key={room} value={room} />
+                  ))}
+                </datalist>
               </div>
             </div>
 
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Class Schedule</label>
-              <input
-                type="text"
-                value={newSchedule}
-                onChange={(e) => setNewSchedule(e.target.value)}
-                placeholder="Mon/Wed 08:00 AM - 11:00 AM"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
+            {/* Step-by-Step Schedule Builder */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  1. Select Day(s) *
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  {DAYS_LIST.map(day => {
+                    const isSelected = selectedDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          let updated: string[];
+                          if (isSelected) {
+                            updated = selectedDays.filter(d => d !== day);
+                          } else {
+                            updated = DAYS_LIST.filter(d => d === day || selectedDays.includes(d));
+                          }
+                          setSelectedDays(updated);
+                          updateScheduleFromPicker(updated, startTime, endTime);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                  <span className="text-slate-400 font-semibold">Presets:</span>
+                  {[
+                    { label: 'Mon/Wed', days: ['Mon', 'Wed'] },
+                    { label: 'Tue/Thu', days: ['Tue', 'Thu'] },
+                    { label: 'Mon/Wed/Fri', days: ['Mon', 'Wed', 'Fri'] },
+                    { label: 'Sat', days: ['Sat'] },
+                  ].map(combo => (
+                    <button
+                      key={combo.label}
+                      type="button"
+                      onClick={() => {
+                        setSelectedDays(combo.days);
+                        updateScheduleFromPicker(combo.days, startTime, endTime);
+                      }}
+                      className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900 transition-colors cursor-pointer"
+                    >
+                      {combo.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  2. Select Time Range *
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
+                    <select
+                      value={startTime}
+                      onChange={(e) => {
+                        setStartTime(e.target.value);
+                        updateScheduleFromPicker(selectedDays, e.target.value, endTime);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={`start-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-400 font-semibold block mb-0.5">End Time</span>
+                    <select
+                      value={endTime}
+                      onChange={(e) => {
+                        setEndTime(e.target.value);
+                        updateScheduleFromPicker(selectedDays, startTime, e.target.value);
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={`end-${t}`} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Final Class Schedule (Editable) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newSchedule}
+                  onChange={(e) => {
+                    setNewSchedule(e.target.value);
+                    setScheduleError(null);
+                  }}
+                  placeholder="e.g. Mon/Wed 08:00 AM - 11:00 AM"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+                />
+                <span className="text-[11px] text-slate-400 block mt-1">
+                  Select Day(s) & Time above to auto-generate, or type any custom schedule text directly.
+                </span>
+              </div>
             </div>
+
+            {scheduleError && (
+              <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">
+                <Info className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <span>{scheduleError}</span>
+              </div>
+            )}
 
             <div className="pt-2 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setIsCreateClassOpen(false)}
+                onClick={() => { setIsCreateClassOpen(false); setScheduleError(null); }}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold shadow-md shadow-accent-600/20"
+                disabled={isSubmittingClass}
+                className="px-5 py-2 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold shadow-md shadow-accent-600/20 disabled:opacity-50"
               >
-                Save Class Section
+                {isSubmittingClass ? 'Saving Class...' : 'Save Class Section'}
               </button>
             </div>
           </form>
@@ -986,7 +1380,7 @@ export const ClassesAndRosters: React.FC = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block</label>
                 <input
@@ -1001,8 +1395,10 @@ export const ClassesAndRosters: React.FC = () => {
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Room Venue</label>
                 <input
                   type="text"
-                  value={editingClass.lecRoom}
+                  list="room-suggestions"
+                  value={editingClass.lecRoom || ''}
                   onChange={(e) => setEditingClass({ ...editingClass, lecRoom: e.target.value })}
+                  placeholder="e.g. Dental Room 101"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </div>
@@ -1012,8 +1408,10 @@ export const ClassesAndRosters: React.FC = () => {
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Class Schedule</label>
               <input
                 type="text"
+                list="schedule-suggestions"
                 value={editingClass.schedule}
                 onChange={(e) => setEditingClass({ ...editingClass, schedule: e.target.value })}
+                placeholder="e.g. Mon/Wed 08:00 AM - 11:00 AM"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
               />
             </div>
@@ -1036,6 +1434,7 @@ export const ClassesAndRosters: React.FC = () => {
           </form>
         </Modal>
       )}
+
 
       {/* Modal: Import iBU Class List File */}
       {isImportIctoOpen && (
