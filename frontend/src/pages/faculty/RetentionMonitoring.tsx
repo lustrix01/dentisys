@@ -1,857 +1,539 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Search, 
-  Plus, 
-  CheckCircle2, 
-  Pencil, 
-  Trash2 
-} from 'lucide-react';
-import { useApp } from '../../context/AppContext';
-import { useAuth } from '../../context/AuthContext';
-import { Student } from '../../types';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, Pencil, Plus, Search } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
-import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
+import { showFeedback } from '../../components/FeedbackCenter';
 import {
+  getFacultyRetentionApi,
   saveFacultyRemedialApi,
   updateFacultyRetentionStatusApi,
-  getFacultyClassesApi,
-  getFacultyCoursesApi
 } from '../../services/apiClient';
-import type { FacultyClassItem, CourseCatalogItem } from '../../services/apiClient';
+import type {
+  FacultyRetentionRecord,
+  FacultyRetentionState,
+} from '../../services/apiClient';
 
-export interface SubjectWatchlistItem {
-  id: string;
-  studentId: string;
-  studentName: string;
-  studentIdNum: string;
-  yearLevel: number;
-  subjectCode: string;
-  subjectName: string;
-  midtermGrade: number;
-  cause: string;
-  status: Student['status'];
-  hasPendingRemedial: boolean;
-  student: Student;
+interface RetentionRemedialRecord {
+  status: 'pending' | 'passed' | 'failed';
+  remedialScore: number | null;
+  examDate: string | null;
+  notes: string | null;
 }
 
+interface RetentionRemedialRow {
+  record: FacultyRetentionRecord;
+  remedial: RetentionRemedialRecord;
+}
+
+type Notification = {
+  type: 'success' | 'info';
+  message: string;
+};
+
+const isPersistedText = (value: string | null | undefined): value is string => (
+  typeof value === 'string' && value.trim().length > 0
+);
+
+const isFiniteNumber = (value: number | null | undefined): value is number => (
+  typeof value === 'number' && Number.isFinite(value)
+);
+
+const hasPersistedIdentifiers = (record: FacultyRetentionRecord): boolean => (
+  isPersistedText(record.enrollmentId)
+  && isPersistedText(record.studentId)
+  && isPersistedText(record.classId)
+);
+
+const canScheduleRecord = (record: FacultyRetentionRecord): boolean => (
+  hasPersistedIdentifiers(record) && isPersistedText(record.subjectCode)
+);
+
+const textOrUnavailable = (value: string | null | undefined, label: string): string => (
+  isPersistedText(value) ? value : label
+);
+
+const readRemedialRecord = (value: Record<string, unknown> | null): RetentionRemedialRecord | null => {
+  if (!value) return null;
+
+  const status = value.status;
+  if (status !== 'pending' && status !== 'passed' && status !== 'failed') {
+    return null;
+  }
+
+  const rawScore = value.remedialScore;
+  const remedialScore = typeof rawScore === 'number' && Number.isFinite(rawScore)
+    ? rawScore
+    : null;
+  const examDate = typeof value.examDate === 'string' && value.examDate.trim().length > 0
+    ? value.examDate
+    : null;
+  const notes = typeof value.notes === 'string' && value.notes.trim().length > 0
+    ? value.notes
+    : null;
+
+  return { status, remedialScore, examDate, notes };
+};
+
+const buildRemedialPayload = (
+  record: FacultyRetentionRecord,
+  status: 'pending' | 'passed' | 'failed',
+  options: { examDate?: string; notes?: string; remedialScore?: number },
+  existing: Record<string, unknown> | null,
+): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {
+    status,
+    studentId: record.studentId,
+    classId: record.classId,
+  };
+
+  if (isPersistedText(record.subjectCode)) payload.subjectCode = record.subjectCode;
+  if (isPersistedText(record.studentName)) payload.studentName = record.studentName;
+  if (isPersistedText(record.studentNumber)) payload.studentNumber = record.studentNumber;
+  if (isPersistedText(record.className)) payload.className = record.className;
+  if (isFiniteNumber(record.gwa)) payload.originalGrade = record.gwa;
+
+  const persistedExamDate = existing && typeof existing.examDate === 'string'
+    ? existing.examDate.trim()
+    : '';
+  const examDate = typeof options.examDate === 'string' && options.examDate.trim().length > 0
+    ? options.examDate.trim()
+    : persistedExamDate;
+  if (examDate.length > 0) payload.examDate = examDate;
+
+  const notes = typeof options.notes === 'string' && options.notes.trim().length > 0
+    ? options.notes.trim()
+    : existing && typeof existing.notes === 'string' && existing.notes.trim().length > 0
+      ? existing.notes.trim()
+      : '';
+  if (notes.length > 0) payload.notes = notes;
+
+  if (isFiniteNumber(options.remedialScore)) payload.remedialScore = options.remedialScore;
+
+  return payload;
+};
+
+const retentionStateLabel = (state: FacultyRetentionState): string => {
+  switch (state) {
+    case 'active': return 'Active';
+    case 'warning': return 'Warning';
+    case 'critical': return 'Critical';
+    case 'remedial': return 'Remedial';
+    default: return 'Unavailable';
+  }
+};
+
+const statusBadgeClasses = (state: FacultyRetentionState): string => {
+  switch (state) {
+    case 'critical': return 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60';
+    case 'warning': return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60';
+    case 'remedial': return 'bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60';
+    case 'active': return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60';
+    default: return 'bg-slate-100 text-slate-500 border border-slate-200';
+  }
+};
+
 export const RetentionMonitoring: React.FC = () => {
-  const { user } = useAuth();
-  const { 
-    students = [], 
-    settings = { retentionThreshold: 2.5 }, 
-    addRemedialExam, 
-    updateRemedialExam, 
-    deleteRemedialExam,
-    overrideRetentionStatus 
-  } = useApp();
-  // Dynamic Faculty Classes & Courses State for Course Filtering
-  const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
-  const [facultyCourses, setFacultyCourses] = useState<CourseCatalogItem[]>([]);
-  const [selectedCourseCode, setSelectedCourseCode] = useState<string>('all');
+  const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<Notification | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    getFacultyClassesApi()
-      .then(res => { if (res?.classes) setFacultyClasses(res.classes); })
-      .catch(() => {});
-    getFacultyCoursesApi()
-      .then(res => { if (res?.courses) setFacultyCourses(res.courses); })
-      .catch(() => {});
-  }, []);
-
-  // Selected class block state
-  const [selectedClassId, setSelectedClassId] = useState<string>('all');
-
-  // Tab Management: 'watchlist' | 'remedials' | 'risk-rules' | 'all'
-  const [activeTab, setActiveTab] = useState<'watchlist' | 'remedials' | 'risk-rules' | 'all'>('watchlist');
+  const [selectedClassId, setSelectedClassId] = useState('all');
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState('all');
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'remedials' | 'risk-rules'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Record Score modal states
-  const [selectedRemedialId, setSelectedRemedialId] = useState<string | null>(null);
-  const [remedialScore, setRemedialScore] = useState('');
-  const [remedialNotes, setRemedialNotes] = useState('');
-
-  // Schedule Remedial modal states
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState('');
+  const [selectedScheduleEnrollmentId, setSelectedScheduleEnrollmentId] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleNotes, setScheduleNotes] = useState('');
 
-  // Manual status override states
+  const [selectedResolveEnrollmentId, setSelectedResolveEnrollmentId] = useState<string | null>(null);
+  const [remedialScore, setRemedialScore] = useState('');
+  const [remedialNotes, setRemedialNotes] = useState('');
+
   const [isOverrideOpen, setIsOverrideOpen] = useState(false);
-  const [overrideStudentId, setOverrideStudentId] = useState('');
-  const [overrideStatus, setOverrideStatus] = useState<Student['status']>('warning');
+  const [selectedOverrideEnrollmentId, setSelectedOverrideEnrollmentId] = useState<string | null>(null);
+  const [overrideStatus, setOverrideStatus] = useState<FacultyRetentionState>('warning');
   const [overrideRemarks, setOverrideRemarks] = useState('');
 
-  // Notification Toast
-  const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
-
-  // Safe students array
-  const safeStudents = useMemo(() => students || [], [students]);
-
-  // Available courses strictly derived from authoritative courses and classes
-  const availableCourseOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    facultyCourses.forEach(c => {
-      if (c.courseCode) {
-        map.set(c.courseCode.toUpperCase(), c.name || c.courseCode);
-      }
-    });
-    facultyClasses.forEach(c => {
-      if (c.courseCode && !map.has(c.courseCode.toUpperCase())) {
-        map.set(c.courseCode.toUpperCase(), c.courseName || c.courseCode);
-      }
-    });
-    return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
-  }, [facultyCourses, facultyClasses]);
-
-  // Available class sections strictly derived from authoritative classes
-  const availableClassOptions = useMemo(() => {
-    const set = new Set<string>();
-    facultyClasses.forEach(c => {
-      if (c.block) set.add(c.block);
-    });
-    return Array.from(set);
-  }, [facultyClasses]);
+  const refreshRetention = useCallback(async (): Promise<boolean> => {
+    setIsLoading(true);
+    try {
+      const response = await getFacultyRetentionApi();
+      setRetentionRecords(Array.isArray(response.retention) ? response.retention : []);
+      setLoadError(null);
+      return true;
+    } catch (requestError) {
+      setRetentionRecords([]);
+      setLoadError(requestError instanceof Error ? requestError.message : 'Authoritative retention data is unavailable.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!selectedSubjectCode && availableCourseOptions.length > 0) {
-      setSelectedSubjectCode(availableCourseOptions[0].code);
-    }
-  }, [availableCourseOptions, selectedSubjectCode]);
+    void refreshRetention();
+  }, [refreshRetention]);
 
-  // Filter students based on selected class section filter
-  const facultyStudents = useMemo(() => {
-    return safeStudents.filter(s => {
-      if (selectedClassId === 'all') return true;
-      return s.classSections?.some(cs => cs.classId === selectedClassId || cs.className?.includes(selectedClassId));
-    });
-  }, [safeStudents, selectedClassId]);
+  const usableRecords = useMemo(
+    () => retentionRecords.filter(hasPersistedIdentifiers),
+    [retentionRecords],
+  );
 
-  const retentionThreshold = settings?.retentionThreshold ?? 2.50;
+  const unavailableRecordCount = retentionRecords.length - usableRecords.length;
 
-  // Subject-level Watchlist Calculations (authoritative API data only, strictly no fake course/grade generation)
-  // Subject-level Watchlist Calculations (authoritative API data only, strictly no fake course/grade generation)
-  const subjectWatchlistItems = useMemo<SubjectWatchlistItem[]>(() => {
-    const items: SubjectWatchlistItem[] = [];
-    const assignedCourseCodes = new Set(
-      facultyClasses
-        .map(c => c.courseCode?.toUpperCase())
-        .filter((code): code is string => Boolean(code))
-    );
+  const subjectOptions = useMemo(() => (
+    Array.from(new Set(
+      usableRecords
+        .map(record => record.subjectCode)
+        .filter(isPersistedText),
+    )).sort((left, right) => left.localeCompare(right))
+  ), [usableRecords]);
 
-    facultyStudents.forEach(student => {
-      const subs = student.enrolledSubjects || [];
-      if (subs.length === 0) {
-        return;
+  const classOptions = useMemo(() => {
+    const labels = new Map<string, string>();
+    usableRecords.forEach(record => {
+      if (!labels.has(record.classId)) {
+        labels.set(
+          record.classId,
+          isPersistedText(record.className)
+            ? record.className
+            : `Class name unavailable (${record.classId})`,
+        );
       }
-
-      subs.forEach(sub => {
-        const codeUpper = sub.code?.toUpperCase();
-        if (!codeUpper) return;
-        if (assignedCourseCodes.size > 0 && !assignedCourseCodes.has(codeUpper)) {
-          return;
-        }
-
-        // Must have an authoritative grade for the subject
-        if (typeof sub.grade !== 'number' || sub.grade <= 0) {
-          return;
-        }
-
-        const subGrade = sub.grade;
-        const subRemedials = (student.remedialExams || []).filter(r => r.subjectCode?.toUpperCase() === codeUpper);
-        const hasPendingRem = subRemedials.some(r => r.status === 'pending');
-        const hasFailedRem = subRemedials.some(r => r.status === 'failed');
-
-        const isAtRisk = subGrade > retentionThreshold || student.status === 'warning' || student.status === 'critical' || student.status === 'remedial' || subRemedials.length > 0;
-
-        if (isAtRisk) {
-          let cause = `Midterm subject grade (${subGrade.toFixed(2)}) exceeds ${retentionThreshold.toFixed(2)} limit`;
-          if (hasFailedRem) {
-            cause = `Failed Remedial Exam for ${sub.code} - Subject Retained`;
-          } else if (hasPendingRem) {
-            cause = `Pending Remedial Exam Scheduled for Final Grade`;
-          } else if (student.status === 'critical') {
-            cause = `Critical Retention Watchlist - Grade (${subGrade.toFixed(2)}) > ${retentionThreshold.toFixed(2)}`;
-          }
-
-          items.push({
-            id: `${student.id}-${sub.code}`,
-            studentId: student.id,
-            studentName: student.name || 'Unknown Student',
-            studentIdNum: student.studentId || '2024-000',
-            yearLevel: student.yearLevel || 4,
-            subjectCode: sub.code,
-            subjectName: sub.name || sub.code,
-            midtermGrade: subGrade,
-            cause,
-            status: student.status || 'warning',
-            hasPendingRemedial: hasPendingRem,
-            student
-          });
-        }
-      });
     });
+    return Array.from(labels.entries()).sort(([left], [right]) => left.localeCompare(right));
+  }, [usableRecords]);
 
-    return items;
-  }, [facultyStudents, facultyClasses, retentionThreshold]);
+  const filteredRecords = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return usableRecords.filter(record => {
+      if (selectedClassId !== 'all' && record.classId !== selectedClassId) return false;
+      if (selectedSubjectCode !== 'all' && record.subjectCode !== selectedSubjectCode) return false;
+      if (query.length === 0) return true;
 
-  // Filter Watchlist items based on selected Course & Search Query
-  const filteredWatchlist = useMemo(() => {
-    return subjectWatchlistItems.filter(item => {
-      const matchesCourse = selectedCourseCode === 'all' || item.subjectCode.toUpperCase() === selectedCourseCode.toUpperCase();
-      const matchesSearch =
-        item.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.studentIdNum.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.subjectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.subjectCode.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCourse && matchesSearch;
+      return [
+        record.studentName,
+        record.studentNumber,
+        record.className,
+        record.subjectCode,
+        record.enrollmentId,
+      ].some(value => isPersistedText(value) && value.toLowerCase().includes(query));
     });
-  }, [subjectWatchlistItems, selectedCourseCode, searchQuery]);
-  
-  // List of all active remedial exams across faculty students, filtered by course
-  const allRemedialExams = useMemo(() => {
-    return facultyStudents.flatMap(s => 
-      (s.remedialExams || []).map(rem => ({
-        ...rem,
-        studentName: s.name || 'Unknown Student',
-        studentIdNum: s.studentId || '2024-000',
-        yearLevel: s.yearLevel || 4
-      }))
-    ).filter(rem => {
-      if (selectedCourseCode === 'all') return true;
-      return rem.subjectCode?.toUpperCase() === selectedCourseCode.toUpperCase();
+  }, [searchQuery, selectedClassId, selectedSubjectCode, usableRecords]);
+
+  const watchlistRecords = useMemo(
+    () => filteredRecords.filter(record => record.state !== 'active'),
+    [filteredRecords],
+  );
+
+  const remedialRows = useMemo<RetentionRemedialRow[]>(() => {
+    const rows: RetentionRemedialRow[] = [];
+    filteredRecords.forEach(record => {
+      const remedial = readRemedialRecord(record.remedial);
+      if (remedial) rows.push({ record, remedial });
     });
-  }, [facultyStudents, selectedCourseCode]);
+    return rows;
+  }, [filteredRecords]);
 
-  const filteredRemedials = useMemo(() => {
-    return allRemedialExams.filter(rem => 
-      (rem.studentName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rem.subjectCode || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rem.subjectName || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [allRemedialExams, searchQuery]);
+  const scheduleCandidates = useMemo(
+    () => filteredRecords.filter(canScheduleRecord),
+    [filteredRecords],
+  );
 
-  const filteredAllStudents = useMemo(() => {
-    return facultyStudents.filter(s => 
-      (s.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.studentId || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [facultyStudents, searchQuery]);
+  const selectedScheduleRecord = useMemo(
+    () => usableRecords.find(record => record.enrollmentId === selectedScheduleEnrollmentId) ?? null,
+    [selectedScheduleEnrollmentId, usableRecords],
+  );
 
-  // Midterm Performance Rules Evaluation
-  const riskRuleResults = useMemo(() => {
-    return facultyStudents.map(student => {
-      const enrolledSubjs = student.enrolledSubjects || [];
-      const clinicalFails = enrolledSubjs.filter(
-        subj => subj.isClinical && subj.grade > (settings?.retentionThreshold || 2.5)
-      );
+  const selectedResolveRecord = useMemo(
+    () => usableRecords.find(record => record.enrollmentId === selectedResolveEnrollmentId) ?? null,
+    [selectedResolveEnrollmentId, usableRecords],
+  );
 
-      const avgAttendance = enrolledSubjs.length > 0
-        ? enrolledSubjs.reduce((acc, curr) => acc + (curr.components?.attendance || 100), 0) / enrolledSubjs.length
-        : null;
+  const selectedOverrideRecord = useMemo(
+    () => usableRecords.find(record => record.enrollmentId === selectedOverrideEnrollmentId) ?? null,
+    [selectedOverrideEnrollmentId, usableRecords],
+  );
 
-      let riskLevel: 'High' | 'Medium' | 'Low' = 'Low';
-      const factors: string[] = [];
+  const pendingRemedialCount = remedialRows.filter(row => row.remedial.status === 'pending').length;
 
-      if (clinicalFails.length > 0 || student.status === 'critical' || (student.overallGWA && student.overallGWA > 2.5)) {
-        riskLevel = 'High';
-        if (clinicalFails.length > 0) {
-          factors.push(`Midterm grade exceeds passing threshold: GWA > 2.5 in ${clinicalFails.map(c=>c.code).join(', ')}`);
-        }
-        if (avgAttendance !== null && avgAttendance < 85) {
-          factors.push(`Low Midterm attendance record: ${avgAttendance.toFixed(1)}% rate is below threshold`);
-        }
-        if (student.status === 'remedial') {
-          factors.push('Currently assigned to active remedial exam program');
-        }
-      } else if (student.status === 'warning' || (student.overallGWA && student.overallGWA > 2.2)) {
-        riskLevel = 'Medium';
-        factors.push('Borderline Midterm GWA: score sits close to passing limit (2.5)');
-        if (avgAttendance !== null && avgAttendance < 90) {
-          factors.push('Midterm attendance requires faculty monitoring');
-        }
-      } else {
-        riskLevel = 'Low';
-        factors.push('Satisfactory Midterm Exam scores across all subjects');
-        factors.push('Consistent attendance rate above required threshold');
-      }
-
-      return { student, riskLevel, factors };
-    }).sort((a, b) => {
-      const levelOrder = { High: 0, Medium: 1, Low: 2 };
-      return levelOrder[a.riskLevel] - levelOrder[b.riskLevel];
-    });
-  }, [facultyStudents, settings]);
-
-  const filteredRiskResults = useMemo(() => {
-    return riskRuleResults.filter(p =>
-      (p.student.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.student.studentId || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [riskRuleResults, searchQuery]);
-
-  // Handler: Record & Grade Remedial Exam Result
-  const handleResolveRemedial = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedRemedialId) return;
-    const scoreVal = parseInt(remedialScore);
-    if (isNaN(scoreVal) || scoreVal < 0 || scoreVal > 100) {
-      showFeedback('Please enter a valid percentage score (0-100).', 'error');
+  const openSchedule = (preferredRecord?: FacultyRetentionRecord) => {
+    const candidate = preferredRecord && canScheduleRecord(preferredRecord)
+      ? preferredRecord
+      : scheduleCandidates[0];
+    if (!candidate) {
+      showFeedback('Scheduling is unavailable because no persisted enrollment, student, class, and subject identifiers are available.', 'info');
       return;
     }
-    const owner = safeStudents.find((student) => (student.remedialExams || []).some((exam) => exam.id === selectedRemedialId));
-    const exam = owner?.remedialExams?.find((item) => item.id === selectedRemedialId);
-    if (!owner || !exam) return;
+    setSelectedScheduleEnrollmentId(candidate.enrollmentId);
+    setScheduleDate('');
+    setScheduleNotes('');
+    setIsScheduleOpen(true);
+  };
+
+  const openResolve = (row: RetentionRemedialRow) => {
+    setSelectedResolveEnrollmentId(row.record.enrollmentId);
+    setRemedialScore('');
+    setRemedialNotes(row.remedial.notes ?? '');
+  };
+
+  const openOverride = (record: FacultyRetentionRecord) => {
+    if (!hasPersistedIdentifiers(record)) {
+      showFeedback('Status override is unavailable because persisted identifiers are missing.', 'info');
+      return;
+    }
+    setSelectedOverrideEnrollmentId(record.enrollmentId);
+    setOverrideStatus(record.state);
+    setOverrideRemarks('');
+    setIsOverrideOpen(true);
+  };
+
+  const resetScheduleForm = () => {
+    setIsScheduleOpen(false);
+    setSelectedScheduleEnrollmentId('');
+    setScheduleDate('');
+    setScheduleNotes('');
+  };
+
+  const resetResolveForm = () => {
+    setSelectedResolveEnrollmentId(null);
+    setRemedialScore('');
+    setRemedialNotes('');
+  };
+
+  const resetOverrideForm = () => {
+    setIsOverrideOpen(false);
+    setSelectedOverrideEnrollmentId(null);
+    setOverrideRemarks('');
+  };
+
+  const handleScheduleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedScheduleRecord || !canScheduleRecord(selectedScheduleRecord)) {
+      showFeedback('Scheduling is unavailable because the selected record lacks persisted identifiers.', 'info');
+      return;
+    }
+    if (scheduleDate.trim().length === 0) {
+      showFeedback('Select a remedial exam date.', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       await saveFacultyRemedialApi({
-        studentId: owner.id,
-        classId: owner.classId,
-        remedial: {
-          ...exam,
-          remedialScore: scoreVal,
-          notes: remedialNotes,
-          status: scoreVal >= 75 ? 'passed' : 'failed',
-        },
+        enrollmentId: selectedScheduleRecord.enrollmentId,
+        studentId: selectedScheduleRecord.studentId,
+        classId: selectedScheduleRecord.classId,
+        remedial: buildRemedialPayload(
+          selectedScheduleRecord,
+          'pending',
+          { examDate: scheduleDate, notes: scheduleNotes },
+          null,
+        ),
       });
-      if (updateRemedialExam) updateRemedialExam(selectedRemedialId, scoreVal, remedialNotes);
-      setSelectedRemedialId(null);
-      setRemedialScore('');
-      setRemedialNotes('');
+      const refreshed = await refreshRetention();
+      resetScheduleForm();
       setNotification({
-        type: 'success',
-        message: `Remedial Exam grade recorded: ${scoreVal}% (${scoreVal >= 75 ? 'PASSED - Student Cleared' : 'FAILED - Retention Warning Maintained'})`
+        type: refreshed ? 'success' : 'info',
+        message: refreshed
+          ? 'Remedial exam persisted successfully.'
+          : 'Remedial exam persisted, but the authoritative list could not be refreshed.',
       });
     } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save remedial result.', 'error');
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the remedial exam.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Handler: Schedule Remedial Exam
-  const handleScheduleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedStudentId || !scheduleDate) {
-      showFeedback('Please complete all required fields.', 'error');
+  const handleResolveRemedial = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedResolveRecord || !hasPersistedIdentifiers(selectedResolveRecord)) {
+      showFeedback('Remedial resolution is unavailable because the persisted enrollment identifiers are missing.', 'info');
       return;
     }
-    const student = safeStudents.find(s => s.id === selectedStudentId);
-    
-    if (student) {
-      const subjectName = availableCourseOptions.find(c => c.code === selectedSubjectCode)?.name || selectedSubjectCode;
-      const enrolledSub = (student.enrolledSubjects || []).find(s => s.code?.toUpperCase() === selectedSubjectCode.toUpperCase());
-      const originalGrade = enrolledSub?.grade || student.overallGWA || 0;
-      const remedial = {
-        studentId: selectedStudentId,
-        studentName: student.name,
-        subjectCode: selectedSubjectCode,
-        subjectName,
-        originalGrade,
-        examDate: scheduleDate,
-        notes: scheduleNotes || 'Midterm Remedial Exam',
-        status: 'pending',
-      };
-      try {
-        await saveFacultyRemedialApi({
-          enrollmentId: `enr-${Date.now()}`,
-          studentId: student.id,
-          classId: 'cls-1',
-          remedial,
-        });
-        if (addRemedialExam) addRemedialExam(remedial);
-        setNotification({
-          type: 'success',
-          message: `Remedial Exam scheduled for ${student.name} on ${scheduleDate}!`
-        });
-      } catch (requestError) {
-        if (addRemedialExam) addRemedialExam(remedial);
-        showFeedback('Remedial exam scheduled locally.', 'info');
-      }
-      setIsScheduleOpen(false);
-      setSelectedStudentId('');
-      setScheduleDate('');
-      setScheduleNotes('');
+
+    const score = Number(remedialScore);
+    if (!Number.isFinite(score) || score < 0 || score > 100) {
+      showFeedback('Enter a valid percentage score from 0 to 100.', 'error');
+      return;
     }
-  };
 
-  // Handler: Status Override
-  const handleOverrideSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!overrideStudentId || !overrideRemarks) return;
-
-    const student = safeStudents.find((item) => item.id === overrideStudentId);
-    if (!student) return;
-
+    const status = score >= 75 ? 'passed' : 'failed';
+    setIsSubmitting(true);
     try {
-      await updateFacultyRetentionStatusApi({
-        studentId: student.id,
-        classId: 'cls-1',
-        status: overrideStatus,
-        reason: overrideRemarks,
+      await saveFacultyRemedialApi({
+        enrollmentId: selectedResolveRecord.enrollmentId,
+        studentId: selectedResolveRecord.studentId,
+        classId: selectedResolveRecord.classId,
+        remedial: buildRemedialPayload(
+          selectedResolveRecord,
+          status,
+          { notes: remedialNotes, remedialScore: score },
+          selectedResolveRecord.remedial,
+        ),
       });
-      if (overrideRetentionStatus) overrideRetentionStatus(overrideStudentId, overrideStatus, overrideRemarks, user?.login_email || 'faculty');
-      setIsOverrideOpen(false);
-      setOverrideStudentId('');
-      setOverrideRemarks('');
+      const refreshed = await refreshRetention();
+      resetResolveForm();
       setNotification({
-        type: 'success',
-        message: `Retention status for ${student.name} updated to ${overrideStatus.toUpperCase()}!`
+        type: refreshed ? 'success' : 'info',
+        message: refreshed
+          ? 'Remedial result persisted successfully.'
+          : 'Remedial result persisted, but the authoritative list could not be refreshed.',
       });
     } catch (requestError) {
-      if (overrideRetentionStatus) overrideRetentionStatus(overrideStudentId, overrideStatus, overrideRemarks, user?.login_email || 'faculty');
-      setIsOverrideOpen(false);
-      setNotification({
-        type: 'success',
-        message: `Retention status for ${student.name} updated!`
-      });
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the remedial result.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleDeleteRemedial = async (id: string) => {
-    if (await requestConfirmation('Remove this remedial exam log?', 'Remove remedial log')) {
-      if (deleteRemedialExam) deleteRemedialExam(id);
-      setNotification({
-        type: 'info',
-        message: 'Remedial record removed.'
+  const handleOverrideSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedOverrideRecord || !hasPersistedIdentifiers(selectedOverrideRecord)) {
+      showFeedback('Status override is unavailable because the persisted identifiers are missing.', 'info');
+      return;
+    }
+    if (overrideRemarks.trim().length < 8) {
+      showFeedback('Enter at least eight characters explaining the override.', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await updateFacultyRetentionStatusApi({
+        studentId: selectedOverrideRecord.studentId,
+        classId: selectedOverrideRecord.classId,
+        status: overrideStatus,
+        reason: overrideRemarks.trim(),
       });
+      const refreshed = await refreshRetention();
+      resetOverrideForm();
+      setNotification({
+        type: refreshed ? 'success' : 'info',
+        message: refreshed
+          ? 'Retention status persisted successfully.'
+          : 'Retention status persisted, but the authoritative list could not be refreshed.',
+      });
+    } catch (requestError) {
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the retention status.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const getStatusBadge = (status: Student['status']) => {
-    const styles = {
-      active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60',
-      warning: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60',
-      critical: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60',
-      remedial: 'bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60',
-    };
-    return (
-      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${styles[status] || styles.active}`}>
-        {status || 'active'}
-      </span>
-    );
-  };
+  const renderStatusBadge = (state: FacultyRetentionState) => (
+    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${statusBadgeClasses(state)}`}>
+      {retentionStateLabel(state)}
+    </span>
+  );
 
   return (
     <div className="space-y-6">
-      
-      {/* 1. Clean Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Retention & Remedial Monitoring
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Monitor student retention status, schedule remedial exams, and record exam outcomes based on Midterm performance.
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">Retention & Remedial Monitoring</h1>
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">View persisted Faculty retention records and submit authorized remedial or status updates.</p>
         </div>
-
-        {/* Top Right Action Button */}
-        <div>
-          <button
-            onClick={() => {
-              setIsScheduleOpen(true);
-              setSelectedStudentId('');
-              setSelectedSubjectCode(selectedCourseCode !== 'all' ? selectedCourseCode : (availableCourseOptions[0]?.code || ''));
-              setScheduleDate(new Date().toISOString().split('T')[0]);
-              setScheduleNotes('');
-            }}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Schedule Remedial</span>
-          </button>
-        </div>
+        <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all" title={scheduleCandidates.length === 0 ? 'Scheduling is unavailable without persisted enrollment identifiers.' : 'Schedule remedial exam'}>
+          <Plus className="w-4 h-4" />
+          <span>Schedule Remedial</span>
+        </button>
       </div>
 
       {notification && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-            <span>{notification.message}</span>
-          </div>
-          <button onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
+          <div className="flex items-center gap-2.5"><CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" /><span>{notification.message}</span></div>
+          <button type="button" onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">Dismiss</button>
         </div>
       )}
 
-      {/* Control Bar: Tabs & Filter Dropdowns Below */}
+      {loadError && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center justify-between gap-3">
+          <span>{loadError}</span>
+          <button type="button" onClick={() => { void refreshRetention(); }} className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold">Retry</button>
+        </div>
+      )}
+
+      {unavailableRecordCount > 0 && !loadError && (
+        <div className="p-4 rounded-2xl bg-slate-500/10 border border-slate-500/20 text-slate-700 dark:text-slate-300 text-xs font-semibold">{unavailableRecordCount} retention record(s) are unavailable because the server did not provide all persisted identifiers required for actions.</div>
+      )}
+
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        {/* Tab Navigation (Text Only - No Icons) */}
         <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit overflow-x-auto">
-          <button
-            onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'watchlist' 
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' 
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-            }`}
-          >
-            Retention Watchlist ({filteredWatchlist.length})
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'remedials' 
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' 
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-            }`}
-          >
-            Remedial Exams ({allRemedialExams.filter(e => e.status === 'pending').length} Pending)
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('risk-rules'); setSearchQuery(''); }}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              activeTab === 'risk-rules'
-                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' 
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-            }`}
-          >
-            Midterm Evaluation Rules
-          </button>
+          <button type="button" onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'watchlist' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Retention Watchlist ({watchlistRecords.length})</button>
+          <button type="button" onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'remedials' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Remedial Exams ({pendingRemedialCount} Pending)</button>
+          <button type="button" onClick={() => { setActiveTab('risk-rules'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'risk-rules' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Midterm Evaluation Rules</button>
         </div>
 
-        {/* Filters & Search Bar Positioned Below */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
-          {/* Course Filter Dropdown */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
-            <select
-              value={selectedCourseCode}
-              onChange={(e) => setSelectedCourseCode(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
-            >
-              <option value="all">All Courses</option>
-              {availableCourseOptions.map(({ code, name }) => (
-                <option key={code} value={code}>{code} - {name}</option>
-              ))}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs">
+            <select value={selectedSubjectCode} onChange={(event) => setSelectedSubjectCode(event.target.value)} className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1">
+              <option value="all">All Subjects</option>
+              {subjectOptions.map(subjectCode => <option key={subjectCode} value={subjectCode}>{subjectCode}</option>)}
             </select>
           </div>
-
-          {/* Class Section Filter Dropdown */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
-            <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
-            >
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs">
+            <select value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)} className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1">
               <option value="all">All Class Sections</option>
-              {availableClassOptions.map((clsLabel: string) => (
-                <option key={clsLabel} value={clsLabel}>{clsLabel}</option>
-              ))}
+              {classOptions.map(([classId, label]) => <option key={classId} value={classId}>{label}</option>)}
             </select>
           </div>
-
-          {/* School Year Selector Filter Dropdown */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
-            <select
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
-            >
-              <option value="2025-2026">S.Y. 2025-2026 (Current)</option>
-              <option value="2024-2025">S.Y. 2024-2025</option>
-            </select>
-          </div>
-
-          {/* Search Input */}
           <div className="relative w-full sm:w-56">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
-            />
+            <input type="text" placeholder="Search..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs" />
           </div>
         </div>
       </div>
 
-      {/* ----------------------------------------------------
-          TAB 1: RETENTION WATCHLIST (MIDTERM GWA > 2.5)
-      ---------------------------------------------------- */}
       {activeTab === 'watchlist' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
-              <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-                Retention Watchlist ({filteredWatchlist.length})
-              </h2>
-              <p className="text-xs text-slate-400">
-                Students requiring retention monitoring due to subject midterm grades exceeding 2.50 or failing marks.
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                setIsScheduleOpen(true);
-                setSelectedStudentId('');
-                setSelectedSubjectCode(selectedCourseCode !== 'all' ? selectedCourseCode : (availableCourseOptions[0]?.code || ''));
-                setScheduleDate(new Date().toISOString().split('T')[0]);
-                setScheduleNotes('');
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Schedule Remedial Exam</span>
-            </button>
+            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-400">Only server-persisted retention states and academic values are shown.</p></div>
+            <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all"><Plus className="w-3.5 h-3.5" /><span>Schedule Remedial Exam</span></button>
           </div>
-
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Student Details</th>
-                  <th className="py-3 px-4">Subject</th>
-                  <th className="py-3 px-4 text-center">Subject Grade</th>
-                  <th className="py-3 px-4">Retention Violation Cause</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Persisted GWA / %</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {filteredWatchlist.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-10 text-center text-slate-400 font-medium">
-                      No students currently in retention watchlist under the selected course and class filters.
-                    </td>
+                {watchlistRecords.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No persisted retention records match the selected filters.'}</td></tr> : watchlistRecords.map(record => (
+                  <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
+                    <td className="py-3.5 px-4 font-mono">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
+                    <td className="py-3.5 px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
+                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? record.gwa.toFixed(2) : 'GWA unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
+                    <td className="py-3.5 px-4">{renderStatusBadge(record.state)}</td>
+                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? 'Scheduling unavailable: persisted subject data is missing.' : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button><button type="button" onClick={() => openOverride(record)} disabled={!hasPersistedIdentifiers(record)} title={!hasPersistedIdentifiers(record) ? 'Status override unavailable: persisted identifiers are missing.' : 'Override retention status'} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 text-[11px] font-bold"><Pencil className="w-3.5 h-3.5" /></button></div></td>
                   </tr>
-                ) : (
-                  filteredWatchlist.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-4">
-                        <span className="font-bold text-slate-800 dark:text-slate-100 block">{item.studentName}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">{item.studentIdNum} • Year {item.yearLevel}</span>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold font-mono text-[11px] block w-fit">
-                          {item.subjectCode}
-                        </span>
-                        <span className="text-[10px] text-slate-400 block mt-0.5 max-w-[180px] truncate">{item.subjectName}</span>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center font-extrabold font-mono text-sm">
-                        <span className={`px-2.5 py-1 rounded-lg ${
-                          item.midtermGrade > 3.0 || item.status === 'critical'
-                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60'
-                            : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
-                        }`}>
-                          {item.midtermGrade.toFixed(2)}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-semibold text-[11px] border border-rose-200/60 block w-fit">
-                          {item.cause}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        {getStatusBadge(item.status)}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => {
-                              setSelectedStudentId(item.studentId);
-                              setSelectedSubjectCode(item.subjectCode !== 'ALL' ? item.subjectCode : (availableCourseOptions[0]?.code || ''));
-                              setScheduleDate(new Date().toISOString().split('T')[0]);
-                              setIsScheduleOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all cursor-pointer shadow-xs"
-                          >
-                            <Plus className="w-3 h-3" />
-                            <span>Remedial</span>
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              setOverrideStudentId(item.studentId);
-                              setOverrideStatus(item.status);
-                              setOverrideRemarks('');
-                              setIsOverrideOpen(true);
-                            }}
-                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-[11px] font-bold cursor-pointer"
-                            title="Override Retention Status"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         </Card>
       )}
 
-      {/* ----------------------------------------------------
-          TAB 2: REMEDIAL EXAMS MANAGEMENT
-      ---------------------------------------------------- */}
       {activeTab === 'remedials' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
-              <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-                Remedial Exam Management ({filteredRemedials.length})
-              </h2>
-              <p className="text-xs text-slate-400">
-                Track scheduled remedial exams, input percentage scores, and resolve student retention status.
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                setIsScheduleOpen(true);
-                setSelectedStudentId('');
-                setScheduleDate(new Date().toISOString().split('T')[0]);
-              }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Schedule Remedial Exam</span>
-            </button>
+            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Persisted Remedial Records ({remedialRows.length})</h2><p className="text-xs text-slate-400">Remedial state is read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
+            <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all"><Plus className="w-3.5 h-3.5" /><span>Schedule Remedial Exam</span></button>
           </div>
-
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Student Name</th>
-                  <th className="py-3 px-4">Course Section</th>
-                  <th className="py-3 px-4">Exam Date</th>
-                  <th className="py-3 px-4">Score & Outcome</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Exam Date</th><th className="py-3 px-4">Score & Outcome</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {filteredRemedials.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-10 text-center text-slate-400">
-                      No pending or completed remedial exams logged.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredRemedials.map(rem => (
-                    <tr key={rem.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
-                        {rem.studentName}
-                        <span className="block text-[10px] text-slate-400 font-mono">{rem.studentIdNum}</span>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-bold text-[10px]">
-                          {rem.subjectCode} - {rem.subjectName}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
-                        {rem.examDate}
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        {rem.status === 'passed' ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">
-                            PASSED ({rem.remedialScore}%) • Cleared
-                          </span>
-                        ) : rem.status === 'failed' ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">
-                            FAILED ({rem.remedialScore}%) • Retained
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">
-                            Scheduled / Pending Exam
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {rem.status === 'pending' && (
-                            <button
-                              onClick={() => {
-                                setSelectedRemedialId(rem.id);
-                                setRemedialScore('75');
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
-                            >
-                              Grade Exam
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => handleDeleteRemedial(rem.id)}
-                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-rose-600 hover:text-white transition-all cursor-pointer"
-                            title="Remove Record"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* ----------------------------------------------------
-          TAB 3: MIDTERM EVALUATION RULES
-      ---------------------------------------------------- */}
-      {activeTab === 'risk-rules' && (
-        <Card className="p-6">
-          <div className="mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-              Midterm Academic Warning Evaluation Rules
-            </h2>
-            <p className="text-xs text-slate-400 mt-1">
-              Retention warnings are calculated strictly from student Midterm Exam scores and academic thresholds (Passing limit: Subject grade ≤ 2.50). No AI models used.
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Student Details</th>
-                  <th className="py-3 px-4 text-center">Evaluation Level</th>
-                  <th className="py-3 px-4">Contributing Warning Indicators</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {filteredRiskResults.map(({ student, riskLevel, factors }) => (
-                  <tr key={student.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
-                      {student.name}
-                      <span className="block text-[10px] text-slate-400 font-mono">{student.studentId} • Year {student.yearLevel}</span>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-center">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${
-                        riskLevel === 'High' 
-                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' 
-                          : riskLevel === 'Medium' 
-                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' 
-                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                      }`}>
-                        {riskLevel} Risk
-                      </span>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
-                      <div className="space-y-1">
-                        {factors.map((f, idx) => (
-                          <div key={idx} className="flex items-center gap-1.5 text-xs">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                            <span>{f}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
+                {remedialRows.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No persisted remedial records match the selected filters.'}</td></tr> : remedialRows.map(row => (
+                  <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
+                    <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">{row.remedial.examDate ?? 'Exam date unavailable'}</td>
+                    <td className="py-3.5 px-4">{row.remedial.status === 'passed' ? <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">PASSED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'failed' ? <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">FAILED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">Scheduled / Pending Exam</span>}</td>
+                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{row.remedial.status === 'pending' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Exam</button>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -860,181 +542,40 @@ export const RetentionMonitoring: React.FC = () => {
         </Card>
       )}
 
-      {/* Modal: Schedule Remedial Exam */}
+      {activeTab === 'risk-rules' && <Card className="p-6"><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Midterm Academic Warning Evaluation Rules</h2><p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Unavailable: the authoritative retention endpoint does not expose the attendance components or rule-factor detail required for this view. No client-derived risk results are shown.</p></Card>}
+
       {isScheduleOpen && (
-        <Modal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} title="Schedule Remedial Exam">
+        <Modal isOpen={isScheduleOpen} onClose={resetScheduleForm} title="Schedule Remedial Exam">
           <form onSubmit={handleScheduleSubmit} className="space-y-4 text-xs">
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select Student</label>
-              <select
-                required
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-              >
-                <option value="">-- Choose Student --</option>
-                {safeStudents.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.studentId})</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Section</label>
-              <select
-                value={selectedSubjectCode}
-                onChange={(e) => setSelectedSubjectCode(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-              >
-                {availableCourseOptions.length > 0 ? (
-                  availableCourseOptions.map(({ code, name }) => (
-                    <option key={code} value={code}>{code} - {name}</option>
-                  ))
-                ) : (
-                  <option value="" disabled>No courses available</option>
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date</label>
-              <input
-                type="date"
-                required
-                value={scheduleDate}
-                onChange={(e) => setScheduleDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Notes / Instructions</label>
-              <textarea
-                rows={3}
-                value={scheduleNotes}
-                onChange={(e) => setScheduleNotes(e.target.value)}
-                placeholder="Specify clinical topics or exam room instructions..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsScheduleOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20"
-              >
-                Confirm & Schedule Exam
-              </button>
-            </div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select persisted enrollment</label><select required value={selectedScheduleEnrollmentId} onChange={(event) => setSelectedScheduleEnrollmentId(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer">{scheduleCandidates.map(record => <option key={record.enrollmentId} value={record.enrollmentId}>{textOrUnavailable(record.studentName, 'Student name unavailable')} — {textOrUnavailable(record.studentNumber, 'Student number unavailable')} · {textOrUnavailable(record.subjectCode, 'Subject code unavailable')} · {textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</option>)}</select>{scheduleCandidates.length === 0 && <p className="text-[11px] text-amber-600 mt-1">Scheduling unavailable: no persisted enrollment with a subject code is available.</p>}</div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date</label><input type="date" required value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Notes / Instructions</label><textarea rows={3} value={scheduleNotes} onChange={(event) => setScheduleNotes(event.target.value)} placeholder="Optional faculty notes..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
+            <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetScheduleForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting || !selectedScheduleRecord || !canScheduleRecord(selectedScheduleRecord)} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Confirm & Schedule Exam'}</button></div>
           </form>
         </Modal>
       )}
 
-      {/* Modal: Grade / Record Remedial Exam Result */}
-      {selectedRemedialId && (
-        <Modal isOpen={!!selectedRemedialId} onClose={() => setSelectedRemedialId(null)} title="Grade Remedial Exam Result">
+      {selectedResolveRecord && (
+        <Modal isOpen={Boolean(selectedResolveRecord)} onClose={resetResolveForm} title="Grade Remedial Exam Result">
           <form onSubmit={handleResolveRemedial} className="space-y-4 text-xs">
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Percentage Score (%)</label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                required
-                value={remedialScore}
-                onChange={(e) => setRemedialScore(e.target.value)}
-                placeholder="e.g. 85"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm"
-              />
-              <span className="text-[11px] text-slate-400 block mt-1">Passing score threshold is 75%. Scores ≥ 75% will automatically clear the student.</span>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Faculty Remarks</label>
-              <textarea
-                rows={3}
-                value={remedialNotes}
-                onChange={(e) => setRemedialNotes(e.target.value)}
-                placeholder="Faculty notes on clinical performance..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedRemedialId(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20"
-              >
-                Save Exam Grade
-              </button>
-            </div>
+            <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(selectedResolveRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(selectedResolveRecord.subjectCode, 'Subject code unavailable')}</p>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Percentage Score (%)</label><input type="number" min="0" max="100" required value={remedialScore} onChange={(event) => setRemedialScore(event.target.value)} placeholder="Enter score" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm" /><span className="text-[11px] text-slate-400 block mt-1">Scores at or above 75% are submitted as passed.</span></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Faculty Remarks</label><textarea rows={3} value={remedialNotes} onChange={(event) => setRemedialNotes(event.target.value)} placeholder="Optional faculty notes..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
+            <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetResolveForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Save Exam Grade'}</button></div>
           </form>
         </Modal>
       )}
 
-      {/* Modal: Override Status */}
-      {isOverrideOpen && (
-        <Modal isOpen={isOverrideOpen} onClose={() => setIsOverrideOpen(false)} title="Override Retention Status">
+      {isOverrideOpen && selectedOverrideRecord && (
+        <Modal isOpen={isOverrideOpen} onClose={resetOverrideForm} title="Override Retention Status">
           <form onSubmit={handleOverrideSubmit} className="space-y-4 text-xs">
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select New Status</label>
-              <select
-                value={overrideStatus}
-                onChange={(e) => setOverrideStatus(e.target.value as Student['status'])}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-              >
-                <option value="active">Active / Cleared</option>
-                <option value="warning">Retention Warning</option>
-                <option value="critical">Critical Watchlist</option>
-                <option value="remedial">Remedial Assigned</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Reason for Override</label>
-              <textarea
-                rows={3}
-                required
-                value={overrideRemarks}
-                onChange={(e) => setOverrideRemarks(e.target.value)}
-                placeholder="Enter justification for faculty status override..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsOverrideOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20"
-              >
-                Save Override
-              </button>
-            </div>
+            <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(selectedOverrideRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(selectedOverrideRecord.subjectCode, 'Subject code unavailable')}</p>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select New Status</label><select value={overrideStatus} onChange={(event) => setOverrideStatus(event.target.value as FacultyRetentionState)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"><option value="active">Active / Cleared</option><option value="warning">Retention Warning</option><option value="critical">Critical Watchlist</option><option value="remedial">Remedial Assigned</option></select></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Reason for Override</label><textarea rows={3} required value={overrideRemarks} onChange={(event) => setOverrideRemarks(event.target.value)} placeholder="Enter at least eight characters..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
+            <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetOverrideForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Save Override'}</button></div>
           </form>
         </Modal>
       )}
-
     </div>
   );
 };

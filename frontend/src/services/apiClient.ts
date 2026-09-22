@@ -640,6 +640,29 @@ export function getFacultyDashboardKpisApi(): Promise<{
   return request('GET', '/faculty/dashboard/kpis');
 }
 
+export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial';
+
+export interface FacultyRetentionRecord {
+  enrollmentId: string;
+  studentId: string;
+  studentNumber: string | null;
+  studentName: string | null;
+  classId: string;
+  className: string | null;
+  subjectCode: string | null;
+  percentage: number | null;
+  gwa: number | null;
+  state: FacultyRetentionState;
+  remedial: Record<string, unknown> | null;
+}
+
+export function getFacultyRetentionApi(): Promise<{
+  status: string;
+  retention: FacultyRetentionRecord[];
+}> {
+  return request('GET', '/faculty/retention');
+}
+
 export function getFacultyStudentsApi(): Promise<Array<{
   id: string;
   studentId: string;
