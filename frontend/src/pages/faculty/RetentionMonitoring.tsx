@@ -63,6 +63,19 @@ const readRemedialRecord = (value: Record<string, unknown> | null): RetentionRem
 
   const status = value.status;
   const legacyPendingExams = value.pendingExams;
+  const hasRemedialShape = status === 'pending'
+    || status === 'passed'
+    || status === 'failed'
+    || Object.prototype.hasOwnProperty.call(value, 'status')
+    || typeof legacyPendingExams === 'number'
+    || typeof value.examDate === 'string'
+    || typeof value.dueDate === 'string'
+    || typeof value.remedialScore === 'number'
+    || typeof value.notes === 'string'
+    || typeof value.subjectCode === 'string'
+    || typeof value.completedRemedials === 'number';
+  if (!hasRemedialShape) return null;
+
   const normalizedStatus = status === 'pending' || status === 'passed' || status === 'failed'
     ? status
     : typeof legacyPendingExams === 'number' && Number.isFinite(legacyPendingExams) && legacyPendingExams > 0
@@ -103,9 +116,9 @@ const buildRemedialPayload = (
   if (isPersistedText(record.className)) payload.className = record.className;
   if (isFiniteNumber(record.gwa)) payload.originalGrade = record.gwa;
 
-  const persistedExamDate = existing && typeof existing.examDate === 'string'
+  const persistedExamDate = existing && typeof existing.examDate === 'string' && existing.examDate.trim().length > 0
     ? existing.examDate.trim()
-    : existing && typeof existing.dueDate === 'string'
+    : existing && typeof existing.dueDate === 'string' && existing.dueDate.trim().length > 0
       ? existing.dueDate.trim()
       : '';
   const examDate = typeof options.examDate === 'string' && options.examDate.trim().length > 0
@@ -559,7 +572,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">{row.remedial.examDate ?? 'Exam date unavailable'}</td>
-                    <td className="py-3.5 px-4">{row.remedial.status === 'passed' ? <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">PASSED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'failed' ? <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">FAILED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">Scheduled / Pending Exam</span>}</td>
+                    <td className="py-3.5 px-4">{row.remedial.status === 'passed' ? <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">PASSED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'failed' ? <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">FAILED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'pending' ? <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">Scheduled / Pending Exam</span> : <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-bold text-[11px] border border-slate-200">Outcome unavailable</span>}</td>
                     <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{row.remedial.status === 'pending' && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Exam</button>}{row.remedial.status === 'unavailable' && <span className="text-[10px] text-amber-600" title="Persisted remedial data does not include an actionable status">Outcome unavailable</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
                   </tr>
                 ))}

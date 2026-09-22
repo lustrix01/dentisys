@@ -52,6 +52,10 @@ test('Retention actions never submit synthetic identifiers or fabricated academi
   assert.match(retentionPage, /record\.state !== 'archived'/);
   assert.match(retentionPage, /pendingExams/);
   assert.match(retentionPage, /Outcome unavailable/);
+  assert.match(retentionPage, /hasRemedialShape/);
+  assert.match(retentionPage, /row\.remedial\.status === 'pending'/);
+  assert.match(retentionPage, /existing\.examDate\.trim\(\)\.length > 0/);
+  assert.match(retentionPage, /existing\.dueDate\.trim\(\)\.length > 0/);
 });
 
 test('Unsupported remedial deletion is explicitly unavailable', () => {
