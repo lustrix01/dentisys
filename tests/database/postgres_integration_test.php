@@ -1364,6 +1364,126 @@ $generatedFacultyAccessToken = auth_issue_access_token(
     config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY')
 )['token'];
 
+// Authoritative Faculty class-section editing coverage. The fixture uses an
+// existing catalog course so the update contract cannot create or retarget a
+// global course record.
+$classEditFixtureSuffix = strtoupper(bin2hex(random_bytes(4)));
+$classEditCourseId = (int) $pdo->query('SELECT course_id FROM courses ORDER BY course_id LIMIT 1')->fetchColumn();
+$classEditForeignFacultyId = (int) $pdo->query(
+    "SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph'"
+)->fetchColumn();
+$classEditInsert = $pdo->prepare(
+    "INSERT INTO class_sections
+        (cs_name, course_id, instructor_user_id, semester, school_year, year_level, lab_room, lec_room, block, status, term_code)
+     VALUES (?, ?, ?, '1ST', '2026-2027', 2, ?, ?, 'A', 'Active', '2026-2027-1ST')
+     RETURNING cs_id"
+);
+$classEditInsert->execute([
+    'Class Edit Fixture ' . $classEditFixtureSuffix,
+    $classEditCourseId,
+    $userId,
+    'Original Laboratory ' . $classEditFixtureSuffix,
+    'Original Lecture ' . $classEditFixtureSuffix,
+]);
+$classEditOwnedId = (int) $classEditInsert->fetchColumn();
+$classEditInsert->execute([
+    'Class Edit Foreign Fixture ' . $classEditFixtureSuffix,
+    $classEditCourseId,
+    $classEditForeignFacultyId,
+    'Foreign Laboratory ' . $classEditFixtureSuffix,
+    'Foreign Lecture ' . $classEditFixtureSuffix,
+]);
+$classEditForeignId = (int) $classEditInsert->fetchColumn();
+
+[$classEditStatus, $classEditBody] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'csName' => 'Edited Class ' . $classEditFixtureSuffix,
+    'block' => 'B',
+    'yearLevel' => 3,
+    'lecRoom' => 'Updated Lecture ' . $classEditFixtureSuffix,
+    'labRoom' => 'Updated Laboratory ' . $classEditFixtureSuffix,
+]);
+expect_same(200, $classEditStatus, 'Faculty can update an owned class section');
+expect_same((string) $classEditOwnedId, (string) ($classEditBody['csId'] ?? ''), 'Class update returns the authoritative section ID');
+$classEditRowStmt = $pdo->prepare(
+    'SELECT cs_name, course_id, semester, school_year, year_level, lab_room, lec_room, block FROM class_sections WHERE cs_id = ?'
+);
+$classEditRowStmt->execute([$classEditOwnedId]);
+$classEditRow = $classEditRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Edited Class ' . $classEditFixtureSuffix, $classEditRow['cs_name'] ?? null, 'Class name update persists');
+expect_same((string) $classEditCourseId, (string) ($classEditRow['course_id'] ?? ''), 'Class update preserves course identity');
+expect_same('1ST', $classEditRow['semester'] ?? null, 'Class update preserves semester identity');
+expect_same('2026-2027', $classEditRow['school_year'] ?? null, 'Class update preserves school-year identity');
+expect_same('Updated Lecture ' . $classEditFixtureSuffix, $classEditRow['lec_room'] ?? null, 'Lecture room persists in the lecture-room field');
+expect_same('Updated Laboratory ' . $classEditFixtureSuffix, $classEditRow['lab_room'] ?? null, 'Laboratory room persists in the laboratory-room field');
+
+$classEditAuditStmt = $pdo->prepare(
+    "SELECT actor_user_id, scope_cs_id, target_id, before_state_json, after_state_json
+       FROM audit_events
+      WHERE action_code = 'class_update' AND target_id = ?
+      ORDER BY sequence_number DESC
+      LIMIT 1"
+);
+$classEditAuditStmt->execute([(string) $classEditOwnedId]);
+$classEditAudit = $classEditAuditStmt->fetch(PDO::FETCH_ASSOC);
+$classEditBefore = json_decode((string) ($classEditAudit['before_state_json'] ?? ''), true);
+$classEditAfter = json_decode((string) ($classEditAudit['after_state_json'] ?? ''), true);
+expect_same((string) $userId, (string) ($classEditAudit['actor_user_id'] ?? ''), 'Class update audit preserves the authenticated actor');
+expect_same((string) $classEditOwnedId, (string) ($classEditAudit['scope_cs_id'] ?? ''), 'Class update audit preserves the class-section scope');
+expect_same('Original Lecture ' . $classEditFixtureSuffix, $classEditBefore['lec_room'] ?? null, 'Class update audit records the prior lecture room');
+expect_same('Updated Laboratory ' . $classEditFixtureSuffix, $classEditAfter['lab_room'] ?? null, 'Class update audit records the new laboratory room');
+
+[$classEditProtectedStatus, $classEditProtectedBody] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'semester' => '2ND',
+    'schoolYear' => '2027-2028',
+    'lecRoom' => 'Must Not Persist',
+]);
+expect_same(422, $classEditProtectedStatus, 'Protected course-term fields are rejected');
+expect_same('VALIDATION_ERROR', $classEditProtectedBody['code'] ?? null, 'Protected class fields use the validation error contract');
+$classEditRowStmt->execute([$classEditOwnedId]);
+$classEditAfterRejected = $classEditRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Updated Lecture ' . $classEditFixtureSuffix, $classEditAfterRejected['lec_room'] ?? null, 'Rejected protected-field request does not partially update rooms');
+
+[$classEditScheduleStatus, $classEditScheduleBody] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'schedule' => 'Monday 08:00-10:00',
+]);
+expect_same(422, $classEditScheduleStatus, 'Schedule is rejected because it is not a persisted class-section field');
+expect_same('VALIDATION_ERROR', $classEditScheduleBody['code'] ?? null, 'Schedule rejection uses the validation error contract');
+
+[$classEditInvalidIdStatus] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => 'not-a-section-id',
+    'csName' => 'Invalid ID Must Not Persist',
+]);
+expect_same(400, $classEditInvalidIdStatus, 'Invalid class-section identifiers are rejected');
+
+[$classEditForeignStatus, $classEditForeignBody] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditForeignId,
+    'csName' => 'Unauthorized Update Must Not Persist',
+]);
+expect_same(403, $classEditForeignStatus, 'Faculty cannot update another Faculty member\'s class section');
+expect_true(($classEditForeignBody['code'] ?? null) !== null, 'Ownership denial returns a structured error');
+$classEditRowStmt->execute([$classEditForeignId]);
+$classEditForeignRow = $classEditRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Class Edit Foreign Fixture ' . $classEditFixtureSuffix, $classEditForeignRow['cs_name'] ?? null, 'Ownership denial preserves the foreign class section');
+
+[$classEditUnauthenticatedStatus] = integration_http_json('/api/faculty/classes/update', '', [
+    'csId' => (string) $classEditOwnedId,
+    'csName' => 'Unauthenticated Update Must Not Persist',
+]);
+expect_same(401, $classEditUnauthenticatedStatus, 'Class updates require an access token');
+
+[$classEditReadStatus, $classEditReadBody] = integration_http_get_json('/api/faculty/classes', $generatedFacultyAccessToken);
+expect_same(200, $classEditReadStatus, 'Faculty class reads remain available after class editing');
+$classEditReadRow = array_values(array_filter(
+    $classEditReadBody['classes'] ?? [],
+    static fn(array $row): bool => (string) ($row['csId'] ?? '') === (string) $classEditOwnedId
+))[0] ?? null;
+expect_same(null, $classEditReadRow['schedule'] ?? null, 'Class reads do not derive schedule from room values');
+expect_same('Updated Lecture ' . $classEditFixtureSuffix, $classEditReadRow['lecRoom'] ?? null, 'Class reads preserve the lecture-room field');
+expect_same('Updated Laboratory ' . $classEditFixtureSuffix, $classEditReadRow['labRoom'] ?? null, 'Class reads preserve the laboratory-room field');
+
 // Authoritative Faculty Attendance Monitoring worksheet coverage. This uses
 // isolated real enrollments and sections so the read/mutation contract can be
 // verified without relying on browser-local attendance state.
@@ -2721,8 +2841,10 @@ $pdo->prepare('DELETE FROM assessments WHERE assessment_id IN (?, ?, ?, ?)')->ex
 $pdo->prepare(
     "UPDATE class_sections
         SET status = 'Archived', created_at = TIMESTAMP '2000-01-01 00:00:00'
-      WHERE cs_id IN (?, ?, ?, ?, ?)"
+      WHERE cs_id IN (?, ?, ?, ?, ?, ?, ?)"
 )->execute([
+    $classEditOwnedId,
+    $classEditForeignId,
     $attendanceClassId,
     $attendanceOtherClassId,
     $gradeClassId,

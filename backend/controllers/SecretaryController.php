@@ -9,6 +9,26 @@ if (!function_exists('sanitize_for_log')) {
     }
 }
 
+/**
+ * Convert the legacy display-name input into the canonical Student components.
+ * The display name remains owned by user_accounts; this helper only supplies
+ * separate values for the Student record.
+ */
+function secretary_student_name_components(string $displayName): array
+{
+    $normalized = normalize_person_name($displayName);
+    $parts = preg_split('/\s+/u', $normalized, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    $lastName = array_pop($parts) ?? '';
+    $firstName = array_shift($parts) ?? $lastName;
+    $middleName = $parts === [] ? null : implode(' ', $parts);
+
+    return [
+        'firstName' => $firstName,
+        'middleName' => $middleName,
+        'lastName' => $lastName,
+    ];
+}
+
 function handle_secretary_invite(): void
 {
     $context = [
@@ -1474,17 +1494,40 @@ function handle_secretary_profile_update(): void
         }
 
         $data = $body['data'];
-        $name = validate_person_name($data, 'name', 2, 255);
         $email = validate_institutional_email($data['email'] ?? '');
 
-        $parts = explode(' ', $name);
-        $lastName = count($parts) > 1 ? array_pop($parts) : '';
-        $firstName = implode(' ', $parts) ?: $name;
+        $hasSplitName = array_key_exists('firstName', $data)
+            || array_key_exists('middleName', $data)
+            || array_key_exists('lastName', $data);
+        if ($hasSplitName && (!array_key_exists('firstName', $data) || !array_key_exists('lastName', $data))) {
+            throw new ValidationException([
+                'firstName' => 'First name and last name are both required when split name fields are provided.',
+                'lastName' => 'First name and last name are both required when split name fields are provided.',
+            ]);
+        }
+
+        if ($hasSplitName) {
+            $firstName = validate_person_name($data, 'firstName', 2, 100);
+            $middleName = validate_optional_person_name($data, 'middleName', 2, 100);
+            $lastName = validate_person_name($data, 'lastName', 2, 100);
+            $name = array_key_exists('name', $data)
+                ? validate_person_name($data, 'name', 2, 255)
+                : normalize_person_name(implode(' ', array_filter([$firstName, $middleName, $lastName])));
+        } else {
+            $name = validate_person_name($data, 'name', 2, 255);
+            $components = secretary_student_name_components($name);
+            $firstName = validate_person_name(['name' => $components['firstName']], 'name', 2, 100);
+            $middleName = $components['middleName'] === null
+                ? null
+                : validate_person_name(['name' => $components['middleName']], 'name', 2, 100);
+            $lastName = validate_person_name(['name' => $components['lastName']], 'name', 2, 100);
+        }
+
         $pdo->beginTransaction();
         try {
             update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
-            $updStudent = $pdo->prepare("UPDATE students SET first_name = ?, last_name = ?, bu_email = ? WHERE user_id = ?");
-            $updStudent->execute([$firstName, $lastName, $email, $authCtx['user_id']]);
+            $updStudent = $pdo->prepare("UPDATE students SET first_name = ?, middle_name = ?, last_name = ?, bu_email = ? WHERE user_id = ?");
+            $updStudent->execute([$firstName, $middleName, $lastName, $email, $authCtx['user_id']]);
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {

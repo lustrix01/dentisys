@@ -750,6 +750,25 @@ These technical items remain unresolved. Listing them does not select or approve
 
 ---
 
+# 9A. Contract Boundaries
+
+## CLS-001 - Faculty class-section editing
+**Status: CURRENT**
+
+Faculty may edit authorized class-section fields through audited server-side APIs. Course catalog identity and protected term identity remain controlled; Faculty class-section editing MUST NOT change the course identity, semester, or school year. Lecture-room, laboratory-room, and schedule concepts remain distinct.
+
+## ID-001 - Split Student identity
+**Status: CURRENT**
+
+Canonical Student identity stores first name, optional middle name, and last name as separate persisted fields. APIs may expose a compatibility display name, but MUST NOT persist or overwrite the entire name as one Student field.
+
+## ACA-001 - Server-authoritative academic decisions
+**Status: CURRENT**
+
+Retention and grading decisions remain server-authoritative through the existing backend APIs. Client-local state, fabricated grades, and fallback subjects MUST NOT become authoritative academic decisions.
+
+---
+
 # 10. Specification Change Protocol
 
 Before changing behavior governed by this file:

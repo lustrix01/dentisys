@@ -17,7 +17,7 @@ $base = [
     'student_id' => 7,
     'student_number' => '2026-DENT-0007',
     'first_name' => 'Ana',
-    'middle_name' => null,
+    'middle_name' => 'Marie',
     'last_name' => 'Reyes',
     'bu_email' => 'ana.reyes@bicol-u.edu.ph',
     'contact' => null,
@@ -72,6 +72,8 @@ $rows = [
 $students = faculty_map_student_rows($rows);
 assert_faculty_students(count($students) === 2, 'Each faculty student is returned once');
 $ana = $students[0];
+assert_faculty_students($ana['name'] === 'Ana Marie Reyes', 'Display name remains compatible with split Student names');
+assert_faculty_students($ana['firstName'] === 'Ana' && $ana['middleName'] === 'Marie' && $ana['lastName'] === 'Reyes', 'Student name components remain separate in the API mapping');
 assert_faculty_students(count($ana['classSections']) === 2, 'Multi-class membership is retained');
 assert_faculty_students($ana['classSections'][1]['enrollmentId'] === '102', 'Class membership carries enrollment ID');
 assert_faculty_students($ana['enrolledSubjects'][1]['classId'] === '12', 'Subject association carries class ID');

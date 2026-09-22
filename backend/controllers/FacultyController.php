@@ -3443,8 +3443,6 @@ function handle_faculty_classes_get(): void
         $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $mapped = array_map(function ($cls) {
-            $schedule = array_filter([$cls['lec_room'] ?? '', $cls['lab_room'] ?? '']);
-            $scheduleStr = implode(' / ', $schedule) ?: 'TBA';
             return [
                 'id' => (string) $cls['cs_id'],
                 'csId' => (int) $cls['cs_id'],
@@ -3457,7 +3455,9 @@ function handle_faculty_classes_get(): void
                 'semester' => $cls['semester'],
                 'yearLevel' => (int) ($cls['year_level'] ?? 1),
                 'block' => $cls['block'] ?? 'A',
-                'schedule' => $scheduleStr,
+                // The current class-section schema stores rooms, not schedules.
+                // Keep this compatibility key without conflating either room with a schedule.
+                'schedule' => null,
                 'labRoom' => $cls['lab_room'] ?? '',
                 'lecRoom' => $cls['lec_room'] ?? '',
                 'enrolledCount' => (int) ($cls['enrolled_count'] ?? 0),
@@ -3596,6 +3596,187 @@ function handle_faculty_class_create(): void
         validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Faculty class create error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_faculty_class_update(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+
+        $data = $body['data'];
+        $rawCsId = $data['csId'] ?? null;
+        if (is_int($rawCsId)) {
+            $csId = $rawCsId;
+        } elseif (is_string($rawCsId) && ctype_digit(trim($rawCsId))) {
+            $csId = (int) trim($rawCsId);
+        } else {
+            safe_error_response('Valid csId is required.', 400);
+            return;
+        }
+        if ($csId <= 0) {
+            safe_error_response('Valid csId is required.', 400);
+            return;
+        }
+
+        $errors = [];
+        $protectedFields = [
+            'courseId' => 'Course catalog identity is controlled and cannot be edited here.',
+            'courseCode' => 'Course catalog identity is controlled and cannot be edited here.',
+            'courseName' => 'Course catalog identity is controlled and cannot be edited here.',
+            'semester' => 'Protected term identity is controlled and cannot be edited here.',
+            'schoolYear' => 'Protected term identity is controlled and cannot be edited here.',
+            'termCode' => 'Protected term identity is controlled and cannot be edited here.',
+            'termStartDate' => 'Protected term identity is controlled and cannot be edited here.',
+            'termEndDate' => 'Protected term identity is controlled and cannot be edited here.',
+            'instructorUserId' => 'Class-section ownership is controlled and cannot be edited here.',
+            'secretaryUserId' => 'Class-section assignment is controlled and cannot be edited here.',
+            'status' => 'Class-section status is controlled and cannot be edited here.',
+            'schedule' => 'Schedule is not a persisted class-section field; edit lecRoom or labRoom separately.',
+        ];
+        foreach ($protectedFields as $field => $message) {
+            if (array_key_exists($field, $data)) {
+                $errors[$field] = $message;
+            }
+        }
+
+        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom'];
+        foreach (array_keys($data) as $field) {
+            if (!in_array($field, $allowedFields, true) && !array_key_exists($field, $protectedFields)) {
+                $errors[$field] = 'This field is not editable through the class-section contract.';
+            }
+        }
+        if ($errors !== []) {
+            throw new ValidationException($errors);
+        }
+
+        $updates = [];
+        $params = [];
+        if (array_key_exists('csName', $data)) {
+            $updates[] = 'cs_name = ?';
+            $params[] = validate_required_string($data, 'csName', 2, 255);
+        }
+        if (array_key_exists('block', $data)) {
+            $updates[] = 'block = ?';
+            $params[] = validate_required_string($data, 'block', 1, 50);
+        }
+        if (array_key_exists('yearLevel', $data)) {
+            $rawYearLevel = $data['yearLevel'];
+            if (is_int($rawYearLevel)) {
+                $yearLevel = $rawYearLevel;
+            } elseif (is_string($rawYearLevel) && ctype_digit(trim($rawYearLevel))) {
+                $yearLevel = (int) trim($rawYearLevel);
+            } else {
+                throw new ValidationException(['yearLevel' => 'Year level must be an integer between 1 and 4.']);
+            }
+            if ($yearLevel < 1 || $yearLevel > 4) {
+                throw new ValidationException(['yearLevel' => 'Year level must be an integer between 1 and 4.']);
+            }
+            $updates[] = 'year_level = ?';
+            $params[] = $yearLevel;
+        }
+        if (array_key_exists('lecRoom', $data)) {
+            $updates[] = 'lec_room = ?';
+            $params[] = validate_optional_string($data, 'lecRoom', 1, 100);
+        }
+        if (array_key_exists('labRoom', $data)) {
+            $updates[] = 'lab_room = ?';
+            $params[] = validate_optional_string($data, 'labRoom', 1, 100);
+        }
+        if ($updates === []) {
+            throw new ValidationException(['fields' => 'At least one editable class-section field is required.']);
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $select = $pdo->prepare("
+                SELECT cs_id, cs_name, course_id, instructor_user_id, semester, school_year,
+                       year_level, lab_room, lec_room, block, status, term_code,
+                       term_start_date, term_end_date
+                FROM class_sections
+                WHERE cs_id = ? AND instructor_user_id = ?
+                FOR UPDATE
+            ");
+            $select->execute([$csId, $authCtx['user_id']]);
+            $before = $select->fetch(PDO::FETCH_ASSOC);
+            if (!$before) {
+                $pdo->rollBack();
+                safe_error_response('Class section not found or not assigned to this faculty member.', 403);
+                return;
+            }
+
+            $update = $pdo->prepare(
+                'UPDATE class_sections SET ' . implode(', ', $updates) . ' WHERE cs_id = ? AND instructor_user_id = ?'
+            );
+            $update->execute(array_merge($params, [$csId, $authCtx['user_id']]));
+
+            $select->execute([$csId, $authCtx['user_id']]);
+            $after = $select->fetch(PDO::FETCH_ASSOC);
+            if (!$after) {
+                throw new RuntimeException('Updated class section could not be reloaded.');
+            }
+
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditCtx = audit_begin_operation($pdo);
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'class_management',
+                'action_code' => 'class_update',
+                'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'],
+                'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'],
+                'actor_display_name' => $authCtx['display_name'],
+                'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => $csId,
+                'target_type' => 'class_section',
+                'target_id' => (string) $csId,
+                'description' => "Updated class section '{$after['cs_name']}'.",
+                'reason' => null,
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey, $before, $after);
+
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+
+        json_response([
+            'status' => 'ok',
+            'message' => 'Class section updated successfully.',
+            'csId' => $csId,
+        ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('Faculty class update error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
 }

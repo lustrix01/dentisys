@@ -557,6 +557,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/faculty/classes/update',
+        'handler' => 'handle_faculty_class_update',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/faculty/classes/available-students',
         'handler' => 'handle_faculty_class_available_students',
