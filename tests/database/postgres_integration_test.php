@@ -121,9 +121,20 @@ $expectedMigrations = [
     '009_persistent_attendance_sessions.sql',
     '010_authoritative_grade_weights.sql',
     '011_student_biometric_attendance.sql',
+    '012_restore_faculty_invitation_token_purpose.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
+$facultyInvitationPurposeConstraint = (string) $pdo->query(
+    "SELECT pg_get_constraintdef(oid)
+       FROM pg_constraint
+      WHERE conrelid = 'security_tokens'::regclass
+        AND conname = 'ck_security_tokens_purpose'"
+)->fetchColumn();
+expect_true(
+    str_contains($facultyInvitationPurposeConstraint, 'faculty_invitation'),
+    'Security-token purpose constraint preserves Faculty invitations'
+);
 
 // Exercise schema-readiness detection against the real disposable database by
 // removing only the ledger entry, without reversing any applied schema change.
