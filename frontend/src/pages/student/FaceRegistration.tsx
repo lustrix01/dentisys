@@ -31,6 +31,12 @@ import type {
   LivenessAction,
 } from '../../types';
 import { developmentBiometricOutcome } from '../../services/developmentProviders';
+import {
+  describeCameraError,
+  listCameraDevices,
+  startCameraStream,
+  type CameraDevice,
+} from '../../utils/camera';
 
 function formatAction(action: LivenessAction): { title: string; instruction: string } {
   switch (action) {
@@ -78,8 +84,12 @@ export const FaceRegistration: React.FC = () => {
   // Step 2: Liveness & Capture
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraAbortRef = useRef<AbortController | null>(null);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraDevices, setCameraDevices] = useState<CameraDevice[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
+  const selectedCameraIdRef = useRef('');
   const [livenessChallenge, setLivenessChallenge] = useState<LivenessChallengeResponse | null>(null);
   const [activeActionIndex, setActiveActionIndex] = useState<0 | 1>(0);
   const [isProcessingEnrollment, setIsProcessingEnrollment] = useState(false);
@@ -106,6 +116,8 @@ export const FaceRegistration: React.FC = () => {
 
   // --- STOP CAMERA HELPER ---
   const stopCamera = useCallback(() => {
+    cameraAbortRef.current?.abort();
+    cameraAbortRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -119,6 +131,26 @@ export const FaceRegistration: React.FC = () => {
   useEffect(() => {
     return () => {
       stopCamera();
+    };
+  }, [stopCamera]);
+
+  // Release the hardware camera when this screen is backgrounded or closed.
+  // A hidden tab must not retain an active biometric capture stream.
+  useEffect(() => {
+    const releaseCameraWhenHidden = (): void => {
+      if (document.visibilityState === 'hidden') {
+        stopCamera();
+        setLivenessChallenge(null);
+        setCameraLoading(false);
+        setCameraError('Camera access was paused because this tab is no longer active. Choose Retry Camera Access when you return.');
+      }
+    };
+
+    document.addEventListener('visibilitychange', releaseCameraWhenHidden);
+    window.addEventListener('pagehide', stopCamera);
+    return () => {
+      document.removeEventListener('visibilitychange', releaseCameraWhenHidden);
+      window.removeEventListener('pagehide', stopCamera);
     };
   }, [stopCamera]);
 
@@ -152,34 +184,59 @@ export const FaceRegistration: React.FC = () => {
   }, [isAuthoritative, loadAuthoritativeProfile]);
 
   // --- START CAMERA & CHALLENGE FOR STEP 2 ---
-  const startCameraAndChallenge = useCallback(async () => {
+  const startCameraAndChallenge = useCallback(async (requestedCameraId?: string, preserveMessage = false) => {
     setCameraLoading(true);
     setCameraError(null);
-    setAuthError(null);
+    if (!preserveMessage) {
+      setAuthError(null);
+    }
     setActiveActionIndex(0);
+    setLivenessChallenge(null);
+    stopCamera();
+    const abortController = new AbortController();
+    cameraAbortRef.current = abortController;
     try {
-      // 1. Request server liveness challenge
-      const challenge = await createBiometricLivenessChallenge({ purpose: 'enrollment' });
-      setLivenessChallenge(challenge);
-
-      // 2. Request browser camera permission
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      // Keep the video element mounted while the asynchronous camera request runs.
+      // This prevents a successful stream from being lost during the loading render.
+      const video = videoRef.current;
+      if (!video) {
+        throw new Error('The camera preview is not ready. Choose Retry Camera Access.');
       }
+
+      const stream = await startCameraStream(
+        video,
+        requestedCameraId || selectedCameraIdRef.current || undefined,
+        abortController.signal,
+      );
+      if (abortController.signal.aborted || cameraAbortRef.current !== abortController) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      const devices = await listCameraDevices();
+      setCameraDevices(devices);
+      const activeDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId || '';
+      if (activeDeviceId && !selectedCameraIdRef.current) {
+        selectedCameraIdRef.current = activeDeviceId;
+        setSelectedCameraId(activeDeviceId);
+      }
+
+      // Request the server challenge only after a usable video source is ready.
+      const challenge = await createBiometricLivenessChallenge({ purpose: 'enrollment' });
+      if (abortController.signal.aborted || cameraAbortRef.current !== abortController) {
+        return;
+      }
+      setLivenessChallenge(challenge);
     } catch (err) {
-      stopCamera();
-      const msg = err instanceof Error ? err.message : 'Unable to access camera. Please allow camera permissions.';
-      setCameraError(msg);
+      if (cameraAbortRef.current === abortController && !abortController.signal.aborted) {
+        stopCamera();
+        setCameraError(describeCameraError(err));
+        setCameraLoading(false);
+      }
     } finally {
-      setCameraLoading(false);
+      if (cameraAbortRef.current === abortController) {
+        setCameraLoading(false);
+      }
     }
   }, [stopCamera]);
 
@@ -286,13 +343,13 @@ export const FaceRegistration: React.FC = () => {
         // Partial or quality failure: prompt retry without claiming completion
         setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again.');
         // Re-request fresh challenge for retry
-        void startCameraAndChallenge();
+        void startCameraAndChallenge(undefined, true);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Facial enrollment failed. Please try again.';
       setAuthError(msg);
       // Re-request fresh challenge for retry
-      void startCameraAndChallenge();
+      void startCameraAndChallenge(undefined, true);
     } finally {
       setIsProcessingEnrollment(false);
     }
@@ -387,6 +444,9 @@ export const FaceRegistration: React.FC = () => {
 
   // Active step for current mode
   const currentStep = isAuthoritative ? authStep : mockStep;
+  const captureDisabled = isProcessingEnrollment
+    || mockScanning
+    || (isAuthoritative && (cameraLoading || Boolean(cameraError) || !livenessChallenge));
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
@@ -607,28 +667,30 @@ export const FaceRegistration: React.FC = () => {
             </button>
           </div>
 
-          {/* Camera Loading or Error */}
-          {cameraLoading ? (
-            <div className="flex flex-col items-center justify-center py-16 space-y-3 text-slate-500">
-              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-              <p className="text-xs font-medium">Requesting camera access & liveness challenge…</p>
-            </div>
-          ) : cameraError ? (
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <strong className="block font-bold">Camera Access Required</strong>
-                <p className="mt-0.5 leading-relaxed">{cameraError}</p>
-                <button
-                  onClick={() => { void startCameraAndChallenge(); }}
-                  className="mt-2.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg font-bold text-[11px] hover:bg-amber-700 cursor-pointer"
-                >
-                  Retry Camera Access
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
+          <div className="space-y-4">
+              {cameraError && (
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-bold">Camera Access Required</strong>
+                    <p className="mt-0.5 leading-relaxed">{cameraError}</p>
+                    <button
+                      onClick={() => { void startCameraAndChallenge(selectedCameraIdRef.current || undefined); }}
+                      className="mt-2.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg font-bold text-[11px] hover:bg-amber-700 cursor-pointer"
+                    >
+                      Retry Camera Access
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {cameraLoading && (
+                <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                  <span>Requesting camera access and preparing the liveness challenge…</span>
+                </div>
+              )}
+
               {/* Server Liveness Instructions (Authoritative) */}
               {isAuthoritative && livenessChallenge && (
                 <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60">
@@ -678,6 +740,13 @@ export const FaceRegistration: React.FC = () => {
                   className="w-full h-full object-cover scale-x-[-1]"
                 />
 
+                {cameraLoading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/75 text-white">
+                    <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                    <span className="text-xs font-semibold">Starting camera…</span>
+                  </div>
+                )}
+
                 {/* Face Alignment Target Oval Overlay */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className={`w-52 h-64 rounded-[50%] border-2 transition-all ${isProcessingEnrollment || mockScanning
@@ -712,6 +781,29 @@ export const FaceRegistration: React.FC = () => {
                 </div>
               )}
 
+              {isAuthoritative && cameraDevices.length > 1 && (
+                <label className="flex flex-col gap-1 max-w-md mx-auto text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  <span>Camera source</span>
+                  <select
+                    value={selectedCameraId}
+                    onChange={event => {
+                      const deviceId = event.target.value;
+                      selectedCameraIdRef.current = deviceId;
+                      setSelectedCameraId(deviceId);
+                      void startCameraAndChallenge(deviceId);
+                    }}
+                    disabled={cameraLoading || isProcessingEnrollment}
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs"
+                  >
+                    {cameraDevices.map(device => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
               <div className="text-center space-y-3">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Ensure good lighting, look directly into the camera, and follow the liveness prompt above.
@@ -719,8 +811,8 @@ export const FaceRegistration: React.FC = () => {
 
                 <button
                   onClick={isAuthoritative ? handleCaptureAndEnroll : handleMockStartCapture}
-                  disabled={isProcessingEnrollment || mockScanning}
-                  className={`px-8 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 mx-auto ${isProcessingEnrollment || mockScanning
+                  disabled={captureDisabled}
+                  className={`px-8 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 mx-auto ${captureDisabled
                     ? 'bg-blue-400 text-white cursor-wait'
                     : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
                     }`}
@@ -737,8 +829,7 @@ export const FaceRegistration: React.FC = () => {
                   )}
                 </button>
               </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
 

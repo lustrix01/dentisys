@@ -35,6 +35,12 @@ import type {
   BiometricAttendanceResponse,
 } from '../../types';
 import { DEVELOPMENT_LOCATION_FIXTURES, developmentBiometricOutcome } from '../../services/developmentProviders';
+import {
+  describeCameraError,
+  listCameraDevices,
+  startCameraStream,
+  type CameraDevice,
+} from '../../utils/camera';
 
 // Mock Geofence center for simulation only
 const BU_DENTAL_CLINIC_COORDS = {
@@ -131,13 +137,21 @@ export const Attendance: React.FC = () => {
   const [activeActionIndex, setActiveActionIndex] = useState<0 | 1>(0);
   const [verificationResult, setVerificationResult] = useState<BiometricAttendanceResponse | null>(null);
   const [failureNotice, setFailureNotice] = useState<string | null>(null);
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraDevices, setCameraDevices] = useState<CameraDevice[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState('');
 
   // Camera Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cameraAbortRef = useRef<AbortController | null>(null);
+  const selectedCameraIdRef = useRef('');
 
   // Stop camera helper
   const stopCamera = useCallback(() => {
+    cameraAbortRef.current?.abort();
+    cameraAbortRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -152,6 +166,32 @@ export const Attendance: React.FC = () => {
       stopCamera();
     };
   }, [stopCamera]);
+
+  useEffect(() => {
+    if (checkInStage !== 'camera') {
+      stopCamera();
+    }
+  }, [checkInStage, stopCamera]);
+
+  // Release the hardware camera when this screen is backgrounded or closed.
+  // Returning to the flow requires a fresh camera start and liveness challenge.
+  useEffect(() => {
+    const releaseCameraWhenHidden = (): void => {
+      if (document.visibilityState === 'hidden' && checkInStage === 'camera') {
+        stopCamera();
+        setLivenessChallenge(null);
+        setCameraLoading(false);
+        setCameraError('Camera access was paused because this tab is no longer active. Choose Retry Camera Access when you return.');
+      }
+    };
+
+    document.addEventListener('visibilitychange', releaseCameraWhenHidden);
+    window.addEventListener('pagehide', stopCamera);
+    return () => {
+      document.removeEventListener('visibilitychange', releaseCameraWhenHidden);
+      window.removeEventListener('pagehide', stopCamera);
+    };
+  }, [checkInStage, stopCamera]);
 
   // Load Authoritative Sessions and Profile
   const loadAuthoritativeData = useCallback(async () => {
@@ -232,30 +272,81 @@ export const Attendance: React.FC = () => {
       setLocationCoords(null);
     }
 
-    // 2. Request Liveness Challenge & Start Camera
+    // 2. Render the camera stage. The effect below starts the camera only after
+    // the video element exists; starting it in this function races the render.
+    setLivenessChallenge(null);
+    setCameraError(null);
+    setCameraLoading(false);
+    setActiveActionIndex(0);
     setCheckInStage('camera');
+  };
+
+  const startCameraAndChallenge = useCallback(async (requestedCameraId?: string) => {
+    if (!currentSelectedSession) return;
+    setCameraLoading(true);
+    setCameraError(null);
+    setFailureNotice(null);
+    stopCamera();
+    const abortController = new AbortController();
+
     try {
+      cameraAbortRef.current = abortController;
+      const video = videoRef.current;
+      if (!video) {
+        throw new Error('The camera preview is not ready. Choose Retry Camera Access.');
+      }
+
+      const stream = await startCameraStream(
+        video,
+        requestedCameraId || selectedCameraIdRef.current || undefined,
+        abortController.signal,
+      );
+      if (abortController.signal.aborted || cameraAbortRef.current !== abortController) {
+        stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      const devices = await listCameraDevices();
+      setCameraDevices(devices);
+      const activeDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId || '';
+      if (activeDeviceId && !selectedCameraIdRef.current) {
+        selectedCameraIdRef.current = activeDeviceId;
+        setSelectedCameraId(activeDeviceId);
+      }
+
       const challenge = await createBiometricLivenessChallenge({
         purpose: 'attendance',
         attendanceSessionId: currentSelectedSession.id,
       });
-      setLivenessChallenge(challenge);
-      setActiveActionIndex(0);
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      if (abortController.signal.aborted || cameraAbortRef.current !== abortController) {
+        return;
       }
+      setLivenessChallenge(challenge);
     } catch (err) {
-      stopCamera();
-      const msg = err instanceof Error ? err.message : 'Unable to start camera or obtain challenge.';
-      setFailureNotice(`Verification setup failed: ${msg}. If technical issues persist, please seek manual attendance.`);
-      setCheckInStage('idle');
+      if (cameraAbortRef.current === abortController && !abortController.signal.aborted) {
+        stopCamera();
+        setCameraError(describeCameraError(err));
+        setCameraLoading(false);
+      }
+    } finally {
+      if (cameraAbortRef.current === abortController) {
+        setCameraLoading(false);
+      }
     }
-  };
+  }, [currentSelectedSession, stopCamera]);
+
+  useEffect(() => {
+    if (
+      isAuthoritative
+      && checkInStage === 'camera'
+      && currentSelectedSession
+      && !livenessChallenge
+      && !cameraLoading
+      && !cameraError
+    ) {
+      void startCameraAndChallenge();
+    }
+  }, [cameraError, cameraLoading, checkInStage, currentSelectedSession, isAuthoritative, livenessChallenge, startCameraAndChallenge]);
 
   // Capture frames from video element
   const captureFrames = async (count: number): Promise<Blob[]> => {
@@ -712,6 +803,8 @@ export const Attendance: React.FC = () => {
                     <button
                       onClick={() => {
                         stopCamera();
+                        setLivenessChallenge(null);
+                        setCameraError(null);
                         setCheckInStage('idle');
                       }}
                       className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
@@ -769,11 +862,57 @@ export const Attendance: React.FC = () => {
                       className="w-full h-full object-cover scale-x-[-1]"
                     />
 
+                    {cameraLoading && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/75 text-white">
+                        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                        <span className="text-xs font-semibold">Starting camera…</span>
+                      </div>
+                    )}
+
                     {/* Target Frame Oval Overlay */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="w-52 h-64 rounded-[50%] border-2 border-white/60 border-dashed" />
                     </div>
                   </div>
+
+                  {cameraError && (
+                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block font-bold">Camera Access Required</strong>
+                        <p className="mt-0.5 leading-relaxed">{cameraError}</p>
+                        <button
+                          onClick={() => { void startCameraAndChallenge(selectedCameraIdRef.current || undefined); }}
+                          className="mt-2.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg font-bold text-[11px] hover:bg-amber-700 cursor-pointer"
+                        >
+                          Retry Camera Access
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {cameraDevices.length > 1 && (
+                    <label className="flex flex-col gap-1 max-w-md mx-auto text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      <span>Camera source</span>
+                      <select
+                        value={selectedCameraId}
+                        onChange={event => {
+                          const deviceId = event.target.value;
+                          selectedCameraIdRef.current = deviceId;
+                          setSelectedCameraId(deviceId);
+                          void startCameraAndChallenge(deviceId);
+                        }}
+                        disabled={cameraLoading}
+                        className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs"
+                      >
+                        {cameraDevices.map(device => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
 
                   <div className="text-center space-y-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -782,7 +921,11 @@ export const Attendance: React.FC = () => {
 
                     <button
                       onClick={() => { void handleSubmitAuthoritativeVerification(); }}
-                      className="px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all flex items-center gap-2 mx-auto cursor-pointer"
+                      disabled={cameraLoading || Boolean(cameraError) || !livenessChallenge}
+                      className={`px-8 py-3 rounded-xl text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center gap-2 mx-auto ${cameraLoading || cameraError || !livenessChallenge
+                        ? 'bg-slate-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99] cursor-pointer'
+                        }`}
                     >
                       <Camera className="w-4 h-4" />
                       <span>Verify & Submit Attendance</span>
