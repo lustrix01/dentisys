@@ -299,18 +299,18 @@ function student_biometric_issue_challenge(
     $stmt = $pdo->prepare(
         "INSERT INTO security_tokens (
              purpose, user_id, related_student_id, related_cs_id, token_digest,
-             issued_at, expires_at, metadata_jsonb
+             issued_at, expires_at, metadata_json
          ) VALUES ('biometric_challenge', ?, ?, ?, ?, ?, ?, ?::jsonb)
          RETURNING token_id"
     );
     $digest = hash('sha256', $rawToken, true);
-    pdo_bind_binary($stmt, 5, $digest);
+    pdo_bind_binary($stmt, 4, $digest);
     $stmt->bindValue(1, $userId, PDO::PARAM_INT);
     $stmt->bindValue(2, $studentId, PDO::PARAM_INT);
     $stmt->bindValue(3, $csId, $csId === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
-    $stmt->bindValue(6, $now->format('Y-m-d H:i:s.u'), PDO::PARAM_STR);
-    $stmt->bindValue(7, $expires->format('Y-m-d H:i:s.u'), PDO::PARAM_STR);
-    $stmt->bindValue(8, $metadata, PDO::PARAM_STR);
+    $stmt->bindValue(5, $now->format('Y-m-d H:i:s.u'), PDO::PARAM_STR);
+    $stmt->bindValue(6, $expires->format('Y-m-d H:i:s.u'), PDO::PARAM_STR);
+    $stmt->bindValue(7, $metadata, PDO::PARAM_STR);
     $stmt->execute();
     $tokenId = (int) $stmt->fetchColumn();
 
@@ -334,20 +334,21 @@ function student_biometric_consume_challenge(
     }
     $digest = hash('sha256', $rawToken, true);
     $stmt = $pdo->prepare(
-        "SELECT token_id, related_student_id, related_cs_id, expires_at, used_at, revoked_at, metadata_jsonb
+        "SELECT token_id, related_student_id, related_cs_id, expires_at, used_at, revoked_at, metadata_json
            FROM security_tokens
           WHERE purpose = 'biometric_challenge'
             AND related_student_id = ?
             AND token_digest = ?
           FOR UPDATE"
     );
+    $stmt->bindValue(1, $studentId, PDO::PARAM_INT);
     pdo_bind_binary($stmt, 2, $digest);
-    $stmt->execute([$studentId]);
+    $stmt->execute();
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($row === false) {
         throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
     }
-    $metadata = json_decode((string) ($row['metadata_jsonb'] ?? '{}'), true);
+    $metadata = json_decode((string) ($row['metadata_json'] ?? '{}'), true);
     if (!is_array($metadata) || ($metadata['purpose'] ?? null) !== $purpose) {
         throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
     }

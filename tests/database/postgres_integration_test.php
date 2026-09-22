@@ -21,7 +21,9 @@ require_once $root . '/backend/app/mfa_runtime.php';
 require_once $root . '/backend/app/ratelimit.php';
 require_once $root . '/backend/app/validation.php';
 require_once $root . '/backend/app/security.php';
+require_once $root . '/backend/app/attendance_sessions.php';
 require_once $root . '/backend/app/student_auth.php';
+require_once $root . '/backend/app/student_biometrics.php';
 require_once $root . '/backend/app/google_auth.php';
 require_once $root . '/backend/controllers/GoogleAuthController.php';
 require_once $root . '/backend/controllers/FacultyInvitationController.php';
@@ -1136,6 +1138,46 @@ $studentAuthContext = auth_verify_access_token(
 );
 expect_same('student', $studentAuthContext['role'], 'Student access token validates with the Student role');
 expect_same(26, $studentAuthContext['student']['student_id'], 'Student access context carries canonical Student identity');
+
+// Regression coverage for the authenticated Student liveness challenge path.
+// This executes the real PostgreSQL INSERT so placeholder/parameter drift cannot
+// be hidden by a source-only contract test.
+$studentChallenge = student_biometric_issue_challenge(
+    $pdo,
+    $studentConfig,
+    (int) $studentAuthContext['user_id'],
+    (int) $studentAuthContext['student']['student_id'],
+    null,
+    null,
+    'enrollment'
+);
+$studentChallengeResponse = student_biometric_challenge_response($studentChallenge);
+expect_same('ok', $studentChallengeResponse['status'] ?? null, 'Authenticated Student liveness challenge returns an ok status');
+foreach (['challengeId', 'challengeToken', 'actions', 'expiresAt'] as $field) {
+    expect_true(array_key_exists($field, $studentChallengeResponse), "Authenticated Student challenge response exposes {$field}");
+}
+expect_true(is_string($studentChallengeResponse['challengeToken']) && $studentChallengeResponse['challengeToken'] !== '', 'Authenticated Student challenge token is non-empty and opaque');
+expect_true(
+    is_array($studentChallengeResponse['actions'])
+        && count($studentChallengeResponse['actions']) === 2
+        && count(array_unique($studentChallengeResponse['actions'])) === 2,
+    'Authenticated Student challenge returns two distinct liveness actions'
+);
+$studentChallengeRow = $pdo->prepare(
+    'SELECT purpose, user_id, related_student_id, related_cs_id, issued_at, expires_at, used_at, revoked_at, metadata_json
+       FROM security_tokens
+      WHERE token_id = ?'
+);
+$studentChallengeRow->execute([(int) $studentChallenge['challengeId']]);
+$studentChallengePersisted = $studentChallengeRow->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($studentChallengePersisted), 'Authenticated Student challenge is persisted in security_tokens');
+expect_same('biometric_challenge', $studentChallengePersisted['purpose'] ?? null, 'Persisted Student challenge uses the biometric_challenge purpose');
+expect_same((int) $studentAuthContext['user_id'], (int) ($studentChallengePersisted['user_id'] ?? 0), 'Persisted Student challenge is scoped to the authenticated user');
+expect_same((int) $studentAuthContext['student']['student_id'], (int) ($studentChallengePersisted['related_student_id'] ?? 0), 'Persisted Student challenge is scoped to the authenticated Student');
+expect_true(
+    strtotime((string) ($studentChallengePersisted['expires_at'] ?? '')) > strtotime((string) ($studentChallengePersisted['issued_at'] ?? '')),
+    'Persisted Student challenge expiry is after issuance'
+);
 $studentMe = auth_runtime_me($pdo, $studentConfig, $studentContext + [
     'auth_header' => 'Bearer ' . $studentCredentials['access_token'],
 ]);
