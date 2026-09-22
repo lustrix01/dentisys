@@ -52,12 +52,12 @@ test.describe('P02 development safety seams', () => {
     await page.click('a[href="/student/face-registration"]');
     await expect(page).toHaveURL('/student/face-registration');
     await page.check('#privacy-consent-checkbox');
-    await page.getByRole('button', { name: /Continue to Facial Scan/i }).click();
-    await page.getByRole('button', { name: /Capture & Extract Face Template/i }).click();
+    await page.getByRole('button', { name: /Continue to Camera Scan/i }).click();
+    await page.getByRole('button', { name: /Capture & Submit Enrollment/i }).click();
     await expect(page.getByText('Development fixture enrollment')).toBeVisible({ timeout: 8000 });
     await page.getByRole('button', { name: /Go to Daily Attendance/i }).click();
     await expect(page).toHaveURL('/student/attendance');
-    await page.getByRole('button', { name: /Submit Attendance for CLIN401/i }).click();
+    await page.getByRole('button', { name: /Take Attendance \(Simulated\)/i }).click();
     await expect(page.getByText(/Attendance recorded successfully for CLIN401/i)).toBeVisible({ timeout: 5000 });
   });
 

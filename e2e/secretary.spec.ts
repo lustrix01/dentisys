@@ -316,7 +316,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('Active Attendance Register Open')).toBeVisible();
     await expect(page.getByText('CLIN402 — CLINIC-4B')).toBeVisible();
     await expect(page.getByText('CS8-20260921-ABC123')).toBeVisible();
-    await expect(page.getByRole('button', { name: /End Class Session/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /End Session/i })).toBeVisible();
     await expect(page.getByText('Session Configuration')).toHaveCount(0);
   });
 
@@ -360,8 +360,8 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('Code: CS8-20260921-XYZ999', { exact: true })).toBeVisible();
     expect(startApiPayload).not.toBeNull();
     expect((startApiPayload as Record<string, unknown>)?.csId).toBe(8);
-    expect((startApiPayload as Record<string, unknown>)?.geofenceLatitude).toBeUndefined();
-    expect((startApiPayload as Record<string, unknown>)?.geofenceLongitude).toBeUndefined();
+    expect((startApiPayload as Record<string, unknown>)?.geofenceLatitude).toBe(13.1436);
+    expect((startApiPayload as Record<string, unknown>)?.geofenceLongitude).toBe(123.7438);
 
     const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
     expect(storedItem).toBeNull();
@@ -433,7 +433,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
 
     // Open confirmation modal
-    await page.getByRole('button', { name: /End Class Session/i }).click();
+    await page.getByRole('button', { name: /End Session/i }).click();
     await expect(page.getByText('Are you sure you want to end the active attendance session')).toBeVisible();
 
     // Confirm end session

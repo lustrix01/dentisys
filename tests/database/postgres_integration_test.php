@@ -120,6 +120,7 @@ $expectedMigrations = [
     '008_invite_only_onboarding.sql',
     '009_persistent_attendance_sessions.sql',
     '010_authoritative_grade_weights.sql',
+    '011_student_biometric_attendance.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -247,6 +248,9 @@ $sessionCode = 'INTEGRATION-SESSION-' . strtoupper(bin2hex(random_bytes(4)));
     'sessionCode' => $sessionCode,
     'room' => 'Integration Attendance Room',
     'biometricRequired' => true,
+    'openingTime' => '08:00',
+    'presentCutoff' => '09:00',
+    'lateCutoff' => '10:00',
     'geofenceEnabled' => true,
     'geofenceLatitude' => 13.1436,
     'geofenceLongitude' => 123.7438,

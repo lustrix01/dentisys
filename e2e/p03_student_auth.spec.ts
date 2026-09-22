@@ -119,7 +119,7 @@ test.describe('P03 Student identity and authentication', () => {
     expect(submittedPayload).toMatchObject({ credential: 'mock-student-google-credential', token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' });
   });
 
-  test('real password-authenticated Student is isolated from every prototype surface', async ({ page }) => {
+  test('real password-authenticated Student uses authoritative surfaces without prototype data', async ({ page }) => {
     const fabricatedValues = [
       'FABRICATED-APP-STUDENT',
       'FABRICATED-APP-COURSE',
@@ -165,6 +165,28 @@ test.describe('P03 Student identity and authentication', () => {
     await page.route('**/api/auth/me', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(realStudent) });
     });
+    await page.route('**/api/student/biometric/profile', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          consentGranted: false,
+          enrollmentStatus: 'unregistered',
+          enrolledAt: null,
+          expiresAt: null,
+          usableSampleCount: 0,
+          requiredUsableSamples: 20,
+          manualFallbackAvailable: true,
+        }),
+      });
+    });
+    await page.route('**/api/student/attendance/sessions/active', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [] }) });
+    });
+    await page.route('**/api/student/attendance/logs**', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], total: 0 }) });
+    });
     await page.goto('/login');
     await page.locator('input[type="email"]').fill('real.student@bicol-u.edu.ph');
     await page.locator('input[type="password"]').fill('Student123!');
@@ -177,9 +199,9 @@ test.describe('P03 Student identity and authentication', () => {
     for (const value of fabricatedValues) {
       await expect(page.locator('body')).not.toContainText(value);
     }
-    await expect(page.getByRole('link', { name: 'Daily Attendance' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Attendance Logs' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Face Registration' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Daily Attendance' })).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'Attendance Logs' })).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'Face Registration' })).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'My Classes' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Retention Monitoring' })).toHaveCount(0);
 
@@ -190,12 +212,22 @@ test.describe('P03 Student identity and authentication', () => {
       await expect(page.locator('body')).not.toContainText(value);
     }
 
+    const authoritativeRoutes: Array<[string, string]> = [
+      ['/student/attendance', 'Daily Class Check-In'],
+      ['/student/attendance-logs', 'My Session Attendance Logs'],
+      ['/student/face-registration', 'Facial Recognition Registration'],
+    ];
+    for (const [path, title] of authoritativeRoutes) {
+      await page.goto(path);
+      await expect(page.getByText(title)).toBeVisible();
+      for (const value of fabricatedValues) {
+        await expect(page.locator('body')).not.toContainText(value);
+      }
+    }
+
     const unavailableRoutes: Array<[string, string]> = [
       ['/student/classes', 'My Classes unavailable'],
-      ['/student/attendance', 'Daily Attendance unavailable'],
-      ['/student/attendance-logs', 'Attendance Logs unavailable'],
       ['/student/retention', 'Retention Monitoring unavailable'],
-      ['/student/face-registration', 'Face Registration unavailable'],
     ];
     for (const [path, title] of unavailableRoutes) {
       await page.goto(path);
@@ -203,7 +235,6 @@ test.describe('P03 Student identity and authentication', () => {
       for (const value of fabricatedValues) {
         await expect(page.locator('body')).not.toContainText(value);
       }
-      await expect(page.getByRole('link', { name: 'Daily Attendance' })).toHaveCount(0);
     }
   });
 
@@ -247,7 +278,7 @@ test.describe('P03 Student identity and authentication', () => {
     await page.getByRole('link', { name: 'Daily Attendance' }).click();
     await expect(page).toHaveURL('/student/attendance');
     await expect(page.getByText('Daily Class Check-In')).toBeVisible();
-    await expect(page.getByText('Step 1: Select Enrolled Class')).toBeVisible();
+    await expect(page.getByText('Step 1: Select Enrolled Subject')).toBeVisible();
   });
 
   test('stale development-mock /me cannot unlock Student prototypes when identity mock is disabled', async ({ page }) => {

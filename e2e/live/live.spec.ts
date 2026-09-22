@@ -349,7 +349,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   // 6. Verify UI transitions to active state
   await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /End Class Session/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /End Session/i })).toBeVisible();
 
   // Verify localStorage was NOT used as authoritative storage
   const localSessionAfterStart = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
@@ -369,7 +369,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   // Active session card restored after reload
   await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /End Class Session/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /End Session/i })).toBeVisible();
 
   // 8. Test navigation away and back
   await page.click('a[href="/"]');
@@ -381,7 +381,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
 
   // 9. End active session
-  await page.getByRole('button', { name: /End Class Session/i }).click();
+  await page.getByRole('button', { name: /End Session/i }).click();
 
   // Confirm modal is shown
   await expect(page.getByText(/End Attendance Session/i).first()).toBeVisible();
