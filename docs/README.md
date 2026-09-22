@@ -3,6 +3,7 @@
 - [Authoritative product specification](../spec.md)
 - [Architecture](architecture.md)
 - [Supported local development environment](development-environment.md)
+- [Manual demo readiness checklist](manual-demo-readiness.md)
 - [Unfinished same-host single-server deployment foundation](single-server.md)
 - [Implemented features and boundaries](features.md)
 - [Frontend overview](frontend.md)
