@@ -530,7 +530,7 @@ The Student MUST already be authenticated to their own DentiSys account. Biometr
 
 DentiSys MUST NOT perform 1:N identification, search all Students, identify an unknown face, return another Student as a possible match, perform classroom-wide identification, or search the Student population for duplicate faces. If another person accesses a Student account and enrolls their own face, biometrics does not discover or establish that person's actual identity. This is an intentional privacy boundary.
 
-The facial-recognition algorithm, model, library, and implementation remain unselected as specified by BIO-007.
+Facial detection MUST use Haar Cascade Classification through OpenCV. Facial verification MUST use Local Binary Patterns Histograms (LBPH) through OpenCV. LBPH MUST remain restricted to strict authenticated-Student 1:1 verification and MUST NOT be used for 1:N identification or Student discovery.
 
 ## BIO-002 — Student enrollment, consent, and manual alternative
 
@@ -546,7 +546,7 @@ Students may refuse biometric processing or later revoke consent. Refusal or ina
 
 The consent disclosure MUST state the attendance-only purpose; the biometric material processed; that raw facial images are not retained; that a protected reference is retained and expires every semester; revocation and deletion behavior; who may access enrollment status; the manual attendance alternative; and that revocation does not erase historical attendance. This scope applies to adult university Students.
 
-Before real Student deployment, final privacy and consent wording MUST be reviewed and approved by the research team, adviser, relevant University authority, and University Data Protection Officer. This named review is the required institutional gate for real Student deployment; implementation remains deferred until that gate and the technical approvals in BIO-007 are complete.
+Before real Student deployment, final privacy and consent wording MUST be reviewed and approved by the research team, adviser, relevant University authority, and University Data Protection Officer. This named review is the required institutional gate for real Student deployment; implementation remains deferred until that gate and the remaining technical approvals in BIO-007 are complete.
 
 ## BIO-003 — Temporary captures, protected reference, and infrastructure boundary
 
@@ -554,9 +554,9 @@ Before real Student deployment, final privacy and consent wording MUST be review
 
 **Implementation: DEFERRED**
 
-Raw photographs, enrollment images, camera frames, verification images, and failed captures MUST NOT be retained after processing, including in development or debugging artifacts. Temporary facial images MAY exist only as necessary for capture-quality evaluation, liveness/PAD, template generation, and 1:1 verification, and MUST be discarded after processing. Enrollment MAY temporarily collect multiple samples when needed for accuracy; the exact count is deferred.
+Raw photographs, enrollment images, camera frames, verification images, and failed captures MUST NOT be retained after processing, including in development or debugging artifacts. Temporary facial images MAY exist only as necessary for capture-quality evaluation, liveness/PAD, template generation, and 1:1 verification, and MUST be discarded after processing. Normal enrollment MUST require 20 usable facial samples and MAY accept at most 30 usable samples during one enrollment operation. Failed quality or liveness samples MUST NOT count. Raw enrollment samples MUST be discarded after protected-reference generation or an aborted enrollment.
 
-Of the biometric material, only the protected reference required for future 1:1 verification may be retained. Normal UI and API access MUST NOT retrieve raw references, templates, embeddings, or equivalent biometric material.
+Of the biometric material, only the protected reference required for future 1:1 verification may be retained. Retained LBPH references/models are distinct from raw imagery and MUST be stored in dedicated biometric storage excluded from ordinary application/database backups. Normal UI and API access MUST NOT retrieve raw references, templates, embeddings, or equivalent biometric material.
 
 After collection by the authorized Student-owned browser/device, biometric data MUST remain within infrastructure controlled by the DentiSys deployment. The browser/device is an authorized capture endpoint and MAY hold a capture temporarily for transmission, but it MUST NOT persist biometric material beyond the active operation. Biometric processing MUST NOT be delegated to an unapproved third-party or cloud provider. The intended research deployment may use one server and a logically separate biometric component whose boundary permits later relocation to separate infrastructure without changing product behavior. This rule does not select a container, service protocol, database, filesystem, object store, or other storage engine.
 
@@ -570,7 +570,7 @@ All biometric captures, temporary facial images, protected references, and tempo
 
 Protected biometric references MUST be protected at rest and in transit, against unauthorized retrieval and modification, and through appropriately restricted access. The design MUST consider confidentiality, integrity, privacy, renewability, and revocability because a compromised biometric characteristic cannot simply be changed like a password.
 
-The design rationale MUST explicitly reference ISO/IEC 24745:2022, Information security, cybersecurity and privacy protection — Biometric information protection. The reference does not claim ISO certification, formal compliance, or audited conformance. The encryption algorithm, cipher, key-management implementation, KMS/provider, protected-template mechanism, and key-rotation implementation remain deferred under BIO-007.
+The design rationale MUST explicitly reference ISO/IEC 24745:2022, Information security, cybersecurity and privacy protection — Biometric information protection. The reference does not claim ISO certification, formal compliance, or audited conformance. Protected LBPH reference data MUST be encrypted at rest using AES-256-GCM. The encryption key MUST be server-controlled and MUST NOT be committed to Git, stored in the ordinary database, exposed through APIs, or sent to browser clients. PostgreSQL MAY contain biometric-profile metadata and an opaque protected-object reference, but MUST NOT contain raw photos or an unprotected LBPH model/reference. Key-management implementation, KMS/provider, protected-template mechanism, and key-rotation implementation remain deferred under BIO-007.
 
 ## BIO-005 — Expiration, revocation, replacement, and loss
 
@@ -590,7 +590,7 @@ Biometric templates MUST NOT be included in normal DentiSys application backups.
 
 **Implementation: DEFERRED**
 
-Production biometric attendance MUST use liveness or presentation-attack detection. Passive or automatic liveness is preferred when practical; an accessible active challenge MAY be used when needed. The exact method, model, library, and thresholds remain deferred.
+Production biometric attendance MUST use randomized active challenge-response liveness or presentation-attack detection. Challenges MUST be server-generated, short-lived, and single-use. Each ordinary attempt MUST request two distinct randomized actions in randomized order from blink, turn head left, and turn head right. The browser MAY display the challenge but MUST NOT be authoritative for pass/fail. The DentiSys biometric component MUST verify the action sequence using temporary frames. MediaPipe Face Landmarker is approved only for landmark, transformation, and blendshape analysis used for liveness; it MUST NOT replace Haar detection or LBPH verification. Raw liveness frames MUST NOT be retained. Numeric liveness, blink, head-pose, and timing thresholds remain deferred.
 
 The system MUST reasonably resist printed facial photographs, a face image displayed on another screen, prerecorded or displayed facial video, and straightforward replay attacks. It MUST continue to support ordinary browser-accessible phone, tablet, and desktop cameras and MUST NOT require depth, infrared, or Face ID-equivalent hardware or claim equivalent assurance.
 
@@ -600,15 +600,27 @@ Production UI MUST provide readable generic outcomes such as “Face verified”
 
 Students may make legitimate retries while biometric attendance remains open. There is no product-level hard retry count. Repeated failure MUST NOT lock the Student account or itself mark the Student Absent. The outcome MUST direct the Student to Secretary or Faculty for manual attendance.
 
-## BIO-007 — Deferred biometric technology selections
+## BIO-007 — Approved and deferred biometric technology selections
 
 **Status: APPROVED**
 
-**Technical selection: DEFERRED**
+**Technical selections: APPROVED as stated below; remaining parameters: DEFERRED**
 
-The following are NOT selected: facial-recognition algorithm; embedding algorithm; machine-learning model; face-recognition library; inference framework or runtime; similarity metric; biometric matching threshold; liveness/PAD model, library, implementation, active-challenge method, and thresholds; capture-quality thresholds; exact enrollment capture count; encryption algorithm or cipher; key-management implementation; KMS/provider; protected-template mechanism; key-rotation implementation; exact biometric storage technology; and production CPU/GPU/hardware.
+Facial detection MUST use Haar Cascade Classification through OpenCV. Facial verification MUST use LBPH through OpenCV. LBPH MUST be restricted to strict authenticated-Student 1:1 verification; DentiSys MUST NOT perform 1:N identification, unknown-person identification, nearest-Student discovery, classroom-wide recognition, or searches across Student references.
 
-Selection requires team research, technical validation, and later explicit Owner approval. No implementation task may introduce a facial-recognition model, library, dependency, numeric matching threshold, or capture-count requirement before that approval. Any future threshold MUST be selected through validation of the chosen technology and MUST NOT be configurable by Students, Faculty, Secretary, or Admin.
+Biometric processing MUST remain inside the same single-server DentiSys Docker deployment. The biometric component MAY be logically separable enough for future relocation, but this amendment does not authorize distributed architecture, Kubernetes, a cloud biometric provider, or multi-server deployment.
+
+Normal enrollment MUST require 20 usable facial samples, and at most 30 usable samples MAY be accepted during one enrollment operation. Failed quality or liveness samples MUST NOT count. Raw enrollment samples MUST be discarded after protected-reference generation or an aborted enrollment.
+
+The LBPH matching threshold MUST be server-controlled. No universal numeric production threshold is approved; calibration MUST use the actual DentiSys camera, preprocessing, and enrollment pipeline and consider false acceptance and false rejection. End users MUST NOT configure the threshold. One matching frame MUST NOT authorize attendance; repeated consistent matching is required.
+
+Liveness/PAD MUST use randomized active challenge-response. Challenges MUST be server-generated, short-lived, and single-use. Each ordinary attempt MUST request two distinct randomized actions in randomized order from blink, turn head left, and turn head right. The browser MAY display the challenge but MUST NOT be authoritative for pass/fail. The DentiSys biometric component MUST verify the action sequence using temporary frames. MediaPipe Face Landmarker is approved only for landmark, transformation, and blendshape analysis used for liveness and MUST NOT replace Haar detection or LBPH verification. Raw liveness frames MUST NOT be retained.
+
+Retained LBPH references/models MUST be distinct from raw imagery and stored in dedicated biometric storage excluded from ordinary application/database backups. Protected LBPH reference data MUST be encrypted at rest using AES-256-GCM. The encryption key MUST be server-controlled and MUST NOT be committed to Git, stored in the ordinary database, exposed through APIs, or sent to browser clients. PostgreSQL MAY contain biometric-profile metadata and an opaque protected-object reference, but MUST NOT contain raw photos or an unprotected LBPH model/reference. For the current research deployment, loss or intentional replacement of the encryption key MAY invalidate protected references and require Student re-enrollment.
+
+The following remain deferred and MUST NOT be invented or selected by implementation: numeric LBPH production threshold; exact repeated-match frame count; exact matching decision window or numeric rule; numeric image-quality thresholds; numeric blink, head-pose, liveness, or timing thresholds; exact internal biometric service protocol; exact filesystem or volume layout; CPU/GPU sizing; future passive PAD; and advanced key-management, KMS, or key-rotation infrastructure.
+
+The remaining deferred parameters require team research, technical validation, and later explicit Owner approval. Any future threshold MUST be selected through validation of the chosen technology and MUST NOT be configurable by Students, Faculty, Secretary, or Admin.
 
 ## BIO-008 — Devices, connectivity, mock isolation, and rollout
 
@@ -620,7 +632,7 @@ The target is desktop/laptop browsers, Android browsers/devices, and iOS browser
 
 Docker remains the intended deployment model. No specific CPU/GPU is a product requirement, and the current research laptop is not a production requirement. The initial study supports classroom-scale use and multiple classrooms; school-wide event recognition is outside current scope. Verification SHOULD feel responsive, but no fixed maximum time is selected. Normal Faculty dashboard refresh is sufficient; live-update behavior is not required by this specification.
 
-After the BIO-002 institutional privacy/consent review and the later technical approvals required by BIO-007 are complete, real biometrics is available by default. Student enrollment and use remain voluntary and require consent. A development biometric mock MAY remain only behind explicit development configuration. Mock and real enrollment MUST remain separate; real biometric failure or unavailable infrastructure MUST fall back to manual attendance and MUST NOT silently use the mock.
+After the BIO-002 institutional privacy/consent review and the remaining technical approvals required by BIO-007 are complete, real biometrics is available by default. Student enrollment and use remain voluntary and require consent. A development biometric mock MAY remain only behind explicit development configuration. Mock and real enrollment MUST remain separate; real biometric failure or unavailable infrastructure MUST fall back to manual attendance and MUST NOT silently use the mock.
 
 ## BIO-009 — Audit, information minimization, and accepted limits
 
@@ -726,7 +738,7 @@ Do not invent speculative open questions.
 
 Current open decisions and deferred technical selections:
 
-* BIO-007: facial-recognition algorithm, embedding algorithm, machine-learning model, face-recognition library, inference framework/runtime, similarity metric, matching threshold, liveness/PAD model/library/method/thresholds, capture-quality thresholds, exact enrollment capture count, encryption/cipher, key management/KMS, protected-template mechanism, key rotation, exact biometric storage technology, and production hardware.
+* BIO-007: numeric LBPH production threshold; exact repeated-match frame count; exact matching decision window or numeric rule; numeric image-quality thresholds; numeric blink, head-pose, liveness, and timing thresholds; exact internal biometric service protocol; exact filesystem or volume layout; CPU/GPU sizing; future passive PAD; and advanced key-management, KMS, or key-rotation infrastructure.
 
 These technical items remain unresolved. Listing them does not select or approve any technology. The biometric product requirements in §8 are approved.
 
@@ -759,7 +771,7 @@ Upon Owner approval of this specification:
 * Faculty and Student account establishment MUST require an authorized invitation and DentiSys password.
 * Google may verify an invited identity during acceptance, but MUST NOT provide invitation authority or enable public signup.
 * Google-linked users MUST retain email + password login capability.
-* The previous BIO-001 placeholder wording, insofar as it left biometric product requirements unresolved, is superseded by BIO-001–BIO-010 and ATT-001–ATT-006. Those product requirements and boundaries are approved, while biometric implementation and the technical selections listed in BIO-007 and §9 remain deferred. This supersession does not claim biometric functionality is implemented or authorize implementation.
+* The previous BIO-001 placeholder wording, insofar as it left biometric product requirements unresolved, is superseded by BIO-001–BIO-010 and ATT-001–ATT-006. Those product requirements and boundaries are approved, while biometric implementation and the remaining deferred technical selections listed in BIO-007 and §9 remain deferred. This supersession does not claim biometric functionality is implemented or authorize implementation.
 
 Affected roadmap/documentation should be aligned before or together with implementation of Google authentication.
 
