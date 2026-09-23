@@ -412,6 +412,34 @@ Absent attendance produces an effective percentage of 0%. Missing attendance is 
 
 ---
 
+## GRD-002 - Period grading and editable presets
+
+**Status: APPROVED - Implementation in progress**
+
+Faculty grading configurations remain scoped to the Faculty member, course, semester, and school year.
+
+New, unconfigured offerings present an editable, unsaved starting preset. The initial contribution ratio is 40% Midterm and 60% Finals, editable by Faculty.
+
+The Midterm preset contains Quiz 25%, Activity 25%, Midterm Exam 40%, and Attendance 10%. The Finals preset contains Quiz 20%, Activity 20%, Laboratory 20%, Final Exam 30%, and Attendance 10%.
+
+Faculty may customize each period's categories and weights. Each period must total exactly 100%, using the existing supported decimal precision. The two period contributions must also total exactly 100%.
+
+Preset values become authoritative only after a successful server save. Existing saved configurations must never be replaced automatically by preset values.
+
+Assessments must reference valid categories for their offering and grading period. Existing assessment identifiers, category references, raw scores, and assessment maximum scores must be preserved.
+
+Existing single-list configurations continue using their current calculation until explicitly converted through a validated operation. Migration must not silently change recorded grades.
+
+For period configurations, the overall percentage is the Midterm percentage multiplied by its contribution plus the Finals percentage multiplied by its contribution. A positively weighted period without sufficient results remains incomplete; it must not silently become zero or be omitted.
+
+Saving configuration does not automatically rewrite persisted grade results. An authorized recomputation applies the saved configuration while preserving raw scores and GRD-001 transmutation behavior.
+
+In period configurations, the preset Attendance category uses authoritative attendance data and replaces the additional independent attendance contribution, preventing double-counting. Assessment-linked transmutation remains governed separately by GRD-001. The assignment of attendance records to Midterm and Finals requires a separate Owner decision before period attendance computation is implemented.
+
+Grade displays and exports must distinguish authoritative Midterm, Finals, and overall results. Unavailable period results must not be replaced with the overall grade.
+
+---
+
 The following capabilities are currently part of DentiSys and MUST NOT be removed as incidental scope.
 
 | Capability                              | Status   |

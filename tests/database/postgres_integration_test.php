@@ -101,6 +101,56 @@ function integration_http_get_json(string $path, string $accessToken): array
     return [$status, is_string($body) ? (json_decode($body, true) ?: []) : []];
 }
 
+function integration_http_async_json(string $path, string $accessToken, array $payload)
+{
+    $socket = @stream_socket_client('tcp://127.0.0.1:80', $errno, $errstr, 2);
+    if (!is_resource($socket)) {
+        throw new RuntimeException("Unable to open asynchronous HTTP socket: {$errstr} ({$errno})");
+    }
+    stream_set_blocking($socket, false);
+    $body = json_encode($payload, JSON_THROW_ON_ERROR);
+    $request = "POST {$path} HTTP/1.1\r\n"
+        . "Host: 127.0.0.1\r\n"
+        . "Connection: close\r\n"
+        . "Content-Type: application/json\r\n"
+        . "Accept: application/json\r\n"
+        . "Authorization: Bearer {$accessToken}\r\n"
+        . 'Content-Length: ' . strlen($body) . "\r\n\r\n"
+        . $body;
+    $offset = 0;
+    $deadline = microtime(true) + 2;
+    while ($offset < strlen($request)) {
+        $written = @fwrite($socket, substr($request, $offset));
+        if ($written === false) {
+            fclose($socket);
+            throw new RuntimeException('Unable to write asynchronous HTTP request.');
+        }
+        if ($written > 0) {
+            $offset += $written;
+            continue;
+        }
+        if (microtime(true) >= $deadline) {
+            fclose($socket);
+            throw new RuntimeException('Timed out writing asynchronous HTTP request.');
+        }
+        usleep(1000);
+    }
+    return $socket;
+}
+
+function integration_http_async_read($socket): array
+{
+    stream_set_blocking($socket, true);
+    $response = stream_get_contents($socket);
+    fclose($socket);
+    $status = 0;
+    if (preg_match('/^HTTP\/\S+\s+(\d{3})/m', $response, $match)) {
+        $status = (int) $match[1];
+    }
+    [, $body] = array_pad(explode("\r\n\r\n", $response, 2), 2, '');
+    return [$status, $body !== '' ? (json_decode($body, true) ?: []) : []];
+}
+
 $pdo = create_pdo([
     'db' => [
         'host' => $host,
@@ -124,6 +174,8 @@ $expectedMigrations = [
     '010_authoritative_grade_weights.sql',
     '011_student_biometric_attendance.sql',
     '012_restore_faculty_invitation_token_purpose.sql',
+    '013_period_grading_configuration.sql',
+    '014_grading_period_memberships.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2565,6 +2617,26 @@ $weightConfigPath = '/api/faculty/grading-config?' . http_build_query([
 [$weightInitialGetStatus, $weightInitialGetBody] = integration_http_get_json($weightConfigPath, $facultyAccessToken);
 expect_same(200, $weightInitialGetStatus, 'Unconfigured Faculty offering returns HTTP 200');
 expect_same(null, $weightInitialGetBody['configuration'] ?? null, 'Unconfigured Faculty offering is explicit rather than fabricated');
+expect_same('periods', $weightInitialGetBody['defaults']['schemaMode'] ?? null, 'Unconfigured Faculty offering exposes editable period defaults');
+expect_same(40, $weightInitialGetBody['defaults']['termRatio']['midterm'] ?? null, 'Unconfigured Faculty defaults use a 40 percent Midterm contribution');
+expect_same(60, $weightInitialGetBody['defaults']['termRatio']['final'] ?? null, 'Unconfigured Faculty defaults use a 60 percent Final contribution');
+expect_same(4, count($weightInitialGetBody['defaults']['midtermCategories'] ?? []), 'Unconfigured Faculty defaults include Midterm categories');
+expect_same(5, count($weightInitialGetBody['defaults']['finalCategories'] ?? []), 'Unconfigured Faculty defaults include Final categories');
+
+[$weightInvalidRatioStatus] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'schemaMode' => 'periods',
+    'termRatio' => true,
+    'midtermCategories' => [
+        ['name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1],
+    ],
+    'finalCategories' => [
+        ['name' => 'Exam', 'weight' => 100, 'sortOrder' => 1],
+    ],
+]);
+expect_same(422, $weightInvalidRatioStatus, 'Period grading save rejects scalar term ratios as validation errors');
 
 [$weightInvalidTotalStatus, $weightInvalidTotalBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
     'courseId' => $weightCourseId,
@@ -2734,6 +2806,14 @@ $weightAssessmentStmt->execute([$weightClassId, 'Legacy Categoryless Assessment 
 $weightLegacyAssessmentId = (int) $weightAssessmentStmt->fetchColumn();
 $weightAssessmentStmt->execute([$weightSharedClassId, 'Shared Section Quiz ' . $weightFixtureSuffix, 'Quiz', $weightQuizCategoryId, 10, 1]);
 $weightSharedAssessmentId = (int) $weightAssessmentStmt->fetchColumn();
+$weightFinalAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments
+        (cs_id, title, type, grading_category_id, grading_period, max_score, weight, status)
+     VALUES (?, ?, ?, ?, 'Final', ?, ?, 'Active')
+     RETURNING assessment_id"
+);
+$weightFinalAssessmentStmt->execute([$weightSharedClassId, 'Shared Section Final Quiz ' . $weightFixtureSuffix, 'Quiz', $weightQuizCategoryId, 10, 1]);
+$weightLegacyFinalAssessmentId = (int) $weightFinalAssessmentStmt->fetchColumn();
 $weightScoreStmt = $pdo->prepare(
     'INSERT INTO assessment_scores (assessment_id, student_id, score, submitted_at, remarks)
      VALUES (?, ?, ?, CURRENT_TIMESTAMP(6), ?)'
@@ -2792,6 +2872,188 @@ expect_same((string) $weightQuizCategoryId, $weightApiRead[0]['gradingCategoryId
 expect_same(409, $weightDeleteInUseStatus, 'Grade-weight save blocks deletion of a category referenced by an assessment');
 expect_same('GRADING_CATEGORY_IN_USE', $weightDeleteInUseBody['code'] ?? null, 'In-use category deletion returns the conflict code');
 
+[$weightConversionRequiredStatus, $weightConversionRequiredBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'version' => $weightConfigVersion,
+    'schemaMode' => 'periods',
+    'termRatio' => ['midterm' => 40, 'final' => 60],
+    'midtermCategories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2],
+    ],
+    'finalCategories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2],
+    ],
+]);
+expect_same(409, $weightConversionRequiredStatus, 'Overall-to-period conversion requires an explicit flag');
+expect_same('GRADING_PERIOD_CONVERSION_REQUIRED', $weightConversionRequiredBody['code'] ?? null, 'Missing conversion flag returns the explicit conversion code');
+
+$pdo->prepare("UPDATE assessments SET status = 'Active' WHERE assessment_id = ?")->execute([$weightLegacyAssessmentId]);
+$weightCategorylessConversionBeforeConfigStmt = $pdo->prepare(
+    'SELECT schema_mode, version FROM grading_configs WHERE config_id = ?'
+);
+$weightCategorylessConversionBeforeConfigStmt->execute([$weightConfigId]);
+$weightCategorylessConversionBeforeConfig = $weightCategorylessConversionBeforeConfigStmt->fetch(PDO::FETCH_ASSOC);
+$weightCategorylessConversionBeforeGradeStmt = $pdo->prepare(
+    'SELECT final_percentage FROM enrollments WHERE enrollment_id = ?'
+);
+$weightCategorylessConversionBeforeGradeStmt->execute([$weightEnrollmentA]);
+$weightCategorylessConversionBeforeGrade = $weightCategorylessConversionBeforeGradeStmt->fetchColumn();
+[$weightCategorylessConversionStatus, $weightCategorylessConversionBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'version' => $weightConfigVersion,
+    'schemaMode' => 'periods',
+    'convertFromOverall' => true,
+    'termRatio' => ['midterm' => 40, 'final' => 60],
+    'midtermCategories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2],
+    ],
+    'finalCategories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2],
+    ],
+]);
+expect_same(422, $weightCategorylessConversionStatus, 'Conversion rejects an active categoryless assessment');
+expect_same('GRADING_CATEGORY_PERIOD_MAPPING_REQUIRED', $weightCategorylessConversionBody['code'] ?? null, 'Active categoryless conversion rejection uses the mapping-required code');
+$weightCategorylessRefs = array_values(array_filter(
+    $weightCategorylessConversionBody['assessmentReferences'] ?? [],
+    static fn(array $reference): bool => (int) ($reference['assessmentId'] ?? 0) === $weightLegacyAssessmentId
+        && array_key_exists('categoryId', $reference)
+        && $reference['categoryId'] === null
+));
+expect_same(1, count($weightCategorylessRefs), 'Mapping-required details identify the active categoryless assessment');
+$weightCategorylessConversionAfterConfigStmt = $pdo->prepare(
+    'SELECT schema_mode, version FROM grading_configs WHERE config_id = ?'
+);
+$weightCategorylessConversionAfterConfigStmt->execute([$weightConfigId]);
+$weightCategorylessConversionAfterConfig = $weightCategorylessConversionAfterConfigStmt->fetch(PDO::FETCH_ASSOC);
+expect_same($weightCategorylessConversionBeforeConfig, $weightCategorylessConversionAfterConfig, 'Rejected categoryless conversion preserves configuration mode and version');
+$weightCategorylessConversionAfterGradeStmt = $pdo->prepare(
+    'SELECT final_percentage FROM enrollments WHERE enrollment_id = ?'
+);
+$weightCategorylessConversionAfterGradeStmt->execute([$weightEnrollmentA]);
+expect_same((string) $weightCategorylessConversionBeforeGrade, (string) $weightCategorylessConversionAfterGradeStmt->fetchColumn(), 'Rejected categoryless conversion preserves the prior persisted grade');
+$weightCategorylessRefStmt = $pdo->prepare('SELECT grading_category_id FROM assessments WHERE assessment_id = ?');
+$weightCategorylessRefStmt->execute([$weightLegacyAssessmentId]);
+expect_same(null, $weightCategorylessRefStmt->fetchColumn(), 'Rejected categoryless conversion does not invent an assessment category reference');
+$pdo->prepare("UPDATE assessments SET status = 'Archived' WHERE assessment_id = ?")->execute([$weightLegacyAssessmentId]);
+
+$weightConversionMissingMappingBeforeStmt = $pdo->prepare('SELECT grading_category_id FROM assessments WHERE assessment_id = ?');
+$weightConversionMissingMappingBeforeStmt->execute([$weightLegacyFinalAssessmentId]);
+$weightConversionMissingMappingBefore = $weightConversionMissingMappingBeforeStmt->fetchColumn();
+[$weightMissingMappingStatus, $weightMissingMappingBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'version' => $weightConfigVersion,
+    'schemaMode' => 'periods',
+    'convertFromOverall' => true,
+    'termRatio' => ['midterm' => 40, 'final' => 60],
+    'midtermCategories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2],
+    ],
+    'finalCategories' => [
+        ['name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2],
+    ],
+]);
+expect_same(422, $weightMissingMappingStatus, 'Conversion rejects an existing assessment reference missing from its period mapping');
+expect_same('GRADING_CATEGORY_PERIOD_MAPPING_REQUIRED', $weightMissingMappingBody['code'] ?? null, 'Missing period mapping returns an explicit conversion error');
+$weightConversionMissingMappingAfterStmt = $pdo->prepare('SELECT grading_category_id FROM assessments WHERE assessment_id = ?');
+$weightConversionMissingMappingAfterStmt->execute([$weightLegacyFinalAssessmentId]);
+expect_same((string) $weightConversionMissingMappingBefore, (string) $weightConversionMissingMappingAfterStmt->fetchColumn(), 'Rejected conversion preserves the existing assessment category reference');
+
+[$weightConversionStatus, $weightConversionBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $weightCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'version' => $weightConfigVersion,
+    'schemaMode' => 'periods',
+    'convertFromOverall' => true,
+    'termRatio' => ['midterm' => 40, 'final' => 60],
+    'midtermCategories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2],
+    ],
+    'finalCategories' => [
+        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1],
+        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2],
+    ],
+]);
+expect_same(200, $weightConversionStatus, 'Overall-to-period conversion succeeds when explicitly confirmed');
+expect_same('periods', $weightConversionBody['configuration']['schemaMode'] ?? null, 'Converted configuration reports period mode');
+expect_same(40, $weightConversionBody['configuration']['termRatio']['midterm'] ?? null, 'Converted configuration preserves the requested Midterm ratio');
+expect_same((string) $weightQuizCategoryId, (string) (($weightConversionBody['configuration']['midtermCategories'][0]['id'] ?? 0)), 'Conversion preserves existing category references');
+expect_same(25.0, (float) ($weightConversionBody['configuration']['midtermCategories'][0]['weight'] ?? -1), 'Legacy Midterm category receives its independent converted weight');
+expect_same('Final Quiz', $weightConversionBody['configuration']['finalCategories'][0]['name'] ?? null, 'Legacy Final category receives its independent converted name');
+expect_same(20.0, (float) ($weightConversionBody['configuration']['finalCategories'][0]['weight'] ?? -1), 'Legacy Final category receives its independent converted weight');
+expect_same(2, count($weightConversionBody['configuration']['midtermCategories'] ?? []), 'Converted Midterm snapshot contains only its memberships');
+expect_same(2, count($weightConversionBody['configuration']['finalCategories'] ?? []), 'Converted Final snapshot contains only its memberships');
+$weightConfigVersion = (int) ($weightConversionBody['configuration']['version'] ?? 0);
+
+$lockPdo = create_pdo([
+    'db' => [
+        'host' => $host,
+        'port' => $port,
+        'name' => $name,
+        'user' => $user,
+        'pass' => $pass,
+    ],
+]);
+$lockPdo->beginTransaction();
+$lockConfigStmt = $lockPdo->prepare('SELECT config_id FROM grading_configs WHERE config_id = ? FOR UPDATE');
+$lockConfigStmt->execute([$weightConfigId]);
+$lockSocket = integration_http_async_json('/api/faculty/assessments', $facultyAccessToken, [[
+    'title' => 'Concurrent Period Assessment ' . $weightFixtureSuffix,
+    'type' => 'Quiz',
+    'classId' => (string) $weightClassId,
+    'gradingCategoryId' => (string) $weightQuizCategoryId,
+    'gradingPeriod' => 'Midterm',
+    'maxScore' => 10,
+    'weight' => 1,
+    'status' => 'Active',
+    'transmutationEnabled' => false,
+]]);
+$lockObserved = true;
+for ($lockAttempt = 0; $lockAttempt < 50; $lockAttempt++) {
+    $readSockets = [$lockSocket];
+    $writeSockets = null;
+    $exceptionSockets = null;
+    $readySockets = @stream_select($readSockets, $writeSockets, $exceptionSockets, 0, 20000);
+    if ($readySockets === false || $readySockets > 0) {
+        $lockObserved = false;
+        break;
+    }
+}
+$lockPdo->commit();
+[$weightConcurrentAssessmentStatus, $weightConcurrentAssessmentBody] = integration_http_async_read($lockSocket);
+expect_true($lockObserved, 'Assessment save waits on the locked existing grading configuration');
+expect_same(200, $weightConcurrentAssessmentStatus, 'Assessment save completes after the grading configuration lock is released');
+$weightConcurrentAssessmentId = (int) ($weightConcurrentAssessmentBody['assessments'][0]['id'] ?? 0);
+expect_true($weightConcurrentAssessmentId > 0, 'Concurrent period assessment save returns a database ID');
+
+[$weightPeriodComputeStatus, $weightPeriodComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $weightClassId,
+]);
+expect_same(422, $weightPeriodComputeStatus, 'Period grade computation is rejected before any recomputation is attempted');
+expect_same('GRADING_PERIOD_COMPUTATION_PENDING', $weightPeriodComputeBody['code'] ?? null, 'Period computation rejection uses an explicit pending-phase code');
+$weightPersistedPercentageStmt = $pdo->prepare('SELECT final_percentage FROM enrollments WHERE enrollment_id = ?');
+$weightPersistedPercentageStmt->execute([$weightEnrollmentA]);
+expect_same('68.00', (string) $weightPersistedPercentageStmt->fetchColumn(), 'Rejected period computation preserves the prior persisted grade');
+$pdo->prepare("UPDATE class_sections SET status = 'Archived' WHERE cs_id = ?")->execute([$weightClassId]);
+[$weightArchivedPeriodComputeStatus, $weightArchivedPeriodComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, []);
+expect_same(422, $weightArchivedPeriodComputeStatus, 'Batch period computation rejects archived period offerings before writes');
+expect_same('GRADING_PERIOD_COMPUTATION_PENDING', $weightArchivedPeriodComputeBody['code'] ?? null, 'Archived period batch rejection remains explicit');
+$weightPersistedPercentageStmt->execute([$weightEnrollmentA]);
+expect_same('68.00', (string) $weightPersistedPercentageStmt->fetchColumn(), 'Archived period batch rejection preserves all prior grades');
+
 $weightAuditStmt = $pdo->prepare(
     "SELECT actor_user_id, actor_display_name, target_type, target_id,
             before_state_json, after_state_json, previous_event_mac, event_mac
@@ -2811,7 +3073,7 @@ expect_true((string) ($weightAudit['after_state_json'] ?? '') !== '', 'Grade-wei
 expect_true(strlen((string) ($weightAudit['previous_event_mac'] ?? '')) > 0 && strlen((string) ($weightAudit['event_mac'] ?? '')) > 0, 'Grade-weight audit remains HMAC chained');
 
 $pdo->beginTransaction();
-$weightAllAssessmentIds = [$weightApiAssessmentId, $weightQuizTwoId, $weightExamId, $weightLegacyAssessmentId, $weightSharedAssessmentId];
+$weightAllAssessmentIds = [$weightApiAssessmentId, $weightQuizTwoId, $weightExamId, $weightLegacyAssessmentId, $weightSharedAssessmentId, $weightLegacyFinalAssessmentId, $weightConcurrentAssessmentId];
 $weightAssessmentPlaceholders = implode(',', array_fill(0, count($weightAllAssessmentIds), '?'));
 $pdo->prepare("DELETE FROM assessment_scores WHERE assessment_id IN ({$weightAssessmentPlaceholders})")->execute($weightAllAssessmentIds);
 $pdo->prepare("DELETE FROM assessments WHERE assessment_id IN ({$weightAssessmentPlaceholders})")->execute($weightAllAssessmentIds);

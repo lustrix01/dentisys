@@ -614,6 +614,78 @@ function faculty_grading_normalize_categories(mixed $value): array
     return $categories;
 }
 
+function faculty_grading_default_period_template(): array
+{
+    return [
+        'schemaMode' => 'periods',
+        'termRatio' => [
+            'midterm' => 40,
+            'final' => 60,
+        ],
+        'midtermCategories' => [
+            ['name' => 'Quiz', 'weight' => 25, 'sortOrder' => 1],
+            ['name' => 'Activity', 'weight' => 25, 'sortOrder' => 2],
+            ['name' => 'Midterm Exam', 'weight' => 40, 'sortOrder' => 3],
+            ['name' => 'Attendance', 'weight' => 10, 'sortOrder' => 4],
+        ],
+        'finalCategories' => [
+            ['name' => 'Quiz', 'weight' => 20, 'sortOrder' => 1],
+            ['name' => 'Activity', 'weight' => 20, 'sortOrder' => 2],
+            ['name' => 'Laboratory', 'weight' => 20, 'sortOrder' => 3],
+            ['name' => 'Final Exam', 'weight' => 30, 'sortOrder' => 4],
+            ['name' => 'Attendance', 'weight' => 10, 'sortOrder' => 5],
+        ],
+    ];
+}
+
+function faculty_grading_normalize_term_ratio(mixed $value): array
+{
+    if ($value instanceof \stdClass) {
+        $value = get_object_vars($value);
+    }
+    if (!is_array($value)) {
+        throw new FacultyGradingConfigurationException('termRatio with midterm and final values is required.');
+    }
+    $midtermBasisPoints = faculty_grading_percentage_basis_points($value['midterm'] ?? null);
+    $finalBasisPoints = faculty_grading_percentage_basis_points($value['final'] ?? null);
+    if ($midtermBasisPoints === null || $finalBasisPoints === null || $midtermBasisPoints + $finalBasisPoints !== 1000000) {
+        throw new FacultyGradingConfigurationException('Term contribution weights must be between 0 and 100 and total exactly 100%.');
+    }
+    return [
+        'midterm' => number_format($midtermBasisPoints / 10000, 4, '.', ''),
+        'final' => number_format($finalBasisPoints / 10000, 4, '.', ''),
+        'midtermBasisPoints' => $midtermBasisPoints,
+        'finalBasisPoints' => $finalBasisPoints,
+    ];
+}
+
+function faculty_grading_percentage_basis_points(mixed $value): ?int
+{
+    if ($value === null || $value === '') {
+        return null;
+    }
+    if (!is_int($value) && !is_float($value) && !is_string($value)) {
+        return null;
+    }
+    $text = is_int($value) || is_float($value) ? (string) $value : trim((string) $value);
+    if (!preg_match('/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,4})?$/', $text)) {
+        return null;
+    }
+    [$whole, $fraction] = array_pad(explode('.', $text, 2), 2, '');
+    $basisPoints = ((int) $whole * 10000) + (int) str_pad($fraction, 4, '0');
+    return $basisPoints >= 0 && $basisPoints <= 1000000 ? $basisPoints : null;
+}
+
+function faculty_grading_normalize_period_categories(mixed $value, string $period): array
+{
+    $categories = faculty_grading_normalize_categories($value);
+    foreach ($categories as &$category) {
+        $category['gradingPeriod'] = $period;
+    }
+    unset($category);
+    return $categories;
+}
+
 function faculty_grading_require_offering(PDO $pdo, int $facultyId, mixed $courseValue, mixed $semesterValue, mixed $schoolYearValue): array
 {
     $courseId = faculty_grading_positive_id($courseValue, 'courseId');
@@ -654,6 +726,7 @@ function faculty_grading_require_offering(PDO $pdo, int $facultyId, mixed $cours
 function faculty_grading_find_config(PDO $pdo, array $offering, bool $forUpdate = false): ?array
 {
     $sql = "SELECT config_id, faculty_user_id, course_id, semester, school_year, version,
+                   schema_mode, term_midterm_weight, term_final_weight,
                    created_at, updated_at, updated_by_user_id
               FROM grading_configs
              WHERE faculty_user_id = ? AND course_id = ? AND semester = ? AND school_year = ?";
@@ -698,38 +771,67 @@ function faculty_grading_offering_for_class(PDO $pdo, int $facultyId, int $csId)
 
 function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): array
 {
-    $stmt = $pdo->prepare(
-        "SELECT gc.category_id, gc.name, gc.weight, gc.sort_order,
-                EXISTS (
-                    SELECT 1
-                      FROM assessments a
-                      JOIN class_sections cs ON cs.cs_id = a.cs_id
-                     WHERE a.grading_category_id = gc.category_id
-                       AND cs.instructor_user_id = ?
-                       AND cs.course_id = ?
-                       AND UPPER(cs.semester) = ?
-                       AND UPPER(cs.school_year) = ?
-                ) AS in_use
-           FROM grading_categories gc
-          WHERE gc.config_id = ?
-          ORDER BY gc.sort_order, gc.category_id"
-    );
-    $stmt->execute([
-        $offering['facultyUserId'],
-        $offering['courseId'],
-        $offering['semester'],
-        $offering['schoolYear'],
-        (int) $configRow['config_id'],
-    ]);
+    $schemaMode = (string) ($configRow['schema_mode'] ?? 'overall');
+    if ($schemaMode === 'periods') {
+        $stmt = $pdo->prepare(
+            "SELECT gcp.category_id, gcp.name, gcp.weight, gcp.sort_order, gcp.grading_period,
+                    EXISTS (
+                        SELECT 1
+                          FROM assessments a
+                          JOIN class_sections cs ON cs.cs_id = a.cs_id
+                         WHERE a.grading_category_id = gcp.category_id
+                           AND a.grading_period = gcp.grading_period
+                           AND cs.instructor_user_id = ?
+                           AND cs.course_id = ?
+                           AND UPPER(cs.semester) = ?
+                           AND UPPER(cs.school_year) = ?
+                    ) AS in_use
+               FROM grading_category_periods gcp
+              WHERE gcp.config_id = ?
+              ORDER BY gcp.grading_period, gcp.sort_order, gcp.category_period_id"
+        );
+        $stmt->execute([
+            $offering['facultyUserId'],
+            $offering['courseId'],
+            $offering['semester'],
+            $offering['schoolYear'],
+            (int) $configRow['config_id'],
+        ]);
+    } else {
+        $stmt = $pdo->prepare(
+            "SELECT gc.category_id, gc.name, gc.weight, gc.sort_order, gc.grading_period,
+                    EXISTS (
+                        SELECT 1
+                          FROM assessments a
+                          JOIN class_sections cs ON cs.cs_id = a.cs_id
+                         WHERE a.grading_category_id = gc.category_id
+                           AND cs.instructor_user_id = ?
+                           AND cs.course_id = ?
+                           AND UPPER(cs.semester) = ?
+                           AND UPPER(cs.school_year) = ?
+                    ) AS in_use
+               FROM grading_categories gc
+              WHERE gc.config_id = ?
+              ORDER BY gc.sort_order, gc.category_id"
+        );
+        $stmt->execute([
+            $offering['facultyUserId'],
+            $offering['courseId'],
+            $offering['semester'],
+            $offering['schoolYear'],
+            (int) $configRow['config_id'],
+        ]);
+    }
     $categories = array_map(static fn(array $row): array => [
         'id' => (int) $row['category_id'],
         'name' => $row['name'],
         'weight' => (float) $row['weight'],
         'sortOrder' => (int) $row['sort_order'],
+        'gradingPeriod' => $row['grading_period'] !== null ? (string) $row['grading_period'] : null,
         'inUse' => filter_var($row['in_use'], FILTER_VALIDATE_BOOLEAN),
     ], $stmt->fetchAll(PDO::FETCH_ASSOC));
 
-    return [
+    $snapshot = [
         'id' => (string) $configRow['config_id'],
         'course' => [
             'id' => (int) $offering['courseId'],
@@ -740,14 +842,34 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
         'schoolYear' => $offering['schoolYear'],
         'version' => (int) $configRow['version'],
         'categories' => $categories,
+        'schemaMode' => $schemaMode,
     ];
+
+    if ($schemaMode === 'periods') {
+        $snapshot['termRatio'] = [
+            'midterm' => (float) $configRow['term_midterm_weight'],
+            'final' => (float) $configRow['term_final_weight'],
+        ];
+        $snapshot['midtermCategories'] = array_values(array_filter(
+            $categories,
+            static fn(array $category): bool => $category['gradingPeriod'] === null || $category['gradingPeriod'] === 'Midterm'
+        ));
+        $snapshot['finalCategories'] = array_values(array_filter(
+            $categories,
+            static fn(array $category): bool => $category['gradingPeriod'] === null || $category['gradingPeriod'] === 'Final'
+        ));
+    }
+
+    return $snapshot;
 }
 
 function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, array $categories): array
 {
     $categoryIndexesByName = [];
     foreach ($categories as $index => $category) {
-        $categoryIndexesByName[faculty_grading_category_name_key($category['name'])] = $index;
+        $period = $category['gradingPeriod'] ?? null;
+        $key = ($period === null ? '*' : $period) . ':' . faculty_grading_category_name_key($category['name']);
+        $categoryIndexesByName[$key] = $index;
     }
 
     // Lock the offering sections before inspecting assessments. New assessment
@@ -772,7 +894,7 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
     ]);
 
     $assessmentStmt = $pdo->prepare(
-        "SELECT a.assessment_id, a.title, a.type
+        "SELECT a.assessment_id, a.title, a.type, a.grading_period
            FROM assessments a
            JOIN class_sections cs ON cs.cs_id = a.cs_id
           WHERE cs.instructor_user_id = ?
@@ -796,7 +918,10 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
     $unmatched = [];
     foreach ($assessmentStmt->fetchAll(PDO::FETCH_ASSOC) as $assessment) {
         $legacyType = (string) ($assessment['type'] ?? '');
-        $categoryIndex = $categoryIndexesByName[faculty_grading_category_name_key($legacyType)] ?? null;
+        $legacyPeriod = (string) ($assessment['grading_period'] ?? '');
+        $categoryIndex = $categoryIndexesByName[$legacyPeriod . ':' . faculty_grading_category_name_key($legacyType)]
+            ?? $categoryIndexesByName['*:' . faculty_grading_category_name_key($legacyType)]
+            ?? null;
         if ($categoryIndex === null) {
             $unmatched[] = [
                 'assessmentId' => (int) $assessment['assessment_id'],
@@ -858,6 +983,21 @@ function faculty_grading_audit_state(array $snapshot): array
         $category['weight'] = number_format((float) $category['weight'], 4, '.', '');
         return $category;
     }, $snapshot['categories'] ?? []);
+    if (isset($auditState['termRatio']) && is_array($auditState['termRatio'])) {
+        foreach ($auditState['termRatio'] as $key => $value) {
+            $auditState['termRatio'][$key] = number_format((float) $value, 4, '.', '');
+        }
+    }
+    foreach (['midtermCategories', 'finalCategories'] as $periodKey) {
+        if (isset($auditState[$periodKey]) && is_array($auditState[$periodKey])) {
+            $auditState[$periodKey] = array_map(static function (array $category): array {
+                if (isset($category['weight'])) {
+                    $category['weight'] = number_format((float) $category['weight'], 4, '.', '');
+                }
+                return $category;
+            }, $auditState[$periodKey]);
+        }
+    }
     return $auditState;
 }
 
@@ -875,10 +1015,14 @@ function handle_faculty_grading_config_get(): void
             $_GET['schoolYear'] ?? null,
         );
         $configRow = faculty_grading_find_config($pdo, $offering);
-        json_response([
+        $response = [
             'status' => 'ok',
             'configuration' => $configRow ? faculty_grading_snapshot($pdo, $offering, $configRow) : null,
-        ], 200);
+        ];
+        if ($configRow === null) {
+            $response['defaults'] = faculty_grading_default_period_template();
+        }
+        json_response($response, 200);
     } catch (FacultyGradingConfigurationException $e) {
         faculty_grading_configuration_error($e);
     } catch (\Throwable $e) {
@@ -914,7 +1058,24 @@ function handle_faculty_grading_config_save(): void
             $data['semester'] ?? null,
             $data['schoolYear'] ?? null,
         );
-        $categories = faculty_grading_normalize_categories($data['categories'] ?? null);
+        $hasPeriodPayload = array_key_exists('midtermCategories', $data) || array_key_exists('finalCategories', $data);
+        $schemaMode = (string) ($data['schemaMode'] ?? ($hasPeriodPayload ? 'periods' : 'overall'));
+        if (!in_array($schemaMode, ['overall', 'periods'], true)) {
+            throw new FacultyGradingConfigurationException('schemaMode must be overall or periods.');
+        }
+        $termRatio = null;
+        if ($schemaMode === 'periods') {
+            $termRatio = faculty_grading_normalize_term_ratio($data['termRatio'] ?? null);
+            $midtermCategories = faculty_grading_normalize_period_categories($data['midtermCategories'] ?? null, 'Midterm');
+            $finalCategories = faculty_grading_normalize_period_categories($data['finalCategories'] ?? null, 'Final');
+            $categories = array_merge($midtermCategories, $finalCategories);
+        } else {
+            $categories = faculty_grading_normalize_categories($data['categories'] ?? null);
+            foreach ($categories as &$category) {
+                $category['gradingPeriod'] = null;
+            }
+            unset($category);
+        }
         $requestedVersion = null;
         if (array_key_exists('version', $data) && $data['version'] !== null && $data['version'] !== '') {
             $requestedVersion = faculty_grading_version($data['version']);
@@ -932,6 +1093,24 @@ function handle_faculty_grading_config_save(): void
                     'GRADING_CONFIGURATION_VERSION_CONFLICT'
                 );
             }
+            $existingSchemaMode = (string) ($existing['schema_mode'] ?? 'overall');
+            if ($existingSchemaMode !== $schemaMode) {
+                if ($existingSchemaMode === 'overall' && $schemaMode === 'periods') {
+                    if (($data['convertFromOverall'] ?? false) !== true) {
+                        throw new FacultyGradingConfigurationException(
+                            'Converting an overall configuration to period categories requires explicit confirmation.',
+                            409,
+                            'GRADING_PERIOD_CONVERSION_REQUIRED'
+                        );
+                    }
+                } else {
+                    throw new FacultyGradingConfigurationException(
+                        'An existing period configuration cannot be changed back to overall categories.',
+                        409,
+                        'GRADING_SCHEMA_MODE_CONFLICT'
+                    );
+                }
+            }
             $beforeState = faculty_grading_snapshot($pdo, $offering, $existing);
         } elseif ($requestedVersion !== null && $requestedVersion !== 0) {
             throw new FacultyGradingConfigurationException(
@@ -948,17 +1127,22 @@ function handle_faculty_grading_config_save(): void
         if ($existing === null) {
             $insertConfig = $pdo->prepare(
                 "INSERT INTO grading_configs
-                    (faculty_user_id, course_id, semester, school_year, version, updated_by_user_id)
-                 VALUES (?, ?, ?, ?, 1, ?)
+                    (faculty_user_id, course_id, semester, school_year, version,
+                     schema_mode, term_midterm_weight, term_final_weight, updated_by_user_id)
+                 VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
                  ON CONFLICT (faculty_user_id, course_id, semester, school_year) DO NOTHING
                  RETURNING config_id, faculty_user_id, course_id, semester, school_year,
-                           version, created_at, updated_at, updated_by_user_id"
+                           version, schema_mode, term_midterm_weight, term_final_weight,
+                           created_at, updated_at, updated_by_user_id"
             );
             $insertConfig->execute([
                 $offering['facultyUserId'],
                 $offering['courseId'],
                 $offering['semester'],
                 $offering['schoolYear'],
+                $schemaMode,
+                $termRatio['midterm'] ?? null,
+                $termRatio['final'] ?? null,
                 $authCtx['user_id'],
             ]);
             $existing = $insertConfig->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -972,17 +1156,51 @@ function handle_faculty_grading_config_save(): void
         }
 
         $configId = (int) $existing['config_id'];
-        $existingCategoryStmt = $pdo->prepare('SELECT category_id FROM grading_categories WHERE config_id = ?');
+        $existingCategoryStmt = $pdo->prepare('SELECT category_id, grading_period FROM grading_categories WHERE config_id = ?');
         $existingCategoryStmt->execute([$configId]);
-        $existingCategoryIds = array_map('intval', $existingCategoryStmt->fetchAll(PDO::FETCH_COLUMN));
-        $incomingCategoryIds = array_values(array_filter(
-            array_map(static fn(array $category): ?int => $category['id'], $categories),
-            static fn(?int $categoryId): bool => $categoryId !== null
-        ));
+        $existingCategoryRows = [];
+        foreach ($existingCategoryStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $existingCategoryRows[(int) $row['category_id']] = [
+                'gradingPeriod' => $row['grading_period'] !== null ? (string) $row['grading_period'] : null,
+            ];
+        }
+        $existingCategoryIds = array_keys($existingCategoryRows);
+        $incomingCategoryIds = [];
+        $categoriesForSave = [];
+        $incomingById = [];
+        foreach ($categories as $category) {
+            if ($category['id'] === null) {
+                $categoriesForSave[] = $category;
+                continue;
+            }
+            $categoryId = (int) $category['id'];
+            if (isset($incomingById[$categoryId])) {
+                continue;
+            }
+            $incomingById[$categoryId] = $category;
+            $categoriesForSave[] = $category;
+            $incomingCategoryIds[] = $categoryId;
+        }
         $existingCategoryIdSet = array_fill_keys($existingCategoryIds, true);
         foreach ($incomingCategoryIds as $categoryId) {
             if (!isset($existingCategoryIdSet[$categoryId])) {
                 throw new FacultyGradingConfigurationException('Category identifier does not belong to this configuration.');
+            }
+        }
+
+        foreach ($categoriesForSave as $category) {
+            if ($category['id'] === null) {
+                continue;
+            }
+            $existingPeriod = $existingCategoryRows[(int) $category['id']]['gradingPeriod'];
+            if ($schemaMode === 'periods'
+                && $existingPeriod !== null
+                && $existingPeriod !== $category['gradingPeriod']) {
+                throw new FacultyGradingConfigurationException(
+                    'A period category can only be edited in its own grading period.',
+                    422,
+                    'GRADING_CATEGORY_PERIOD_MAPPING_INVALID'
+                );
             }
         }
 
@@ -1012,15 +1230,21 @@ function handle_faculty_grading_config_save(): void
                     'GRADING_CATEGORY_IN_USE'
                 );
             }
+            if ($schemaMode === 'periods') {
+                $deleteRemovedMemberships = $pdo->prepare(
+                    "DELETE FROM grading_category_periods WHERE config_id = ? AND category_id IN ({$placeholders})"
+                );
+                $deleteRemovedMemberships->execute(array_merge([$configId], $removedCategoryIds));
+            }
             $deleteCategory = $pdo->prepare("DELETE FROM grading_categories WHERE config_id = ? AND category_id IN ({$placeholders})");
             $deleteCategory->execute(array_merge([$configId], $removedCategoryIds));
         }
 
-        if ($existingCategoryIds !== []) {
+        if ($existingCategoryIds !== [] && $schemaMode !== 'periods') {
             $temporaryName = $pdo->prepare(
                 "UPDATE grading_categories SET name = ? WHERE config_id = ? AND category_id = ?"
             );
-            foreach ($categories as $category) {
+            foreach ($categoriesForSave as $category) {
                 if ($category['id'] !== null) {
                     $temporaryName->execute([
                         '__grading_pending_' . $category['id'],
@@ -1032,19 +1256,31 @@ function handle_faculty_grading_config_save(): void
         }
 
         $categoryIds = [];
+        $insertedCategoryIds = [];
         $insertCategory = $pdo->prepare(
-            "INSERT INTO grading_categories (config_id, name, weight, sort_order)
-             VALUES (?, ?, ?, ?) RETURNING category_id"
+            "INSERT INTO grading_categories (config_id, name, weight, sort_order, grading_period)
+             VALUES (?, ?, ?, ?, ?) RETURNING category_id"
         );
         $updateCategory = $pdo->prepare(
             "UPDATE grading_categories
                 SET name = ?, weight = ?, sort_order = ?
               WHERE config_id = ? AND category_id = ?"
         );
-        foreach ($categories as $category) {
+        foreach ($categoriesForSave as $category) {
             if ($category['id'] === null) {
-                $insertCategory->execute([$configId, $category['name'], $category['weight'], $category['sortOrder']]);
+                $insertCategory->execute([
+                    $configId,
+                    $schemaMode === 'periods'
+                        ? '__grading_period_category_' . $configId . '_' . (count($insertedCategoryIds) + 1)
+                        : $category['name'],
+                    $category['weight'],
+                    $category['sortOrder'],
+                    null,
+                ]);
                 $categoryIds[] = (int) $insertCategory->fetchColumn();
+                $insertedCategoryIds[] = $categoryIds[array_key_last($categoryIds)];
+            } elseif ($schemaMode === 'periods') {
+                $categoryIds[] = $category['id'];
             } else {
                 $updateCategory->execute([
                     $category['name'],
@@ -1060,6 +1296,163 @@ function handle_faculty_grading_config_save(): void
             }
         }
 
+        if ($schemaMode === 'periods') {
+            $existingMembershipStmt = $pdo->prepare(
+                'SELECT category_period_id, category_id, grading_period FROM grading_category_periods WHERE config_id = ?'
+            );
+            $existingMembershipStmt->execute([$configId]);
+            $existingMemberships = [];
+            foreach ($existingMembershipStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $existingMemberships[(int) $row['category_id'] . ':' . $row['grading_period']] = [
+                    'categoryPeriodId' => (int) $row['category_period_id'],
+                    'categoryId' => (int) $row['category_id'],
+                    'gradingPeriod' => (string) $row['grading_period'],
+                ];
+            }
+
+            $incomingMemberships = [];
+            $newCategoryIndex = 0;
+            foreach ($categories as $category) {
+                $categoryId = $category['id'] !== null
+                    ? (int) $category['id']
+                    : (int) $insertedCategoryIds[$newCategoryIndex++];
+                $membershipKey = $categoryId . ':' . $category['gradingPeriod'];
+                $incomingMemberships[$membershipKey] = [
+                    'categoryId' => $categoryId,
+                    'gradingPeriod' => $category['gradingPeriod'],
+                    'name' => $category['name'],
+                    'weight' => $category['weight'],
+                    'sortOrder' => $category['sortOrder'],
+                ];
+            }
+
+            if (!$isCreate && (string) ($existing['schema_mode'] ?? 'overall') === 'overall') {
+                $assessmentRefsStmt = $pdo->prepare(
+                    "SELECT a.assessment_id, a.grading_category_id, a.grading_period, a.status
+                       FROM assessments a
+                       JOIN class_sections cs ON cs.cs_id = a.cs_id
+                      WHERE (a.grading_category_id IS NOT NULL OR LOWER(COALESCE(a.status, '')) = 'active')
+                        AND cs.instructor_user_id = ?
+                        AND cs.course_id = ?
+                        AND UPPER(cs.semester) = ?
+                        AND UPPER(cs.school_year) = ?"
+                );
+                $assessmentRefsStmt->execute([
+                    $offering['facultyUserId'],
+                    $offering['courseId'],
+                    $offering['semester'],
+                    $offering['schoolYear'],
+                ]);
+                $missingAssessmentRefs = [];
+                foreach ($assessmentRefsStmt->fetchAll(PDO::FETCH_ASSOC) as $assessmentRef) {
+                    $categoryId = $assessmentRef['grading_category_id'] !== null
+                        ? (int) $assessmentRef['grading_category_id']
+                        : null;
+                    if ($categoryId === null) {
+                        $missingAssessmentRefs[] = [
+                            'assessmentId' => (int) $assessmentRef['assessment_id'],
+                            'categoryId' => null,
+                            'gradingPeriod' => (string) ($assessmentRef['grading_period'] ?? ''),
+                            'status' => (string) ($assessmentRef['status'] ?? ''),
+                        ];
+                        continue;
+                    }
+                    $membershipKey = $categoryId . ':' . (string) $assessmentRef['grading_period'];
+                    if (!isset($incomingMemberships[$membershipKey])) {
+                        $missingAssessmentRefs[] = [
+                            'assessmentId' => (int) $assessmentRef['assessment_id'],
+                            'categoryId' => $categoryId,
+                            'gradingPeriod' => (string) $assessmentRef['grading_period'],
+                            'status' => (string) ($assessmentRef['status'] ?? ''),
+                        ];
+                    }
+                }
+                if ($missingAssessmentRefs !== []) {
+                    throw new FacultyGradingConfigurationException(
+                        'Every existing assessment must have a category mapping for its grading period during conversion.',
+                        422,
+                        'GRADING_CATEGORY_PERIOD_MAPPING_REQUIRED',
+                        ['assessmentReferences' => $missingAssessmentRefs]
+                    );
+                }
+            }
+
+            $removedMemberships = array_diff_key($existingMemberships, $incomingMemberships);
+            foreach ($removedMemberships as $removedMembership) {
+                $membershipInUseStmt = $pdo->prepare(
+                    "SELECT COUNT(*)
+                       FROM assessments a
+                       JOIN class_sections cs ON cs.cs_id = a.cs_id
+                      WHERE a.grading_category_id = ?
+                        AND a.grading_period = ?
+                        AND cs.instructor_user_id = ?
+                        AND cs.course_id = ?
+                        AND UPPER(cs.semester) = ?
+                        AND UPPER(cs.school_year) = ?"
+                );
+                $membershipInUseStmt->execute([
+                    $removedMembership['categoryId'],
+                    $removedMembership['gradingPeriod'],
+                    $offering['facultyUserId'],
+                    $offering['courseId'],
+                    $offering['semester'],
+                    $offering['schoolYear'],
+                ]);
+                if ((int) $membershipInUseStmt->fetchColumn() > 0) {
+                    throw new FacultyGradingConfigurationException(
+                        'A period grading category referenced by an assessment cannot be deleted.',
+                        409,
+                        'GRADING_CATEGORY_IN_USE'
+                    );
+                }
+            }
+
+            if ($existingMemberships !== []) {
+                $temporaryMembershipName = $pdo->prepare(
+                    'UPDATE grading_category_periods SET name = ? WHERE config_id = ? AND category_period_id = ?'
+                );
+                foreach ($existingMemberships as $existingMembership) {
+                    $temporaryMembershipName->execute([
+                        '__grading_period_pending_' . $existingMembership['categoryId'] . '_' . $existingMembership['gradingPeriod'],
+                        $configId,
+                        $existingMembership['categoryPeriodId'],
+                    ]);
+                }
+            }
+
+            $deleteMissingMembership = $pdo->prepare(
+                'DELETE FROM grading_category_periods WHERE config_id = ? AND category_id = ? AND grading_period = ?'
+            );
+            foreach ($removedMemberships as $removedMembership) {
+                $deleteMissingMembership->execute([
+                    $configId,
+                    $removedMembership['categoryId'],
+                    $removedMembership['gradingPeriod'],
+                ]);
+            }
+
+            $upsertMembership = $pdo->prepare(
+                "INSERT INTO grading_category_periods
+                    (config_id, category_id, grading_period, name, weight, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT (config_id, category_id, grading_period) DO UPDATE
+                 SET name = EXCLUDED.name,
+                     weight = EXCLUDED.weight,
+                     sort_order = EXCLUDED.sort_order,
+                     updated_at = CURRENT_TIMESTAMP(6)"
+            );
+            foreach ($incomingMemberships as $membership) {
+                $upsertMembership->execute([
+                    $configId,
+                    $membership['categoryId'],
+                    $membership['gradingPeriod'],
+                    $membership['name'],
+                    $membership['weight'],
+                    $membership['sortOrder'],
+                ]);
+            }
+        }
+
         if ($isCreate) {
             faculty_grading_apply_legacy_assessment_mappings($pdo, $legacyAssessmentMappings, $categoryIds);
         }
@@ -1067,11 +1460,20 @@ function handle_faculty_grading_config_save(): void
         $newVersion = $isCreate ? 1 : ((int) $existing['version'] + 1);
         $updateConfig = $pdo->prepare(
             "UPDATE grading_configs
-                SET version = ?, updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP(6)
+                SET version = ?, schema_mode = ?, term_midterm_weight = ?, term_final_weight = ?,
+                    updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP(6)
               WHERE config_id = ? AND version = ?"
         );
         $expectedVersion = $isCreate ? 1 : (int) $existing['version'];
-        $updateConfig->execute([$newVersion, $authCtx['user_id'], $configId, $expectedVersion]);
+        $updateConfig->execute([
+            $newVersion,
+            $schemaMode,
+            $termRatio['midterm'] ?? null,
+            $termRatio['final'] ?? null,
+            $authCtx['user_id'],
+            $configId,
+            $expectedVersion,
+        ]);
         if ($updateConfig->rowCount() !== 1) {
             throw new FacultyGradingConfigurationException(
                 'The grading configuration is stale. Reload it before saving.',
@@ -1304,7 +1706,7 @@ function handle_faculty_assessments_save(): void
                 }
             }
             $offering = faculty_grading_offering_for_class($pdo, (int) $authCtx['user_id'], $csId);
-            $gradingConfig = faculty_grading_find_config($pdo, $offering);
+            $gradingConfig = faculty_grading_find_config($pdo, $offering, true);
             $categoryWasSupplied = array_key_exists('gradingCategoryId', $item);
             $gradingCategoryId = $categoryWasSupplied
                 ? faculty_grading_category_id($item['gradingCategoryId'])
@@ -1321,12 +1723,36 @@ function handle_faculty_assessments_save(): void
                     return;
                 }
                 $categoryStmt = $pdo->prepare(
-                    'SELECT 1 FROM grading_categories WHERE config_id = ? AND category_id = ?'
+                    "SELECT gc.grading_period,
+                            EXISTS (
+                                SELECT 1
+                                  FROM grading_category_periods gcp
+                                 WHERE gcp.config_id = gc.config_id
+                                   AND gcp.category_id = gc.category_id
+                                   AND gcp.grading_period = ?
+                            ) AS period_membership
+                       FROM grading_categories gc
+                      WHERE gc.config_id = ? AND gc.category_id = ?"
                 );
-                $categoryStmt->execute([(int) $gradingConfig['config_id'], $gradingCategoryId]);
-                if (!$categoryStmt->fetchColumn()) {
+                $categoryStmt->execute([$period, (int) $gradingConfig['config_id'], $gradingCategoryId]);
+                $categoryRow = $categoryStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+                if ($categoryRow === null) {
                     $pdo->rollBack();
                     safe_error_response('Grading category does not belong to this course configuration.', 422);
+                    return;
+                }
+                $categoryPeriod = $categoryRow['grading_period'];
+                if (($gradingConfig['schema_mode'] ?? 'overall') === 'periods'
+                    && !filter_var($categoryRow['period_membership'], FILTER_VALIDATE_BOOLEAN)) {
+                    $pdo->rollBack();
+                    safe_error_response('Grading category does not belong to the assessment period.', 422);
+                    return;
+                }
+                if (($gradingConfig['schema_mode'] ?? 'overall') === 'periods'
+                    && $categoryPeriod !== null
+                    && (string) $categoryPeriod !== $period) {
+                    $pdo->rollBack();
+                    safe_error_response('Grading category does not belong to the assessment period.', 422);
                     return;
                 }
             } elseif (!$categoryWasSupplied && $gradingCategoryId === null) {
@@ -1636,6 +2062,31 @@ function handle_faculty_grades_compute(): void
         if ($classRef !== '' && $csId <= 0) {
             safe_error_response('Class is not assigned to this faculty member.', 403);
             return;
+        }
+
+        $periodConfigSql =
+            "SELECT 1
+               FROM grading_configs gc
+               JOIN class_sections cs ON cs.instructor_user_id = gc.faculty_user_id
+                                      AND cs.course_id = gc.course_id
+                                      AND UPPER(cs.semester) = gc.semester
+                                      AND UPPER(cs.school_year) = gc.school_year
+              WHERE gc.faculty_user_id = ?
+                AND gc.schema_mode = 'periods'";
+        $periodConfigParams = [(int) $authCtx['user_id']];
+        if ($csId > 0) {
+            $periodConfigSql .= ' AND cs.cs_id = ?';
+            $periodConfigParams[] = $csId;
+        }
+        $periodConfigSql .= ' LIMIT 1';
+        $periodConfigStmt = $pdo->prepare($periodConfigSql);
+        $periodConfigStmt->execute($periodConfigParams);
+        if ($periodConfigStmt->fetchColumn()) {
+            throw new FacultyGradingConfigurationException(
+                'Period grading computation is unavailable until period attribution and recomputation are enabled.',
+                422,
+                'GRADING_PERIOD_COMPUTATION_PENDING'
+            );
         }
 
         $settingsStmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults' LIMIT 1");

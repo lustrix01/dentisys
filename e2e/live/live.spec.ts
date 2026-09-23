@@ -571,13 +571,14 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   expect(activeClasses.length).toBeGreaterThan(0);
 
   // 3. Navigate to Grade Weights Editor
+  const initialConfigPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
+  );
   await page.goto('/grades?tab=components');
   await expect(page.locator('#course-offering-select')).toBeVisible();
 
   // 4. Wait for configuration to load
-  await page.waitForResponse(
-    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
-  );
+  await initialConfigPromise;
 
   // Check if categories already exist or if it's unconfigured
   await expect(
@@ -643,12 +644,13 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
 
   // 6. Hard reload with cleared localStorage to verify PostgreSQL persistence
   await page.evaluate(() => localStorage.clear());
+  const persistenceConfigPromise = page.waitForResponse(
+    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
+  );
   await page.reload();
 
   await expect(page.locator('#course-offering-select')).toBeVisible();
-  await page.waitForResponse(
-    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
-  );
+  await persistenceConfigPromise;
 
   const reloadedFirstName = await page.locator('input[placeholder*="Category name"]').nth(0).inputValue();
   expect(reloadedFirstName).toBe(updatedFirstName);
@@ -681,12 +683,12 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
 
   // 8. Hard reload with cleared localStorage to verify PostgreSQL persistence of reordered sortOrder
   await page.evaluate(() => localStorage.clear());
-  await page.reload();
-
-  await expect(page.locator('#course-offering-select')).toBeVisible();
   const reloadGetPromise = page.waitForResponse(
     response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
   );
+  await page.reload();
+
+  await expect(page.locator('#course-offering-select')).toBeVisible();
   const reloadGetRes = await reloadGetPromise;
   const reloadGetData = await reloadGetRes.json();
   expect(reloadGetData.configuration.categories[0].name).toBe(secondCatNameBefore);

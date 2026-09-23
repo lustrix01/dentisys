@@ -38,4 +38,27 @@ assert_faculty_grading(
     'Disabled transmutation preserves the raw percentage'
 );
 
+$periodDefaults = faculty_grading_default_period_template();
+assert_faculty_grading($periodDefaults['schemaMode'] === 'periods', 'Unconfigured grading defaults use period mode');
+assert_faculty_grading($periodDefaults['termRatio']['midterm'] === 40 && $periodDefaults['termRatio']['final'] === 60, 'Faculty default term ratio is 40/60');
+assert_faculty_grading(count($periodDefaults['midtermCategories']) === 4 && count($periodDefaults['finalCategories']) === 5, 'Faculty default period category templates are populated');
+assert_faculty_grading(faculty_grading_normalize_term_ratio(['midterm' => 40, 'final' => 60])['final'] === '60.0000', 'Term ratio normalizes to fixed precision');
+assert_faculty_grading(faculty_grading_normalize_period_categories([
+    ['name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1],
+], 'Midterm')[0]['gradingPeriod'] === 'Midterm', 'Period category normalization retains its period');
+
+try {
+    faculty_grading_normalize_term_ratio(['midterm' => 40, 'final' => 50]);
+    assert_faculty_grading(false, 'Term ratio rejects totals other than exactly 100%');
+} catch (FacultyGradingConfigurationException $e) {
+    assert_faculty_grading($e->getMessage() !== '', 'Term ratio rejects totals other than exactly 100%');
+}
+
+try {
+    faculty_grading_normalize_term_ratio(['midterm' => true, 'final' => 99]);
+    assert_faculty_grading(false, 'Term ratio rejects boolean scalar values');
+} catch (FacultyGradingConfigurationException $e) {
+    assert_faculty_grading($e->getMessage() !== '', 'Term ratio rejects boolean scalar values');
+}
+
 echo "ALL FACULTY GRADING TESTS PASSED\n";
