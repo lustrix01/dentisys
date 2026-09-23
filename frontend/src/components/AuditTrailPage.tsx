@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, AlertCircle, AlertTriangle, CheckCircle2, Download, FileText, Filter, RefreshCw, Search, ShieldCheck, SlidersHorizontal, XCircle } from 'lucide-react';
-import { auditForCurrentUser, AuditLog, AuditRole, AuditStatus } from '../services/auditService';
+import type { AuditLog, AuditRole, AuditStatus } from '../services/auditService';
 import { getAdminAuditLogsApi } from '../services/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
@@ -50,8 +50,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
     fetchLogs();
   }, [query, roleFilter, moduleFilter, statusFilter, date]);
 
-  const source = dbLogs.length > 0 ? dbLogs : auditForCurrentUser();
-  const logs = allLogs ? source : source.filter(log => log.userRole === role);
+  const logs = allLogs ? dbLogs : dbLogs.filter(log => log.userRole === role);
   const modules = Array.from(new Set(logs.map(log => log.module))).sort();
 
   const filtered = useMemo(() => logs.filter(log =>

@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 
 export const Profile: React.FC = () => {
   const { user } = useAuth();
@@ -256,6 +257,7 @@ export const Profile: React.FC = () => {
 
           {/* MFA Security & Account Credentials Card */}
           <MfaSettingsCard userEmail={studentEmail} roleName="Dental Student" />
+          <PasswordChangeCard />
 
         </div>
 

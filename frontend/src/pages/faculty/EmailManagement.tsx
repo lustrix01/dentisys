@@ -28,16 +28,36 @@ import {
 } from '../../services/authService';
 import { createStudentInvitation } from '../../services/apiClient';
 import { Student } from '../../types';
+import { getFacultyStudentsApi, getFacultyClassesApi } from '../../services/apiClient';
 
 type Tab = 'student_invites' | 'secretary' | 'history';
 
 const initialLogs: EmailLog[] = [];
 
 export const EmailManagement: React.FC = () => {
-  const { students = [] } = useApp();
   const { user } = useAuth();
 
-  const assignedClasses = ['Section 4-A', 'Section 4-B'];
+  const [dbStudents, setDbStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      getFacultyStudentsApi().catch(() => []),
+      getFacultyClassesApi().catch(() => ({ status: 'success', classes: [] })),
+    ]).then(([stRes, clsRes]) => {
+      if (Array.isArray(stRes)) {
+        setDbStudents(stRes as unknown as Student[]);
+      }
+      if (clsRes?.classes && Array.isArray(clsRes.classes)) {
+        setClasses(clsRes.classes);
+      }
+    });
+  }, []);
+
+  const assignedClasses = useMemo(() => {
+    const list = Array.from(new Set(classes.map(c => c.block || c.csName).filter(Boolean)));
+    return list.length > 0 ? list : ['Section 4-A', 'Section 4-B'];
+  }, [classes]);
 
   const [tab, setTab] = useState<Tab>('student_invites');
   const [selected, setSelected] = useState<string[]>([]);
@@ -59,7 +79,7 @@ export const EmailManagement: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
-  const safeStudents = useMemo(() => students || [], [students]);
+  const safeStudents = useMemo(() => dbStudents || [], [dbStudents]);
 
   const loadSecretaryInvitations = async () => {
     try {
@@ -93,7 +113,7 @@ export const EmailManagement: React.FC = () => {
   useEffect(() => {
     void loadSecretaryInvitations();
     void fetchEmailLogs();
-  }, [students]);
+  }, [dbStudents]);
 
   // Filter students based on selected Class Section filter & search
   const filteredStudents = useMemo(() => {

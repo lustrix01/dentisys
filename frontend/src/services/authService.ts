@@ -55,9 +55,14 @@ const SECRETARY_INVITATIONS_KEY = 'dentisys_secretary_invitations';
 const EMAIL_LOGS_KEY = 'dentisys_email_logs';
 
 /**
- * Validates whether an email address belongs to the official Bicol University domain.
+ * Validates whether an email address belongs to an authorized institutional domain.
+ * If allowedDomains is provided and non-empty, checks against that list.
+ * Otherwise validates standard email format and relies on server-authoritative allowlists.
  */
-export const validateBicolUEmail = (email: string): { isValid: boolean; message: string } => {
+export const validateBicolUEmail = (
+  email: string,
+  allowedDomains?: string[]
+): { isValid: boolean; message: string } => {
   if (!email || !email.trim()) {
     return { isValid: false, message: 'Email address is required.' };
   }
@@ -69,16 +74,21 @@ export const validateBicolUEmail = (email: string): { isValid: boolean; message:
     return { isValid: false, message: 'Please enter a valid email format.' };
   }
 
-  const strictBicolURegex = /^[^\s@]+@bicol-u\.edu\.ph$/;
-  if (!strictBicolURegex.test(trimmedEmail)) {
-    return {
-      isValid: false,
-      message: 'Only official Bicol University email addresses (@bicol-u.edu.ph) are allowed.',
-    };
+  if (Array.isArray(allowedDomains) && allowedDomains.length > 0) {
+    const domain = trimmedEmail.split('@')[1];
+    const normalizedAllowed = allowedDomains.map(d => d.toLowerCase().replace(/^@/, ''));
+    if (!normalizedAllowed.includes(domain)) {
+      const display = normalizedAllowed.map(d => `@${d}`).join(', ');
+      return {
+        isValid: false,
+        message: `Only official institutional email addresses (${display}) are allowed.`,
+      };
+    }
   }
 
   return { isValid: true, message: '' };
 };
+
 
 /**
  * Validates whether a person's name contains only valid letters, spaces, hyphens, and apostrophes.

@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { getSecretaryProfileApi, updateSecretaryProfileApi } from '../../services/apiClient';
+import { validateBicolUEmail } from '../../services/authService';
 import { normalizePersonName } from '../../utils/nameNormalization';
 
 export const Profile: React.FC = () => {
@@ -58,8 +60,9 @@ export const Profile: React.FC = () => {
       return;
     }
 
-    if (!trimmedEmail.endsWith('@bicol-u.edu.ph')) {
-      setMessage({ type: 'error', text: 'Official Bicol University email address (@bicol-u.edu.ph) required.' });
+    const emailValidation = validateBicolUEmail(trimmedEmail);
+    if (!emailValidation.isValid) {
+      setMessage({ type: 'error', text: emailValidation.message || 'Valid institutional email address required (e.g. @bicol-u.edu.ph or configured allowlist domain).' });
       return;
     }
 
@@ -208,9 +211,16 @@ export const Profile: React.FC = () => {
                         type="email"
                         value={editEmail}
                         onChange={(e) => setEditEmail(e.target.value)}
+                        list="secretary-email-suggestions"
                         required
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
                       />
+                      <datalist id="secretary-email-suggestions">
+                        {editEmail && !editEmail.includes('@') && (
+                          <option value={`${editEmail}@bicol-u.edu.ph`} />
+                        )}
+                        <option value="secretary@bicol-u.edu.ph" />
+                      </datalist>
                     </div>
                   </div>
 
@@ -235,31 +245,25 @@ export const Profile: React.FC = () => {
         </div>
       )}
 
-      {/* Facial Biometric Registration & Data Privacy Audit Card */}
+      {/* Facial Biometric Information & Data Privacy Audit Card */}
       <Card className="p-6 space-y-4">
         <CardHeader className="p-0 border-b border-slate-100 dark:border-slate-800 pb-3">
           <CardTitle className="flex items-center gap-2 text-sm">
             <Camera className="w-4.5 h-4.5 text-blue-600" />
-            Facial Biometric Registration & Data Privacy Audit
+            Facial Biometric & Data Privacy Information
           </CardTitle>
         </CardHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <div>
-              <h4 className="font-bold text-slate-800 dark:text-slate-100">Face Biometric Status</h4>
+              <h4 className="font-bold text-slate-800 dark:text-slate-100">Secretary Attendance Operations</h4>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                {localStorage.getItem(`dentisys_face_registered_${profile.id || '1'}`) === 'true' 
-                  ? 'Registered and active for biometric verification' 
-                  : 'Biometric registration available'}
+                Class Secretaries supervise room attendance and manual overrides. Student self-service biometrics are managed under Student view.
               </p>
             </div>
-            <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-              localStorage.getItem(`dentisys_face_registered_${profile.id || '1'}`) === 'true'
-                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' 
-                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-            }`}>
-              {localStorage.getItem(`dentisys_face_registered_${profile.id || '1'}`) === 'true' ? 'Active ✓' : 'Pending'}
+            <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+              Role Scoped
             </span>
           </div>
 
@@ -269,11 +273,13 @@ export const Profile: React.FC = () => {
               <span>Data Privacy Act of 2012 (RA 10173) Compliance</span>
             </div>
             <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-[11px]">
-              Your consent record is retained for audit compliance. Facial biometric descriptors are processed strictly for attendance verification within DentiSys.
+              Your consent record is retained for audit compliance. Attendance records and manual overrides are cryptographically signed and immutable.
             </p>
           </div>
         </div>
       </Card>
+
+      <PasswordChangeCard />
 
       <MfaSettingsCard userEmail={editEmail || profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
     </div>

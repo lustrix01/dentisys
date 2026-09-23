@@ -17,12 +17,12 @@ import {
   Ban,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '../../components/Card';
-import { useApp } from '../../context/AppContext';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { DEVELOPMENT_LOCATION_FIXTURES } from '../../services/developmentProviders';
 import {
   getSecretaryActiveAttendanceSessionApi,
   getSecretaryDashboardKpisApi,
+  getSecretaryAttendanceApi,
   startSecretaryAttendanceSessionApi,
   endSecretaryAttendanceSessionApi,
   revokeSecretaryAttendanceSessionApi,
@@ -31,7 +31,6 @@ import {
 } from '../../services/apiClient';
 
 export const StartSession: React.FC = () => {
-  const { students, attendanceRecords } = useApp();
   const config = useRuntimeConfig();
   const simulationEnabled = config.providers.location.active === 'development-mock' && config.features.browser_attendance_prototype;
 
@@ -61,14 +60,11 @@ export const StartSession: React.FC = () => {
   const [requireGeo, setRequireGeo] = useState(true);
   const [geofenceRadius, setGeofenceRadius] = useState(200);
 
-  // Secretary GPS state (kept as prototype location fixture)
-  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number; address: string } | null>({
-    lat: 13.1436,
-    lng: 123.7438,
-    address: 'BU Dental Room Location Verified (13.1436°, 123.7438°)',
-  });
+  // Secretary GPS state (device location)
+  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [liveAttendanceRecords, setLiveAttendanceRecords] = useState<Array<{ id: string; status: string; date: string }>>([]);
 
   // Notifications
   const [notification, setNotification] = useState<{
@@ -101,9 +97,10 @@ export const StartSession: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [activeResult, kpisResult] = await Promise.all([
+      const [activeResult, kpisResult, attResult] = await Promise.all([
         getSecretaryActiveAttendanceSessionApi(),
         getSecretaryDashboardKpisApi(),
+        getSecretaryAttendanceApi().catch(() => ({ records: [] })),
       ]);
 
       if (kpisResult?.assignedClass) {
@@ -111,6 +108,10 @@ export const StartSession: React.FC = () => {
         if (kpisResult.assignedClass.classroomName && !customRoom) {
           setCustomRoom(kpisResult.assignedClass.classroomName);
         }
+      }
+
+      if (attResult?.records) {
+        setLiveAttendanceRecords(attResult.records);
       }
 
       if (activeResult?.activeSession && (activeResult.activeSession.status === 'active' || activeResult.activeSession.status === 'revoked')) {
@@ -155,21 +156,50 @@ export const StartSession: React.FC = () => {
   }, [activeSession]);
 
   const handleAcquireGps = () => {
-    if (!simulationEnabled) {
-      setGpsError('Development location simulation is disabled. Configure the explicit test flags to exercise this prototype.');
-      return;
-    }
     setIsLocating(true);
     setGpsError(null);
 
-    window.setTimeout(() => {
-      setGpsLocation({
-        lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
-        lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
-        address: 'BU Dental Room Location Verified (13.1436°, 123.7438°)',
-      });
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = Number(position.coords.latitude.toFixed(6));
+          const lng = Number(position.coords.longitude.toFixed(6));
+          const accuracy = Math.round(position.coords.accuracy);
+          setGpsLocation({
+            lat,
+            lng,
+            address: `Device Coordinates Acquired (${lat}°, ${lng}°) ±${accuracy}m`,
+          });
+          setIsLocating(false);
+        },
+        (err) => {
+          if (simulationEnabled) {
+            setGpsLocation({
+              lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
+              lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
+              address: 'Development Location Fixture (Simulated 13.1436°, 123.7438°)',
+            });
+            setGpsError(`Browser geolocation failed (${err.message}). Using development simulation fixture.`);
+          } else {
+            setGpsError(`Geolocation error: ${err.message}. Please allow location access in your browser.`);
+          }
+          setIsLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    } else {
+      if (simulationEnabled) {
+        setGpsLocation({
+          lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
+          lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
+          address: 'Development Location Fixture (Simulated 13.1436°, 123.7438°)',
+        });
+        setGpsError('Browser geolocation not supported. Using development simulation fixture.');
+      } else {
+        setGpsError('Geolocation is not supported by your browser.');
+      }
       setIsLocating(false);
-    }, 50);
+    }
   };
 
   const handleStartSession = async (e: React.FormEvent) => {
@@ -179,6 +209,14 @@ export const StartSession: React.FC = () => {
       setNotification({
         type: 'warning',
         message: 'No assigned class section found for your Secretary account.',
+      });
+      return;
+    }
+
+    if (requireGeo && !gpsLocation) {
+      setNotification({
+        type: 'warning',
+        message: 'Geofencing is enabled, but GPS coordinates have not been acquired. Please acquire device location before starting the session.',
       });
       return;
     }
@@ -345,12 +383,13 @@ export const StartSession: React.FC = () => {
   }
 
   // Live session student metrics (preserves student attendance counts)
+  const todayDateStr = activeSession?.sessionDate || new Date().toISOString().split('T')[0];
   const sessionRecords = activeSession 
-    ? attendanceRecords.filter(r => r.subjectCode === activeSession.courseCode)
+    ? liveAttendanceRecords.filter(r => r.date === todayDateStr)
     : [];
   const checkedInCount = sessionRecords.filter(r => r.status === 'present' || r.status === 'late').length;
-  const totalEnrolled = students.length || 24;
-  const attendanceRatePct = Math.round((checkedInCount / totalEnrolled) * 100) || 75;
+  const totalEnrolled = sessionRecords.length;
+  const attendanceRatePct = totalEnrolled > 0 ? Math.round((checkedInCount / totalEnrolled) * 100) : null;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
@@ -485,7 +524,9 @@ export const StartSession: React.FC = () => {
               <div className="flex flex-col sm:flex-row items-center gap-3 flex-shrink-0">
                 <div className="text-center sm:text-right bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Check-In Rate</span>
-                  <span className="text-xl font-extrabold text-slate-800 dark:text-slate-100">{checkedInCount} / {totalEnrolled} ({attendanceRatePct}%)</span>
+                  <span className="text-xl font-extrabold text-slate-800 dark:text-slate-100">
+                    {totalEnrolled > 0 ? `${checkedInCount} / ${totalEnrolled} (${attendanceRatePct}%)` : `${checkedInCount} Checked In`}
+                  </span>
                 </div>
 
                 <button

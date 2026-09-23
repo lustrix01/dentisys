@@ -3,6 +3,7 @@ import { Mail, ShieldCheck, UserCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 
 const unavailableCopy = 'Academic services are unavailable for real Student accounts until the authoritative Student APIs are enabled.';
 
@@ -97,6 +98,7 @@ export const RealStudentProfile: React.FC = () => (
       </div>
       <div className="lg:col-span-5 space-y-6">
         <MfaSettingsCard userEmail={undefined} roleName="Student" />
+        <PasswordChangeCard />
       </div>
     </div>
   </div>

@@ -241,6 +241,7 @@ function App() {
                   <Route path="/admin/audit" element={<Navigate to="/admin/audit-trail" replace />} />
                   <Route path="/admin/profile" element={<DeanProfile />} />
                   <Route path="/admin/settings" element={<DeanSettings />} />
+                  <Route path="/admin/rules" element={<Navigate to="/admin/settings" replace />} />
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['secretary']} />}>

@@ -68,8 +68,8 @@ export const Dashboard: React.FC = () => {
     s => s.email.toLowerCase() === user?.login_email.toLowerCase() || s.id === '1'
   ) || students[0];
 
-  const studentName = currentStudent?.name || user?.display_name || 'Dental Student';
-  const studentId = currentStudent?.studentId || '2023-BU-0142';
+  const studentName = user?.display_name || currentStudent?.name || 'Dental Student';
+  const studentId = user?.student?.student_number || currentStudent?.studentId || '—';
   const retentionThreshold = settings?.retentionThreshold || 2.5;
 
   const isFaceRegistered = localStorage.getItem(`dentisys_face_registered_${currentStudent?.id || '1'}`) === 'true';
@@ -82,9 +82,9 @@ export const Dashboard: React.FC = () => {
   const studentRecords = attendanceRecords.filter(r => r.studentId === currentStudent?.id);
   const totalLogs = studentRecords.length;
   const presentCount = studentRecords.filter(r => r.status === 'present' || r.status === 'late').length;
-  const overallAttendanceRate = totalLogs > 0 ? Math.round(((presentCount) / totalLogs) * 100) : 92;
+  const overallAttendanceRate = totalLogs > 0 ? Math.round(((presentCount) / totalLogs) * 100) : null;
 
-  const isLowAttendance = overallAttendanceRate < 85;
+  const isLowAttendance = overallAttendanceRate !== null && overallAttendanceRate < 85;
   const isAtRisk = failingSubjects.length > 0 || isLowAttendance;
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -235,7 +235,7 @@ export const Dashboard: React.FC = () => {
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
                 <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5">
-                  {overallAttendanceRate}%
+                  {overallAttendanceRate !== null ? `${overallAttendanceRate}%` : '—'}
                 </span>
               </div>
 
@@ -256,7 +256,7 @@ export const Dashboard: React.FC = () => {
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Clinical Hours</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
-                  140 / 160 <span className="text-[10px] font-normal text-slate-400">hrs</span>
+                  — <span className="text-[10px] font-normal text-slate-400">pending sync</span>
                 </span>
               </div>
             </div>

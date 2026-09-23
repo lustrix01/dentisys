@@ -23,6 +23,7 @@ import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { normalizeOptionalPersonName, normalizePersonName } from '../../utils/nameNormalization';
+import { validateBicolUEmail } from '../../services/authService';
 
 const getDefaultSubjectsForYear = (year: 1 | 2 | 3 | 4): EnrolledSubject[] => {
   const defaultComponents = { quizzes: 80, exams: 80, practicum: 80, attendance: 80 };
@@ -143,10 +144,9 @@ export const StudentManagement: React.FC = () => {
 
     const cleanEmail = formEmail.trim();
     if (cleanEmail) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-        errors.email = 'Invalid email address format.';
-      } else if (!cleanEmail.toLowerCase().endsWith('@bicol-u.edu.ph')) {
-        errors.email = 'Only official Bicol University email addresses (@bicol-u.edu.ph) are allowed.';
+      const emailValidation = validateBicolUEmail(cleanEmail);
+      if (!emailValidation.isValid) {
+        errors.email = emailValidation.message || 'Invalid institutional email address.';
       }
     }
 
@@ -614,9 +614,10 @@ export const StudentManagement: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">BU Email Address</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Institutional Email Address</label>
                   <input
                     type="email"
+                    list="student-email-suggestions"
                     placeholder="e.g. angela@bicol-u.edu.ph"
                     value={formEmail}
                     onChange={(e) => {
@@ -625,6 +626,12 @@ export const StudentManagement: React.FC = () => {
                     }}
                     className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.email ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
                   />
+                  <datalist id="student-email-suggestions">
+                    {formEmail && !formEmail.includes('@') && (
+                      <option value={`${formEmail.trim()}@bicol-u.edu.ph`} />
+                    )}
+                    <option value="@bicol-u.edu.ph" />
+                  </datalist>
                   {formErrors.email && <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">{formErrors.email}</p>}
                 </div>
 

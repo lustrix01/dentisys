@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  HelpCircle,
   Search,
   ShieldAlert,
   UserX,
@@ -16,7 +17,7 @@ import {
   overrideSecretaryAttendanceApi,
 } from '../../services/apiClient';
 
-type EditableStatus = 'present' | 'late' | 'absent';
+type EditableStatus = 'present' | 'late' | 'absent' | 'excused';
 type ApiRecord = Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['records'][number];
 
 const statusClasses: Record<string, string> = {
@@ -237,10 +238,31 @@ export const ManualAttendanceOverride: React.FC = () => {
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400 dark:border-slate-800">Select a record to correct.</div>
               )}
-              <div className="grid grid-cols-3 gap-2">
-                {(['present', 'late', 'absent'] as EditableStatus[]).map((nextStatus) => {
-                  const Icon = nextStatus === 'present' ? CheckCircle2 : nextStatus === 'late' ? Clock : UserX;
-                  return <button key={nextStatus} type="button" onClick={() => setStatus(nextStatus)} disabled={!selected} className={`min-h-20 rounded-xl border text-xs font-bold capitalize flex flex-col items-center justify-center gap-1.5 disabled:opacity-40 ${status === nextStatus ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-400' : 'border-slate-200 text-slate-500 dark:border-slate-800'}`}><Icon className="w-4 h-4" />{nextStatus}</button>;
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['present', 'late', 'absent', 'excused'] as EditableStatus[]).map((nextStatus) => {
+                  const Icon = nextStatus === 'present'
+                    ? CheckCircle2
+                    : nextStatus === 'late'
+                      ? Clock
+                      : nextStatus === 'absent'
+                        ? UserX
+                        : HelpCircle;
+                  return (
+                    <button
+                      key={nextStatus}
+                      type="button"
+                      onClick={() => setStatus(nextStatus)}
+                      disabled={!selected}
+                      className={`min-h-20 rounded-xl border text-xs font-bold capitalize flex flex-col items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer ${
+                        status === nextStatus
+                          ? 'border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-400'
+                          : 'border-slate-200 text-slate-500 dark:border-slate-800'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {nextStatus}
+                    </button>
+                  );
                 })}
               </div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide">

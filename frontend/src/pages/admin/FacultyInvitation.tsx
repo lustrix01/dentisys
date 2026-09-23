@@ -65,14 +65,21 @@ export const FacultyInvitation: React.FC = () => {
   const statusBadge = (status: string) => {
     const accepted = status === 'Accepted';
     const pending = status === 'Pending';
-    const Icon = accepted ? CheckCircle2 : pending ? Clock : AlertCircle;
+    const revoked = status === 'Revoked';
+    const expired = status === 'Expired';
+    const Icon = accepted ? CheckCircle2 : pending ? Clock : revoked ? AlertCircle : Clock;
     const style = accepted
       ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
       : pending
         ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
-        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+        : revoked
+          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+          : expired
+            ? 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
     return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${style}`}><Icon className="h-3 w-3" />{status}</span>;
   };
+
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12 animate-fade-in">
@@ -104,7 +111,18 @@ export const FacultyInvitation: React.FC = () => {
           </label>
           <label className="space-y-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-5">
             Institutional email
-            <input required type="email" value={email} onChange={event => setEmail(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-900" placeholder="faculty@institution.edu" />
+            <input
+              required
+              type="email"
+              list="admin-faculty-email-domains"
+              value={email}
+              onChange={event => setEmail(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
+              placeholder="faculty@bicol-u.edu.ph"
+            />
+            <datalist id="admin-faculty-email-domains">
+              <option value={`${email.split('@')[0]}@bicol-u.edu.ph`} />
+            </datalist>
           </label>
           <div className="flex items-end sm:col-span-2">
             <button type="submit" disabled={sending} className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-xs font-bold text-white shadow-md disabled:opacity-50">

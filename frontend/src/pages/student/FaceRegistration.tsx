@@ -25,10 +25,11 @@ import {
   submitBiometricEnrollment,
   revokeStudentBiometricProfile,
 } from '../../services/apiClient';
-import type {
-  StudentBiometricProfile,
-  LivenessChallengeResponse,
-  LivenessAction,
+import {
+  type StudentBiometricProfile,
+  type LivenessChallengeResponse,
+  type LivenessAction,
+  isAuthoritativeActiveEnrolled,
 } from '../../types';
 import { developmentBiometricOutcome } from '../../services/developmentProviders';
 import {
@@ -69,7 +70,7 @@ export const FaceRegistration: React.FC = () => {
   ) || students[0];
 
   const studentName = user?.display_name || currentStudent?.name || 'Dental Student';
-  const studentIdNum = user?.student?.student_number || currentStudent?.studentId || '2023-BU-0142';
+  const studentIdNum = user?.student?.student_number || currentStudent?.studentId || '—';
 
   // --- AUTHORITATIVE STATE ---
   const [authLoading, setAuthLoading] = useState<boolean>(isAuthoritative);
@@ -162,7 +163,7 @@ export const FaceRegistration: React.FC = () => {
     try {
       const data = await getStudentBiometricProfile();
       setProfile(data);
-      if (data.enrollmentStatus === 'enrolled') {
+      if (isAuthoritativeActiveEnrolled(data.enrollmentStatus)) {
         setAuthStep(3);
         setServerUsableCount(data.usableSampleCount ?? data.requiredUsableSamples ?? 20);
       } else {
@@ -297,6 +298,15 @@ export const FaceRegistration: React.FC = () => {
   const handleCaptureAndEnroll = async () => {
     if (!livenessChallenge || isProcessingEnrollment) return;
 
+    if (livenessChallenge.expiresAt) {
+      const expiryMs = new Date(livenessChallenge.expiresAt).getTime();
+      if (Number.isFinite(expiryMs) && Date.now() >= expiryMs) {
+        setAuthError('Liveness challenge has expired. Requesting a fresh challenge…');
+        void startCameraAndChallenge(undefined, true);
+        return;
+      }
+    }
+
     setIsProcessingEnrollment(true);
     setAuthError(null);
 
@@ -329,25 +339,25 @@ export const FaceRegistration: React.FC = () => {
       // Server determines authoritative usable sample count
       setServerUsableCount(result.usableSampleCount);
 
-      if (result.enrollmentStatus === 'enrolled') {
+      if (isAuthoritativeActiveEnrolled(result.enrollmentStatus)) {
         stopCamera();
         setProfile(prev => prev ? {
           ...prev,
-          enrollmentStatus: 'enrolled',
+          enrollmentStatus: 'active',
           enrolledAt: result.enrolledAt || new Date().toISOString(),
           expiresAt: result.expiresAt || null,
           usableSampleCount: result.usableSampleCount,
         } : null);
         setAuthStep(3);
       } else {
-        // Partial or quality failure: prompt retry without claiming completion
-        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again.');
+        // Partial or quality failure: prompt retry without claiming completion and provide manual fallback guidance
+        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again, or seek manual attendance check-in from your Secretary or Instructor.');
         // Re-request fresh challenge for retry
         void startCameraAndChallenge(undefined, true);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Facial enrollment failed. Please try again.';
-      setAuthError(msg);
+      const msg = err instanceof Error ? err.message : 'Facial enrollment failed.';
+      setAuthError(`${msg} Please adjust lighting, face the camera directly, and retry, or contact your Course Instructor/Secretary for manual attendance.`);
       // Re-request fresh challenge for retry
       void startCameraAndChallenge(undefined, true);
     } finally {
@@ -471,7 +481,7 @@ export const FaceRegistration: React.FC = () => {
           </div>
 
           {isAuthoritative ? (
-            profile?.enrollmentStatus === 'enrolled' && currentStep === 3 && (
+            isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && currentStep === 3 && (
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleStartReEnrollment}

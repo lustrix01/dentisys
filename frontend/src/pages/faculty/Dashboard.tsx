@@ -28,22 +28,9 @@ export const Dashboard: React.FC = () => {
         setDashboardKpis(res);
         setLoading(false);
       })
-      .catch(() => {
-        setDashboardKpis({
-          status: 'success',
-          kpis: {
-            assignedStudents: 45,
-            activeClasses: 2,
-            averageAttendance: 94.5,
-            retentionAlerts: 1,
-            goodStanding: 44,
-            remedialCount: 1,
-          },
-          classes: [
-            { id: 'dent-301', name: 'DENT 301 - Restorative Dentistry I (Sec A)', courseCode: 'DENT 301', courseName: 'Restorative Dentistry I', students: 23, attendance: 96.0 },
-            { id: 'dent-302', name: 'DENT 302 - Clinical Prosthodontics (Sec A)', courseCode: 'DENT 302', courseName: 'Clinical Prosthodontics', students: 22, attendance: 93.0 },
-          ]
-        });
+      .catch((err) => {
+        setDashboardKpis(null);
+        setDashboardError(err instanceof Error ? err.message : 'Unable to connect to backend server.');
         setLoading(false);
       });
   }, []);

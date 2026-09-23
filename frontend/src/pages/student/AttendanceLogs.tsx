@@ -50,7 +50,7 @@ export const AttendanceLogs: React.FC = () => {
   ) || students[0];
 
   const studentName = user?.display_name || currentStudent?.name || 'Dental Student';
-  const studentIdNum = user?.student?.student_number || currentStudent?.studentId || '2023-BU-0142';
+  const studentIdNum = user?.student?.student_number || currentStudent?.studentId || '—';
 
   // --- AUTHORITATIVE STATE ---
   const [logs, setLogs] = useState<StudentAttendanceLogRecord[]>([]);

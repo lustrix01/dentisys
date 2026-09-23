@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { BookOpen, BriefcaseBusiness, CheckCircle2, Mail, Phone, Save, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
-import { getFacultyProfileApi, updateFacultyProfileApi } from '../../services/apiClient';
+import { getFacultyProfileApi, updateFacultyProfileApi, getFacultyClassesApi } from '../../services/apiClient';
 import { normalizePersonName } from '../../utils/nameNormalization';
 
 const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-clinical-500';
@@ -17,6 +18,7 @@ export const Profile: React.FC = () => {
   const [specialty, setSpecialty] = useState('Clinical Dentistry');
   const [saved, setSaved] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [subjects, setSubjects] = useState<string[]>(['CLIN401', 'CLIN402']);
 
   useEffect(() => {
     getFacultyProfileApi()
@@ -27,9 +29,16 @@ export const Profile: React.FC = () => {
         }
       })
       .catch(() => {});
-  }, []);
 
-  const subjects: string[] = ['CLIN401', 'CLIN402'];
+    getFacultyClassesApi()
+      .then((res) => {
+        if (res?.classes && Array.isArray(res.classes)) {
+          const codes = Array.from(new Set(res.classes.map(c => c.courseCode).filter(Boolean)));
+          if (codes.length > 0) setSubjects(codes);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((part: string) => part[0]).join('').toUpperCase() || 'F';
 
   const save = async (event: React.FormEvent) => {
@@ -66,6 +75,7 @@ export const Profile: React.FC = () => {
             <CardContent className="p-5"><form onSubmit={save} className="space-y-5">{message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}<div className="grid sm:grid-cols-2 gap-4"><Field label="Full faculty name" value={name} setValue={setName} /><Field label="Email address" value={email} setValue={setEmail} type="email" icon={<Mail className="w-4 h-4" />} /><Field label="Contact number" value={phone} setValue={setPhone} icon={<Phone className="w-4 h-4" />} /><Field label="Clinical specialty" value={specialty} setValue={setSpecialty} icon={<BriefcaseBusiness className="w-4 h-4" />} /></div><div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800"><button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/10 transition-all"><Save className="w-4 h-4" />{saved ? 'Profile saved' : 'Save profile'}</button></div></form></CardContent>
           </Card>
           <MfaSettingsCard userEmail={email || 'faculty@bicol-u.edu.ph'} roleName="Faculty Member" />
+          <PasswordChangeCard />
         </div>
       </div>
     </div>

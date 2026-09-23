@@ -155,9 +155,29 @@ export interface DashboardStats {
   averageAttendanceRate: number;
 }
 
-export type LivenessAction = 'blink' | 'turn_left' | 'turn_right';
+export type AuthoritativeBiometricStatus = 'active' | 'not_enrolled' | 'enrolling' | 'expired' | 'revoked';
+export type BiometricEnrollmentStatus =
+  | AuthoritativeBiometricStatus
+  | 'unregistered'
+  | 'enrolled'
+  | 'in_progress'
+  | 'rejected';
 
-export type BiometricEnrollmentStatus = 'unregistered' | 'enrolled' | 'expired' | 'revoked' | 'in_progress' | 'rejected';
+export const isAuthoritativeActiveEnrolled = (status: BiometricEnrollmentStatus | string | null | undefined): boolean => (
+  status === 'active'
+);
+
+export interface PasswordChangePayload {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface PasswordChangeResponse {
+  status: string;
+  message: string;
+}
+export type LivenessAction = 'blink' | 'turn_left' | 'turn_right';
 
 export interface StudentBiometricProfile {
   consentGranted: boolean;
@@ -169,6 +189,7 @@ export interface StudentBiometricProfile {
   manualFallbackAvailable: boolean;
   disclosureVersion?: string | null;
 }
+
 
 export interface BiometricConsentPayload {
   granted: boolean;

@@ -182,7 +182,7 @@ export const Dashboard: React.FC = () => {
               </button>
 
               <button
-                onClick={() => navigate('/admin/rules')}
+                onClick={() => navigate('/admin/settings')}
                 className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-purple-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
               >
                 <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block">Governance</span>

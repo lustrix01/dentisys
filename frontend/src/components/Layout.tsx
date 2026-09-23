@@ -173,7 +173,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     }
     
     if (currentUser.role === 'secretary') {
-      const secretaryItems: NavItem[] = [
+      return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
         { name: 'Start New Session', path: '/secretary/start-session', icon: Play },
         { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
@@ -182,18 +182,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         { name: 'Secretary Profile', path: '/secretary/profile', icon: UserCircle },
         { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
       ];
-
-      // Student Functions: BIO-010 allows Secretary accounts self-service only for own linked Student identity
-      if (user?.student) {
-        secretaryItems.push(
-          { name: 'Student Dashboard', path: '/student/dashboard', icon: LayoutDashboard, sectionHeader: 'Student Functions' },
-          { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
-          { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
-          { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
-        );
-      }
-
-      return secretaryItems;
     }
 
     if (currentUser.role === 'student') {
@@ -236,15 +224,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
   const navItems = getNavItems();
 
-  const criticalAlerts = students.flatMap(s => 
-    s.remedialExams
-      .filter(rem => rem.status === 'pending')
-      .map(rem => ({
-        id: rem.id,
-        text: `${s.name} has a pending Remedial Exam for ${rem.subjectCode}`,
-        path: '/retention'
-      }))
-  );
+  // Persistent notifications awaiting database-backed notification service (Blocker BLK-03)
+  const criticalAlerts: Array<{ id: string; text: string; path: string }> = [];
 
   const getBadgeValue = (type: string) => {
     if (type === 'retention') {
@@ -387,6 +368,28 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     >
                       <SettingsIcon className="w-4 h-4 text-slate-400" />
                       <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
+                    </Link>
+                  )}
+
+                  {currentUser.role === 'secretary' && user?.student && (
+                    <Link
+                      to="/student/dashboard"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-semibold transition-all"
+                    >
+                      <UserCheck className="w-4 h-4 text-blue-500" />
+                      <span>Switch to Student View</span>
+                    </Link>
+                  )}
+
+                  {currentUser.role === 'student' && user?.role === 'secretary' && (
+                    <Link
+                      to="/"
+                      onClick={() => setIsProfileOpen(false)}
+                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-indigo-600 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 text-xs font-semibold transition-all"
+                    >
+                      <LayoutDashboard className="w-4 h-4 text-indigo-500" />
+                      <span>Return to Secretary View</span>
                     </Link>
                   )}
 
@@ -541,7 +544,31 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           </div>
 
           {/* Right Header Navigation Panel */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
+
+            {/* Secretary / Student Linked Account Context Switch */}
+            {currentUser.role === 'secretary' && user?.student && (
+              <button
+                type="button"
+                onClick={() => navigate('/student/dashboard')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-500/20 transition-all cursor-pointer"
+                title="Switch to Linked Student Self-Service"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span className="hidden sm:inline">Student View</span>
+              </button>
+            )}
+            {currentUser.role === 'student' && user?.role === 'secretary' && (
+              <button
+                type="button"
+                onClick={() => navigate('/')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-500/20 transition-all cursor-pointer"
+                title="Return to Secretary Dashboard"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span className="hidden sm:inline">Secretary View</span>
+              </button>
+            )}
             
             {/* Theme Toggle */}
             <button
@@ -574,28 +601,16 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-4 z-50 max-h-96 overflow-y-auto">
                     <h3 className="font-heading font-semibold text-sm mb-3 border-b border-slate-100 dark:border-slate-800 pb-2 flex justify-between items-center">
                       <span>Alerts & Notifications</span>
-                      <span className="text-[10px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded-md font-bold">
-                        {criticalAlerts.length} Warnings
+                      <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded-md font-bold">
+                        Database-Backed
                       </span>
                     </h3>
-                    {criticalAlerts.length === 0 ? (
-                      <p className="text-xs text-slate-400 py-6 text-center">No warning triggers active</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {criticalAlerts.map((alert) => (
-                          <div
-                            key={alert.id}
-                            onClick={() => {
-                              navigate(alert.path);
-                              setIsNotificationsOpen(false);
-                            }}
-                            className="p-2.5 rounded-xl bg-amber-50/50 hover:bg-amber-100/30 dark:bg-amber-950/20 dark:hover:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs border border-amber-200/40 dark:border-amber-900/20 cursor-pointer transition-all"
-                          >
-                            {alert.text}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <div className="py-6 text-center space-y-1.5">
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">No unread notifications</p>
+                      <p className="text-[11px] text-slate-400">
+                        Persistent notifications service pending (Blocker BLK-03).
+                      </p>
+                    </div>
                   </div>
                 </>
               )}
@@ -647,6 +662,28 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       >
                         <SettingsIcon className="w-4 h-4 text-slate-400" />
                         <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
+                      </Link>
+                    )}
+
+                    {currentUser.role === 'secretary' && user?.student && (
+                      <Link
+                        to="/student/dashboard"
+                        onClick={() => setIsProfileOpen(false)}
+                        className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-semibold transition-all"
+                      >
+                        <UserCheck className="w-4 h-4 text-blue-500" />
+                        <span>Switch to Student View</span>
+                      </Link>
+                    )}
+
+                    {currentUser.role === 'student' && user?.role === 'secretary' && (
+                      <Link
+                        to="/"
+                        onClick={() => setIsProfileOpen(false)}
+                        className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-indigo-600 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 text-xs font-semibold transition-all"
+                      >
+                        <LayoutDashboard className="w-4 h-4 text-indigo-500" />
+                        <span>Return to Secretary View</span>
                       </Link>
                     )}
 

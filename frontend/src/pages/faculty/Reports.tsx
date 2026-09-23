@@ -37,27 +37,37 @@ import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../ty
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { effectiveAssessmentPercentage, gwaToDescription } from '../../utils/gradeHelper';
 
-import { getFacultyReportsSummaryApi } from '../../services/apiClient';
+import { getFacultyReportsSummaryApi, getFacultyClassesApi } from '../../services/apiClient';
 
 export const Reports: React.FC = () => {
   const { user } = useAuth();
-  const { students: appStudents, attendanceRecords: appAttendanceRecords, assessments, assessmentScores, settings } = useApp();
+  const { assessments, assessmentScores, settings } = useApp();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dbStudents, setDbStudents] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
 
   const fetchFacultyReports = () => {
     setLoading(true);
     setError('');
-    getFacultyReportsSummaryApi()
-      .then((res) => {
-        if (res.reports?.students) {
-          setDbStudents(res.reports.students);
+    Promise.all([
+      getFacultyReportsSummaryApi(),
+      getFacultyClassesApi().catch(() => ({ status: 'success', classes: [] })),
+    ])
+      .then(([repRes, clsRes]) => {
+        if (repRes.reports?.students) {
+          setDbStudents(repRes.reports.students);
+        } else {
+          setDbStudents([]);
+        }
+        if (clsRes?.classes) {
+          setClasses(clsRes.classes);
         }
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Unable to fetch report summary from server.');
+        setDbStudents([]);
       })
       .finally(() => setLoading(false));
   };
@@ -66,14 +76,26 @@ export const Reports: React.FC = () => {
     fetchFacultyReports();
   }, []);
 
-  const students = dbStudents.length > 0 ? dbStudents : appStudents;
-  const attendanceRecords = appAttendanceRecords;
+  const students = dbStudents;
+  const attendanceRecords: any[] = [];
 
-  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const assignedClasses = ['CLINIC-A', 'CLINIC-B'];
+  const assignedClasses = useMemo(() => {
+    const list = Array.from(new Set(classes.map(c => c.block || c.csName || c.courseCode).filter(Boolean)));
+    return list.length > 0 ? list : ['All Assigned Classes'];
+  }, [classes]);
+
+  const assignedSubjects = useMemo(() => {
+    const list = Array.from(new Set(classes.map(c => c.courseCode).filter(Boolean)));
+    return list.length > 0 ? list : ['CLIN401'];
+  }, [classes]);
 
   // Selected class block state
-  const [selectedClassId, setSelectedClassId] = useState<string>(assignedClasses[0] || 'CLINIC-A');
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  useEffect(() => {
+    if (assignedClasses.length > 0 && (!selectedClassId || !assignedClasses.includes(selectedClassId))) {
+      setSelectedClassId(assignedClasses[0]);
+    }
+  }, [assignedClasses, selectedClassId]);
 
   // Report Category State: 'academic' | 'retention' | 'attendance' | 'analytics'
   const [reportTab, setReportTab] = useState<'academic' | 'retention' | 'attendance' | 'analytics'>('academic');
@@ -90,17 +112,21 @@ export const Reports: React.FC = () => {
   // Filter students based on selected class and subjects (RBAC)
   const facultyStudents = useMemo(() => {
     return students.filter(s =>
-      s.enrolledSubjects.some((sub: any) => sub.classId === selectedClassId && assignedSubjects.includes(sub.code)) &&
       (!search || s.name.toLowerCase().includes(search.toLowerCase()) || s.studentId.toLowerCase().includes(search.toLowerCase()))
     );
-  }, [students, selectedClassId, assignedSubjects, search]);
+  }, [students, search]);
 
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState(assignedSubjects[0] || 'CLIN401');
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
+  useEffect(() => {
+    if (assignedSubjects.length > 0 && (!selectedSubjectCode || !assignedSubjects.includes(selectedSubjectCode))) {
+      setSelectedSubjectCode(assignedSubjects[0]);
+    }
+  }, [assignedSubjects, selectedSubjectCode]);
 
   // Filter roster by course tab selector
   const studentsInSelectedSubject = useMemo(() => {
     return facultyStudents.filter(s =>
-      s.enrolledSubjects.some((sub: any) => sub.code === selectedSubjectCode)
+      (s.enrolledSubjects || []).some((sub: any) => sub.code === selectedSubjectCode)
     );
   }, [facultyStudents, selectedSubjectCode]);
 
@@ -125,15 +151,15 @@ export const Reports: React.FC = () => {
       headers = 'Student ID,Name,Course Code,Quizzes %,Exams %,Practicum %,Attendance %,GWA,Remarks\n';
       rows = studentsInSelectedSubject.map((student: any) => {
         const subj = (student.enrolledSubjects || []).find((sub: any) => sub.code === selectedSubjectCode);
-        const q = subj && subj.components?.quizzes !== undefined ? Number(subj.components.quizzes).toFixed(1) : '80.0';
-        const e = subj && subj.components?.exams !== undefined ? Number(subj.components.exams).toFixed(1) : '80.0';
-        const p = subj && subj.components?.practicum !== undefined ? Number(subj.components.practicum).toFixed(1) : '80.0';
-        const a = subj && subj.components?.attendance !== undefined ? Number(subj.components.attendance).toFixed(1) : '90.0';
-        const g = subj && subj.grade !== undefined ? Number(subj.grade).toFixed(2) : '2.50';
-        const rem = subj && subj.grade > 2.5 && subj.isClinical ? 'FAILS RETENTION' : 'PASS';
+        const q = subj && subj.components?.quizzes !== undefined && subj.components.quizzes !== null ? Number(subj.components.quizzes).toFixed(1) : 'N/A';
+        const e = subj && subj.components?.exams !== undefined && subj.components.exams !== null ? Number(subj.components.exams).toFixed(1) : 'N/A';
+        const p = subj && subj.components?.practicum !== undefined && subj.components.practicum !== null ? Number(subj.components.practicum).toFixed(1) : 'N/A';
+        const a = subj && subj.components?.attendance !== undefined && subj.components.attendance !== null ? Number(subj.components.attendance).toFixed(1) : 'N/A';
+        const g = subj && subj.grade !== undefined && subj.grade !== null ? Number(subj.grade).toFixed(2) : 'N/A';
+        const rem = subj && typeof subj.grade === 'number' ? (subj.grade > 2.5 && subj.isClinical ? 'FAILS RETENTION' : 'PASS') : 'PENDING';
         return `${student.studentId},"${student.name}",${selectedSubjectCode},${q},${e},${p},${a},${g},${rem}`;
       }).join('\n');
-      fileName = `${selectedSubjectCode}_Academic_Report.csv`;
+      fileName = `${selectedSubjectCode || 'Course'}_Academic_Report.csv`;
     } else if (type === 'retention') {
       headers = 'Student ID,Name,Standing GWA,Warning Count,Risk Level,Remedial Status\n';
       rows = facultyStudents.map((student: any) => {
@@ -141,7 +167,8 @@ export const Reports: React.FC = () => {
         const riskLevel = warningCount > 0 ? 'HIGH' : 'LOW';
         const remedialCount = Array.isArray(student.remedialExams) ? student.remedialExams.filter((rem: any) => rem.status === 'pending').length : 0;
         const remStatus = remedialCount > 0 ? 'PENDING EXAM' : 'STABLE';
-        return `${student.studentId},"${student.name}",${Number(student.overallGWA || 1.75).toFixed(2)},${warningCount},${riskLevel},${remStatus}`;
+        const standingGwa = typeof student.overallGWA === 'number' ? student.overallGWA.toFixed(2) : (student.overallGWA ? String(student.overallGWA) : 'N/A');
+        return `${student.studentId},"${student.name}",${standingGwa},${warningCount},${riskLevel},${remStatus}`;
       }).join('\n');
       fileName = `Retention_Report.csv`;
     } else {
@@ -175,7 +202,8 @@ export const Reports: React.FC = () => {
       { range: '3.0+ (Critical Risk)', count: 0 },
     ];
     facultyStudents.forEach((s: any) => {
-      const gwa = s.overallGWA || 1.75;
+      const gwa = typeof s.overallGWA === 'number' ? s.overallGWA : (s.overallGWA ? parseFloat(s.overallGWA) : null);
+      if (gwa === null || isNaN(gwa)) return;
       if (gwa <= 1.5) buckets[0].count++;
       else if (gwa <= 2.0) buckets[1].count++;
       else if (gwa <= 2.5) buckets[2].count++;
@@ -377,12 +405,12 @@ export const Reports: React.FC = () => {
                         <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
                         <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.quizzes !== undefined ? Number(subj.components.quizzes).toFixed(1) : '80.0'}%</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.practicum !== undefined ? Number(subj.components.practicum).toFixed(1) : '80.0'}%</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.exams !== undefined ? Number(subj.components.exams).toFixed(1) : '80.0'}%</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.attendance !== undefined ? Number(subj.components.attendance).toFixed(1) : '90.0'}%</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.quizzes !== undefined && subj.components.quizzes !== null ? `${Number(subj.components.quizzes).toFixed(1)}%` : '—'}</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.practicum !== undefined && subj.components.practicum !== null ? `${Number(subj.components.practicum).toFixed(1)}%` : '—'}</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.exams !== undefined && subj.components.exams !== null ? `${Number(subj.components.exams).toFixed(1)}%` : '—'}</td>
+                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.attendance !== undefined && subj.components.attendance !== null ? `${Number(subj.components.attendance).toFixed(1)}%` : '—'}</td>
                       <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                        {subj && subj.grade !== undefined ? Number(subj.grade).toFixed(2) : '2.50'}
+                        {subj && subj.grade !== undefined && subj.grade !== null ? Number(subj.grade).toFixed(2) : '—'}
                       </td>
                       <td className="px-5 py-3.5">
                         <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
@@ -471,7 +499,9 @@ export const Reports: React.FC = () => {
                         <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
                         <span className="text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
                       </td>
-                      <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">{student.overallGWA.toFixed(2)}</td>
+                      <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
+                        {typeof student.overallGWA === 'number' ? student.overallGWA.toFixed(2) : (student.overallGWA ? String(student.overallGWA) : '—')}
+                      </td>
                       <td className="px-5 py-3.5 text-center font-semibold text-rose-500">{warnings.length} Warnings</td>
                       <td className="px-5 py-3.5 text-center">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
@@ -687,11 +717,11 @@ export const Reports: React.FC = () => {
                     <tr key={student.id}>
                       <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
                       <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.quizzes !== undefined ? Number(subj.components.quizzes).toFixed(1) : '80.0'}%</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.practicum !== undefined ? Number(subj.components.practicum).toFixed(1) : '80.0'}%</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.exams !== undefined ? Number(subj.components.exams).toFixed(1) : '80.0'}%</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.attendance !== undefined ? Number(subj.components.attendance).toFixed(1) : '90.0'}%</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{subj && subj.grade !== undefined ? Number(subj.grade).toFixed(2) : '2.50'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.quizzes !== undefined && subj.components.quizzes !== null ? `${Number(subj.components.quizzes).toFixed(1)}%` : '—'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.practicum !== undefined && subj.components.practicum !== null ? `${Number(subj.components.practicum).toFixed(1)}%` : '—'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.exams !== undefined && subj.components.exams !== null ? `${Number(subj.components.exams).toFixed(1)}%` : '—'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.attendance !== undefined && subj.components.attendance !== null ? `${Number(subj.components.attendance).toFixed(1)}%` : '—'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{subj && subj.grade !== undefined && subj.grade !== null ? Number(subj.grade).toFixed(2) : '—'}</td>
                     </tr>
                   );
                 })}
@@ -721,7 +751,7 @@ export const Reports: React.FC = () => {
                     <tr key={student.id}>
                       <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
                       <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{student.overallGWA.toFixed(2)}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{typeof student.overallGWA === 'number' ? student.overallGWA.toFixed(2) : (student.overallGWA ? String(student.overallGWA) : '—')}</td>
                       <td className="border border-slate-300 px-3 py-1.5 text-center capitalize">{student.status}</td>
                       <td className="border border-slate-300 px-3 py-1.5 text-slate-500">
                         {remedialCount > 0 ? `Pending ${remedialCount} exam(s)` : 'Stable standing'}

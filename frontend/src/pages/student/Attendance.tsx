@@ -27,12 +27,13 @@ import {
   createBiometricLivenessChallenge,
   submitBiometricAttendance,
 } from '../../services/apiClient';
-import type {
-  StudentBiometricProfile,
-  StudentActiveSession,
-  LivenessChallengeResponse,
-  LivenessAction,
-  BiometricAttendanceResponse,
+import {
+  type StudentBiometricProfile,
+  type StudentActiveSession,
+  type LivenessChallengeResponse,
+  type LivenessAction,
+  type BiometricAttendanceResponse,
+  isAuthoritativeActiveEnrolled,
 } from '../../types';
 import { DEVELOPMENT_LOCATION_FIXTURES, developmentBiometricOutcome } from '../../services/developmentProviders';
 import {
@@ -120,7 +121,7 @@ export const Attendance: React.FC = () => {
     s => s.email.toLowerCase() === user?.login_email.toLowerCase() || s.id === '1'
   ) || students[0];
 
-  const studentIdNum = user?.student?.student_number || currentStudent?.studentId || '2023-BU-0142';
+  const studentIdNum = user?.student?.student_number || currentStudent?.studentId || '—';
 
   // --- AUTHORITATIVE STATE ---
   const [initialLoading, setInitialLoading] = useState(isAuthoritative);
@@ -375,6 +376,15 @@ export const Attendance: React.FC = () => {
   const handleSubmitAuthoritativeVerification = async () => {
     if (!currentSelectedSession || !livenessChallenge) return;
 
+    if (livenessChallenge.expiresAt) {
+      const expiryMs = new Date(livenessChallenge.expiresAt).getTime();
+      if (Number.isFinite(expiryMs) && Date.now() >= expiryMs) {
+        setFailureNotice('Liveness challenge has expired. Requesting a fresh challenge…');
+        void startCameraAndChallenge();
+        return;
+      }
+    }
+
     setCheckInStage('verifying');
     setFailureNotice(null);
 
@@ -567,13 +577,15 @@ export const Attendance: React.FC = () => {
 
       {/* 2. FACE REGISTRATION WARNING / ENROLLMENT CHECK */}
       {isAuthoritative ? (
-        profile?.enrollmentStatus !== 'enrolled' && (
+        !isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && (
           <div className="bg-amber-50 dark:bg-amber-950/40 rounded-2xl p-4 border border-amber-200 dark:border-amber-900 flex items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-3 text-amber-900 dark:text-amber-200">
               <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
               <span>
                 {profile?.enrollmentStatus === 'expired'
                   ? 'Your biometric enrollment expired for this semester. Face re-registration is required.'
+                  : profile?.enrollmentStatus === 'revoked'
+                  ? 'Your biometric profile was revoked. Please consent and re-register.'
                   : 'Face registration required before taking automated session attendance.'}
               </span>
             </div>
@@ -581,7 +593,7 @@ export const Attendance: React.FC = () => {
               onClick={() => navigate('/student/face-registration')}
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold flex items-center gap-1.5 flex-shrink-0 cursor-pointer"
             >
-              <span>{profile?.enrollmentStatus === 'expired' ? 'Re-Enroll' : 'Register Face'}</span>
+              <span>{profile?.enrollmentStatus === 'expired' || profile?.enrollmentStatus === 'revoked' ? 'Re-Enroll' : 'Register Face'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -974,8 +986,8 @@ export const Attendance: React.FC = () => {
 
                   <button
                     onClick={() => { void handleStartAuthoritativeCheckIn(); }}
-                    disabled={profile?.enrollmentStatus !== 'enrolled'}
-                    className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 flex-shrink-0 ${profile?.enrollmentStatus === 'enrolled'
+                    disabled={!isAuthoritativeActiveEnrolled(profile?.enrollmentStatus)}
+                    className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 flex-shrink-0 ${isAuthoritativeActiveEnrolled(profile?.enrollmentStatus)
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
                       : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                       }`}

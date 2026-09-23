@@ -18,7 +18,10 @@ import type {
   BiometricAttendanceResponse,
   StudentAttendanceLogRecord,
   StudentAttendanceLogsResponse,
+  PasswordChangePayload,
+  PasswordChangeResponse,
 } from '../types';
+
 
 const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim();
 const API_BASE_URL = configuredBase
@@ -186,6 +189,7 @@ async function request<T>(
   path: string,
   body?: unknown,
   tokenOverride?: string,
+  timeoutMs = 15000,
 ): Promise<T> {
   const headers: Record<string, string> = {
     accept: 'application/json',
@@ -203,7 +207,7 @@ async function request<T>(
 
   let response: Response;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
@@ -991,7 +995,7 @@ export function getSecretaryAttendanceApi(): Promise<{
 
 export function overrideSecretaryAttendanceApi(data: {
   studentId: string;
-  status: 'present' | 'late' | 'absent';
+  status: 'present' | 'late' | 'absent' | 'excused';
   reason: string;
   recordId?: string;
   date?: string;
@@ -1561,7 +1565,7 @@ export function createBiometricLivenessChallenge(payload: LivenessChallengeReque
 }
 
 export function submitBiometricEnrollment(formData: FormData): Promise<BiometricEnrollmentResponse> {
-  return request<BiometricEnrollmentResponse>('POST', '/student/biometric/enrollment', formData);
+  return request<BiometricEnrollmentResponse>('POST', '/student/biometric/enrollment', formData, undefined, 30000);
 }
 
 export function revokeStudentBiometricProfile(): Promise<BiometricRevocationResponse> {
@@ -1586,7 +1590,7 @@ export async function getStudentActiveAttendanceSessions(): Promise<StudentActiv
 }
 
 export function submitBiometricAttendance(formData: FormData): Promise<BiometricAttendanceResponse> {
-  return request<BiometricAttendanceResponse>('POST', '/student/attendance/biometric', formData);
+  return request<BiometricAttendanceResponse>('POST', '/student/attendance/biometric', formData, undefined, 30000);
 }
 
 export async function getStudentAttendanceLogs(params?: {
@@ -1623,6 +1627,11 @@ export async function getStudentAttendanceLogs(params?: {
   return { records: [], total: 0 };
 }
 
-
-
+export function changePasswordApi(data: PasswordChangePayload): Promise<PasswordChangeResponse> {
+  return request<PasswordChangeResponse>('POST', '/auth/password/change', {
+    current_password: data.currentPassword,
+    new_password: data.newPassword,
+    confirm_password: data.confirmPassword,
+  });
+}
 

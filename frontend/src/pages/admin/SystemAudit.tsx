@@ -10,7 +10,6 @@ import {
   Filter,
   Search,
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { recordAudit } from '../../services/auditService';
 
@@ -28,8 +27,6 @@ const PRINT_STYLES = `
 import { getAdminReportsSummaryApi } from '../../services/apiClient';
 
 export const DeanReports: React.FC = () => {
-  const { students: appStudents, attendanceRecords: appAttendanceRecords } = useApp();
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dbStudents, setDbStudents] = useState<any[]>([]);
@@ -57,8 +54,9 @@ export const DeanReports: React.FC = () => {
     fetchReportData();
   }, []);
 
-  const students = dbStudents.length > 0 ? dbStudents : appStudents;
-  const attendanceRecords = dbAttendance.length > 0 ? dbAttendance : appAttendanceRecords;
+  const students = dbStudents;
+  const attendanceRecords = dbAttendance;
+
 
   const [activeTab, setActiveTab] = useState<ReportTab>('students');
   const [classFilter, setClassFilter] = useState('all');
@@ -103,17 +101,19 @@ export const DeanReports: React.FC = () => {
 
     if (activeTab === 'students') {
       csv = `Dean's Student Summary Report\nGenerated: ${ts}\n\nStudent ID,Name,Class,Year Level,GWA,Status,Face Enrolled\n`;
-      csv += filtered.map(s =>
-        `${s.studentId},"${s.name}",${s.classId || '-'},${s.yearLevel},${s.overallGWA.toFixed(2)},${s.status},${s.faceEnrolled ? 'Yes' : 'No'}`
-      ).join('\n');
+      csv += filtered.map(s => {
+        const gwaStr = s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : 'N/A';
+        return `${s.studentId},"${s.name}",${s.classId || '-'},${s.yearLevel},${gwaStr},${s.status},${s.faceEnrolled ? 'Yes' : 'No'}`;
+      }).join('\n');
       fileName = `Student_Summary_${ts.replace(/[: ]/g, '-')}.csv`;
 
     } else if (activeTab === 'academic') {
       csv = `Academic Grade Report\nGenerated: ${ts}\n\nStudent ID,Name,Subject Code,Subject Name,Grade,Has Remedial\n`;
       csv += filtered.flatMap((s: any) =>
-        (s.enrolledSubjects || []).map((sub: any) =>
-          `${s.studentId},"${s.name}",${sub.code},"${sub.name}",${Number(sub.grade || 0).toFixed(2)},${sub.hasRemedial ? 'Yes' : 'No'}`
-        )
+        (s.enrolledSubjects || []).map((sub: any) => {
+          const gradeStr = sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? Number(sub.grade).toFixed(2) : 'N/A';
+          return `${s.studentId},"${s.name}",${sub.code},"${sub.name}",${gradeStr},${sub.hasRemedial ? 'Yes' : 'No'}`;
+        })
       ).join('\n');
       fileName = `Academic_Report_${ts.replace(/[: ]/g, '-')}.csv`;
 
@@ -121,7 +121,8 @@ export const DeanReports: React.FC = () => {
       csv = `Retention Status Report\nGenerated: ${ts}\n\nStudent ID,Name,Class,GWA,Status,Pending Remedials\n`;
       csv += filtered.map((s: any) => {
         const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
-        return `${s.studentId},"${s.name}",${s.classId || '-'},${Number(s.overallGWA || 1.75).toFixed(2)},${s.status},${pendingRem}`;
+        const gwaStr = s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : 'N/A';
+        return `${s.studentId},"${s.name}",${s.classId || '-'},${gwaStr},${s.status},${pendingRem}`;
       }).join('\n');
       fileName = `Retention_Report_${ts.replace(/[: ]/g, '-')}.csv`;
 
@@ -302,7 +303,9 @@ export const DeanReports: React.FC = () => {
                       <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
                       <td className="py-3 px-3 text-slate-500">{s.classId || s.className || '-'}</td>
                       <td className="py-3 px-3 text-slate-500">Year {s.yearLevel}</td>
-                      <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">{Number(s.overallGWA || 1.75).toFixed(2)}</td>
+                      <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">
+                        {s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—'}
+                      </td>
                       <td className="py-3 px-3"><StatusBadge status={s.status} /></td>
                       <td className="py-3 px-3">
                         <span className={`text-[9px] font-bold ${s.faceEnrolled ? 'text-emerald-600' : 'text-rose-500'}`}>
@@ -382,11 +385,13 @@ export const DeanReports: React.FC = () => {
                         <td className="py-2.5 px-3 text-slate-500">{s.classId}</td>
                         <td className="py-2.5 px-3 font-mono text-slate-500">{sub.code}</td>
                         <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 max-w-[180px] truncate">{sub.name}</td>
-                        <td className="py-2.5 px-3">{sub.components?.quizzes || 80}%</td>
-                        <td className="py-2.5 px-3">{sub.components?.exams || 80}%</td>
-                        <td className="py-2.5 px-3">{sub.isClinical ? `${sub.components?.practicum || 80}%` : '—'}</td>
-                        <td className="py-2.5 px-3">{sub.components?.attendance || 90}%</td>
-                        <td className={`py-2.5 px-3 font-extrabold ${sub.grade > 2.5 ? 'text-rose-600' : 'text-emerald-600'}`}>{Number(sub.grade || 0).toFixed(2)}</td>
+                        <td className="py-2.5 px-3">{sub.components?.quizzes !== undefined ? `${sub.components.quizzes}%` : '—'}</td>
+                        <td className="py-2.5 px-3">{sub.components?.exams !== undefined ? `${sub.components.exams}%` : '—'}</td>
+                        <td className="py-2.5 px-3">{sub.isClinical ? (sub.components?.practicum !== undefined ? `${sub.components.practicum}%` : '—') : '—'}</td>
+                        <td className="py-2.5 px-3">{sub.components?.attendance !== undefined ? `${sub.components.attendance}%` : '—'}</td>
+                        <td className={`py-2.5 px-3 font-extrabold ${Number(sub.grade || 0) > 2.5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? Number(sub.grade).toFixed(2) : '—'}
+                        </td>
                         <td className="py-2.5 px-3">
                           {sub.hasRemedial
                             ? <span className="text-[9px] px-2 py-0.5 rounded-md font-bold bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400">Yes</span>
@@ -448,7 +453,9 @@ export const DeanReports: React.FC = () => {
                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                           <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
                           <td className="py-3 px-3 text-slate-500">{s.classId}</td>
-                          <td className={`py-3 px-3 font-extrabold ${s.overallGWA > 2.5 ? 'text-rose-600' : 'text-emerald-600'}`}>{s.overallGWA.toFixed(2)}</td>
+                          <td className={`py-3 px-3 font-extrabold ${Number(s.overallGWA || 0) > 2.5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—'}
+                          </td>
                           <td className="py-3 px-3"><StatusBadge status={s.status} /></td>
                           <td className="py-3 px-3 text-slate-500">{s.clinicHoursCompleted}h</td>
                           <td className="py-3 px-3">

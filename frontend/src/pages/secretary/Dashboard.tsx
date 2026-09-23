@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ArrowRight, Play, Zap, Clock, CheckCircle2, BookOpen, MapPin } from 'lucide-react';
+import { Search, ArrowRight, Play, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { getSecretaryDashboardKpisApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
@@ -36,10 +36,17 @@ export const Dashboard: React.FC = () => {
   const attendanceRateVal = data?.kpis.attendanceRate ?? 0;
   const todayRecordsVal = data?.kpis.todayRecords ?? 0;
   const overriddenVal = data?.kpis.overriddenCount ?? 0;
-  const assignedClassName = data?.assignedClass.className || 'CLINIC-4B';
+  const assignedClassName = data?.assignedClass?.className || 'No Section Assigned';
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
+
+      {error && (
+        <div role="alert" className="flex items-center justify-between rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-xs text-rose-700 dark:text-rose-300">
+          <span className="flex items-center gap-2"><AlertCircle className="h-4 w-4" />{error}</span>
+          <button type="button" onClick={() => void load()} className="font-bold underline cursor-pointer">Retry</button>
+        </div>
+      )}
       
       {/* 1. Clean Top Header with Highlighted Action Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">

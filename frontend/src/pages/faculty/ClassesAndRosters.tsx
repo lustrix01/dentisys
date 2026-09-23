@@ -23,8 +23,8 @@ import {
   CheckCircle2,
   UserPlus,
   Trash2,
-  Filter,
-  Pencil
+  Pencil,
+  AlertCircle,
 } from 'lucide-react';
 import { Student } from '../../types';
 import { Card } from '../../components/Card';
@@ -148,15 +148,17 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Notification Banner
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Fetch authoritative data from PostgreSQL APIs
   const fetchData = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const [clsRes, crsRes, rosterRes] = await Promise.all([
-        getFacultyClassesApi().catch(() => ({ status: 'success', classes: [] })),
-        getFacultyCoursesApi().catch(() => ({ status: 'success', courses: [] })),
-        getFacultyStudentsApi().catch(() => []),
+        getFacultyClassesApi(),
+        getFacultyCoursesApi(),
+        getFacultyStudentsApi(),
       ]);
 
       const classData = Array.isArray(clsRes.classes) ? clsRes.classes : [];
@@ -174,8 +176,9 @@ export const ClassesAndRosters: React.FC = () => {
 
       const studentData = Array.isArray(rosterRes) ? (rosterRes as unknown as Student[]) : [];
       setStudentsList(studentData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load authoritative classes and rosters:', err);
+      setFetchError(err instanceof Error ? err.message : 'Failed to load authoritative classes and rosters from server.');
       setClasses([]);
       setStudentsList([]);
     } finally {
@@ -491,17 +494,11 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
-  // Handler: Import iBU Class List File
+  // Handler: Import iBU Class List File - Externally Blocked (Batch X1)
   const handleImportIctoFile = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ictoFileText.trim()) {
-      alert('Please select a PDF or CSV file to import.');
-      return;
-    }
-
     setIsImportIctoOpen(false);
-    setIctoFileText('');
-    showFeedback('iBU Roster File processed and student roster updated!', 'success');
+    showFeedback('Registrar/iBU roster import is externally blocked awaiting official University file layout specification (Batch X1). Automated parsing is disabled.', 'info');
   };
 
   // Handler: Send Email Invitation to Student
@@ -590,7 +587,7 @@ export const ClassesAndRosters: React.FC = () => {
             Create classes, import iBU student rosters (PDF/CSV), manage students, and send email invitations.
           </p>
           <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-2">
-            Authoritative records: class sections and enrollments are synced with the server. Development preview: roster file imports remain browser-local.
+            Authoritative records: class sections and enrollments are synced with the server. Registrar/iBU roster import is externally blocked awaiting official University file layout specification (Batch X1).
           </p>
         </div>
 
@@ -613,6 +610,16 @@ export const ClassesAndRosters: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {fetchError && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <Info className="w-4 h-4 text-rose-500 flex-shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <button onClick={() => void fetchData()} className="px-3 py-1 bg-rose-600 text-white rounded-lg hover:bg-rose-700 font-bold text-xs">Retry</button>
+        </div>
+      )}
 
       {notification && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center justify-between gap-3 animate-fade-in">
@@ -1505,46 +1512,38 @@ export const ClassesAndRosters: React.FC = () => {
         </Modal>
       )}
 
-      {/* Modal: Import iBU Class List File */}
+      {/* Modal: Import iBU Class List File - Blocked (Batch X1) */}
       {isImportIctoOpen && (
-        <Modal isOpen={isImportIctoOpen} onClose={() => setIsImportIctoOpen(false)} title="Import iBU Class Roster File (PDF or CSV)">
+        <Modal isOpen={isImportIctoOpen} onClose={() => setIsImportIctoOpen(false)} title="Import iBU Class Roster File (Batch X1 Blocked)">
           <form onSubmit={handleImportIctoFile} className="space-y-4 text-xs">
-            <div className="p-3.5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/40 rounded-xl text-slate-700 dark:text-slate-300 space-y-1">
-              <span className="font-bold block text-blue-900 dark:text-blue-200">Import iBU Class Roster:</span>
-              <p className="text-slate-600 dark:text-slate-400">
-                Upload your class list exported from iBU system in <strong>PDF</strong> or <strong>CSV</strong> format to automatically populate student enrollments.
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-amber-800 dark:text-amber-200 space-y-1.5">
+              <span className="font-bold flex items-center gap-1.5 text-amber-900 dark:text-amber-100">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                Registrar/iBU Import Blocked (Batch X1)
+              </span>
+              <p className="text-amber-700 dark:text-amber-300 leading-relaxed">
+                Automated roster import is externally blocked awaiting official University / Registrar file layout specification (exact headers, Student identifier format, course/section columns, and encoding). Browser-only file parsing is disabled to protect database integrity.
               </p>
             </div>
 
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">Select PDF or CSV File</label>
-              <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-5 text-center hover:border-indigo-500 transition-colors cursor-pointer bg-slate-50/50 dark:bg-slate-900/50">
-                <Upload className="w-7 h-7 text-indigo-500 mx-auto mb-2" />
-                <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
-                  Choose a PDF or CSV file to upload
+              <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-5 text-center bg-slate-50/50 dark:bg-slate-900/50">
+                <Upload className="w-7 h-7 text-slate-400 mx-auto mb-2" />
+                <span className="font-bold text-slate-600 dark:text-slate-400 block text-xs">
+                  Official roster file upload is pending format specification
                 </span>
                 <span className="text-[11px] text-slate-400 block mt-0.5 mb-2">
-                  Supports .pdf, .csv, and .txt files exported from iBU portal
+                  Awaiting Registrar format guidelines
                 </span>
                 <input
                   type="file"
                   accept=".pdf, .csv, .txt"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setIctoFileText(e.target.files[0].name);
-                    }
-                  }}
-                  className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                  disabled
+                  className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-400 cursor-not-allowed"
                 />
               </div>
             </div>
-
-            {ictoFileText && (
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                <span>Selected file: <strong>{ictoFileText}</strong></span>
-              </div>
-            )}
 
             <div className="pt-2 flex justify-end gap-2">
               <button
@@ -1552,13 +1551,15 @@ export const ClassesAndRosters: React.FC = () => {
                 onClick={() => setIsImportIctoOpen(false)}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
               >
-                Cancel
+                Close
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md shadow-indigo-600/20"
+                disabled
+                className="px-5 py-2 rounded-xl bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed"
+                title="Awaiting University/Registrar file specification (Batch X1)"
               >
-                Process & Import iBU Roster
+                Import Blocked (Pending Registrar Layout)
               </button>
             </div>
           </form>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Building2, CheckCircle2, Mail, Save, ShieldCheck, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
 import { getAdminProfileApi, updateAdminProfileApi } from '../../services/apiClient';
@@ -99,6 +100,7 @@ export const Profile: React.FC = () => {
             </CardContent>
           </Card>
           <MfaSettingsCard userEmail={email || 'dean@bicol-u.edu.ph'} roleName="Administrator" />
+          <PasswordChangeCard />
         </div>
       </div>
     </div>
