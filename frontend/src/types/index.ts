@@ -3,6 +3,7 @@ export interface GradeComponents {
   exams: number;        // 0-100 percentage
   practicum: number;    // 0-100 percentage (clinical practical work)
   attendance: number;   // 0-100 percentage
+  [key: string]: unknown;
 }
 
 export interface EnrolledSubject {

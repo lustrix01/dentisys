@@ -917,8 +917,8 @@ export function saveFacultyAssessmentScoresApi(assessmentId: string, scores: Arr
   return request('POST', '/faculty/scores', { assessmentId, scores });
 }
 
-export function computeFacultyGradesApi(classId?: string): Promise<{ status: string; message: string; results: Array<Record<string, unknown>> }> {
-  return request('POST', '/faculty/grades/compute', classId ? { classId } : {});
+export function computeFacultyGradesApi(classId?: string): Promise<FacultyComputeGradesResponse> {
+  return request<FacultyComputeGradesResponse>('POST', '/faculty/grades/compute', classId ? { classId } : {});
 }
 
 export function getFacultyProfileApi(): Promise<{
@@ -1259,11 +1259,31 @@ export function formatWeightUnitsToPercent(units: number): string {
   return Number.isInteger(percent) ? `${percent}%` : `${percent.toFixed(2).replace(/\.?0+$/, '')}%`;
 }
 
+export type GradingPeriodEnum = 'Midterm' | 'Final';
+export type GradingSourceKindEnum = 'assessment' | 'attendance';
+
+export interface FacultyAttendanceDateRange {
+  startDate: string | null;
+  endDate: string | null;
+}
+
+export interface FacultyAttendanceDateRanges {
+  midterm: FacultyAttendanceDateRange;
+  final: FacultyAttendanceDateRange;
+}
+
+export interface FacultyTermRatio {
+  midterm: number;
+  final: number;
+}
+
 export interface FacultyGradingCategoryItem {
   id?: number | null;
   name: string;
   weight: number | string;
   sortOrder?: number;
+  gradingPeriod?: GradingPeriodEnum | null;
+  sourceKind?: GradingSourceKindEnum | null;
   inUse?: boolean;
 }
 
@@ -1279,12 +1299,26 @@ export interface FacultyGradingConfiguration {
   semester: string;
   schoolYear: string;
   version: number;
+  schemaMode?: 'overall' | 'periods';
+  termRatio?: FacultyTermRatio;
+  attendanceDateRanges?: FacultyAttendanceDateRanges;
   categories: FacultyGradingCategoryItem[];
+  midtermCategories?: FacultyGradingCategoryItem[];
+  finalCategories?: FacultyGradingCategoryItem[];
+}
+
+export interface FacultyGradingConfigDefaults {
+  schemaMode: 'periods';
+  termRatio: { midterm: number; final: number };
+  midtermCategories: Array<{ name: string; weight: number; sortOrder: number; sourceKind: GradingSourceKindEnum }>;
+  finalCategories: Array<{ name: string; weight: number; sortOrder: number; sourceKind: GradingSourceKindEnum }>;
+  attendanceDateRanges: FacultyAttendanceDateRanges;
 }
 
 export interface FacultyGradingConfigGetResponse {
   status: string;
   configuration: FacultyGradingConfiguration | null;
+  defaults?: FacultyGradingConfigDefaults;
 }
 
 export interface FacultyGradingCategoryAssignmentRequiredItem {
@@ -1293,22 +1327,201 @@ export interface FacultyGradingCategoryAssignmentRequiredItem {
   legacyType: string;
 }
 
+export interface FacultyGradingPeriodMappingRequiredItem {
+  assessmentId: number;
+  categoryId: number | null;
+  gradingPeriod: string;
+  status: string;
+}
+export type FacultyGradingCategoryPeriodMappingRequiredItem = FacultyGradingPeriodMappingRequiredItem;
+
 export interface FacultyGradingConfigSavePayload {
   courseId: number;
   semester: string;
   schoolYear: string;
   version?: number;
-  categories: Array<{
-    id?: number;
+  schemaMode?: 'overall' | 'periods';
+  convertFromOverall?: boolean;
+  termRatio?: { midterm: number | string; final: number | string };
+  attendanceDateRanges?: {
+    midterm?: { startDate?: string | null; endDate?: string | null };
+    final?: { startDate?: string | null; endDate?: string | null };
+  };
+  midtermCategories?: Array<{
+    id?: number | null;
     name: string;
     weight: number | string;
-    sortOrder: number;
+    sortOrder?: number;
+    sourceKind?: GradingSourceKindEnum;
+  }>;
+  finalCategories?: Array<{
+    id?: number | null;
+    name: string;
+    weight: number | string;
+    sortOrder?: number;
+    sourceKind?: GradingSourceKindEnum;
+  }>;
+  categories?: Array<{
+    id?: number | null;
+    name: string;
+    weight: number | string;
+    sortOrder?: number;
   }>;
 }
 
 export interface FacultyGradingConfigSaveResponse {
   status: string;
   configuration: FacultyGradingConfiguration;
+}
+
+export type PeriodIncompleteReason =
+  | 'missing_date_range'
+  | 'no_sessions'
+  | 'unresolved_attendance'
+  | 'no_assessment_results'
+  | 'missing_assessment_score'
+  | 'unresolved_assessment_attendance'
+  | 'duplicate_attendance_sources';
+
+export interface FacultyPeriodIncompleteItem {
+  categoryId?: number;
+  name?: string;
+  sourceKind?: GradingSourceKindEnum | string;
+  reason: PeriodIncompleteReason;
+  sessions?: Array<{
+    sessionId: string;
+    sessionDate: string;
+    sessionCode: string;
+    status?: string;
+    sessionStatus?: string;
+  }>;
+  assessmentId?: string;
+  categoryIds?: number[];
+}
+
+export interface FacultyPeriodCategoryDetail {
+  categoryId: number;
+  name: string;
+  sourceKind: GradingSourceKindEnum;
+  earnedPoints: number;
+  possiblePoints: number;
+  ratio: number;
+  weight: number;
+  contribution: number;
+  sessions?: Array<{
+    sessionId: string;
+    sessionDate: string;
+    sessionCode: string;
+    status: string;
+    sessionStatus: string;
+  }>;
+}
+
+export interface FacultyPeriodBreakdown {
+  period: GradingPeriodEnum;
+  status: 'computed' | 'incomplete';
+  percentage: number | null;
+  categories: FacultyPeriodCategoryDetail[];
+  incomplete: FacultyPeriodIncompleteItem[];
+  attendanceDateRange: FacultyAttendanceDateRange;
+}
+
+export interface FacultyPeriodModeComputedResult {
+  status: 'computed';
+  enrollmentId: string;
+  studentId: string;
+  percentage: number;
+  gwa: number;
+  retentionState: string;
+  periods: {
+    midterm: FacultyPeriodBreakdown;
+    final: FacultyPeriodBreakdown;
+  };
+  breakdown: {
+    calculationMode: 'authoritative_periods';
+    termRatio: FacultyTermRatio;
+    periods: {
+      midterm: FacultyPeriodBreakdown;
+      final: FacultyPeriodBreakdown;
+    };
+    retentionThreshold: number;
+    percentage?: number;
+    gwa?: number;
+    retentionState?: string;
+  };
+}
+
+export interface FacultyPeriodModeIncompleteResult {
+  status: 'incomplete_period';
+  enrollmentId: string;
+  studentId: string;
+  periods: {
+    midterm: FacultyPeriodBreakdown;
+    final: FacultyPeriodBreakdown;
+  };
+  breakdown: {
+    calculationMode: 'authoritative_periods';
+    termRatio: FacultyTermRatio;
+    periods: {
+      midterm: FacultyPeriodBreakdown;
+      final: FacultyPeriodBreakdown;
+    };
+    retentionThreshold: number;
+  };
+  previouslyPersisted: boolean;
+  previousPercentage: number | null;
+  previousGwa: number | null;
+}
+
+export interface FacultyLegacyComputedResult {
+  status: 'computed';
+  enrollmentId: string;
+  studentId: string;
+  percentage: number;
+  gwa: number;
+  retentionState: string;
+  breakdown: {
+    calculationMode: 'authoritative_categories' | 'raw_points';
+    categories?: Array<{
+      categoryId: number;
+      name: string;
+      earnedPoints: number;
+      possiblePoints: number;
+      ratio: number;
+      weight: number;
+      contribution: number;
+    }>;
+    retentionThreshold: number;
+  };
+}
+
+export interface FacultyLegacyIncompleteAttendanceResult {
+  status: 'incomplete_attendance';
+  enrollmentId: string;
+  studentId: string;
+  missingAssessments: Array<{
+    assessmentId: string;
+    attendanceSessionDate: string;
+    attendanceSessionCode: string;
+  }>;
+}
+
+export type FacultyGradeComputeResult =
+  | FacultyPeriodModeComputedResult
+  | FacultyPeriodModeIncompleteResult
+  | FacultyLegacyComputedResult
+  | FacultyLegacyIncompleteAttendanceResult;
+
+export interface FacultyComputeGradesResponse {
+  status: string;
+  message: string;
+  results: FacultyGradeComputeResult[];
+}
+
+export function isPeriodComputeResult(
+  result: FacultyGradeComputeResult
+): result is FacultyPeriodModeComputedResult | FacultyPeriodModeIncompleteResult {
+  return result.status === 'incomplete_period' || (result.status === 'computed' && 'periods' in result);
 }
 
 export function getFacultyGradingConfigApi(params: {

@@ -57,8 +57,24 @@ import type {
   FacultyClassItem,
   FacultyGradingConfiguration,
   FacultyGradingCategoryAssignmentRequiredItem,
-  FacultyGradingConfigSavePayload
+  FacultyGradingCategoryPeriodMappingRequiredItem,
+  FacultyGradingConfigSavePayload,
+  FacultyGradeComputeResult
 } from '../../services/apiClient';
+import {
+  buildDefaultPeriodDraft,
+  buildRowCompositeKey,
+  validateDateRanges,
+  normalizeDateRangesForPayload,
+  formatPeriodIncompleteReason,
+  extractPeriodEvaluation,
+  generateGradeSummaryCSV,
+  isPeriodComputeResult
+} from '../../utils/periodGradingHelper';
+import type {
+  PeriodDraftState,
+  PeriodCategoryDraftRow
+} from '../../utils/periodGradingHelper';
 
 export const GradeComputation: React.FC = () => {
   const { user } = useAuth();
@@ -344,6 +360,35 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
+  const modalEligibleCategories = useMemo(() => {
+    if (!modalConfig || !Array.isArray(modalConfig.categories)) return [];
+    if (modalConfig.schemaMode === 'periods') {
+      return modalConfig.categories.filter(c =>
+        (c.gradingPeriod === assPeriod || !c.gradingPeriod) &&
+        c.sourceKind !== 'attendance'
+      );
+    }
+    return modalConfig.categories.filter(c => c.sourceKind !== 'attendance');
+  }, [modalConfig, assPeriod]);
+
+  const handlePeriodChange = (newPeriod: 'Midterm' | 'Final') => {
+    setAssPeriod(newPeriod);
+    if (modalConfig && modalConfig.schemaMode === 'periods') {
+      const validForNewPeriod = modalConfig.categories.filter(
+        c => (c.gradingPeriod === newPeriod || !c.gradingPeriod) && c.sourceKind !== 'attendance'
+      );
+      if (!validForNewPeriod.some(c => String(c.id) === String(assGradingCategoryId))) {
+        setAssGradingCategoryId('');
+        setAssType('');
+        if (modalConfigStatus === 'configured') {
+          setModalCategoryWarning(true);
+        }
+      } else {
+        setModalCategoryWarning(false);
+      }
+    }
+  };
+
   const attendanceSessionOptions = useMemo(() => {
     const grouped = new Map<string, Set<string>>();
     attendanceRecords
@@ -447,7 +492,11 @@ export const GradeComputation: React.FC = () => {
     if (offering) {
       const cfg = await loadModalConfigForOffering(offering);
       if (cfg && Array.isArray(cfg.categories) && cfg.categories.length > 0) {
-        const matchedCat = cfg.categories.find(c => String(c.id) === String(ass.gradingCategoryId));
+        const matchedCat = cfg.categories.find(c =>
+          String(c.id) === String(ass.gradingCategoryId) &&
+          (cfg.schemaMode !== 'periods' || c.gradingPeriod === ass.gradingPeriod) &&
+          c.sourceKind !== 'attendance'
+        );
         if (matchedCat) {
           setAssGradingCategoryId(String(matchedCat.id));
           setAssType(matchedCat.name);
@@ -887,13 +936,46 @@ export const GradeComputation: React.FC = () => {
 
   const [selectedOfferingKey, setSelectedOfferingKey] = useState<string>('');
   const [loadedConfig, setLoadedConfig] = useState<FacultyGradingConfiguration | null>(null);
+  const [schemaMode, setSchemaMode] = useState<'overall' | 'periods'>('periods');
+  const [isPresetDraft, setIsPresetDraft] = useState<boolean>(false);
+  const [activePeriodEditorTab, setActivePeriodEditorTab] = useState<'Midterm' | 'Final'>('Midterm');
+
+  // Overall Mode State (Preserved Legacy Single-List)
   const [categoryRows, setCategoryRows] = useState<EditorCategoryRow[]>([]);
   const [savedCategoryRows, setSavedCategoryRows] = useState<EditorCategoryRow[]>([]);
+
+  // Period Mode State (Midterm & Finals)
+  const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '40', final: '60' });
+  const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '40', final: '60' });
+
+  const [midtermCategories, setMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
+  const [savedMidtermCategories, setSavedMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
+
+  const [finalCategories, setFinalCategories] = useState<PeriodCategoryDraftRow[]>([]);
+  const [savedFinalCategories, setSavedFinalCategories] = useState<PeriodCategoryDraftRow[]>([]);
+
+  const [attendanceDateRanges, setAttendanceDateRanges] = useState<{
+    midterm: { startDate: string; endDate: string };
+    final: { startDate: string; endDate: string };
+  }>({
+    midterm: { startDate: '', endDate: '' },
+    final: { startDate: '', endDate: '' },
+  });
+  const [savedAttendanceDateRanges, setSavedAttendanceDateRanges] = useState<{
+    midterm: { startDate: string; endDate: string };
+    final: { startDate: string; endDate: string };
+  }>({
+    midterm: { startDate: '', endDate: '' },
+    final: { startDate: '', endDate: '' },
+  });
+
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [conflictError, setConflictError] = useState(false);
-  const [mappingError, setMappingError] = useState<FacultyGradingCategoryAssignmentRequiredItem[] | null>(null);
+  const [firstSaveAssignmentError, setFirstSaveAssignmentError] = useState<FacultyGradingCategoryAssignmentRequiredItem[] | null>(null);
+  const [conversionMappingError, setConversionMappingError] = useState<FacultyGradingCategoryPeriodMappingRequiredItem[] | null>(null);
+  const [isConversionModalOpen, setIsConversionModalOpen] = useState(false);
 
   // Initialize selected offering key
   useEffect(() => {
@@ -918,7 +1000,8 @@ export const GradeComputation: React.FC = () => {
     setConfigLoading(true);
     setConfigError(null);
     setConflictError(false);
-    setMappingError(null);
+    setFirstSaveAssignmentError(null);
+    setConversionMappingError(null);
     try {
       const res = await getFacultyGradingConfigApi({
         courseId: offering.courseId,
@@ -926,20 +1009,146 @@ export const GradeComputation: React.FC = () => {
         schoolYear: offering.canonicalSchoolYear,
       });
       setLoadedConfig(res.configuration);
-      if (res.configuration && Array.isArray(res.configuration.categories) && res.configuration.categories.length > 0) {
-        const rows: EditorCategoryRow[] = res.configuration.categories.map((cat, idx) => ({
-          tempId: String(cat.id ?? `cat-${idx}`),
-          id: cat.id ?? undefined,
-          name: cat.name,
-          weight: String(cat.weight),
-          sortOrder: cat.sortOrder ?? (idx + 1),
-          inUse: Boolean(cat.inUse),
-        }));
-        setCategoryRows(rows);
-        setSavedCategoryRows(rows);
-      } else {
+      if (res.configuration === null) {
+        // Unconfigured offering: populate editable unsaved starting preset
+        setSchemaMode('periods');
+        setIsPresetDraft(true);
+        const defaults = res.defaults;
+        const fallback = buildDefaultPeriodDraft();
+
+        const initialRatio = defaults?.termRatio
+          ? { midterm: String(defaults.termRatio.midterm), final: String(defaults.termRatio.final) }
+          : fallback.termRatio;
+        setTermRatio(initialRatio);
+        setSavedTermRatio(initialRatio);
+
+        const initialMidterm: PeriodCategoryDraftRow[] = defaults?.midtermCategories
+          ? defaults.midtermCategories.map((c, idx) => ({
+              compositeKey: buildRowCompositeKey('Midterm', undefined, `preset-m-${idx + 1}`),
+              tempId: `preset-m-${idx + 1}`,
+              id: undefined,
+              name: c.name,
+              weight: String(c.weight),
+              sortOrder: c.sortOrder ?? (idx + 1),
+              gradingPeriod: 'Midterm' as const,
+              sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+              inUse: false,
+            }))
+          : fallback.midtermCategories;
+        setMidtermCategories(initialMidterm);
+        setSavedMidtermCategories(initialMidterm);
+
+        const initialFinal: PeriodCategoryDraftRow[] = defaults?.finalCategories
+          ? defaults.finalCategories.map((c, idx) => ({
+              compositeKey: buildRowCompositeKey('Final', undefined, `preset-f-${idx + 1}`),
+              tempId: `preset-f-${idx + 1}`,
+              id: undefined,
+              name: c.name,
+              weight: String(c.weight),
+              sortOrder: c.sortOrder ?? (idx + 1),
+              gradingPeriod: 'Final' as const,
+              sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+              inUse: false,
+            }))
+          : fallback.finalCategories;
+        setFinalCategories(initialFinal);
+        setSavedFinalCategories(initialFinal);
+
+        setAttendanceDateRanges(fallback.attendanceDateRanges);
+        setSavedAttendanceDateRanges(fallback.attendanceDateRanges);
+
         setCategoryRows([]);
         setSavedCategoryRows([]);
+      } else {
+        setIsPresetDraft(false);
+        const mode = res.configuration.schemaMode ?? 'overall';
+        setSchemaMode(mode);
+
+        if (mode === 'overall') {
+          if (Array.isArray(res.configuration.categories) && res.configuration.categories.length > 0) {
+            const rows: EditorCategoryRow[] = res.configuration.categories.map((cat, idx) => ({
+              tempId: String(cat.id ?? `cat-${idx}`),
+              id: cat.id ?? undefined,
+              name: cat.name,
+              weight: String(cat.weight),
+              sortOrder: cat.sortOrder ?? (idx + 1),
+              inUse: Boolean(cat.inUse),
+            }));
+            setCategoryRows(rows);
+            setSavedCategoryRows(rows);
+          } else {
+            setCategoryRows([]);
+            setSavedCategoryRows([]);
+          }
+          // Populate default period state in case user converts
+          const draft = buildDefaultPeriodDraft();
+          setTermRatio(draft.termRatio);
+          setSavedTermRatio(draft.termRatio);
+          setMidtermCategories(draft.midtermCategories);
+          setSavedMidtermCategories(draft.midtermCategories);
+          setFinalCategories(draft.finalCategories);
+          setSavedFinalCategories(draft.finalCategories);
+          setAttendanceDateRanges(draft.attendanceDateRanges);
+          setSavedAttendanceDateRanges(draft.attendanceDateRanges);
+        } else {
+          // Period Mode
+          const tr = {
+            midterm: String(res.configuration.termRatio?.midterm ?? 40),
+            final: String(res.configuration.termRatio?.final ?? 60),
+          };
+          setTermRatio(tr);
+          setSavedTermRatio(tr);
+
+          const dr = {
+            midterm: {
+              startDate: res.configuration.attendanceDateRanges?.midterm?.startDate ?? '',
+              endDate: res.configuration.attendanceDateRanges?.midterm?.endDate ?? '',
+            },
+            final: {
+              startDate: res.configuration.attendanceDateRanges?.final?.startDate ?? '',
+              endDate: res.configuration.attendanceDateRanges?.final?.endDate ?? '',
+            },
+          };
+          setAttendanceDateRanges(dr);
+          setSavedAttendanceDateRanges(dr);
+
+          const mSource = res.configuration.midtermCategories
+            ?? res.configuration.categories?.filter(c => c.gradingPeriod === 'Midterm')
+            ?? [];
+          const mRows: PeriodCategoryDraftRow[] = mSource.map((c, idx) => ({
+            compositeKey: buildRowCompositeKey('Midterm', c.id, `m-${idx + 1}`),
+            tempId: `m-${c.id ?? idx + 1}`,
+            id: c.id,
+            name: c.name,
+            weight: String(c.weight),
+            sortOrder: c.sortOrder ?? (idx + 1),
+            gradingPeriod: 'Midterm' as const,
+            sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            inUse: Boolean(c.inUse),
+          }));
+          setMidtermCategories(mRows);
+          setSavedMidtermCategories(mRows);
+
+          const fSource = res.configuration.finalCategories
+            ?? res.configuration.categories?.filter(c => c.gradingPeriod === 'Final')
+            ?? [];
+          const fRows: PeriodCategoryDraftRow[] = fSource.map((c, idx) => ({
+            compositeKey: buildRowCompositeKey('Final', c.id, `f-${idx + 1}`),
+            tempId: `f-${c.id ?? idx + 1}`,
+            id: c.id,
+            name: c.name,
+            weight: String(c.weight),
+            sortOrder: c.sortOrder ?? (idx + 1),
+            gradingPeriod: 'Final' as const,
+            sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            inUse: Boolean(c.inUse),
+          }));
+          setFinalCategories(fRows);
+          setSavedFinalCategories(fRows);
+
+          setCategoryRows([]);
+          setSavedCategoryRows([]);
+        }
       }
     } catch (err) {
       setConfigError(err instanceof Error ? err.message : 'Failed to load grade configuration.');
@@ -954,7 +1163,8 @@ export const GradeComputation: React.FC = () => {
     loadGradingConfig(currentOffering);
   }, [activeSubTab, currentOffering?.key]);
 
-  const isDirty = useMemo(() => {
+  // Dirty state checking
+  const isOverallDirty = useMemo(() => {
     if (categoryRows.length !== savedCategoryRows.length) return true;
     for (let i = 0; i < categoryRows.length; i++) {
       const curr = categoryRows[i];
@@ -971,6 +1181,37 @@ export const GradeComputation: React.FC = () => {
     return false;
   }, [categoryRows, savedCategoryRows]);
 
+  const isPeriodDirty = useMemo(() => {
+    if (termRatio.midterm !== savedTermRatio.midterm || termRatio.final !== savedTermRatio.final) return true;
+    if (
+      attendanceDateRanges.midterm.startDate !== savedAttendanceDateRanges.midterm.startDate ||
+      attendanceDateRanges.midterm.endDate !== savedAttendanceDateRanges.midterm.endDate ||
+      attendanceDateRanges.final.startDate !== savedAttendanceDateRanges.final.startDate ||
+      attendanceDateRanges.final.endDate !== savedAttendanceDateRanges.final.endDate
+    ) {
+      return true;
+    }
+    if (midtermCategories.length !== savedMidtermCategories.length) return true;
+    for (let i = 0; i < midtermCategories.length; i++) {
+      const c = midtermCategories[i];
+      const s = savedMidtermCategories[i];
+      if (c.name !== s.name || c.weight !== s.weight || c.sortOrder !== s.sortOrder || c.id !== s.id || c.sourceKind !== s.sourceKind) {
+        return true;
+      }
+    }
+    if (finalCategories.length !== savedFinalCategories.length) return true;
+    for (let i = 0; i < finalCategories.length; i++) {
+      const c = finalCategories[i];
+      const s = savedFinalCategories[i];
+      if (c.name !== s.name || c.weight !== s.weight || c.sortOrder !== s.sortOrder || c.id !== s.id || c.sourceKind !== s.sourceKind) {
+        return true;
+      }
+    }
+    return false;
+  }, [termRatio, savedTermRatio, attendanceDateRanges, savedAttendanceDateRanges, midtermCategories, savedMidtermCategories, finalCategories, savedFinalCategories]);
+
+  const isDirty = schemaMode === 'overall' ? isOverallDirty : isPeriodDirty;
+
   const handleSelectOffering = async (newKey: string) => {
     if (newKey === selectedOfferingKey) return;
     if (isDirty) {
@@ -980,6 +1221,19 @@ export const GradeComputation: React.FC = () => {
       );
       if (!confirmed) return;
     }
+    // Clear all period state before loading new offering so one offering's preset cannot leak into another
+    setLoadedConfig(null);
+    setCategoryRows([]);
+    setSavedCategoryRows([]);
+    setMidtermCategories([]);
+    setSavedMidtermCategories([]);
+    setFinalCategories([]);
+    setSavedFinalCategories([]);
+    setAttendanceDateRanges({ midterm: { startDate: '', endDate: '' }, final: { startDate: '', endDate: '' } });
+    setSavedAttendanceDateRanges({ midterm: { startDate: '', endDate: '' }, final: { startDate: '', endDate: '' } });
+    setFirstSaveAssignmentError(null);
+    setConversionMappingError(null);
+    setConflictError(false);
     setSelectedOfferingKey(newKey);
   };
 
@@ -996,6 +1250,7 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
+  // Legacy Overall Category Handlers
   const handleAddCategory = () => {
     const newRow: EditorCategoryRow = {
       tempId: `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -1092,60 +1347,393 @@ export const GradeComputation: React.FC = () => {
     return null;
   }, [categoryRows, weightCalculation]);
 
-  const handleSaveGradingConfig = async (e?: React.FormEvent) => {
+  // Period Mode Category & Ratio Handlers
+  const handleUpdateTermRatio = (field: 'midterm' | 'final', val: string) => {
+    if (field === 'midterm') {
+      const num = parseFloat(val);
+      if (!isNaN(num) && num >= 0 && num <= 100) {
+        const comp = Math.round((100 - num) * 10000) / 10000;
+        setTermRatio({ midterm: val, final: String(comp) });
+      } else {
+        setTermRatio(prev => ({ ...prev, midterm: val }));
+      }
+    } else {
+      const num = parseFloat(val);
+      if (!isNaN(num) && num >= 0 && num <= 100) {
+        const comp = Math.round((100 - num) * 10000) / 10000;
+        setTermRatio({ midterm: String(comp), final: val });
+      } else {
+        setTermRatio(prev => ({ ...prev, final: val }));
+      }
+    }
+  };
+
+  const handleUpdateDateRange = (period: 'midterm' | 'final', field: 'startDate' | 'endDate', val: string) => {
+    setAttendanceDateRanges(prev => ({
+      ...prev,
+      [period]: {
+        ...prev[period],
+        [field]: val,
+      },
+    }));
+  };
+
+  const handleAddPeriodCategory = (period: 'Midterm' | 'Final') => {
+    const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const newRow: PeriodCategoryDraftRow = {
+      compositeKey: buildRowCompositeKey(period, null, tempId),
+      tempId,
+      name: '',
+      weight: '',
+      sortOrder: (period === 'Midterm' ? midtermCategories.length : finalCategories.length) + 1,
+      gradingPeriod: period,
+      sourceKind: 'assessment',
+      inUse: false,
+    };
+    if (period === 'Midterm') {
+      setMidtermCategories(prev => [...prev, newRow]);
+    } else {
+      setFinalCategories(prev => [...prev, newRow]);
+    }
+  };
+
+  const handleUpdatePeriodCategoryField = (
+    period: 'Midterm' | 'Final',
+    compositeKey: string,
+    field: 'name' | 'weight',
+    val: string
+  ) => {
+    const updateList = (list: PeriodCategoryDraftRow[]) =>
+      list.map(r => {
+        if (r.compositeKey !== compositeKey) return r;
+        return { ...r, [field]: val };
+      });
+
+    if (period === 'Midterm') {
+      setMidtermCategories(updateList);
+    } else {
+      setFinalCategories(updateList);
+    }
+  };
+
+  const handleMovePeriodCategory = (period: 'Midterm' | 'Final', index: number, direction: 'up' | 'down') => {
+    const list = period === 'Midterm' ? midtermCategories : finalCategories;
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+    const next = [...list];
+    const item = next[index];
+    next[index] = next[targetIndex];
+    next[targetIndex] = item;
+    const reordered = next.map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
+    if (period === 'Midterm') {
+      setMidtermCategories(reordered);
+    } else {
+      setFinalCategories(reordered);
+    }
+  };
+
+  const handleRemovePeriodCategory = (period: 'Midterm' | 'Final', compositeKey: string) => {
+    const list = period === 'Midterm' ? midtermCategories : finalCategories;
+    const target = list.find(r => r.compositeKey === compositeKey);
+    if (!target) return;
+    if (target.inUse) {
+      showFeedback('Cannot remove category that has associated assessments.', 'error');
+      return;
+    }
+    const filtered = list.filter(r => r.compositeKey !== compositeKey).map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
+    if (period === 'Midterm') {
+      setMidtermCategories(filtered);
+    } else {
+      setFinalCategories(filtered);
+    }
+  };
+
+  const midtermCalc = useMemo(() => {
+    let sumUnits = 0;
+    let allValid = true;
+    for (const row of midtermCategories) {
+      const trimmed = row.weight.trim();
+      if (trimmed === '') {
+        allValid = false;
+        continue;
+      }
+      const units = parseWeightUnits(trimmed);
+      if (units === null) {
+        allValid = false;
+      } else {
+        sumUnits += units;
+      }
+    }
+    const isExact100 = allValid && sumUnits === TOTAL_WEIGHT_UNITS;
+    const displayPercent = formatWeightUnitsToPercent(sumUnits);
+    return { sumUnits, allValid, isExact100, displayPercent };
+  }, [midtermCategories]);
+
+  const finalCalc = useMemo(() => {
+    let sumUnits = 0;
+    let allValid = true;
+    for (const row of finalCategories) {
+      const trimmed = row.weight.trim();
+      if (trimmed === '') {
+        allValid = false;
+        continue;
+      }
+      const units = parseWeightUnits(trimmed);
+      if (units === null) {
+        allValid = false;
+      } else {
+        sumUnits += units;
+      }
+    }
+    const isExact100 = allValid && sumUnits === TOTAL_WEIGHT_UNITS;
+    const displayPercent = formatWeightUnitsToPercent(sumUnits);
+    return { sumUnits, allValid, isExact100, displayPercent };
+  }, [finalCategories]);
+
+  const termRatioCalc = useMemo(() => {
+    const midUnits = parseWeightUnits(termRatio.midterm.trim());
+    const finUnits = parseWeightUnits(termRatio.final.trim());
+    const allValid = midUnits !== null && finUnits !== null;
+    const sumUnits = (midUnits ?? 0) + (finUnits ?? 0);
+    const isExact100 = allValid && sumUnits === TOTAL_WEIGHT_UNITS;
+    const displayPercent = formatWeightUnitsToPercent(sumUnits);
+    return { allValid, isExact100, displayPercent };
+  }, [termRatio]);
+
+  const periodValidationError = useMemo(() => {
+    if (!termRatioCalc.isExact100) {
+      return `Term ratio weights must equal 100% (Current: ${termRatioCalc.displayPercent}%).`;
+    }
+
+    if (midtermCategories.length === 0) {
+      return 'At least one Midterm category is required.';
+    }
+    const mNames = midtermCategories.map(r => r.name.trim());
+    if (mNames.some(n => !n)) {
+      return 'All Midterm category names must be filled out.';
+    }
+    const mLower = mNames.map(n => n.toLowerCase());
+    if (new Set(mLower).size !== mLower.length) {
+      return 'Midterm category names must be unique.';
+    }
+    const mAttendanceCount = midtermCategories.filter(r => r.sourceKind === 'attendance').length;
+    if (mAttendanceCount > 1) {
+      return 'Each period may contain only one authoritative Attendance category.';
+    }
+    for (const row of midtermCategories) {
+      const units = parseWeightUnits(row.weight.trim());
+      if (units === null) {
+        return `Invalid Midterm weight "${row.weight}". Enter a number between 0 and 100 with up to 4 decimal places.`;
+      }
+    }
+    if (!midtermCalc.isExact100) {
+      return `Midterm category weights must equal 100% (Current: ${midtermCalc.displayPercent}%).`;
+    }
+
+    if (finalCategories.length === 0) {
+      return 'At least one Finals category is required.';
+    }
+    const fNames = finalCategories.map(r => r.name.trim());
+    if (fNames.some(n => !n)) {
+      return 'All Finals category names must be filled out.';
+    }
+    const fLower = fNames.map(n => n.toLowerCase());
+    if (new Set(fLower).size !== fLower.length) {
+      return 'Finals category names must be unique.';
+    }
+    const fAttendanceCount = finalCategories.filter(r => r.sourceKind === 'attendance').length;
+    if (fAttendanceCount > 1) {
+      return 'Each period may contain only one authoritative Attendance category.';
+    }
+    for (const row of finalCategories) {
+      const units = parseWeightUnits(row.weight.trim());
+      if (units === null) {
+        return `Invalid Finals weight "${row.weight}". Enter a number between 0 and 100 with up to 4 decimal places.`;
+      }
+    }
+    if (!finalCalc.isExact100) {
+      return `Finals category weights must equal 100% (Current: ${finalCalc.displayPercent}%).`;
+    }
+
+    const dateVal = validateDateRanges(attendanceDateRanges);
+    if (!dateVal.valid) {
+      return dateVal.error || 'Attendance date ranges are invalid.';
+    }
+
+    return null;
+  }, [termRatioCalc, midtermCategories, finalCategories, midtermCalc, finalCalc, attendanceDateRanges]);
+
+  const handleSaveGradingConfig = async (e?: React.FormEvent, options?: { convertFromOverall?: boolean }) => {
     if (e) e.preventDefault();
     if (!currentOffering) return;
     if (configSaving) return;
 
-    if (validationError) {
-      showFeedback(validationError, 'error');
-      return;
+    if (schemaMode === 'overall' && !options?.convertFromOverall) {
+      if (validationError) {
+        showFeedback(validationError, 'error');
+        return;
+      }
+    } else {
+      if (periodValidationError) {
+        showFeedback(periodValidationError, 'error');
+        return;
+      }
     }
 
     setConfigSaving(true);
     setConfigError(null);
     setConflictError(false);
-    setMappingError(null);
+    setFirstSaveAssignmentError(null);
+    setConversionMappingError(null);
 
-    const payload: FacultyGradingConfigSavePayload = {
-      courseId: currentOffering.courseId,
-      semester: currentOffering.canonicalSemester,
-      schoolYear: currentOffering.canonicalSchoolYear,
-      categories: categoryRows.map((row, idx) => ({
-        ...(row.id ? { id: row.id } : {}),
-        name: row.name.trim(),
-        weight: row.weight.trim(),
-        sortOrder: idx + 1,
-      })),
-    };
+    let payload: FacultyGradingConfigSavePayload;
 
-    if (loadedConfig?.version !== undefined && loadedConfig.version !== null) {
-      payload.version = loadedConfig.version;
+    if (schemaMode === 'overall' && !options?.convertFromOverall) {
+      payload = {
+        courseId: currentOffering.courseId,
+        semester: currentOffering.canonicalSemester,
+        schoolYear: currentOffering.canonicalSchoolYear,
+        schemaMode: 'overall',
+        categories: categoryRows.map((row, idx) => ({
+          ...(row.id ? { id: row.id } : {}),
+          name: row.name.trim(),
+          weight: row.weight.trim(),
+          sortOrder: idx + 1,
+        })),
+      };
+      if (loadedConfig?.version !== undefined && loadedConfig.version !== null) {
+        payload.version = loadedConfig.version;
+      }
+    } else {
+      payload = {
+        courseId: currentOffering.courseId,
+        semester: currentOffering.canonicalSemester,
+        schoolYear: currentOffering.canonicalSchoolYear,
+        schemaMode: 'periods',
+        termRatio: {
+          midterm: Number(termRatio.midterm),
+          final: Number(termRatio.final),
+        },
+        midtermCategories: midtermCategories.map((c, idx) => ({
+          ...(c.id ? { id: c.id } : {}),
+          name: c.name.trim(),
+          weight: c.weight.trim(),
+          sortOrder: idx + 1,
+          gradingPeriod: 'Midterm',
+          sourceKind: c.sourceKind,
+        })),
+        finalCategories: finalCategories.map((c, idx) => ({
+          ...(c.id ? { id: c.id } : {}),
+          name: c.name.trim(),
+          weight: c.weight.trim(),
+          sortOrder: idx + 1,
+          gradingPeriod: 'Final',
+          sourceKind: c.sourceKind,
+        })),
+        attendanceDateRanges: normalizeDateRangesForPayload(attendanceDateRanges),
+      };
+      if (loadedConfig?.version !== undefined && loadedConfig.version !== null) {
+        payload.version = loadedConfig.version;
+      }
+      if (options?.convertFromOverall) {
+        payload.convertFromOverall = true;
+      }
     }
 
     try {
       const res = await saveFacultyGradingConfigApi(payload);
       setLoadedConfig(res.configuration);
-      const updatedRows: EditorCategoryRow[] = res.configuration.categories.map((cat, idx) => ({
-        tempId: String(cat.id ?? `cat-${idx}`),
-        id: cat.id ?? undefined,
-        name: cat.name,
-        weight: String(cat.weight),
-        sortOrder: cat.sortOrder ?? (idx + 1),
-        inUse: Boolean(cat.inUse),
-      }));
-      setCategoryRows(updatedRows);
-      setSavedCategoryRows(updatedRows);
+      setIsPresetDraft(false);
+      setSchemaMode(res.configuration.schemaMode ?? 'periods');
+
+      if (res.configuration.schemaMode === 'overall') {
+        const updatedRows: EditorCategoryRow[] = res.configuration.categories.map((cat, idx) => ({
+          tempId: String(cat.id ?? `cat-${idx}`),
+          id: cat.id ?? undefined,
+          name: cat.name,
+          weight: String(cat.weight),
+          sortOrder: cat.sortOrder ?? (idx + 1),
+          inUse: Boolean(cat.inUse),
+        }));
+        setCategoryRows(updatedRows);
+        setSavedCategoryRows(updatedRows);
+      } else {
+        const tr = {
+          midterm: String(res.configuration.termRatio?.midterm ?? 40),
+          final: String(res.configuration.termRatio?.final ?? 60),
+        };
+        setTermRatio(tr);
+        setSavedTermRatio(tr);
+
+        const dr = {
+          midterm: {
+            startDate: res.configuration.attendanceDateRanges?.midterm?.startDate ?? '',
+            endDate: res.configuration.attendanceDateRanges?.midterm?.endDate ?? '',
+          },
+          final: {
+            startDate: res.configuration.attendanceDateRanges?.final?.startDate ?? '',
+            endDate: res.configuration.attendanceDateRanges?.final?.endDate ?? '',
+          },
+        };
+        setAttendanceDateRanges(dr);
+        setSavedAttendanceDateRanges(dr);
+
+        const mSource = res.configuration.midtermCategories
+          ?? res.configuration.categories?.filter(c => c.gradingPeriod === 'Midterm')
+          ?? [];
+        const mRows: PeriodCategoryDraftRow[] = mSource.map((c, idx) => ({
+          compositeKey: buildRowCompositeKey('Midterm', c.id, `m-${idx + 1}`),
+          tempId: `m-${c.id ?? idx + 1}`,
+          id: c.id,
+          name: c.name,
+          weight: String(c.weight),
+          sortOrder: c.sortOrder ?? (idx + 1),
+          gradingPeriod: 'Midterm',
+          sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+          inUse: Boolean(c.inUse),
+        }));
+        setMidtermCategories(mRows);
+        setSavedMidtermCategories(mRows);
+
+        const fSource = res.configuration.finalCategories
+          ?? res.configuration.categories?.filter(c => c.gradingPeriod === 'Final')
+          ?? [];
+        const fRows: PeriodCategoryDraftRow[] = fSource.map((c, idx) => ({
+          compositeKey: buildRowCompositeKey('Final', c.id, `f-${idx + 1}`),
+          tempId: `f-${c.id ?? idx + 1}`,
+          id: c.id,
+          name: c.name,
+          weight: String(c.weight),
+          sortOrder: c.sortOrder ?? (idx + 1),
+          gradingPeriod: 'Final',
+          sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+          inUse: Boolean(c.inUse),
+        }));
+        setFinalCategories(fRows);
+        setSavedFinalCategories(fRows);
+
+        if (options?.convertFromOverall) {
+          setIsConversionModalOpen(false);
+        }
+      }
       showFeedback('Grade weights saved successfully.', 'success');
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setConflictError(true);
-          showFeedback('Version conflict: another session updated these grade weights. Please reload the latest configuration.', 'error');
-        } else if (err.status === 422 && (err.code === 'GRADING_CATEGORY_ASSIGNMENT_REQUIRED' || Array.isArray(err.details?.assessments))) {
+          if (err.code === 'GRADING_PERIOD_CONVERSION_REQUIRED') {
+            showFeedback('Converting from overall grading requires explicit confirmation.', 'error');
+          } else {
+            setConflictError(true);
+            showFeedback('Version conflict: another session updated these grade weights. Please reload the latest configuration.', 'error');
+          }
+        } else if (err.status === 422 && err.code === 'GRADING_CATEGORY_ASSIGNMENT_REQUIRED') {
           const assessments = (Array.isArray(err.details?.assessments) ? err.details.assessments : []) as FacultyGradingCategoryAssignmentRequiredItem[];
-          setMappingError(assessments);
+          setFirstSaveAssignmentError(assessments);
           showFeedback(err.message || 'Existing assessments require matching category assignments.', 'error');
+        } else if (err.status === 422 && err.code === 'GRADING_CATEGORY_PERIOD_MAPPING_REQUIRED') {
+          const refs = (Array.isArray(err.details?.assessmentReferences) ? err.details.assessmentReferences : []) as FacultyGradingCategoryPeriodMappingRequiredItem[];
+          setConversionMappingError(refs);
+          showFeedback(err.message || 'Existing assessments require matching period category assignments.', 'error');
         } else {
           setConfigError(err.message);
           showFeedback(err.message, 'error');
@@ -1167,6 +1755,15 @@ export const GradeComputation: React.FC = () => {
   const [sortField, setSortField] = useState<'name' | 'overall'>('name');
   const [sortAsc, setSortAsc] = useState(true);
 
+  // Recomputation State
+  const [computeResultsByEnrollment, setComputeResultsByEnrollment] = useState<Map<string, FacultyGradeComputeResult>>(new Map());
+  const [isRecomputing, setIsRecomputing] = useState(false);
+  const [recomputeAlert, setRecomputeAlert] = useState<{
+    status: 'success' | 'incomplete';
+    message: string;
+    details?: string[];
+  } | null>(null);
+
   const toggleSort = (field: 'name' | 'overall') => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
@@ -1186,25 +1783,111 @@ export const GradeComputation: React.FC = () => {
       if (sortField === 'name') {
         return sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
       } else {
-        const gradeA = a.enrolledSubjects.find(sub => sub.code === selectedSubjectCode)?.grade ?? 5.0;
-        const gradeB = b.enrolledSubjects.find(sub => sub.code === selectedSubjectCode)?.grade ?? 5.0;
+        const subjA = a.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+        const subjB = b.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+        const resA = subjA?.enrollmentId ? computeResultsByEnrollment.get(String(subjA.enrollmentId)) : null;
+        const resB = subjB?.enrollmentId ? computeResultsByEnrollment.get(String(subjB.enrollmentId)) : null;
+        const evalA = extractPeriodEvaluation(subjA, resA);
+        const evalB = extractPeriodEvaluation(subjB, resB);
+        const gradeA = evalA.overallGwa ?? 5.0;
+        const gradeB = evalB.overallGwa ?? 5.0;
         // In GWA, smaller values are better (e.g. 1.0 is better than 5.0)
         return sortAsc ? gradeA - gradeB : gradeB - gradeA;
       }
     });
-  }, [activeStudents, summarySearch, sortField, sortAsc, selectedSubjectCode]);
+  }, [activeStudents, summarySearch, sortField, sortAsc, selectedSubjectCode, computeResultsByEnrollment]);
+
+  const isPeriodMode = useMemo(() => {
+    if (loadedConfig?.schemaMode === 'periods') return true;
+    if (assessmentConfig?.schemaMode === 'periods') return true;
+    const hasStudentPeriod = activeStudents.some(s => {
+      const subj = s.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+      return subj?.components && typeof subj.components === 'object' && (subj.components as any).calculationMode === 'authoritative_periods';
+    });
+    if (hasStudentPeriod) return true;
+    for (const res of computeResultsByEnrollment.values()) {
+      if (isPeriodComputeResult(res)) return true;
+    }
+    return false;
+  }, [loadedConfig, assessmentConfig, activeStudents, selectedSubjectCode, computeResultsByEnrollment]);
+
+  const handleRecomputeGrades = async () => {
+    if (!selectedClassId) return;
+    setIsRecomputing(true);
+    setRecomputeAlert(null);
+    try {
+      const response = await computeFacultyGradesApi(selectedClassId);
+      const newMap = new Map<string, FacultyGradeComputeResult>();
+      let computedCount = 0;
+      let incompleteCount = 0;
+      const incompleteReasons = new Set<string>();
+
+      (response.results || []).forEach(res => {
+        if (res.enrollmentId) {
+          newMap.set(String(res.enrollmentId), res);
+        }
+        if (res.status === 'computed') {
+          computedCount++;
+        } else {
+          incompleteCount++;
+          if (res.status === 'incomplete_period' && res.periods) {
+            const m = res.periods.midterm;
+            const f = res.periods.final;
+            if (Array.isArray(m?.incomplete)) {
+              m.incomplete.forEach(i => incompleteReasons.add(`Midterm: ${formatPeriodIncompleteReason(i.reason)}`));
+            }
+            if (Array.isArray(f?.incomplete)) {
+              f.incomplete.forEach(i => incompleteReasons.add(`Finals: ${formatPeriodIncompleteReason(i.reason)}`));
+            }
+          } else if (res.status === 'incomplete_attendance') {
+            incompleteReasons.add('Attendance data missing or unresolved');
+          }
+        }
+      });
+
+      setComputeResultsByEnrollment(newMap);
+
+      if (incompleteCount > 0) {
+        setRecomputeAlert({
+          status: 'incomplete',
+          message: `Recomputation complete: ${computedCount} computed, ${incompleteCount} incomplete. Prior recorded results were preserved.`,
+          details: Array.from(incompleteReasons),
+        });
+        showFeedback(`Recomputation complete: ${incompleteCount} student(s) remain incomplete. Prior grades preserved.`, 'info');
+      } else {
+        setRecomputeAlert({
+          status: 'success',
+          message: `All ${computedCount} student grade(s) recomputed and persisted successfully.`,
+        });
+        showFeedback('Class grades recomputed successfully.', 'success');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Recomputation failed.';
+      setRecomputeAlert({
+        status: 'incomplete',
+        message: `Grade recomputation failed: ${msg}. Prior persisted grades remain in place.`,
+      });
+      showFeedback(msg, 'error');
+    } finally {
+      setIsRecomputing(false);
+    }
+  };
 
   const handleExportCSV = () => {
-    recordAudit({ action: 'Exported grade CSV', module: 'Grade Computation', description: `Exported grade ledger for ${selectedSubjectCode}.`, status: 'Success' });
-    let headers = 'Student ID,Name,Midterm Grade,Final Grade,Overall GWA,Status\n';
-    let rows = sortedSummaryStudents.map(student => {
-      const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
-      const gradeVal = subj && typeof subj.grade === 'number' ? subj.grade.toFixed(2) : '5.00';
-      const statusText = student.status.toUpperCase();
-      return `${student.studentId},"${student.name}",${gradeVal},${gradeVal},${gradeVal},${statusText}`;
-    }).join('\n');
+    recordAudit({
+      action: 'Exported grade CSV',
+      module: 'Grade Computation',
+      description: `Exported grade ledger for ${selectedSubjectCode}.`,
+      status: 'Success',
+    });
+    const csvContent = generateGradeSummaryCSV(
+      sortedSummaryStudents,
+      selectedSubjectCode,
+      isPeriodMode,
+      computeResultsByEnrollment
+    );
 
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -2066,13 +2749,25 @@ export const GradeComputation: React.FC = () => {
                     ))}
                   </select>
 
-                  {loadedConfig && (
+                  {isPresetDraft ? (
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                        Suggested starting preset — unsaved
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350 text-[10px] font-bold uppercase">
+                        Period Grading
+                      </span>
+                    </div>
+                  ) : loadedConfig ? (
                     <div className="flex items-center gap-2">
                       <span className="px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 border border-clinical-200 dark:border-clinical-800 text-clinical-700 dark:text-clinical-300 text-[10px] font-bold">
                         Version {loadedConfig.version}
                       </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350 text-[10px] font-bold uppercase">
+                        {schemaMode === 'periods' ? 'Period Grading' : 'Legacy Overall'}
+                      </span>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>
@@ -2100,15 +2795,15 @@ export const GradeComputation: React.FC = () => {
               </div>
             )}
 
-            {/* Mapping Error Alert (422) */}
-            {mappingError && mappingError.length > 0 && (
+            {/* First-Save Unmapped Assessment Alert (422) */}
+            {firstSaveAssignmentError && firstSaveAssignmentError.length > 0 && (
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 space-y-3 text-xs">
                 <div className="flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <div>
                     <div className="font-bold">Existing Assessments Require Matching Categories</div>
                     <div className="text-[11px] mt-0.5">
-                      This course offering contains active assessments that require matching category names before this configuration can be activated. Please create categories matching each legacy type below:
+                      This unconfigured course offering contains active assessments that require matching category names before this configuration can be activated. Please create categories matching each legacy assessment below:
                     </div>
                   </div>
                 </div>
@@ -2122,13 +2817,54 @@ export const GradeComputation: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-amber-500/20">
-                      {mappingError.map(item => (
+                      {firstSaveAssignmentError.map(item => (
                         <tr key={item.assessmentId}>
                           <td className="px-3 py-1.5 font-mono text-[11px]">{item.assessmentId}</td>
                           <td className="px-3 py-1.5 font-semibold text-slate-800 dark:text-slate-100">{item.title}</td>
                           <td className="px-3 py-1.5">
                             <span className="px-2 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-bold text-[10px]">
                               {item.legacyType}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Conversion Mapping Error Alert (422) */}
+            {conversionMappingError && conversionMappingError.length > 0 && (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 space-y-3 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <div>
+                    <div className="font-bold">Existing Assessments Require Period Category Mappings</div>
+                    <div className="text-[11px] mt-0.5">
+                      Every existing assessment must have a category mapping for its grading period during conversion. Please review the missing mappings below:
+                    </div>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-amber-500/20 bg-white/60 dark:bg-slate-900/60">
+                  <table className="min-w-full divide-y divide-amber-500/20 text-xs">
+                    <thead>
+                      <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider text-left">
+                        <th className="px-3 py-2">Assessment ID</th>
+                        <th className="px-3 py-2">Category ID</th>
+                        <th className="px-3 py-2">Grading Period</th>
+                        <th className="px-3 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-500/20">
+                      {conversionMappingError.map(item => (
+                        <tr key={item.assessmentId}>
+                          <td className="px-3 py-1.5 font-mono text-[11px]">{item.assessmentId}</td>
+                          <td className="px-3 py-1.5 font-mono text-[11px]">{item.categoryId ?? 'Unassigned'}</td>
+                          <td className="px-3 py-1.5 font-semibold text-slate-800 dark:text-slate-100">{item.gradingPeriod}</td>
+                          <td className="px-3 py-1.5">
+                            <span className="px-2 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-bold text-[10px]">
+                              {item.status || 'Active'}
                             </span>
                           </td>
                         </tr>
@@ -2153,66 +2889,373 @@ export const GradeComputation: React.FC = () => {
                 <RefreshCw className="w-6 h-6 animate-spin text-clinical-550" />
                 <span className="text-xs">Loading course grade configuration...</span>
               </div>
+            ) : schemaMode === 'overall' ? (
+              /* LEGACY OVERALL GRADING VIEW */
+              <div className="space-y-5">
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      Legacy Overall Grading Active
+                    </div>
+                    <p className="text-[11px] text-slate-650 dark:text-slate-350 mt-0.5">
+                      This course offering uses single-list overall grading categories. You can continue editing or convert to period grading.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsConversionModalOpen(true)}
+                    className="shrink-0 px-3.5 py-1.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    Convert to Period Grading
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveGradingConfig} className="space-y-5">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Grading Categories ({categoryRows.length})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddCategory}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-clinical-50 dark:bg-clinical-950/40 text-clinical-600 dark:text-clinical-400 hover:bg-clinical-100 font-bold text-xs transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Category
+                      </button>
+                    </div>
+
+                    {categoryRows.length === 0 ? (
+                      <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                        <p className="text-xs text-slate-400">No categories added yet.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-150 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
+                        {categoryRows.map((row, index) => (
+                          <div key={row.tempId} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                type="button"
+                                aria-label="Move category up"
+                                onClick={() => handleMoveCategory(index, 'up')}
+                                disabled={index === 0}
+                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Move category down"
+                                onClick={() => handleMoveCategory(index, 'down')}
+                                disabled={index === categoryRows.length - 1}
+                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <div className="flex-1">
+                              <input
+                                type="text"
+                                value={row.name}
+                                placeholder="Category name (e.g. Quizzes, Final Exam)"
+                                onChange={(e) => handleUpdateCategory(row.tempId, 'name', e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-1.5 w-28">
+                              <input
+                                type="text"
+                                value={row.weight}
+                                placeholder="0"
+                                onChange={(e) => handleUpdateCategory(row.tempId, 'weight', e.target.value)}
+                                className="w-20 px-2.5 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                              />
+                              <span className="text-xs font-bold text-slate-400">%</span>
+                            </div>
+
+                            <div>
+                              <button
+                                type="button"
+                                aria-label={`Delete category ${row.name || 'unnamed'}`}
+                                onClick={() => handleRemoveCategory(row.tempId)}
+                                disabled={row.inUse}
+                                title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
+                                className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-150 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs">
+                        <span className="text-slate-400">Total Weight: </span>
+                        <span className={`font-extrabold text-sm ${weightCalculation.isExact100 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {weightCalculation.displayPercent}
+                        </span>
+                        <span className="text-slate-400 text-xs"> / 100%</span>
+                      </div>
+                      {weightCalculation.isExact100 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                          <CheckCircle className="w-3 h-3" />
+                          Valid 100%
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
+                          <AlertTriangle className="w-3 h-3" />
+                          Must equal 100%
+                        </span>
+                      )}
+                      {isDirty && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                          Unsaved Changes
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={configSaving || !weightCalculation.isExact100 || categoryRows.length === 0}
+                      className="flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{configSaving ? 'Saving...' : 'Save Grade Weights'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
             ) : (
-              <form onSubmit={handleSaveGradingConfig} className="space-y-5">
-                {/* Policy Banner / Empty State Banner */}
-                {loadedConfig === null && categoryRows.length === 0 ? (
+              /* PERIOD GRADING VIEW (MIDTERM & FINALS) */
+              <div className="space-y-5">
+                {isPresetDraft ? (
                   <div className="p-4 rounded-2xl bg-clinical-500/10 border border-clinical-500/20 text-xs text-clinical-800 dark:text-clinical-300 space-y-2">
                     <div className="font-bold flex items-center gap-1.5">
                       <BookOpen className="w-4 h-4 text-clinical-600 dark:text-clinical-400" />
-                      Unconfigured Course Offering
+                      Suggested starting preset — unsaved
                     </div>
                     <p className="text-[11px] leading-relaxed text-slate-650 dark:text-slate-350">
-                      No grade weights have been configured for this course offering yet. Add dynamic categories totaling exactly <strong>100%</strong> to establish the initial grading schema.
+                      No grade weights have been configured for this course offering yet. The standard dental curriculum starting preset (40% Midterm / 60% Finals) is loaded for you to customize and save.
                     </p>
                   </div>
                 ) : (
                   <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-clinical-500" />
                     <span>
-                      Grade weighting policy: Total weights across all categories must sum to exactly <strong>100%</strong>. Weights support decimal precision up to 4 places (e.g. 33.3333%).
+                      Period grading policy: Midterm and Finals categories independently total 100%. The term contribution ratio must also total 100%.
                     </span>
                   </div>
                 )}
 
-                {/* Categories Table / Rows */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Grading Categories ({categoryRows.length})
-                    </span>
+                <form onSubmit={handleSaveGradingConfig} className="space-y-5">
+                  {/* Term Weight Contribution Ratio */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Term Weight Ratio
+                      </span>
+                      {termRatioCalc.isExact100 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                          <CheckCircle className="w-3 h-3" />
+                          Valid 100%
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
+                          <AlertTriangle className="w-3 h-3" />
+                          Must equal 100% (Current: {termRatioCalc.displayPercent}%)
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="midterm-ratio-input" className="text-xs font-semibold text-slate-600 dark:text-slate-350 block mb-1">
+                          Midterm Weight (%)
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            id="midterm-ratio-input"
+                            type="text"
+                            value={termRatio.midterm}
+                            onChange={(e) => handleUpdateTermRatio('midterm', e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                          />
+                          <span className="text-xs font-bold text-slate-400">%</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label htmlFor="final-ratio-input" className="text-xs font-semibold text-slate-600 dark:text-slate-350 block mb-1">
+                          Finals Weight (%)
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            id="final-ratio-input"
+                            type="text"
+                            value={termRatio.final}
+                            onChange={(e) => handleUpdateTermRatio('final', e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                          />
+                          <span className="text-xs font-bold text-slate-400">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Attendance Date Ranges */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Faculty-Defined Attendance Date Ranges (YYYY-MM-DD)
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Inclusive calendar dates for each period's attendance. Midterm attendance must end before Finals attendance starts; gaps are allowed. Attendance calculations are performed strictly server-side.
+                      </p>
+                    </div>
+
+                    {!validateDateRanges(attendanceDateRanges).valid && (
+                      <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                        <span>{validateDateRanges(attendanceDateRanges).error}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Midterm Dates */}
+                      <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Midterm Attendance Range</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label htmlFor="midterm-start-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">Start Date</label>
+                            <input
+                              id="midterm-start-date"
+                              type="date"
+                              value={attendanceDateRanges.midterm.startDate}
+                              onChange={(e) => handleUpdateDateRange('midterm', 'startDate', e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="midterm-end-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">End Date</label>
+                            <input
+                              id="midterm-end-date"
+                              type="date"
+                              value={attendanceDateRanges.midterm.endDate}
+                              onChange={(e) => handleUpdateDateRange('midterm', 'endDate', e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Finals Dates */}
+                      <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Finals Attendance Range</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label htmlFor="final-start-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">Start Date</label>
+                            <input
+                              id="final-start-date"
+                              type="date"
+                              value={attendanceDateRanges.final.startDate}
+                              onChange={(e) => handleUpdateDateRange('final', 'startDate', e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="final-end-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">End Date</label>
+                            <input
+                              id="final-end-date"
+                              type="date"
+                              value={attendanceDateRanges.final.endDate}
+                              onChange={(e) => handleUpdateDateRange('final', 'endDate', e.target.value)}
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Period Category Tabs */}
+                  <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2">
                     <button
                       type="button"
-                      onClick={handleAddCategory}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-clinical-50 dark:bg-clinical-950/40 text-clinical-600 dark:text-clinical-400 hover:bg-clinical-100 font-bold text-xs transition-colors"
+                      onClick={() => setActivePeriodEditorTab('Midterm')}
+                      className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all ${
+                        activePeriodEditorTab === 'Midterm'
+                          ? 'border-clinical-600 text-clinical-600 dark:text-clinical-400'
+                          : 'border-transparent text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Category
+                      <span>Midterm Categories ({midtermCategories.length})</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] ${
+                        midtermCalc.isExact100
+                          ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+                      }`}>
+                        {midtermCalc.displayPercent}%
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivePeriodEditorTab('Final')}
+                      className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all ${
+                        activePeriodEditorTab === 'Final'
+                          ? 'border-clinical-600 text-clinical-600 dark:text-clinical-400'
+                          : 'border-transparent text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      <span>Finals Categories ({finalCategories.length})</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] ${
+                        finalCalc.isExact100
+                          ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+                      }`}>
+                        {finalCalc.displayPercent}%
+                      </span>
                     </button>
                   </div>
 
-                  {categoryRows.length === 0 ? (
-                    <div className="py-8 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
-                      <p className="text-xs text-slate-400">No categories added yet.</p>
+                  {/* Active Period Category Table */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Grading Categories
+                      </span>
                       <button
                         type="button"
-                        onClick={handleAddCategory}
-                        className="mt-2 inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-clinical-600 text-white font-bold text-xs hover:bg-clinical-700"
+                        onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-clinical-50 dark:bg-clinical-950/40 text-clinical-600 dark:text-clinical-400 hover:bg-clinical-100 font-bold text-xs transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        Add First Category
+                        Add {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Category
                       </button>
                     </div>
-                  ) : (
+
+                    {periodValidationError && (
+                      <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                        <span>{periodValidationError}</span>
+                      </div>
+                    )}
+
                     <div className="divide-y divide-slate-150 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
-                      {categoryRows.map((row, index) => (
-                        <div key={row.tempId} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                      {(activePeriodEditorTab === 'Midterm' ? midtermCategories : finalCategories).map((row, index, arr) => (
+                        <div key={row.compositeKey} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                           {/* Reorder Buttons */}
                           <div className="flex flex-col gap-0.5">
                             <button
                               type="button"
-                              aria-label="Move category up"
-                              onClick={() => handleMoveCategory(index, 'up')}
+                              aria-label={`Move category ${row.name || 'unnamed'} up`}
+                              onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'up')}
                               disabled={index === 0}
                               className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
                             >
@@ -2220,24 +3263,29 @@ export const GradeComputation: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                              aria-label="Move category down"
-                              onClick={() => handleMoveCategory(index, 'down')}
-                              disabled={index === categoryRows.length - 1}
+                              aria-label={`Move category ${row.name || 'unnamed'} down`}
+                              onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'down')}
+                              disabled={index === arr.length - 1}
                               className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
                             >
                               <ChevronDown className="w-3.5 h-3.5" />
                             </button>
                           </div>
 
-                          {/* Category Name Input */}
-                          <div className="flex-1">
+                          {/* Category Name & Source Kind Badge */}
+                          <div className="flex-1 flex items-center gap-2">
                             <input
                               type="text"
                               value={row.name}
-                              placeholder="Category name (e.g. Quizzes, Final Exam)"
-                              onChange={(e) => handleUpdateCategory(row.tempId, 'name', e.target.value)}
+                              placeholder="Category name (e.g. Quiz, Exam)"
+                              onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'name', e.target.value)}
                               className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
                             />
+                            {row.sourceKind === 'attendance' && (
+                              <span className="shrink-0 px-2 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 text-[10px] font-bold border border-clinical-200 dark:border-clinical-800" title="Authoritative attendance data from recorded sessions">
+                                Authoritative Attendance
+                              </span>
+                            )}
                           </div>
 
                           {/* Category Weight Input */}
@@ -2246,7 +3294,7 @@ export const GradeComputation: React.FC = () => {
                               type="text"
                               value={row.weight}
                               placeholder="0"
-                              onChange={(e) => handleUpdateCategory(row.tempId, 'weight', e.target.value)}
+                              onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
                               className="w-20 px-2.5 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500"
                             />
                             <span className="text-xs font-bold text-slate-400">%</span>
@@ -2257,7 +3305,7 @@ export const GradeComputation: React.FC = () => {
                             <button
                               type="button"
                               aria-label={`Delete category ${row.name || 'unnamed'}`}
-                              onClick={() => handleRemoveCategory(row.tempId)}
+                              onClick={() => handleRemovePeriodCategory(activePeriodEditorTab, row.compositeKey)}
                               disabled={row.inUse}
                               title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
                               className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
@@ -2268,64 +3316,124 @@ export const GradeComputation: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                {/* Total Bar and Action Buttons */}
-                <div className="pt-4 border-t border-slate-150 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="text-xs">
-                      <span className="text-slate-400">Total Weight: </span>
-                      <span
-                        className={`font-extrabold text-sm ${
-                          weightCalculation.isExact100 ? 'text-emerald-500' : 'text-rose-500'
-                        }`}
-                      >
-                        {weightCalculation.displayPercent}
-                      </span>
-                      <span className="text-slate-400 text-xs"> / 100%</span>
+                  {/* Period Total Bar & Action Buttons */}
+                  <div className="pt-4 border-t border-slate-150 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-400">Ratio: </span>
+                        <span className={`font-bold ${termRatioCalc.isExact100 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {termRatio.midterm}% / {termRatio.final}%
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Midterm: </span>
+                        <span className={`font-bold ${midtermCalc.isExact100 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {midtermCalc.displayPercent}%
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Finals: </span>
+                        <span className={`font-bold ${finalCalc.isExact100 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {finalCalc.displayPercent}%
+                        </span>
+                      </div>
+
+                      {isDirty && (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                          Unsaved Changes
+                        </span>
+                      )}
                     </div>
 
-                    {weightCalculation.isExact100 ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                        <CheckCircle className="w-3 h-3" />
-                        Valid 100%
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
-                        <AlertTriangle className="w-3 h-3" />
-                        Must equal 100%
-                      </span>
-                    )}
-
-                    {isDirty && (
-                      <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                        Unsaved Changes
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="submit"
+                        disabled={configSaving || periodValidationError !== null}
+                        className="flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>
+                          {configSaving
+                            ? 'Saving...'
+                            : isPresetDraft
+                            ? 'Save Initial Schema'
+                            : 'Save Grade Weights'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="submit"
-                      disabled={configSaving || !weightCalculation.isExact100 || categoryRows.length === 0}
-                      className="flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>
-                        {configSaving
-                          ? 'Saving...'
-                          : loadedConfig
-                          ? 'Save Grade Weights'
-                          : 'Save Initial Schema'}
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              </form>
+                </form>
+              </div>
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* ----------------------------------------------------
+          CONVERSION REVIEW MODAL (LEGACY TO PERIOD GRADING)
+      ---------------------------------------------------- */}
+      {isConversionModalOpen && (
+        <Modal
+          isOpen={isConversionModalOpen}
+          onClose={() => setIsConversionModalOpen(false)}
+          title="Convert to Period Grading"
+        >
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 space-y-2">
+              <div className="font-bold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                Convert Course Offering to Period Grading
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                Converting will switch this course offering from legacy single-list grading to separate <strong>Midterm</strong> and <strong>Finals</strong> grading periods.
+                Once converted, existing assessments will be associated with their corresponding period categories.
+                Conversion cannot be undone once saved.
+              </p>
+            </div>
+
+            {conversionMappingError && conversionMappingError.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400 space-y-2">
+                <div className="font-bold">Missing Period Category Mappings</div>
+                <p className="text-[11px]">The following assessments need valid period category assignments before conversion:</p>
+                <div className="max-h-32 overflow-y-auto">
+                  {conversionMappingError.map(item => (
+                    <div key={item.assessmentId} className="text-[10px] font-mono">
+                      Assessment #{item.assessmentId} (Period: {item.gradingPeriod})
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2 text-xs">
+              <h4 className="font-bold text-slate-800 dark:text-slate-200">Proposed Term Ratio:</h4>
+              <div className="flex items-center gap-4 text-slate-650 dark:text-slate-350">
+                <span>Midterm: <strong>{termRatio.midterm}%</strong></span>
+                <span>Finals: <strong>{termRatio.final}%</strong></span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-150 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsConversionModalOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-205 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={configSaving}
+                onClick={() => handleSaveGradingConfig(undefined, { convertFromOverall: true })}
+                className="px-5 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 disabled:opacity-50 text-white font-bold text-xs shadow-md"
+              >
+                {configSaving ? 'Converting...' : 'Confirm Conversion'}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ----------------------------------------------------
@@ -2341,6 +3449,16 @@ export const GradeComputation: React.FC = () => {
 
             <div className="flex flex-wrap gap-2">
               <button
+                type="button"
+                onClick={handleRecomputeGrades}
+                disabled={isRecomputing || !selectedClassId}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all"
+              >
+                <Zap className={`w-3.5 h-3.5 ${isRecomputing ? 'animate-spin' : 'text-amber-400'}`} />
+                <span>{isRecomputing ? 'Recomputing...' : 'Recompute Grades'}</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => window.print()}
                 className="flex items-center gap-1 px-3.5 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 text-slate-650 hover:bg-slate-50 dark:text-slate-350 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 font-bold text-xs"
               >
@@ -2348,6 +3466,7 @@ export const GradeComputation: React.FC = () => {
                 Print Layout
               </button>
               <button
+                type="button"
                 onClick={handleExportCSV}
                 className="flex items-center gap-1 px-3.5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm"
               >
@@ -2370,6 +3489,31 @@ export const GradeComputation: React.FC = () => {
             </div>
           </div>
 
+          {/* Recompute Alert */}
+          {recomputeAlert && (
+            <div className={`mx-5 my-3 p-4 rounded-2xl border text-xs flex flex-col gap-1.5 ${
+              recomputeAlert.status === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+            }`}>
+              <div className="flex items-center gap-2 font-bold">
+                {recomputeAlert.status === 'success' ? (
+                  <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                )}
+                <span>{recomputeAlert.message}</span>
+              </div>
+              {recomputeAlert.details && recomputeAlert.details.length > 0 && (
+                <div className="mt-1 pl-6 space-y-0.5 text-[11px] opacity-90">
+                  {recomputeAlert.details.map((detail, idx) => (
+                    <div key={idx}>• {detail}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
@@ -2380,10 +3524,19 @@ export const GradeComputation: React.FC = () => {
                       <ArrowUpDown className="w-3 h-3" />
                     </div>
                   </th>
-                  <th className="px-5 py-3 text-center">Quizzes</th>
-                  <th className="px-5 py-3 text-center">Practicum</th>
-                  <th className="px-5 py-3 text-center">Exams</th>
-                  <th className="px-5 py-3 text-center">Attendance</th>
+                  {isPeriodMode ? (
+                    <>
+                      <th className="px-5 py-3 text-center">Midterm %</th>
+                      <th className="px-5 py-3 text-center">Final %</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-5 py-3 text-center">Quizzes</th>
+                      <th className="px-5 py-3 text-center">Practicum</th>
+                      <th className="px-5 py-3 text-center">Exams</th>
+                      <th className="px-5 py-3 text-center">Attendance</th>
+                    </>
+                  )}
                   <th className="px-5 py-3 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => toggleSort('overall')}>
                     <div className="flex items-center justify-center gap-1">
                       Overall GWA
@@ -2396,13 +3549,70 @@ export const GradeComputation: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
                 {sortedSummaryStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-8 text-center text-slate-400">
+                    <td colSpan={isPeriodMode ? 5 : 7} className="px-5 py-8 text-center text-slate-400">
                       No matching student grade summaries found.
                     </td>
                   </tr>
                 ) : (
                   sortedSummaryStudents.map(student => {
                     const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+                    const computeRes = subj?.enrollmentId ? computeResultsByEnrollment.get(String(subj.enrollmentId)) : null;
+
+                    if (isPeriodMode) {
+                      const evalResult = extractPeriodEvaluation(subj, computeRes);
+                      const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa > settings.retentionThreshold;
+                      const isFailed = evalResult.overallGwa === 5.0;
+                      const isIncomplete = evalResult.overallGwa === null;
+
+                      return (
+                        <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
+                          <td className="px-5 py-3">
+                            <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
+                            <span className="text-[10px] text-slate-400">{student.studentId}</span>
+                          </td>
+                          <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
+                            {evalResult.midtermPercentage !== null ? (
+                              `${evalResult.midtermPercentage.toFixed(2)}%`
+                            ) : evalResult.midtermReasons.length > 0 ? (
+                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.midtermReasons.join(', ')}>
+                                Incomplete ({evalResult.midtermReasons[0]})
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-sans">Incomplete</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
+                            {evalResult.finalPercentage !== null ? (
+                              `${evalResult.finalPercentage.toFixed(2)}%`
+                            ) : evalResult.finalReasons.length > 0 ? (
+                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.finalReasons.join(', ')}>
+                                Incomplete ({evalResult.finalReasons[0]})
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-sans">Incomplete</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
+                            {evalResult.overallGwa !== null ? evalResult.overallGwa.toFixed(2) : '—'}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                              isFailed
+                                ? 'bg-rose-100 text-rose-700'
+                                : isFailsRetention
+                                ? 'bg-amber-100 text-amber-700'
+                                : isIncomplete
+                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                : 'bg-emerald-100 text-emerald-700'
+                            }`}>
+                              {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : isIncomplete ? 'INCOMPLETE' : 'PASS'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    // Legacy overall view
                     const isFailsRetention = subj && subj.isClinical && subj.grade > settings.retentionThreshold;
                     const isFailed = subj && subj.grade === 5.0;
 
@@ -2694,14 +3904,15 @@ export const GradeComputation: React.FC = () => {
                     onChange={(e) => {
                       const selectedId = e.target.value;
                       setAssGradingCategoryId(selectedId);
-                      const found = modalConfig.categories.find(c => String(c.id) === String(selectedId));
+                      const found = modalEligibleCategories.find(c => String(c.id) === String(selectedId));
                       setAssType(found ? found.name : '');
+                      setModalCategoryWarning(false);
                     }}
                     required
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
                   >
                     <option value="">Select grading category</option>
-                    {modalConfig.categories.map(cat => (
+                    {modalEligibleCategories.map(cat => (
                       <option key={cat.id} value={String(cat.id)}>
                         {cat.name} ({cat.weight}%)
                       </option>
@@ -2733,7 +3944,7 @@ export const GradeComputation: React.FC = () => {
               </label>
               <select
                 value={assPeriod}
-                onChange={(e) => setAssPeriod(e.target.value as any)}
+                onChange={(e) => handlePeriodChange(e.target.value as any)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
               >
                 <option value="Midterm">Midterm Period</option>

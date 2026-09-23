@@ -249,7 +249,7 @@ The `Last reviewed` value is the repository commit set used to review this check
 
 1. Sign in as the local demo Faculty account.
 2. Visit `/classes` and `/students`; present the visible class, roster, eligibility, and student information for the selected class.
-3. Visit `/grades`; present the assessment/grade worksheet and the visible score, category, or transmutation context without claiming more than the current data shows.
+3. Visit `/grades`; present the Grade Weights Editor with period preset customization (40% Midterm / 60% Finals), Faculty-defined attendance date ranges, conversion from legacy overall weighting, explicit recomputation, and authoritative period percentage / overall GWA ledger and CSV export.
 4. Visit `/attendance`; select an available class/date and present the attendance records and visible status controls.
 5. Visit `/retention` and `/reports`; present the visible retention indicators and report context.
 6. Visit `/email-management`; present email history and, if using a tester-controlled eligible roster, the student-invitation presentation.
@@ -258,7 +258,7 @@ The `Last reviewed` value is the repository commit set used to review this check
 
 **Expected observations:** Faculty can see only the current assigned/available roster context; grades/assessments, attendance, retention, reports, email history, audit, profile, and settings are presented without obvious contradiction; logout ends the session. Exact save payloads, conflict handling, and persistence are covered by automated tests.
 
-**Automated coverage:** [e2e/faculty.spec.ts](../e2e/faculty.spec.ts), [e2e/live/live.spec.ts](../e2e/live/live.spec.ts) live Faculty workflows, [e2e/dfd_verification.spec.ts](../e2e/dfd_verification.spec.ts), [e2e/transmutation.spec.ts](../e2e/transmutation.spec.ts), and [e2e/auth.spec.ts](../e2e/auth.spec.ts) Student invitation initiation.
+**Automated coverage:** [frontend/src/tests/periodGradingContract.test.ts](../frontend/src/tests/periodGradingContract.test.ts), [e2e/faculty.spec.ts](../e2e/faculty.spec.ts), [e2e/live/live.spec.ts](../e2e/live/live.spec.ts) live Faculty workflows, [e2e/dfd_verification.spec.ts](../e2e/dfd_verification.spec.ts), [e2e/transmutation.spec.ts](../e2e/transmutation.spec.ts), and [e2e/auth.spec.ts](../e2e/auth.spec.ts) Student invitation initiation.
 
 **Status:** `Not Run`
 

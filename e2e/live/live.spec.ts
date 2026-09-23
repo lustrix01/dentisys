@@ -569,6 +569,29 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   expect(classesData.status).toBe('ok');
   const activeClasses = (classesData.classes || []).filter((c: any) => (c.status || '').toLowerCase() === 'active');
   expect(activeClasses.length).toBeGreaterThan(0);
+  const activeClass = activeClasses[0];
+
+  // For unconfigured offerings, ensure an active assessment with legacy type 'Laboratory' exists
+  // in PostgreSQL to exercise live 422 GRADING_CATEGORY_ASSIGNMENT_REQUIRED before initial schema activation
+  const checkConfigRes = await page.request.get(
+    `/api/faculty/grading-config?courseId=${activeClass.courseId}&semester=${encodeURIComponent(activeClass.semester)}&schoolYear=${encodeURIComponent(activeClass.schoolYear)}`,
+    { headers: { Authorization: `Bearer ${credentials.access_token}` } }
+  );
+  const checkConfigData = await jsonResponse(checkConfigRes);
+  if (!checkConfigData.configuration?.isConfigured) {
+    const seedAssRes = await page.request.post('/api/faculty/assessments', {
+      headers: { Authorization: `Bearer ${credentials.access_token}`, 'Content-Type': 'application/json' },
+      data: [{
+        classId: activeClass.id,
+        title: 'Live Unmapped Practical Exam',
+        type: 'Laboratory',
+        gradingPeriod: 'Midterm',
+        maxScore: 100,
+        status: 'Active',
+      }],
+    });
+    expect(seedAssRes.status()).toBe(200);
+  }
 
   // 3. Navigate to Grade Weights Editor
   const initialConfigPromise = page.waitForResponse(
@@ -581,31 +604,58 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   await initialConfigPromise;
 
   // Check if categories already exist or if it's unconfigured
-  await expect(
-    page.getByText(/Unconfigured Course Offering/i).or(page.locator('input[placeholder*="Category name"]').first())
-  ).toBeVisible();
+  await expect(page.locator('input[placeholder*="Category name"]').first()).toBeVisible();
 
-  const hasUnconfiguredBanner = await page.getByText(/Unconfigured Course Offering/i).isVisible();
+  const isUnsavedPreset = await page.getByText(/Suggested starting preset — unsaved/i).first().isVisible();
 
-  if (hasUnconfiguredBanner) {
-    // Add 3 dynamic categories totaling 100%
-    await page.getByRole('button', { name: /Add First Category/i }).click();
-    const nameInputs = page.locator('input[placeholder*="Category name"]');
-    const weightInputs = page.locator('input[placeholder="0"]');
+  if (isUnsavedPreset) {
+    // Assert suggested starting preset is displayed with default period categories
+    const initialNameInputs = page.locator('input[placeholder*="Category name"]');
+    await expect(initialNameInputs.nth(0)).toHaveValue('Quiz');
 
-    await nameInputs.nth(0).fill('Quizzes');
-    await weightInputs.nth(0).fill('30');
+    // 4a. Live 422 unmapped assessment validation:
+    // Existing active assessments in PostgreSQL seeded without category (e.g. Practicum 1 / Laboratory in Midterm)
+    // require matching grading categories before the initial schema can be activated.
+    const firstSaveFailPromise = page.waitForResponse(
+      response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
+    );
+    await page.getByRole('button', { name: /Save Initial Schema/i }).click();
 
-    await page.getByRole('button', { name: /Add Category/i }).click();
-    await nameInputs.nth(1).fill('Midterm Exam');
-    await weightInputs.nth(1).fill('30');
+    const failRes = await firstSaveFailPromise;
+    expect(failRes.status()).toBe(422);
+    const failData = await failRes.json();
+    expect(failData.code).toBe('GRADING_CATEGORY_ASSIGNMENT_REQUIRED');
+    expect(failData.assessments.length).toBeGreaterThan(0);
 
-    await page.getByRole('button', { name: /Add Category/i }).click();
-    await nameInputs.nth(2).fill('Final Exam');
-    await weightInputs.nth(2).fill('40');
+    // 422 warning banner appears and displays unmapped assessment requirement
+    await expect(page.getByText(/Existing Assessments Require Matching Categories/i)).toBeVisible();
+    await expect(page.getByText('Live Unmapped Practical Exam')).toBeVisible();
+    await expect(page.getByText('Laboratory').first()).toBeVisible();
 
-    await expect(page.getByText(/Valid 100%/i)).toBeVisible();
+    // Filter out expected intentional 422 console errors
+    const scrubExpected422 = () => {
+      const errs = (page as any).__liveErrors;
+      if (Array.isArray(errs)) {
+        const kept = errs.filter((e: string) => !e.includes('status of 422'));
+        errs.length = 0;
+        errs.push(...kept);
+      }
+    };
+    scrubExpected422();
 
+    // Verify unsaved draft remains preserved after 422
+    await expect(initialNameInputs.nth(0)).toHaveValue('Quiz');
+
+    // 4b. Resolve unmapped assessment by updating Midterm category 1 (Activity -> Laboratory)
+    await initialNameInputs.nth(1).fill('Laboratory');
+
+    // Fill attendance date ranges
+    await page.locator('#midterm-start-date').fill('2026-08-01');
+    await page.locator('#midterm-end-date').fill('2026-10-15');
+    await page.locator('#final-start-date').fill('2026-10-20');
+    await page.locator('#final-end-date').fill('2026-12-15');
+
+    // Save Initial Schema successfully
     const savePromise = page.waitForResponse(
       response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
     );
@@ -616,7 +666,18 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     const saveData = await saveRes.json();
     expect(saveData.status).toBe('ok');
     expect(saveData.configuration.version).toBe(1);
-    expect(saveData.configuration.categories).toHaveLength(3);
+    expect(saveData.configuration.schemaMode).toBe('periods');
+    expect(saveData.configuration.categories.length).toBeGreaterThanOrEqual(4);
+    expect(saveData.configuration.attendanceDateRanges).toEqual({
+      midterm: {
+        startDate: '2026-08-01',
+        endDate: '2026-10-15',
+      },
+      final: {
+        startDate: '2026-10-20',
+        endDate: '2026-12-15',
+      },
+    });
 
     await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
     await expect(page.getByText(/Version 1/i)).toBeVisible();
@@ -638,7 +699,8 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   expect(updateRes.status()).toBe(200);
   const updateData = await updateRes.json();
   expect(updateData.status).toBe('ok');
-  expect(updateData.configuration.categories[0].name).toBe(updatedFirstName);
+  const updateMidtermCats = updateData.configuration.midtermCategories ?? updateData.configuration.categories.filter((c: any) => c.gradingPeriod === 'Midterm');
+  expect(updateMidtermCats[0].name).toBe(updatedFirstName);
 
   await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
 
@@ -661,7 +723,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   const secondCatNameBefore = await reorderNameInputs.nth(1).inputValue();
 
   // Move row 0 down: row 0 becomes secondCatNameBefore, row 1 becomes firstCatNameBefore
-  await page.locator('button[aria-label="Move category down"]').first().click();
+  await page.locator('button[aria-label*="down"]').first().click();
   await expect(reorderNameInputs.nth(0)).toHaveValue(secondCatNameBefore);
   await expect(reorderNameInputs.nth(1)).toHaveValue(firstCatNameBefore);
 
@@ -674,10 +736,11 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   expect(reorderSaveRes.status()).toBe(200);
   const reorderSaveData = await reorderSaveRes.json();
   expect(reorderSaveData.status).toBe('ok');
-  expect(reorderSaveData.configuration.categories[0].name).toBe(secondCatNameBefore);
-  expect(reorderSaveData.configuration.categories[0].sortOrder).toBe(1);
-  expect(reorderSaveData.configuration.categories[1].name).toBe(firstCatNameBefore);
-  expect(reorderSaveData.configuration.categories[1].sortOrder).toBe(2);
+  const reorderMidtermCats = reorderSaveData.configuration.midtermCategories ?? reorderSaveData.configuration.categories.filter((c: any) => c.gradingPeriod === 'Midterm');
+  expect(reorderMidtermCats[0].name).toBe(secondCatNameBefore);
+  expect(reorderMidtermCats[0].sortOrder).toBe(1);
+  expect(reorderMidtermCats[1].name).toBe(firstCatNameBefore);
+  expect(reorderMidtermCats[1].sortOrder).toBe(2);
 
   await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
 
@@ -691,14 +754,22 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   await expect(page.locator('#course-offering-select')).toBeVisible();
   const reloadGetRes = await reloadGetPromise;
   const reloadGetData = await reloadGetRes.json();
-  expect(reloadGetData.configuration.categories[0].name).toBe(secondCatNameBefore);
-  expect(reloadGetData.configuration.categories[0].sortOrder).toBe(1);
-  expect(reloadGetData.configuration.categories[1].name).toBe(firstCatNameBefore);
-  expect(reloadGetData.configuration.categories[1].sortOrder).toBe(2);
+  const reloadMidtermCats = reloadGetData.configuration.midtermCategories ?? reloadGetData.configuration.categories.filter((c: any) => c.gradingPeriod === 'Midterm');
+  expect(reloadMidtermCats[0].name).toBe(secondCatNameBefore);
+  expect(reloadMidtermCats[0].sortOrder).toBe(1);
+  expect(reloadMidtermCats[1].name).toBe(firstCatNameBefore);
+  expect(reloadMidtermCats[1].sortOrder).toBe(2);
 
   const postReloadInputs = page.locator('input[placeholder*="Category name"]');
   await expect(postReloadInputs.nth(0)).toHaveValue(secondCatNameBefore);
   await expect(postReloadInputs.nth(1)).toHaveValue(firstCatNameBefore);
+
+  const scrubErrs = (page as any).__liveErrors;
+  if (Array.isArray(scrubErrs)) {
+    const kept = scrubErrs.filter((e: string) => !e.includes('status of 422'));
+    scrubErrs.length = 0;
+    scrubErrs.push(...kept);
+  }
 
   console.log('LIVE FACULTY GRADE WEIGHTS WORKFLOW VALIDATED SUCCESSFULLY IN POSTGRESQL');
 });
@@ -751,8 +822,10 @@ test('authoritative faculty assessment manager: create and edit assessments with
   }
 
   expect(existingConfig.categories.length).toBeGreaterThanOrEqual(2);
-  const firstCategory = existingConfig.categories[0];
-  const secondCategory = existingConfig.categories[1];
+  const eligibleCategories = existingConfig.categories.filter((c: any) => c.sourceKind !== 'attendance' && (c.gradingPeriod === 'Midterm' || !c.gradingPeriod));
+  expect(eligibleCategories.length).toBeGreaterThanOrEqual(2);
+  const firstCategory = eligibleCategories[0];
+  const secondCategory = eligibleCategories[1];
 
   // 4. Navigate to Assessments Tab
   await page.goto('/grades?tab=assessments');

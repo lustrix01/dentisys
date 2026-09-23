@@ -723,7 +723,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
     });
 
-    test('collapses duplicate sections into course offering and shows honest unconfigured empty state', async ({ page }) => {
+    test('collapses duplicate sections into course offering and shows editable unsaved starting preset', async ({ page }) => {
       await page.route('**/api/faculty/grading-config?*', async (route) => {
         await route.fulfill({
           status: 200,
@@ -741,13 +741,21 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(offeringSelect.locator('option').first()).toContainText('CLIN401 - Clinical Dentistry I (1st Semester, 2026-2027) · 2 Sections');
       await expect(offeringSelect.locator('option').nth(1)).toContainText('CLIN402 - Clinical Dentistry II (2nd Semester, 2026-2027) · 1 Section');
 
-      // Honest empty state
-      await expect(page.getByText(/Unconfigured Course Offering/i)).toBeVisible();
-      await expect(page.getByText(/No grade weights have been configured for this course offering yet/i)).toBeVisible();
-      await expect(page.getByRole('button', { name: /Add First Category/i })).toBeVisible();
+      // Suggested starting preset indicator
+      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
+      await expect(page.getByText(/Period Grading/i)).toBeVisible();
+
+      // Term ratio inputs: Midterm 40% and Finals 60%
+      const midtermRatioInput = page.locator('#midterm-ratio-input');
+      const finalRatioInput = page.locator('#final-ratio-input');
+      await expect(midtermRatioInput).toHaveValue('40');
+      await expect(finalRatioInput).toHaveValue('60');
+
+      // Save Initial Schema button
+      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeVisible();
     });
 
-    test('supports adding dynamic categories, reordering, weight updates, and live percentage validation', async ({ page }) => {
+    test('supports adding dynamic categories, reordering, weight updates, and live percentage validation across period tabs', async ({ page }) => {
       await page.route('**/api/faculty/grading-config?*', async (route) => {
         await route.fulfill({
           status: 200,
@@ -757,47 +765,49 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await page.getByRole('button', { name: /Add First Category/i }).click();
+      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
 
-      // Row 1
+      // In starting preset, Midterm tab has 4 categories (Quiz 25, Activity 25, Midterm Exam 40, Attendance 10)
       const nameInputs = page.locator('input[placeholder*="Category name"]');
       const weightInputs = page.locator('input[placeholder="0"]');
 
-      await nameInputs.nth(0).fill('Quizzes');
-      await weightInputs.nth(0).fill('35');
+      await expect(nameInputs.nth(0)).toHaveValue('Quiz');
+      await expect(weightInputs.nth(0)).toHaveValue('25');
 
-      // Check sum shows 35% and invalid
-      await expect(page.getByText('35%')).toBeVisible();
-      await expect(page.getByText(/Must equal 100%/i)).toBeVisible();
+      // Check sum shows 100% and valid initially
+      await expect(page.getByText(/Valid 100%/i).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+
+      // Update Quiz weight to 35 -> sum is 110% (invalid)
+      await weightInputs.nth(0).fill('35');
+      await expect(page.getByText(/Must equal 100%/i).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeDisabled();
 
-      // Add Row 2
-      await page.getByRole('button', { name: /Add Category/i }).click();
-      await nameInputs.nth(1).fill('Midterm Exam');
-      await weightInputs.nth(1).fill('30');
-
-      // Add Row 3
-      await page.getByRole('button', { name: /Add Category/i }).click();
-      await nameInputs.nth(2).fill('Final Exam');
-      await weightInputs.nth(2).fill('35');
-
-      // Check sum shows 100% and valid
-      await expect(page.locator('text=Total Weight:').locator('..')).toContainText('100% / 100%');
-      await expect(page.getByText(/Valid 100%/i)).toBeVisible();
+      // Update Activity weight to 15 -> sum returns to 100% (valid)
+      await weightInputs.nth(1).fill('15');
+      await expect(page.getByText(/Valid 100%/i).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+
+      // Add a dynamic category to Midterm
+      await page.getByRole('button', { name: /Add Midterm Category/i }).click();
+      await nameInputs.nth(4).fill('Extra Assessment');
+      await weightInputs.nth(4).fill('0');
 
       // Test decimal precision (e.g. 33.3333 + 33.3333 + 33.3334)
       await weightInputs.nth(0).fill('33.3333');
       await weightInputs.nth(1).fill('33.3333');
       await weightInputs.nth(2).fill('33.3334');
-      await expect(page.locator('text=Total Weight:').locator('..')).toContainText('100% / 100%');
-      await expect(page.getByText(/Valid 100%/i)).toBeVisible();
-      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+      await weightInputs.nth(3).fill('0');
+      await expect(page.getByText(/Valid 100%/i).first()).toBeVisible();
 
-      // Test reordering: move Row 1 ('Quizzes') down
-      await page.locator('button[aria-label="Move category down"]').first().click();
-      await expect(nameInputs.nth(0)).toHaveValue('Midterm Exam');
-      await expect(nameInputs.nth(1)).toHaveValue('Quizzes');
+      // Test reordering: move category 0 (Quiz) down
+      await page.locator('button[aria-label^="Move category"]').nth(1).click();
+      await expect(nameInputs.nth(0)).toHaveValue('Activity');
+      await expect(nameInputs.nth(1)).toHaveValue('Quiz');
+
+      // Switch to Finals period tab
+      await page.getByRole('button', { name: /Finals Categories/i }).click();
+      await expect(page.locator('input[placeholder*="Category name"]').first()).toHaveValue('Quiz');
     });
 
     test('first save sends canonical payload omitting version and category IDs', async ({ page }) => {
@@ -825,10 +835,25 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
                 semester: '1st Semester',
                 schoolYear: '2026-2027',
                 version: 1,
-                categories: [
-                  { id: 100, name: 'Quizzes', weight: '50', sortOrder: 1, inUse: false },
-                  { id: 101, name: 'Final Exam', weight: '50', sortOrder: 2, inUse: false },
+                schemaMode: 'periods',
+                termRatio: { midterm: 40, final: 60 },
+                midtermCategories: [
+                  { id: 100, name: 'Quiz', weight: '25', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: false },
+                  { id: 101, name: 'Activity', weight: '25', sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: false },
+                  { id: 102, name: 'Midterm Exam', weight: '40', sortOrder: 3, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: false },
+                  { id: 103, name: 'Attendance', weight: '10', sortOrder: 4, gradingPeriod: 'Midterm', sourceKind: 'attendance', inUse: false },
                 ],
+                finalCategories: [
+                  { id: 104, name: 'Quiz', weight: '20', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
+                  { id: 105, name: 'Activity', weight: '20', sortOrder: 2, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
+                  { id: 106, name: 'Laboratory', weight: '20', sortOrder: 3, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
+                  { id: 107, name: 'Final Exam', weight: '30', sortOrder: 4, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
+                  { id: 108, name: 'Attendance', weight: '10', sortOrder: 5, gradingPeriod: 'Final', sourceKind: 'attendance', inUse: false },
+                ],
+                attendanceDateRanges: {
+                  midterm: { startDate: '2026-08-01', endDate: '2026-10-15' },
+                  final: { startDate: '2026-10-16', endDate: '2026-12-20' },
+                },
               },
             }),
           });
@@ -836,17 +861,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await page.getByRole('button', { name: /Add First Category/i }).click();
+      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
 
-      const nameInputs = page.locator('input[placeholder*="Category name"]');
-      const weightInputs = page.locator('input[placeholder="0"]');
-
-      await nameInputs.nth(0).fill('Quizzes');
-      await weightInputs.nth(0).fill('50');
-
-      await page.getByRole('button', { name: /Add Category/i }).click();
-      await nameInputs.nth(1).fill('Final Exam');
-      await weightInputs.nth(1).fill('50');
+      // Fill attendance date inputs
+      await page.locator('#midterm-start-date').fill('2026-08-01');
+      await page.locator('#midterm-end-date').fill('2026-10-15');
+      await page.locator('#final-start-date').fill('2026-10-16');
+      await page.locator('#final-end-date').fill('2026-12-20');
 
       await page.getByRole('button', { name: /Save Initial Schema/i }).click();
 
@@ -855,16 +876,17 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(putPayload.courseId).toBe(101);
       expect(putPayload.semester).toBe('1st Semester');
       expect(putPayload.schoolYear).toBe('2026-2027');
+      expect(putPayload.schemaMode).toBe('periods');
       expect(putPayload.version).toBeUndefined();
-      expect(putPayload.categories).toHaveLength(2);
-      expect(putPayload.categories[0].id).toBeUndefined();
-      expect(putPayload.categories[0].name).toBe('Quizzes');
-      expect(putPayload.categories[0].weight).toBe('50');
-      expect(putPayload.categories[0].sortOrder).toBe(1);
-      expect(putPayload.categories[1].id).toBeUndefined();
-      expect(putPayload.categories[1].name).toBe('Final Exam');
-      expect(putPayload.categories[1].weight).toBe('50');
-      expect(putPayload.categories[1].sortOrder).toBe(2);
+      expect(putPayload.termRatio).toEqual({ midterm: 40, final: 60 });
+      expect(putPayload.midtermCategories).toHaveLength(4);
+      expect(putPayload.finalCategories).toHaveLength(5);
+      expect(putPayload.midtermCategories[0].id).toBeUndefined();
+      expect(putPayload.finalCategories[0].id).toBeUndefined();
+      expect(putPayload.attendanceDateRanges).toEqual({
+        midterm: { startDate: '2026-08-01', endDate: '2026-10-15' },
+        final: { startDate: '2026-10-16', endDate: '2026-12-20' },
+      });
 
       // Should now display Version 1 badge
       await expect(page.getByText(/Version 1/i)).toBeVisible();
@@ -1079,13 +1101,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await page.getByRole('button', { name: /Add First Category/i }).click();
 
       const nameInputs = page.locator('input[placeholder*="Category name"]');
       const weightInputs = page.locator('input[placeholder="0"]');
-
-      await nameInputs.nth(0).fill('Quizzes');
-      await weightInputs.nth(0).fill('100');
 
       await page.getByRole('button', { name: /Save Initial Schema/i }).click();
 
@@ -1096,8 +1114,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByText('Laboratory').first()).toBeVisible();
 
       // Local row remains intact and wasn't cleared
-      await expect(nameInputs.nth(0)).toHaveValue('Quizzes');
-      await expect(weightInputs.nth(0)).toHaveValue('100');
+      await expect(nameInputs.nth(0)).toHaveValue('Quiz');
+      await expect(weightInputs.nth(0)).toHaveValue('25');
     });
 
     test('confirms before discarding unsaved changes when switching course offerings', async ({ page }) => {
@@ -1116,8 +1134,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.goto('/grades?tab=components');
       await expect(page.locator('#course-offering-select')).toBeVisible();
 
-      // Add a category to make it dirty
-      await page.getByRole('button', { name: /Add First Category/i }).click();
+      // Edit a category name to make it dirty
       const nameInputs = page.locator('input[placeholder*="Category name"]');
       await nameInputs.nth(0).fill('Dirty Category');
 
