@@ -384,12 +384,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         }
 
+        const rawStud = students.find(s => s.id === student.id);
+        const rawSub = rawStud?.enrolledSubjects.find(u => u.code === subj.code);
+
+        // Finding 3: Preserve server grades and authoritative_periods breakdowns through reloads and score/attendance refreshes
+        const existingComponents = subj.components ?? rawSub?.components;
+        const isAuthoritativePeriods = Boolean(
+          existingComponents &&
+          typeof existingComponents === 'object' &&
+          (existingComponents as any).calculationMode === 'authoritative_periods'
+        );
+
+        if (isAuthoritativePeriods) {
+          const preservedGrade = subj.grade ?? rawSub?.grade ?? null;
+          const isClinicalViolation = subj.isClinical && typeof preservedGrade === 'number' && preservedGrade > settings.retentionThreshold;
+          const isFailing = preservedGrade === 5.0;
+          const needsRemedial = isClinicalViolation || isFailing;
+          return {
+            ...subj,
+            grade: preservedGrade,
+            components: existingComponents,
+            hasRemedial: needsRemedial,
+          };
+        }
+
         const subjRecords = attList.filter(
           r => r.studentId === student.id && r.subjectCode === subj.code
         );
         let attRate = 90; // Default
-        const rawStud = students.find(s => s.id === student.id);
-        const rawSub = rawStud?.enrolledSubjects.find(u => u.code === subj.code);
         if (rawSub?.components?.attendance !== undefined) {
           attRate = rawSub.components.attendance;
         }
@@ -530,8 +552,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const updatedSubjects = student.enrolledSubjects.map(subj => {
           if (subj.code !== subjectCode) return subj;
-          let computedGrade = computeSubjectGrade(components, settings.weights);
-          const isClinicalViolation = subj.isClinical && computedGrade > settings.retentionThreshold;
+          const isPeriod = Boolean(
+            (components && typeof components === 'object' && (components as any).calculationMode === 'authoritative_periods') ||
+            (subj.components && typeof subj.components === 'object' && (subj.components as any).calculationMode === 'authoritative_periods')
+          );
+          let computedGrade = isPeriod && typeof subj.grade === 'number'
+            ? subj.grade
+            : computeSubjectGrade(components, settings.weights);
+          const isClinicalViolation = subj.isClinical && typeof computedGrade === 'number' && computedGrade > settings.retentionThreshold;
           const isFailing = computedGrade === 5.0;
           const needsRemedial = isClinicalViolation || isFailing;
 

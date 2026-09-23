@@ -1452,6 +1452,334 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.locator('.no-print tbody').getByText('INCOMPLETE', { exact: true })).toBeVisible();
       await expect(page.locator('.no-print tbody').getByText('PASS')).toHaveCount(0);
     });
+
+    test('uncomputed period mode displays Pending and — across summary table and print without leaking legacy grade', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-period-pending',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 2,
+              schemaMode: 'periods',
+              termRatio: { midterm: 40, final: 60 },
+              midtermCategories: [
+                { id: 401, name: 'Quizzes', weight: '50', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+                { id: 402, name: 'Exams', weight: '50', sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+              ],
+              finalCategories: [
+                { id: 403, name: 'Quizzes', weight: '50', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment' },
+                { id: 404, name: 'Exams', weight: '50', sortOrder: 2, gradingPeriod: 'Final', sourceKind: 'assessment' },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route('**/api/faculty/students', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            {
+              id: '42',
+              studentId: 'DENT-042',
+              name: 'Clara Santos',
+              email: 'clara@bicol-u.edu.ph',
+              yearLevel: 4,
+              status: 'active',
+              classSections: [{ classId: '1', className: 'CLIN401-A', enrollmentId: '1' }],
+              enrolledSubjects: [
+                {
+                  code: 'CLIN401',
+                  name: 'Clinical Dentistry I',
+                  units: 3,
+                  grade: 1.75,
+                  classId: '1',
+                  enrollmentId: '1',
+                  isClinical: true,
+                  components: {
+                    quizzes: 85,
+                    exams: 90,
+                    practicum: 88,
+                    attendance: 95,
+                  },
+                },
+              ],
+            },
+          ]),
+        });
+      });
+
+      await page.goto('/grades?tab=summary');
+
+      // In interactive summary table:
+      const interactiveRow = page.locator('.no-print tbody tr').filter({ hasText: 'Clara Santos' });
+      await expect(interactiveRow).toBeVisible();
+
+      // Midterm & Finals cells must show 'Pending', NOT legacy quiz percentages or 80.0%
+      await expect(interactiveRow.locator('td').nth(1)).toContainText('Pending');
+      await expect(interactiveRow.locator('td').nth(2)).toContainText('Pending');
+
+      // Overall GWA must show '—', NOT the legacy 1.75!
+      await expect(interactiveRow.locator('td').nth(3)).toContainText('—');
+      await expect(interactiveRow.locator('td').nth(3)).not.toContainText('1.75');
+
+      // Status badge must be PENDING, NOT PASS!
+      await expect(interactiveRow.locator('td').nth(4)).toContainText('PENDING');
+      await expect(interactiveRow.locator('td').nth(4)).not.toContainText('PASS');
+
+      // In printable view:
+      const printRow = page.locator('.print-only tbody tr').filter({ hasText: 'Clara Santos' });
+      await expect(printRow.locator('td').nth(2)).toContainText('Pending');
+      await expect(printRow.locator('td').nth(3)).toContainText('Pending');
+      await expect(printRow.locator('td').nth(4)).toContainText('—');
+      await expect(printRow.locator('td').nth(4)).not.toContainText('1.75');
+      await expect(printRow.locator('td').nth(5)).toContainText('PENDING');
+    });
+
+    test('incomplete recomputation without server previouslyPersisted does not display historical grade', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-period-incomp2',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 2,
+              schemaMode: 'periods',
+              termRatio: { midterm: 40, final: 60 },
+              midtermCategories: [],
+              finalCategories: [],
+            },
+          }),
+        });
+      });
+
+      await page.route('**/api/faculty/students', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            {
+              id: '43',
+              studentId: 'DENT-043',
+              name: 'Danilo Cruz',
+              email: 'danilo@bicol-u.edu.ph',
+              yearLevel: 4,
+              status: 'active',
+              classSections: [{ classId: '1', className: 'CLIN401-A', enrollmentId: '2' }],
+              enrolledSubjects: [
+                {
+                  code: 'CLIN401',
+                  name: 'Clinical Dentistry I',
+                  units: 3,
+                  grade: 2.25,
+                  classId: '1',
+                  enrollmentId: '2',
+                  isClinical: true,
+                },
+              ],
+            },
+          ]),
+        });
+      });
+
+      await page.route('**/api/faculty/grades/compute', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            results: [
+              {
+                status: 'incomplete_period',
+                enrollmentId: 2,
+                previouslyPersisted: false,
+                previousGwa: null,
+                previousPercentage: null,
+                reasons: ['unresolved_attendance'],
+                periods: {
+                  midterm: {
+                    period: 'Midterm',
+                    status: 'incomplete',
+                    percentage: null,
+                    incomplete: [{ reason: 'unresolved_attendance' }],
+                  },
+                  final: {
+                    period: 'Final',
+                    status: 'computed',
+                    percentage: 85.0,
+                    incomplete: [],
+                  },
+                },
+              },
+            ],
+          }),
+        });
+      });
+
+      await page.goto('/grades?tab=summary');
+      await page.getByRole('button', { name: /Recompute Grades/i }).click();
+      await page.getByRole('button', { name: /Confirm Recomputation/i }).click();
+
+      const row = page.locator('.no-print tbody tr').filter({ hasText: 'Danilo Cruz' });
+      await expect(row).toBeVisible();
+
+      // INCOMPLETE badge is shown in remarks (column 4)
+      await expect(row.locator('td').nth(4)).toContainText('INCOMPLETE');
+      // Overall GWA (column 3) must show '—', and must NOT fall back to legacy 2.25 or 'Prior: 2.25 (Historical)'
+      await expect(row.locator('td').nth(3)).toContainText('—');
+      await expect(page.locator('.no-print').getByText(/Prior:/i)).toHaveCount(0);
+      await expect(page.locator('.no-print').getByText(/Historical/i)).toHaveCount(0);
+    });
+
+    test('409 GRADING_CATEGORY_IN_USE displays error alert and does NOT trigger reload flow', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-cat-inuse',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 1,
+              categories: [
+                { id: 1, name: 'Quizzes', weight: '50', sortOrder: 1, inUse: true },
+                { id: 2, name: 'Exams', weight: '50', sortOrder: 2, inUse: false },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config', async (route) => {
+        if (route.request().method() === 'PUT') {
+          await route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'error',
+              code: 'GRADING_CATEGORY_IN_USE',
+              message: 'A grading category referenced by an assessment cannot be deleted.',
+            }),
+          });
+        }
+      });
+
+      await page.goto('/grades?tab=components');
+      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+
+      // Specific error message must be visible
+      await expect(page.getByText('A grading category referenced by an assessment cannot be deleted.').first()).toBeVisible();
+
+      // Reload latest conflict banner must NOT be visible
+      await expect(page.getByText(/Version Conflict Detected/i)).toHaveCount(0);
+      await expect(page.locator('.bg-rose-500\\/10', { hasText: 'Version Conflict Detected' })).toHaveCount(0);
+    });
+
+    test('409 GRADING_SCHEMA_MODE_CONFLICT displays error alert and does NOT trigger reload flow', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-schema-conflict',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 2,
+              schemaMode: 'periods',
+              termRatio: { midterm: 40, final: 60 },
+              midtermCategories: [
+                { id: 401, name: 'Quizzes', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+              ],
+              finalCategories: [
+                { id: 402, name: 'Final Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment' },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config', async (route) => {
+        if (route.request().method() === 'PUT') {
+          await route.fulfill({
+            status: 409,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'error',
+              code: 'GRADING_SCHEMA_MODE_CONFLICT',
+              message: 'An existing period configuration cannot be changed back to overall categories.',
+            }),
+          });
+        }
+      });
+
+      await page.goto('/grades?tab=components');
+      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+
+      // Specific error message must be visible
+      await expect(page.getByText('An existing period configuration cannot be changed back to overall categories.').first()).toBeVisible();
+
+      // Reload latest conflict banner must NOT be visible
+      await expect(page.getByText(/Version Conflict Detected/i)).toHaveCount(0);
+      await expect(page.locator('.bg-rose-500\\/10', { hasText: 'Version Conflict Detected' })).toHaveCount(0);
+    });
+
+    test('rejects impossible calendar dates such as February 31, disabling save and rendering validation error', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-period-dates',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 2,
+              schemaMode: 'periods',
+              termRatio: { midterm: 40, final: 60 },
+              midtermCategories: [
+                { id: 401, name: 'Quizzes', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+              ],
+              finalCategories: [
+                { id: 402, name: 'Final Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment' },
+              ],
+              attendanceDateRanges: {
+                midterm: { startDate: '2026-02-31', endDate: '2026-03-15' },
+                final: { startDate: '2026-03-16', endDate: '2026-05-15' },
+              },
+            },
+          }),
+        });
+      });
+
+      await page.goto('/grades?tab=components');
+
+      // Validation error appears rejecting February 31
+      await expect(page.getByText(/Midterm start date must be a valid calendar date in YYYY-MM-DD format/i).first()).toBeVisible();
+
+      // Save button is disabled
+      const saveBtn = page.getByRole('button', { name: /Save Grade Weights/i });
+      await expect(saveBtn).toBeDisabled();
+    });
   });
 
   test.describe('Faculty Assessment Manager stable grading categories', () => {

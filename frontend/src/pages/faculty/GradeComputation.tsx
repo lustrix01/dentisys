@@ -1792,11 +1792,24 @@ export const GradeComputation: React.FC = () => {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          if (err.code === 'GRADING_PERIOD_CONVERSION_REQUIRED') {
-            showFeedback('Converting from overall grading requires explicit confirmation.', 'error');
-          } else {
+          if (err.code === 'GRADING_CONFIGURATION_VERSION_CONFLICT') {
             setConflictError(true);
             showFeedback('Version conflict: another session updated these grade weights. Please reload the latest configuration.', 'error');
+          } else if (err.code === 'GRADING_PERIOD_CONVERSION_REQUIRED') {
+            const msg = err.message || 'Converting from overall grading requires explicit confirmation.';
+            setConfigError(msg);
+            showFeedback(msg, 'error');
+          } else if (err.code === 'GRADING_SCHEMA_MODE_CONFLICT') {
+            const msg = err.message || 'An existing period configuration cannot be changed back to overall categories.';
+            setConfigError(msg);
+            showFeedback(msg, 'error');
+          } else if (err.code === 'GRADING_CATEGORY_IN_USE') {
+            const msg = err.message || 'A grading category referenced by an assessment cannot be deleted.';
+            setConfigError(msg);
+            showFeedback(msg, 'error');
+          } else {
+            setConfigError(err.message);
+            showFeedback(err.message, 'error');
           }
         } else if (err.status === 422 && err.code === 'GRADING_CATEGORY_ASSIGNMENT_REQUIRED') {
           const assessments = (Array.isArray(err.details?.assessments) ? err.details.assessments : []) as FacultyGradingCategoryAssignmentRequiredItem[];
@@ -1845,6 +1858,20 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
+  const isPeriodMode = useMemo(() => {
+    if (loadedConfig?.schemaMode === 'periods') return true;
+    if (assessmentConfig?.schemaMode === 'periods') return true;
+    const hasStudentPeriod = activeStudents.some(s => {
+      const subj = s.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+      return subj?.components && typeof subj.components === 'object' && (subj.components as any).calculationMode === 'authoritative_periods';
+    });
+    if (hasStudentPeriod) return true;
+    for (const res of computeResultsByEnrollment.values()) {
+      if (isPeriodComputeResult(res)) return true;
+    }
+    return false;
+  }, [loadedConfig, assessmentConfig, activeStudents, selectedSubjectCode, computeResultsByEnrollment]);
+
   const sortedSummaryStudents = useMemo(() => {
     const filtered = activeStudents.filter(s =>
       s.name.toLowerCase().includes(summarySearch.toLowerCase()) ||
@@ -1859,29 +1886,15 @@ export const GradeComputation: React.FC = () => {
         const subjB = b.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
         const resA = subjA?.enrollmentId ? computeResultsByEnrollment.get(String(subjA.enrollmentId)) : null;
         const resB = subjB?.enrollmentId ? computeResultsByEnrollment.get(String(subjB.enrollmentId)) : null;
-        const evalA = extractPeriodEvaluation(subjA, resA);
-        const evalB = extractPeriodEvaluation(subjB, resB);
+        const evalA = extractPeriodEvaluation(subjA, resA, isPeriodMode);
+        const evalB = extractPeriodEvaluation(subjB, resB, isPeriodMode);
         const gradeA = evalA.overallGwa ?? 5.0;
         const gradeB = evalB.overallGwa ?? 5.0;
         // In GWA, smaller values are better (e.g. 1.0 is better than 5.0)
         return sortAsc ? gradeA - gradeB : gradeB - gradeA;
       }
     });
-  }, [activeStudents, summarySearch, sortField, sortAsc, selectedSubjectCode, computeResultsByEnrollment]);
-
-  const isPeriodMode = useMemo(() => {
-    if (loadedConfig?.schemaMode === 'periods') return true;
-    if (assessmentConfig?.schemaMode === 'periods') return true;
-    const hasStudentPeriod = activeStudents.some(s => {
-      const subj = s.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
-      return subj?.components && typeof subj.components === 'object' && (subj.components as any).calculationMode === 'authoritative_periods';
-    });
-    if (hasStudentPeriod) return true;
-    for (const res of computeResultsByEnrollment.values()) {
-      if (isPeriodComputeResult(res)) return true;
-    }
-    return false;
-  }, [loadedConfig, assessmentConfig, activeStudents, selectedSubjectCode, computeResultsByEnrollment]);
+  }, [activeStudents, summarySearch, sortField, sortAsc, selectedSubjectCode, computeResultsByEnrollment, isPeriodMode]);
 
   const handleRecomputeGrades = async () => {
     if (!selectedClassId) return;
@@ -3733,9 +3746,10 @@ export const GradeComputation: React.FC = () => {
                     const computeRes = subj?.enrollmentId ? computeResultsByEnrollment.get(String(subj.enrollmentId)) : null;
 
                     if (isPeriodMode) {
-                      const evalResult = extractPeriodEvaluation(subj, computeRes);
+                      const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
                       const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa > settings.retentionThreshold;
                       const isFailed = evalResult.overallGwa === 5.0;
+                      const isPending = evalResult.statusText === 'PENDING';
                       const isIncomplete = evalResult.overallGwa === null;
 
                       return (
@@ -3747,6 +3761,8 @@ export const GradeComputation: React.FC = () => {
                           <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
                             {evalResult.midtermPercentage !== null ? (
                               `${evalResult.midtermPercentage.toFixed(2)}%`
+                            ) : evalResult.midtermStatus === 'pending' ? (
+                              <span className="text-slate-400 font-sans">Pending</span>
                             ) : evalResult.midtermReasons.length > 0 ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.midtermReasons.join(', ')}>
                                 Incomplete ({evalResult.midtermReasons[0]})
@@ -3758,6 +3774,8 @@ export const GradeComputation: React.FC = () => {
                           <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
                             {evalResult.finalPercentage !== null ? (
                               `${evalResult.finalPercentage.toFixed(2)}%`
+                            ) : evalResult.finalStatus === 'pending' ? (
+                              <span className="text-slate-400 font-sans">Pending</span>
                             ) : evalResult.finalReasons.length > 0 ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold" title={evalResult.finalReasons.join(', ')}>
                                 Incomplete ({evalResult.finalReasons[0]})
@@ -3783,11 +3801,13 @@ export const GradeComputation: React.FC = () => {
                                 ? 'bg-rose-100 text-rose-700'
                                 : isFailsRetention
                                 ? 'bg-amber-100 text-amber-700'
+                                : isPending
+                                ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
                                 : isIncomplete
                                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                                 : 'bg-emerald-100 text-emerald-700'
                             }`}>
-                              {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : isIncomplete ? 'INCOMPLETE' : 'PASS'}
+                              {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : isPending ? 'PENDING' : isIncomplete ? 'INCOMPLETE' : 'PASS'}
                             </span>
                           </td>
                         </tr>
@@ -3991,18 +4011,23 @@ export const GradeComputation: React.FC = () => {
               const computeRes = subj?.enrollmentId ? computeResultsByEnrollment.get(String(subj.enrollmentId)) : null;
 
               if (isPeriodMode) {
-                const evalResult = extractPeriodEvaluation(subj, computeRes);
+                const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
                 const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa > settings.retentionThreshold;
                 const isFailed = evalResult.overallGwa === 5.0;
+                const isPending = evalResult.statusText === 'PENDING';
                 const isIncomplete = evalResult.overallGwa === null;
 
                 const midtermStr = evalResult.midtermPercentage !== null
                   ? `${evalResult.midtermPercentage.toFixed(2)}%`
+                  : evalResult.midtermStatus === 'pending'
+                  ? 'Pending'
                   : evalResult.midtermReasons.length > 0
                   ? `Incomplete (${evalResult.midtermReasons[0]})`
                   : '—';
                 const finalStr = evalResult.finalPercentage !== null
                   ? `${evalResult.finalPercentage.toFixed(2)}%`
+                  : evalResult.finalStatus === 'pending'
+                  ? 'Pending'
                   : evalResult.finalReasons.length > 0
                   ? `Incomplete (${evalResult.finalReasons[0]})`
                   : '—';
@@ -4015,6 +4040,8 @@ export const GradeComputation: React.FC = () => {
                   ? 'FAILED'
                   : isFailsRetention
                   ? 'FAILS RETENTION'
+                  : isPending
+                  ? 'PENDING'
                   : isIncomplete
                   ? 'INCOMPLETE'
                   : 'PASS';

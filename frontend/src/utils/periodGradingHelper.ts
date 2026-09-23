@@ -146,11 +146,25 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
   };
 }
 
+export function isValidCalendarDate(dateStr: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+  const [yearStr, monthStr, dayStr] = dateStr.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+  if (month < 1 || month > 12) return false;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
 export function validateDateRanges(ranges: {
   midterm: { startDate: string; endDate: string };
   final: { startDate: string; endDate: string };
 }): { valid: boolean; error?: string } {
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
   const mStart = ranges.midterm.startDate.trim();
   const mEnd = ranges.midterm.endDate.trim();
   const fStart = ranges.final.startDate.trim();
@@ -162,7 +176,7 @@ export function validateDateRanges(ranges: {
     [fStart, 'Finals start date'],
     [fEnd, 'Finals end date'],
   ]) {
-    if (val && !dateRegex.test(val)) {
+    if (val && !isValidCalendarDate(val)) {
       return { valid: false, error: `${label} must be a valid calendar date in YYYY-MM-DD format.` };
     }
   }
@@ -221,10 +235,10 @@ export function formatPeriodIncompleteReason(reason: PeriodIncompleteReason | st
 
 export interface StudentPeriodEvaluation {
   isPeriodMode: boolean;
-  midtermStatus: 'computed' | 'incomplete' | 'unconfigured';
+  midtermStatus: 'computed' | 'incomplete' | 'unconfigured' | 'pending';
   midtermPercentage: number | null;
   midtermReasons: string[];
-  finalStatus: 'computed' | 'incomplete' | 'unconfigured';
+  finalStatus: 'computed' | 'incomplete' | 'unconfigured' | 'pending';
   finalPercentage: number | null;
   finalReasons: string[];
   overallGwa: number | null;
@@ -236,8 +250,20 @@ export interface StudentPeriodEvaluation {
 
 export function extractPeriodEvaluation(
   subj?: EnrolledSubject | null,
-  computeResult?: FacultyGradeComputeResult | null
+  computeResult?: FacultyGradeComputeResult | null,
+  configurationMode?: 'overall' | 'periods' | boolean | null
 ): StudentPeriodEvaluation {
+  const isPeriodConfigured = typeof configurationMode === 'boolean'
+    ? configurationMode
+    : typeof configurationMode === 'string'
+    ? configurationMode === 'periods'
+    : (computeResult ? isPeriodComputeResult(computeResult) : false) ||
+      Boolean(
+        subj?.components &&
+        typeof subj.components === 'object' &&
+        (subj.components as any).calculationMode === 'authoritative_periods'
+      );
+
   // If we have an authoritative computeResult for this enrollment
   if (computeResult && isPeriodComputeResult(computeResult)) {
     const midtermBreakdown = computeResult.periods?.midterm as FacultyPeriodBreakdown | undefined;
@@ -256,9 +282,12 @@ export function extractPeriodEvaluation(
     const isComputed = computeResult.status === 'computed';
     const overallGwa = isComputed ? computeResult.gwa : null;
     const overallPercentage = isComputed ? computeResult.percentage : null;
-    const historicalGwa = !isComputed && computeResult.previouslyPersisted && computeResult.previousGwa !== null
+
+    // Finding 2: For incomplete results, remove the subj.grade fallback when previouslyPersisted is false.
+    // Display historical grades only when confirmed by the server.
+    const historicalGwa = !isComputed && Boolean(computeResult.previouslyPersisted) && typeof computeResult.previousGwa === 'number' && computeResult.previousGwa > 0
       ? computeResult.previousGwa
-      : (!isComputed && subj && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade : null);
+      : null;
     const isIncomplete = !isComputed || midtermBreakdown?.status !== 'computed' || finalBreakdown?.status !== 'computed';
 
     return {
@@ -299,7 +328,11 @@ export function extractPeriodEvaluation(
       const isFinComputed = fin?.status === 'computed';
       const isBothComputed = isMidComputed && isFinComputed;
       const overallGwa = isBothComputed && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade : null;
-      const historicalGwa = !isBothComputed && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade : null;
+
+      // Finding 2: Display historical grades only when confirmed by the server (previouslyPersisted: true)
+      const historicalGwa = !isBothComputed && Boolean(comps.previouslyPersisted) && typeof comps.previousGwa === 'number' && comps.previousGwa > 0
+        ? comps.previousGwa
+        : null;
       const overallPercentage = isBothComputed && typeof comps.percentage === 'number' ? comps.percentage : null;
       const isIncomplete = !isBothComputed;
 
@@ -318,6 +351,24 @@ export function extractPeriodEvaluation(
         statusText: isBothComputed && overallGwa !== null ? (overallGwa === 5.0 ? 'FAILED' : 'PASS') : 'INCOMPLETE',
       };
     }
+  }
+
+  // Finding 1: If configured in period mode but no period computation has run yet
+  if (isPeriodConfigured) {
+    return {
+      isPeriodMode: true,
+      midtermStatus: 'pending',
+      midtermPercentage: null,
+      midtermReasons: ['Pending Computation'],
+      finalStatus: 'pending',
+      finalPercentage: null,
+      finalReasons: ['Pending Computation'],
+      overallGwa: null,
+      overallPercentage: null,
+      historicalGwa: null,
+      isIncomplete: true,
+      statusText: 'PENDING',
+    };
   }
 
   // Legacy single-list or uncomputed
@@ -351,11 +402,13 @@ export function generateGradeSummaryCSV(
         const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
         const enrollmentId = subj?.enrollmentId;
         const computeResult = enrollmentId && computeResultsByEnrollment ? computeResultsByEnrollment.get(enrollmentId) : null;
-        const evalResult = extractPeriodEvaluation(subj, computeResult);
+        const evalResult = extractPeriodEvaluation(subj, computeResult, isPeriodMode);
 
         const midtermVal =
           evalResult.midtermPercentage !== null
             ? `${evalResult.midtermPercentage.toFixed(2)}%`
+            : evalResult.midtermStatus === 'pending'
+            ? 'Pending'
             : evalResult.midtermReasons.length > 0
             ? `Incomplete (${evalResult.midtermReasons[0]})`
             : 'Incomplete';
@@ -363,6 +416,8 @@ export function generateGradeSummaryCSV(
         const finalVal =
           evalResult.finalPercentage !== null
             ? `${evalResult.finalPercentage.toFixed(2)}%`
+            : evalResult.finalStatus === 'pending'
+            ? 'Pending'
             : evalResult.finalReasons.length > 0
             ? `Incomplete (${evalResult.finalReasons[0]})`
             : 'Incomplete';
@@ -372,8 +427,10 @@ export function generateGradeSummaryCSV(
             ? evalResult.overallGwa.toFixed(2)
             : evalResult.historicalGwa !== null
             ? `Prior: ${evalResult.historicalGwa.toFixed(2)} (Historical)`
+            : evalResult.statusText === 'PENDING'
+            ? 'Pending'
             : 'Incomplete';
-        const statusVal = evalResult.overallGwa !== null ? (evalResult.overallGwa === 5.0 ? 'FAILED' : 'PASS') : 'INCOMPLETE';
+        const statusVal = evalResult.statusText;
 
         return `${student.studentId},"${student.name}",${midtermVal},${finalVal},${gwaVal},${statusVal}`;
       })

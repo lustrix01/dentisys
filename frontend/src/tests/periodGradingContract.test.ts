@@ -8,6 +8,7 @@ import {
   buildRowCompositeKey,
   extractPeriodEvaluation,
   generateGradeSummaryCSV,
+  isValidCalendarDate,
 } from '../utils/periodGradingHelper.ts';
 import type { FacultyPeriodModeComputedResult, FacultyPeriodModeIncompleteResult } from '../services/apiClient.ts';
 
@@ -102,6 +103,48 @@ test('Date Ranges Validation: rejects Midterm ending on or after Finals starts',
   });
   assert.equal(sameDay.valid, false);
   assert.match(sameDay.error || '', /Midterm attendance must end before Finals attendance starts/);
+});
+
+test('Calendar Date Validation: isValidCalendarDate strictly validates real calendar dates', () => {
+  // Impossible days for February
+  assert.equal(isValidCalendarDate('2026-02-31'), false);
+  assert.equal(isValidCalendarDate('2026-02-30'), false);
+  assert.equal(isValidCalendarDate('2026-02-29'), false); // 2026 is not a leap year
+  assert.equal(isValidCalendarDate('2024-02-29'), true);  // 2024 is a leap year
+
+  // 30-day months cannot have day 31
+  assert.equal(isValidCalendarDate('2026-04-31'), false); // April
+  assert.equal(isValidCalendarDate('2026-06-31'), false); // June
+  assert.equal(isValidCalendarDate('2026-09-31'), false); // September
+  assert.equal(isValidCalendarDate('2026-11-31'), false); // November
+
+  // Valid dates
+  assert.equal(isValidCalendarDate('2026-04-30'), true);
+  assert.equal(isValidCalendarDate('2026-08-01'), true);
+  assert.equal(isValidCalendarDate('2026-12-31'), true);
+
+  // Invalid formats and out-of-range components
+  assert.equal(isValidCalendarDate('2026-00-15'), false);
+  assert.equal(isValidCalendarDate('2026-13-01'), false);
+  assert.equal(isValidCalendarDate('2026-05-00'), false);
+  assert.equal(isValidCalendarDate('2026-05-32'), false);
+  assert.equal(isValidCalendarDate('invalid-date'), false);
+});
+
+test('Date Ranges Validation: rejects impossible calendar dates such as February 31', () => {
+  const feb31Midterm = validateDateRanges({
+    midterm: { startDate: '2026-02-31', endDate: '2026-03-15' },
+    final: { startDate: '2026-03-16', endDate: '2026-05-15' },
+  });
+  assert.equal(feb31Midterm.valid, false);
+  assert.equal(feb31Midterm.error, 'Midterm start date must be a valid calendar date in YYYY-MM-DD format.');
+
+  const april31Final = validateDateRanges({
+    midterm: { startDate: '2026-01-15', endDate: '2026-03-15' },
+    final: { startDate: '2026-03-16', endDate: '2026-04-31' },
+  });
+  assert.equal(april31Final.valid, false);
+  assert.equal(april31Final.error, 'Finals end date must be a valid calendar date in YYYY-MM-DD format.');
 });
 
 test('Date Ranges Normalization: serializes blank strings to null', () => {
@@ -306,6 +349,110 @@ test('Evaluation Extraction: preserves prior persisted grade when recomputation 
   assert.equal(evaluation.statusText, 'INCOMPLETE');
 });
 
+test('Evaluation Extraction: uncomputed period mode shows pending state and hides legacy grade', () => {
+  // Legacy enrolled subject with grade 1.75
+  const legacySubj = {
+    code: 'CLIN401',
+    name: 'Clinical Dentistry I',
+    units: 3,
+    grade: 1.75,
+    isClinical: true,
+    hasRemedial: false,
+    components: {
+      quizzes: 85,
+      exams: 88,
+      practicum: 90,
+      attendance: 95,
+    },
+  };
+
+  // When configured in period mode without compute result
+  const evaluation = extractPeriodEvaluation(legacySubj as any, null, 'periods');
+  assert.equal(evaluation.isPeriodMode, true);
+  assert.equal(evaluation.midtermStatus, 'pending');
+  assert.equal(evaluation.midtermPercentage, null);
+  assert.equal(evaluation.finalStatus, 'pending');
+  assert.equal(evaluation.finalPercentage, null);
+  assert.equal(evaluation.overallGwa, null);
+  assert.equal(evaluation.historicalGwa, null);
+  assert.equal(evaluation.isIncomplete, true);
+  assert.equal(evaluation.statusText, 'PENDING');
+});
+
+test('Evaluation Extraction: incomplete result without confirmed persisted grade does NOT fall back to subj.grade', () => {
+  const legacySubj = {
+    code: 'CLIN401',
+    name: 'Clinical Dentistry I',
+    units: 3,
+    grade: 2.00,
+    isClinical: true,
+    hasRemedial: false,
+    components: {
+      quizzes: 80,
+      exams: 80,
+      practicum: 80,
+      attendance: 80,
+    },
+  };
+
+  const incompleteResult: FacultyPeriodModeIncompleteResult = {
+    status: 'incomplete_period',
+    enrollmentId: '104',
+    studentId: '204',
+    periods: {
+      midterm: {
+        period: 'Midterm',
+        status: 'incomplete',
+        percentage: null,
+        categories: [],
+        incomplete: [{ reason: 'unresolved_attendance' }],
+        attendanceDateRange: { startDate: '2026-08-01', endDate: '2026-10-15' },
+      },
+      final: {
+        period: 'Final',
+        status: 'computed',
+        percentage: 85.0,
+        categories: [],
+        incomplete: [],
+        attendanceDateRange: { startDate: '2026-10-16', endDate: '2026-12-20' },
+      },
+    },
+    breakdown: {
+      calculationMode: 'authoritative_periods',
+      termRatio: { midterm: 40, final: 60 },
+      periods: {
+        midterm: {
+          period: 'Midterm',
+          status: 'incomplete',
+          percentage: null,
+          categories: [],
+          incomplete: [{ reason: 'unresolved_attendance' }],
+          attendanceDateRange: { startDate: '2026-08-01', endDate: '2026-10-15' },
+        },
+        final: {
+          period: 'Final',
+          status: 'computed',
+          percentage: 85.0,
+          categories: [],
+          incomplete: [],
+          attendanceDateRange: { startDate: '2026-10-16', endDate: '2026-12-20' },
+        },
+      },
+      retentionThreshold: 2.5,
+    },
+    previouslyPersisted: false,
+    previousPercentage: null,
+    previousGwa: null,
+  };
+
+  const evalResult = extractPeriodEvaluation(legacySubj as any, incompleteResult);
+  assert.equal(evalResult.isPeriodMode, true);
+  assert.equal(evalResult.overallGwa, null);
+  // Must NOT fall back to subj.grade (2.00) because previouslyPersisted is false!
+  assert.equal(evalResult.historicalGwa, null);
+  assert.equal(evalResult.statusText, 'INCOMPLETE');
+});
+
 test('CSV Generation: exports distinct period percentages without copying overall grades', () => {
   const dummyStudents = [
     {
@@ -388,7 +535,7 @@ test('CSV Generation: exports distinct period percentages without copying overal
   assert.equal(lines[2], 'DENT-002,"Bob Santos",Incomplete (Missing Date Range),90.00%,Incomplete,INCOMPLETE');
 });
 
-test('CSV Generation: incomplete recomputation with prior GWA marks status INCOMPLETE and records prior grade', () => {
+test('CSV Generation: incomplete recomputation with prior GWA marks status INCOMPLETE and records prior grade only when server confirmed', () => {
   const dummyStudents = [
     {
       id: 's3',
@@ -412,6 +559,8 @@ test('CSV Generation: incomplete recomputation with prior GWA marks status INCOM
             attendance: 0,
             calculationMode: 'authoritative_periods',
             termRatio: { midterm: 40, final: 60 },
+            previouslyPersisted: true,
+            previousGwa: 2.00,
             periods: {
               midterm: { period: 'Midterm', status: 'incomplete', percentage: null, categories: [], incomplete: [{ reason: 'unresolved_attendance' }] },
               final: { period: 'Final', status: 'computed', percentage: 85.0, categories: [], incomplete: [] },
@@ -424,11 +573,88 @@ test('CSV Generation: incomplete recomputation with prior GWA marks status INCOM
       remedialExams: [],
       classSections: [],
     },
+    {
+      id: 's4',
+      studentId: 'DENT-004',
+      name: 'Danilo Cruz',
+      email: '',
+      yearLevel: 4 as const,
+      status: 'active' as const,
+      enrolledSubjects: [
+        {
+          code: 'CLIN401',
+          name: 'Clinical Dentistry I',
+          units: 3,
+          grade: 2.50,
+          isClinical: true,
+          hasRemedial: false,
+          components: {
+            quizzes: 0,
+            exams: 0,
+            practicum: 0,
+            attendance: 0,
+            calculationMode: 'authoritative_periods',
+            termRatio: { midterm: 40, final: 60 },
+            previouslyPersisted: false,
+            previousGwa: null,
+            periods: {
+              midterm: { period: 'Midterm', status: 'incomplete', percentage: null, categories: [], incomplete: [{ reason: 'unresolved_attendance' }] },
+              final: { period: 'Final', status: 'computed', percentage: 85.0, categories: [], incomplete: [] },
+            },
+          },
+        },
+      ],
+      clinicHoursCompleted: 50,
+      overallGWA: 2.50,
+      remedialExams: [],
+      classSections: [],
+    },
   ];
 
   const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
   const lines = csv.trim().split('\n');
+  // Student 3 has previouslyPersisted: true -> Prior: 2.00 (Historical)
   assert.equal(lines[1], 'DENT-003,"Clara Santos",Incomplete (Unresolved Attendance),85.00%,Prior: 2.00 (Historical),INCOMPLETE');
+  // Student 4 has previouslyPersisted: false -> Incomplete (no fallback to subj.grade 2.50)
+  assert.equal(lines[2], 'DENT-004,"Danilo Cruz",Incomplete (Unresolved Attendance),85.00%,Incomplete,INCOMPLETE');
+});
+
+test('CSV Generation: uncomputed period mode outputs Pending and PENDING', () => {
+  const dummyStudents = [
+    {
+      id: 's5',
+      studentId: 'DENT-005',
+      name: 'Elena Ramos',
+      email: '',
+      yearLevel: 4 as const,
+      status: 'active' as const,
+      enrolledSubjects: [
+        {
+          code: 'CLIN401',
+          name: 'Clinical Dentistry I',
+          units: 3,
+          grade: 1.75, // Legacy grade from earlier semester
+          isClinical: true,
+          hasRemedial: false,
+          components: {
+            quizzes: 85,
+            exams: 85,
+            practicum: 85,
+            attendance: 90,
+          },
+        },
+      ],
+      clinicHoursCompleted: 50,
+      overallGWA: 1.75,
+      remedialExams: [],
+      classSections: [],
+    },
+  ];
+
+  const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
+  const lines = csv.trim().split('\n');
+  assert.equal(lines[0], 'Student ID,Name,Midterm %,Final %,Overall GWA,Status');
+  assert.equal(lines[1], 'DENT-005,"Elena Ramos",Pending,Pending,Pending,PENDING');
 });
 
 test('CSV Generation: legacy mode exports accurately labeled overall columns without duplicating overall grade', () => {
