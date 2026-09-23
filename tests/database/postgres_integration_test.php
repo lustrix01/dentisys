@@ -44,6 +44,43 @@ function expect_same(mixed $expected, mixed $actual, string $label): void
     expect_true($expected === $actual, $label . ' (expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . ')');
 }
 
+function integration_period_date(array $configuration, string $period, string $edge): ?string
+{
+    $periodKey = strtolower($period);
+    $range = $configuration['attendanceDateRanges'][$periodKey] ?? null;
+    if (!is_array($range) || !array_key_exists($edge . 'Date', $range)) {
+        return null;
+    }
+    return $range[$edge . 'Date'] !== null ? (string) $range[$edge . 'Date'] : null;
+}
+
+function integration_period_result(array $result, string $period): ?array
+{
+    $periodKey = strtolower($period);
+    return is_array($result['periods'][$periodKey] ?? null) ? $result['periods'][$periodKey] : null;
+}
+
+function integration_period_percentage(array $result, string $period): ?float
+{
+    $periodResult = integration_period_result($result, $period);
+    if ($periodResult === null) {
+        return null;
+    }
+    return array_key_exists('percentage', $periodResult) && $periodResult['percentage'] !== null
+        ? (float) $periodResult['percentage']
+        : null;
+}
+
+function integration_find_enrollment_result(array $body, int $enrollmentId): ?array
+{
+    foreach (($body['results'] ?? []) as $result) {
+        if (is_array($result) && (string) ($result['enrollmentId'] ?? '') === (string) $enrollmentId) {
+            return $result;
+        }
+    }
+    return null;
+}
+
 function integration_http_method_json(string $method, string $path, string $accessToken, array $payload): array
 {
     $headers = "Content-Type: application/json\r\nAccept: application/json\r\n";
@@ -176,6 +213,7 @@ $expectedMigrations = [
     '012_restore_faculty_invitation_token_purpose.sql',
     '013_period_grading_configuration.sql',
     '014_grading_period_memberships.sql',
+    '015_period_attendance_ranges_and_sources.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -3039,20 +3077,624 @@ expect_same(200, $weightConcurrentAssessmentStatus, 'Assessment save completes a
 $weightConcurrentAssessmentId = (int) ($weightConcurrentAssessmentBody['assessments'][0]['id'] ?? 0);
 expect_true($weightConcurrentAssessmentId > 0, 'Concurrent period assessment save returns a database ID');
 
+// GRD-002 period date-range and attendance computation coverage. Keep this
+// offering separate from the conversion fixture above so an overall-mode
+// regression remains observable independently of the new period path.
+$periodFixtureSuffix = bin2hex(random_bytes(4));
+$periodCourseCode = 'PD' . strtoupper($periodFixtureSuffix);
+$periodCourseStmt = $pdo->prepare(
+    "INSERT INTO courses (course_code, name, units, semester, grading_config)
+     VALUES (?, 'Period Dates Integration Course', 3.0, '1ST', '{}'::jsonb)
+     RETURNING course_id"
+);
+$periodCourseStmt->execute([$periodCourseCode]);
+$periodCourseId = (int) $periodCourseStmt->fetchColumn();
+$periodClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, status)
+     VALUES (?, ?, ?, '1st', '2027-2028', 'Active')
+     RETURNING cs_id"
+);
+$periodClassStmt->execute(['Period Dates ' . $periodFixtureSuffix, $periodCourseId, $userId]);
+$periodClassId = (int) $periodClassStmt->fetchColumn();
+
+$periodDatePayload = [
+    'midtermStartDate' => '2027-08-15',
+    'midtermEndDate' => '2027-09-30',
+    'finalStartDate' => '2027-10-15',
+    'finalEndDate' => '2027-12-01',
+];
+$periodDateRangesPayload = [
+    'attendanceDateRanges' => [
+        'midterm' => [
+            'startDate' => $periodDatePayload['midtermStartDate'],
+            'endDate' => $periodDatePayload['midtermEndDate'],
+        ],
+        'final' => [
+            'startDate' => $periodDatePayload['finalStartDate'],
+            'endDate' => $periodDatePayload['finalEndDate'],
+        ],
+    ],
+];
+$periodCreatePayload = array_merge([
+    'courseId' => $periodCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'schemaMode' => 'periods',
+    'termRatio' => ['midterm' => 40, 'final' => 60],
+    'midtermCategories' => [
+        ['name' => 'Quiz', 'weight' => 50, 'sortOrder' => 1],
+        ['name' => 'Attendance', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+    ],
+    'finalCategories' => [
+        ['name' => 'Exam', 'weight' => 50, 'sortOrder' => 1],
+        ['name' => 'Attendance', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+    ],
+], $periodDateRangesPayload);
+[$periodCreateStatus, $periodCreateBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodCreatePayload);
+expect_same(201, $periodCreateStatus, 'Period offering accepts inclusive attendance date ranges on first save');
+$periodConfiguration = $periodCreateBody['configuration'] ?? [];
+$periodConfigId = (int) ($periodConfiguration['id'] ?? 0);
+$periodConfigVersion = (int) ($periodConfiguration['version'] ?? 0);
+expect_true($periodConfigId > 0 && $periodConfigVersion === 1, 'Period date configuration has an authoritative ID and version');
+$periodConfigDatesStmt = $pdo->prepare(
+    'SELECT midterm_start_date, midterm_end_date, final_start_date, final_end_date FROM grading_configs WHERE config_id = ?'
+);
+$periodConfigDatesStmt->execute([$periodConfigId]);
+$periodConfigDates = $periodConfigDatesStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(
+    [$periodDatePayload['midtermStartDate'], $periodDatePayload['midtermEndDate'], $periodDatePayload['finalStartDate'], $periodDatePayload['finalEndDate']],
+    [
+        (string) ($periodConfigDates['midterm_start_date'] ?? ''),
+        (string) ($periodConfigDates['midterm_end_date'] ?? ''),
+        (string) ($periodConfigDates['final_start_date'] ?? ''),
+        (string) ($periodConfigDates['final_end_date'] ?? ''),
+    ],
+    'Period date ranges persist in the PostgreSQL configuration row'
+);
+foreach (['midterm', 'final'] as $periodKey) {
+    $expectedStart = $periodDatePayload[$periodKey . 'StartDate'];
+    $expectedEnd = $periodDatePayload[$periodKey . 'EndDate'];
+    expect_same($expectedStart, integration_period_date($periodConfiguration, ucfirst($periodKey), 'start'), ucfirst($periodKey) . ' start date round-trips through the save response');
+    expect_same($expectedEnd, integration_period_date($periodConfiguration, ucfirst($periodKey), 'end'), ucfirst($periodKey) . ' end date round-trips through the save response');
+}
+$periodMidtermCategories = [];
+foreach (($periodConfiguration['midtermCategories'] ?? []) as $category) {
+    $periodMidtermCategories[(string) ($category['name'] ?? '')] = $category;
+}
+$periodFinalCategories = [];
+foreach (($periodConfiguration['finalCategories'] ?? []) as $category) {
+    $periodFinalCategories[(string) ($category['name'] ?? '')] = $category;
+}
+$periodMidtermQuizId = (int) ($periodMidtermCategories['Quiz']['id'] ?? 0);
+$periodMidtermAttendanceId = (int) ($periodMidtermCategories['Attendance']['id'] ?? 0);
+$periodFinalExamId = (int) ($periodFinalCategories['Exam']['id'] ?? 0);
+$periodFinalAttendanceId = (int) ($periodFinalCategories['Attendance']['id'] ?? 0);
+expect_true(
+    $periodMidtermQuizId > 0 && $periodMidtermAttendanceId > 0
+        && $periodFinalExamId > 0 && $periodFinalAttendanceId > 0,
+    'Period categories expose stable identifiers for assessments and attendance sources'
+);
+$periodSourceKindStmt = $pdo->prepare(
+    'SELECT grading_period, source_kind FROM grading_category_periods WHERE config_id = ? ORDER BY grading_period, sort_order'
+);
+$periodSourceKindStmt->execute([$periodConfigId]);
+$periodSourceKinds = $periodSourceKindStmt->fetchAll(PDO::FETCH_ASSOC);
+$periodSourceKindsByPeriod = [];
+foreach ($periodSourceKinds as $periodSourceKind) {
+    $periodSourceKindsByPeriod[(string) ($periodSourceKind['grading_period'] ?? '')][] = (string) ($periodSourceKind['source_kind'] ?? '');
+}
+expect_true(in_array('attendance', $periodSourceKindsByPeriod['Midterm'] ?? [], true), 'Midterm Attendance category is persisted as an attendance source');
+expect_true(in_array('attendance', $periodSourceKindsByPeriod['Final'] ?? [], true), 'Final Attendance category is persisted as an attendance source');
+
+[$periodAttendanceAssessmentStatus, $periodAttendanceAssessmentBody] = integration_http_json('/api/faculty/assessments', $facultyAccessToken, [[
+    'title' => 'Rejected attendance-source assessment ' . $periodFixtureSuffix,
+    'type' => 'Quiz',
+    'classId' => (string) $periodClassId,
+    'gradingCategoryId' => (string) $periodMidtermAttendanceId,
+    'gradingPeriod' => 'Midterm',
+    'maxScore' => 10,
+    'weight' => 1,
+    'status' => 'Active',
+    'transmutationEnabled' => false,
+]]);
+expect_same(422, $periodAttendanceAssessmentStatus, 'Assessment save rejects a period Attendance source category');
+expect_true(($periodAttendanceAssessmentBody['status'] ?? null) === 'error', 'Attendance-source assessment rejection remains structured');
+
+[$periodGetStatus, $periodGetBody] = integration_http_get_json(
+    '/api/faculty/grading-config?' . http_build_query([
+        'courseId' => $periodCourseId,
+        'semester' => '1st',
+        'schoolYear' => '2027-2028',
+    ]),
+    $facultyAccessToken
+);
+expect_same(200, $periodGetStatus, 'Period date configuration can be reloaded through the public API');
+foreach (['midterm', 'final'] as $periodKey) {
+    expect_same(
+        $periodDatePayload[$periodKey . 'StartDate'],
+        integration_period_date($periodGetBody['configuration'] ?? [], ucfirst($periodKey), 'start'),
+        ucfirst($periodKey) . ' start date persists in PostgreSQL and reloads through the API'
+    );
+    expect_same(
+        $periodDatePayload[$periodKey . 'EndDate'],
+        integration_period_date($periodGetBody['configuration'] ?? [], ucfirst($periodKey), 'end'),
+        ucfirst($periodKey) . ' end date persists in PostgreSQL and reloads through the API'
+    );
+}
+
+// Renaming the source rows must not change which stable category receives
+// authoritative attendance. Assessments remain attached only to Quiz/Exam.
+$periodVersionBeforeRename = $periodConfigVersion;
+$periodRenamePayload = array_merge([
+    'courseId' => $periodCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'schemaMode' => 'periods',
+    'version' => $periodConfigVersion,
+    'termRatio' => ['midterm' => 40, 'final' => 60],
+    'midtermCategories' => [
+        ['id' => $periodMidtermQuizId, 'name' => 'Quiz', 'weight' => 50, 'sortOrder' => 1],
+        ['id' => $periodMidtermAttendanceId, 'name' => 'Participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+    ],
+    'finalCategories' => [
+        ['id' => $periodFinalExamId, 'name' => 'Exam', 'weight' => 50, 'sortOrder' => 1],
+        ['id' => $periodFinalAttendanceId, 'name' => 'Participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+    ],
+], $periodDateRangesPayload);
+[$periodRenameStatus, $periodRenameBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodRenamePayload);
+expect_same(200, $periodRenameStatus, 'Renaming period attendance categories preserves the saved date ranges');
+$periodConfigVersion = (int) ($periodRenameBody['configuration']['version'] ?? 0);
+expect_same($periodVersionBeforeRename + 1, $periodConfigVersion, 'Period category rename advances the versioned configuration');
+expect_same(
+    $periodDatePayload['midtermStartDate'],
+    integration_period_date($periodRenameBody['configuration'] ?? [], 'Midterm', 'start'),
+    'Category rename preserves the Midterm date range'
+);
+
+$periodAuditStmt = $pdo->prepare(
+    "SELECT target_type, target_id, after_state_json, previous_event_mac, event_mac
+       FROM audit_events
+      WHERE module_code = 'faculty_grading'
+        AND action_code = 'grading_config_update'
+        AND target_id = ?
+      ORDER BY sequence_number DESC
+      LIMIT 1"
+);
+$periodAuditStmt->execute([(string) $periodConfigId]);
+$periodAudit = $periodAuditStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($periodAudit), 'Period date/category save writes a configuration audit event');
+expect_same('grading_config', $periodAudit['target_type'] ?? null, 'Period date audit targets the grading configuration');
+expect_same((string) $periodConfigId, (string) ($periodAudit['target_id'] ?? ''), 'Period date audit targets the persisted configuration ID');
+expect_true((string) ($periodAudit['after_state_json'] ?? '') !== '', 'Period date audit stores the canonical after-state');
+expect_true(str_contains((string) ($periodAudit['after_state_json'] ?? ''), 'attendanceDateRanges'), 'Period date audit records the saved attendance date ranges');
+expect_true(strlen((string) ($periodAudit['previous_event_mac'] ?? '')) > 0 && strlen((string) ($periodAudit['event_mac'] ?? '')) > 0, 'Period date audit remains HMAC chained');
+
+// An update that omits date fields must preserve the server-side dates.
+$periodOmittedPayload = [
+    'courseId' => $periodCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2027-2028',
+    'schemaMode' => 'periods',
+    'version' => $periodConfigVersion,
+    'termRatio' => ['midterm' => 40, 'final' => 60],
+    'midtermCategories' => [
+        ['id' => $periodMidtermQuizId, 'name' => 'Quiz', 'weight' => 50, 'sortOrder' => 1],
+        ['id' => $periodMidtermAttendanceId, 'name' => 'Participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+    ],
+    'finalCategories' => [
+        ['id' => $periodFinalExamId, 'name' => 'Exam', 'weight' => 50, 'sortOrder' => 1],
+        ['id' => $periodFinalAttendanceId, 'name' => 'Participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+    ],
+];
+[$periodOmittedStatus, $periodOmittedBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodOmittedPayload);
+expect_same(200, $periodOmittedStatus, 'Omitting date fields keeps a saved period configuration valid');
+$periodConfigVersion = (int) ($periodOmittedBody['configuration']['version'] ?? 0);
+expect_same(
+    $periodDatePayload['finalEndDate'],
+    integration_period_date($periodOmittedBody['configuration'] ?? [], 'Final', 'end'),
+    'Omitting date fields preserves the Final end date'
+);
+
+$periodDuplicateAttendancePayload = array_merge($periodOmittedPayload, ['version' => $periodConfigVersion]);
+$periodDuplicateAttendancePayload['midtermCategories'][1]['weight'] = 25;
+$periodDuplicateAttendancePayload['midtermCategories'][] = [
+    'name' => 'Duplicate participation', 'weight' => 25, 'sortOrder' => 3, 'sourceKind' => 'attendance',
+];
+[$periodDuplicateStatus, $periodDuplicateBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodDuplicateAttendancePayload);
+expect_same(422, $periodDuplicateStatus, 'A second authoritative attendance category in the same period is rejected');
+expect_same('GRADING_ATTENDANCE_CATEGORY_DUPLICATE', $periodDuplicateBody['code'] ?? null, 'Duplicate attendance sources report a specific error');
+$periodVersionAfterDuplicate = $pdo->prepare('SELECT version FROM grading_configs WHERE config_id = ?');
+$periodVersionAfterDuplicate->execute([$periodConfigId]);
+expect_same($periodConfigVersion, (int) $periodVersionAfterDuplicate->fetchColumn(), 'Rejected duplicate attendance source does not change the saved configuration version');
+
+$periodInvalidPayload = array_merge($periodOmittedPayload, ['version' => $periodConfigVersion, 'attendanceDateRanges' => [
+    'midterm' => ['startDate' => '2027-02-30', 'endDate' => '2027-09-30'],
+    'final' => ['startDate' => '2027-10-15', 'endDate' => '2027-12-01'],
+]]);
+[$periodInvalidDateStatus, $periodInvalidDateBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodInvalidPayload);
+expect_same(422, $periodInvalidDateStatus, 'Invalid calendar dates are rejected by the period configuration API');
+expect_same('GRADING_PERIOD_DATE_RANGE_INVALID', $periodInvalidDateBody['code'] ?? null, 'Invalid calendar dates use the explicit period date-range error code');
+$periodInvalidPayload = array_merge($periodOmittedPayload, ['version' => $periodConfigVersion, 'attendanceDateRanges' => [
+    'midterm' => ['startDate' => '2027-10-01', 'endDate' => '2027-09-30'],
+    'final' => ['startDate' => '2027-10-15', 'endDate' => '2027-12-01'],
+]]);
+[$periodReversedStatus, $periodReversedBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodInvalidPayload);
+expect_same(422, $periodReversedStatus, 'A period start after its end is rejected');
+expect_same('GRADING_PERIOD_DATE_RANGE_INVALID', $periodReversedBody['code'] ?? null, 'Reversed period dates use the explicit period date-range error code');
+$periodInvalidPayload = array_merge($periodOmittedPayload, ['version' => $periodConfigVersion, 'attendanceDateRanges' => [
+    'midterm' => ['startDate' => '2027-08-15', 'endDate' => '2027-10-15'],
+    'final' => ['startDate' => '2027-10-15', 'endDate' => '2027-12-01'],
+]]);
+[$periodOverlapStatus, $periodOverlapBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodInvalidPayload);
+expect_same(422, $periodOverlapStatus, 'Midterm end equal to Final start is rejected while gaps remain allowed');
+expect_same('GRADING_PERIOD_DATE_RANGE_INVALID', $periodOverlapBody['code'] ?? null, 'Overlapping period dates use the explicit period date-range error code');
+[$periodAfterInvalidGetStatus, $periodAfterInvalidGetBody] = integration_http_get_json(
+    '/api/faculty/grading-config?' . http_build_query(['courseId' => $periodCourseId, 'semester' => '1st', 'schoolYear' => '2027-2028']),
+    $facultyAccessToken
+);
+expect_same(200, $periodAfterInvalidGetStatus, 'Rejected date ranges leave the saved configuration readable');
+expect_same(
+    $periodDatePayload['midtermStartDate'],
+    integration_period_date($periodAfterInvalidGetBody['configuration'] ?? [], 'Midterm', 'start'),
+    'Rejected date ranges do not mutate the persisted Midterm start date'
+);
+
+$periodStudentStmt = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, ?, 'Period Fixture', ?, 'active')
+     RETURNING student_id"
+);
+$periodStudentStmt->execute(['PD-' . $periodFixtureSuffix . '-A', 'Complete', 'period-complete-' . $periodFixtureSuffix . '@bicol-u.edu.ph']);
+$periodStudentA = (int) $periodStudentStmt->fetchColumn();
+$periodStudentStmt->execute(['PD-' . $periodFixtureSuffix . '-B', 'Incomplete', 'period-incomplete-' . $periodFixtureSuffix . '@bicol-u.edu.ph']);
+$periodStudentB = (int) $periodStudentStmt->fetchColumn();
+$periodEnrollmentStmt = $pdo->prepare(
+    "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled)
+     VALUES (?, ?, 'Active', CURRENT_DATE)
+     RETURNING enrollment_id"
+);
+$periodEnrollmentStmt->execute([$periodStudentA, $periodClassId]);
+$periodEnrollmentA = (int) $periodEnrollmentStmt->fetchColumn();
+$periodEnrollmentStmt->execute([$periodStudentB, $periodClassId]);
+$periodEnrollmentB = (int) $periodEnrollmentStmt->fetchColumn();
+
+$periodAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments
+        (cs_id, title, type, grading_category_id, grading_period, max_score, weight, status,
+         transmutation_enabled, transmutation_minimum_percentage, transmutation_maximum_percentage,
+         attendance_session_date, attendance_session_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, ?, ?, ?)
+     RETURNING assessment_id"
+);
+$periodAssessmentIds = [];
+$periodAssessmentStmt->execute([
+    $periodClassId, 'Linked transmutation quiz ' . $periodFixtureSuffix, 'Quiz', $periodMidtermQuizId, 'Midterm',
+    100, 999, 'true', 50, 100, '2027-07-31', 'PERIOD-TRANS-LINK',
+]);
+$periodAssessmentIds[] = (int) $periodAssessmentStmt->fetchColumn();
+$periodAssessmentStmt->execute([
+    $periodClassId, 'Regular quiz ' . $periodFixtureSuffix, 'Quiz', $periodMidtermQuizId, 'Midterm',
+    100, 1, 'false', 50, 100, null, null,
+]);
+$periodAssessmentIds[] = (int) $periodAssessmentStmt->fetchColumn();
+$periodAssessmentStmt->execute([
+    $periodClassId, 'Final exam ' . $periodFixtureSuffix, 'Exam', $periodFinalExamId, 'Final',
+    100, 1, 'false', 50, 100, null, null,
+]);
+$periodAssessmentIds[] = (int) $periodAssessmentStmt->fetchColumn();
+$periodLinkedAssessmentId = $periodAssessmentIds[0];
+$periodRegularAssessmentId = $periodAssessmentIds[1];
+$periodFinalAssessmentId = $periodAssessmentIds[2];
+
+$periodScoreStmt = $pdo->prepare(
+    'INSERT INTO assessment_scores (assessment_id, student_id, score, submitted_at, remarks)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP(6), ?)'
+);
+// 50/100 transmuted with a present exact-linked session becomes 75%; the
+// regular 80/100 quiz keeps raw points authoritative; the Final is 90/100.
+$periodScoreStmt->execute([$periodLinkedAssessmentId, $periodStudentA, 50, 'GRD-001 linked transmutation']);
+$periodScoreStmt->execute([$periodRegularAssessmentId, $periodStudentA, 80, 'Period category ratio']);
+$periodScoreStmt->execute([$periodFinalAssessmentId, $periodStudentA, 90, 'Period term ratio']);
+$periodScoreStmt->execute([$periodLinkedAssessmentId, $periodStudentB, 50, 'Incomplete linked attendance']);
+$periodScoreStmt->execute([$periodRegularAssessmentId, $periodStudentB, 80, 'Incomplete period category ratio']);
+$periodScoreStmt->execute([$periodFinalAssessmentId, $periodStudentB, 90, 'Incomplete period term ratio']);
+
+$periodSecretaryId = (int) $pdo->query(
+    "SELECT user_id FROM user_accounts WHERE login_email = 'secretary@bicol-u.edu.ph' LIMIT 1"
+)->fetchColumn();
+expect_true($periodSecretaryId > 0, 'Period attendance fixture has a valid Secretary source');
+$periodSessionStmt = $pdo->prepare(
+    "INSERT INTO attendance_sessions
+        (cs_id, secretary_user_id, session_date, session_code, status, ended_at)
+     VALUES (?, ?, ?, ?, 'ended', CURRENT_TIMESTAMP(6))
+     RETURNING session_id"
+);
+$periodSessionIds = [];
+$periodSessionRows = [
+    ['2027-08-15', 'PERIOD-M-START'],
+    ['2027-09-30', 'PERIOD-M-END'],
+    ['2027-10-01', 'PERIOD-GAP'],
+    ['2027-08-14', 'PERIOD-OUT-BEFORE'],
+    ['2027-10-15', 'PERIOD-F-START'],
+    ['2027-12-01', 'PERIOD-F-END'],
+    ['2027-12-02', 'PERIOD-OUT-AFTER'],
+    ['2027-07-31', 'PERIOD-TRANS-LINK'],
+];
+foreach ($periodSessionRows as [$periodSessionDate, $periodSessionCode]) {
+    $periodSessionStmt->execute([$periodClassId, $periodSecretaryId, $periodSessionDate, $periodSessionCode]);
+    $periodSessionIds[$periodSessionCode] = (int) $periodSessionStmt->fetchColumn();
+}
+$periodAttendanceStmt = $pdo->prepare(
+    "INSERT INTO attendance_records
+        (enrollment_id, attendance_session_id, session_date, session_code, status, verification_method)
+     VALUES (?, ?, ?, ?, ?, 'manual_faculty')"
+);
+$periodAttendanceRows = [
+    [$periodEnrollmentA, '2027-08-15', 'PERIOD-M-START', 'present'], // inclusive Midterm start
+    [$periodEnrollmentA, '2027-09-30', 'PERIOD-M-END', 'late'], // inclusive Midterm end
+    [$periodEnrollmentA, '2027-10-01', 'PERIOD-GAP', 'absent'], // allowed gap, ignored
+    [$periodEnrollmentA, '2027-08-14', 'PERIOD-OUT-BEFORE', 'absent'], // outside before
+    [$periodEnrollmentA, '2027-10-15', 'PERIOD-F-START', 'present'], // inclusive Final start
+    [$periodEnrollmentA, '2027-12-01', 'PERIOD-F-END', 'late'], // inclusive Final end
+    [$periodEnrollmentA, '2027-12-02', 'PERIOD-OUT-AFTER', 'present'], // outside after
+    [$periodEnrollmentA, '2027-07-31', 'PERIOD-TRANS-LINK', 'present'], // GRD-001 exact link, outside range
+];
+foreach ($periodAttendanceRows as $periodAttendanceRow) {
+    [$periodEnrollment, $periodSessionDate, $periodSessionCode, $periodAttendanceStatus] = $periodAttendanceRow;
+    $periodAttendanceStmt->execute([
+        $periodEnrollment,
+        $periodSessionIds[$periodSessionCode],
+        $periodSessionDate,
+        $periodSessionCode,
+        $periodAttendanceStatus,
+    ]);
+}
+$periodAttendanceCountStmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM attendance_records WHERE enrollment_id = ? AND session_date BETWEEN ? AND ?'
+);
+$periodAttendanceCountStmt->execute([$periodEnrollmentA, '2027-08-15', '2027-09-30']);
+expect_same(2, (int) $periodAttendanceCountStmt->fetchColumn(), 'Inclusive Midterm boundaries select exactly the two in-range sessions');
+$periodAttendanceCountStmt->execute([$periodEnrollmentA, '2027-10-15', '2027-12-01']);
+expect_same(2, (int) $periodAttendanceCountStmt->fetchColumn(), 'Inclusive Final boundaries select exactly the two in-range sessions');
+
+$periodRevokedSessionStmt = $pdo->prepare(
+    "INSERT INTO attendance_sessions
+        (cs_id, secretary_user_id, session_date, session_code, status, revoked_at)
+     VALUES (?, ?, '2027-09-15', ?, 'revoked', CURRENT_TIMESTAMP(6))
+     RETURNING session_id"
+);
+$periodRevokedSessionStmt->execute([$periodClassId, $periodSecretaryId, 'PERIOD-REVOKED-' . $periodFixtureSuffix]);
+$periodRevokedSessionId = (int) $periodRevokedSessionStmt->fetchColumn();
+$periodAttendanceStmt->execute([
+    $periodEnrollmentA,
+    $periodRevokedSessionId,
+    '2027-09-15',
+    'PERIOD-REVOKED-' . $periodFixtureSuffix,
+    'absent',
+]);
+
+$periodAssessmentCategoryCountStmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM assessments WHERE grading_category_id IN (?, ?)'
+);
+$periodAssessmentCategoryCountStmt->execute([$periodMidtermAttendanceId, $periodFinalAttendanceId]);
+expect_same(0, (int) $periodAssessmentCategoryCountStmt->fetchColumn(), 'No assessment is assigned to an attendance-source category');
+
+[$periodInitialComputeStatus, $periodInitialComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $periodClassId,
+]);
+expect_same(200, $periodInitialComputeStatus, 'Period grading recomputation accepts valid date ranges');
+$periodInitialComplete = integration_find_enrollment_result($periodInitialComputeBody, $periodEnrollmentA);
+$periodInitialIncomplete = integration_find_enrollment_result($periodInitialComputeBody, $periodEnrollmentB);
+expect_same('computed', $periodInitialComplete['status'] ?? null, 'Enrollment with period sessions receives a complete result');
+expect_same(83.75, integration_period_percentage($periodInitialComplete ?? [], 'Midterm'), 'Midterm category/attendance math uses inclusive boundaries, GRD-001 transmutation, and no double attendance');
+expect_same(83.75, integration_period_percentage($periodInitialComplete ?? [], 'Midterm'), 'Revoked attendance sessions do not contribute to period attendance');
+expect_same(90.0, integration_period_percentage($periodInitialComplete ?? [], 'Final'), 'Final category/attendance math is independent of Midterm math');
+expect_same(87.5, (float) ($periodInitialComplete['percentage'] ?? -1), 'Overall term ratio combines distinct Midterm and Final results');
+$periodMidtermAttendanceCategories = array_values(array_filter(
+    $periodInitialComplete['periods']['midterm']['categories'] ?? [],
+    static fn(array $category): bool => ($category['sourceKind'] ?? null) === 'attendance'
+));
+$periodFinalAttendanceCategories = array_values(array_filter(
+    $periodInitialComplete['periods']['final']['categories'] ?? [],
+    static fn(array $category): bool => ($category['sourceKind'] ?? null) === 'attendance'
+));
+expect_same(1, count($periodMidtermAttendanceCategories), 'Midterm computation has one authoritative attendance category');
+expect_same(2, count($periodMidtermAttendanceCategories[0]['sessions'] ?? []), 'Midterm computation includes only its two inclusive boundary sessions');
+expect_same(1, count($periodFinalAttendanceCategories), 'Final computation has one authoritative attendance category');
+expect_same(2, count($periodFinalAttendanceCategories[0]['sessions'] ?? []), 'Final computation includes only its two inclusive boundary sessions');
+$periodMidtermAssessmentCategories = array_values(array_filter(
+    $periodInitialComplete['periods']['midterm']['categories'] ?? [],
+    static fn(array $category): bool => ($category['sourceKind'] ?? null) === 'assessment'
+));
+expect_same(155.0, (float) ($periodMidtermAssessmentCategories[0]['earnedPoints'] ?? -1), 'GRD-001 exact-linked transmutation contributes 75 points while the regular quiz contributes 80 raw points');
+expect_same(200.0, (float) ($periodMidtermAssessmentCategories[0]['possiblePoints'] ?? -1), 'Assessment category math uses each assessment maximum exactly once');
+
+// Guard against a legacy or manually restored configuration that predates the
+// save-time duplicate Attendance source validation. Recompute must surface the
+// invalid state as incomplete instead of adding the same attendance records
+// once for each duplicate membership.
+$periodDuplicatePersistedCategoryStmt = $pdo->prepare(
+    "INSERT INTO grading_categories (config_id, name, weight, sort_order)
+     VALUES (?, ?, ?, ?)
+     RETURNING category_id"
+);
+$periodDuplicatePersistedCategoryStmt->execute([
+    $periodConfigId,
+    'Persisted duplicate participation ' . $periodFixtureSuffix,
+    25,
+    3,
+]);
+$periodDuplicatePersistedCategoryId = (int) $periodDuplicatePersistedCategoryStmt->fetchColumn();
+$periodDuplicatePersistedMembershipStmt = $pdo->prepare(
+    "INSERT INTO grading_category_periods
+        (config_id, category_id, grading_period, name, weight, sort_order, source_kind)
+     VALUES (?, ?, 'Midterm', ?, ?, ?, 'attendance')
+     RETURNING category_period_id"
+);
+$periodDuplicatePersistedMembershipStmt->execute([
+    $periodConfigId,
+    $periodDuplicatePersistedCategoryId,
+    'Persisted duplicate participation ' . $periodFixtureSuffix,
+    25,
+    3,
+]);
+$periodDuplicatePersistedMembershipId = (int) $periodDuplicatePersistedMembershipStmt->fetchColumn();
+[$periodDuplicateComputeStatus, $periodDuplicateComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $periodClassId,
+]);
+expect_same(200, $periodDuplicateComputeStatus, 'Recomputation accepts a legacy duplicate-source fixture and returns a structured result');
+$periodDuplicateResult = integration_find_enrollment_result($periodDuplicateComputeBody, $periodEnrollmentA);
+expect_same('incomplete_period', $periodDuplicateResult['status'] ?? null, 'Legacy duplicate Attendance sources do not produce a computed grade');
+expect_true(
+    in_array('duplicate_attendance_sources', array_column($periodDuplicateResult['periods']['midterm']['incomplete'] ?? [], 'reason'), true),
+    'Legacy duplicate Attendance sources report an explicit incomplete reason'
+);
+$pdo->prepare('DELETE FROM grading_category_periods WHERE category_period_id = ?')->execute([$periodDuplicatePersistedMembershipId]);
+$pdo->prepare('DELETE FROM grading_categories WHERE category_id = ?')->execute([$periodDuplicatePersistedCategoryId]);
+
+expect_same('incomplete_period', $periodInitialIncomplete['status'] ?? null, 'Enrollment with no usable attendance remains incomplete');
+expect_same('incomplete', $periodInitialIncomplete['periods']['midterm']['status'] ?? null, 'Missing Midterm attendance is reported as an incomplete period');
+expect_true(
+    in_array('unresolved_attendance', array_column($periodInitialIncomplete['periods']['midterm']['incomplete'] ?? [], 'reason'), true),
+    'Missing attendance records for ended sessions remain explicitly unresolved'
+);
+
+$periodPersistedBeforeCorrectionStmt = $pdo->prepare('SELECT final_percentage, grade_components_json FROM enrollments WHERE enrollment_id = ?');
+$periodPersistedBeforeCorrectionStmt->execute([$periodEnrollmentA]);
+$periodPersistedBeforeCorrection = $periodPersistedBeforeCorrectionStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('87.50', (string) ($periodPersistedBeforeCorrection['final_percentage'] ?? ''), 'Explicit recomputation persists the overall period result');
+
+// Correct one attendance record. Persistence must remain unchanged until the
+// explicit compute endpoint is called again.
+$pdo->prepare('UPDATE attendance_records SET status = ? WHERE enrollment_id = ? AND session_code = ?')
+    ->execute(['present', $periodEnrollmentA, 'PERIOD-M-END']);
+$periodPersistedBeforeCorrectionStmt->execute([$periodEnrollmentA]);
+$periodPersistedAfterAttendanceEdit = $periodPersistedBeforeCorrectionStmt->fetch(PDO::FETCH_ASSOC);
+expect_same((string) $periodPersistedBeforeCorrection['final_percentage'], (string) ($periodPersistedAfterAttendanceEdit['final_percentage'] ?? ''), 'Attendance corrections do not rewrite persisted grades before explicit recomputation');
+
+[$periodCorrectedComputeStatus, $periodCorrectedComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $periodClassId,
+]);
+expect_same(200, $periodCorrectedComputeStatus, 'Explicit recomputation applies corrected attendance');
+$periodCorrectedComplete = integration_find_enrollment_result($periodCorrectedComputeBody, $periodEnrollmentA);
+expect_same(88.75, integration_period_percentage($periodCorrectedComplete ?? [], 'Midterm'), 'Corrected Midterm attendance changes only the affected period');
+expect_same(89.5, (float) ($periodCorrectedComplete['percentage'] ?? -1), 'Corrected period result updates the overall term ratio');
+
+// Change dates to a valid gap with no usable sessions. Saving the new dates
+// must preserve the recorded grade until explicit recomputation.
+$periodNoSessionDatePayload = [
+    'attendanceDateRanges' => [
+        'midterm' => ['startDate' => '2027-08-16', 'endDate' => '2027-09-29'],
+        'final' => ['startDate' => $periodDatePayload['finalStartDate'], 'endDate' => $periodDatePayload['finalEndDate']],
+    ],
+];
+$periodNoSessionPayload = array_merge($periodOmittedPayload, ['version' => $periodConfigVersion], $periodNoSessionDatePayload);
+[$periodNoSessionSaveStatus, $periodNoSessionSaveBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodNoSessionPayload);
+expect_same(200, $periodNoSessionSaveStatus, 'Valid disjoint ranges with an allowed gap save successfully');
+$periodConfigVersion = (int) ($periodNoSessionSaveBody['configuration']['version'] ?? 0);
+$periodPersistedBeforeNoSessionStmt = $pdo->prepare('SELECT final_percentage FROM enrollments WHERE enrollment_id = ?');
+$periodPersistedBeforeNoSessionStmt->execute([$periodEnrollmentA]);
+expect_same('89.50', (string) $periodPersistedBeforeNoSessionStmt->fetchColumn(), 'Changing saved dates preserves the prior recorded overall result');
+[$periodNoSessionComputeStatus, $periodNoSessionComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $periodClassId,
+]);
+expect_same(200, $periodNoSessionComputeStatus, 'Recomputation with a valid range and no usable attendance returns a result set');
+$periodNoSessionResult = integration_find_enrollment_result($periodNoSessionComputeBody, $periodEnrollmentA);
+expect_same('incomplete_period', $periodNoSessionResult['status'] ?? null, 'A valid range with no usable attendance remains incomplete');
+expect_same('incomplete', $periodNoSessionResult['periods']['midterm']['status'] ?? null, 'A range with no usable attendance reports an incomplete Midterm period');
+
+// Restore the date range and recompute after the attendance correction. This
+// also proves that the exact linked GRD-001 session outside both ranges still
+// contributes its transmuted score.
+$periodRestorePayload = array_merge($periodOmittedPayload, ['version' => $periodConfigVersion], $periodDateRangesPayload);
+[$periodRestoreStatus, $periodRestoreBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodRestorePayload);
+expect_same(200, $periodRestoreStatus, 'Restoring the saved period date ranges succeeds with the current version');
+$periodConfigVersion = (int) ($periodRestoreBody['configuration']['version'] ?? 0);
+[$periodFinalComputeStatus, $periodFinalComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $periodClassId,
+]);
+expect_same(200, $periodFinalComputeStatus, 'Final explicit recomputation restores complete period results');
+$periodFinalComplete = integration_find_enrollment_result($periodFinalComputeBody, $periodEnrollmentA);
+expect_same(88.75, integration_period_percentage($periodFinalComplete ?? [], 'Midterm'), 'Stable attendance-source category survives rename and date-range restore');
+expect_same(89.5, (float) ($periodFinalComplete['percentage'] ?? -1), 'GRD-001 exact-linked transmutation remains independent of period date attribution');
+
+$periodBreakdownJson = json_encode($periodFinalComplete, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+expect_true(str_contains((string) $periodBreakdownJson, 'Participation'), 'Period response identifies the renamed attendance source by stable category');
+expect_true(!str_contains((string) $periodBreakdownJson, 'attendanceWeight'), 'Period response does not add a second independent attendance contribution');
+
+// Explicitly clear the Midterm range to verify missing ranges remain honest
+// incomplete results, then leave the disposable fixture in a valid state for
+// cleanup below.
+$periodMissingRangePayload = array_merge($periodOmittedPayload, ['version' => $periodConfigVersion, 'attendanceDateRanges' => [
+    'midterm' => ['startDate' => null, 'endDate' => null],
+    'final' => ['startDate' => $periodDatePayload['finalStartDate'], 'endDate' => $periodDatePayload['finalEndDate']],
+]]);
+[$periodMissingRangeSaveStatus, $periodMissingRangeSaveBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodMissingRangePayload);
+expect_same(200, $periodMissingRangeSaveStatus, 'Period configuration accepts an explicitly missing range');
+$periodConfigVersion = (int) ($periodMissingRangeSaveBody['configuration']['version'] ?? 0);
+[$periodMissingRangeComputeStatus, $periodMissingRangeComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $periodClassId,
+]);
+expect_same(200, $periodMissingRangeComputeStatus, 'Missing period range returns an explicit incomplete result');
+$periodMissingRangeResult = integration_find_enrollment_result($periodMissingRangeComputeBody, $periodEnrollmentA);
+expect_same('incomplete_period', $periodMissingRangeResult['status'] ?? null, 'Missing period range does not fabricate a zero or overall replacement');
+expect_same('missing_date_range', $periodMissingRangeResult['periods']['midterm']['incomplete'][0]['reason'] ?? null, 'Missing period range reports the explicit incomplete reason');
+
+// A period with zero term weight is not required for the overall result. The
+// positive-weight Final remains authoritative even when Midterm has no range.
+$periodZeroWeightPayload = array_merge($periodOmittedPayload, [
+    'version' => $periodConfigVersion,
+    'termRatio' => ['midterm' => 0, 'final' => 100],
+    'attendanceDateRanges' => [
+        'midterm' => ['startDate' => null, 'endDate' => null],
+        'final' => ['startDate' => $periodDatePayload['finalStartDate'], 'endDate' => $periodDatePayload['finalEndDate']],
+    ],
+]);
+[$periodZeroWeightSaveStatus, $periodZeroWeightSaveBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodZeroWeightPayload);
+expect_same(200, $periodZeroWeightSaveStatus, 'A zero-weight period with no date range is a valid configuration');
+$periodConfigVersion = (int) ($periodZeroWeightSaveBody['configuration']['version'] ?? 0);
+[$periodZeroWeightComputeStatus, $periodZeroWeightComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
+    'classId' => (string) $periodClassId,
+]);
+expect_same(200, $periodZeroWeightComputeStatus, 'Zero-weight period computation returns a usable result');
+$periodZeroWeightResult = integration_find_enrollment_result($periodZeroWeightComputeBody, $periodEnrollmentA);
+expect_same('computed', $periodZeroWeightResult['status'] ?? null, 'Missing zero-weight Midterm does not block the positive-weight Final');
+expect_same('incomplete', $periodZeroWeightResult['periods']['midterm']['status'] ?? null, 'Zero-weight Midterm remains transparently incomplete');
+expect_same('computed', $periodZeroWeightResult['periods']['final']['status'] ?? null, 'Positive-weight Final remains complete');
+expect_same(90.0, (float) ($periodZeroWeightResult['percentage'] ?? -1), 'Overall result uses the positive-weight Final at 100 percent');
+$periodZeroWeightPersistedStmt = $pdo->prepare('SELECT final_percentage FROM enrollments WHERE enrollment_id = ?');
+$periodZeroWeightPersistedStmt->execute([$periodEnrollmentA]);
+expect_same('90.00', (string) $periodZeroWeightPersistedStmt->fetchColumn(), 'Zero-weight period computation persists the positive-weight overall grade');
+
+$pdo->beginTransaction();
+$periodAssessmentPlaceholders = implode(',', array_fill(0, count($periodAssessmentIds), '?'));
+$pdo->prepare("DELETE FROM assessment_scores WHERE assessment_id IN ({$periodAssessmentPlaceholders})")->execute($periodAssessmentIds);
+$pdo->prepare("DELETE FROM assessments WHERE assessment_id IN ({$periodAssessmentPlaceholders})")->execute($periodAssessmentIds);
+$pdo->prepare('DELETE FROM attendance_records WHERE enrollment_id IN (?, ?)')->execute([$periodEnrollmentA, $periodEnrollmentB]);
+$pdo->prepare('DELETE FROM enrollments WHERE enrollment_id IN (?, ?)')->execute([$periodEnrollmentA, $periodEnrollmentB]);
+$pdo->prepare('DELETE FROM students WHERE student_id IN (?, ?)')->execute([$periodStudentA, $periodStudentB]);
+$pdo->prepare('DELETE FROM attendance_sessions WHERE cs_id = ?')->execute([$periodClassId]);
+$pdo->prepare('DELETE FROM grading_configs WHERE config_id = ?')->execute([$periodConfigId]);
+$pdo->prepare('DELETE FROM class_sections WHERE cs_id = ?')->execute([$periodClassId]);
+$pdo->prepare('DELETE FROM courses WHERE course_id = ?')->execute([$periodCourseId]);
+$pdo->commit();
+echo "PASS: GRD-002 period date-range and computation integration coverage completed.\n";
+
 [$weightPeriodComputeStatus, $weightPeriodComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
     'classId' => (string) $weightClassId,
 ]);
-expect_same(422, $weightPeriodComputeStatus, 'Period grade computation is rejected before any recomputation is attempted');
-expect_same('GRADING_PERIOD_COMPUTATION_PENDING', $weightPeriodComputeBody['code'] ?? null, 'Period computation rejection uses an explicit pending-phase code');
+expect_same(200, $weightPeriodComputeStatus, 'Period grade computation returns implemented complete/incomplete semantics');
+$weightPeriodResult = integration_find_enrollment_result($weightPeriodComputeBody, $weightEnrollmentA);
+expect_same('incomplete_period', $weightPeriodResult['status'] ?? null, 'Period computation reports an incomplete enrollment result rather than the removed pending-phase error');
 $weightPersistedPercentageStmt = $pdo->prepare('SELECT final_percentage FROM enrollments WHERE enrollment_id = ?');
 $weightPersistedPercentageStmt->execute([$weightEnrollmentA]);
-expect_same('68.00', (string) $weightPersistedPercentageStmt->fetchColumn(), 'Rejected period computation preserves the prior persisted grade');
+expect_same('68.00', (string) $weightPersistedPercentageStmt->fetchColumn(), 'Period computation leaves the legacy persisted grade unchanged when the result is incomplete');
 $pdo->prepare("UPDATE class_sections SET status = 'Archived' WHERE cs_id = ?")->execute([$weightClassId]);
 [$weightArchivedPeriodComputeStatus, $weightArchivedPeriodComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, []);
-expect_same(422, $weightArchivedPeriodComputeStatus, 'Batch period computation rejects archived period offerings before writes');
-expect_same('GRADING_PERIOD_COMPUTATION_PENDING', $weightArchivedPeriodComputeBody['code'] ?? null, 'Archived period batch rejection remains explicit');
+expect_same(200, $weightArchivedPeriodComputeStatus, 'Batch period computation handles archived period offerings through the implemented result contract');
+expect_same('ok', $weightArchivedPeriodComputeBody['status'] ?? null, 'Archived period batch returns the normal computation status');
 $weightPersistedPercentageStmt->execute([$weightEnrollmentA]);
-expect_same('68.00', (string) $weightPersistedPercentageStmt->fetchColumn(), 'Archived period batch rejection preserves all prior grades');
+expect_same('68.00', (string) $weightPersistedPercentageStmt->fetchColumn(), 'Archived period batch preserves the prior persisted grade');
 
 $weightAuditStmt = $pdo->prepare(
     "SELECT actor_user_id, actor_display_name, target_type, target_id,

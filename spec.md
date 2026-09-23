@@ -434,7 +434,9 @@ For period configurations, the overall percentage is the Midterm percentage mult
 
 Saving configuration does not automatically rewrite persisted grade results. An authorized recomputation applies the saved configuration while preserving raw scores and GRD-001 transmutation behavior.
 
-In period configurations, the preset Attendance category uses authoritative attendance data and replaces the additional independent attendance contribution, preventing double-counting. Assessment-linked transmutation remains governed separately by GRD-001. The assignment of attendance records to Midterm and Finals requires a separate Owner decision before period attendance computation is implemented.
+In period configurations, the preset Attendance category uses authoritative attendance data and replaces the additional independent attendance contribution, preventing double-counting. Assessment-linked transmutation remains governed separately by GRD-001.
+
+Faculty defines one inclusive attendance date range for Midterm and one for Finals for each offering. Each start date must be on or before its end date; Midterm must end before Finals starts. Gaps are allowed. Attendance is assigned using its recorded session date, and records outside both ranges do not contribute to period attendance. Missing ranges or unresolved attendance keep the affected result incomplete. Saving changed dates does not rewrite recorded results; changes apply through explicit recomputation.
 
 Grade displays and exports must distinguish authoritative Midterm, Finals, and overall results. Unavailable period results must not be replaced with the overall grade.
 

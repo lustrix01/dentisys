@@ -1,10 +1,20 @@
 # Grade Weights Editor: Gemini Frontend Handoff
 
-Status: frontend plan only. Configuration storage is implemented and validated on `codex/period-grading-config`. Period computation is not implemented: attendance attribution awaits the Owner's decision. Do not present this stage as a complete grading feature or merge it into `lighthal5`.
+Status: frontend plan only. Configuration storage, Faculty-defined attendance date ranges, and period computation are implemented on `codex/period-grading-config`. The approved date rules are recorded in GRD-002. The frontend migration is still required. Do not present this stage as a complete grading UI or merge it into `lighthal5`.
+
+## Approved attendance date ranges
+
+The Owner selected Faculty-defined date ranges rather than reusing semester-wide attendance for both periods. Gemini should implement two date controls (start/end) for each period, scoped to the selected offering, alongside the existing dirty-state, save, version-conflict, and reload safeguards. Do not invent dates or calculate attendance in the browser. The backend date-range payload is documented below.
+
+GRD-002 now specifies:
+
+> Faculty defines one inclusive attendance date range for Midterm and one for Finals for each offering. Each start date must be on or before its end date; Midterm must end before Finals starts. Gaps are allowed. Attendance is assigned using its recorded session date, and records outside both ranges do not contribute to period attendance. Missing ranges or unresolved attendance keep the affected result incomplete. Saving changed dates does not rewrite recorded results; changes apply through explicit recomputation.
+
+Backend work adds ordered, additive date storage; validates and returns ranges through the existing versioned configuration API; computes attendance per enrollment and period; preserves GRD-001 assessment-linked transmutation; persists distinct period results on explicit recomputation; and covers boundaries, gaps, invalid ranges, missing attendance, correction/recomputation, and legacy compatibility in regression tests. Gemini must consume the verified response contract and show the pending/error states directly.
 
 The implementation must be made on an isolated frontend branch or worktree. Do not merge it into the active branch as part of the UI handoff. No frontend implementation is included in this document.
 
-Backend closeout validation (2026-09-23): `scripts/check.ps1` passed, including 116 mocked browser tests; `scripts/check-postgres.ps1` passed, including the PostgreSQL integration suite and all eight live browser tests. The live grading test now registers response listeners before navigation/reload; its assertions are unchanged. Luna XHigh review identified two valid issues (categoryless legacy conversion and concurrent assessment membership changes), both fixed with regression coverage. Its subsequent integer/bigint foreign-key objection was rejected after verifying the actual PostgreSQL constraints and successful migrations. Review used `autoreview --mode local --engine codex --model gpt-5.6-luna --thinking xhigh --no-web-search`.
+Backend closeout validation (2026-09-23): `scripts/check.ps1` passed, including all 116 mocked browser tests. `scripts/check-postgres.ps1 -KeepStack` passed against the fresh disposable `dentisys-grading-final6` Compose project, including migration checks, the PostgreSQL integration suite, smoke checks, all eight live browser tests, and log checks; the project override was restored afterward and the development volume was untouched. The final Luna XHigh structured review command `autoreview --mode local --engine codex --model gpt-5.6-luna --thinking xhigh --no-web-search` returned an empty findings array and marked the patch correct. The earlier duplicate-authoritative-Attendance finding is fixed in both save-time validation (`GRADING_ATTENDANCE_CATEGORY_DUPLICATE`) and computation-time handling of legacy rows (`duplicate_attendance_sources`), with Faculty and PostgreSQL regression coverage. The closeout also verifies unique period-save placeholders and excludes revoked attendance sessions from period totals. The frontend migration remains unverified until Gemini's implementation passes the browser checks below.
 
 ## Approved behavior and boundaries
 
@@ -15,10 +25,10 @@ Backend closeout validation (2026-09-23): `scripts/check.ps1` passed, including 
 - Preset values become authoritative only after a successful server save. Existing saved configurations must never be replaced automatically (`spec.md:427-427`).
 - Assessments must reference a valid category for their offering and grading period, and existing assessment identifiers, category references, raw scores, and assessment maximum scores must survive (`spec.md:429-429`).
 - Existing single-list configurations keep their current calculation until an explicit validated conversion. Conversion must not silently change recorded grades (`spec.md:431-431`). Saving a configuration does not rewrite persisted results; an authorized recomputation applies the saved configuration (`spec.md:435-435`).
-- In period mode, the Attendance category uses authoritative attendance data and replaces the additional independent attendance contribution, so attendance is not double-counted (`spec.md:437-437`). The assignment of attendance records to Midterm and Finals is still awaiting an Owner decision.
-- Grade displays and exports must distinguish authoritative Midterm, Finals, and overall results. An unavailable period result must never be replaced with the overall grade (`spec.md:439-439`).
+- In period mode, the Attendance category uses authoritative attendance data and replaces the additional independent attendance contribution, so attendance is not double-counted (GRD-002). Faculty-defined date ranges follow the approved rules above.
+- Grade displays and exports must distinguish authoritative Midterm, Finals, and overall results. An unavailable period result must never be replaced with the overall grade (GRD-002).
 
-There is no approval for Admin-wide grading presets. There is also no approval for persisting a category maximum score in the grading configuration. Keep Faculty configuration offering-scoped and keep assessment `maxScore` at the assessment level. Do not add either concept to the frontend API payload while the backend contract is pending.
+There is no approval for Admin-wide grading presets. There is also no approval for persisting a category maximum score in the grading configuration. Keep Faculty configuration offering-scoped and keep assessment `maxScore` at the assessment level. Do not add either concept to the frontend API payload.
 
 ## Exact source preset to reproduce
 
@@ -72,15 +82,41 @@ Handle structured errors without discarding the draft:
 - `409 GRADING_CATEGORY_IN_USE`: referenced category or period membership cannot be removed.
 - `422 GRADING_CATEGORY_PERIOD_MAPPING_INVALID`: incompatible category-period mapping.
 - `422 GRADING_CATEGORY_PERIOD_MAPPING_REQUIRED`: conversion would leave existing assessments without matching period categories; use the returned `assessmentReferences` to identify the missing mappings.
-- `422 GRADING_PERIOD_COMPUTATION_PENDING`: recomputation of period configurations is unavailable in this stage and leaves persisted grades untouched.
+- `422 GRADING_PERIOD_DATE_RANGE_INVALID`: invalid calendar dates, reversed ranges, or Midterm ending on/after Finals starts. Missing endpoints can be saved but leave attendance-dependent computation incomplete.
+- `422 GRADING_CATEGORY_SOURCE_KIND_INVALID`: unsupported category source.
+- `422 GRADING_ATTENDANCE_CATEGORY_DUPLICATE`: each period may have at most one authoritative Attendance category; the same attendance records must not contribute through multiple rows.
+- `422 GRADING_ATTENDANCE_CATEGORY_ASSESSMENT_INVALID`: an assessment cannot use an authoritative attendance category.
 
-Do not advertise period calculations, conversion readiness for production, or Midterm/Final result fields until the next backend phase is complete. Configuration UX may be built and tested on the isolated branch while that dependency remains explicit. Attendance input fields and period-result response fields are still pending; do not invent them.
+The date-range and period-computation extension replaces the former `GRADING_PERIOD_COMPUTATION_PENDING` guard. Backend runtime validation passed; use the contract below and do not claim the UI is ready before the frontend browser checks pass.
 
 The existing frontend client still represents a flat offering-scoped category list in `frontend/src/services/apiClient.ts`. Extend its types to the implemented configuration contract above. Retain positive category weights, unique names/order, exact 100% totals, stable identifiers, `inUse` state, version conflicts, referenced-category protection, and first-save legacy assessment mapping errors.
 
-Use the implemented configuration fields above, not the source branch's subject-code API. Wait for the next backend contract before implementing attendance attribution or successful period recomputation. Do not emulate missing server behavior in local state.
+### Date-range integration
 
-Until the contract is final, keep conversion, recomputation, and period-aware attendance controls behind a clearly bounded integration point. A disabled or unavailable state is safer than a client-side guess.
+The backend extension uses `attendanceDateRanges` on the existing period configuration payload and response:
+
+```json
+{
+  "attendanceDateRanges": {
+    "midterm": { "startDate": "2026-08-01", "endDate": "2026-10-15" },
+    "final": { "startDate": "2026-10-16", "endDate": "2026-12-20" }
+  }
+}
+```
+
+These dates illustrate the payload only; never use them as preset dates. Use `YYYY-MM-DD` or `null` for missing values. Omitting the date-range field preserves existing saved dates; explicit `null` clears the supplied range. Category snapshots additionally expose `sourceKind` (`assessment` or `attendance`); preserve it through label edits rather than deriving calculation behavior from the displayed name. Attendance rows must not appear in assessment-category choices.
+
+### Explicit computation response
+
+Call the existing `POST /api/faculty/grades/compute` with the selected `classId`. Each period-mode result contains `periods.midterm` and `periods.final`, also included in `breakdown.periods`. Each period has `status`, `percentage` (nullable), `categories`, `incomplete`, and `attendanceDateRange`. A computed overall result has `status: "computed"`, `percentage`, `gwa`, and `retentionState`; its breakdown uses `calculationMode: "authoritative_periods"` and includes the saved term ratio.
+
+An insufficient positively weighted period produces `status: "incomplete_period"` with reasons such as `missing_date_range`, `no_sessions`, `unresolved_attendance`, `no_assessment_results`, `missing_assessment_score`, or `unresolved_assessment_attendance`. Show the reasons under the affected period. The response reports `previouslyPersisted`, `previousPercentage`, and `previousGwa`; these are prior recorded results, not newly computed values. An incomplete recomputation preserves those recorded results. An incomplete zero-weight period remains unavailable but does not block a complete positively weighted period from determining the overall result.
+
+Persisted breakdowns are stored in the existing grade-components JSON and returned by Faculty result readers. Read their distinct period percentages instead of copying the overall GWA into period columns. No separate Midterm/Final GWA fields are promised by this contract.
+
+Use the implemented configuration fields above, not the source branch's subject-code API. Attendance attribution and recomputation must run on the server; do not emulate them in local state.
+
+Keep conversion, recomputation, and period-aware attendance controls connected through the typed API client. A server-reported unavailable state must remain visible.
 
 ## Draft and saved preset behavior
 
@@ -111,6 +147,8 @@ Saving the configuration must show a “saved configuration; persisted results u
 
 Use the current lighthal5 editor safeguards while adopting the source layout:
 
+- Add a start and end date for each period using calendar dates, not browser-local timestamps. Show that both endpoints count toward attendance. Reject reversed or overlapping ranges and explain that Midterm must end before Finals starts; gaps are allowed. Do not infer date defaults from today's date or the school year.
+- Include date edits in the same offering-scoped draft and explicit Save action. Saving dates must explain that recorded results remain unchanged until Faculty explicitly recomputes. If ranges are missing, allow the server's configuration-save behavior and show the resulting incomplete grading state honestly.
 - Keep offering scope, Reload Latest, version display, dirty-state discard confirmation, server-response hydration, stable category IDs, and `inUse` deletion protection.
 - Keep exact 100% validation for each period and the period contribution ratio. Reuse the current decimal precision rules rather than the source's integer-only checks.
 - Validate blank names, case-insensitive duplicate names within the period, invalid/zero/out-of-range weights, duplicate ordering, and any backend-approved cross-period constraints before enabling Save.
@@ -120,7 +158,7 @@ Use the current lighthal5 editor safeguards while adopting the source layout:
 
 The Attendance row is a period category in period mode. It must not be accompanied by an extra independent attendance contribution. The UI should explain that attendance is authoritative and separate assessment-linked transmutation remains governed by GRD-001.
 
-Attendance attribution is pending an Owner decision. The frontend must not assign records to Midterm or Finals by guessing from browser dates, offering date ranges, semester percentages, or assessment dates. Until the approved rule and response status exist, display attendance-dependent period results as pending/incomplete and direct the user to the backend result rather than showing zero.
+Attendance attribution uses the approved Faculty-defined date ranges. The frontend must not assign records to Midterm or Finals by guessing from browser dates, offering date ranges, semester percentages, or assessment dates. Display missing-range or unresolved-attendance results as pending/incomplete using the backend status rather than showing zero.
 
 ## Assessment manager and score entry
 
@@ -157,7 +195,9 @@ After Gemini implements the UI against the approved contract, verify it in the D
 6. Verify the explicit legacy conversion review, confirmation, and server result. Confirm opening the editor and ordinary saves do not convert or recompute by themselves.
 7. Verify explicit recomputation applies the saved configuration only through the server, preserves raw scores and assessment maximums, and reports incomplete/pending results without substituting zero or the overall grade.
 8. In the assessment modal, switch Midterm/Finals and confirm only valid period categories are selectable. Confirm existing assessment identifiers, category references, raw scores, and maximums survive edits. Confirm score-entry bounds still use assessment maximums.
-9. Verify period Attendance does not create a second independent attendance contribution. Until the Owner-approved attribution rule is implemented, confirm attendance-dependent period results remain visibly pending/incomplete rather than guessed.
+9. Verify period Attendance does not create a second independent attendance contribution. Confirm missing ranges, missing sessions, and unresolved attendance remain visibly incomplete, with the server's reason rather than a guessed value.
 10. Verify summary tables, print output, and CSV distinguish Midterm, Finals, and overall values, and that unavailable values are explicit. Confirm no single overall value is copied into multiple period columns.
+11. Save and reload both date ranges. Exercise inclusive start/end boundaries, invalid calendar dates, reversed dates, overlapping or same-day boundary ranges, and allowed gaps. Check missing-range messages and confirm dates from one offering never appear in another.
+12. Change a saved date range and verify recorded results remain unchanged before recomputation. Explicitly recompute and verify the server's new period results. A missing or unresolved attendance result must remain incomplete, including a range with no usable attendance results.
 
-After these checks pass, update the relevant grading section of `docs/manual-demo-readiness.md` with the verified UI path and limitations. Configuration conversion is implemented in the backend; do not claim the conversion UI is verified until its browser checks pass. Period computation remains unavailable until the Owner's attendance attribution decision is implemented and verified.
+After these checks pass, update the relevant grading section of `docs/manual-demo-readiness.md` with the verified UI path and limitations. Configuration conversion and period computation are backend capabilities; do not claim their frontend workflows are verified until Gemini's implementation passes these browser checks.

@@ -46,6 +46,70 @@ assert_faculty_grading(faculty_grading_normalize_term_ratio(['midterm' => 40, 'f
 assert_faculty_grading(faculty_grading_normalize_period_categories([
     ['name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1],
 ], 'Midterm')[0]['gradingPeriod'] === 'Midterm', 'Period category normalization retains its period');
+assert_faculty_grading(
+    faculty_grading_normalize_period_categories([
+        ['name' => 'Attendance', 'weight' => 100, 'sortOrder' => 1, 'sourceKind' => 'attendance'],
+    ], 'Final')[0]['sourceKind'] === 'attendance',
+    'Period category normalization retains the authoritative attendance source kind'
+);
+
+$periodDateRanges = faculty_grading_normalize_date_ranges([
+    'midterm' => ['startDate' => '2027-08-15', 'endDate' => '2027-09-30'],
+    'final' => ['startDate' => '2027-10-15', 'endDate' => '2027-12-01'],
+], [
+    'midterm' => ['startDate' => null, 'endDate' => null],
+    'final' => ['startDate' => null, 'endDate' => null],
+]);
+assert_faculty_grading(
+    $periodDateRanges['midterm']['startDate'] === '2027-08-15'
+        && $periodDateRanges['midterm']['endDate'] === '2027-09-30'
+        && $periodDateRanges['final']['startDate'] === '2027-10-15'
+        && $periodDateRanges['final']['endDate'] === '2027-12-01',
+    'Period date ranges preserve inclusive Faculty-defined endpoints'
+);
+assert_faculty_grading(
+    faculty_grading_normalize_date_ranges([
+        'midterm' => ['startDate' => '2027-08-16'],
+    ], $periodDateRanges)['midterm']['endDate'] === '2027-09-30'
+        && $periodDateRanges['final']['startDate'] === '2027-10-15',
+    'Omitted period date edges preserve the saved values'
+);
+assert_faculty_grading(
+    faculty_grading_normalize_date_ranges([
+        'midterm' => ['startDate' => null, 'endDate' => null],
+        'final' => ['startDate' => null, 'endDate' => null],
+    ], $periodDateRanges)['midterm']['startDate'] === null,
+    'Explicitly missing period dates remain missing for incomplete computation'
+);
+
+try {
+    faculty_grading_normalize_date_ranges([
+        'midterm' => ['startDate' => '2027-09-30', 'endDate' => '2027-08-15'],
+        'final' => ['startDate' => '2027-10-15', 'endDate' => '2027-12-01'],
+    ], $periodDateRanges);
+    assert_faculty_grading(false, 'Period date ranges reject a reversed period');
+} catch (FacultyGradingConfigurationException $e) {
+    assert_faculty_grading($e->errorCode === 'GRADING_PERIOD_DATE_RANGE_INVALID', 'Reversed period dates return the explicit date-range error code');
+}
+
+try {
+    faculty_grading_normalize_date_ranges([
+        'midterm' => ['startDate' => '2027-08-15', 'endDate' => '2027-10-15'],
+        'final' => ['startDate' => '2027-10-15', 'endDate' => '2027-12-01'],
+    ], $periodDateRanges);
+    assert_faculty_grading(false, 'Period date ranges reject overlapping or same-day boundaries');
+} catch (FacultyGradingConfigurationException $e) {
+    assert_faculty_grading($e->errorCode === 'GRADING_PERIOD_DATE_RANGE_INVALID', 'Overlapping period dates return the explicit date-range error code');
+}
+
+$gappedPeriodDateRanges = faculty_grading_normalize_date_ranges([
+    'midterm' => ['startDate' => '2027-08-15', 'endDate' => '2027-09-30'],
+    'final' => ['startDate' => '2027-10-15', 'endDate' => '2027-12-01'],
+], $periodDateRanges);
+assert_faculty_grading(
+    $gappedPeriodDateRanges['midterm']['endDate'] < $gappedPeriodDateRanges['final']['startDate'],
+    'Period date ranges allow a gap between Midterm and Finals'
+);
 
 try {
     faculty_grading_normalize_term_ratio(['midterm' => 40, 'final' => 50]);
