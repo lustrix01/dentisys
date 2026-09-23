@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
@@ -6,6 +6,7 @@ import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { getSecretaryProfileApi, updateSecretaryProfileApi } from '../../services/apiClient';
 import { validateBicolUEmail } from '../../services/authService';
 import { normalizePersonName } from '../../utils/nameNormalization';
+import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 
 export const Profile: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -31,6 +32,13 @@ export const Profile: React.FC = () => {
 
   const [editName, setEditName] = useState(profile.name);
   const [editEmail, setEditEmail] = useState(profile.email);
+
+  const runtimeConfig = useRuntimeConfig();
+  const allowedDomains = useMemo(() => {
+    return runtimeConfig.allowed_email_domains && runtimeConfig.allowed_email_domains.length > 0
+      ? runtimeConfig.allowed_email_domains
+      : ['bicol-u.edu.ph'];
+  }, [runtimeConfig.allowed_email_domains]);
 
   useEffect(() => {
     setLoading(true);
@@ -60,7 +68,7 @@ export const Profile: React.FC = () => {
       return;
     }
 
-    const emailValidation = validateBicolUEmail(trimmedEmail);
+    const emailValidation = validateBicolUEmail(trimmedEmail, allowedDomains);
     if (!emailValidation.isValid) {
       setMessage({ type: 'error', text: emailValidation.message || 'Valid institutional email address required (e.g. @bicol-u.edu.ph or configured allowlist domain).' });
       return;
@@ -216,10 +224,12 @@ export const Profile: React.FC = () => {
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
                       />
                       <datalist id="secretary-email-suggestions">
-                        {editEmail && !editEmail.includes('@') && (
-                          <option value={`${editEmail}@bicol-u.edu.ph`} />
-                        )}
-                        <option value="secretary@bicol-u.edu.ph" />
+                        {editEmail && !editEmail.includes('@') && allowedDomains.map(dom => (
+                          <option key={`prefix-${dom}`} value={`${editEmail.trim()}@${dom}`} />
+                        ))}
+                        {allowedDomains.map(dom => (
+                          <option key={`domain-${dom}`} value={`secretary@${dom}`} />
+                        ))}
                       </datalist>
                     </div>
                   </div>

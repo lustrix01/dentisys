@@ -42,15 +42,23 @@ const KNOWN_API_PATHS = new Set([
   '/api/faculty/profile', '/api/faculty/settings', '/api/faculty/send-email', '/api/faculty/email-logs', '/api/faculty/reports/summary',
   '/api/faculty/classes', '/api/faculty/courses', '/api/faculty/classes/available-students', '/api/faculty/classes/enroll',
   '/api/faculty/classes/unenroll', '/api/faculty/grading-config',
+  '/api/notifications', '/api/notifications/read-all', '/api/secretary/activity',
+  '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
+  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/biometric/profile',
+  '/api/student/profile',
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
   '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
   '/api/admin/dashboard/kpis', '/api/admin/audit-logs', '/api/admin/reports/summary', '/api/secretary/invitation', '/api/secretary/invitations',
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/session/active', '/api/secretary/profile', '/api/secretary/settings',
+  '/api/secretary/activity',
   '/api/faculty/dashboard/kpis', '/api/faculty/students', '/api/faculty/assessments',
   '/api/faculty/attendance', '/api/faculty/email-logs', '/api/faculty/reports/summary', '/api/faculty/courses',
   '/api/faculty/classes/available-students',
+  '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
+  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/biometric/profile',
+  '/api/student/profile',
 ]);
 
 const MULTI_METHOD_API_PATHS = new Set([
@@ -58,15 +66,18 @@ const MULTI_METHOD_API_PATHS = new Set([
   '/api/admin/retention/criteria', '/api/admin/profile', '/api/admin/settings',
   '/api/secretary/profile', '/api/secretary/settings', '/api/faculty/scores', '/api/faculty/profile',
   '/api/faculty/settings', '/api/faculty/classes',
+  '/api/notifications',
 ]);
 
 function isKnownApiPath(pathname: string): boolean {
   if (KNOWN_API_PATHS.has(pathname)) return true;
+  if (/^\/api\/notifications(\/|$)/.test(pathname)) return true;
   return /^\/api\/(admin|faculty|secretary)\/(audit-logs|scores|retention|profile|settings|email-logs|reports\/summary)(\/|$)/.test(pathname);
 }
 
 function isKnownApiRequest(pathname: string, method: string): boolean {
   if (!isKnownApiPath(pathname)) return false;
+  if (/^\/api\/notifications(\/|$)/.test(pathname)) return method === 'GET' || method === 'POST';
   if (pathname === '/api/faculty/grading-config') return method === 'GET' || method === 'PUT';
   if (MULTI_METHOD_API_PATHS.has(pathname)) return method === 'GET' || method === 'POST';
   if (GET_ONLY_API_PATHS.has(pathname)) return method === 'GET';
@@ -153,7 +164,53 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname.endsWith('/faculty/attendance/override')) {
     return { status: 'ok', message: 'Attendance record updated and audited.', operation: 'updated', recordId: '1', attendanceSessionId: null };
   }
-  if (pathname.endsWith('/email-logs')) return { status: 'ok', logs: [] };
+  if (pathname === '/api/notifications') return { status: 'ok', notifications: [], unreadCount: 0 };
+  if (pathname === '/api/notifications/read-all') return { status: 'ok', updatedCount: 0 };
+  if (/^\/api\/notifications\/[^/]+\/read$/.test(pathname)) return { status: 'ok', message: 'Notification marked as read' };
+  if (pathname === '/api/student/dashboard') {
+    return {
+      status: 'ok',
+      student: {
+        studentId: 1,
+        studentNumber: '2024-0001',
+        name: 'Mock Student',
+        firstName: 'Mock',
+        lastName: 'Student',
+        status: 'active',
+        yearLevel: 4,
+        account: { id: 101, email: 'mock.student@bicol-u.edu.ph', role: 'student', status: 'Active' },
+      },
+      summary: {
+        classCount: 0,
+        gwa: null,
+        attendanceRate: null,
+        clinicalHoursCompleted: 0,
+        retentionAlerts: 0,
+      },
+      classes: [],
+    };
+  }
+  if (pathname === '/api/student/classes') return { status: 'ok', classes: [] };
+  if (pathname === '/api/student/retention') return { status: 'ok', retention: { records: [], atRiskCount: 0, hasPendingGrades: false } };
+  if (pathname === '/api/student/attendance/logs') return { status: 'ok', records: [], total: 0 };
+  if (pathname === '/api/student/attendance/sessions/active') return { status: 'ok', activeSession: null };
+  if (pathname === '/api/student/biometric/profile') return { status: 'ok', consentGranted: false, enrollmentStatus: 'not_enrolled', enrolledAt: null, expiresAt: null, usableSampleCount: 0, requiredUsableSamples: 20, manualFallbackAvailable: true };
+  if (pathname === '/api/student/profile') {
+    return {
+      status: 'ok',
+      profile: {
+        studentId: 1,
+        studentNumber: '2024-0001',
+        name: 'Mock Student',
+        firstName: 'Mock',
+        lastName: 'Student',
+        email: 'mock.student@bicol-u.edu.ph',
+        status: 'active',
+        yearLevel: 4,
+        account: { id: 101, email: 'mock.student@bicol-u.edu.ph', role: 'student', status: 'Active' },
+      },
+    };
+  }
   if (pathname.endsWith('/retention/criteria') || pathname.endsWith('/retention')) return { status: 'ok', criteria: [], records: [], retention: [] };
   if (pathname.endsWith('/mfa/settings')) return { status: 'ok', two_factor: { enabled: false, authenticator_enabled: false, recovery_code_count: 0 } };
   if (method === 'GET') return [];

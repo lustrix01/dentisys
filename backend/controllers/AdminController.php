@@ -149,7 +149,7 @@ function handle_admin_dashboard_kpis(): void
             }
         }
 
-        $attendanceRate = $attCount > 0 ? (int) round(($presentCount / $attCount) * 100) : 0;
+        $attendanceRate = $attCount > 0 ? (int) round(($presentCount / $attCount) * 100) : null;
 
         $classAttendance = [];
         foreach ($classAttCounts as $cName => $counts) {
@@ -631,7 +631,7 @@ function handle_admin_reports_summary(): void
                 $grouped[$id] = [
                     'id' => $id, 'studentId' => $s['student_number'],
                     'name' => trim($s['first_name'] . ' ' . ($s['middle_name'] ? $s['middle_name'] . ' ' : '') . $s['last_name']),
-                    'email' => $s['bu_email'] ?? '', 'yearLevel' => (int) ($s['year_level'] ?? 4),
+                    'email' => $s['bu_email'] ?? '', 'yearLevel' => $s['year_level'] !== null ? (int) $s['year_level'] : null,
                     'status' => $s['retention_state'] ?? strtolower($s['status'] ?? 'active'),
                     'overallGWA' => null, 'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
                     'consentStatus' => $s['consent_status'] ?? 'pending', 'classId' => null,
@@ -644,7 +644,7 @@ function handle_admin_reports_summary(): void
                 $grouped[$id]['overallGWA'] = $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null;
                 $grouped[$id]['enrolledSubjects'][] = [
                     'code' => $s['course_code'], 'name' => $s['course_name'],
-                    'units' => (float) $s['units'], 'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : 0,
+                    'units' => (float) $s['units'], 'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null,
                     'isClinical' => (bool) $s['is_clinical'],
                     'hasRemedial' => $s['retention_state'] === 'remedial',
                     'components' => $s['grade_components_json'] ? json_decode($s['grade_components_json'], true) : null,

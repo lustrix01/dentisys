@@ -43,3 +43,4 @@ playwright-report/
 *.sln
 *.sw?
 .dentisys-local
+.agent-worktrees/

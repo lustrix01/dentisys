@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 class InvalidCredentialsException extends \RuntimeException {}
+class PasswordChangeCurrentCredentialException extends \RuntimeException {}
 class InactiveAccountException extends \RuntimeException
 {
     public string $accountStatus;
@@ -196,6 +197,102 @@ function auth_runtime_me(PDO $pdo, array $config, array $context): array
     }
 
     return $response;
+}
+
+function auth_runtime_change_password(
+    PDO $pdo,
+    array $config,
+    array $authContext,
+    string $currentPassword,
+    string $newPassword,
+    array $context
+): void {
+    $userId = (int) ($authContext['user_id'] ?? 0);
+    $expectedTokenVersion = (int) ($authContext['token_version'] ?? -1);
+
+    if ($userId < 1 || $expectedTokenVersion < 0) {
+        throw new AuthException('Authentication required.');
+    }
+
+    $pdo->beginTransaction();
+    try {
+        // Lock the account before checking the current credential. This makes
+        // a simultaneous password change serialize cleanly and lets the
+        // token-version check reject an access token that became stale while
+        // this request was waiting for the row lock.
+        $userStmt = $pdo->prepare(
+            "SELECT user_id, login_email, role, display_name, status,
+                    password_hash, token_version
+             FROM user_accounts
+             WHERE user_id = ?
+             FOR UPDATE"
+        );
+        $userStmt->execute([$userId]);
+        $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($user === false
+            || $user['status'] !== 'Active'
+            || (int) $user['token_version'] !== $expectedTokenVersion
+        ) {
+            throw new AuthException('Authentication required.');
+        }
+
+        if (!password_verify($currentPassword, (string) $user['password_hash'])) {
+            throw new PasswordChangeCurrentCredentialException();
+        }
+
+        if (hash_equals($currentPassword, $newPassword)) {
+            throw new ValidationException([
+                ['field' => 'new_password', 'message' => 'New password must differ from the current password.'],
+            ]);
+        }
+
+        $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
+        if (!is_string($passwordHash) || $passwordHash === '') {
+            throw new AuthException('Unable to update password.');
+        }
+
+        $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+        $update = $pdo->prepare(
+            "UPDATE user_accounts
+             SET password_hash = ?, token_version = token_version + 1, updated_at = ?
+             WHERE user_id = ? AND token_version = ?"
+        );
+        $update->execute([$passwordHash, $nowSql, $userId, $expectedTokenVersion]);
+
+        if ($update->rowCount() !== 1) {
+            throw new AuthException('Authentication required.');
+        }
+
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        $auditCtx = audit_begin_operation($pdo);
+        audit_finish_operation($pdo, $auditCtx, [
+            'module_code' => 'auth',
+            'action_code' => 'password_changed',
+            'event_status' => 'Success',
+            'actor_user_id' => $userId,
+            'actor_username' => $user['login_email'],
+            'actor_role' => $user['role'],
+            'actor_display_name' => $user['display_name'],
+            'session_id' => $authContext['session_id'] ?? null,
+            'target_type' => 'user_account',
+            'target_id' => (string) $userId,
+            'description' => 'Password changed; existing authentication credentials invalidated.',
+            'reason' => null,
+            'http_method' => $context['http_method'] ?? null,
+            'endpoint' => $context['endpoint'] ?? null,
+            'request_id' => $context['request_id'] ?? null,
+            'ip_address' => $context['ip_address'] ?? null,
+            'user_agent' => $context['user_agent'] ?? null,
+        ], $macKey);
+
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 }
 
 function auth_controller_emit(array $response): void

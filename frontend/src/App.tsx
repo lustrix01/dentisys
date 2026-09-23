@@ -117,6 +117,24 @@ function StudentAttendanceLogsRoute() {
     : <StudentUnavailable title="Attendance Logs unavailable" />;
 }
 
+function StudentClassesRoute() {
+  const { user } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  if (canAccessAuthoritativeStudentBiometrics(user)) return <StudentClasses />;
+  return isStudentPrototypeAllowed(user, runtimeConfig, 'academic')
+    ? <StudentClasses />
+    : <StudentUnavailable title="My Classes unavailable" />;
+}
+
+function StudentRetentionRoute() {
+  const { user } = useAuth();
+  const runtimeConfig = useRuntimeConfig();
+  if (canAccessAuthoritativeStudentBiometrics(user)) return <StudentRetentionMonitoring />;
+  return isStudentPrototypeAllowed(user, runtimeConfig, 'academic')
+    ? <StudentRetentionMonitoring />
+    : <StudentUnavailable title="Retention Monitoring unavailable" />;
+}
+
 function StudentPrototypeRoute({
   prototype,
   title,
@@ -226,8 +244,8 @@ function App() {
                   <Route path="/student/attendance" element={<StudentAttendanceRoute />} />
                   <Route path="/student/attendance-logs" element={<StudentAttendanceLogsRoute />} />
                   <Route path="/student/face-registration" element={<StudentFaceRegistrationRoute />} />
-                  <Route path="/student/classes" element={<StudentPrototypeRoute prototype={StudentClasses} title="My Classes unavailable" surface="academic" />} />
-                  <Route path="/student/retention" element={<StudentPrototypeRoute prototype={StudentRetentionMonitoring} title="Retention Monitoring unavailable" surface="academic" />} />
+                  <Route path="/student/classes" element={<StudentClassesRoute />} />
+                  <Route path="/student/retention" element={<StudentRetentionRoute />} />
                   <Route path="/student/profile" element={<StudentProfileRoute />} />
                 </Route>
 

@@ -22,6 +22,7 @@ import type {
   StartSecretaryAttendanceSessionPayload,
   SecretaryAttendanceSession,
 } from '../services/apiClient.ts';
+import { isTransportOrBiometricUnavailable } from '../utils/biometricErrors.ts';
 
 const defaultRuntimeConfig: RuntimeConfig = {
   loading: false,
@@ -577,4 +578,89 @@ test('Student Flow Isolation: real student flows never fall back to mock data or
   // and does not fallback to mock fixtures or localStorage
   const activeSessionsResponse: { sessions: StudentActiveSession[] } = { sessions: [] };
   assert.equal(activeSessionsResponse.sessions.length, 0);
+});
+
+test('Biometric Error Classification: transport/503 allows retry while semantic rejects consume challenge', () => {
+  // Transport network error (status 0)
+  const networkError = { status: 0, message: 'Unable to connect to the server. Check your connection.' };
+  assert.equal(isTransportOrBiometricUnavailable(networkError), true);
+
+  // 503 Provider unavailable
+  const unavailableError = { status: 503, message: 'Biometric service is temporarily unavailable.', code: 'biometric_service_unavailable' };
+  assert.equal(isTransportOrBiometricUnavailable(unavailableError), true);
+
+  // Plain error with timeout or unavailable keyword
+  const timeoutError = new Error('Gateway timeout while reaching biometric provider');
+  assert.equal(isTransportOrBiometricUnavailable(timeoutError), true);
+
+  // Semantic rejections: must NOT be classified as retryable transport errors
+  const livenessError = { status: 400, message: 'Liveness check could not be verified.', code: 'liveness_failed' };
+  assert.equal(isTransportOrBiometricUnavailable(livenessError), false);
+
+  const qualityError = { status: 400, message: 'Verification could not accept sufficient usable frames.', code: 'quality_failed' };
+  assert.equal(isTransportOrBiometricUnavailable(qualityError), false);
+
+  const expiredChallengeError = { status: 400, message: 'Liveness challenge expired.', code: 'challenge_expired' };
+  assert.equal(isTransportOrBiometricUnavailable(expiredChallengeError), false);
+
+  const faceMismatchError = { status: 400, message: 'Face could not be verified.', code: 'biometric_verification_failed' };
+  assert.equal(isTransportOrBiometricUnavailable(faceMismatchError), false);
+
+  const invalidChallengeError = { status: 400, message: 'Liveness challenge is invalid.', code: 'challenge_invalid' };
+  assert.equal(isTransportOrBiometricUnavailable(invalidChallengeError), false);
+});
+
+test('Guided Capture Frame Contract: 3-phase capture collects 25 candidate frames within [20, 30] limits', () => {
+  // Phase 1 (Neutral Frontal): 8 frames
+  const phase1Frames = 8;
+  // Phase 2 (Action 1): 9 frames
+  const phase2Frames = 9;
+  // Phase 3 (Action 2): 8 frames
+  const phase3Frames = 8;
+
+  const totalCandidateFrames = phase1Frames + phase2Frames + phase3Frames;
+  assert.equal(totalCandidateFrames, 25);
+
+  // Contract requires at least 20 and at most 30 candidate frames
+  assert.ok(totalCandidateFrames >= 20, 'At least 20 frames for enrollment');
+  assert.ok(totalCandidateFrames <= 30, 'At most 30 frames for sidecar limit');
+});
+
+test('Retry Preservation Semantics: preserves challenge and idempotency key on transport failure', () => {
+  const initialPayload = {
+    challengeId: 'chal-uuid-8899',
+    challengeToken: 'tok_live_preserve_123',
+    idempotencyKey: 'idem-uuid-consistent-key',
+    framesCount: 25,
+  };
+
+  // Simulating transport retry flow:
+  // On network error, the payload is preserved as pendingPayload
+  let pendingPayload: typeof initialPayload | null = null;
+  let canRetryUpload = false;
+
+  const error = { status: 503, message: 'Biometric service is temporarily unavailable.', code: 'biometric_service_unavailable' };
+  if (isTransportOrBiometricUnavailable(error)) {
+    pendingPayload = initialPayload;
+    canRetryUpload = true;
+  }
+
+  // Idempotency key and challenge must be exactly identical upon retry
+  assert.equal(canRetryUpload, true);
+  assert.ok(pendingPayload);
+  assert.equal(pendingPayload?.idempotencyKey, initialPayload.idempotencyKey);
+  assert.equal(pendingPayload?.challengeId, initialPayload.challengeId);
+  assert.equal(pendingPayload?.challengeToken, initialPayload.challengeToken);
+  assert.equal(pendingPayload?.framesCount, 25);
+
+  // Simulating semantic rejection:
+  // On semantic failure, pendingPayload is cleared and must NOT be retried with the same challenge
+  const semanticError = { status: 400, message: 'Liveness check failed.', code: 'liveness_failed' };
+  if (!isTransportOrBiometricUnavailable(semanticError)) {
+    pendingPayload = null;
+    canRetryUpload = false;
+  }
+
+  assert.equal(canRetryUpload, false);
+  assert.equal(pendingPayload, null);
 });

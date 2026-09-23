@@ -1,51 +1,143 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Student } from '../../types';
+import { canAccessAuthoritativeStudentBiometrics } from './studentGates';
+import { getStudentAcademicRetentionApi } from '../../services/apiClient';
+import type { Student, StudentAcademicClass } from '../../types';
 
 export const RetentionMonitoring: React.FC = () => {
   const { user } = useAuth();
   const { students = [], settings = { retentionThreshold: 2.5 } } = useApp();
 
-  // Find the logged-in student or secretary record
-  const currentStudent = useMemo(() => {
-    if (!students || students.length === 0) return null;
-    return students.find(s => 
-      s.email.toLowerCase() === (user?.login_email || '').toLowerCase() ||
-      s.studentId.toLowerCase() === (user?.login_email || '').toLowerCase()
-    ) || students[0]; // fallback to first mock student
-  }, [students, user]);
+  const isAuthoritative = canAccessAuthoritativeStudentBiometrics(user);
 
-  const studentName = currentStudent?.name || user?.display_name || 'Student';
-  const studentId = currentStudent?.studentId || '2024-DENT-0004';
-  const status = currentStudent?.status || 'active';
-  const enrolledSubjects = currentStudent?.enrolledSubjects || [];
-  const remedialExams = currentStudent?.remedialExams || [];
+  const [authRecords, setAuthRecords] = useState<StudentAcademicClass[]>([]);
+  const [atRiskCount, setAtRiskCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(isAuthoritative);
+  const [error, setError] = useState<string | null>(null);
 
   const threshold = settings?.retentionThreshold || 2.5;
-  const deficientSubjects = enrolledSubjects.filter(s => s.grade > threshold);
-  const isAtRisk = status === 'warning' || status === 'critical' || deficientSubjects.length > 0;
 
-  const getStatusBadge = (st: Student['status']) => {
-    const styles = {
-      active: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60',
-      warning: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60',
-      critical: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60',
-      remedial: 'bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60',
-    };
-    const labels = {
-      active: 'ACTIVE STANDING • CLEARED',
-      warning: 'RETENTION WARNING • AT RISK',
-      critical: 'CRITICAL WATCHLIST',
-      remedial: 'REMEDIAL EXAM ASSIGNED',
-    };
+  useEffect(() => {
+    if (!isAuthoritative) return;
+    setLoading(true);
+    setError(null);
+    getStudentAcademicRetentionApi()
+      .then((res) => {
+        setAuthRecords(res.retention.records);
+        setAtRiskCount(res.retention.atRiskCount);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Unable to load retention monitoring data.');
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [isAuthoritative]);
+
+  // Fallback for development mock students
+  const currentMockStudent = students.find(s =>
+    s.email.toLowerCase() === (user?.login_email || '').toLowerCase() ||
+    s.studentId.toLowerCase() === (user?.login_email || '').toLowerCase()
+  ) || students[0];
+
+  const studentName = isAuthoritative
+    ? (user?.display_name || 'Student')
+    : (currentMockStudent?.name || user?.display_name || 'Student');
+
+  const studentId = isAuthoritative
+    ? (user?.student?.student_number || '—')
+    : (currentMockStudent?.studentId || '2024-DENT-0004');
+
+  const status = isAuthoritative
+    ? (user?.student?.status || 'active')
+    : (currentMockStudent?.status || 'active');
+
+  const getStatusBadge = (st: Student['status'] | string) => {
+    const norm = (st || 'active').toLowerCase();
+    const isWarn = norm === 'warning';
+    const isCrit = norm === 'critical';
+    const isRem = norm === 'remedial';
+
+    if (isCrit) {
+      return (
+        <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60">
+          CRITICAL WATCHLIST
+        </span>
+      );
+    }
+    if (isWarn) {
+      return (
+        <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60">
+          RETENTION WARNING • AT RISK
+        </span>
+      );
+    }
+    if (isRem) {
+      return (
+        <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60">
+          REMEDIAL EXAM ASSIGNED
+        </span>
+      );
+    }
     return (
-      <span className={`px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider ${styles[st] || styles.active}`}>
-        {labels[st] || 'ACTIVE STANDING'}
+      <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
+        ACTIVE STANDING • CLEARED
       </span>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
+        Loading retention monitoring data…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-3xl mx-auto pt-6 animate-fade-in" role="alert">
+        <Card className="p-6 border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+            <div className="space-y-2">
+              <h2 className="font-bold text-base text-rose-950 dark:text-rose-100">Unable to load Retention Records</h2>
+              <p className="text-xs text-rose-800 dark:text-rose-300">{error}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoading(true);
+                  setError(null);
+                  getStudentAcademicRetentionApi()
+                    .then(res => {
+                      setAuthRecords(res.retention.records);
+                      setAtRiskCount(res.retention.atRiskCount);
+                    })
+                    .catch(e => setError(e instanceof Error ? e.message : 'Failed to reload.'))
+                    .finally(() => setLoading(false));
+                }}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const deficientCount = isAuthoritative
+    ? authRecords.filter(r => r.grade !== null && r.grade > threshold).length
+    : (currentMockStudent?.enrolledSubjects || []).filter(s => s.grade > threshold).length;
+
+  const isAtRisk = isAuthoritative
+    ? (atRiskCount > 0 || deficientCount > 0)
+    : (status === 'warning' || status === 'critical' || deficientCount > 0);
 
   return (
     <div className="space-y-6">
@@ -73,7 +165,7 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center gap-3">
               {getStatusBadge(status)}
-              <span className="text-xs text-slate-400 font-medium">Midterm Evaluation Period</span>
+              <span className="text-xs text-slate-400 font-medium">Evaluation Period</span>
             </div>
             
             <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
@@ -82,7 +174,7 @@ export const RetentionMonitoring: React.FC = () => {
             
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
               {isAtRisk 
-                ? `You have ${deficientSubjects.length} subject(s) with midterm grades exceeding the ${threshold.toFixed(2)} retention limit or requiring faculty monitoring. Please review your subject performance below.`
+                ? `You have ${deficientCount} subject(s) with midterm grades exceeding the ${threshold.toFixed(2)} retention limit or requiring faculty monitoring. Please review your subject performance below.`
                 : `Your academic performance is currently in good standing! All enrolled subject midterm grades meet College of Dental Medicine retention criteria (${threshold.toFixed(2)} or better per subject).`
               }
             </p>
@@ -93,8 +185,8 @@ export const RetentionMonitoring: React.FC = () => {
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">
                 Deficient Subjects
               </span>
-              <span className={`text-2xl font-extrabold font-mono ${deficientSubjects.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {deficientSubjects.length}
+              <span className={`text-2xl font-extrabold font-mono ${deficientCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {deficientCount}
               </span>
             </div>
 
@@ -114,10 +206,10 @@ export const RetentionMonitoring: React.FC = () => {
       <Card className="p-6">
         <div className="mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
           <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-            Midterm Course Performance Breakdown ({enrolledSubjects.length} Enrolled)
+            Course Performance Breakdown ({isAuthoritative ? authRecords.length : (currentMockStudent?.enrolledSubjects || []).length} Enrolled)
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Per-subject midterm grades and clinical attendance rates.
+            Per-subject grades, clinical status, and retention standing.
           </p>
         </div>
 
@@ -126,23 +218,69 @@ export const RetentionMonitoring: React.FC = () => {
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-4">Subject Code & Title</th>
-                <th className="py-3 px-4 text-center">Midterm Grade</th>
-                <th className="py-3 px-4 text-center">Attendance Rate</th>
-                <th className="py-3 px-4">Clinical Status</th>
+                <th className="py-3 px-4 text-center">Score %</th>
+                <th className="py-3 px-4 text-center">Grade</th>
+                <th className="py-3 px-4">Course Type</th>
                 <th className="py-3 px-4 text-right">Standing</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-              {enrolledSubjects.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-10 text-center text-slate-400">
-                    No enrolled subject grades recorded for current semester.
-                  </td>
-                </tr>
+              {isAuthoritative ? (
+                authRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center text-slate-400">
+                      No course records registered.
+                    </td>
+                  </tr>
+                ) : (
+                  authRecords.map(cls => {
+                    const isPending = cls.grade === null;
+                    const isPassing = isPending || (cls.grade !== null && cls.grade <= threshold);
+                    const isAtRiskRow = ['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase());
+
+                    return (
+                      <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
+                          {cls.courseCode}
+                          <span className="block text-[10px] text-slate-400 font-normal">{cls.courseName}</span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center font-mono font-bold">
+                          {cls.percentage !== null ? `${cls.percentage}%` : '—'}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center font-extrabold font-mono text-sm">
+                          {isPending ? (
+                            <span className="text-slate-400 font-normal">Pending</span>
+                          ) : (
+                            <span className={isPassing ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                              {cls.grade?.toFixed(2)}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
+                            {cls.isClinical ? 'Clinical Lab Course' : 'Lecture Course'}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 text-right">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                            isAtRiskRow
+                              ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60'
+                              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
+                          }`}>
+                            {cls.retentionState || 'Passing'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )
               ) : (
-                enrolledSubjects.map(subj => {
-                  const isPassing = subj.grade <= (settings?.retentionThreshold || 2.5);
-                  const attRate = subj.components?.attendance || 95;
+                (currentMockStudent?.enrolledSubjects || []).map(subj => {
+                  const isPassing = subj.grade <= threshold;
                   return (
                     <tr key={subj.code} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
@@ -150,15 +288,13 @@ export const RetentionMonitoring: React.FC = () => {
                         <span className="block text-[10px] text-slate-400 font-normal">{subj.name}</span>
                       </td>
 
+                      <td className="py-3.5 px-4 text-center font-mono font-bold">
+                        {subj.components?.exams ? `${subj.components.exams}%` : '—'}
+                      </td>
+
                       <td className="py-3.5 px-4 text-center font-extrabold font-mono text-sm">
                         <span className={isPassing ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
                           {subj.grade.toFixed(2)}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-center font-bold font-mono">
-                        <span className={attRate >= 85 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
-                          {attRate}%
                         </span>
                       </td>
 
@@ -186,74 +322,7 @@ export const RetentionMonitoring: React.FC = () => {
         </div>
       </Card>
 
-      {/* 4. Assigned Remedial Exams */}
-      <Card className="p-6">
-        <div className="mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-          <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-            Assigned Remedial Exams ({remedialExams.length})
-          </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Scheduled remedial exams for academic clearance per subject. Score 75% or higher to pass.
-          </p>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-4">Subject</th>
-                <th className="py-3 px-4">Exam Date</th>
-                <th className="py-3 px-4">Instructions / Notes</th>
-                <th className="py-3 px-4 text-right">Outcome & Score</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-              {remedialExams.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="py-10 text-center text-slate-400">
-                    No remedial exams currently assigned to your account.
-                  </td>
-                </tr>
-              ) : (
-                remedialExams.map(rem => (
-                  <tr key={rem.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
-                      {rem.subjectCode}
-                      <span className="block text-[10px] text-slate-400 font-normal">{rem.subjectName}</span>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-semibold">
-                      {rem.examDate}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
-                      {rem.notes || 'Midterm Remedial Exam'}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right">
-                      {rem.status === 'passed' ? (
-                        <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">
-                          PASSED ({rem.remedialScore}%) • Cleared
-                        </span>
-                      ) : rem.status === 'failed' ? (
-                        <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">
-                          FAILED ({rem.remedialScore}%) • Retained
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">
-                          Scheduled / Pending Exam
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* 5. Policy & Retention Rules Guide */}
+      {/* 4. Policy & Retention Rules Guide */}
       <Card className="p-6 bg-slate-50/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
         <h3 className="text-sm font-bold font-heading text-slate-800 dark:text-slate-100 mb-3">
           Bicol University CDM Academic Retention Guidelines

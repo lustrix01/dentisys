@@ -587,7 +587,7 @@ export const ClassesAndRosters: React.FC = () => {
             Create classes, import iBU student rosters (PDF/CSV), manage students, and send email invitations.
           </p>
           <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-2">
-            Authoritative records: class sections and enrollments are synced with the server. Registrar/iBU roster import is externally blocked awaiting official University file layout specification (Batch X1).
+            Authoritative records: class sections and enrollments are synced with the server. Development preview: registrar/iBU roster file imports remain browser-local / externally blocked awaiting official University layout specification (Batch X1).
           </p>
         </div>
 

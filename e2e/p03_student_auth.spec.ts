@@ -216,22 +216,12 @@ test.describe('P03 Student identity and authentication', () => {
       ['/student/attendance', 'Daily Class Check-In'],
       ['/student/attendance-logs', 'My Session Attendance Logs'],
       ['/student/face-registration', 'Facial Recognition Registration'],
+      ['/student/classes', 'My Enrolled Classes & Retention Standing'],
+      ['/student/retention', 'Retention Risk Monitoring'],
     ];
     for (const [path, title] of authoritativeRoutes) {
       await page.goto(path);
       await expect(page.getByText(title)).toBeVisible();
-      for (const value of fabricatedValues) {
-        await expect(page.locator('body')).not.toContainText(value);
-      }
-    }
-
-    const unavailableRoutes: Array<[string, string]> = [
-      ['/student/classes', 'My Classes unavailable'],
-      ['/student/retention', 'Retention Monitoring unavailable'],
-    ];
-    for (const [path, title] of unavailableRoutes) {
-      await page.goto(path);
-      await expect(page.getByRole('status')).toContainText(title);
       for (const value of fabricatedValues) {
         await expect(page.locator('body')).not.toContainText(value);
       }

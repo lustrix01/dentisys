@@ -35,7 +35,7 @@ export const Dashboard: React.FC = () => {
   const totalFaculty = apiData?.kpis?.totalFaculty ?? 0;
   const goodStanding = apiData?.kpis?.goodStanding ?? 0;
   const atRisk = apiData?.kpis?.atRisk ?? 0;
-  const attendanceRate = apiData?.kpis?.attendanceRate ?? 0;
+  const attendanceRate = apiData?.kpis?.attendanceRate;
 
   if (loading) {
     return (
@@ -158,7 +158,9 @@ export const Dashboard: React.FC = () => {
 
             <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
               <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Attendance Rate</span>
-              <span className="text-2xl font-extrabold text-accent-600 dark:text-accent-400 block mt-1">{attendanceRate}%</span>
+              <span className="text-2xl font-extrabold text-accent-600 dark:text-accent-400 block mt-1">
+                {typeof attendanceRate === 'number' ? `${attendanceRate}%` : '—'}
+              </span>
             </Card>
           </div>
 
@@ -244,11 +246,11 @@ export const Dashboard: React.FC = () => {
         {/* Right Sidebar Panel (Spans 4) */}
         <div className="lg:col-span-4 space-y-5">
           
-          {/* Widget 1: Announcements */}
+          {/* Administrative Overview */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Announcements
+                Administration Overview
               </h3>
               <span className="text-[10px] font-bold text-accent-600 bg-[#EAE5F8] dark:bg-accent-950/60 px-2 py-0.5 rounded-full">
                 Dean's Office
@@ -258,74 +260,34 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-3 text-xs">
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[9px] font-bold text-accent-600 dark:text-accent-400 uppercase tracking-wider">
-                  Governance Directive
+                  Faculty Accounts
                 </span>
-                <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  Midterm Retention Review Session
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Academic committee review for students under critical retention standing.
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                  {totalFaculty} authorized faculty accounts. Manage onboarding via email invitations.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/faculty-invite')}
+                  className="text-[10px] font-bold text-accent-600 dark:text-accent-400 hover:underline pt-1 block cursor-pointer"
+                >
+                  Manage Faculty Invitations →
+                </button>
               </div>
 
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
-                  Faculty Invitations
+                  Audit Logging
                 </span>
-                <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  Invitation Status
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Track pending, expired, and accepted Admin invitations.
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                  Permanent accountability logging for faculty invitations, attendance overrides, and administrative actions.
                 </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Widget 2: System Status */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                System Health & Services
-              </h3>
-              <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md">
-                Operational
-              </span>
-            </div>
-
-            <div className="space-y-2.5 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-slate-800 dark:text-slate-100">PostgreSQL Database</h4>
-                  <p className="text-[10px] text-slate-400">DentiSys Local Container Engine</p>
-                </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded-md">
-                  Connected
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Widget 3: Recent Activity */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Recent Audit Trail
-              </h3>
-              <button 
-                onClick={() => navigate('/admin/audit-trail')}
-                className="text-[10px] font-bold text-accent-600 dark:text-accent-400 hover:underline"
-              >
-                View Audit
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <p className="text-slate-700 dark:text-slate-300 text-xs font-medium">
-                  Verified system security policies & active sessions.
-                </p>
-                <span className="text-[10px] text-slate-400 block mt-1">Audit Trail • System</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/admin/audit-trail')}
+                  className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:underline pt-1 block cursor-pointer"
+                >
+                  View System Audit Trail →
+                </button>
               </div>
             </div>
           </div>

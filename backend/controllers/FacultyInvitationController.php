@@ -44,6 +44,28 @@ function faculty_invitation_row_is_live(array $row): bool
         && new DateTimeImmutable((string) $row['expires_at'], new DateTimeZone('UTC')) > new DateTimeImmutable('now', new DateTimeZone('UTC'));
 }
 
+function faculty_invitation_name_from_payload(array $data): string
+{
+    $structured = array_key_exists('firstName', $data)
+        || array_key_exists('middleName', $data)
+        || array_key_exists('lastName', $data)
+        || array_key_exists('prefix', $data)
+        || array_key_exists('suffix', $data);
+    if (!$structured) {
+        return normalize_person_name(validate_person_name($data, 'name', 2, 255));
+    }
+
+    $first = validate_person_name($data, 'firstName', 2, 100);
+    $last = validate_person_name($data, 'lastName', 2, 100);
+    $middle = validate_optional_person_name($data, 'middleName', 2, 100);
+    $prefix = validate_optional_string($data, 'prefix', 1, 50);
+    $suffix = validate_optional_string($data, 'suffix', 1, 50);
+    return normalize_person_name(trim(implode(' ', array_filter(
+        [$prefix, $first, $middle, $last, $suffix],
+        static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''
+    ))));
+}
+
 function handle_admin_faculty_invitations_list(): void
 {
     try {
@@ -113,11 +135,11 @@ function handle_admin_faculty_invitation_create(): void
             safe_error_response('Request body required.', 400);
             return;
         }
-        if (array_diff(array_keys($body['data']), ['name', 'email']) !== []) {
+        if (array_diff(array_keys($body['data']), ['name', 'email', 'prefix', 'firstName', 'middleName', 'lastName', 'suffix']) !== []) {
             safe_error_response('Invalid request.', 400);
             return;
         }
-        $name = normalize_person_name(validate_person_name($body['data'], 'name', 2, 255));
+        $name = faculty_invitation_name_from_payload($body['data']);
         $email = validate_institutional_email((string) ($body['data']['email'] ?? ''));
         $token = faculty_invitation_token();
         $digest = hash('sha256', $token, true);
@@ -240,6 +262,227 @@ function handle_admin_faculty_invitation_create(): void
     } catch (Throwable $e) {
         error_log('Faculty invitation create error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_admin_faculty_invitation_update(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $actor = admin_verify_auth($pdo, $config);
+        $body = request_body();
+        $allowed = ['id', 'name', 'email', 'prefix', 'firstName', 'middleName', 'lastName', 'suffix'];
+        if (!$body['has_body'] || array_diff(array_keys($body['data']), $allowed) !== []) {
+            safe_error_response('Invalid request.', 400);
+            return;
+        }
+        $rawId = $body['data']['id'] ?? null;
+        $userId = is_int($rawId) ? $rawId : (is_string($rawId) && ctype_digit(trim($rawId)) ? (int) trim($rawId) : 0);
+        if ($userId < 1) {
+            throw new ValidationException([['field' => 'id', 'message' => 'A valid Faculty account is required.']]);
+        }
+        $name = faculty_invitation_name_from_payload($body['data']);
+        $email = validate_institutional_email((string) ($body['data']['email'] ?? ''));
+        $token = faculty_invitation_token();
+        $digest = hash('sha256', $token, true);
+        $passwordHash = password_hash(faculty_invitation_token(), PASSWORD_DEFAULT);
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+        $nowSql = $now->format('Y-m-d H:i:s.u');
+        $expiresSql = $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u');
+
+        $pdo->beginTransaction();
+        $accountStmt = $pdo->prepare(
+            'SELECT user_id, login_email, display_name, role, status
+               FROM user_accounts WHERE user_id = ? FOR UPDATE'
+        );
+        $accountStmt->execute([$userId]);
+        $account = $accountStmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($account) || $account['role'] !== 'faculty' || $account['status'] !== 'Pending Activation') {
+            $pdo->rollBack();
+            throw new DomainException('Only a pending Faculty invitation can be edited.');
+        }
+
+        $emailConflict = $pdo->prepare(
+            'SELECT user_id FROM user_accounts
+              WHERE lower(login_email) = lower(?) AND user_id <> ?
+              LIMIT 1 FOR UPDATE'
+        );
+        $emailConflict->execute([$email, $userId]);
+        if ($emailConflict->fetchColumn() !== false) {
+            $pdo->rollBack();
+            throw new DomainException('This email already belongs to another account.');
+        }
+
+        $auditContext = audit_begin_operation($pdo);
+        $update = $pdo->prepare(
+            "UPDATE user_accounts
+                SET login_email = ?, display_name = ?, password_hash = ?, google_subject = NULL,
+                    token_version = token_version + 1, updated_at = ?
+              WHERE user_id = ?"
+        );
+        $update->execute([$email, $name, $passwordHash, $nowSql, $userId]);
+        $revoke = $pdo->prepare(
+            "UPDATE security_tokens
+                SET revoked_at = ?, revocation_reason = 'Replaced by edited Faculty invitation'
+              WHERE purpose = 'faculty_invitation' AND user_id = ?
+                AND used_at IS NULL AND revoked_at IS NULL"
+        );
+        $revoke->execute([$nowSql, $userId]);
+        $insertToken = $pdo->prepare(
+            "INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)
+             VALUES ('faculty_invitation', ?, ?, ?, ?) RETURNING token_id"
+        );
+        $insertToken->bindValue(1, $userId, PDO::PARAM_INT);
+        pdo_bind_binary($insertToken, 2, $digest);
+        $insertToken->bindValue(3, $nowSql, PDO::PARAM_STR);
+        $insertToken->bindValue(4, $expiresSql, PDO::PARAM_STR);
+        $insertToken->execute();
+        $tokenId = (int) $insertToken->fetchColumn();
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        audit_finish_operation($pdo, $auditContext, [
+            'module_code' => 'admin',
+            'action_code' => 'faculty_invitation_edited',
+            'event_status' => 'Success',
+            'actor_user_id' => $actor['user_id'],
+            'actor_username' => $actor['login_email'],
+            'actor_role' => $actor['role'],
+            'actor_display_name' => $actor['display_name'],
+            'session_id' => $actor['session_id'],
+            'target_type' => 'security_token',
+            'target_id' => (string) $tokenId,
+            'description' => "Edited pending Faculty invitation for {$name} ({$email}); previous tokens were revoked.",
+            'reason' => null,
+            'http_method' => $context['http_method'],
+            'endpoint' => $context['endpoint'],
+            'request_id' => $context['request_id'],
+            'ip_address' => $context['ip_address'],
+            'user_agent' => $context['user_agent'],
+        ], $macKey);
+        $pdo->commit();
+
+        $link = app_url($config, '/activate-faculty', ['token' => $token]);
+        $sent = send_email(
+            $email,
+            'DentiSys Faculty Invitation Updated',
+            '<p>Your pending DentiSys Faculty invitation was updated.</p><p><a href="' . htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Accept your Faculty invitation</a></p>',
+            $config,
+            true
+        );
+        json_response([
+            'status' => 'ok',
+            'invitation' => [
+                'id' => (string) $userId,
+                'name' => $name,
+                'email' => $email,
+                'invitedAt' => $nowSql,
+                'expiresAt' => $expiresSql,
+                'status' => 'Pending',
+            ],
+            'invitation_link' => !empty($config['show_dev_invitation_link']) ? $link : null,
+            'delivery_status' => $sent ? 'Sent' : 'Failed',
+        ], 200);
+    } catch (ValidationException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        validation_error_response($e->getErrors());
+    } catch (DomainException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        safe_error_response($e->getMessage(), 409);
+    } catch (AuthException | ChallengeException | RuntimeException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        auth_error_response('Authentication required.', 401);
+    } catch (Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        error_log('Faculty invitation edit error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to edit Faculty invitation.', 500);
+    }
+}
+
+function handle_admin_faculty_invitation_revoke(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $actor = admin_verify_auth($pdo, $config);
+        $body = request_body();
+        $rawId = $body['has_body'] ? ($body['data']['id'] ?? null) : null;
+        $userId = is_int($rawId) ? $rawId : (is_string($rawId) && ctype_digit(trim($rawId)) ? (int) trim($rawId) : 0);
+        if ($userId < 1) {
+            throw new ValidationException([['field' => 'id', 'message' => 'A valid Faculty account is required.']]);
+        }
+        $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+        $pdo->beginTransaction();
+        $account = $pdo->prepare('SELECT user_id, role, status, display_name, login_email FROM user_accounts WHERE user_id = ? FOR UPDATE');
+        $account->execute([$userId]);
+        $row = $account->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row) || $row['role'] !== 'faculty' || $row['status'] !== 'Pending Activation') {
+            $pdo->rollBack();
+            throw new DomainException('Only a pending Faculty invitation can be revoked.');
+        }
+        $revoke = $pdo->prepare(
+            "UPDATE security_tokens
+                SET revoked_at = ?, revocation_reason = 'Revoked by administrator'
+              WHERE purpose = 'faculty_invitation' AND user_id = ?
+                AND used_at IS NULL AND revoked_at IS NULL"
+        );
+        $revoke->execute([$nowSql, $userId]);
+        if ($revoke->rowCount() === 0) {
+            $pdo->rollBack();
+            safe_error_response('No live Faculty invitation exists for this account.', 404);
+            return;
+        }
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        $auditContext = audit_begin_operation($pdo);
+        audit_finish_operation($pdo, $auditContext, [
+            'module_code' => 'admin',
+            'action_code' => 'faculty_invitation_revoked',
+            'event_status' => 'Success',
+            'actor_user_id' => $actor['user_id'],
+            'actor_username' => $actor['login_email'],
+            'actor_role' => $actor['role'],
+            'actor_display_name' => $actor['display_name'],
+            'session_id' => $actor['session_id'],
+            'target_type' => 'user_account',
+            'target_id' => (string) $userId,
+            'description' => "Revoked pending Faculty invitation for {$row['display_name']} ({$row['login_email']}).",
+            'reason' => 'Revoked by administrator',
+            'http_method' => $context['http_method'],
+            'endpoint' => $context['endpoint'],
+            'request_id' => $context['request_id'],
+            'ip_address' => $context['ip_address'],
+            'user_agent' => $context['user_agent'],
+        ], $macKey);
+        $pdo->commit();
+        json_response(['status' => 'ok', 'id' => (string) $userId, 'statusValue' => 'Revoked'], 200);
+    } catch (ValidationException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        validation_error_response($e->getErrors());
+    } catch (DomainException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        safe_error_response($e->getMessage(), 409);
+    } catch (AuthException | ChallengeException | RuntimeException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        auth_error_response('Authentication required.', 401);
+    } catch (Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        error_log('Faculty invitation revoke error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to revoke Faculty invitation.', 500);
     }
 }
 

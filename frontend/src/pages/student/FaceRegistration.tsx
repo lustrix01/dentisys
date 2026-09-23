@@ -24,6 +24,7 @@ import {
   createBiometricLivenessChallenge,
   submitBiometricEnrollment,
   revokeStudentBiometricProfile,
+  isTransportOrBiometricUnavailable,
 } from '../../services/apiClient';
 import {
   type StudentBiometricProfile,
@@ -51,6 +52,15 @@ function formatAction(action: LivenessAction): { title: string; instruction: str
       return { title: 'Look Forward', instruction: 'Look directly into the camera frame.' };
   }
 }
+
+interface PendingEnrollmentPayload {
+  challengeId: string;
+  challengeToken: string;
+  idempotencyKey: string;
+  frames: Blob[];
+}
+
+export type GuidedCapturePhase = 'idle' | 'phase1_neutral' | 'phase2_action1' | 'phase3_action2' | 'uploading';
 
 export const FaceRegistration: React.FC = () => {
   const navigate = useNavigate();
@@ -86,6 +96,8 @@ export const FaceRegistration: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const cameraAbortRef = useRef<AbortController | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const abortCaptureRef = useRef<boolean>(false);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraDevices, setCameraDevices] = useState<CameraDevice[]>([]);
@@ -95,6 +107,13 @@ export const FaceRegistration: React.FC = () => {
   const [activeActionIndex, setActiveActionIndex] = useState<0 | 1>(0);
   const [isProcessingEnrollment, setIsProcessingEnrollment] = useState(false);
   const [serverUsableCount, setServerUsableCount] = useState(0);
+
+  // Guided Multi-Phase Capture & Retry State
+  const [capturePhase, setCapturePhase] = useState<GuidedCapturePhase>('idle');
+  const [capturedFrameCount, setCapturedFrameCount] = useState<number>(0);
+  const [phaseInstruction, setPhaseInstruction] = useState<string>('');
+  const [pendingPayload, setPendingPayload] = useState<PendingEnrollmentPayload | null>(null);
+  const [canRetryUpload, setCanRetryUpload] = useState<boolean>(false);
 
   // Revocation Modal
   const [showRevokeModal, setShowRevokeModal] = useState(false);
@@ -128,30 +147,39 @@ export const FaceRegistration: React.FC = () => {
     }
   }, []);
 
-  // Teardown camera on unmount or when step changes
+  // Teardown camera and abort in-flight capture/upload on unmount
   useEffect(() => {
     return () => {
+      abortCaptureRef.current = true;
+      uploadAbortRef.current?.abort();
+      uploadAbortRef.current = null;
       stopCamera();
     };
   }, [stopCamera]);
 
-  // Release the hardware camera when this screen is backgrounded or closed.
-  // A hidden tab must not retain an active biometric capture stream.
+  // Release the hardware camera and abort capture when this screen is backgrounded or closed.
   useEffect(() => {
-    const releaseCameraWhenHidden = (): void => {
+    const handleVisibilityOrPageHide = (): void => {
       if (document.visibilityState === 'hidden') {
+        abortCaptureRef.current = true;
+        uploadAbortRef.current?.abort();
+        uploadAbortRef.current = null;
         stopCamera();
+        setCapturePhase('idle');
+        setIsProcessingEnrollment(false);
+        setPendingPayload(null);
+        setCanRetryUpload(false);
         setLivenessChallenge(null);
         setCameraLoading(false);
-        setCameraError('Camera access was paused because this tab is no longer active. Choose Retry Camera Access when you return.');
+        setCameraError('Camera access and capture were paused because this tab is no longer active. Choose Retry Camera Access when you return.');
       }
     };
 
-    document.addEventListener('visibilitychange', releaseCameraWhenHidden);
-    window.addEventListener('pagehide', stopCamera);
+    document.addEventListener('visibilitychange', handleVisibilityOrPageHide);
+    window.addEventListener('pagehide', handleVisibilityOrPageHide);
     return () => {
-      document.removeEventListener('visibilitychange', releaseCameraWhenHidden);
-      window.removeEventListener('pagehide', stopCamera);
+      document.removeEventListener('visibilitychange', handleVisibilityOrPageHide);
+      window.removeEventListener('pagehide', handleVisibilityOrPageHide);
     };
   }, [stopCamera]);
 
@@ -269,75 +297,50 @@ export const FaceRegistration: React.FC = () => {
     }
   };
 
-  // --- STEP 2: FRAME CAPTURE & SERVER ENROLLMENT ---
-  const captureCandidateFrames = async (count: number): Promise<Blob[]> => {
+  // --- STEP 2: GUIDED MULTI-PHASE FRAME CAPTURE & SERVER ENROLLMENT ---
+  const captureSingleFrame = async (): Promise<Blob | null> => {
     const video = videoRef.current;
-    if (!video || !video.videoWidth) return [];
+    if (!video || !video.videoWidth || !video.videoHeight) return null;
 
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return [];
+    if (!ctx) return null;
 
-    const blobs: Blob[] = [];
-    for (let i = 0; i < count; i++) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise<Blob | null>(resolve => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.85);
-      });
-      if (blob) {
-        blobs.push(blob);
-      }
-      // Small pause between frame captures
-      await new Promise(r => setTimeout(r, 60));
-    }
-    return blobs;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return new Promise<Blob | null>(resolve => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.85);
+    });
   };
 
-  const handleCaptureAndEnroll = async () => {
-    if (!livenessChallenge || isProcessingEnrollment) return;
-
-    if (livenessChallenge.expiresAt) {
-      const expiryMs = new Date(livenessChallenge.expiresAt).getTime();
-      if (Number.isFinite(expiryMs) && Date.now() >= expiryMs) {
-        setAuthError('Liveness challenge has expired. Requesting a fresh challenge…');
-        void startCameraAndChallenge(undefined, true);
-        return;
-      }
-    }
-
+  const uploadEnrollment = async (payload: PendingEnrollmentPayload) => {
     setIsProcessingEnrollment(true);
+    setCapturePhase('uploading');
+    setPhaseInstruction('Submitting candidate frames to server for verification…');
     setAuthError(null);
 
+    const abortController = new AbortController();
+    uploadAbortRef.current = abortController;
+
     try {
-      // Capture 20 candidate frames from camera feed
-      const frames = await captureCandidateFrames(20);
-      if (frames.length === 0) {
-        throw new Error('Could not capture frames from camera. Please verify video feed.');
-      }
-
-      // Build multipart request
       const formData = new FormData();
-      formData.append('challengeId', livenessChallenge.challengeId);
-      formData.append('challenge_id', livenessChallenge.challengeId);
-      if (livenessChallenge.challengeToken) {
-        formData.append('challengeToken', livenessChallenge.challengeToken);
-        formData.append('challenge_token', livenessChallenge.challengeToken);
-      }
-      const idempotencyKey = crypto.randomUUID();
-      formData.append('idempotencyKey', idempotencyKey);
-      formData.append('idempotency_key', idempotencyKey);
+      formData.append('challengeId', payload.challengeId);
+      formData.append('challenge_id', payload.challengeId);
+      formData.append('challengeToken', payload.challengeToken);
+      formData.append('challenge_token', payload.challengeToken);
+      formData.append('idempotencyKey', payload.idempotencyKey);
+      formData.append('idempotency_key', payload.idempotencyKey);
 
-      frames.forEach((blob, idx) => {
+      payload.frames.forEach((blob, idx) => {
         formData.append('frames[]', blob, `sample_${idx}.jpg`);
       });
 
-      // Submit to server
-      const result = await submitBiometricEnrollment(formData);
+      const result = await submitBiometricEnrollment(formData, abortController.signal);
 
-      // Server determines authoritative usable sample count
       setServerUsableCount(result.usableSampleCount);
+      setPendingPayload(null);
+      setCanRetryUpload(false);
 
       if (isAuthoritativeActiveEnrolled(result.enrollmentStatus)) {
         stopCamera();
@@ -350,19 +353,154 @@ export const FaceRegistration: React.FC = () => {
         } : null);
         setAuthStep(3);
       } else {
-        // Partial or quality failure: prompt retry without claiming completion and provide manual fallback guidance
         setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again, or seek manual attendance check-in from your Secretary or Instructor.');
-        // Re-request fresh challenge for retry
+        setPendingPayload(null);
+        setCanRetryUpload(false);
         void startCameraAndChallenge(undefined, true);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Facial enrollment failed.';
-      setAuthError(`${msg} Please adjust lighting, face the camera directly, and retry, or contact your Course Instructor/Secretary for manual attendance.`);
-      // Re-request fresh challenge for retry
-      void startCameraAndChallenge(undefined, true);
+      if (abortController.signal.aborted) {
+        return;
+      }
+      if (isTransportOrBiometricUnavailable(err)) {
+        // Transport, network, or 503 error: preserve payload & idempotency key for retry
+        setPendingPayload(payload);
+        setCanRetryUpload(true);
+        const msg = err instanceof Error ? err.message : 'Network or biometric service is temporarily unavailable.';
+        setAuthError(`${msg} Your captured frames and server challenge are preserved. Click "Retry Upload" to resubmit with the same idempotency key, or seek manual attendance from your Secretary or Instructor.`);
+      } else {
+        // Semantic failure or quality rejection: discard and request fresh challenge
+        setPendingPayload(null);
+        setCanRetryUpload(false);
+        const msg = err instanceof Error ? err.message : 'Facial enrollment failed.';
+        setAuthError(`${msg} Please adjust lighting, face the camera directly, and start a fresh capture, or contact your Course Instructor/Secretary for manual attendance.`);
+        void startCameraAndChallenge(undefined, true);
+      }
     } finally {
+      uploadAbortRef.current = null;
       setIsProcessingEnrollment(false);
+      setCapturePhase('idle');
     }
+  };
+
+  const handleStartGuidedCapture = async () => {
+    if (!livenessChallenge || isProcessingEnrollment || capturePhase !== 'idle') return;
+
+    if (livenessChallenge.expiresAt) {
+      const expiryMs = new Date(livenessChallenge.expiresAt).getTime();
+      if (Number.isFinite(expiryMs) && Date.now() >= expiryMs) {
+        setAuthError('Liveness challenge has expired. Requesting a fresh challenge…');
+        void startCameraAndChallenge(undefined, true);
+        return;
+      }
+    }
+
+    setPendingPayload(null);
+    setCanRetryUpload(false);
+    setAuthError(null);
+    abortCaptureRef.current = false;
+    setCapturedFrameCount(0);
+
+    const collectedFrames: Blob[] = [];
+
+    // Phase 1: Neutral Frontal Face (8 frames over ~1.2s)
+    setCapturePhase('phase1_neutral');
+    setPhaseInstruction('Look directly into the camera with a neutral expression');
+    await new Promise(r => setTimeout(r, 400));
+
+    for (let i = 0; i < 8; i++) {
+      if (abortCaptureRef.current) return;
+      const frame = await captureSingleFrame();
+      if (frame) {
+        collectedFrames.push(frame);
+        setCapturedFrameCount(collectedFrames.length);
+      }
+      await new Promise(r => setTimeout(r, 140));
+    }
+
+    if (abortCaptureRef.current) return;
+
+    // Phase 2: Action 1 from server challenge (9 frames over ~1.35s)
+    setActiveActionIndex(0);
+    setCapturePhase('phase2_action1');
+    const action1 = livenessChallenge.actions[0];
+    const details1 = formatAction(action1);
+    setPhaseInstruction(`${details1.title}: ${details1.instruction}`);
+    await new Promise(r => setTimeout(r, 500));
+
+    for (let i = 0; i < 9; i++) {
+      if (abortCaptureRef.current) return;
+      const frame = await captureSingleFrame();
+      if (frame) {
+        collectedFrames.push(frame);
+        setCapturedFrameCount(collectedFrames.length);
+      }
+      await new Promise(r => setTimeout(r, 140));
+    }
+
+    if (abortCaptureRef.current) return;
+
+    // Phase 3: Action 2 from server challenge (8 frames over ~1.2s)
+    setActiveActionIndex(1);
+    setCapturePhase('phase3_action2');
+    const action2 = livenessChallenge.actions[1];
+    const details2 = formatAction(action2);
+    setPhaseInstruction(`${details2.title}: ${details2.instruction}`);
+    await new Promise(r => setTimeout(r, 500));
+
+    for (let i = 0; i < 8; i++) {
+      if (abortCaptureRef.current) return;
+      const frame = await captureSingleFrame();
+      if (frame) {
+        collectedFrames.push(frame);
+        setCapturedFrameCount(collectedFrames.length);
+      }
+      await new Promise(r => setTimeout(r, 140));
+    }
+
+    if (abortCaptureRef.current) return;
+
+    if (collectedFrames.length < 20) {
+      setAuthError('Could not capture sufficient camera frames. Please verify video feed and lighting.');
+      setCapturePhase('idle');
+      return;
+    }
+
+    const idempotencyKey = crypto.randomUUID();
+    const payload: PendingEnrollmentPayload = {
+      challengeId: livenessChallenge.challengeId,
+      challengeToken: livenessChallenge.challengeToken,
+      idempotencyKey,
+      frames: collectedFrames,
+    };
+
+    await uploadEnrollment(payload);
+  };
+
+  const handleCancelCapture = () => {
+    abortCaptureRef.current = true;
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
+    setIsProcessingEnrollment(false);
+    setCapturePhase('idle');
+    setPendingPayload(null);
+    setCanRetryUpload(false);
+    setCapturedFrameCount(0);
+    setAuthError('Capture cancelled.');
+    void startCameraAndChallenge(undefined, true);
+  };
+
+  const handleRetryUpload = () => {
+    if (!pendingPayload) return;
+    void uploadEnrollment(pendingPayload);
+  };
+
+  const handleDiscardAndRecapture = () => {
+    setPendingPayload(null);
+    setCanRetryUpload(false);
+    setCapturedFrameCount(0);
+    setAuthError(null);
+    void startCameraAndChallenge(undefined, true);
   };
 
   // --- REVOCATION ---
@@ -456,6 +594,7 @@ export const FaceRegistration: React.FC = () => {
   const currentStep = isAuthoritative ? authStep : mockStep;
   const captureDisabled = isProcessingEnrollment
     || mockScanning
+    || capturePhase !== 'idle'
     || (isAuthoritative && (cameraLoading || Boolean(cameraError) || !livenessChallenge));
 
   return (
@@ -759,25 +898,47 @@ export const FaceRegistration: React.FC = () => {
 
                 {/* Face Alignment Target Oval Overlay */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className={`w-52 h-64 rounded-[50%] border-2 transition-all ${isProcessingEnrollment || mockScanning
+                  <div className={`w-52 h-64 rounded-[50%] border-2 transition-all ${isProcessingEnrollment || mockScanning || capturePhase !== 'idle'
                     ? 'border-blue-400 shadow-[0_0_25px_rgba(59,130,246,0.5)]'
                     : 'border-white/60 border-dashed'
                     }`} />
                 </div>
 
-                {/* Scanning / Uploading Overlay */}
-                {(isProcessingEnrollment || mockScanning) && (
+                {/* Active Guided Capture Phase Overlay */}
+                {isAuthoritative && capturePhase !== 'idle' && (
+                  <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-slate-950/90 via-slate-950/75 to-transparent p-4 text-center text-white space-y-2 z-10 animate-fade-in">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600/90 text-white font-extrabold text-[11px] shadow-sm uppercase tracking-wider">
+                      {capturePhase === 'phase1_neutral' && 'Phase 1 of 3: Frontal / Neutral Face'}
+                      {capturePhase === 'phase2_action1' && `Phase 2 of 3: Action 1 (${livenessChallenge ? formatAction(livenessChallenge.actions[0]).title : ''})`}
+                      {capturePhase === 'phase3_action2' && `Phase 3 of 3: Action 2 (${livenessChallenge ? formatAction(livenessChallenge.actions[1]).title : ''})`}
+                      {capturePhase === 'uploading' && 'Submitting Candidate Frames'}
+                    </div>
+                    <p className="text-xs font-semibold text-blue-200">
+                      {phaseInstruction}
+                    </p>
+                    <div className="w-56 mx-auto bg-slate-800/80 h-2 rounded-full overflow-hidden border border-slate-700">
+                      <div
+                        className="bg-blue-500 h-full transition-all duration-150"
+                        style={{ width: `${Math.min(100, Math.round((capturedFrameCount / 25) * 100))}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-300 font-mono block">
+                      {capturedFrameCount} / 25 candidate frames captured
+                    </span>
+                  </div>
+                )}
+
+                {/* Mock Scanning Overlay */}
+                {!isAuthoritative && mockScanning && (
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-4 text-center text-white space-y-1.5">
                     <p className="text-xs font-bold animate-pulse flex items-center justify-center gap-1.5">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      {isAuthoritative
-                        ? 'Capturing candidate frames & transmitting to server…'
-                        : `Extracting Facial Feature Vector... ${mockProgress}%`}
+                      Extracting Facial Feature Vector... {mockProgress}%
                     </p>
                     <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
                       <div
                         className="bg-blue-500 h-full transition-all duration-300"
-                        style={{ width: isAuthoritative ? '100%' : `${mockProgress}%` }}
+                        style={{ width: `${mockProgress}%` }}
                       />
                     </div>
                   </div>
@@ -802,7 +963,7 @@ export const FaceRegistration: React.FC = () => {
                       setSelectedCameraId(deviceId);
                       void startCameraAndChallenge(deviceId);
                     }}
-                    disabled={cameraLoading || isProcessingEnrollment}
+                    disabled={cameraLoading || isProcessingEnrollment || capturePhase !== 'idle'}
                     className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs"
                   >
                     {cameraDevices.map(device => (
@@ -814,30 +975,91 @@ export const FaceRegistration: React.FC = () => {
                 </label>
               )}
 
+              {/* Preserved Retry Upload Card */}
+              {isAuthoritative && canRetryUpload && pendingPayload && (
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block font-bold">Network or Biometric Service Disruption</strong>
+                      <p className="mt-0.5 leading-relaxed">
+                        Your 25 captured candidate frames and server challenge session have been preserved. You can retry submission with the same idempotency key without re-capturing.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                    <button
+                      onClick={handleDiscardAndRecapture}
+                      disabled={isProcessingEnrollment}
+                      className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                    >
+                      Discard & Fresh Capture
+                    </button>
+                    <button
+                      onClick={handleRetryUpload}
+                      disabled={isProcessingEnrollment}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
+                    >
+                      {isProcessingEnrollment ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Retrying Upload…</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Retry Upload</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="text-center space-y-3">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Ensure good lighting, look directly into the camera, and follow the liveness prompt above.
+                  Ensure good lighting, look directly into the camera, and follow the paced liveness instructions.
                 </p>
 
-                <button
-                  onClick={isAuthoritative ? handleCaptureAndEnroll : handleMockStartCapture}
-                  disabled={captureDisabled}
-                  className={`px-8 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 mx-auto ${captureDisabled
-                    ? 'bg-blue-400 text-white cursor-wait'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
-                    }`}
-                >
-                  {isProcessingEnrollment ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Verifying with Server…</span>
-                    </>
-                  ) : mockScanning ? (
-                    <span>Scanning...</span>
-                  ) : (
-                    <span>Capture & Submit Enrollment</span>
+                <div className="flex items-center justify-center gap-3">
+                  {isAuthoritative && capturePhase !== 'idle' && (
+                    <button
+                      onClick={handleCancelCapture}
+                      className="px-5 py-3 rounded-xl font-bold text-xs border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer"
+                    >
+                      Cancel Capture
+                    </button>
                   )}
-                </button>
+
+                  {!canRetryUpload && (
+                    <button
+                      onClick={isAuthoritative ? handleStartGuidedCapture : handleMockStartCapture}
+                      disabled={captureDisabled}
+                      className={`px-8 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 ${captureDisabled
+                        ? 'bg-blue-400 text-white cursor-wait'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
+                        }`}
+                    >
+                      {isProcessingEnrollment ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Verifying with Server…</span>
+                        </>
+                      ) : capturePhase !== 'idle' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Paced Capture Active…</span>
+                        </>
+                      ) : mockScanning ? (
+                        <span>Scanning...</span>
+                      ) : isAuthoritative ? (
+                        <span>Start Guided Biometric Capture (25 Frames)</span>
+                      ) : (
+                        <span>Capture & Submit Enrollment</span>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
           </div>
         </div>

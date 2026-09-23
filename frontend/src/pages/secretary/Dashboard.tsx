@@ -33,7 +33,7 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   const assignedStudentsCount = data?.kpis.assignedStudents ?? 0;
-  const attendanceRateVal = data?.kpis.attendanceRate ?? 0;
+  const attendanceRateVal = data?.kpis.attendanceRate;
   const todayRecordsVal = data?.kpis.todayRecords ?? 0;
   const overriddenVal = data?.kpis.overriddenCount ?? 0;
   const assignedClassName = data?.assignedClass?.className || 'No Section Assigned';
@@ -114,7 +114,7 @@ export const Dashboard: React.FC = () => {
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
                 <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5">
-                  {attendanceRateVal}%
+                  {typeof attendanceRateVal === 'number' ? `${attendanceRateVal}%` : '—'}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
@@ -135,7 +135,9 @@ export const Dashboard: React.FC = () => {
 
             <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
               <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Attendance Rate</span>
-              <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1">{attendanceRateVal}%</span>
+              <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1">
+                {typeof attendanceRateVal === 'number' ? `${attendanceRateVal}%` : '—'}
+              </span>
             </Card>
 
             <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
@@ -260,11 +262,11 @@ export const Dashboard: React.FC = () => {
         {/* Right Sidebar Panel (Spans 4) */}
         <div className="lg:col-span-4 space-y-5">
           
-          {/* Widget 1: Announcements */}
+          {/* Section Overview */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Announcements
+                Assigned Section
               </h3>
               <span className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full">
                 {assignedClassName}
@@ -274,73 +276,62 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-3 text-xs">
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                  Daily Attendance
+                  Assigned Section
                 </span>
                 <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  Daily Cut-off Submission
+                  {data?.assignedClass?.className || assignedClassName}
                 </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  All attendance overrides and late entries must be finalized by 5:00 PM today.
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Section ID: {data?.assignedClass?.classId || '—'}
                 </p>
               </div>
 
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[9px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">
-                  Face Verification
+                  Assigned Room
                 </span>
-                <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  Biometric Verification Active
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Automatic check-in logging is operational for Lecture Room 101.
+                <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">
+                  {data?.assignedClass?.classroomName || 'TBA'}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Widget 2: Today's Schedule */}
+          {/* Section Operations */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Today's Schedule
+                Section Operations
               </h3>
-              <span className="text-[10px] text-slate-400 font-semibold">Active Section</span>
             </div>
 
-            <div className="space-y-2.5 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-slate-800 dark:text-slate-100">Clinical Dentistry II</h4>
-                  <p className="text-[10px] text-slate-400">Section {assignedClassName} • 8:00 AM - 11:00 AM</p>
-                </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded-md">
-                  Clinic Lab 2
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Widget 3: Recent Activity */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Recent Activity
-              </h3>
-              <button 
-                onClick={() => navigate('/secretary/attendance')}
-                className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+            <div className="space-y-2 text-xs">
+              <button
+                type="button"
+                onClick={() => navigate('/secretary/start-session')}
+                className="w-full text-left p-3 rounded-2xl bg-slate-50 hover:bg-blue-50/60 dark:bg-slate-800/40 dark:hover:bg-blue-950/20 border border-slate-100 dark:border-slate-800 transition-all cursor-pointer block"
               >
-                View Sheet
+                <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">Session Control</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100 block mt-0.5">Start Class Session →</span>
               </button>
-            </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <p className="text-slate-700 dark:text-slate-300 text-xs font-medium">
-                  Verified daily check-in logs for {assignedClassName}.
-                </p>
-                <span className="text-[10px] text-slate-400 block mt-1">Attendance Sheet • Today</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/secretary/override')}
+                className="w-full text-left p-3 rounded-2xl bg-slate-50 hover:bg-amber-50/60 dark:bg-slate-800/40 dark:hover:bg-amber-950/20 border border-slate-100 dark:border-slate-800 transition-all cursor-pointer block"
+              >
+                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">Corrections</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100 block mt-0.5">Manual Attendance Override →</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate('/secretary/audit-trail')}
+                className="w-full text-left p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/40 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800 transition-all cursor-pointer block"
+              >
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Accountability</span>
+                <span className="font-bold text-slate-800 dark:text-slate-100 block mt-0.5">My Activity Log →</span>
+              </button>
             </div>
           </div>
 

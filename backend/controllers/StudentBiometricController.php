@@ -40,6 +40,18 @@ function student_biometric_controller_context(): array
     return [$config, $pdo, $authCtx, $identity];
 }
 
+function student_biometric_form_alias(string $primary, string $alias): string
+{
+    $primaryPresent = array_key_exists($primary, $_POST);
+    $aliasPresent = array_key_exists($alias, $_POST);
+    $primaryValue = $primaryPresent ? trim((string) $_POST[$primary]) : null;
+    $aliasValue = $aliasPresent ? trim((string) $_POST[$alias]) : null;
+    if ($primaryValue !== null && $aliasValue !== null && $primaryValue !== $aliasValue) {
+        throw new StudentBiometricException("{$primary} and {$alias} must match.", 422, 'VALIDATION_ERROR');
+    }
+    return $primaryValue ?? $aliasValue ?? '';
+}
+
 function student_biometric_failure_audit(
     array $config,
     array $authCtx,
@@ -207,6 +219,13 @@ function handle_student_biometric_challenge(): void
             if ($profile !== null && $profile['consent_status'] !== 'approved') {
                 throw new StudentBiometricException('Biometric consent is required before enrollment.', 409, 'consent_required');
             }
+            if ($profile !== null && $profile['enrollment_status'] === 'enrolling') {
+                throw new StudentBiometricException(
+                    'A biometric enrollment operation is already in progress. Retry after it finishes.',
+                    409,
+                    'biometric_enrollment_in_progress'
+                );
+            }
         }
         $challenge = student_biometric_issue_challenge(
             $pdo, $config, (int) $authCtx['user_id'], $identity['student_id'], $csId, $attendanceSessionId, $purpose
@@ -225,6 +244,8 @@ function handle_student_biometric_enrollment(): void
     $authCtx = [];
     $config = [];
     $reference = null;
+    $challengeTokenId = null;
+    $idempotencyKey = null;
     try {
         [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
         $studentId = $identity['student_id'];
@@ -233,10 +254,13 @@ function handle_student_biometric_enrollment(): void
         if (count($frames) < 20) {
             throw new StudentBiometricException('At least twenty usable enrollment samples are required.', 422, 'enrollment_samples_insufficient');
         }
-        $challengeToken = trim((string) ($_POST['challengeToken'] ?? $_POST['challenge_token'] ?? ''));
+        $challengeId = student_biometric_challenge_id(student_biometric_form_alias('challengeId', 'challenge_id'));
+        $challengeToken = student_biometric_form_alias('challengeToken', 'challenge_token');
         if ($challengeToken === '') {
             throw new StudentBiometricException('Biometric enrollment challenge is required.', 422, 'challenge_invalid');
         }
+        $idempotencyValue = student_biometric_form_alias('idempotencyKey', 'idempotency_key');
+        $idempotencyKey = student_biometric_idempotency_key($idempotencyValue !== '' ? $idempotencyValue : request_header('Idempotency-Key') ?? '');
         $pdo->beginTransaction();
         try {
             $previous = student_biometric_profile($pdo, $studentId, true);
@@ -244,7 +268,38 @@ function handle_student_biometric_enrollment(): void
                 $pdo->rollBack();
                 throw new StudentBiometricException('Biometric consent is required before enrollment.', 409, 'consent_required');
             }
-            $challenge = student_biometric_consume_challenge($pdo, $studentId, $challengeToken, 'enrollment', null);
+            if ($previous['enrollment_status'] === 'enrolling') {
+                throw new StudentBiometricException(
+                    'A biometric enrollment operation is already in progress. Retry after it finishes.',
+                    409,
+                    'biometric_enrollment_in_progress'
+                );
+            }
+            $challenge = student_biometric_consume_challenge(
+                $pdo,
+                $studentId,
+                $challengeToken,
+                'enrollment',
+                null,
+                $challengeId,
+                $idempotencyKey
+            );
+            $challengeTokenId = (int) $challenge['tokenId'];
+            if (($challenge['replayed'] ?? false) === true) {
+                $replayedProfile = student_biometric_profile($pdo, $studentId, true);
+                if ($replayedProfile !== null
+                    && $replayedProfile['enrollment_status'] === 'active'
+                    && $replayedProfile['protected_object_reference'] !== null) {
+                    $pdo->commit();
+                    json_response(student_biometric_profile_response($replayedProfile, $config), 200);
+                    return;
+                }
+                throw new StudentBiometricException(
+                    'The biometric operation already completed without an active enrollment. Request a new challenge.',
+                    409,
+                    'idempotency_conflict'
+                );
+            }
             $before = student_biometric_snapshot($previous);
             $update = $pdo->prepare("UPDATE biometric_profiles SET enrollment_status = 'enrolling', updated_at = ? WHERE profile_id = ?");
             $update->execute([attendance_session_now_utc()->format('Y-m-d H:i:s.u'), (int) $previous['profile_id']]);
@@ -284,6 +339,7 @@ function handle_student_biometric_enrollment(): void
             );
             $update->execute([$reference, $expiresOn, $usable, $nowSql, $nowSql, (int) $row['profile_id']]);
             $row = student_biometric_profile($pdo, $studentId, true);
+            student_biometric_complete_challenge($pdo, $challengeTokenId, (string) $idempotencyKey);
             student_biometric_record_audit(
                 $pdo, $config, $authCtx, $context, 'biometric_enrollment_succeeded', $studentId,
                 'Student biometric enrollment succeeded.', null, $before, student_biometric_snapshot($row)
@@ -307,6 +363,13 @@ function handle_student_biometric_enrollment(): void
         }
         json_response(student_biometric_profile_response($row, $config), 201);
     } catch (Throwable $e) {
+        if ($reference !== null) {
+            try {
+                student_biometric_sidecar_revoke($config, $reference);
+            } catch (Throwable $cleanupError) {
+                error_log('Biometric enrollment reference cleanup skipped: ' . sanitize_for_log($cleanupError));
+            }
+        }
         if ($studentId > 0 && $previous !== null && $authCtx !== [] && $config !== []) {
             try {
                 $restorePdo = create_pdo($config);
@@ -322,6 +385,15 @@ function handle_student_biometric_enrollment(): void
                     $previous['reference_expires_on'], $previous['usable_sample_count'], $previous['enrolled_at'],
                     attendance_session_now_utc()->format('Y-m-d H:i:s.u'), (int) $previous['profile_id'],
                 ]);
+                if ($challengeTokenId !== null && $idempotencyKey !== null) {
+                    $terminalChallengeFailure = $e instanceof StudentBiometricException
+                        && in_array($e->errorCode, ['liveness_failed', 'quality_failed', 'biometric_verification_failed'], true);
+                    if ($terminalChallengeFailure) {
+                        student_biometric_fail_challenge($restorePdo, $challengeTokenId, $idempotencyKey);
+                    } else {
+                        student_biometric_reset_challenge_for_retry($restorePdo, $challengeTokenId, $idempotencyKey);
+                    }
+                }
                 student_biometric_record_audit(
                     $restorePdo, $config, $authCtx, $context, 'biometric_enrollment_failed', $studentId,
                     'Student biometric enrollment failed.', $e instanceof StudentBiometricException ? $e->errorCode : 'biometric_service_unavailable',
@@ -456,7 +528,10 @@ function handle_student_attendance_biometric(): void
         if ($sessionId <= 0) {
             throw new StudentBiometricException('A valid attendance session is required.', 422, 'VALIDATION_ERROR');
         }
-        $challengeToken = trim((string) ($_POST['challengeToken'] ?? $_POST['challenge_token'] ?? ''));
+        $challengeToken = student_biometric_form_alias('challengeToken', 'challenge_token');
+        $challengeId = student_biometric_challenge_id(student_biometric_form_alias('challengeId', 'challenge_id'));
+        $idempotencyValue = student_biometric_form_alias('idempotencyKey', 'idempotency_key');
+        $idempotencyKey = student_biometric_idempotency_key($idempotencyValue !== '' ? $idempotencyValue : request_header('Idempotency-Key') ?? '');
         $frames = student_biometric_uploaded_frames();
         $latitude = student_biometric_post_float('latitude', -90, 90);
         $longitude = student_biometric_post_float('longitude', -180, 180);
@@ -509,14 +584,41 @@ function handle_student_attendance_biometric(): void
                 $pdo->rollBack();
                 throw new StudentBiometricException('You are outside the permitted attendance location.', 409, 'geofence_failed');
             }
-            $challenge = student_biometric_consume_challenge($pdo, $studentId, $challengeToken, 'attendance', $sessionId);
-            $sidecar = student_biometric_sidecar_request($config, '/v1/verify', [
-                'protectedObjectReference' => (string) $profile['protected_object_reference'],
-                'challengeActions' => json_encode($challenge['actions'], JSON_UNESCAPED_SLASHES),
-                'studentId' => (string) $studentId,
-            ], array_map(static fn(array $frame): array => $frame + ['field' => 'frames'], $frames));
-            if (($sidecar['verified'] ?? false) !== true) {
-                throw new StudentBiometricException('Face could not be verified.', 422, 'biometric_verification_failed');
+            $challenge = student_biometric_consume_challenge(
+                $pdo,
+                $studentId,
+                $challengeToken,
+                'attendance',
+                $sessionId,
+                $challengeId,
+                $idempotencyKey
+            );
+            if (($challenge['replayed'] ?? false) === true && ($challenge['submissionState'] ?? '') === 'failed') {
+                throw new StudentBiometricException(
+                    'Biometric verification already failed for this challenge. Request a new challenge.',
+                    422,
+                    'biometric_verification_failed'
+                );
+            }
+            try {
+                $sidecar = student_biometric_sidecar_request($config, '/v1/verify', [
+                    'protectedObjectReference' => (string) $profile['protected_object_reference'],
+                    'challengeActions' => json_encode($challenge['actions'], JSON_UNESCAPED_SLASHES),
+                    'studentId' => (string) $studentId,
+                ], array_map(static fn(array $frame): array => $frame + ['field' => 'frames'], $frames));
+                if (($sidecar['verified'] ?? false) !== true) {
+                    throw new StudentBiometricException('Face could not be verified.', 422, 'biometric_verification_failed');
+                }
+            } catch (Throwable $e) {
+                $terminalChallengeFailure = $e instanceof StudentBiometricException
+                    && in_array($e->errorCode, ['liveness_failed', 'quality_failed', 'biometric_verification_failed'], true);
+                if ($terminalChallengeFailure) {
+                    student_biometric_fail_challenge($pdo, (int) $challenge['tokenId'], $idempotencyKey);
+                } else {
+                    student_biometric_reset_challenge_for_retry($pdo, (int) $challenge['tokenId'], $idempotencyKey);
+                }
+                $pdo->commit();
+                throw $e;
             }
             $now = attendance_session_now_utc();
             $nowSql = $now->format('Y-m-d H:i:s.u');
@@ -553,6 +655,7 @@ function handle_student_attendance_biometric(): void
                 "Recorded biometric attendance for Student #{$studentId}.", null, null,
                 ['record_id' => (int) $recordId, 'student_id' => $studentId, 'status' => $decision['status'], 'verification_method' => 'biometric']
             );
+            student_biometric_complete_challenge($pdo, (int) $challenge['tokenId'], $idempotencyKey);
             $pdo->commit();
             $attendance = [
                 'recordId' => (string) $recordId,
@@ -573,7 +676,7 @@ function handle_student_attendance_biometric(): void
         }
     } catch (Throwable $e) {
         if ($studentId > 0 && $authCtx !== [] && $config !== [] && $e instanceof StudentBiometricException
-            && in_array($e->errorCode, ['geofence_failed', 'liveness_failed', 'biometric_verification_failed', 'biometric_service_unavailable'], true)) {
+            && in_array($e->errorCode, ['geofence_failed', 'liveness_failed', 'quality_failed', 'biometric_verification_failed', 'biometric_service_unavailable'], true)) {
             student_biometric_failure_audit($config, $authCtx, $context, $studentId, 'biometric_verification_failed', $e->errorCode);
         }
         student_biometric_emit_exception($e);

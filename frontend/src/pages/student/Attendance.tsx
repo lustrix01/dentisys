@@ -26,6 +26,7 @@ import {
   getStudentActiveAttendanceSessions,
   createBiometricLivenessChallenge,
   submitBiometricAttendance,
+  isTransportOrBiometricUnavailable,
 } from '../../services/apiClient';
 import {
   type StudentBiometricProfile,
@@ -143,10 +144,28 @@ export const Attendance: React.FC = () => {
   const [cameraDevices, setCameraDevices] = useState<CameraDevice[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState('');
 
-  // Camera Refs
+  // Guided Multi-Phase Capture & Retry State
+  const [capturePhase, setCapturePhase] = useState<'idle' | 'phase1_neutral' | 'phase2_action1' | 'phase3_action2' | 'submitting'>('idle');
+  const [capturedFrameCount, setCapturedFrameCount] = useState<number>(0);
+  const [phaseInstruction, setPhaseInstruction] = useState<string>('');
+  const [pendingAttendancePayload, setPendingAttendancePayload] = useState<{
+    attendanceSessionId: number;
+    challengeId: string;
+    challengeToken: string;
+    idempotencyKey: string;
+    frames: Blob[];
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
+  } | null>(null);
+  const [canRetryUpload, setCanRetryUpload] = useState<boolean>(false);
+
+  // Camera & Abort Refs
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const cameraAbortRef = useRef<AbortController | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const abortCaptureRef = useRef<boolean>(false);
   const selectedCameraIdRef = useRef('');
 
   // Stop camera helper
@@ -162,8 +181,12 @@ export const Attendance: React.FC = () => {
     }
   }, []);
 
+  // Teardown camera and abort in-flight operations on unmount
   useEffect(() => {
     return () => {
+      abortCaptureRef.current = true;
+      uploadAbortRef.current?.abort();
+      uploadAbortRef.current = null;
       stopCamera();
     };
   }, [stopCamera]);
@@ -175,22 +198,30 @@ export const Attendance: React.FC = () => {
   }, [checkInStage, stopCamera]);
 
   // Release the hardware camera when this screen is backgrounded or closed.
-  // Returning to the flow requires a fresh camera start and liveness challenge.
   useEffect(() => {
     const releaseCameraWhenHidden = (): void => {
-      if (document.visibilityState === 'hidden' && checkInStage === 'camera') {
+      if (document.visibilityState === 'hidden') {
+        abortCaptureRef.current = true;
+        uploadAbortRef.current?.abort();
+        uploadAbortRef.current = null;
         stopCamera();
+        setCapturePhase('idle');
+        setPendingAttendancePayload(null);
+        setCanRetryUpload(false);
         setLivenessChallenge(null);
         setCameraLoading(false);
-        setCameraError('Camera access was paused because this tab is no longer active. Choose Retry Camera Access when you return.');
+        if (checkInStage === 'camera' || checkInStage === 'verifying') {
+          setCheckInStage('idle');
+          setFailureNotice('Attendance capture was paused because this tab is no longer active.');
+        }
       }
     };
 
     document.addEventListener('visibilitychange', releaseCameraWhenHidden);
-    window.addEventListener('pagehide', stopCamera);
+    window.addEventListener('pagehide', releaseCameraWhenHidden);
     return () => {
       document.removeEventListener('visibilitychange', releaseCameraWhenHidden);
-      window.removeEventListener('pagehide', stopCamera);
+      window.removeEventListener('pagehide', releaseCameraWhenHidden);
     };
   }, [checkInStage, stopCamera]);
 
@@ -349,32 +380,100 @@ export const Attendance: React.FC = () => {
     }
   }, [cameraError, cameraLoading, checkInStage, currentSelectedSession, isAuthoritative, livenessChallenge, startCameraAndChallenge]);
 
-  // Capture frames from video element
-  const captureFrames = async (count: number): Promise<Blob[]> => {
+  // Capture single frame from video element
+  const captureSingleFrame = async (): Promise<Blob | null> => {
     const video = videoRef.current;
-    if (!video || !video.videoWidth) return [];
+    if (!video || !video.videoWidth || !video.videoHeight) return null;
 
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return [];
+    if (!ctx) return null;
 
-    const blobs: Blob[] = [];
-    for (let i = 0; i < count; i++) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise<Blob | null>(resolve => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.85);
-      });
-      if (blob) blobs.push(blob);
-      await new Promise(r => setTimeout(r, 60));
-    }
-    return blobs;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return new Promise<Blob | null>(resolve => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.85);
+    });
   };
 
-  // Submit Biometric Attendance to Server
-  const handleSubmitAuthoritativeVerification = async () => {
-    if (!currentSelectedSession || !livenessChallenge) return;
+  // Submit Biometric Attendance to Server with Retry Preservation
+  const uploadAttendance = async (payload: {
+    attendanceSessionId: number;
+    challengeId: string;
+    challengeToken: string;
+    idempotencyKey: string;
+    frames: Blob[];
+    latitude?: number;
+    longitude?: number;
+    accuracy?: number;
+  }) => {
+    setCheckInStage('verifying');
+    setFailureNotice(null);
+    setAuthError(null);
+
+    const abortController = new AbortController();
+    uploadAbortRef.current = abortController;
+
+    try {
+      const formData = new FormData();
+      formData.append('attendanceSessionId', String(payload.attendanceSessionId));
+      formData.append('attendance_session_id', String(payload.attendanceSessionId));
+      formData.append('challengeId', payload.challengeId);
+      formData.append('challenge_id', payload.challengeId);
+      formData.append('challengeToken', payload.challengeToken);
+      formData.append('challenge_token', payload.challengeToken);
+      formData.append('idempotencyKey', payload.idempotencyKey);
+      formData.append('idempotency_key', payload.idempotencyKey);
+
+      if (payload.latitude !== undefined && payload.longitude !== undefined) {
+        formData.append('latitude', String(payload.latitude));
+        formData.append('longitude', String(payload.longitude));
+        if (payload.accuracy !== undefined) {
+          formData.append('accuracy', String(payload.accuracy));
+        }
+      }
+
+      payload.frames.forEach((blob, idx) => {
+        formData.append('frames[]', blob, `frame_${idx}.jpg`);
+      });
+
+      const result = await submitBiometricAttendance(formData, abortController.signal);
+      stopCamera();
+      setPendingAttendancePayload(null);
+      setCanRetryUpload(false);
+      setVerificationResult(result);
+      setCheckInStage('result');
+      void loadAuthoritativeData();
+    } catch (err) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      if (isTransportOrBiometricUnavailable(err)) {
+        // Transport/network/503: preserve challenge, idempotencyKey, and candidate frames
+        setPendingAttendancePayload(payload);
+        setCanRetryUpload(true);
+        const msg = err instanceof Error ? err.message : 'Biometric service or network connection is temporarily unavailable.';
+        setFailureNotice(`${msg} Your 25 verification frames and server challenge have been preserved. You can click "Retry Submission" to resubmit with the existing idempotency key, or report to your Class Secretary or Course Instructor for authorized manual check-in.`);
+        setCheckInStage('camera');
+      } else {
+        // Semantic rejection: consume challenge and return to idle
+        stopCamera();
+        setPendingAttendancePayload(null);
+        setCanRetryUpload(false);
+        const msg = err instanceof Error ? err.message : 'Biometric verification failed.';
+        setFailureNotice(`${msg} Your attendance was not recorded. Please report to your Class Secretary or Course Instructor for authorized manual check-in.`);
+        setCheckInStage('idle');
+      }
+    } finally {
+      uploadAbortRef.current = null;
+      setCapturePhase('idle');
+    }
+  };
+
+  // Guided Multi-Phase Check-in (Neutral + Action 1 + Action 2 = 25 frames)
+  const handleStartGuidedCheckIn = async () => {
+    if (!currentSelectedSession || !livenessChallenge || capturePhase !== 'idle') return;
 
     if (livenessChallenge.expiresAt) {
       const expiryMs = new Date(livenessChallenge.expiresAt).getTime();
@@ -385,54 +484,116 @@ export const Attendance: React.FC = () => {
       }
     }
 
-    setCheckInStage('verifying');
+    setPendingAttendancePayload(null);
+    setCanRetryUpload(false);
     setFailureNotice(null);
+    abortCaptureRef.current = false;
+    setCapturedFrameCount(0);
 
-    try {
-      // Capture 5 verification frames
-      const frames = await captureFrames(5);
-      stopCamera();
+    const collectedFrames: Blob[] = [];
 
-      if (frames.length === 0) {
-        throw new Error('Could not capture frames from video feed.');
+    // Phase 1: Neutral Frontal Face (8 frames over ~1.2s)
+    setCapturePhase('phase1_neutral');
+    setPhaseInstruction('Look directly into the camera with a neutral expression');
+    await new Promise(r => setTimeout(r, 400));
+
+    for (let i = 0; i < 8; i++) {
+      if (abortCaptureRef.current) return;
+      const frame = await captureSingleFrame();
+      if (frame) {
+        collectedFrames.push(frame);
+        setCapturedFrameCount(collectedFrames.length);
       }
-
-      const formData = new FormData();
-      formData.append('attendanceSessionId', String(currentSelectedSession.id));
-      formData.append('attendance_session_id', String(currentSelectedSession.id));
-      formData.append('challengeId', livenessChallenge.challengeId);
-      formData.append('challenge_id', livenessChallenge.challengeId);
-      if (livenessChallenge.challengeToken) {
-        formData.append('challengeToken', livenessChallenge.challengeToken);
-        formData.append('challenge_token', livenessChallenge.challengeToken);
-      }
-
-      const idempotencyKey = crypto.randomUUID();
-      formData.append('idempotencyKey', idempotencyKey);
-      formData.append('idempotency_key', idempotencyKey);
-
-      if (locationCoords) {
-        formData.append('latitude', String(locationCoords.latitude));
-        formData.append('longitude', String(locationCoords.longitude));
-        formData.append('accuracy', String(locationCoords.accuracy));
-      }
-
-      frames.forEach((blob, idx) => {
-        formData.append('frames[]', blob, `frame_${idx}.jpg`);
-      });
-
-      // Submit to backend
-      const result = await submitBiometricAttendance(formData);
-      setVerificationResult(result);
-      setCheckInStage('result');
-      // Refresh active sessions list
-      void loadAuthoritativeData();
-    } catch (err) {
-      stopCamera();
-      const msg = err instanceof Error ? err.message : 'Biometric verification failed.';
-      setFailureNotice(`${msg} Your attendance was not recorded. Please report to your Class Secretary or Course Instructor for authorized manual check-in.`);
-      setCheckInStage('idle');
+      await new Promise(r => setTimeout(r, 140));
     }
+
+    if (abortCaptureRef.current) return;
+
+    // Phase 2: Action 1 from server challenge (9 frames over ~1.35s)
+    setActiveActionIndex(0);
+    setCapturePhase('phase2_action1');
+    const action1 = livenessChallenge.actions[0];
+    const details1 = formatAction(action1);
+    setPhaseInstruction(`${details1.title}: ${details1.instruction}`);
+    await new Promise(r => setTimeout(r, 500));
+
+    for (let i = 0; i < 9; i++) {
+      if (abortCaptureRef.current) return;
+      const frame = await captureSingleFrame();
+      if (frame) {
+        collectedFrames.push(frame);
+        setCapturedFrameCount(collectedFrames.length);
+      }
+      await new Promise(r => setTimeout(r, 140));
+    }
+
+    if (abortCaptureRef.current) return;
+
+    // Phase 3: Action 2 from server challenge (8 frames over ~1.2s)
+    setActiveActionIndex(1);
+    setCapturePhase('phase3_action2');
+    const action2 = livenessChallenge.actions[1];
+    const details2 = formatAction(action2);
+    setPhaseInstruction(`${details2.title}: ${details2.instruction}`);
+    await new Promise(r => setTimeout(r, 500));
+
+    for (let i = 0; i < 8; i++) {
+      if (abortCaptureRef.current) return;
+      const frame = await captureSingleFrame();
+      if (frame) {
+        collectedFrames.push(frame);
+        setCapturedFrameCount(collectedFrames.length);
+      }
+      await new Promise(r => setTimeout(r, 140));
+    }
+
+    if (abortCaptureRef.current) return;
+
+    if (collectedFrames.length < 20) {
+      setFailureNotice('Could not capture sufficient camera frames. Please verify video feed and lighting.');
+      setCapturePhase('idle');
+      return;
+    }
+
+    const idempotencyKey = crypto.randomUUID();
+    const payload = {
+      attendanceSessionId: currentSelectedSession.id,
+      challengeId: livenessChallenge.challengeId,
+      challengeToken: livenessChallenge.challengeToken,
+      idempotencyKey,
+      frames: collectedFrames,
+      latitude: locationCoords?.latitude,
+      longitude: locationCoords?.longitude,
+      accuracy: locationCoords?.accuracy,
+    };
+
+    await uploadAttendance(payload);
+  };
+
+  const handleCancelAttendance = () => {
+    abortCaptureRef.current = true;
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
+    stopCamera();
+    setCapturePhase('idle');
+    setPendingAttendancePayload(null);
+    setCanRetryUpload(false);
+    setCapturedFrameCount(0);
+    setLivenessChallenge(null);
+    setCheckInStage('idle');
+  };
+
+  const handleRetryAttendanceUpload = () => {
+    if (!pendingAttendancePayload) return;
+    void uploadAttendance(pendingAttendancePayload);
+  };
+
+  const handleDiscardAndRestart = () => {
+    setPendingAttendancePayload(null);
+    setCanRetryUpload(false);
+    setCapturedFrameCount(0);
+    setFailureNotice(null);
+    void startCameraAndChallenge();
   };
 
   // --- MOCK SIMULATION STATE ---
@@ -813,12 +974,7 @@ export const Attendance: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => {
-                        stopCamera();
-                        setLivenessChallenge(null);
-                        setCameraError(null);
-                        setCheckInStage('idle');
-                      }}
+                      onClick={handleCancelAttendance}
                       className="text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
                     >
                       Cancel
@@ -883,8 +1039,35 @@ export const Attendance: React.FC = () => {
 
                     {/* Target Frame Oval Overlay */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-52 h-64 rounded-[50%] border-2 border-white/60 border-dashed" />
+                      <div className={`w-52 h-64 rounded-[50%] border-2 transition-all ${capturePhase !== 'idle'
+                        ? 'border-blue-400 shadow-[0_0_25px_rgba(59,130,246,0.5)]'
+                        : 'border-white/60 border-dashed'
+                        }`} />
                     </div>
+
+                    {/* Active Guided Capture Phase Overlay */}
+                    {capturePhase !== 'idle' && (
+                      <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-slate-950/90 via-slate-950/75 to-transparent p-4 text-center text-white space-y-2 z-10 animate-fade-in">
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600/90 text-white font-extrabold text-[11px] shadow-sm uppercase tracking-wider">
+                          {capturePhase === 'phase1_neutral' && 'Phase 1 of 3: Frontal / Neutral Face'}
+                          {capturePhase === 'phase2_action1' && `Phase 2 of 3: Action 1 (${livenessChallenge ? formatAction(livenessChallenge.actions[0]).title : ''})`}
+                          {capturePhase === 'phase3_action2' && `Phase 3 of 3: Action 2 (${livenessChallenge ? formatAction(livenessChallenge.actions[1]).title : ''})`}
+                          {capturePhase === 'submitting' && 'Transmitting Verification'}
+                        </div>
+                        <p className="text-xs font-semibold text-blue-200">
+                          {phaseInstruction}
+                        </p>
+                        <div className="w-56 mx-auto bg-slate-800/80 h-2 rounded-full overflow-hidden border border-slate-700">
+                          <div
+                            className="bg-blue-500 h-full transition-all duration-150"
+                            style={{ width: `${Math.min(100, Math.round((capturedFrameCount / 25) * 100))}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-300 font-mono block">
+                          {capturedFrameCount} / 25 verification frames captured
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {cameraError && (
@@ -914,7 +1097,7 @@ export const Attendance: React.FC = () => {
                           setSelectedCameraId(deviceId);
                           void startCameraAndChallenge(deviceId);
                         }}
-                        disabled={cameraLoading}
+                        disabled={cameraLoading || capturePhase !== 'idle'}
                         className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs"
                       >
                         {cameraDevices.map(device => (
@@ -926,22 +1109,74 @@ export const Attendance: React.FC = () => {
                     </label>
                   )}
 
+                  {/* Preserved Retry Submission Card */}
+                  {canRetryUpload && pendingAttendancePayload && (
+                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-3">
+                      <div className="flex items-start gap-2.5">
+                        <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="block font-bold">Network or Biometric Service Interruption</strong>
+                          <p className="mt-0.5 leading-relaxed">
+                            Your 25 captured frames and attendance challenge have been preserved. You can retry submission with the same idempotency key without re-capturing.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                        <button
+                          onClick={handleDiscardAndRestart}
+                          className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                        >
+                          Discard & Fresh Challenge
+                        </button>
+                        <button
+                          onClick={handleRetryAttendanceUpload}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Retry Submission</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="text-center space-y-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Look directly into the camera, follow the liveness actions, and submit verification.
+                      Look directly into the camera, follow the paced liveness actions, and complete verification.
                     </p>
 
-                    <button
-                      onClick={() => { void handleSubmitAuthoritativeVerification(); }}
-                      disabled={cameraLoading || Boolean(cameraError) || !livenessChallenge}
-                      className={`px-8 py-3 rounded-xl text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center gap-2 mx-auto ${cameraLoading || cameraError || !livenessChallenge
-                        ? 'bg-slate-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99] cursor-pointer'
-                        }`}
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>Verify & Submit Attendance</span>
-                    </button>
+                    <div className="flex items-center justify-center gap-3">
+                      {capturePhase !== 'idle' && (
+                        <button
+                          onClick={handleCancelAttendance}
+                          className="px-5 py-3 rounded-xl font-bold text-xs border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer"
+                        >
+                          Cancel Capture
+                        </button>
+                      )}
+
+                      {!canRetryUpload && (
+                        <button
+                          onClick={() => { void handleStartGuidedCheckIn(); }}
+                          disabled={cameraLoading || Boolean(cameraError) || !livenessChallenge || capturePhase !== 'idle'}
+                          className={`px-8 py-3 rounded-xl text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center gap-2 mx-auto ${cameraLoading || cameraError || !livenessChallenge || capturePhase !== 'idle'
+                            ? 'bg-slate-400 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.99] cursor-pointer'
+                            }`}
+                        >
+                          {capturePhase !== 'idle' ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Paced Capture Active…</span>
+                            </>
+                          ) : (
+                            <>
+                              <Camera className="w-4 h-4" />
+                              <span>Start Guided Biometric Check-in (25 Frames)</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

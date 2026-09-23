@@ -214,6 +214,7 @@ $expectedMigrations = [
     '013_period_grading_configuration.sql',
     '014_grading_period_memberships.sql',
     '015_period_attendance_ranges_and_sources.sql',
+    '016_academic_notifications.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -515,6 +516,89 @@ expect_same(2, count($sessionAuditRows), 'Session start and end each create an a
 expect_same('attendance_session_started', $sessionAuditRows[0]['action_code'] ?? null, 'Session start audit action is recorded');
 expect_same('attendance_session_ended', $sessionAuditRows[1]['action_code'] ?? null, 'Session end audit action is recorded');
 expect_same((string) $secretarySessionClassId, (string) ($sessionAuditRows[0]['scope_cs_id'] ?? ''), 'Session audit is scoped to the assigned class section');
+[$secretaryKpiStatus, $secretaryKpiBody] = integration_http_get_json('/api/secretary/dashboard/kpis', $secretaryAccessToken);
+expect_same(200, $secretaryKpiStatus, 'Secretary KPI read returns HTTP 200');
+$secretaryAssignedBefore = count($secretaryKpiBody['assignedClasses'] ?? []);
+$secretaryFixtureUserId = (int) $pdo->query("SELECT user_id FROM user_accounts WHERE login_email = 'secretary@bicol-u.edu.ph'")->fetchColumn();
+$secretarySecondClassCourseId = (int) $pdo->query('SELECT course_id FROM class_sections WHERE cs_id = ' . $secretarySessionClassId)->fetchColumn();
+$secretarySecondClassInsert = $pdo->prepare(
+    "INSERT INTO class_sections
+        (cs_name, course_id, instructor_user_id, secretary_user_id, semester, school_year, year_level,
+         lab_room, lec_room, block, status, term_code, created_at)
+     VALUES (?, ?, (SELECT instructor_user_id FROM class_sections WHERE cs_id = ?), ?, '1ST', '2026-2027', 2,
+             'Secretary Second Lab', 'Secretary Second Lecture', 'Z', 'Active', '2026-2027-1ST', CURRENT_TIMESTAMP(6))
+     RETURNING cs_id"
+);
+$secretarySecondClassInsert->execute([
+    'Secretary Second Section ' . strtoupper(bin2hex(random_bytes(3))),
+    $secretarySecondClassCourseId,
+    $secretarySessionClassId,
+    $secretaryFixtureUserId,
+]);
+$secretarySecondClassId = (int) $secretarySecondClassInsert->fetchColumn();
+[$secretaryMultiKpiStatus, $secretaryMultiKpiBody] = integration_http_get_json('/api/secretary/dashboard/kpis', $secretaryAccessToken);
+expect_same(200, $secretaryMultiKpiStatus, 'Secretary KPI read remains available with multiple assigned sections');
+expect_same($secretaryAssignedBefore + 1, count($secretaryMultiKpiBody['assignedClasses'] ?? []), 'Secretary KPI response returns every assigned class section');
+[$secretarySelectedKpiStatus, $secretarySelectedKpiBody] = integration_http_get_json('/api/secretary/dashboard/kpis?csId=' . $secretarySecondClassId, $secretaryAccessToken);
+expect_same(200, $secretarySelectedKpiStatus, 'Secretary KPI read accepts an assigned class selector');
+expect_same((string) $secretarySecondClassId, (string) ($secretarySelectedKpiBody['assignedClass']['classId'] ?? ''), 'Secretary KPI read selects the requested assigned class');
+[$secretaryActivityStatus, $secretaryActivityBody] = integration_http_get_json('/api/secretary/activity', $secretaryAccessToken);
+expect_same(200, $secretaryActivityStatus, 'Secretary activity read returns HTTP 200');
+$secretarySessionActivity = array_values(array_filter(
+    $secretaryActivityBody['activity'] ?? [],
+    static fn(array $event): bool => ($event['action'] ?? $event['actionCode'] ?? null) === 'attendance_session_started'
+        && str_contains((string) ($event['description'] ?? ''), $sessionCode)
+));
+expect_true(count($secretarySessionActivity) >= 1, 'Secretary activity is scoped to the authenticated Secretary and includes its session event');
+[$secretaryFilteredStatus, $secretaryFilteredBody] = integration_http_get_json(
+    '/api/secretary/attendance?date=' . rawurlencode($sessionDate) . '&csId=' . $secretarySessionClassId . '&sessionId=' . $attendanceSessionId,
+    $secretaryAccessToken
+);
+expect_same(200, $secretaryFilteredStatus, 'Secretary attendance accepts date, class, and session filters');
+expect_same(1, count($secretaryFilteredBody['sessions'] ?? []), 'Secretary attendance returns only the selected session');
+$secretaryFilteredRecords = $secretaryFilteredBody['records'] ?? [];
+expect_true(count($secretaryFilteredRecords) >= 1, 'Secretary attendance returns records persisted for the selected session');
+foreach ($secretaryFilteredRecords as $secretaryFilteredRecord) {
+    expect_same((string) $attendanceSessionId, (string) ($secretaryFilteredRecord['attendanceSessionId'] ?? ''), 'Secretary attendance records preserve the selected session linkage');
+}
+$secondSessionCode = 'INTEGRATION-SESSION-OLDER-' . strtoupper(bin2hex(random_bytes(4)));
+[$secondSessionStartStatus, $secondSessionStartBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'csId' => $secretarySessionClassId,
+    'sessionDate' => $sessionDate,
+    'sessionCode' => $secondSessionCode,
+    'room' => 'Integration Older Session Room',
+    'biometricRequired' => true,
+    'openingTime' => '08:00',
+    'presentCutoff' => '09:00',
+    'lateCutoff' => '10:00',
+    'geofenceEnabled' => true,
+    'geofenceLatitude' => 13.1436,
+    'geofenceLongitude' => 123.7438,
+]);
+expect_same(201, $secondSessionStartStatus, 'Secretary can start a later session for older-record override coverage');
+$secondAttendanceSessionId = (int) ($secondSessionStartBody['session']['sessionId'] ?? 0);
+expect_true($secondAttendanceSessionId > $attendanceSessionId, 'Later Secretary session receives a higher database ID');
+[$secondSessionEndStatus] = integration_http_json('/api/secretary/attendance/session/end', $secretaryAccessToken, [
+    'sessionId' => (string) $secondAttendanceSessionId,
+]);
+expect_same(200, $secondSessionEndStatus, 'Secretary can end the later session before older-record override');
+$sessionStudentStmt = $pdo->prepare(
+    'SELECT s.student_id FROM enrollments e JOIN students s ON s.student_id = e.student_id WHERE e.enrollment_id = ?'
+);
+$sessionStudentStmt->execute([$sessionEnrollmentId]);
+$sessionStudentId = (int) $sessionStudentStmt->fetchColumn();
+[$olderOverrideStatus] = integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, [
+    'studentId' => (string) $sessionStudentId,
+    'sessionId' => (string) $attendanceSessionId,
+    'status' => 'late',
+    'reason' => 'Correct older linked session',
+]);
+expect_same(200, $olderOverrideStatus, 'Secretary override selects an older session when recordId is omitted');
+$olderOverrideRowStmt = $pdo->prepare(
+    'SELECT status FROM attendance_records WHERE enrollment_id = ? AND attendance_session_id = ? ORDER BY record_id DESC LIMIT 1'
+);
+$olderOverrideRowStmt->execute([$sessionEnrollmentId, $attendanceSessionId]);
+expect_same('late', $olderOverrideRowStmt->fetchColumn(), 'Older Secretary session record receives the override');
 echo "PASS: Persistent Secretary attendance-session integration coverage completed.\n";
 
 $originalAdminGradingDefaultsJson = (string) $pdo->query(
@@ -783,6 +867,59 @@ $facultyInvitationTokenStmt->execute([(int) $facultyInvitationAccount['user_id']
 $facultyInvitationToken = $facultyInvitationTokenStmt->fetch(PDO::FETCH_ASSOC);
 expect_same(32, (int) ($facultyInvitationToken['digest_length'] ?? 0), 'Faculty invitation persists only a 32-byte digest');
 expect_true(in_array($facultyInvitationToken['seven_day_lifetime'] ?? null, [true, 't', '1', 1], true), 'Faculty invitation uses a seven-day expiry');
+$facultyInvitationRawToken = base64url_encode(random_bytes(32));
+$facultyInvitationRawDigest = hash('sha256', $facultyInvitationRawToken, true);
+$facultyInvitationReplaceDigest = $pdo->prepare(
+    "UPDATE security_tokens
+        SET token_digest = ?
+      WHERE token_id = (
+          SELECT token_id FROM security_tokens
+           WHERE purpose = 'faculty_invitation' AND user_id = ?
+           ORDER BY token_id DESC LIMIT 1
+      )"
+);
+pdo_bind_binary($facultyInvitationReplaceDigest, 1, $facultyInvitationRawDigest);
+$facultyInvitationReplaceDigest->bindValue(2, (int) $facultyInvitationAccount['user_id'], PDO::PARAM_INT);
+$facultyInvitationReplaceDigest->execute();
+expect_same(1, $facultyInvitationReplaceDigest->rowCount(), 'Invitation edit fixture has a replaceable live token');
+$facultyVersionBeforeEditStmt = $pdo->prepare('SELECT token_version FROM user_accounts WHERE user_id = ?');
+$facultyVersionBeforeEditStmt->execute([(int) $facultyInvitationAccount['user_id']]);
+$facultyVersionBeforeEdit = (int) $facultyVersionBeforeEditStmt->fetchColumn();
+[$facultyEditStatus, $facultyEditBody] = integration_http_json('/api/admin/faculty-invitations/update', $adminAccessToken, [
+    'id' => (string) $facultyInvitationAccount['user_id'],
+    'email' => $facultyInvitationEmail,
+    'prefix' => 'Dr.',
+    'firstName' => 'Edited',
+    'middleName' => 'Pending',
+    'lastName' => 'Faculty',
+]);
+expect_same(200, $facultyEditStatus, 'Admin can edit a pending Faculty invitation');
+expect_same('Dr. Edited Pending Faculty', $facultyEditBody['invitation']['name'] ?? null, 'Faculty invitation edit persists structured identity fields');
+$facultyVersionAfterEditStmt = $pdo->prepare('SELECT token_version, display_name FROM user_accounts WHERE user_id = ?');
+$facultyVersionAfterEditStmt->execute([(int) $facultyInvitationAccount['user_id']]);
+$facultyVersionAfterEdit = $facultyVersionAfterEditStmt->fetch(PDO::FETCH_ASSOC);
+expect_same($facultyVersionBeforeEdit + 1, (int) ($facultyVersionAfterEdit['token_version'] ?? -1), 'Faculty invitation edit increments the account token version');
+expect_same('Dr. Edited Pending Faculty', $facultyVersionAfterEdit['display_name'] ?? null, 'Faculty invitation edit persists the canonical display name');
+$facultyEditTokenStatesStmt = $pdo->prepare(
+    "SELECT COUNT(*) FILTER (WHERE used_at IS NULL AND revoked_at IS NULL) AS live_count,
+            COUNT(*) FILTER (WHERE revoked_at IS NOT NULL) AS revoked_count
+       FROM security_tokens WHERE purpose = 'faculty_invitation' AND user_id = ?"
+);
+$facultyEditTokenStatesStmt->execute([(int) $facultyInvitationAccount['user_id']]);
+$facultyEditTokenStates = $facultyEditTokenStatesStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(1, (int) ($facultyEditTokenStates['live_count'] ?? 0), 'Faculty invitation edit leaves one live replacement token');
+expect_same(1, (int) ($facultyEditTokenStates['revoked_count'] ?? 0), 'Faculty invitation edit revokes the previous live token');
+[$facultyOldTokenInspectStatus] = integration_http_get_json('/api/auth/faculty/invitation?token=' . rawurlencode($facultyInvitationRawToken), '');
+expect_same(400, $facultyOldTokenInspectStatus, 'Faculty invitation edit invalidates the previous raw token');
+$facultyEditedDigestStmt = $pdo->prepare(
+    "SELECT token_digest
+       FROM security_tokens
+      WHERE purpose = 'faculty_invitation' AND user_id = ?
+      ORDER BY token_id DESC LIMIT 1"
+);
+$facultyEditedDigestStmt->execute([(int) $facultyInvitationAccount['user_id']]);
+$facultyEditedDigest = pdo_binary_value($facultyEditedDigestStmt->fetchColumn());
+expect_true($facultyEditedDigest !== null && strlen($facultyEditedDigest) === 32 && !hash_equals($facultyInvitationRawDigest, $facultyEditedDigest), 'Faculty invitation edit persists a fresh replacement digest');
 $legacyFacultyName = 'Dr. Invitation Faculty, DMD';
 $pdo->prepare('UPDATE user_accounts SET display_name = ?, status = ? WHERE user_id = ?')->execute([$legacyFacultyName, 'Pending Approval', (int) $facultyInvitationAccount['user_id']]);
 [$facultyReissueStatus] = integration_http_json('/api/admin/faculty-invitations/reissue', $adminAccessToken, [
@@ -808,7 +945,7 @@ $facultyTokenStatesStmt = $pdo->prepare(
 $facultyTokenStatesStmt->execute([(int) $facultyInvitationAccount['user_id']]);
 $facultyTokenStates = $facultyTokenStatesStmt->fetch(PDO::FETCH_ASSOC);
 expect_same(1, (int) ($facultyTokenStates['live_count'] ?? 0), 'Faculty reissue leaves exactly one unconsumed live token');
-expect_same(1, (int) ($facultyTokenStates['revoked_count'] ?? 0), 'Faculty reissue revokes the previous invitation');
+expect_same(2, (int) ($facultyTokenStates['revoked_count'] ?? 0), 'Faculty reissue revokes every previous invitation token');
 [$facultyListStatus, $facultyListBody] = integration_http_get_json('/api/admin/faculty-invitations', $adminAccessToken);
 expect_same(200, $facultyListStatus, 'Admin can view Faculty invitation state');
 $listedFacultyInvitation = array_values(array_filter($facultyListBody['invitations'] ?? [], static fn(array $item): bool => $item['email'] === $facultyInvitationEmail))[0] ?? null;
@@ -891,6 +1028,38 @@ pdo_bind_binary($revokeExpiredFacultyToken, 2, $expiredFacultyDigest);
 $revokeExpiredFacultyToken->execute();
 [$revokedFacultyAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $expiredFacultyToken, 'password' => 'FacultyInvitePass123!']);
 expect_same(400, $revokedFacultyAcceptStatus, 'Revoked Faculty invitation cannot be accepted');
+$revokeFacultyToken = base64url_encode(random_bytes(32));
+$revokeFacultyDigest = hash('sha256', $revokeFacultyToken, true);
+$revokeFacultyEmail = 'revoke-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$revokeFacultyInsert = $pdo->prepare(
+    "INSERT INTO user_accounts (login_email, password_hash, role, display_name, status, created_at)
+     VALUES (?, ?, 'faculty', 'Revoke Fixture Faculty', 'Pending Activation', CURRENT_TIMESTAMP(6))
+     RETURNING user_id"
+);
+$revokeFacultyInsert->execute([$revokeFacultyEmail, password_hash(base64url_encode(random_bytes(32)), PASSWORD_DEFAULT)]);
+$revokeFacultyId = (int) $revokeFacultyInsert->fetchColumn();
+$revokeFacultyTokenInsert = $pdo->prepare(
+    "INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)
+     VALUES ('faculty_invitation', ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6) + INTERVAL '7 days')"
+);
+$revokeFacultyTokenInsert->bindValue(1, $revokeFacultyId, PDO::PARAM_INT);
+pdo_bind_binary($revokeFacultyTokenInsert, 2, $revokeFacultyDigest);
+$revokeFacultyTokenInsert->execute();
+[$revokeFacultyStatus, $revokeFacultyBody] = integration_http_json('/api/admin/faculty-invitations/revoke', $adminAccessToken, [
+    'id' => (string) $revokeFacultyId,
+]);
+expect_same(200, $revokeFacultyStatus, 'Admin can revoke a pending Faculty invitation');
+expect_same('Revoked', $revokeFacultyBody['statusValue'] ?? null, 'Faculty invitation revoke returns the revoked state');
+$revokeFacultyStateStmt = $pdo->prepare('SELECT revoked_at, revocation_reason FROM security_tokens WHERE purpose = ? AND user_id = ?');
+$revokeFacultyStateStmt->execute(['faculty_invitation', $revokeFacultyId]);
+$revokeFacultyState = $revokeFacultyStateStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(($revokeFacultyState['revoked_at'] ?? null) !== null, 'Faculty invitation revoke persists token invalidation');
+expect_same('Revoked by administrator', $revokeFacultyState['revocation_reason'] ?? null, 'Faculty invitation revoke persists its bounded reason');
+[$revokeFacultyAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', [
+    'token' => $revokeFacultyToken,
+    'password' => 'FacultyInvitePass123!',
+]);
+expect_same(400, $revokeFacultyAcceptStatus, 'Revoked Faculty invitation token cannot be activated');
 
 $studentClassStmt = $pdo->prepare(
     "SELECT cs.cs_id FROM class_sections cs JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
@@ -1268,10 +1437,165 @@ expect_true(
     strtotime((string) ($studentChallengePersisted['expires_at'] ?? '')) > strtotime((string) ($studentChallengePersisted['issued_at'] ?? '')),
     'Persisted Student challenge expiry is after issuance'
 );
+$studentRetryChallenge = student_biometric_issue_challenge(
+    $pdo,
+    $studentConfig,
+    (int) $studentAuthContext['user_id'],
+    (int) $studentAuthContext['student']['student_id'],
+    null,
+    null,
+    'enrollment'
+);
+$studentRetryKey = 'integration-biometric-' . strtolower(bin2hex(random_bytes(6)));
+$studentRetryFirst = student_biometric_consume_challenge(
+    $pdo,
+    (int) $studentAuthContext['student']['student_id'],
+    $studentRetryChallenge['challengeToken'],
+    'enrollment',
+    null,
+    $studentRetryChallenge['challengeId'],
+    $studentRetryKey
+);
+expect_same(false, $studentRetryFirst['replayed'] ?? null, 'Biometric challenge first consume claims the idempotency operation');
+try {
+    student_biometric_consume_challenge(
+        $pdo,
+        (int) $studentAuthContext['student']['student_id'],
+        $studentRetryChallenge['challengeToken'],
+        'enrollment',
+        null,
+        $studentRetryChallenge['challengeId'],
+        $studentRetryKey . '-different'
+    );
+    expect_true(false, 'Biometric challenge rejects a different idempotency key');
+} catch (StudentBiometricException $error) {
+    expect_same('idempotency_conflict', $error->errorCode, 'Biometric challenge rejects a different idempotency key with a conflict');
+}
+try {
+    student_biometric_consume_challenge(
+        $pdo,
+        (int) $studentAuthContext['student']['student_id'],
+        $studentRetryChallenge['challengeToken'],
+        'enrollment',
+        null,
+        $studentRetryChallenge['challengeId'],
+        $studentRetryKey
+    );
+    expect_true(false, 'Biometric challenge blocks duplicate processing while in flight');
+} catch (StudentBiometricException $error) {
+    expect_same('biometric_operation_in_progress', $error->errorCode, 'Biometric challenge blocks duplicate processing while in flight');
+}
+student_biometric_reset_challenge_for_retry(
+    $pdo,
+    (int) $studentRetryChallenge['challengeId'],
+    $studentRetryKey
+);
+$studentRetryAfterReset = student_biometric_consume_challenge(
+    $pdo,
+    (int) $studentAuthContext['student']['student_id'],
+    $studentRetryChallenge['challengeToken'],
+    'enrollment',
+    null,
+    $studentRetryChallenge['challengeId'],
+    $studentRetryKey
+);
+expect_same(false, $studentRetryAfterReset['replayed'] ?? null, 'Retryable biometric provider failure permits the same idempotency key to retry');
+student_biometric_complete_challenge($pdo, (int) $studentRetryChallenge['challengeId'], $studentRetryKey);
+$studentReplayAfterCommit = student_biometric_consume_challenge(
+    $pdo,
+    (int) $studentAuthContext['student']['student_id'],
+    $studentRetryChallenge['challengeToken'],
+    'enrollment',
+    null,
+    $studentRetryChallenge['challengeId'],
+    $studentRetryKey
+);
+expect_same(true, $studentReplayAfterCommit['replayed'] ?? null, 'Committed biometric challenge retries replay safely with the same idempotency key');
 $studentMe = auth_runtime_me($pdo, $studentConfig, $studentContext + [
     'auth_header' => 'Bearer ' . $studentCredentials['access_token'],
 ]);
 expect_true(isset($studentMe['authentication_source'], $studentMe['student']), 'Student /api/auth/me shape includes provenance and nested Student identity');
+[$studentProfileStatus, $studentProfileBody] = integration_http_get_json('/api/student/profile?studentId=1', $studentCredentials['access_token']);
+expect_same(200, $studentProfileStatus, 'Student profile read returns HTTP 200');
+expect_same('26', (string) ($studentProfileBody['profile']['id'] ?? ''), 'Student profile ignores another Student id query and uses token identity');
+[$studentClassesStatus, $studentClassesBody] = integration_http_get_json('/api/student/classes?studentId=1', $studentCredentials['access_token']);
+expect_same(200, $studentClassesStatus, 'Student class read returns HTTP 200');
+expect_true(is_array($studentClassesBody['classes'] ?? null), 'Student class read returns a canonical classes array');
+[$studentDashboardStatus, $studentDashboardBody] = integration_http_get_json('/api/student/dashboard', $studentCredentials['access_token']);
+expect_same(200, $studentDashboardStatus, 'Student dashboard read returns HTTP 200');
+expect_same('26', (string) ($studentDashboardBody['student']['id'] ?? ''), 'Student dashboard resolves the authenticated Student identity');
+
+// Remedial notifications are committed with the enrollment mutation and are
+// recipient-scoped at both list and mark-read boundaries.
+$studentNotificationTargetStmt = $pdo->prepare(
+    "SELECT e.enrollment_id, s.student_account_user_id
+       FROM enrollments e
+       JOIN students s ON s.student_id = e.student_id
+       JOIN class_sections cs ON cs.cs_id = e.cs_id
+      WHERE e.student_id = 26 AND e.cs_id = ? AND LOWER(e.status) = 'active'
+        AND cs.instructor_user_id = (SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph')
+      ORDER BY e.enrollment_id LIMIT 1"
+);
+$studentNotificationTargetStmt->execute([$studentClassId]);
+$studentNotificationTarget = $studentNotificationTargetStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($studentNotificationTarget) && (int) ($studentNotificationTarget['student_account_user_id'] ?? 0) > 0, 'Notification fixture resolves the canonical Student recipient account');
+$studentNotificationKey = 'integration-remedial-' . strtolower(bin2hex(random_bytes(5)));
+$studentNotificationPayload = [
+    'enrollmentId' => (string) $studentNotificationTarget['enrollment_id'],
+    'remedial' => ['status' => $studentNotificationKey, 'note' => 'Integration remedial notification'],
+];
+[$studentNotificationFirstStatus, $studentNotificationFirstBody] = integration_http_json('/api/faculty/retention/remedial', $seedFacultyAccessToken, $studentNotificationPayload);
+expect_same(200, $studentNotificationFirstStatus, 'Faculty remedial update returns HTTP 200');
+expect_same(true, $studentNotificationFirstBody['notification']['created'] ?? null, 'First remedial update creates one Student notification');
+[$studentNotificationRepeatStatus, $studentNotificationRepeatBody] = integration_http_json('/api/faculty/retention/remedial', $seedFacultyAccessToken, $studentNotificationPayload);
+expect_same(200, $studentNotificationRepeatStatus, 'Repeated remedial update remains successful');
+expect_same(false, $studentNotificationRepeatBody['notification']['created'] ?? null, 'Repeated remedial update is deduplicated');
+$studentNotificationCountStmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ? AND deduplication_key = ?'
+);
+$studentNotificationCountStmt->execute([(int) $studentNotificationTarget['student_account_user_id'], 'remedial:' . $studentNotificationTarget['enrollment_id'] . ':' . $studentNotificationKey]);
+expect_same(1, (int) $studentNotificationCountStmt->fetchColumn(), 'Recipient-scoped notification deduplication stores one row');
+[$studentNotificationListStatus, $studentNotificationListBody] = integration_http_get_json('/api/notifications?unreadOnly=true&limit=100', $studentCredentials['access_token']);
+expect_same(200, $studentNotificationListStatus, 'Student notification list returns HTTP 200');
+$studentNotificationRow = array_values(array_filter(
+    $studentNotificationListBody['notifications'] ?? [],
+    static fn(array $row): bool => ($row['entityId'] ?? null) === (string) $studentNotificationTarget['enrollment_id']
+        && ($row['type'] ?? null) === 'remedial_assignment'
+))[0] ?? null;
+expect_true(is_array($studentNotificationRow), 'Student notification list returns the recipient notification');
+$studentNotificationId = (string) ($studentNotificationRow['id'] ?? '');
+[$studentNotificationForeignReadStatus] = integration_http_json('/api/notifications/' . rawurlencode($studentNotificationId) . '/read', $seedFacultyAccessToken, []);
+expect_same(404, $studentNotificationForeignReadStatus, 'Another account cannot mark a Student notification read');
+[$studentNotificationReadStatus] = integration_http_json('/api/notifications/' . rawurlencode($studentNotificationId) . '/read', $studentCredentials['access_token'], []);
+expect_same(200, $studentNotificationReadStatus, 'Recipient can mark its notification read');
+$studentNotificationReadStmt = $pdo->prepare('SELECT read_at FROM notifications WHERE notification_id = ?');
+$studentNotificationReadStmt->execute([(int) $studentNotificationId]);
+expect_true($studentNotificationReadStmt->fetchColumn() !== null, 'Notification mark-read persists the recipient read state');
+$studentRetentionNotificationPayload = [
+    'studentId' => '26',
+    'classId' => (string) $studentClassId,
+    'status' => 'critical',
+    'reason' => 'Integration retention status update',
+];
+[$studentRetentionNotificationFirstStatus, $studentRetentionNotificationFirstBody] = integration_http_json('/api/faculty/retention/status', $seedFacultyAccessToken, $studentRetentionNotificationPayload);
+expect_same(200, $studentRetentionNotificationFirstStatus, 'Faculty retention status update returns HTTP 200');
+expect_same(true, $studentRetentionNotificationFirstBody['notification']['created'] ?? null, 'Retention status update creates one Student notification');
+[$studentRetentionNotificationRepeatStatus, $studentRetentionNotificationRepeatBody] = integration_http_json('/api/faculty/retention/status', $seedFacultyAccessToken, $studentRetentionNotificationPayload);
+expect_same(200, $studentRetentionNotificationRepeatStatus, 'Repeated retention status update remains successful');
+expect_same(false, $studentRetentionNotificationRepeatBody['notification']['created'] ?? null, 'Repeated retention status update is deduplicated');
+$studentRetentionNotificationCountStmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ? AND deduplication_key = ?'
+);
+$studentRetentionNotificationCountStmt->execute([(int) $studentNotificationTarget['student_account_user_id'], 'retention:' . $studentNotificationTarget['enrollment_id'] . ':critical']);
+expect_same(1, (int) $studentRetentionNotificationCountStmt->fetchColumn(), 'Retention status notification deduplication stores one row');
+[$studentRetentionNotificationListStatus, $studentRetentionNotificationListBody] = integration_http_get_json('/api/notifications?unreadOnly=true&limit=100', $studentCredentials['access_token']);
+expect_same(200, $studentRetentionNotificationListStatus, 'Student notification list includes retention status updates');
+$studentRetentionNotificationRow = array_values(array_filter(
+    $studentRetentionNotificationListBody['notifications'] ?? [],
+    static fn(array $row): bool => ($row['entityId'] ?? null) === (string) $studentNotificationTarget['enrollment_id']
+        && ($row['type'] ?? null) === 'retention_status'
+))[0] ?? null;
+expect_true(is_array($studentRetentionNotificationRow), 'Student notification list returns the retention status notification');
 
 $studentRefresh = auth_runtime_refresh($pdo, $studentConfig, $studentContext, $studentCredentials['refresh_token']);
 expect_same('rotated', $studentRefresh['type'], 'Established Student refresh succeeds when Student auth is disabled');
@@ -1573,6 +1897,71 @@ $classEditReadRow = array_values(array_filter(
 expect_same(null, $classEditReadRow['schedule'] ?? null, 'Class reads do not derive schedule from room values');
 expect_same('Updated Lecture ' . $classEditFixtureSuffix, $classEditReadRow['lecRoom'] ?? null, 'Class reads preserve the lecture-room field');
 expect_same('Updated Laboratory ' . $classEditFixtureSuffix, $classEditReadRow['labRoom'] ?? null, 'Class reads preserve the laboratory-room field');
+
+// Faculty roster lifecycle coverage proves that an archive/re-enroll cycle
+// preserves the same enrollment identity and its historical grade/attendance.
+$rosterFixtureSuffix = strtoupper(bin2hex(random_bytes(4)));
+$rosterStudentInsert = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, year_level, status)
+     VALUES (?, 'Roster', 'Archive Fixture', ?, 3, 'active')
+     RETURNING student_id"
+);
+$rosterStudentEmail = 'roster-archive-' . strtolower($rosterFixtureSuffix) . '@bicol-u.edu.ph';
+$rosterStudentInsert->execute(['ROSTER-' . $rosterFixtureSuffix, $rosterStudentEmail]);
+$rosterStudentId = (int) $rosterStudentInsert->fetchColumn();
+$rosterEnrollmentInsert = $pdo->prepare(
+    "INSERT INTO enrollments (student_id, cs_id, status, final_percentage, final_gwa, retention_state, date_enrolled)
+     VALUES (?, ?, 'Active', 88.00, 2.25, 'active', CURRENT_DATE)
+     RETURNING enrollment_id"
+);
+$rosterEnrollmentInsert->execute([$rosterStudentId, $classEditOwnedId]);
+$rosterEnrollmentId = (int) $rosterEnrollmentInsert->fetchColumn();
+$rosterAttendanceInsert = $pdo->prepare(
+    "INSERT INTO attendance_records (enrollment_id, session_date, session_code, status, verification_method)
+     VALUES (?, DATE '2026-01-15', ?, 'present', 'roster_fixture')
+     RETURNING record_id"
+);
+$rosterAttendanceInsert->execute([$rosterEnrollmentId, 'ROSTER-' . $rosterFixtureSuffix]);
+$rosterAttendanceId = (int) $rosterAttendanceInsert->fetchColumn();
+[$rosterArchiveStatus, $rosterArchiveBody] = integration_http_json('/api/faculty/classes/unenroll', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'studentId' => (string) $rosterStudentId,
+]);
+expect_same(200, $rosterArchiveStatus, 'Faculty can archive a current roster enrollment');
+expect_same('Archived', $rosterArchiveBody['enrollmentStatus'] ?? null, 'Roster archive returns the archived enrollment state');
+$rosterArchivedStmt = $pdo->prepare(
+    'SELECT status, enrollment_id, final_percentage, final_gwa FROM enrollments WHERE enrollment_id = ?'
+);
+$rosterArchivedStmt->execute([$rosterEnrollmentId]);
+$rosterArchived = $rosterArchivedStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Archived', $rosterArchived['status'] ?? null, 'Roster archive persists the Archived status');
+expect_same('88.00', (string) ($rosterArchived['final_percentage'] ?? ''), 'Roster archive preserves the persisted percentage');
+expect_same('2.25', (string) ($rosterArchived['final_gwa'] ?? ''), 'Roster archive preserves the persisted GWA');
+$rosterAttendanceCheckStmt = $pdo->prepare('SELECT COUNT(*), status FROM attendance_records WHERE record_id = ? GROUP BY status');
+$rosterAttendanceCheckStmt->execute([$rosterAttendanceId]);
+$rosterAttendanceCheck = $rosterAttendanceCheckStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('1', (string) ($rosterAttendanceCheck['count'] ?? ''), 'Roster archive preserves the historical attendance row');
+expect_same('present', $rosterAttendanceCheck['status'] ?? null, 'Roster archive preserves the historical attendance status');
+[$rosterAvailableStatus, $rosterAvailableBody] = integration_http_get_json('/api/faculty/classes/available-students?csId=' . $classEditOwnedId, $generatedFacultyAccessToken);
+expect_same(200, $rosterAvailableStatus, 'Faculty available-student read returns HTTP 200 after archive');
+$rosterAvailable = array_values(array_filter(
+    $rosterAvailableBody['students'] ?? [],
+    static fn(array $row): bool => (string) ($row['id'] ?? '') === (string) $rosterStudentId
+));
+expect_same(1, count($rosterAvailable), 'Archived roster Student becomes available for re-enrollment');
+[$rosterRestoreStatus, $rosterRestoreBody] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'studentIds' => [(string) $rosterStudentId],
+]);
+expect_same(200, $rosterRestoreStatus, 'Faculty can re-enroll an archived roster Student');
+expect_same(1, (int) ($rosterRestoreBody['enrolledCount'] ?? 0), 'Roster re-enrollment reports one revived membership');
+$rosterArchivedStmt->execute([$rosterEnrollmentId]);
+$rosterRestored = $rosterArchivedStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Active', $rosterRestored['status'] ?? null, 'Roster re-enrollment revives the same enrollment row');
+expect_same((string) $rosterEnrollmentId, (string) ($rosterRestored['enrollment_id'] ?? ''), 'Roster re-enrollment preserves enrollment identity');
+expect_same('88.00', (string) ($rosterRestored['final_percentage'] ?? ''), 'Roster re-enrollment preserves grade history');
+$rosterAttendanceCheckStmt->execute([$rosterAttendanceId]);
+expect_same('1', (string) ($rosterAttendanceCheckStmt->fetchColumn() ?: ''), 'Roster re-enrollment leaves historical attendance intact');
 
 // Authoritative Faculty Attendance Monitoring worksheet coverage. This uses
 // isolated real enrollments and sections so the read/mutation contract can be
@@ -3761,5 +4150,109 @@ $pdo->prepare(
 )->execute([$originalGradingDefaultsJson]);
 $pdo->commit();
 echo "PASS: Persisted assessment-transmutation integration coverage completed.\n";
+
+// Authenticated password-change coverage uses a disposable account so the
+// documented demo credentials remain available to the rest of this suite.
+$passwordChangeEmail = 'password-change-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$passwordChangeOld = 'OldPassword1!';
+$passwordChangeNew = 'NewPassword2@';
+$passwordChangeInsert = $pdo->prepare(
+    "INSERT INTO user_accounts (login_email, password_hash, role, display_name, status)
+     VALUES (?, ?, 'faculty', 'Password Change Integration User', 'Active')
+     RETURNING user_id"
+);
+$passwordChangeInsert->execute([$passwordChangeEmail, password_hash($passwordChangeOld, PASSWORD_DEFAULT)]);
+$passwordChangeUserId = (int) $passwordChangeInsert->fetchColumn();
+$passwordChangeDirectLogin = auth_runtime_login($pdo, $config, [
+    'email' => $passwordChangeEmail,
+    'password' => $passwordChangeOld,
+], [
+    'request_id' => 'password-change-refresh-' . bin2hex(random_bytes(4)),
+    'ip_address' => '127.0.0.1',
+    'user_agent' => 'Password Change Integration Test',
+    'http_method' => 'POST',
+    'endpoint' => '/api/auth/login',
+]);
+expect_same('direct_login', $passwordChangeDirectLogin['type'], 'Password-change fixture issues a real refresh credential');
+$passwordChangeRefreshToken = (string) $passwordChangeDirectLogin['credentials']['refresh_token'];
+
+[$passwordChangeLoginStatus, $passwordChangeLoginBody] = integration_http_json('/api/auth/login', '', [
+    'email' => $passwordChangeEmail,
+    'password' => $passwordChangeOld,
+]);
+expect_same(200, $passwordChangeLoginStatus, 'Password-change fixture can sign in');
+$passwordChangeAccessToken = (string) ($passwordChangeLoginBody['access_token'] ?? '');
+expect_true($passwordChangeAccessToken !== '', 'Password-change fixture receives an access token');
+
+[$passwordChangeWrongStatus, $passwordChangeWrongBody] = integration_http_json('/api/auth/password/change', $passwordChangeAccessToken, [
+    'current_password' => 'WrongPassword3#',
+    'new_password' => $passwordChangeNew,
+    'confirm_password' => $passwordChangeNew,
+]);
+expect_same(422, $passwordChangeWrongStatus, 'Wrong current password is rejected');
+expect_same('current_password', $passwordChangeWrongBody['errors'][0]['field'] ?? null, 'Wrong current password identifies the current_password field');
+
+[$passwordChangeReuseStatus, $passwordChangeReuseBody] = integration_http_json('/api/auth/password/change', $passwordChangeAccessToken, [
+    'current_password' => $passwordChangeOld,
+    'new_password' => $passwordChangeOld,
+    'confirm_password' => $passwordChangeOld,
+]);
+expect_same(422, $passwordChangeReuseStatus, 'Exact current-password reuse is rejected');
+expect_same('new_password', $passwordChangeReuseBody['errors'][0]['field'] ?? null, 'Password reuse identifies the new_password field');
+
+[$passwordChangeStatus, $passwordChangeBody] = integration_http_json('/api/auth/password/change', $passwordChangeAccessToken, [
+    'current_password' => $passwordChangeOld,
+    'new_password' => $passwordChangeNew,
+    'confirm_password' => $passwordChangeNew,
+]);
+expect_same(200, $passwordChangeStatus, 'Authenticated password change succeeds');
+expect_same(true, $passwordChangeBody['sign_in_again'] ?? null, 'Password change asks the client to sign in again');
+
+[$passwordChangeMeStatus] = integration_http_get_json('/api/auth/me', $passwordChangeAccessToken);
+expect_same(401, $passwordChangeMeStatus, 'Password change invalidates the existing access token');
+$passwordChangeRefreshRejected = false;
+try {
+    auth_runtime_refresh($pdo, $config, [
+        'request_id' => 'password-change-refresh-check-' . bin2hex(random_bytes(4)),
+        'ip_address' => '127.0.0.1',
+        'user_agent' => 'Password Change Integration Test',
+        'http_method' => 'POST',
+        'endpoint' => '/api/auth/refresh',
+    ], $passwordChangeRefreshToken);
+} catch (ChallengeException) {
+    $passwordChangeRefreshRejected = true;
+}
+expect_true($passwordChangeRefreshRejected, 'Password change invalidates an existing refresh credential');
+
+[$passwordChangeOldLoginStatus] = integration_http_json('/api/auth/login', '', [
+    'email' => $passwordChangeEmail,
+    'password' => $passwordChangeOld,
+]);
+expect_same(401, $passwordChangeOldLoginStatus, 'Old password no longer authenticates after change');
+
+[$passwordChangeNewLoginStatus, $passwordChangeNewLoginBody] = integration_http_json('/api/auth/login', '', [
+    'email' => $passwordChangeEmail,
+    'password' => $passwordChangeNew,
+]);
+expect_same(200, $passwordChangeNewLoginStatus, 'New password authenticates after change');
+$passwordChangeVersionStmt = $pdo->prepare('SELECT token_version, password_hash FROM user_accounts WHERE user_id = ?');
+$passwordChangeVersionStmt->execute([$passwordChangeUserId]);
+$passwordChangeAccount = $passwordChangeVersionStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(1, (int) ($passwordChangeAccount['token_version'] ?? -1), 'Password change increments token_version exactly once');
+expect_true(password_verify($passwordChangeNew, (string) ($passwordChangeAccount['password_hash'] ?? '')), 'Password change stores the new password hash');
+$passwordChangeAuditStmt = $pdo->prepare(
+    "SELECT description, before_state_json, after_state_json
+       FROM audit_events
+      WHERE action_code = 'password_changed' AND actor_user_id = ?
+      ORDER BY sequence_number DESC
+      LIMIT 1"
+);
+$passwordChangeAuditStmt->execute([$passwordChangeUserId]);
+$passwordChangeAudit = $passwordChangeAuditStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($passwordChangeAudit), 'Password change writes an audit event');
+expect_same(null, $passwordChangeAudit['before_state_json'] ?? null, 'Password audit does not store a before password state');
+expect_same(null, $passwordChangeAudit['after_state_json'] ?? null, 'Password audit does not store an after password state');
+expect_true(!str_contains((string) json_encode($passwordChangeAudit), $passwordChangeOld)
+    && !str_contains((string) json_encode($passwordChangeAudit), $passwordChangeNew), 'Password audit contains no password values');
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

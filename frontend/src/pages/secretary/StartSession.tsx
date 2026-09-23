@@ -60,8 +60,12 @@ export const StartSession: React.FC = () => {
   const [requireGeo, setRequireGeo] = useState(true);
   const [geofenceRadius, setGeofenceRadius] = useState(200);
 
-  // Secretary GPS state (device location)
-  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
+  // Secretary GPS state (kept as prototype location fixture)
+  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number; address: string } | null>({
+    lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
+    lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
+    address: 'BU Dental Room Location Verified (13.1436°, 123.7438°)',
+  });
   const [isLocating, setIsLocating] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [liveAttendanceRecords, setLiveAttendanceRecords] = useState<Array<{ id: string; status: string; date: string }>>([]);
@@ -159,6 +163,18 @@ export const StartSession: React.FC = () => {
     setIsLocating(true);
     setGpsError(null);
 
+    if (simulationEnabled) {
+      window.setTimeout(() => {
+        setGpsLocation({
+          lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
+          lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
+          address: 'BU Dental Room Location Verified (13.1436°, 123.7438°)',
+        });
+        setIsLocating(false);
+      }, 50);
+      return;
+    }
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -173,31 +189,13 @@ export const StartSession: React.FC = () => {
           setIsLocating(false);
         },
         (err) => {
-          if (simulationEnabled) {
-            setGpsLocation({
-              lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
-              lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
-              address: 'Development Location Fixture (Simulated 13.1436°, 123.7438°)',
-            });
-            setGpsError(`Browser geolocation failed (${err.message}). Using development simulation fixture.`);
-          } else {
-            setGpsError(`Geolocation error: ${err.message}. Please allow location access in your browser.`);
-          }
+          setGpsError(`Geolocation error: ${err.message}. Please allow location access in your browser.`);
           setIsLocating(false);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
-      if (simulationEnabled) {
-        setGpsLocation({
-          lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
-          lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
-          address: 'Development Location Fixture (Simulated 13.1436°, 123.7438°)',
-        });
-        setGpsError('Browser geolocation not supported. Using development simulation fixture.');
-      } else {
-        setGpsError('Geolocation is not supported by your browser.');
-      }
+      setGpsError('Geolocation is not supported by your browser.');
       setIsLocating(false);
     }
   };

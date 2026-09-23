@@ -20,6 +20,12 @@ import type {
   StudentAttendanceLogsResponse,
   PasswordChangePayload,
   PasswordChangeResponse,
+  NotificationsResponse,
+  StudentAcademicDashboardResponse,
+  StudentAcademicProfileResponse,
+  StudentAcademicClassesResponse,
+  StudentAcademicRetentionResponse,
+  FacultyInvitationUpdatePayload,
 } from '../types';
 
 
@@ -57,6 +63,32 @@ export class ApiError extends Error {
     this.requestId = requestId;
     this.details = details;
   }
+}
+
+export function isTransportOrBiometricUnavailable(err: unknown): boolean {
+  if (err instanceof ApiError) {
+    if (err.status === 0 || err.status === 503) return true;
+    if (err.code === 'biometric_service_unavailable') return true;
+  }
+  if (err && typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    if (obj.status === 0 || obj.status === 503) return true;
+    if (obj.code === 'biometric_service_unavailable') return true;
+  }
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    if (
+      msg.includes('unable to connect') ||
+      msg.includes('network') ||
+      msg.includes('connection') ||
+      msg.includes('temporarily unavailable') ||
+      msg.includes('service unavailable') ||
+      msg.includes('timeout')
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
@@ -190,6 +222,7 @@ async function request<T>(
   body?: unknown,
   tokenOverride?: string,
   timeoutMs = 15000,
+  signal?: AbortSignal,
 ): Promise<T> {
   const headers: Record<string, string> = {
     accept: 'application/json',
@@ -208,6 +241,14 @@ async function request<T>(
   let response: Response;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      throw new ApiError(0, 'Request cancelled.');
+    }
+    signal.addEventListener('abort', onExternalAbort);
+  }
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
@@ -217,9 +258,15 @@ async function request<T>(
       signal: controller.signal,
     });
   } catch {
+    if (signal?.aborted) {
+      throw new ApiError(0, 'Request cancelled.');
+    }
     throw new ApiError(0, 'Unable to connect to the server. Check your connection.');
   } finally {
     clearTimeout(timeoutId);
+    if (signal) {
+      signal.removeEventListener('abort', onExternalAbort);
+    }
   }
 
   let responseData: unknown;
@@ -432,7 +479,15 @@ export function getFacultyInvitations(): Promise<{ status: string; invitations: 
   return request('GET', '/admin/faculty-invitations');
 }
 
-export function createFacultyInvitation(data: { name: string; email: string }): Promise<{
+export function createFacultyInvitation(data: {
+  email: string;
+  name?: string;
+  prefix?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  suffix?: string;
+}): Promise<{
   status: string;
   invitation: FacultyInvitation;
   invitation_link?: string | null;
@@ -440,6 +495,22 @@ export function createFacultyInvitation(data: { name: string; email: string }): 
   message: string;
 }> {
   return request('POST', '/admin/faculty-invitations', data);
+}
+
+export function updateFacultyInvitation(data: FacultyInvitationUpdatePayload): Promise<{
+  status: string;
+  invitation: FacultyInvitation;
+  invitation_link?: string | null;
+  delivery_status: string;
+}> {
+  return request('POST', '/admin/faculty-invitations/update', data);
+}
+
+export function revokeFacultyInvitation(id: string | number): Promise<{
+  status: string;
+  message: string;
+}> {
+  return request('POST', '/admin/faculty-invitations/revoke', { id });
 }
 
 export function reissueFacultyInvitation(id: string): Promise<{
@@ -716,6 +787,21 @@ export function createStudentApi(data: {
   return request('POST', '/faculty/students', data);
 }
 
+export function updateFacultyStudentApi(studentId: string | number, data: {
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  email?: string;
+  contact?: string;
+  sex?: string;
+  yearLevel?: number;
+  status?: string;
+  admissionDate?: string;
+  birthdate?: string;
+}): Promise<{ status: string; student: any }> {
+  return request('PUT', `/faculty/students/${encodeURIComponent(String(studentId))}`, data);
+}
+
 export function updateFacialEnrollmentApi(studentId: string, enrolled: boolean): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/students/facial-enroll', { studentId, enrolled });
 }
@@ -976,32 +1062,76 @@ export function getSecretaryDashboardKpisApi(): Promise<{
   return request('GET', '/secretary/dashboard/kpis');
 }
 
-export function getSecretaryAttendanceApi(): Promise<{
+export function getSecretaryAttendanceApi(params?: {
+  date?: string;
+  csId?: string | number;
+  sessionId?: string | number;
+}): Promise<{
   status: string;
+  sessions?: Array<{
+    sessionId: string;
+    classId: string;
+    className: string;
+    subjectCode: string;
+    date: string;
+    sessionCode: string;
+    room?: string;
+    status: string;
+    startedAt?: string;
+    endedAt?: string;
+    revokedAt?: string | null;
+  }>;
   records: Array<{
     id: string;
+    attendanceSessionId?: string | null;
     studentId: string;
     studentNumber: string;
     studentName: string;
     date: string;
     subjectCode: string;
+    classId?: string;
+    className?: string;
     status: string;
     overrideReason?: string | null;
     overrideAt?: string | null;
   }>;
 }> {
-  return request('GET', '/secretary/attendance');
+  const query = new URLSearchParams();
+  if (params?.date) query.set('date', params.date);
+  if (params?.csId) query.set('csId', String(params.csId));
+  if (params?.sessionId) query.set('sessionId', String(params.sessionId));
+  const qs = query.toString();
+  return request('GET', `/secretary/attendance${qs ? `?${qs}` : ''}`);
 }
 
 export function overrideSecretaryAttendanceApi(data: {
   studentId: string;
   status: 'present' | 'late' | 'absent' | 'excused';
   reason: string;
-  recordId?: string;
+  recordId?: string | number;
+  sessionId?: string | number;
   date?: string;
   subjectCode?: string;
 }): Promise<{ status: string; message: string; record?: { id: string; status: string; overrideReason: string; overrideAt: string } }> {
   return request('POST', '/secretary/attendance/override', data);
+}
+
+export function getSecretaryActivityApi(limit = 50): Promise<{
+  status: string;
+  activity: Array<{
+    id: string;
+    timestamp: string;
+    userName?: string | null;
+    userRole?: string | null;
+    action?: string | null;
+    module?: string | null;
+    description: string;
+    status?: string | null;
+    ipAddress?: string | null;
+    device?: string | null;
+  }>;
+}> {
+  return request('GET', `/secretary/activity?limit=${limit}`);
 }
 
 export function getSecretaryProfileApi(): Promise<{
@@ -1564,8 +1694,8 @@ export function createBiometricLivenessChallenge(payload: LivenessChallengeReque
   return request<LivenessChallengeResponse>('POST', '/student/biometric/liveness/challenge', payload);
 }
 
-export function submitBiometricEnrollment(formData: FormData): Promise<BiometricEnrollmentResponse> {
-  return request<BiometricEnrollmentResponse>('POST', '/student/biometric/enrollment', formData, undefined, 30000);
+export function submitBiometricEnrollment(formData: FormData, signal?: AbortSignal): Promise<BiometricEnrollmentResponse> {
+  return request<BiometricEnrollmentResponse>('POST', '/student/biometric/enrollment', formData, undefined, 30000, signal);
 }
 
 export function revokeStudentBiometricProfile(): Promise<BiometricRevocationResponse> {
@@ -1589,8 +1719,8 @@ export async function getStudentActiveAttendanceSessions(): Promise<StudentActiv
   return { sessions: [] };
 }
 
-export function submitBiometricAttendance(formData: FormData): Promise<BiometricAttendanceResponse> {
-  return request<BiometricAttendanceResponse>('POST', '/student/attendance/biometric', formData, undefined, 30000);
+export function submitBiometricAttendance(formData: FormData, signal?: AbortSignal): Promise<BiometricAttendanceResponse> {
+  return request<BiometricAttendanceResponse>('POST', '/student/attendance/biometric', formData, undefined, 30000, signal);
 }
 
 export async function getStudentAttendanceLogs(params?: {
@@ -1635,3 +1765,39 @@ export function changePasswordApi(data: PasswordChangePayload): Promise<Password
   });
 }
 
+// --- Authoritative Student Academic APIs ---
+export function getStudentAcademicDashboardApi(): Promise<StudentAcademicDashboardResponse> {
+  return request<StudentAcademicDashboardResponse>('GET', '/student/dashboard');
+}
+
+export function getStudentAcademicProfileApi(): Promise<StudentAcademicProfileResponse> {
+  return request<StudentAcademicProfileResponse>('GET', '/student/profile');
+}
+
+export function getStudentAcademicClassesApi(): Promise<StudentAcademicClassesResponse> {
+  return request<StudentAcademicClassesResponse>('GET', '/student/classes');
+}
+
+export function getStudentAcademicRetentionApi(): Promise<StudentAcademicRetentionResponse> {
+  return request<StudentAcademicRetentionResponse>('GET', '/student/retention');
+}
+
+// --- Authoritative Notifications APIs ---
+export function getNotificationsApi(params?: {
+  limit?: number;
+  unreadOnly?: boolean;
+}): Promise<NotificationsResponse> {
+  const query = new URLSearchParams();
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.unreadOnly !== undefined) query.set('unreadOnly', String(params.unreadOnly));
+  const qs = query.toString();
+  return request<NotificationsResponse>('GET', `/notifications${qs ? `?${qs}` : ''}`);
+}
+
+export function markNotificationReadApi(notificationId: number | string): Promise<{ status: string }> {
+  return request<{ status: string }>('POST', `/notifications/${encodeURIComponent(String(notificationId))}/read`);
+}
+
+export function markAllNotificationsReadApi(): Promise<{ status: string; updatedCount: number }> {
+  return request<{ status: string; updatedCount: number }>('POST', '/notifications/read-all');
+}

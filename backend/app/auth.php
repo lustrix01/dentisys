@@ -336,6 +336,25 @@ function auth_extract_bearer_token(string $header): string
     return $token;
 }
 
+/**
+ * Resolve and validate the access token supplied to an authenticated API
+ * endpoint. Callers should translate AuthException into the endpoint's
+ * authentication-required response.
+ */
+function auth_authenticated_context(PDO $pdo, array $config): array
+{
+    $authHeader = request_header('Authorization') ?? '';
+
+    if ($authHeader === '') {
+        throw new AuthException('Authentication required.');
+    }
+
+    $token = auth_extract_bearer_token($authHeader);
+    $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+
+    return auth_verify_access_token($pdo, $config, $token, $jwtKey);
+}
+
 function auth_revoke_session(
     PDO $pdo,
     int $sessionId,

@@ -12,6 +12,9 @@ require_once dirname(__DIR__) . '/controllers/MfaController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyInvitationController.php';
 require_once dirname(__DIR__) . '/controllers/SecretaryController.php';
 require_once dirname(__DIR__) . '/controllers/PasswordResetController.php';
+require_once dirname(__DIR__) . '/controllers/PasswordChangeController.php';
+require_once dirname(__DIR__) . '/controllers/StudentAcademicController.php';
+require_once dirname(__DIR__) . '/controllers/NotificationController.php';
 require_once dirname(__DIR__) . '/controllers/AdminController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyController.php';
 
@@ -154,6 +157,18 @@ return [
         'handler' => 'handle_admin_faculty_invitation_reissue',
         'has_params' => false,
     ],
+    [
+        'method' => 'POST',
+        'path' => '/api/admin/faculty-invitations/update',
+        'handler' => 'handle_admin_faculty_invitation_update',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/admin/faculty-invitations/revoke',
+        'handler' => 'handle_admin_faculty_invitation_revoke',
+        'has_params' => false,
+    ],
     // Class Secretary Workflow
     [
         'method' => 'POST',
@@ -251,6 +266,12 @@ return [
         'handler' => 'handle_secretary_settings_update',
         'has_params' => false,
     ],
+    [
+        'method' => 'GET',
+        'path' => '/api/secretary/activity',
+        'handler' => 'handle_secretary_activity_get',
+        'has_params' => false,
+    ],
     // Password Reset Workflow
     [
         'method' => 'POST',
@@ -262,6 +283,12 @@ return [
         'method' => 'POST',
         'path' => '/api/auth/password/reset-confirm',
         'handler' => 'handle_password_reset_confirm',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/auth/password/change',
+        'handler' => 'handle_password_change',
         'has_params' => false,
     ],
     // Dean (Admin) Module APIs
@@ -337,6 +364,12 @@ return [
         'path' => '/api/faculty/students',
         'handler' => 'handle_faculty_student_create',
         'has_params' => false,
+    ],
+    [
+        'method' => 'PUT',
+        'path' => '/api/faculty/students/{student_id}',
+        'handler' => 'handle_faculty_student_update',
+        'has_params' => true,
     ],
     [
         'method' => 'POST',
@@ -422,6 +455,31 @@ return [
         'handler' => 'handle_faculty_attendance_session_revoke',
         'has_params' => false,
     ],
+    // Student academic self-service
+    [
+        'method' => 'GET',
+        'path' => '/api/student/profile',
+        'handler' => 'handle_student_profile_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/student/classes',
+        'handler' => 'handle_student_classes_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/student/retention',
+        'handler' => 'handle_student_retention_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/student/dashboard',
+        'handler' => 'handle_student_dashboard_get',
+        'has_params' => false,
+    ],
     // Student biometric attendance self-service
     [
         'method' => 'GET',
@@ -470,6 +528,25 @@ return [
         'path' => '/api/student/attendance/logs',
         'handler' => 'handle_student_attendance_logs',
         'has_params' => false,
+    ],
+    // Recipient-scoped notifications
+    [
+        'method' => 'GET',
+        'path' => '/api/notifications',
+        'handler' => 'handle_notifications_list',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/notifications/read-all',
+        'handler' => 'handle_notifications_mark_all_read',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/notifications/{notification_id}/read',
+        'handler' => 'handle_notification_mark_read',
+        'has_params' => true,
     ],
     [
         'method' => 'POST',

@@ -528,6 +528,33 @@ function secretary_verify_auth(PDO $pdo, array $config): array
     return $authCtx;
 }
 
+function secretary_activity_rows(PDO $pdo, int $userId, int $limit = 20): array
+{
+    $limit = max(1, min(100, $limit));
+    $stmt = $pdo->prepare(
+        'SELECT event_id AS id, occurred_at AS timestamp, actor_username AS user_name,
+                actor_role AS user_role, action_code AS action, module_code AS module,
+                description, event_status AS status, ip_address, user_agent
+           FROM audit_events
+          WHERE actor_user_id = ?
+          ORDER BY occurred_at DESC, event_id DESC
+          LIMIT ' . $limit
+    );
+    $stmt->execute([$userId]);
+    return array_map(static fn(array $row): array => [
+        'id' => (string) $row['id'],
+        'timestamp' => $row['timestamp'],
+        'userName' => $row['user_name'] ?? null,
+        'userRole' => $row['user_role'] ?? null,
+        'action' => $row['action'] ?? null,
+        'module' => $row['module'] ?? null,
+        'description' => $row['description'] ?? '',
+        'status' => $row['status'] ?? null,
+        'ipAddress' => $row['ip_address'] ?? null,
+        'device' => $row['user_agent'] ?? null,
+    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+}
+
 function handle_secretary_dashboard_kpis(): void
 {
     try {
@@ -535,44 +562,67 @@ function handle_secretary_dashboard_kpis(): void
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
 
-        // Retrieve assigned class for this secretary if present
-        $csStmt = $pdo->prepare("SELECT cs_id, cs_name, lab_room, lec_room FROM class_sections WHERE secretary_user_id = ? ORDER BY cs_id ASC LIMIT 1");
+        $csStmt = $pdo->prepare(
+            "SELECT cs.cs_id, cs.cs_name, cs.lab_room, cs.lec_room,
+                    cs.semester, cs.school_year, c.course_code, c.name AS course_name
+               FROM class_sections cs
+               JOIN courses c ON c.course_id = cs.course_id
+              WHERE cs.secretary_user_id = ? AND LOWER(cs.status) = 'active'
+              ORDER BY cs.cs_id ASC"
+        );
         $csStmt->execute([$authCtx['user_id']]);
-        $csRow = $csStmt->fetch(PDO::FETCH_ASSOC);
+        $assignedClassRows = $csStmt->fetchAll(PDO::FETCH_ASSOC);
+        $requestedClassId = (int) ($_GET['csId'] ?? 0);
+        $csRow = null;
+        foreach ($assignedClassRows as $candidate) {
+            if ($requestedClassId > 0 && (int) $candidate['cs_id'] === $requestedClassId) {
+                $csRow = $candidate;
+                break;
+            }
+        }
+        if ($requestedClassId > 0 && $csRow === null) {
+            safe_error_response('Class section is not assigned to this Secretary.', 403);
+            return;
+        }
+        $csRow ??= $assignedClassRows[0] ?? null;
 
         $className = $csRow['cs_name'] ?? '';
         $classroomName = ($csRow['lab_room'] ?? null) ?: ($csRow['lec_room'] ?? null) ?: '';
         $classId = $csRow ? (string) $csRow['cs_id'] : '';
 
-        // Count assigned students
-        $studentStmt = $pdo->prepare(
-            "SELECT DISTINCT s.student_id, s.first_name, s.last_name, s.student_number
+        $studentSql = "SELECT DISTINCT s.student_id, s.first_name, s.last_name, s.student_number
              FROM students s
-             JOIN enrollments e ON e.student_id = s.student_id
+             JOIN enrollments e ON e.student_id = s.student_id AND LOWER(e.status) = 'active'
              JOIN class_sections cs ON cs.cs_id = e.cs_id
-             WHERE cs.secretary_user_id = ?"
-        );
-        $studentStmt->execute([$authCtx['user_id']]);
+             WHERE cs.secretary_user_id = ?";
+        $studentParams = [$authCtx['user_id']];
+        if ($classId !== '') {
+            $studentSql .= ' AND cs.cs_id = ?';
+            $studentParams[] = (int) $classId;
+        }
+        $studentStmt = $pdo->prepare($studentSql);
+        $studentStmt->execute($studentParams);
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $totalStudents = count($students);
 
-        // Fetch attendance records from database if available
         $attStmt = $pdo->prepare(
             "SELECT r.record_id, r.enrollment_id, r.session_date, r.status, r.override_reason, r.override_at
              FROM attendance_records r
              JOIN enrollments e ON e.enrollment_id = r.enrollment_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              WHERE cs.secretary_user_id = ?
+               AND LOWER(e.status) = 'active'
+               AND (? = 0 OR cs.cs_id = ?)
              ORDER BY r.created_at DESC"
         );
-        $attStmt->execute([$authCtx['user_id']]);
+        $selectedClass = $classId === '' ? 0 : (int) $classId;
+        $attStmt->execute([$authCtx['user_id'], $selectedClass, $selectedClass]);
         $attRecords = $attStmt ? $attStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-        $today = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d');
+        $today = app_local_date($config, new DateTimeImmutable('now', new DateTimeZone('UTC')));
         $todayCount = 0;
         $overriddenCount = 0;
         $presentOrLate = 0;
-        $recentActivity = [];
 
         foreach ($attRecords as $rec) {
             if (($rec['session_date'] ?? '') === $today) {
@@ -588,7 +638,17 @@ function handle_secretary_dashboard_kpis(): void
         }
 
         $totalRecords = count($attRecords);
-        $attendanceRate = $totalRecords > 0 ? (int) round(($presentOrLate / $totalRecords) * 100) : 96;
+        $attendanceRate = $totalRecords > 0 ? (int) round(($presentOrLate / $totalRecords) * 100) : null;
+
+        $assignedClasses = array_map(static fn(array $row): array => [
+            'classId' => (string) $row['cs_id'],
+            'className' => $row['cs_name'],
+            'courseCode' => $row['course_code'],
+            'courseName' => $row['course_name'],
+            'semester' => $row['semester'],
+            'schoolYear' => $row['school_year'],
+            'classroomName' => $row['lab_room'] ?: ($row['lec_room'] ?: null),
+        ], $assignedClassRows);
 
         json_response([
             'status' => 'ok',
@@ -598,7 +658,8 @@ function handle_secretary_dashboard_kpis(): void
                 'todayRecords' => $todayCount,
                 'overriddenCount' => $overriddenCount,
             ],
-            'recentActivity' => $recentActivity,
+            'recentActivity' => secretary_activity_rows($pdo, (int) $authCtx['user_id']),
+            'assignedClasses' => $assignedClasses,
             'assignedClass' => [
                 'classId' => $classId,
                 'className' => $className,
@@ -610,6 +671,23 @@ function handle_secretary_dashboard_kpis(): void
     } catch (\Throwable $e) {
         error_log('Secretary dashboard error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_secretary_activity_get(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = secretary_verify_auth($pdo, $config);
+        $limit = (int) ($_GET['limit'] ?? 50);
+        json_response([
+            'status' => 'ok',
+            'activity' => secretary_activity_rows($pdo, (int) $authCtx['user_id'], $limit),
+        ], 200);
+    } catch (\Throwable $e) {
+        error_log('Secretary activity error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to read Secretary activity.', 500);
     }
 }
 
@@ -1291,19 +1369,102 @@ function handle_secretary_attendance_get(): void
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
 
-        $stmt = $pdo->prepare(
+        $rawDate = $_GET['date'] ?? null;
+        $date = null;
+        if ($rawDate !== null && trim((string) $rawDate) !== '') {
+            $date = trim((string) $rawDate);
+            $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone('UTC'));
+            $dateErrors = DateTimeImmutable::getLastErrors();
+            if (!$parsed || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0)) || $parsed->format('Y-m-d') !== $date) {
+                throw new ValidationException([['field' => 'date', 'message' => 'Date must use YYYY-MM-DD format.']]);
+            }
+        }
+        $classId = (int) ($_GET['csId'] ?? 0);
+        $sessionId = (int) ($_GET['sessionId'] ?? 0);
+        if ($classId < 0) {
+            throw new ValidationException([['field' => 'csId', 'message' => 'Class id must be positive when supplied.']]);
+        }
+        if ($sessionId < 0) {
+            throw new ValidationException([['field' => 'sessionId', 'message' => 'Session id must be positive when supplied.']]);
+        }
+        if ($classId > 0) {
+            $classCheck = $pdo->prepare(
+                "SELECT 1 FROM class_sections WHERE cs_id = ? AND secretary_user_id = ? AND LOWER(status) = 'active'"
+            );
+            $classCheck->execute([$classId, $authCtx['user_id']]);
+            if ($classCheck->fetchColumn() === false) {
+                safe_error_response('Class section is not assigned to this Secretary.', 403);
+                return;
+            }
+        }
+
+        $sessionSql =
+            "SELECT a.session_id, a.cs_id, a.session_date, a.session_code, a.room,
+                    a.status, a.started_at, a.ended_at, a.revoked_at,
+                    cs.cs_name, c.course_code
+               FROM attendance_sessions a
+               JOIN class_sections cs ON cs.cs_id = a.cs_id
+               JOIN courses c ON c.course_id = cs.course_id
+              WHERE cs.secretary_user_id = ?";
+        $sessionParams = [$authCtx['user_id']];
+        if ($date !== null) {
+            $sessionSql .= ' AND a.session_date = ?';
+            $sessionParams[] = $date;
+        }
+        if ($classId > 0) {
+            $sessionSql .= ' AND a.cs_id = ?';
+            $sessionParams[] = $classId;
+        }
+        if ($sessionId > 0) {
+            $sessionSql .= ' AND a.session_id = ?';
+            $sessionParams[] = $sessionId;
+        }
+        $sessionSql .= ' ORDER BY a.session_date DESC, a.started_at DESC, a.session_id DESC';
+        $sessionStmt = $pdo->prepare($sessionSql);
+        $sessionStmt->execute($sessionParams);
+        $sessions = array_map(static fn(array $row): array => [
+            'sessionId' => (string) $row['session_id'],
+            'classId' => (string) $row['cs_id'],
+            'className' => $row['cs_name'],
+            'subjectCode' => $row['course_code'],
+            'date' => $row['session_date'],
+            'sessionCode' => $row['session_code'],
+            'room' => $row['room'],
+            'status' => $row['status'],
+            'startedAt' => $row['started_at'],
+            'endedAt' => $row['ended_at'],
+            'revokedAt' => $row['revoked_at'],
+        ], $sessionStmt->fetchAll(PDO::FETCH_ASSOC));
+        if ($sessionId > 0 && $sessions === []) {
+            safe_error_response('Attendance session was not found in an assigned class.', 404);
+            return;
+        }
+        $recordSql =
             "SELECT r.record_id, r.enrollment_id, r.attendance_session_id, r.session_date, r.session_code, r.status,
                     r.override_reason, r.override_at, s.student_id, s.student_number,
-                    s.first_name, s.last_name, cs.cs_id, cs.cs_name, c.course_code
+                    s.first_name, s.middle_name, s.last_name, cs.cs_id, cs.cs_name, c.course_code
              FROM attendance_records r
              JOIN enrollments e ON r.enrollment_id = e.enrollment_id
              JOIN students s ON e.student_id = s.student_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
-             WHERE cs.secretary_user_id = ?
-             ORDER BY r.session_date DESC, r.record_id DESC"
-        );
-        $stmt->execute([$authCtx['user_id']]);
+             WHERE cs.secretary_user_id = ?";
+        $recordParams = [$authCtx['user_id']];
+        if ($date !== null) {
+            $recordSql .= ' AND r.session_date = ?';
+            $recordParams[] = $date;
+        }
+        if ($classId > 0) {
+            $recordSql .= ' AND cs.cs_id = ?';
+            $recordParams[] = $classId;
+        }
+        if ($sessionId > 0) {
+            $recordSql .= ' AND r.attendance_session_id = ?';
+            $recordParams[] = $sessionId;
+        }
+        $recordSql .= ' ORDER BY r.session_date DESC, r.record_id DESC';
+        $stmt = $pdo->prepare($recordSql);
+        $stmt->execute($recordParams);
         $records = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $mapped = array_map(function ($r) {
@@ -1312,7 +1473,7 @@ function handle_secretary_attendance_get(): void
                 'attendanceSessionId' => $r['attendance_session_id'] !== null ? (string) $r['attendance_session_id'] : null,
                 'studentId' => (string) $r['student_id'],
                 'studentNumber' => $r['student_number'],
-                'studentName' => trim($r['first_name'] . ' ' . $r['last_name']),
+                'studentName' => trim(implode(' ', array_filter([$r['first_name'], $r['middle_name'], $r['last_name']], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))),
                 'date' => $r['session_date'],
                 'subjectCode' => $r['course_code'],
                 'classId' => (string) $r['cs_id'],
@@ -1325,8 +1486,11 @@ function handle_secretary_attendance_get(): void
 
         json_response([
             'status' => 'ok',
+            'sessions' => $sessions,
             'records' => $mapped,
         ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Secretary attendance get error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
@@ -1357,6 +1521,10 @@ function handle_secretary_attendance_override(): void
         $data = $body['data'];
         $studentId = validate_required_string($data, 'studentId', 1, 100);
         $recordId = isset($data['recordId']) ? (int) $data['recordId'] : 0;
+        $sessionId = isset($data['sessionId']) ? (int) $data['sessionId'] : 0;
+        if ($sessionId < 0) {
+            throw new ValidationException([['field' => 'sessionId', 'message' => 'Session id must be positive when supplied.']]);
+        }
         $status = validate_enum($data, 'status', ['present', 'late', 'absent', 'excused']);
         $reason = validate_required_string($data, 'reason', 8, 240);
 
@@ -1367,7 +1535,7 @@ function handle_secretary_attendance_override(): void
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
 
-            $lookupSql = "SELECT r.record_id, cs.cs_id
+            $lookupSql = "SELECT r.record_id, r.attendance_session_id, cs.cs_id
                           FROM attendance_records r
                           JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                           JOIN students s ON s.student_id = e.student_id
@@ -1382,6 +1550,9 @@ function handle_secretary_attendance_override(): void
             if ($recordId > 0) {
                 $lookupSql .= " AND r.record_id = :record_id";
                 $params[':record_id'] = $recordId;
+            } elseif ($sessionId > 0) {
+                $lookupSql .= " AND r.attendance_session_id = :session_id";
+                $params[':session_id'] = $sessionId;
             }
             $lookupSql .= " ORDER BY r.session_date DESC, r.record_id DESC LIMIT 1 FOR UPDATE";
             $lookup = $pdo->prepare($lookupSql);
@@ -1391,6 +1562,9 @@ function handle_secretary_attendance_override(): void
             $targetCsId = (int) ($targetRecord['cs_id'] ?? 0);
             if ($targetRecordId <= 0) {
                 throw new ValidationException([['field' => 'recordId', 'message' => 'Attendance record was not found in an assigned class.']]);
+            }
+            if ($sessionId > 0 && (int) ($targetRecord['attendance_session_id'] ?? 0) !== $sessionId) {
+                throw new ValidationException([['field' => 'sessionId', 'message' => 'Attendance record does not belong to the selected session.']]);
             }
 
             $update = $pdo->prepare(

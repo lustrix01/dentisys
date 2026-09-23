@@ -160,6 +160,34 @@ function student_biometric_profile_response(?array $row, array $config): array
     ] + $payload;
 }
 
+/**
+ * Validate the opaque operation key used to make a multipart biometric
+ * submission safely retryable. The key is a correlation value, not an
+ * authentication credential; it is persisted only in challenge operation
+ * metadata and is never returned in an audit record.
+ */
+function student_biometric_idempotency_key(mixed $raw): string
+{
+    $value = trim((string) $raw);
+    if ($value === '' || strlen($value) > 128 || preg_match('/[\x00-\x20\x7f]/', $value) === 1) {
+        throw new StudentBiometricException(
+            'A valid idempotency key is required for biometric capture.',
+            422,
+            'idempotency_key_required'
+        );
+    }
+    return $value;
+}
+
+function student_biometric_challenge_id(mixed $raw): string
+{
+    $value = trim((string) $raw);
+    if ($value === '' || !ctype_digit($value) || (int) $value <= 0) {
+        throw new StudentBiometricException('A valid biometric challenge is required.', 422, 'challenge_invalid');
+    }
+    return (string) (int) $value;
+}
+
 function student_biometric_challenge_response(array $challenge): array
 {
     return [
@@ -220,9 +248,16 @@ function student_biometric_expire_if_needed(
         return $row;
     }
 
+    // Expiration is a privacy lifecycle event, not just a display state. The
+    // protected LBPH object must be removed before metadata is invalidated so
+    // a later enrollment cannot leave an expired usable reference behind.
+    if ($row['protected_object_reference'] !== null) {
+        student_biometric_sidecar_revoke($config, (string) $row['protected_object_reference']);
+    }
     $update = $pdo->prepare(
         "UPDATE biometric_profiles
             SET enrollment_status = 'expired', face_enrolled = 0,
+                protected_object_reference = NULL,
                 usable_sample_count = NULL,
                 updated_at = CURRENT_TIMESTAMP(6)
           WHERE profile_id = ?"
@@ -231,6 +266,7 @@ function student_biometric_expire_if_needed(
     $after = $row;
     $after['enrollment_status'] = 'expired';
     $after['face_enrolled'] = 0;
+    $after['protected_object_reference'] = null;
     $after['usable_sample_count'] = null;
     student_biometric_record_audit(
         $pdo, $config, $authCtx, $context, 'biometric_enrollment_expired', (int) $row['student_id'],
@@ -327,11 +363,15 @@ function student_biometric_consume_challenge(
     int $studentId,
     string $rawToken,
     string $purpose,
-    ?int $attendanceSessionId
+    ?int $attendanceSessionId,
+    string $challengeId,
+    string $idempotencyKey
 ): array {
     if ($rawToken === '') {
         throw new StudentBiometricException('Biometric challenge is required.', 422, 'challenge_invalid');
     }
+    $challengeId = student_biometric_challenge_id($challengeId);
+    $idempotencyKey = student_biometric_idempotency_key($idempotencyKey);
     $digest = hash('sha256', $rawToken, true);
     $stmt = $pdo->prepare(
         "SELECT token_id, related_student_id, related_cs_id, expires_at, used_at, revoked_at, metadata_json
@@ -348,6 +388,9 @@ function student_biometric_consume_challenge(
     if ($row === false) {
         throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
     }
+    if ((string) $row['token_id'] !== $challengeId) {
+        throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
+    }
     $metadata = json_decode((string) ($row['metadata_json'] ?? '{}'), true);
     if (!is_array($metadata) || ($metadata['purpose'] ?? null) !== $purpose) {
         throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
@@ -355,15 +398,63 @@ function student_biometric_consume_challenge(
     if ($attendanceSessionId !== null && (int) ($metadata['attendance_session_id'] ?? 0) !== $attendanceSessionId) {
         throw new StudentBiometricException('Biometric challenge is invalid for this session.', 422, 'challenge_invalid');
     }
-    if ($row['used_at'] !== null || $row['revoked_at'] !== null) {
+    $storedIdempotencyKey = isset($metadata['idempotency_key'])
+        ? (string) $metadata['idempotency_key']
+        : null;
+    if ($storedIdempotencyKey !== null && !hash_equals($storedIdempotencyKey, $idempotencyKey)) {
+        throw new StudentBiometricException('The biometric operation key does not match this challenge.', 409, 'idempotency_conflict');
+    }
+    if ($row['revoked_at'] !== null) {
         throw new StudentBiometricException('Biometric challenge has already been used.', 422, 'challenge_invalid');
+    }
+    if ($row['used_at'] !== null) {
+        if ($storedIdempotencyKey === null) {
+            throw new StudentBiometricException('Biometric challenge has already been used.', 422, 'challenge_invalid');
+        }
+        return [
+            'tokenId' => (int) $row['token_id'],
+            'actions' => array_values($metadata['actions'] ?? []),
+            'relatedCsId' => $row['related_cs_id'] !== null ? (int) $row['related_cs_id'] : null,
+            'submissionState' => (string) ($metadata['submission_state'] ?? ''),
+            'replayed' => true,
+        ];
+    }
+    if (($metadata['submission_state'] ?? null) === 'processing') {
+        throw new StudentBiometricException(
+            'This biometric operation is still processing. Retry with the same idempotency key after it finishes.',
+            409,
+            'biometric_operation_in_progress'
+        );
+    }
+    $conflict = $pdo->prepare(
+        "SELECT token_id
+           FROM security_tokens
+          WHERE purpose = 'biometric_challenge'
+            AND related_student_id = ?
+            AND token_id <> ?
+            AND metadata_json->>'idempotency_key' = ?
+          LIMIT 1"
+    );
+    $conflict->execute([$studentId, (int) $row['token_id'], $idempotencyKey]);
+    if ($conflict->fetchColumn() !== false) {
+        throw new StudentBiometricException('The biometric operation key was already used.', 409, 'idempotency_conflict');
     }
     $now = attendance_session_now_utc();
     if (new DateTimeImmutable((string) $row['expires_at'], new DateTimeZone('UTC')) <= $now) {
         throw new StudentBiometricException('Biometric challenge has expired.', 422, 'challenge_expired');
     }
-    $update = $pdo->prepare("UPDATE security_tokens SET used_at = ? WHERE token_id = ? AND used_at IS NULL");
-    $update->execute([$now->format('Y-m-d H:i:s.u'), (int) $row['token_id']]);
+    $metadata['idempotency_key'] = $idempotencyKey;
+    $metadata['submission_state'] = 'processing';
+    $metadataJson = json_encode($metadata, JSON_UNESCAPED_SLASHES);
+    if ($metadataJson === false) {
+        throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
+    }
+    $update = $pdo->prepare(
+        "UPDATE security_tokens
+            SET metadata_json = ?::jsonb
+          WHERE token_id = ? AND used_at IS NULL"
+    );
+    $update->execute([$metadataJson, (int) $row['token_id']]);
     if ($update->rowCount() !== 1) {
         throw new StudentBiometricException('Biometric challenge has already been used.', 422, 'challenge_invalid');
     }
@@ -371,7 +462,122 @@ function student_biometric_consume_challenge(
         'tokenId' => (int) $row['token_id'],
         'actions' => array_values($metadata['actions'] ?? []),
         'relatedCsId' => $row['related_cs_id'] !== null ? (int) $row['related_cs_id'] : null,
+        'submissionState' => 'processing',
+        'replayed' => false,
     ];
+}
+
+function student_biometric_complete_challenge(PDO $pdo, int $tokenId, string $idempotencyKey): void
+{
+    $idempotencyKey = student_biometric_idempotency_key($idempotencyKey);
+    $stmt = $pdo->prepare(
+        'SELECT used_at, revoked_at, metadata_json
+           FROM security_tokens
+          WHERE token_id = ? AND purpose = \'biometric_challenge\'
+          FOR UPDATE'
+    );
+    $stmt->execute([$tokenId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row === false) {
+        throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
+    }
+    $metadata = json_decode((string) ($row['metadata_json'] ?? '{}'), true);
+    if (!is_array($metadata)
+        || !isset($metadata['idempotency_key'])
+        || !hash_equals((string) $metadata['idempotency_key'], $idempotencyKey)
+        || ($metadata['submission_state'] ?? null) !== 'processing') {
+        throw new StudentBiometricException('The biometric operation key does not match this challenge.', 409, 'idempotency_conflict');
+    }
+    if ($row['revoked_at'] !== null) {
+        throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
+    }
+    if ($row['used_at'] !== null) {
+        return;
+    }
+    $metadata['submission_state'] = 'committed';
+    $metadataJson = json_encode($metadata, JSON_UNESCAPED_SLASHES);
+    if ($metadataJson === false) {
+        throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
+    }
+    $update = $pdo->prepare(
+        'UPDATE security_tokens
+            SET used_at = ?, metadata_json = ?::jsonb
+          WHERE token_id = ? AND used_at IS NULL'
+    );
+    $update->execute([
+        attendance_session_now_utc()->format('Y-m-d H:i:s.u'),
+        $metadataJson,
+        $tokenId,
+    ]);
+    if ($update->rowCount() !== 1) {
+        throw new StudentBiometricException('Biometric challenge has already been used.', 422, 'challenge_invalid');
+    }
+}
+
+function student_biometric_reset_challenge_for_retry(PDO $pdo, int $tokenId, string $idempotencyKey): void
+{
+    $idempotencyKey = student_biometric_idempotency_key($idempotencyKey);
+    $stmt = $pdo->prepare(
+        'SELECT used_at, revoked_at, metadata_json
+           FROM security_tokens
+          WHERE token_id = ? AND purpose = \'biometric_challenge\'
+          FOR UPDATE'
+    );
+    $stmt->execute([$tokenId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row === false || $row['used_at'] !== null || $row['revoked_at'] !== null) {
+        return;
+    }
+    $metadata = json_decode((string) ($row['metadata_json'] ?? '{}'), true);
+    if (!is_array($metadata)
+        || !isset($metadata['idempotency_key'])
+        || !hash_equals((string) $metadata['idempotency_key'], $idempotencyKey)) {
+        return;
+    }
+    $metadata['submission_state'] = 'retryable';
+    $metadataJson = json_encode($metadata, JSON_UNESCAPED_SLASHES);
+    if ($metadataJson === false) {
+        return;
+    }
+    $update = $pdo->prepare('UPDATE security_tokens SET metadata_json = ?::jsonb WHERE token_id = ? AND used_at IS NULL');
+    $update->execute([$metadataJson, $tokenId]);
+}
+
+function student_biometric_fail_challenge(PDO $pdo, int $tokenId, string $idempotencyKey): void
+{
+    $idempotencyKey = student_biometric_idempotency_key($idempotencyKey);
+    $stmt = $pdo->prepare(
+        'SELECT used_at, revoked_at, metadata_json
+           FROM security_tokens
+          WHERE token_id = ? AND purpose = \'biometric_challenge\'
+          FOR UPDATE'
+    );
+    $stmt->execute([$tokenId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row === false || $row['used_at'] !== null || $row['revoked_at'] !== null) {
+        return;
+    }
+    $metadata = json_decode((string) ($row['metadata_json'] ?? '{}'), true);
+    if (!is_array($metadata)
+        || !isset($metadata['idempotency_key'])
+        || !hash_equals((string) $metadata['idempotency_key'], $idempotencyKey)) {
+        return;
+    }
+    $metadata['submission_state'] = 'failed';
+    $metadataJson = json_encode($metadata, JSON_UNESCAPED_SLASHES);
+    if ($metadataJson === false) {
+        return;
+    }
+    $update = $pdo->prepare(
+        'UPDATE security_tokens
+            SET used_at = ?, metadata_json = ?::jsonb
+          WHERE token_id = ? AND used_at IS NULL'
+    );
+    $update->execute([
+        attendance_session_now_utc()->format('Y-m-d H:i:s.u'),
+        $metadataJson,
+        $tokenId,
+    ]);
 }
 
 function student_biometric_uploaded_frames(): array

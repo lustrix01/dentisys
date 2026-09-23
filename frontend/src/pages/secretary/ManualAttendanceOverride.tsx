@@ -19,6 +19,7 @@ import {
 
 type EditableStatus = 'present' | 'late' | 'absent' | 'excused';
 type ApiRecord = Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['records'][number];
+type ApiSession = NonNullable<Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['sessions']>[number];
 
 const statusClasses: Record<string, string> = {
   present: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
@@ -29,9 +30,12 @@ const statusClasses: Record<string, string> = {
 
 export const ManualAttendanceOverride: React.FC = () => {
   const [records, setRecords] = useState<ApiRecord[]>([]);
+  const [sessions, setSessions] = useState<ApiSession[]>([]);
   const [className, setClassName] = useState('');
   const [query, setQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
+  const [selectedSessionId, setSelectedSessionId] = useState('');
+  const [allDates, setAllDates] = useState<string[]>([]);
   const [selected, setSelected] = useState<ApiRecord | null>(null);
   const [status, setStatus] = useState<EditableStatus>('present');
   const [reason, setReason] = useState('');
@@ -40,7 +44,7 @@ export const ManualAttendanceOverride: React.FC = () => {
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const load = async () => {
+  const loadInitial = async () => {
     setLoading(true);
     setMessage(null);
     try {
@@ -48,10 +52,27 @@ export const ManualAttendanceOverride: React.FC = () => {
         getSecretaryAttendanceApi(),
         getSecretaryProfileApi(),
       ]);
-      setRecords(attendance.records);
       setClassName(profile.profile.assignedClassName);
-      const firstDate = attendance.records[0]?.date || '';
-      setSelectedDate((current) => current || firstDate);
+      setSessions(attendance.sessions || []);
+      setRecords(attendance.records);
+      const extractedDates = Array.from(
+        new Set([
+          ...attendance.records.map((r) => r.date),
+          ...(attendance.sessions || []).map((s) => s.date),
+        ]),
+      )
+        .filter(Boolean)
+        .sort()
+        .reverse();
+      setAllDates(extractedDates);
+      const firstDate = extractedDates[0] || '';
+      if (firstDate) {
+        setSelectedDate(firstDate);
+        // Cascade to fetch records & sessions for the first date
+        const dateFiltered = await getSecretaryAttendanceApi({ date: firstDate });
+        setSessions(dateFiltered.sessions || []);
+        setRecords(dateFiltered.records);
+      }
     } catch (requestError) {
       setMessage({
         type: 'error',
@@ -63,25 +84,60 @@ export const ManualAttendanceOverride: React.FC = () => {
   };
 
   useEffect(() => {
-    void load();
+    void loadInitial();
   }, []);
 
-  const dates = useMemo(
-    () => Array.from(new Set(records.map((record) => record.date))).sort().reverse(),
-    [records],
-  );
+  const handleDateChange = async (newDate: string) => {
+    setSelectedDate(newDate);
+    setSelectedSessionId('');
+    setSelected(null);
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await getSecretaryAttendanceApi(newDate ? { date: newDate } : undefined);
+      setSessions(res.sessions || []);
+      setRecords(res.records || []);
+    } catch (err) {
+      setMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to query attendance for selected date.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSessionChange = async (newSessionId: string) => {
+    setSelectedSessionId(newSessionId);
+    setSelected(null);
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await getSecretaryAttendanceApi({
+        date: selectedDate || undefined,
+        sessionId: newSessionId ? Number(newSessionId) : undefined,
+      });
+      setRecords(res.records || []);
+    } catch (err) {
+      setMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Failed to query attendance for selected session.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return records.filter((record) => {
-      if (selectedDate && record.date !== selectedDate) return false;
       if (!needle) return true;
       return (
         record.studentName.toLocaleLowerCase().includes(needle) ||
         record.studentNumber.toLocaleLowerCase().includes(needle)
       );
     });
-  }, [query, records, selectedDate]);
+  }, [query, records]);
 
   const selectRecord = (record: ApiRecord) => {
     setSelected(record);
@@ -114,9 +170,15 @@ export const ManualAttendanceOverride: React.FC = () => {
     if (!selected) return;
     setSubmitting(true);
     try {
+      const targetSessionId = selected.attendanceSessionId
+        ? Number(selected.attendanceSessionId)
+        : (selectedSessionId ? Number(selectedSessionId) : undefined);
+
       const response = await overrideSecretaryAttendanceApi({
         studentId: selected.studentId,
         recordId: selected.id,
+        sessionId: targetSessionId,
+        date: selected.date,
         status,
         reason,
       });
@@ -175,7 +237,7 @@ export const ManualAttendanceOverride: React.FC = () => {
         >
           {message.text}
           {message.type === 'error' && (
-            <button type="button" onClick={() => void load()} className="ml-3 underline">
+            <button type="button" onClick={() => void loadInitial()} className="ml-3 underline cursor-pointer">
               Retry
             </button>
           )}
@@ -185,16 +247,44 @@ export const ManualAttendanceOverride: React.FC = () => {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2 space-y-4">
           <Card className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <label className="relative block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search student name or ID" className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm dark:text-slate-100" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search student or ID"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs dark:text-slate-100"
+                />
               </label>
+
               <label className="relative block">
                 <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <select value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm dark:text-slate-100">
+                <select
+                  value={selectedDate}
+                  onChange={(event) => void handleDateChange(event.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs dark:text-slate-100"
+                >
                   <option value="">All dates</option>
-                  {dates.map((date) => <option key={date} value={date}>{date}</option>)}
+                  {allDates.map((date) => (
+                    <option key={date} value={date}>{date}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="relative block">
+                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <select
+                  value={selectedSessionId}
+                  onChange={(event) => void handleSessionChange(event.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs dark:text-slate-100"
+                >
+                  <option value="">All sessions {selectedDate ? `(${sessions.length})` : ''}</option>
+                  {sessions.map((s) => (
+                    <option key={s.sessionId} value={s.sessionId}>
+                      {s.sessionCode} · {s.subjectCode} ({s.status})
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>

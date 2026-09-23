@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/app/notifications.php';
+
 if (!function_exists('sanitize_for_log')) {
     function sanitize_for_log(\Throwable $e): string
     {
@@ -50,6 +52,7 @@ function handle_faculty_dashboard_kpis(): void
             JOIN enrollments e ON s.student_id = e.student_id
             JOIN class_sections cs ON e.cs_id = cs.cs_id
             WHERE cs.instructor_user_id = :faculty_id
+              AND LOWER(e.status) = 'active'
         ");
         $studentStmt->execute([':faculty_id' => $authCtx['user_id']]);
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
@@ -65,10 +68,10 @@ function handle_faculty_dashboard_kpis(): void
                 SUM(CASE WHEN ar.status IN ('present', 'late') THEN 1 ELSE 0 END) AS attendance_met
             FROM class_sections cs
             JOIN courses c ON c.course_id = cs.course_id
-            LEFT JOIN enrollments e ON e.cs_id = cs.cs_id
+            LEFT JOIN enrollments e ON e.cs_id = cs.cs_id AND LOWER(e.status) = 'active'
             LEFT JOIN attendance_records ar ON ar.enrollment_id = e.enrollment_id
             WHERE cs.instructor_user_id = :faculty_id
-              AND (cs.status = 'active' OR cs.status IS NULL)
+              AND (LOWER(cs.status) = 'active' OR cs.status IS NULL)
             GROUP BY cs.cs_id, cs.cs_name, c.course_code, c.name
             ORDER BY cs.cs_id
         ");
@@ -151,7 +154,7 @@ function faculty_map_student_rows(array $rows): array
                 'email' => $row['bu_email'] ?? '',
                 'contact' => $row['contact'] ?? '',
                 'sex' => $row['sex'] ?? '',
-                'yearLevel' => (int) ($row['year_level'] ?? 4),
+                'yearLevel' => $row['year_level'] !== null ? (int) $row['year_level'] : null,
                 'status' => 'active',
                 'admissionDate' => $row['admission_date'] ?? '',
                 'birthdate' => $row['birthdate'] ?? '',
@@ -187,7 +190,7 @@ function faculty_map_student_rows(array $rows): array
             'enrollmentId' => (string) $row['enrollment_id'],
             'components' => $row['grade_components_json']
                 ? json_decode($row['grade_components_json'], true)
-                : ['quizzes' => 0, 'exams' => 0, 'practicum' => 0, 'attendance' => 0],
+                : null,
             'grade' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
             'hasRemedial' => $state === 'remedial',
         ];
@@ -225,7 +228,8 @@ function handle_faculty_students(): void
             JOIN class_sections cs ON e.cs_id = cs.cs_id
             JOIN courses c ON c.course_id = cs.course_id
             LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
-            WHERE cs.instructor_user_id = :faculty_id
+             WHERE cs.instructor_user_id = :faculty_id
+               AND LOWER(e.status) = 'active'
         ");
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
@@ -268,8 +272,10 @@ function handle_faculty_student_create(): void
         $email = trim((string) ($data['email'] ?? ''));
         $contact = trim((string) ($data['contact'] ?? ''));
         $sex = trim((string) ($data['sex'] ?? ''));
-        $yearLevel = (int) ($data['yearLevel'] ?? 4);
-        $status = trim((string) ($data['status'] ?? 'active'));
+        $yearLevel = array_key_exists('yearLevel', $data) && $data['yearLevel'] !== null && $data['yearLevel'] !== ''
+            ? (int) $data['yearLevel']
+            : null;
+        $status = strtolower(trim((string) ($data['status'] ?? 'active')));
         $admissionDate = !empty($data['admissionDate']) ? $data['admissionDate'] : null;
         $birthdate = !empty($data['birthdate']) ? $data['birthdate'] : null;
 
@@ -289,17 +295,17 @@ function handle_faculty_student_create(): void
             $errors['lastName'] = 'Last name must be at least 2 characters.';
         }
         if (!empty($email)) {
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $errors['email'] = 'Invalid email address format.';
-            } else {
-                $domain = substr(strrchr(mb_strtolower($email), '@'), 1);
-                if ($domain !== 'bicol-u.edu.ph') {
-                    $errors['email'] = 'Only official Bicol University email addresses (@bicol-u.edu.ph) are allowed.';
-                }
+            try {
+                $email = validate_institutional_email($email);
+            } catch (ValidationException $e) {
+                $errors['email'] = $e->getErrors()[0]['message'] ?? 'Email is not valid.';
             }
         }
-        if ($yearLevel < 1 || $yearLevel > 4) {
+        if ($yearLevel !== null && ($yearLevel < 1 || $yearLevel > 4)) {
             $errors['yearLevel'] = 'Year level must be between 1 and 4.';
+        }
+        if (!in_array(strtolower($status), ['active', 'disabled', 'archived'], true)) {
+            $errors['status'] = 'Student status must be active, disabled, or archived.';
         }
 
         if (!empty($errors)) {
@@ -377,6 +383,208 @@ function handle_faculty_student_create(): void
             return;
         }
         safe_error_response('Failed to register student.', 500);
+    }
+}
+
+/**
+ * Update a canonical Student profile only when the Faculty owns at least one
+ * class-section enrollment for that Student. Student number and enrollment
+ * membership are intentionally outside this profile contract.
+ */
+function handle_faculty_student_update(array $params = []): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+
+        $rawId = $params['student_id'] ?? $body['data']['studentId'] ?? $body['data']['id'] ?? null;
+        $studentId = is_int($rawId) ? $rawId : (is_string($rawId) && ctype_digit(trim($rawId)) ? (int) trim($rawId) : 0);
+        if ($studentId <= 0) {
+            throw new ValidationException([['field' => 'studentId', 'message' => 'A valid Student id is required.']]);
+        }
+
+        $data = $body['data'];
+        $allowed = [
+            'studentId', 'id', 'firstName', 'middleName', 'lastName', 'email',
+            'contact', 'sex', 'yearLevel', 'status', 'admissionDate', 'birthdate',
+        ];
+        $errors = [];
+        foreach (array_keys($data) as $field) {
+            if (!in_array($field, $allowed, true)) {
+                $errors[$field] = 'This field is not editable through the Student roster contract.';
+            }
+        }
+        if (array_key_exists('studentNumber', $data)) {
+            $errors['studentNumber'] = 'Student number is the canonical identity and cannot be edited here.';
+        }
+        if ($errors !== []) {
+            throw new ValidationException($errors);
+        }
+
+        $pdo->beginTransaction();
+        $select = $pdo->prepare(
+            'SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                    s.bu_email, s.student_account_user_id, s.contact, s.sex, s.year_level, s.status,
+                    s.admission_date, s.birthdate
+               FROM students s
+              WHERE s.student_id = ?
+                AND EXISTS (
+                    SELECT 1 FROM enrollments e
+                    JOIN class_sections cs ON cs.cs_id = e.cs_id
+                    WHERE e.student_id = s.student_id
+                      AND cs.instructor_user_id = ?
+                )
+              FOR UPDATE'
+        );
+        $select->execute([$studentId, (int) $authCtx['user_id']]);
+        $before = $select->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($before)) {
+            $pdo->rollBack();
+            safe_error_response('Student is not in a class assigned to this Faculty member.', 403);
+            return;
+        }
+
+        $updates = [];
+        $values = [];
+        if (array_key_exists('firstName', $data)) {
+            $updates[] = 'first_name = ?';
+            $values[] = validate_person_name($data, 'firstName', 2, 100);
+        }
+        if (array_key_exists('middleName', $data)) {
+            $updates[] = 'middle_name = ?';
+            $values[] = validate_optional_person_name($data, 'middleName', 2, 100);
+        }
+        if (array_key_exists('lastName', $data)) {
+            $updates[] = 'last_name = ?';
+            $values[] = validate_person_name($data, 'lastName', 2, 100);
+        }
+        if (array_key_exists('email', $data)) {
+            $email = trim((string) $data['email']);
+            if ($before['student_account_user_id'] !== null
+                && strtolower(trim((string) $before['bu_email'])) !== strtolower($email)) {
+                throw new DomainException('Email for an activated Student is controlled by the canonical account identity.');
+            }
+            $updates[] = 'bu_email = ?';
+            $values[] = $email === '' ? null : validate_institutional_email($email);
+        }
+        if (array_key_exists('contact', $data)) {
+            $updates[] = 'contact = ?';
+            $values[] = validate_optional_string($data, 'contact', 1, 50);
+        }
+        if (array_key_exists('sex', $data)) {
+            $updates[] = 'sex = ?';
+            $values[] = validate_optional_string($data, 'sex', 1, 1);
+        }
+        if (array_key_exists('yearLevel', $data)) {
+            $yearLevel = $data['yearLevel'];
+            if ($yearLevel === null || $yearLevel === '') {
+                $updates[] = 'year_level = ?';
+                $values[] = null;
+            } else {
+                $yearLevel = is_int($yearLevel) ? $yearLevel : (is_string($yearLevel) && ctype_digit(trim($yearLevel)) ? (int) trim($yearLevel) : 0);
+                if ($yearLevel < 1 || $yearLevel > 4) {
+                    throw new ValidationException([['field' => 'yearLevel', 'message' => 'Year level must be between 1 and 4.']]);
+                }
+                $updates[] = 'year_level = ?';
+                $values[] = $yearLevel;
+            }
+        }
+        if (array_key_exists('status', $data)) {
+            $status = strtolower(trim((string) $data['status']));
+            if (!in_array($status, ['active', 'disabled', 'archived'], true)) {
+                throw new ValidationException([['field' => 'status', 'message' => 'Student status must be active, disabled, or archived.']]);
+            }
+            $updates[] = 'status = ?';
+            $values[] = $status;
+        }
+        foreach (['admissionDate' => 'admission_date', 'birthdate' => 'birthdate'] as $input => $column) {
+            if (array_key_exists($input, $data)) {
+                $value = $data[$input];
+                if ($value !== null && $value !== '' && (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value))) {
+                    throw new ValidationException([['field' => $input, 'message' => 'Date must use YYYY-MM-DD format.']]);
+                }
+                $updates[] = $column . ' = ?';
+                $values[] = ($value === '' ? null : $value);
+            }
+        }
+        if ($updates === []) {
+            throw new ValidationException([['field' => 'fields', 'message' => 'At least one editable Student field is required.']]);
+        }
+
+        $values[] = $studentId;
+        $pdo->prepare('UPDATE students SET ' . implode(', ', $updates) . ', updated_at = CURRENT_TIMESTAMP(6) WHERE student_id = ?')
+            ->execute($values);
+        $select->execute([$studentId, (int) $authCtx['user_id']]);
+        $after = $select->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($after)) {
+            throw new RuntimeException('Updated Student could not be reloaded.');
+        }
+
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        $auditCtx = audit_begin_operation($pdo);
+        audit_finish_operation($pdo, $auditCtx, [
+            'module_code' => 'class_management',
+            'action_code' => 'student_update',
+            'event_status' => 'Success',
+            'actor_user_id' => $authCtx['user_id'],
+            'actor_username' => $authCtx['login_email'],
+            'actor_role' => $authCtx['role'],
+            'actor_display_name' => $authCtx['display_name'],
+            'session_id' => $authCtx['session_id'],
+            'target_type' => 'student',
+            'target_id' => (string) $studentId,
+            'description' => 'Updated Student roster profile fields.',
+            'reason' => null,
+            'http_method' => $context['http_method'],
+            'endpoint' => $context['endpoint'],
+            'request_id' => $context['request_id'],
+            'ip_address' => $context['ip_address'],
+            'user_agent' => $context['user_agent'],
+        ], $macKey, $before, $after);
+        $pdo->commit();
+
+        json_response([
+            'status' => 'ok',
+            'student' => [
+                'id' => (string) $after['student_id'],
+                'studentId' => (string) $after['student_number'],
+                'firstName' => $after['first_name'],
+                'middleName' => $after['middle_name'],
+                'lastName' => $after['last_name'],
+                'name' => trim(implode(' ', array_filter([$after['first_name'], $after['middle_name'], $after['last_name']], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))),
+                'email' => $after['bu_email'],
+                'contact' => $after['contact'],
+                'sex' => $after['sex'],
+                'yearLevel' => $after['year_level'] !== null ? (int) $after['year_level'] : null,
+                'status' => $after['status'],
+                'admissionDate' => $after['admission_date'],
+                'birthdate' => $after['birthdate'],
+            ],
+        ], 200);
+    } catch (ValidationException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        validation_error_response($e->getErrors());
+    } catch (DomainException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        safe_error_response($e->getMessage(), 409);
+    } catch (Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        error_log('Faculty student update error: ' . sanitize_for_log($e));
+        safe_error_response('Failed to update Student.', 500);
     }
 }
 
@@ -4048,6 +4256,7 @@ function handle_faculty_retention_get(): void
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
              WHERE cs.instructor_user_id = ?
+               AND LOWER(e.status) = 'active'
              ORDER BY e.retention_state DESC, s.last_name, s.first_name"
         );
         $stmt->execute([$authCtx['user_id']]);
@@ -4076,6 +4285,7 @@ function handle_faculty_retention_get(): void
 
 function handle_faculty_retention_remedial_save(): void
 {
+    $pdo = null;
     try {
         $config = app_config();
         $pdo = create_pdo($config);
@@ -4089,12 +4299,19 @@ function handle_faculty_retention_remedial_save(): void
         $enrollmentId = (int) ($data['enrollmentId'] ?? 0);
         $studentId = (int) ($data['studentId'] ?? 0);
         $classId = (int) ($data['classId'] ?? 0);
-        $remedial = $data['remedial'] ?? null;
+        $remedialValue = $data['remedial'] ?? null;
+        $remedial = is_array($remedialValue)
+            ? $remedialValue
+            : ($remedialValue instanceof \stdClass ? get_object_vars($remedialValue) : null);
         if (($enrollmentId <= 0 && ($studentId <= 0 || $classId <= 0)) || !is_array($remedial)) {
             safe_error_response('Enrollment or student/class identifiers and remedial details are required.', 422);
             return;
         }
         $json = json_encode($remedial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            safe_error_response('Remedial details could not be encoded.', 422);
+            return;
+        }
         $remedialStatus = (string) ($remedial['status'] ?? 'pending');
         $state = in_array($remedialStatus, ['passed', 'removed'], true) ? 'active' : 'remedial';
         $where = $enrollmentId > 0
@@ -4104,18 +4321,57 @@ function handle_faculty_retention_remedial_save(): void
             "UPDATE enrollments AS e
              SET remedial_state_json = ?, retention_state = ?
              FROM class_sections AS cs
-             WHERE {$where} AND cs.cs_id = e.cs_id AND cs.instructor_user_id = ?"
+             WHERE {$where} AND cs.cs_id = e.cs_id AND cs.instructor_user_id = ?
+               AND LOWER(e.status) = 'active'"
         );
         $params = $enrollmentId > 0
             ? [$json, $state, $enrollmentId, $authCtx['user_id']]
             : [$json, $state, $studentId, $classId, $authCtx['user_id']];
+        $pdo->beginTransaction();
         $stmt->execute($params);
         if ($stmt->rowCount() === 0) {
+            $pdo->rollBack();
             safe_error_response('Enrollment not found in an assigned class.', 404);
             return;
         }
-        json_response(['status' => 'ok', 'message' => 'Remedial record persisted successfully.', 'enrollmentId' => $enrollmentId > 0 ? (string) $enrollmentId : null], 200);
+        $recipientWhere = $enrollmentId > 0 ? 'e.enrollment_id = ?' : 'e.student_id = ? AND e.cs_id = ?';
+        $recipient = $pdo->prepare(
+            "SELECT e.enrollment_id, s.student_account_user_id, c.course_code
+               FROM enrollments e
+               JOIN students s ON s.student_id = e.student_id
+               JOIN class_sections cs ON cs.cs_id = e.cs_id
+               JOIN courses c ON c.course_id = cs.course_id
+              WHERE {$recipientWhere} AND cs.instructor_user_id = ?"
+        );
+        $recipientParams = $enrollmentId > 0
+            ? [$enrollmentId, $authCtx['user_id']]
+            : [$studentId, $classId, $authCtx['user_id']];
+        $recipient->execute($recipientParams);
+        $target = $recipient->fetch(PDO::FETCH_ASSOC);
+        $notification = null;
+        if (is_array($target) && $target['student_account_user_id'] !== null) {
+            $notification = notification_create_idempotent(
+                $pdo,
+                (int) $target['student_account_user_id'],
+                'remedial_assignment',
+                'Remedial update for ' . (string) $target['course_code'],
+                $state === 'remedial'
+                    ? 'A Faculty member recorded a remedial action for your course enrollment.'
+                    : 'Your course remedial state was updated to ' . $state . '.',
+                'enrollment',
+                (string) $target['enrollment_id'],
+                'remedial:' . (string) $target['enrollment_id'] . ':' . $remedialStatus
+            );
+        }
+        $pdo->commit();
+        json_response([
+            'status' => 'ok',
+            'message' => 'Remedial record persisted successfully.',
+            'enrollmentId' => is_array($target) ? (string) $target['enrollment_id'] : ($enrollmentId > 0 ? (string) $enrollmentId : null),
+            'notification' => $notification !== null ? ['created' => $notification['created']] : null,
+        ], 200);
     } catch (\Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty retention remedial save error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
@@ -4123,6 +4379,7 @@ function handle_faculty_retention_remedial_save(): void
 
 function handle_faculty_retention_status_update(): void
 {
+    $pdo = null;
     try {
         $config = app_config();
         $pdo = create_pdo($config);
@@ -4141,6 +4398,7 @@ function handle_faculty_retention_status_update(): void
             safe_error_response('Student, class, valid retention state, and an eight-character reason are required.', 422);
             return;
         }
+        $pdo->beginTransaction();
         $stmt = $pdo->prepare(
             "UPDATE enrollments e
              SET retention_state = ?,
@@ -4155,9 +4413,36 @@ function handle_faculty_retention_status_update(): void
         $now = gmdate('Y-m-d\TH:i:s\Z');
         $stmt->execute([$state, $reason, $now, $studentId, $classId, $authCtx['user_id']]);
         if ($stmt->rowCount() === 0) {
+            $pdo->rollBack();
             safe_error_response('Enrollment not found in an assigned class.', 404);
             return;
         }
+        $recipient = $pdo->prepare(
+            "SELECT e.enrollment_id, s.student_account_user_id, c.course_code
+               FROM enrollments e
+               JOIN students s ON s.student_id = e.student_id
+               JOIN class_sections cs ON cs.cs_id = e.cs_id
+               JOIN courses c ON c.course_id = cs.course_id
+              WHERE e.student_id = ? AND e.cs_id = ?
+                AND cs.instructor_user_id = ?
+                AND LOWER(e.status) = 'active'"
+        );
+        $recipient->execute([$studentId, $classId, $authCtx['user_id']]);
+        $target = $recipient->fetch(PDO::FETCH_ASSOC);
+        $notification = null;
+        if (is_array($target) && $target['student_account_user_id'] !== null) {
+            $notification = notification_create_idempotent(
+                $pdo,
+                (int) $target['student_account_user_id'],
+                'retention_status',
+                'Retention status updated for ' . (string) $target['course_code'],
+                'A Faculty member updated your retention status to ' . $state . '.',
+                'enrollment',
+                (string) $target['enrollment_id'],
+                'retention:' . (string) $target['enrollment_id'] . ':' . $state
+            );
+        }
+        $pdo->commit();
         json_response([
             'status' => 'ok',
             'message' => 'Retention state persisted successfully.',
@@ -4168,8 +4453,10 @@ function handle_faculty_retention_status_update(): void
                 'reason' => $reason,
                 'updatedAt' => $now,
             ],
+            'notification' => $notification !== null ? ['created' => $notification['created']] : null,
         ], 200);
     } catch (\Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty retention status update error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
@@ -4330,8 +4617,9 @@ function handle_faculty_email_send(): void
                FROM students s
                JOIN enrollments e ON e.student_id = s.student_id
                JOIN class_sections cs ON cs.cs_id = e.cs_id
-              WHERE cs.instructor_user_id = ?
-                AND s.student_id IN ({$placeholders})"
+             WHERE cs.instructor_user_id = ?
+               AND LOWER(e.status) = 'active'
+               AND s.student_id IN ({$placeholders})"
         );
         $recipientStmt->execute(array_merge([(int) $authCtx['user_id']], $studentIds));
         $validatedRecipients = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -4465,6 +4753,7 @@ function handle_faculty_reports_summary(): void
              JOIN courses c ON c.course_id = cs.course_id
              LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
              WHERE cs.instructor_user_id = ?
+               AND LOWER(e.status) = 'active'
              ORDER BY s.student_number ASC, cs.cs_id ASC"
         );
         $stmt->execute([$authCtx['user_id']]);
@@ -4479,7 +4768,7 @@ function handle_faculty_reports_summary(): void
                     'studentId' => $s['student_number'],
                     'name' => trim($s['first_name'] . ' ' . ($s['middle_name'] ? $s['middle_name'] . ' ' : '') . $s['last_name']),
                     'email' => $s['bu_email'] ?? '',
-                    'yearLevel' => (int) ($s['year_level'] ?? 4),
+                    'yearLevel' => $s['year_level'] !== null ? (int) $s['year_level'] : null,
                     'status' => $s['retention_state'],
                     'overallGWA' => null,
                     'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
@@ -4493,12 +4782,12 @@ function handle_faculty_reports_summary(): void
             }
             $components = $s['grade_components_json']
                 ? json_decode($s['grade_components_json'], true)
-                : ['quizzes' => 0, 'exams' => 0, 'practicum' => 0, 'attendance' => 0];
+                : null;
             $grouped[$id]['enrolledSubjects'][] = [
                 'code' => $s['course_code'],
                 'name' => $s['course_name'],
                 'units' => (float) $s['units'],
-                'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : 0,
+                'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null,
                 'isClinical' => (bool) $s['is_clinical'],
                 'hasRemedial' => $s['retention_state'] === 'remedial',
                 'components' => $components,
@@ -4929,7 +5218,11 @@ function handle_faculty_class_available_students(): void
         $stmt = $pdo->prepare("
             SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.bu_email, s.year_level, s.status
             FROM students s
-            WHERE s.student_id NOT IN (SELECT e.student_id FROM enrollments e WHERE e.cs_id = ?)
+            WHERE LOWER(s.status) = 'active'
+              AND NOT EXISTS (
+                SELECT 1 FROM enrollments e
+                 WHERE e.cs_id = ? AND e.student_id = s.student_id AND LOWER(e.status) = 'active'
+            )
             ORDER BY s.last_name ASC, s.first_name ASC
         ");
         $stmt->execute([$csId]);
@@ -4942,7 +5235,7 @@ function handle_faculty_class_available_students(): void
                 'studentId' => $s['student_number'],
                 'name' => $fullName,
                 'email' => $s['bu_email'] ?? '',
-                'yearLevel' => (int) ($s['year_level'] ?? 1),
+                'yearLevel' => $s['year_level'] !== null ? (int) $s['year_level'] : null,
                 'status' => strtolower($s['status'] ?? 'active'),
             ];
         }, $rows);
@@ -4993,18 +5286,45 @@ function handle_faculty_class_enroll_students(): void
 
         $pdo->beginTransaction();
         try {
-            $insertStmt = $pdo->prepare("
-                INSERT INTO enrollments (student_id, cs_id, status, date_enrolled, retention_state, created_at)
-                VALUES (?, ?, 'Active', CURRENT_DATE, 'active', CURRENT_TIMESTAMP(6))
-                ON CONFLICT (student_id, cs_id) DO NOTHING
-            ");
+            $existingStmt = $pdo->prepare(
+                'SELECT enrollment_id, status
+                   FROM enrollments
+                  WHERE student_id = ? AND cs_id = ?
+                  FOR UPDATE'
+            );
+            $insertStmt = $pdo->prepare(
+                "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled, retention_state, created_at)
+                 VALUES (?, ?, 'Active', CURRENT_DATE, 'active', CURRENT_TIMESTAMP(6))
+                 RETURNING enrollment_id"
+            );
+            $reviveStmt = $pdo->prepare(
+                "UPDATE enrollments
+                    SET status = 'Active', date_enrolled = COALESCE(date_enrolled, CURRENT_DATE), updated_at = CURRENT_TIMESTAMP(6)
+                  WHERE enrollment_id = ? AND LOWER(status) <> 'active'"
+            );
 
             $enrolledCount = 0;
+            $studentExists = $pdo->prepare("SELECT 1 FROM students WHERE student_id = ? AND LOWER(status) = 'active'");
             foreach ($studentIds as $sId) {
                 $stId = (int) $sId;
                 if ($stId > 0) {
+                    $studentExists->execute([$stId]);
+                    if ($studentExists->fetchColumn() === false) {
+                        $pdo->rollBack();
+                        safe_error_response('One or more selected Students are not active.', 422);
+                        return;
+                    }
+                    $existingStmt->execute([$stId, $csId]);
+                    $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
+                    if (is_array($existing)) {
+                        $reviveStmt->execute([(int) $existing['enrollment_id']]);
+                        if ($reviveStmt->rowCount() > 0) {
+                            $enrolledCount++;
+                        }
+                        continue;
+                    }
                     $insertStmt->execute([$stId, $csId]);
-                    if ($insertStmt->rowCount() > 0) {
+                    if ($insertStmt->fetchColumn() !== false) {
                         $enrolledCount++;
                     }
                 }
@@ -5086,9 +5406,13 @@ function handle_faculty_class_unenroll_student(): void
 
         $pdo->beginTransaction();
         try {
-            $delStmt = $pdo->prepare("DELETE FROM enrollments WHERE cs_id = ? AND student_id = ?");
-            $delStmt->execute([$csId, $studentId]);
-            if ($delStmt->rowCount() === 0) {
+            $archiveStmt = $pdo->prepare(
+                "UPDATE enrollments
+                    SET status = 'Archived', updated_at = CURRENT_TIMESTAMP(6)
+                  WHERE cs_id = ? AND student_id = ? AND LOWER(status) = 'active'"
+            );
+            $archiveStmt->execute([$csId, $studentId]);
+            if ($archiveStmt->rowCount() === 0) {
                 $pdo->rollBack();
                 safe_error_response('Student is not enrolled in this class.', 404);
                 return;
@@ -5108,7 +5432,7 @@ function handle_faculty_class_unenroll_student(): void
                 'scope_cs_id' => $csId,
                 'target_type' => 'class_section',
                 'target_id' => (string) $csId,
-                'description' => "Removed student #{$studentId} from class section #{$csId}.",
+                'description' => "Archived Student #{$studentId}'s current membership in class section #{$csId}; historical grades and attendance were preserved.",
                 'reason' => null,
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],
@@ -5125,7 +5449,8 @@ function handle_faculty_class_unenroll_student(): void
 
         json_response([
             'status' => 'ok',
-            'message' => 'Student removed from class section successfully.',
+            'message' => 'Student removed from the active class roster; historical grades and attendance were preserved.',
+            'enrollmentStatus' => 'Archived',
         ], 200);
     } catch (\Throwable $e) {
         error_log('Faculty class unenroll error: ' . sanitize_for_log($e));

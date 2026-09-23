@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -28,12 +28,16 @@ import {
   BookOpen,
   Camera,
   History,
-  Play
+  Play,
+  CheckCheck,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useRuntimeConfig } from '../context/RuntimeConfigContext';
 import { isDevelopmentMockStudent, isStudentPrototypeAllowed, canAccessAuthoritativeStudentBiometrics } from '../pages/student/studentGates';
+import { getNotificationsApi, markNotificationReadApi, markAllNotificationsReadApi } from '../services/apiClient';
+import type { NotificationItem } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -224,8 +228,164 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
   const navItems = getNavItems();
 
-  // Persistent notifications awaiting database-backed notification service (Blocker BLK-03)
-  const criticalAlerts: Array<{ id: string; text: string; path: string }> = [];
+  // Persistent notifications state and actions
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread'>('all');
+
+  const fetchNotifications = useCallback(async () => {
+    if (!user) return;
+    try {
+      setNotificationsLoading(true);
+      const res = await getNotificationsApi({ limit: 50 });
+      setNotifications(res.notifications || []);
+      setUnreadCount(typeof res.unreadCount === 'number' ? res.unreadCount : 0);
+    } catch {
+      // Gracefully preserve notifications state if endpoint temporarily unreachable
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void fetchNotifications();
+  }, [fetchNotifications]);
+
+  const handleMarkAsRead = async (id: number) => {
+    try {
+      await markNotificationReadApi(id);
+      const now = new Date().toISOString();
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, readAt: now } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error('Failed to mark notification read:', err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllNotificationsReadApi();
+      const now = new Date().toISOString();
+      setNotifications(prev => prev.map(n => ({ ...n, readAt: n.readAt || now })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('Failed to mark all notifications read:', err);
+    }
+  };
+
+  const filteredNotifications = notificationFilter === 'unread'
+    ? notifications.filter(n => !n.readAt)
+    : notifications;
+
+  const renderNotificationsDropdown = () => (
+    <>
+      <div className="fixed inset-0 z-40" onClick={() => setIsNotificationsOpen(false)} />
+      <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-4 z-50 max-h-[28rem] flex flex-col animate-fade-in">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-2">
+          <div className="flex items-center gap-2">
+            <h3 className="font-heading font-semibold text-sm text-slate-800 dark:text-slate-100">
+              Notifications
+            </h3>
+            {unreadCount > 0 && (
+              <span className="text-[10px] bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-bold">
+                {unreadCount} new
+              </span>
+            )}
+          </div>
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={handleMarkAllAsRead}
+              className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              Mark all read
+            </button>
+          )}
+        </div>
+
+        {/* Filter tabs */}
+        <div className="flex gap-2 mb-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+          <button
+            type="button"
+            onClick={() => setNotificationFilter('all')}
+            className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+              notificationFilter === 'all'
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            All ({notifications.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setNotificationFilter('unread')}
+            className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-all cursor-pointer ${
+              notificationFilter === 'unread'
+                ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            Unread ({unreadCount})
+          </button>
+        </div>
+
+        {/* List of items */}
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+          {notificationsLoading ? (
+            <div className="py-8 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <p className="text-xs">Loading notifications…</p>
+            </div>
+          ) : filteredNotifications.length === 0 ? (
+            <div className="py-8 text-center text-slate-400">
+              <p className="text-xs font-semibold">
+                {notificationFilter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+              </p>
+            </div>
+          ) : (
+            filteredNotifications.map((item) => {
+              const isUnread = !item.readAt;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => {
+                    if (isUnread) void handleMarkAsRead(item.id);
+                  }}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    isUnread
+                      ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-900/40 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                      : 'bg-slate-50/50 dark:bg-slate-850/40 border-slate-100 dark:border-slate-800 hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={`text-xs font-bold ${isUnread ? 'text-blue-900 dark:text-blue-100' : 'text-slate-700 dark:text-slate-200'}`}>
+                      {item.title}
+                    </p>
+                    {isUnread && (
+                      <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400 flex-shrink-0 mt-1" />
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                    {item.body}
+                  </p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5 font-medium">
+                    {new Date(item.createdAt).toLocaleString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </>
+  );
 
   const getBadgeValue = (type: string) => {
     if (type === 'retention') {
@@ -320,6 +480,30 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         </div>
 
         <div className="flex items-center space-x-2.5">
+          {/* Mobile Notification Bell */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                const willOpen = !isNotificationsOpen;
+                setIsNotificationsOpen(willOpen);
+                setIsProfileOpen(false);
+                if (willOpen) void fetchNotifications();
+              }}
+              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 relative cursor-pointer"
+              title="Notifications"
+              aria-label="Notifications"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[1rem] h-[1rem] px-0.5 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center border-2 border-white dark:border-slate-900">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+            {isNotificationsOpen && renderNotificationsDropdown()}
+          </div>
+
           {/* Theme Toggle */}
           <button
             onClick={toggleTheme}
@@ -582,38 +766,26 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             {/* Notification bell dropdown */}
             <div className="relative">
               <button
+                type="button"
                 onClick={() => {
-                  setIsNotificationsOpen(!isNotificationsOpen);
+                  const willOpen = !isNotificationsOpen;
+                  setIsNotificationsOpen(willOpen);
                   setIsProfileOpen(false);
+                  if (willOpen) void fetchNotifications();
                 }}
-                className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 transition-colors relative"
+                className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 transition-colors relative cursor-pointer"
                 title="Notifications"
+                aria-label="Notifications"
               >
                 <Bell className="w-5 h-5" />
-                {criticalAlerts.length > 0 && (
-                  <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping border-2 border-white dark:border-slate-950" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white dark:border-slate-950">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
                 )}
               </button>
 
-              {isNotificationsOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setIsNotificationsOpen(false)} />
-                  <div className="absolute right-0 mt-3 w-80 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-4 z-50 max-h-96 overflow-y-auto">
-                    <h3 className="font-heading font-semibold text-sm mb-3 border-b border-slate-100 dark:border-slate-800 pb-2 flex justify-between items-center">
-                      <span>Alerts & Notifications</span>
-                      <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded-md font-bold">
-                        Database-Backed
-                      </span>
-                    </h3>
-                    <div className="py-6 text-center space-y-1.5">
-                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">No unread notifications</p>
-                      <p className="text-[11px] text-slate-400">
-                        Persistent notifications service pending (Blocker BLK-03).
-                      </p>
-                    </div>
-                  </div>
-                </>
-              )}
+              {isNotificationsOpen && renderNotificationsDropdown()}
             </div>
 
             {/* Interactive User profile dropdown menu */}

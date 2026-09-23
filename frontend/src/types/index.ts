@@ -209,7 +209,7 @@ export interface LivenessChallengeRequest {
 
 export interface LivenessChallengeResponse {
   challengeId: string;
-  challengeToken?: string;
+  challengeToken: string;
   actions: [LivenessAction, LivenessAction];
   expiresAt: string;
 }
@@ -290,4 +290,120 @@ export interface StudentAttendanceLogRecord {
 export interface StudentAttendanceLogsResponse {
   records: StudentAttendanceLogRecord[];
   total?: number;
+}
+
+// --- Authoritative Notifications ---
+export interface NotificationItem {
+  id: number;
+  recipientUserId: number;
+  type: string;
+  title: string;
+  body: string;
+  entityType?: string | null;
+  entityId?: number | null;
+  deduplicationKey?: string | null;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationsResponse {
+  status: string;
+  notifications: NotificationItem[];
+  unreadCount: number;
+}
+
+// --- Authoritative Student Academic APIs ---
+export interface StudentAcademicAccount {
+  userId: string | null;
+  email: string | null;
+  role: string | null;
+  status: string | null;
+}
+
+export interface StudentAcademicProfile {
+  id: string;
+  studentNumber: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  name: string;
+  email: string | null;
+  contact: string | null;
+  sex: string | null;
+  yearLevel: number | null;
+  status: string;
+  admissionDate: string | null;
+  birthdate: string | null;
+  account?: StudentAcademicAccount;
+}
+
+export interface StudentAcademicClass {
+  enrollmentId: string;
+  classId: string;
+  className: string;
+  courseId: string;
+  courseCode: string;
+  courseName: string;
+  units: number;
+  isClinical: boolean;
+  semester: string;
+  schoolYear: string;
+  yearLevel: number | null;
+  dateEnrolled: string | null;
+  grade: number | null;
+  percentage: number | null;
+  gradeComponents: Record<string, unknown> | null;
+  retentionState: string;
+  remedial: Record<string, unknown> | null;
+  clinicHoursCompleted: number;
+}
+
+export interface StudentAcademicDashboardSummary {
+  classCount: number;
+  gwa: number | null;
+  attendanceRate: number | null;
+  clinicalHoursCompleted: number;
+  retentionAlerts: number;
+}
+
+export interface StudentAcademicDashboardResponse {
+  status: string;
+  student: StudentAcademicProfile;
+  summary: StudentAcademicDashboardSummary;
+  classes: StudentAcademicClass[];
+}
+
+export interface StudentAcademicProfileResponse {
+  status: string;
+  profile: StudentAcademicProfile;
+}
+
+export interface StudentAcademicClassesResponse {
+  status: string;
+  classes: StudentAcademicClass[];
+}
+
+export interface StudentAcademicRetentionResponse {
+  status: string;
+  retention: {
+    records: StudentAcademicClass[];
+    atRiskCount: number;
+    hasPendingGrades: boolean;
+  };
+}
+
+// --- Faculty Invitation Lifecycle ---
+export interface FacultyInvitationUpdatePayload {
+  id: string | number;
+  email: string;
+  prefix?: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  suffix?: string;
+  name?: string;
+}
+
+export interface FacultyInvitationRevokePayload {
+  id: string | number;
 }
