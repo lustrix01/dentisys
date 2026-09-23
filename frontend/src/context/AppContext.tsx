@@ -327,7 +327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Find existing mock percentages for initial students so we do not break layout on fresh load
         const rawStud = students.find(s => s.id === studentId);
         const rawSubj = rawStud?.enrolledSubjects.find(su => su.code === subjectCode);
-        if (rawSubj) {
+        if (rawSubj && rawSubj.components) {
           if (cat === 'Laboratory') return catPercentages[cat] = rawSubj.components.practicum;
           if (cat === 'Quiz') return catPercentages[cat] = rawSubj.components.quizzes;
           if (cat === 'Midterm Exam' || cat === 'Final Exam') return catPercentages[cat] = rawSubj.components.exams;
@@ -390,7 +390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         let attRate = 90; // Default
         const rawStud = students.find(s => s.id === student.id);
         const rawSub = rawStud?.enrolledSubjects.find(u => u.code === subj.code);
-        if (rawSub) {
+        if (rawSub?.components?.attendance !== undefined) {
           attRate = rawSub.components.attendance;
         }
         if (subjRecords.length > 0) {

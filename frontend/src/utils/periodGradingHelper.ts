@@ -229,6 +229,8 @@ export interface StudentPeriodEvaluation {
   finalReasons: string[];
   overallGwa: number | null;
   overallPercentage: number | null;
+  historicalGwa: number | null;
+  isIncomplete: boolean;
   statusText: string;
 }
 
@@ -252,16 +254,12 @@ export function extractPeriodEvaluation(
       : [];
 
     const isComputed = computeResult.status === 'computed';
-    const overallGwa = isComputed
-      ? computeResult.gwa
-      : computeResult.previouslyPersisted && computeResult.previousGwa !== null
+    const overallGwa = isComputed ? computeResult.gwa : null;
+    const overallPercentage = isComputed ? computeResult.percentage : null;
+    const historicalGwa = !isComputed && computeResult.previouslyPersisted && computeResult.previousGwa !== null
       ? computeResult.previousGwa
-      : null;
-    const overallPercentage = isComputed
-      ? computeResult.percentage
-      : computeResult.previouslyPersisted && computeResult.previousPercentage !== null
-      ? computeResult.previousPercentage
-      : null;
+      : (!isComputed && subj && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade : null);
+    const isIncomplete = !isComputed || midtermBreakdown?.status !== 'computed' || finalBreakdown?.status !== 'computed';
 
     return {
       isPeriodMode: true,
@@ -273,7 +271,9 @@ export function extractPeriodEvaluation(
       finalReasons,
       overallGwa,
       overallPercentage,
-      statusText: isComputed ? 'PASS' : 'INCOMPLETE',
+      historicalGwa,
+      isIncomplete,
+      statusText: isComputed ? (overallGwa === 5.0 ? 'FAILED' : 'PASS') : 'INCOMPLETE',
     };
   }
 
@@ -295,8 +295,13 @@ export function extractPeriodEvaluation(
         ? (fin.incomplete as Array<{ reason: string }>).map(i => formatPeriodIncompleteReason(i.reason))
         : [];
 
-      const overallGwa = typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade : null;
-      const overallPercentage = typeof comps.percentage === 'number' ? comps.percentage : null;
+      const isMidComputed = mid?.status === 'computed';
+      const isFinComputed = fin?.status === 'computed';
+      const isBothComputed = isMidComputed && isFinComputed;
+      const overallGwa = isBothComputed && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade : null;
+      const historicalGwa = !isBothComputed && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade : null;
+      const overallPercentage = isBothComputed && typeof comps.percentage === 'number' ? comps.percentage : null;
+      const isIncomplete = !isBothComputed;
 
       return {
         isPeriodMode: true,
@@ -308,7 +313,9 @@ export function extractPeriodEvaluation(
         finalReasons,
         overallGwa,
         overallPercentage,
-        statusText: overallGwa !== null ? (overallGwa === 5.0 ? 'FAILED' : 'PASS') : 'INCOMPLETE',
+        historicalGwa,
+        isIncomplete,
+        statusText: isBothComputed && overallGwa !== null ? (overallGwa === 5.0 ? 'FAILED' : 'PASS') : 'INCOMPLETE',
       };
     }
   }
@@ -325,6 +332,8 @@ export function extractPeriodEvaluation(
     finalReasons: [],
     overallGwa: legacyGrade,
     overallPercentage: null,
+    historicalGwa: null,
+    isIncomplete: legacyGrade === null,
     statusText: legacyGrade !== null ? (legacyGrade === 5.0 ? 'FAILED' : 'PASS') : 'UNCOMPUTED',
   };
 }
@@ -358,7 +367,12 @@ export function generateGradeSummaryCSV(
             ? `Incomplete (${evalResult.finalReasons[0]})`
             : 'Incomplete';
 
-        const gwaVal = evalResult.overallGwa !== null ? evalResult.overallGwa.toFixed(2) : 'Incomplete';
+        const gwaVal =
+          evalResult.overallGwa !== null
+            ? evalResult.overallGwa.toFixed(2)
+            : evalResult.historicalGwa !== null
+            ? `Prior: ${evalResult.historicalGwa.toFixed(2)} (Historical)`
+            : 'Incomplete';
         const statusVal = evalResult.overallGwa !== null ? (evalResult.overallGwa === 5.0 ? 'FAILED' : 'PASS') : 'INCOMPLETE';
 
         return `${student.studentId},"${student.name}",${midtermVal},${finalVal},${gwaVal},${statusVal}`;
@@ -368,13 +382,19 @@ export function generateGradeSummaryCSV(
   }
 
   // Legacy Overall Mode
-  const headers = 'Student ID,Name,Midterm Grade,Final Grade,Overall GWA,Status\n';
+  const headers = 'Student ID,Name,Quizzes,Practicum,Exams,Attendance,Overall GWA,Remarks\n';
   const rows = students
     .map(student => {
       const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
-      const gradeVal = subj && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade.toFixed(2) : '5.00';
-      const statusText = student.status.toUpperCase();
-      return `${student.studentId},"${student.name}",${gradeVal},${gradeVal},${gradeVal},${statusText}`;
+      const quizzes = subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—';
+      const practicum = subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—';
+      const exams = subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—';
+      const attendance = subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—';
+      const gradeVal = subj && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade.toFixed(2) : '—';
+      const statusText = subj && typeof subj.grade === 'number' && subj.grade > 0
+        ? (subj.grade === 5.0 ? 'FAILED' : 'PASS')
+        : 'UNCOMPUTED';
+      return `${student.studentId},"${student.name}",${quizzes},${practicum},${exams},${attendance},${gradeVal},${statusText}`;
     })
     .join('\n');
   return headers + rows;

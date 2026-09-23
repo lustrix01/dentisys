@@ -578,7 +578,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     { headers: { Authorization: `Bearer ${credentials.access_token}` } }
   );
   const checkConfigData = await jsonResponse(checkConfigRes);
-  if (!checkConfigData.configuration?.isConfigured) {
+  if (checkConfigData.configuration === null) {
     const seedAssRes = await page.request.post('/api/faculty/assessments', {
       headers: { Authorization: `Bearer ${credentials.access_token}`, 'Content-Type': 'application/json' },
       data: [{

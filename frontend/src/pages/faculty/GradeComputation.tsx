@@ -59,7 +59,8 @@ import type {
   FacultyGradingCategoryAssignmentRequiredItem,
   FacultyGradingCategoryPeriodMappingRequiredItem,
   FacultyGradingConfigSavePayload,
-  FacultyGradeComputeResult
+  FacultyGradeComputeResult,
+  GradingSourceKindEnum
 } from '../../services/apiClient';
 import {
   buildDefaultPeriodDraft,
@@ -181,7 +182,10 @@ export const GradeComputation: React.FC = () => {
   const getInitialTab = () => {
     const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
-    if (tab === 'assessments' || tab === 'scores' || tab === 'components' || tab === 'summaries' || tab === 'import') {
+    if (tab === 'summary' || tab === 'summaries') {
+      return 'summaries';
+    }
+    if (tab === 'assessments' || tab === 'scores' || tab === 'components' || tab === 'import') {
       return tab;
     }
     return 'scores';
@@ -976,6 +980,38 @@ export const GradeComputation: React.FC = () => {
   const [firstSaveAssignmentError, setFirstSaveAssignmentError] = useState<FacultyGradingCategoryAssignmentRequiredItem[] | null>(null);
   const [conversionMappingError, setConversionMappingError] = useState<FacultyGradingCategoryPeriodMappingRequiredItem[] | null>(null);
   const [isConversionModalOpen, setIsConversionModalOpen] = useState(false);
+  const [isRecomputeConfirmOpen, setIsRecomputeConfirmOpen] = useState(false);
+
+  const handleOpenConversionModal = () => {
+    setConversionMappingError(null);
+    if (categoryRows.length > 0) {
+      const mRows: PeriodCategoryDraftRow[] = categoryRows.map((cat, idx) => ({
+        compositeKey: buildRowCompositeKey('Midterm', cat.id, `m-${idx + 1}`),
+        tempId: `m-${cat.id ?? idx + 1}`,
+        id: cat.id ?? undefined,
+        name: cat.name,
+        weight: cat.weight,
+        sortOrder: cat.sortOrder ?? (idx + 1),
+        gradingPeriod: 'Midterm',
+        sourceKind: (cat.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment') as GradingSourceKindEnum,
+        inUse: Boolean(cat.inUse),
+      }));
+      const fRows: PeriodCategoryDraftRow[] = categoryRows.map((cat, idx) => ({
+        compositeKey: buildRowCompositeKey('Final', cat.id, `f-${idx + 1}`),
+        tempId: `f-${cat.id ?? idx + 1}`,
+        id: cat.id ?? undefined,
+        name: cat.name,
+        weight: cat.weight,
+        sortOrder: cat.sortOrder ?? (idx + 1),
+        gradingPeriod: 'Final',
+        sourceKind: (cat.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment') as GradingSourceKindEnum,
+        inUse: Boolean(cat.inUse),
+      }));
+      setMidtermCategories(mRows);
+      setFinalCategories(fRows);
+    }
+    setIsConversionModalOpen(true);
+  };
 
   // Initialize selected offering key
   useEffect(() => {
@@ -1080,16 +1116,53 @@ export const GradeComputation: React.FC = () => {
             setCategoryRows([]);
             setSavedCategoryRows([]);
           }
-          // Populate default period state in case user converts
-          const draft = buildDefaultPeriodDraft();
-          setTermRatio(draft.termRatio);
-          setSavedTermRatio(draft.termRatio);
-          setMidtermCategories(draft.midtermCategories);
-          setSavedMidtermCategories(draft.midtermCategories);
-          setFinalCategories(draft.finalCategories);
-          setSavedFinalCategories(draft.finalCategories);
-          setAttendanceDateRanges(draft.attendanceDateRanges);
-          setSavedAttendanceDateRanges(draft.attendanceDateRanges);
+          // Populate period draft preserving existing categories in case user converts
+          const existingCats = Array.isArray(res.configuration.categories) && res.configuration.categories.length > 0
+            ? res.configuration.categories
+            : [];
+          if (existingCats.length > 0) {
+            const mRows: PeriodCategoryDraftRow[] = existingCats.map((cat, idx) => ({
+              compositeKey: buildRowCompositeKey('Midterm', cat.id, `m-${idx + 1}`),
+              tempId: `m-${cat.id ?? idx + 1}`,
+              id: cat.id ?? undefined,
+              name: cat.name,
+              weight: String(cat.weight),
+              sortOrder: cat.sortOrder ?? (idx + 1),
+              gradingPeriod: 'Midterm' as const,
+              sourceKind: (cat.sourceKind ?? (cat.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment')) as GradingSourceKindEnum,
+              inUse: Boolean(cat.inUse),
+            }));
+            const fRows: PeriodCategoryDraftRow[] = existingCats.map((cat, idx) => ({
+              compositeKey: buildRowCompositeKey('Final', cat.id, `f-${idx + 1}`),
+              tempId: `f-${cat.id ?? idx + 1}`,
+              id: cat.id ?? undefined,
+              name: cat.name,
+              weight: String(cat.weight),
+              sortOrder: cat.sortOrder ?? (idx + 1),
+              gradingPeriod: 'Final' as const,
+              sourceKind: (cat.sourceKind ?? (cat.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment')) as GradingSourceKindEnum,
+              inUse: Boolean(cat.inUse),
+            }));
+            const defaultDraft = buildDefaultPeriodDraft();
+            setTermRatio(defaultDraft.termRatio);
+            setSavedTermRatio(defaultDraft.termRatio);
+            setMidtermCategories(mRows);
+            setSavedMidtermCategories(mRows);
+            setFinalCategories(fRows);
+            setSavedFinalCategories(fRows);
+            setAttendanceDateRanges(defaultDraft.attendanceDateRanges);
+            setSavedAttendanceDateRanges(defaultDraft.attendanceDateRanges);
+          } else {
+            const draft = buildDefaultPeriodDraft();
+            setTermRatio(draft.termRatio);
+            setSavedTermRatio(draft.termRatio);
+            setMidtermCategories(draft.midtermCategories);
+            setSavedMidtermCategories(draft.midtermCategories);
+            setFinalCategories(draft.finalCategories);
+            setSavedFinalCategories(draft.finalCategories);
+            setAttendanceDateRanges(draft.attendanceDateRanges);
+            setSavedAttendanceDateRanges(draft.attendanceDateRanges);
+          }
         } else {
           // Period Mode
           const tr = {
@@ -1158,10 +1231,9 @@ export const GradeComputation: React.FC = () => {
   };
 
   useEffect(() => {
-    if (activeSubTab !== 'components') return;
     if (!currentOffering) return;
     loadGradingConfig(currentOffering);
-  }, [activeSubTab, currentOffering?.key]);
+  }, [currentOffering?.key]);
 
   // Dirty state checking
   const isOverallDirty = useMemo(() => {
@@ -2605,7 +2677,8 @@ export const GradeComputation: React.FC = () => {
                           }
                           if (assessmentConfigStatus === 'configured' && assessmentConfig) {
                             const matchedCategory = assessmentConfig.categories.find(
-                              c => String(c.id) === String(ass.gradingCategoryId)
+                              c => String(c.id) === String(ass.gradingCategoryId) &&
+                                   (assessmentConfig.schemaMode !== 'periods' || !ass.gradingPeriod || !c.gradingPeriod || c.gradingPeriod === ass.gradingPeriod)
                             );
                             if (matchedCategory) {
                               return (
@@ -2904,7 +2977,7 @@ export const GradeComputation: React.FC = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsConversionModalOpen(true)}
+                    onClick={handleOpenConversionModal}
                     className="shrink-0 px-3.5 py-1.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
                   >
                     <Zap className="w-3.5 h-3.5" />
@@ -3415,6 +3488,63 @@ export const GradeComputation: React.FC = () => {
               </div>
             </div>
 
+            <div className="space-y-3 text-xs">
+              <h4 className="font-bold text-slate-800 dark:text-slate-200">Proposed Period Category Mapping:</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-56 overflow-y-auto">
+                {/* Midterm Mapping */}
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+                  <div className="font-bold text-slate-700 dark:text-slate-300 text-[11px] flex items-center justify-between">
+                    <span>Midterm Categories</span>
+                    <span className="font-mono text-[10px] text-clinical-600 font-bold">{midtermCategories.reduce((acc, c) => acc + (parseFloat(c.weight) || 0), 0)}%</span>
+                  </div>
+                  <div className="space-y-1">
+                    {midtermCategories.map(c => (
+                      <div key={c.compositeKey} className="flex items-center justify-between text-[11px] py-1 border-b border-slate-100 dark:border-slate-800 last:border-none">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{c.name}</span>
+                          <span className="text-[9px] font-mono text-slate-400">
+                            {c.id ? `(#${c.id})` : '(New)'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 capitalize">
+                            {c.sourceKind}
+                          </span>
+                          <span className="font-mono font-bold text-slate-700 dark:text-slate-350">{c.weight}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Finals Mapping */}
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+                  <div className="font-bold text-slate-700 dark:text-slate-300 text-[11px] flex items-center justify-between">
+                    <span>Finals Categories</span>
+                    <span className="font-mono text-[10px] text-clinical-600 font-bold">{finalCategories.reduce((acc, c) => acc + (parseFloat(c.weight) || 0), 0)}%</span>
+                  </div>
+                  <div className="space-y-1">
+                    {finalCategories.map(c => (
+                      <div key={c.compositeKey} className="flex items-center justify-between text-[11px] py-1 border-b border-slate-100 dark:border-slate-800 last:border-none">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-medium text-slate-800 dark:text-slate-200 truncate">{c.name}</span>
+                          <span className="text-[9px] font-mono text-slate-400">
+                            {c.id ? `(#${c.id})` : '(New)'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 capitalize">
+                            {c.sourceKind}
+                          </span>
+                          <span className="font-mono font-bold text-slate-700 dark:text-slate-350">{c.weight}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-150 dark:border-slate-800">
               <button
                 type="button"
@@ -3437,6 +3567,50 @@ export const GradeComputation: React.FC = () => {
       )}
 
       {/* ----------------------------------------------------
+          RECOMPUTE CONFIRMATION MODAL
+      ---------------------------------------------------- */}
+      {isRecomputeConfirmOpen && (
+        <Modal
+          isOpen={isRecomputeConfirmOpen}
+          onClose={() => setIsRecomputeConfirmOpen(false)}
+          title="Recompute Class Grades"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 space-y-2">
+              <div className="font-bold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                Confirm Grade Recomputation
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                This will recalculate student period evaluations and General Weighted Averages (GWA) for all enrolled students in class <strong>{selectedClassId}</strong> using the authoritative grading configuration.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-150 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsRecomputeConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-205 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isRecomputing}
+                onClick={() => {
+                  setIsRecomputeConfirmOpen(false);
+                  handleRecomputeGrades();
+                }}
+                className="px-5 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 disabled:opacity-50 text-white font-bold text-xs shadow-md flex items-center gap-1.5"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                Confirm Recomputation
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ----------------------------------------------------
           TAB 4: GRADE SUMMARIES & EXPORT
       ---------------------------------------------------- */}
       {activeSubTab === 'summaries' && (
@@ -3450,7 +3624,7 @@ export const GradeComputation: React.FC = () => {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={handleRecomputeGrades}
+                onClick={() => setIsRecomputeConfirmOpen(true)}
                 disabled={isRecomputing || !selectedClassId}
                 className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all"
               >
@@ -3578,7 +3752,7 @@ export const GradeComputation: React.FC = () => {
                                 Incomplete ({evalResult.midtermReasons[0]})
                               </span>
                             ) : (
-                              <span className="text-slate-400 font-sans">Incomplete</span>
+                              <span className="text-slate-400 font-sans">—</span>
                             )}
                           </td>
                           <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
@@ -3589,11 +3763,19 @@ export const GradeComputation: React.FC = () => {
                                 Incomplete ({evalResult.finalReasons[0]})
                               </span>
                             ) : (
-                              <span className="text-slate-400 font-sans">Incomplete</span>
+                              <span className="text-slate-400 font-sans">—</span>
                             )}
                           </td>
                           <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                            {evalResult.overallGwa !== null ? evalResult.overallGwa.toFixed(2) : '—'}
+                            {evalResult.overallGwa !== null ? (
+                              evalResult.overallGwa.toFixed(2)
+                            ) : evalResult.historicalGwa !== null ? (
+                              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium" title="Prior persisted grade; current recomputation is incomplete">
+                                Prior: {evalResult.historicalGwa.toFixed(2)} (Historical)
+                              </span>
+                            ) : (
+                              '—'
+                            )}
                           </td>
                           <td className="px-5 py-3">
                             <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
@@ -3613,8 +3795,9 @@ export const GradeComputation: React.FC = () => {
                     }
 
                     // Legacy overall view
-                    const isFailsRetention = subj && subj.isClinical && subj.grade > settings.retentionThreshold;
-                    const isFailed = subj && subj.grade === 5.0;
+                    const isFailsRetention = subj && subj.isClinical && typeof subj.grade === 'number' && subj.grade > settings.retentionThreshold;
+                    const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
+                    const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
 
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
@@ -3622,22 +3805,24 @@ export const GradeComputation: React.FC = () => {
                           <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
                           <span className="text-[10px] text-slate-400">{student.studentId}</span>
                         </td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.quizzes === 'number' ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.practicum === 'number' ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.exams === 'number' ? subj.components.exams.toFixed(1) : '80.0'}%</td>
-                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.attendance === 'number' ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
                         <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                          {subj && typeof subj.grade === 'number' ? subj.grade.toFixed(2) : '2.50'}
+                          {hasGrade ? subj.grade.toFixed(2) : '—'}
                         </td>
                         <td className="px-5 py-3">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                            isFailed
+                            !hasGrade
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                              : isFailed
                               ? 'bg-rose-100 text-rose-700'
                               : isFailsRetention
                               ? 'bg-amber-100 text-amber-700'
                               : 'bg-emerald-100 text-emerald-700'
                           }`}>
-                            {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
+                            {!hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
                           </span>
                         </td>
                       </tr>
@@ -3778,28 +3963,90 @@ export const GradeComputation: React.FC = () => {
 
         <table className="w-full border-collapse border border-slate-300 text-xs">
           <thead>
-            <tr className="bg-slate-100 text-left font-bold uppercase">
-              <th className="border border-slate-300 px-4 py-2">Student ID</th>
-              <th className="border border-slate-300 px-4 py-2">Student Name</th>
-              <th className="border border-slate-300 px-4 py-2 text-center">Quizzes</th>
-              <th className="border border-slate-300 px-4 py-2 text-center">Practicum</th>
-              <th className="border border-slate-300 px-4 py-2 text-center">Exams</th>
-              <th className="border border-slate-300 px-4 py-2 text-center">Attendance</th>
-              <th className="border border-slate-300 px-4 py-2 text-center">Overall GWA</th>
-            </tr>
+            {isPeriodMode ? (
+              <tr className="bg-slate-100 text-left font-bold uppercase">
+                <th className="border border-slate-300 px-4 py-2">Student ID</th>
+                <th className="border border-slate-300 px-4 py-2">Student Name</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Midterm %</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Final %</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Overall GWA</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Remarks</th>
+              </tr>
+            ) : (
+              <tr className="bg-slate-100 text-left font-bold uppercase">
+                <th className="border border-slate-300 px-4 py-2">Student ID</th>
+                <th className="border border-slate-300 px-4 py-2">Student Name</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Quizzes</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Practicum</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Exams</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Attendance</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Overall GWA</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Remarks</th>
+              </tr>
+            )}
           </thead>
           <tbody>
             {sortedSummaryStudents.map(student => {
               const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+              const computeRes = subj?.enrollmentId ? computeResultsByEnrollment.get(String(subj.enrollmentId)) : null;
+
+              if (isPeriodMode) {
+                const evalResult = extractPeriodEvaluation(subj, computeRes);
+                const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa > settings.retentionThreshold;
+                const isFailed = evalResult.overallGwa === 5.0;
+                const isIncomplete = evalResult.overallGwa === null;
+
+                const midtermStr = evalResult.midtermPercentage !== null
+                  ? `${evalResult.midtermPercentage.toFixed(2)}%`
+                  : evalResult.midtermReasons.length > 0
+                  ? `Incomplete (${evalResult.midtermReasons[0]})`
+                  : '—';
+                const finalStr = evalResult.finalPercentage !== null
+                  ? `${evalResult.finalPercentage.toFixed(2)}%`
+                  : evalResult.finalReasons.length > 0
+                  ? `Incomplete (${evalResult.finalReasons[0]})`
+                  : '—';
+                const gwaStr = evalResult.overallGwa !== null
+                  ? evalResult.overallGwa.toFixed(2)
+                  : evalResult.historicalGwa !== null
+                  ? `Prior: ${evalResult.historicalGwa.toFixed(2)} (Historical)`
+                  : '—';
+                const remarksStr = isFailed
+                  ? 'FAILED'
+                  : isFailsRetention
+                  ? 'FAILS RETENTION'
+                  : isIncomplete
+                  ? 'INCOMPLETE'
+                  : 'PASS';
+
+                return (
+                  <tr key={student.id}>
+                    <td className="border border-slate-300 px-4 py-2 font-mono">{student.studentId}</td>
+                    <td className="border border-slate-300 px-4 py-2 font-bold">{student.name}</td>
+                    <td className="border border-slate-300 px-4 py-2 text-center font-mono">{midtermStr}</td>
+                    <td className="border border-slate-300 px-4 py-2 text-center font-mono">{finalStr}</td>
+                    <td className="border border-slate-300 px-4 py-2 text-center font-extrabold">{gwaStr}</td>
+                    <td className="border border-slate-300 px-4 py-2 text-center font-bold text-[10px]">{remarksStr}</td>
+                  </tr>
+                );
+              }
+
+              // Legacy print row
+              const isFailsRetention = subj && subj.isClinical && typeof subj.grade === 'number' && subj.grade > settings.retentionThreshold;
+              const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
+              const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
+              const remarksStr = !hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS';
+
               return (
                 <tr key={student.id}>
                   <td className="border border-slate-300 px-4 py-2 font-mono">{student.studentId}</td>
                   <td className="border border-slate-300 px-4 py-2 font-bold">{student.name}</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.quizzes === 'number' ? subj.components.quizzes.toFixed(1) : '80.0'}%</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.practicum === 'number' ? subj.components.practicum.toFixed(1) : '80.0'}%</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.exams === 'number' ? subj.components.exams.toFixed(1) : '80.0'}%</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.attendance === 'number' ? subj.components.attendance.toFixed(1) : '90.0'}%</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center font-extrabold">{subj && typeof subj.grade === 'number' ? subj.grade.toFixed(2) : '2.50'}</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center font-extrabold">{hasGrade ? subj.grade.toFixed(2) : '—'}</td>
+                  <td className="border border-slate-300 px-4 py-2 text-center font-bold text-[10px]">{remarksStr}</td>
                 </tr>
               );
             })}

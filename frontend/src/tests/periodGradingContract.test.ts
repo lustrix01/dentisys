@@ -300,8 +300,9 @@ test('Evaluation Extraction: preserves prior persisted grade when recomputation 
   assert.equal(evaluation.isPeriodMode, true);
   assert.equal(evaluation.midtermPercentage, null);
   assert.deepEqual(evaluation.midtermReasons, ['Unresolved Attendance']);
-  assert.equal(evaluation.overallGwa, 2.25);
-  assert.equal(evaluation.overallPercentage, 78.5);
+  assert.equal(evaluation.overallGwa, null);
+  assert.equal(evaluation.historicalGwa, 2.25);
+  assert.equal(evaluation.isIncomplete, true);
   assert.equal(evaluation.statusText, 'INCOMPLETE');
 });
 
@@ -385,4 +386,85 @@ test('CSV Generation: exports distinct period percentages without copying overal
   assert.equal(lines[1], 'DENT-001,"Alice Reyes",88.75%,90.00%,1.75,PASS');
   // Student 2: Midterm Incomplete (Missing Date Range), Final 90.00%, Overall GWA Incomplete
   assert.equal(lines[2], 'DENT-002,"Bob Santos",Incomplete (Missing Date Range),90.00%,Incomplete,INCOMPLETE');
+});
+
+test('CSV Generation: incomplete recomputation with prior GWA marks status INCOMPLETE and records prior grade', () => {
+  const dummyStudents = [
+    {
+      id: 's3',
+      studentId: 'DENT-003',
+      name: 'Clara Santos',
+      email: '',
+      yearLevel: 4 as const,
+      status: 'active' as const,
+      enrolledSubjects: [
+        {
+          code: 'CLIN401',
+          name: 'Clinical Dentistry I',
+          units: 3,
+          grade: 2.00,
+          isClinical: true,
+          hasRemedial: false,
+          components: {
+            quizzes: 0,
+            exams: 0,
+            practicum: 0,
+            attendance: 0,
+            calculationMode: 'authoritative_periods',
+            termRatio: { midterm: 40, final: 60 },
+            periods: {
+              midterm: { period: 'Midterm', status: 'incomplete', percentage: null, categories: [], incomplete: [{ reason: 'unresolved_attendance' }] },
+              final: { period: 'Final', status: 'computed', percentage: 85.0, categories: [], incomplete: [] },
+            },
+          },
+        },
+      ],
+      clinicHoursCompleted: 50,
+      overallGWA: 2.00,
+      remedialExams: [],
+      classSections: [],
+    },
+  ];
+
+  const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
+  const lines = csv.trim().split('\n');
+  assert.equal(lines[1], 'DENT-003,"Clara Santos",Incomplete (Unresolved Attendance),85.00%,Prior: 2.00 (Historical),INCOMPLETE');
+});
+
+test('CSV Generation: legacy mode exports accurately labeled overall columns without duplicating overall grade', () => {
+  const dummyStudents = [
+    {
+      id: 's4',
+      studentId: 'DENT-004',
+      name: 'David Lim',
+      email: '',
+      yearLevel: 3 as const,
+      status: 'active' as const,
+      enrolledSubjects: [
+        {
+          code: 'ANAT101',
+          name: 'General Anatomy',
+          units: 3,
+          grade: 1.50,
+          isClinical: false,
+          hasRemedial: false,
+          components: {
+            quizzes: 85.0,
+            practicum: 90.0,
+            exams: 88.0,
+            attendance: 95.0,
+          },
+        },
+      ],
+      clinicHoursCompleted: 0,
+      overallGWA: 1.50,
+      remedialExams: [],
+      classSections: [],
+    },
+  ];
+
+  const csv = generateGradeSummaryCSV(dummyStudents, 'ANAT101', false);
+  const lines = csv.trim().split('\n');
+  assert.equal(lines[0], 'Student ID,Name,Quizzes,Practicum,Exams,Attendance,Overall GWA,Remarks');
+  assert.equal(lines[1], 'DENT-004,"David Lim",85.0%,90.0%,88.0%,95.0%,1.50,PASS');
 });

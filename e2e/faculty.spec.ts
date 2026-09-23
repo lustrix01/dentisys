@@ -1183,6 +1183,275 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // The legacy category from localStorage must NOT be used by Grade Weights Editor
       await expect(page.getByText('IsolatedLegacyCat')).toHaveCount(0);
     });
+
+    test('legacy conversion preserves existing IDs/names, displays proposed mapping in modal, and sends convertFromOverall: true with preserved IDs', async ({ page }) => {
+      let putPayload: any = null;
+
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-overall-1',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 4,
+              schemaMode: 'overall',
+              categories: [
+                { id: 301, name: 'Quizzes', weight: '30', sortOrder: 1, inUse: true },
+                { id: 302, name: 'Major Exams', weight: '60', sortOrder: 2, inUse: true },
+                { id: 303, name: 'Attendance', weight: '10', sortOrder: 3, inUse: false },
+              ],
+            },
+          }),
+        });
+      });
+
+      await page.route('**/api/faculty/grading-config', async (route) => {
+        if (route.request().method() === 'PUT') {
+          putPayload = route.request().postDataJSON();
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'ok',
+              configuration: {
+                id: 'cfg-period-1',
+                course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+                semester: '1st Semester',
+                schoolYear: '2026-2027',
+                version: 5,
+                schemaMode: 'periods',
+                termRatio: { midterm: 40, final: 60 },
+                midtermCategories: [
+                  { id: 301, name: 'Quizzes', weight: '30', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: true },
+                  { id: 302, name: 'Major Exams', weight: '60', sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: true },
+                  { id: 303, name: 'Attendance', weight: '10', sortOrder: 3, gradingPeriod: 'Midterm', sourceKind: 'attendance', inUse: false },
+                ],
+                finalCategories: [
+                  { id: 301, name: 'Quizzes', weight: '30', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: true },
+                  { id: 302, name: 'Major Exams', weight: '60', sortOrder: 2, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: true },
+                  { id: 303, name: 'Attendance', weight: '10', sortOrder: 3, gradingPeriod: 'Final', sourceKind: 'attendance', inUse: false },
+                ],
+              },
+            }),
+          });
+        }
+      });
+
+      await page.goto('/grades?tab=components');
+      await expect(page.getByText('This course offering uses single-list overall grading categories.')).toBeVisible();
+
+      // Click "Convert to Period Grading"
+      await page.getByRole('button', { name: /Convert to Period Grading/i }).click();
+
+      // Conversion review modal should be visible
+      const modal = page.locator('div[role="dialog"]').or(page.locator('.fixed')).filter({ hasText: /Convert Course Offering to Period Grading/i });
+      await expect(modal).toBeVisible();
+
+      // Check that proposed period mapping displays preserved category IDs
+      await expect(modal.getByText('Quizzes').first()).toBeVisible();
+      await expect(modal.getByText('(#301)').first()).toBeVisible();
+      await expect(modal.getByText('Major Exams').first()).toBeVisible();
+      await expect(modal.getByText('(#302)').first()).toBeVisible();
+      await expect(modal.getByText('Attendance').first()).toBeVisible();
+      await expect(modal.getByText('(#303)').first()).toBeVisible();
+
+      // Confirm conversion
+      await page.getByRole('button', { name: /Confirm Conversion/i }).click();
+
+      await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+      expect(putPayload).not.toBeNull();
+      expect(putPayload.convertFromOverall).toBe(true);
+      expect(putPayload.schemaMode).toBe('periods');
+      expect(putPayload.version).toBe(4);
+      expect(putPayload.midtermCategories).toHaveLength(3);
+      expect(putPayload.finalCategories).toHaveLength(3);
+      expect(putPayload.midtermCategories.map((c: any) => c.id)).toEqual([301, 302, 303]);
+      expect(putPayload.finalCategories.map((c: any) => c.id)).toEqual([301, 302, 303]);
+    });
+
+    test('direct navigation to /grades?tab=summary loads canonical period configuration independently of components tab', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-period-direct',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 2,
+              schemaMode: 'periods',
+              termRatio: { midterm: 40, final: 60 },
+              midtermCategories: [
+                { id: 401, name: 'Quizzes', weight: '50', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+                { id: 402, name: 'Exams', weight: '50', sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+              ],
+              finalCategories: [
+                { id: 403, name: 'Quizzes', weight: '50', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment' },
+                { id: 404, name: 'Exams', weight: '50', sortOrder: 2, gradingPeriod: 'Final', sourceKind: 'assessment' },
+              ],
+            },
+          }),
+        });
+      });
+
+      // Directly open summaries tab
+      await page.goto('/grades?tab=summary');
+
+      // The table headers must reflect canonical period mode: Midterm % and Final %
+      await expect(page.locator('.no-print th', { hasText: 'Midterm %' })).toBeVisible();
+      await expect(page.locator('.no-print th', { hasText: 'Final %' })).toBeVisible();
+      // Should NOT have legacy Quizzes / Practicum headers
+      await expect(page.locator('.no-print th', { hasText: 'Practicum' })).toHaveCount(0);
+    });
+
+    test('print output uses authoritative period columns and no fabricated 80.0% fallbacks', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-period-print',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 2,
+              schemaMode: 'periods',
+              termRatio: { midterm: 40, final: 60 },
+              midtermCategories: [],
+              finalCategories: [],
+            },
+          }),
+        });
+      });
+
+      await page.goto('/grades?tab=summary');
+
+      // Inspect printable table headers
+      const printTable = page.locator('.print-only table');
+      await expect(printTable.locator('th', { hasText: 'Midterm %' })).toBeAttached();
+      await expect(printTable.locator('th', { hasText: 'Final %' })).toBeAttached();
+      await expect(printTable.locator('th', { hasText: 'Overall GWA' })).toBeAttached();
+
+      // Verify no hardcoded 80.0% exists in the printable table
+      await expect(printTable.getByText('80.0%')).toHaveCount(0);
+    });
+
+    test('incomplete recomputation requires confirmation, marks status INCOMPLETE, and displays prior grade visibly as historical', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'cfg-period-incomp',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester',
+              schoolYear: '2026-2027',
+              version: 2,
+              schemaMode: 'periods',
+              termRatio: { midterm: 40, final: 60 },
+              midtermCategories: [],
+              finalCategories: [],
+            },
+          }),
+        });
+      });
+
+      await page.route('**/api/faculty/students', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            {
+              id: '42',
+              studentId: 'DENT-042',
+              name: 'Clara Santos',
+              email: 'clara@bicol-u.edu.ph',
+              yearLevel: 4,
+              status: 'active',
+              classSections: [{ classId: '1', className: 'CLIN401-A', enrollmentId: '1' }],
+              enrolledSubjects: [
+                {
+                  code: 'CLIN401',
+                  name: 'Clinical Dentistry I',
+                  units: 3,
+                  grade: 1.75,
+                  classId: '1',
+                  enrollmentId: '1',
+                  isClinical: true,
+                },
+              ],
+            },
+          ]),
+        });
+      });
+
+      let recomputeRequested = false;
+      await page.route('**/api/faculty/grades/compute', async (route) => {
+        recomputeRequested = true;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            results: [
+              {
+                status: 'incomplete_period',
+                enrollmentId: 1,
+                previouslyPersisted: true,
+                previousGwa: 1.75,
+                previousPercentage: 88.5,
+                reasons: ['unresolved_attendance'],
+                periods: {
+                  midterm: {
+                    period: 'Midterm',
+                    status: 'incomplete',
+                    percentage: null,
+                    incomplete: [{ reason: 'unresolved_attendance' }],
+                  },
+                  final: {
+                    period: 'Final',
+                    status: 'computed',
+                    percentage: 92.0,
+                    incomplete: [],
+                  },
+                },
+              },
+            ],
+          }),
+        });
+      });
+
+      await page.goto('/grades?tab=summary');
+
+      // Click Recompute Grades
+      await page.getByRole('button', { name: /Recompute Grades/i }).click();
+
+      // Expect confirmation dialog
+      const confirmModal = page.locator('div[role="dialog"]').or(page.locator('.fixed')).filter({ hasText: /Confirm Grade Recomputation/i });
+      await expect(confirmModal).toBeVisible();
+      expect(recomputeRequested).toBe(false);
+
+      // Confirm recomputation
+      await page.getByRole('button', { name: /Confirm Recomputation/i }).click();
+      expect(recomputeRequested).toBe(true);
+
+      // Table should now display historical prior grade and INCOMPLETE status badge (NOT PASS)
+      await expect(page.locator('.no-print').getByText(/Prior: 1.75 \(Historical\)/i)).toBeVisible();
+      await expect(page.locator('.no-print tbody').getByText('INCOMPLETE', { exact: true })).toBeVisible();
+      await expect(page.locator('.no-print tbody').getByText('PASS')).toHaveCount(0);
+    });
   });
 
   test.describe('Faculty Assessment Manager stable grading categories', () => {
