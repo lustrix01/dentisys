@@ -30,6 +30,7 @@ import { useApp } from '../../context/AppContext';
 import { Student, EnrolledSubject } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { InstitutionalEmailInput } from '../../components/InstitutionalEmailInput';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { 
   getFacultyClassesApi, 
@@ -1121,13 +1122,11 @@ export const ClassesAndRosters: React.FC = () => {
 
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Bicol University Email</label>
-              <input
-                type="email"
+              <InstitutionalEmailInput
                 required
                 value={studentEmailInput}
                 onChange={(e) => setStudentEmailInput(e.target.value)}
-                placeholder="username@bicol-u.edu.ph"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                placeholder="username"
               />
             </div>
 
@@ -1232,12 +1231,11 @@ export const ClassesAndRosters: React.FC = () => {
 
             <div>
               <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Bicol University Email</label>
-              <input
-                type="email"
+              <InstitutionalEmailInput
                 required
                 value={studentEmailInput}
                 onChange={(e) => setStudentEmailInput(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                placeholder="username"
               />
             </div>
 

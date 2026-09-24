@@ -29,7 +29,7 @@ interface AppContextProps {
     assignedClassId?: string;
   }) => void;
   addRemedialExam: (remedial: Omit<RemedialExam, 'id' | 'status' | 'remedialScore' | 'remedialGrade'>) => void;
-  updateRemedialExam: (remedialId: string, score: number, notes?: string) => void;
+  updateRemedialExam: (remedialId: string, score: number, notes?: string, outcome?: RemedialExam['retentionOutcome']) => void;
   deleteRemedialExam: (remedialId: string) => void;
   updateSettings: (settings: SystemSettings) => void;
   
@@ -671,7 +671,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const updateRemedialExam = (remedialId: string, score: number, notes?: string) => {
+  const updateRemedialExam = (remedialId: string, score: number, notes?: string, outcome?: RemedialExam['retentionOutcome']) => {
     setStudents(prev => {
       const updated = prev.map(student => {
         const examIndex = student.remedialExams.findIndex(rem => rem.id === remedialId);
@@ -696,6 +696,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           remedialScore: score,
           remedialGrade: resolvedGrade,
           status,
+          retentionOutcome: outcome || originalExam.retentionOutcome,
           notes: notes || `Remediation exam resolved. Score: ${score}%. Status: ${status.toUpperCase()}.`,
         };
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -28,7 +28,9 @@ import {
   BookOpen,
   Camera,
   History,
-  Play
+  Play,
+  Briefcase,
+  GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
@@ -74,7 +76,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
   const initials = getInitials(currentUser.name);
 
-  const getRoleColors = (role: string) => {
+  const getRoleColors = (role: string, secretaryMode?: 'secretary' | 'student') => {
     switch (role) {
       case 'admin':
         return {
@@ -91,6 +93,21 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
         };
       case 'secretary':
+        if (secretaryMode === 'student') {
+          return {
+            bgGradient: 'from-emerald-500/20 to-teal-600/20 dark:from-emerald-500/25 dark:to-teal-600/25',
+            textActive: 'text-emerald-600 dark:text-emerald-300 font-bold border-l-4 border-emerald-500 bg-emerald-500/10 dark:bg-emerald-500/20',
+            iconActive: 'text-emerald-600 dark:text-emerald-400',
+            iconHover: 'group-hover:text-emerald-600 dark:group-hover:text-emerald-300',
+            logoRing: 'shadow-emerald-500/20',
+            avatarBg: 'from-emerald-500 to-teal-600 dark:from-emerald-600 dark:to-teal-700',
+            avatarText: 'text-white font-bold font-heading',
+            crumbHover: 'hover:text-emerald-500',
+            roleLabelText: 'text-emerald-500',
+            hoverBg: 'hover:bg-emerald-50/80 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white',
+            sidebarGradient: 'from-slate-50 via-slate-100 to-slate-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950',
+          };
+        }
         return {
           bgGradient: 'from-blue-500/20 to-blue-600/20 dark:from-blue-500/25 dark:to-blue-600/25',
           textActive: 'text-blue-600 dark:text-blue-300 font-bold border-l-4 border-blue-500 bg-blue-500/10 dark:bg-blue-500/20',
@@ -135,7 +152,17 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         };
     }
   };
-  const colors = getRoleColors(currentUser.role);
+
+  const [secretaryViewMode, setSecretaryViewMode] = useState<'secretary' | 'student'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('dentisys_secretary_view_mode');
+      if (saved === 'secretary' || saved === 'student') return saved;
+      if (window.location.pathname.startsWith('/student')) return 'student';
+    }
+    return 'secretary';
+  });
+
+  const colors = getRoleColors(currentUser.role, secretaryViewMode);
 
   const { settings, updateSettings, students } = useApp();
   const config = useRuntimeConfig();
@@ -146,6 +173,29 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (currentUser.role === 'secretary') {
+      if (location.pathname.startsWith('/student') && secretaryViewMode !== 'student') {
+        setSecretaryViewMode('student');
+        localStorage.setItem('dentisys_secretary_view_mode', 'student');
+      } else if ((location.pathname.startsWith('/secretary') || location.pathname === '/') && secretaryViewMode !== 'secretary') {
+        setSecretaryViewMode('secretary');
+        localStorage.setItem('dentisys_secretary_view_mode', 'secretary');
+      }
+    }
+  }, [location.pathname, currentUser.role, secretaryViewMode]);
+
+  const handleToggleSecretaryMode = (newMode: 'secretary' | 'student') => {
+    setSecretaryViewMode(newMode);
+    localStorage.setItem('dentisys_secretary_view_mode', newMode);
+    setIsSidebarOpen(false);
+    if (newMode === 'student') {
+      navigate('/student/dashboard');
+    } else {
+      navigate('/');
+    }
+  };
 
   const toggleTheme = () => {
     updateSettings({
@@ -173,23 +223,24 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     }
     
     if (currentUser.role === 'secretary') {
+      if (secretaryViewMode === 'student') {
+        return [
+          { name: 'Student Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
+          { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
+          { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
+          { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
+          { name: 'My Classes', path: '/student/classes', icon: BookOpen },
+          { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
+          { name: 'My Profile', path: '/student/profile', icon: UserCircle },
+        ];
+      }
+
       return [
-        // Secretary Functions
-        { name: 'Dashboard', path: '/', icon: LayoutDashboard, sectionHeader: 'Secretary Functions' },
-        { name: 'Start Class Session', path: '/secretary/start-session', icon: Play },
-        { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
-        { name: 'Manual Override', path: '/secretary/override', icon: ClipboardPenLine },
+        { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Attendance Monitoring', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
         { name: 'Secretary Profile', path: '/secretary/profile', icon: UserCircle },
         { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
-
-        // Student Functions
-        { name: 'Student Dashboard', path: '/student/dashboard', icon: LayoutDashboard, sectionHeader: 'Student Functions' },
-        { name: 'Daily Attendance', path: '/student/attendance', icon: Camera },
-        { name: 'Attendance Logs', path: '/student/attendance-logs', icon: History },
-        { name: 'Face Registration', path: '/student/face-registration', icon: UserCheck },
-        { name: 'My Classes', path: '/student/classes', icon: BookOpen },
-        { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
       ];
     }
 
@@ -277,12 +328,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Reports & Analytics', path: '/admin/reports' });
     } else if (path === '/admin/audit-trail') {
       crumbs.push({ name: 'Audit Trail', path: '/admin/audit-trail' });
-    } else if (path === '/secretary/start-session') {
-      crumbs.push({ name: 'Start Class Session', path: '/secretary/start-session' });
-    } else if (path === '/secretary/attendance') {
-      crumbs.push({ name: 'Attendance List', path: '/secretary/attendance' });
-    } else if (path === '/secretary/override') {
-      crumbs.push({ name: 'Manual Override', path: '/secretary/override' });
+    } else if (path === '/secretary/attendance' || path === '/secretary/override' || path === '/secretary/start-session') {
+      crumbs.push({ name: 'Attendance Monitoring', path: '/secretary/attendance' });
     } else if (path === '/secretary/audit-trail') {
       crumbs.push({ name: 'My Activity Log', path: '/secretary/audit-trail' });
     } else if (path === '/faculty/audit-trail') {
@@ -354,15 +401,43 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
                     <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
+                    {currentUser.role === 'secretary' && (
+                      <span className="inline-block mt-1 text-[10px] font-extrabold text-blue-600 dark:text-blue-400">
+                        Active: {secretaryViewMode === 'student' ? 'Student View 🎓' : 'Secretary View 💼'}
+                      </span>
+                    )}
                   </div>
 
+                  {currentUser.role === 'secretary' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleToggleSecretaryMode(secretaryViewMode === 'secretary' ? 'student' : 'secretary');
+                        setIsProfileOpen(false);
+                      }}
+                      className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-bold transition-all cursor-pointer border-b border-slate-100 dark:border-slate-800 pb-2 mb-1"
+                    >
+                      {secretaryViewMode === 'secretary' ? (
+                        <>
+                          <GraduationCap className="w-4 h-4 text-emerald-600" />
+                          <span>Switch to Student View</span>
+                        </>
+                      ) : (
+                        <>
+                          <Briefcase className="w-4 h-4 text-blue-600" />
+                          <span>Switch to Secretary View</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+
                   <Link
-                    to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
+                    to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? (secretaryViewMode === 'student' ? '/student/profile' : '/secretary/profile') : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
                     onClick={() => setIsProfileOpen(false)}
                     className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                   >
                     <User className="w-4 h-4 text-slate-400" />
-                    <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
+                    <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? (secretaryViewMode === 'student' ? 'My Student Profile' : 'My Secretary Profile') : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
                   </Link>
 
                   <Link
@@ -405,7 +480,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       >
         
         {/* Brand Logo & Desktop Collapse Toggle */}
-        <div className="flex items-center justify-between mb-8 px-1.5 relative">
+        <div className="flex items-center justify-between mb-6 px-1.5 relative">
           <div className="flex items-center space-x-3 min-w-0">
             <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className={`w-10 h-10 rounded-full object-cover shadow-lg ${colors.logoRing} flex-shrink-0`} />
             {!isSidebarCollapsed && (
@@ -429,6 +504,53 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
           </button>
         </div>
+
+        {/* Secretary / Student Role Switcher */}
+        {currentUser.role === 'secretary' && (
+          <div className="mb-4 px-1">
+            {!isSidebarCollapsed ? (
+              <div className="p-1 rounded-2xl bg-slate-200/70 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 flex items-center shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => handleToggleSecretaryMode('secretary')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    secretaryViewMode === 'secretary'
+                      ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                  title="Switch to Secretary Functions"
+                >
+                  <Briefcase className="w-3.5 h-3.5" />
+                  <span>Secretary</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleSecretaryMode('student')}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    secretaryViewMode === 'student'
+                      ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                  title="Switch to Student Functions"
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>Student</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => handleToggleSecretaryMode(secretaryViewMode === 'secretary' ? 'student' : 'secretary')}
+                  className="p-2 rounded-xl bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-700 transition-all cursor-pointer shadow-xs"
+                  title={`Switch to ${secretaryViewMode === 'secretary' ? 'Student Mode' : 'Secretary Mode'}`}
+                >
+                  {secretaryViewMode === 'secretary' ? <Briefcase className="w-4 h-4 text-blue-600" /> : <GraduationCap className="w-4 h-4 text-emerald-600" />}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Navigation Items */}
         <nav className="flex-1 space-y-1.5 overflow-y-auto">
@@ -599,7 +721,11 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
                   <div className="text-left hidden lg:block">
                   <div className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none">{currentUser.name}</div>
-                  <span className={`text-[9px] font-semibold ${colors.roleLabelText}`}>{ROLE_TITLES[currentUser.role] || ''}</span>
+                  <span className={`text-[9px] font-semibold ${colors.roleLabelText}`}>
+                    {currentUser.role === 'secretary'
+                      ? (secretaryViewMode === 'student' ? 'Class Secretary • Student View' : 'Class Secretary')
+                      : (ROLE_TITLES[currentUser.role] || '')}
+                  </span>
                 </div>
                 <ChevronDown className="w-4 h-4 text-slate-400" />
               </button>
@@ -612,15 +738,43 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800 pb-2 mb-1.5">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signed in as</p>
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate mt-0.5">{currentUser.email}</p>
+                      {currentUser.role === 'secretary' && (
+                        <span className="inline-block mt-1 text-[10px] font-extrabold text-blue-600 dark:text-blue-400">
+                          Active: {secretaryViewMode === 'student' ? 'Student View 🎓' : 'Secretary View 💼'}
+                        </span>
+                      )}
                     </div>
 
+                    {currentUser.role === 'secretary' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToggleSecretaryMode(secretaryViewMode === 'secretary' ? 'student' : 'secretary');
+                          setIsProfileOpen(false);
+                        }}
+                        className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 dark:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-bold transition-all cursor-pointer border-b border-slate-100 dark:border-slate-800 pb-2 mb-1"
+                      >
+                        {secretaryViewMode === 'secretary' ? (
+                          <>
+                            <GraduationCap className="w-4 h-4 text-emerald-600" />
+                            <span>Switch to Student View</span>
+                          </>
+                        ) : (
+                          <>
+                            <Briefcase className="w-4 h-4 text-blue-600" />
+                            <span>Switch to Secretary View</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
                     <Link
-                      to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
+                      to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? (secretaryViewMode === 'student' ? '/student/profile' : '/secretary/profile') : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
                       onClick={() => setIsProfileOpen(false)}
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <User className="w-4 h-4 text-slate-400" />
-                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
+                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? (secretaryViewMode === 'student' ? 'My Student Profile' : 'My Secretary Profile') : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
                     </Link>
 
                     <Link

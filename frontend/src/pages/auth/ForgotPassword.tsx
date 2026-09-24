@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail, Check, Copy, ExternalLink } from 'lucide-react';
 import { requestPasswordReset } from '../../services/authService';
+import { InstitutionalEmailInput } from '../../components/InstitutionalEmailInput';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -59,25 +60,19 @@ export function ForgotPassword() {
               )}
 
               <div>
-                <label htmlFor="email" className="block text-sm font-semibold text-slate-700">
+                <label htmlFor="email" className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Email address
                 </label>
-                <div className="mt-1 relative rounded-xl shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-slate-400" aria-hidden="true" />
-                  </div>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="focus:ring-2 focus:ring-clinical-500 focus:border-clinical-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-xl py-2.5 border transition-all"
-                    placeholder="you@example.com"
-                  />
-                </div>
+                <InstitutionalEmailInput
+                  id="email"
+                  name="email"
+                  autoComplete="email"
+                  required
+                  icon={<Mail className="h-4 w-4" />}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="username"
+                />
               </div>
 
               <div>

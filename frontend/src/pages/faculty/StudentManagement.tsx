@@ -21,6 +21,7 @@ import { useApp } from '../../context/AppContext';
 import { Student, EnrolledSubject } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { InstitutionalEmailInput } from '../../components/InstitutionalEmailInput';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { normalizeOptionalPersonName, normalizePersonName } from '../../utils/nameNormalization';
 
@@ -615,15 +616,14 @@ export const StudentManagement: React.FC = () => {
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">BU Email Address</label>
-                  <input
-                    type="email"
-                    placeholder="e.g. angela@bicol-u.edu.ph"
+                  <InstitutionalEmailInput
+                    placeholder="e.g. angela"
                     value={formEmail}
                     onChange={(e) => {
                       setFormEmail(e.target.value);
                       if (formErrors.email) setFormErrors(prev => ({ ...prev, email: '' }));
                     }}
-                    className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.email ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
+                    hasError={!!formErrors.email}
                   />
                   {formErrors.email && <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold">{formErrors.email}</p>}
                 </div>

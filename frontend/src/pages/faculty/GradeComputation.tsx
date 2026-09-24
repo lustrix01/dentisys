@@ -24,7 +24,10 @@ import {
   Grid,
   List,
   Zap,
-  RotateCcw
+  RotateCcw,
+  ArrowDownAZ,
+  ArrowUpZA,
+  X
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
@@ -342,6 +345,90 @@ export const GradeComputation: React.FC = () => {
   const [scoreEntryMode, setScoreEntryMode] = useState<'single' | 'matrix'>('single');
   const [matrixScoresState, setMatrixScoresState] = useState<Record<string, Record<string, string>>>({});
   const [isMatrixSavedAlert, setIsMatrixSavedAlert] = useState(false);
+
+  // Matrix View Sorting & Filtering States
+  const [matrixSortBy, setMatrixSortBy] = useState<'alpha-asc' | 'alpha-desc' | 'lastname-asc' | 'id-asc' | 'id-desc' | 'default'>('alpha-asc');
+  const [matrixStatusFilter, setMatrixStatusFilter] = useState<'all' | 'incomplete' | 'complete'>('all');
+  const [matrixAssessmentTypeFilter, setMatrixAssessmentTypeFilter] = useState<string>('all');
+  const [matrixSearch, setMatrixSearch] = useState('');
+
+  // Derived Matrix Filtered Students
+  const matrixStudents = useMemo(() => {
+    let list = [...activeStudents];
+
+    // 1. Search query filter
+    const query = (matrixSearch || scoreSearch).trim().toLowerCase();
+    if (query) {
+      list = list.filter(s =>
+        s.name.toLowerCase().includes(query) ||
+        s.studentId.toLowerCase().includes(query)
+      );
+    }
+
+    // 2. Score Completion Status filter
+    if (matrixStatusFilter === 'incomplete') {
+      list = list.filter(student => {
+        return activeAssessments.some(ass => {
+          const val = matrixScoresState[student.id]?.[ass.id];
+          return val === undefined || val === '';
+        });
+      });
+    } else if (matrixStatusFilter === 'complete') {
+      list = list.filter(student => {
+        if (activeAssessments.length === 0) return true;
+        return activeAssessments.every(ass => {
+          const val = matrixScoresState[student.id]?.[ass.id];
+          return val !== undefined && val !== '';
+        });
+      });
+    }
+
+    // 3. Sorting
+    list.sort((a, b) => {
+      if (matrixSortBy === 'alpha-asc') {
+        return a.name.localeCompare(b.name);
+      }
+      if (matrixSortBy === 'alpha-desc') {
+        return b.name.localeCompare(a.name);
+      }
+      if (matrixSortBy === 'lastname-asc') {
+        const getLastName = (name: string) => {
+          const parts = name.trim().split(/\s+/);
+          return parts.length > 1 ? parts[parts.length - 1] : parts[0];
+        };
+        return getLastName(a.name).localeCompare(getLastName(b.name));
+      }
+      if (matrixSortBy === 'id-asc') {
+        return a.studentId.localeCompare(b.studentId);
+      }
+      if (matrixSortBy === 'id-desc') {
+        return b.studentId.localeCompare(a.studentId);
+      }
+      return 0;
+    });
+
+    return list;
+  }, [activeStudents, matrixSearch, scoreSearch, matrixStatusFilter, matrixSortBy, activeAssessments, matrixScoresState]);
+
+  // Derived Matrix Assessment Columns
+  const matrixAssessments = useMemo(() => {
+    if (matrixAssessmentTypeFilter === 'all') return activeAssessments;
+    return activeAssessments.filter(ass => ass.type === matrixAssessmentTypeFilter);
+  }, [activeAssessments, matrixAssessmentTypeFilter]);
+
+  const distinctAssessmentTypes = useMemo(() => {
+    return Array.from(new Set(activeAssessments.map(a => a.type)));
+  }, [activeAssessments]);
+
+  const handleToggleStudentSort = () => {
+    if (matrixSortBy === 'alpha-asc') {
+      setMatrixSortBy('alpha-desc');
+    } else if (matrixSortBy === 'alpha-desc') {
+      setMatrixSortBy('id-asc');
+    } else {
+      setMatrixSortBy('alpha-asc');
+    }
+  };
 
   // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
   useEffect(() => {
@@ -1199,20 +1286,20 @@ export const GradeComputation: React.FC = () => {
 
           {scoreEntryMode === 'matrix' ? (
             /* FULL GRADEBOOK MATRIX VIEW */
-            <Card className="p-0 overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <Card className="p-0 overflow-hidden shadow-sm">
+              <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
                     <Grid className="w-4 h-4 text-clinical-550" />
                     Full Gradebook Matrix View
                   </h3>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Edit all course assessments side-by-side in a spreadsheet grid.</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Edit all course assessments side-by-side in a spreadsheet grid with alphabetical sorting and filters.</p>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleSaveMatrixScores}
-                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97"
+                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
                     <span>{isMatrixSavedAlert ? 'All Matrix Scores Saved!' : 'Save All Matrix Scores'}</span>
@@ -1220,12 +1307,120 @@ export const GradeComputation: React.FC = () => {
                 </div>
               </div>
 
+              {/* Matrix Control & Filter Toolbar */}
+              <div className="px-5 py-3 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {/* Search Input */}
+                  <div className="relative w-48 sm:w-60">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search student or ID..."
+                      value={matrixSearch}
+                      onChange={(e) => setMatrixSearch(e.target.value)}
+                      className="w-full pl-8 pr-7 py-1.5 bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-clinical-500/20 focus:border-clinical-500 transition-all"
+                    />
+                    {matrixSearch && (
+                      <button
+                        onClick={() => setMatrixSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Alphabetical / Sort Dropdown */}
+                  <div className="flex items-center gap-1.5 bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Sort:</span>
+                    <select
+                      value={matrixSortBy}
+                      onChange={(e) => setMatrixSortBy(e.target.value as any)}
+                      className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                    >
+                      <option value="alpha-asc">Alphabetical (A ➔ Z)</option>
+                      <option value="alpha-desc">Alphabetical (Z ➔ A)</option>
+                      <option value="lastname-asc">Last Name (A ➔ Z)</option>
+                      <option value="id-asc">Student ID (Ascending)</option>
+                      <option value="id-desc">Student ID (Descending)</option>
+                      <option value="default">Roster Default</option>
+                    </select>
+                  </div>
+
+                  {/* Score Completion Filter */}
+                  <div className="flex items-center gap-1.5 bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Status:</span>
+                    <select
+                      value={matrixStatusFilter}
+                      onChange={(e) => setMatrixStatusFilter(e.target.value as any)}
+                      className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                    >
+                      <option value="all">All Students</option>
+                      <option value="incomplete">Incomplete Scores</option>
+                      <option value="complete">Fully Graded</option>
+                    </select>
+                  </div>
+
+                  {/* Assessment Type Column Filter */}
+                  {distinctAssessmentTypes.length > 1 && (
+                    <div className="flex items-center gap-1.5 bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5">
+                      <span className="text-[10px] font-bold uppercase text-slate-400">Columns:</span>
+                      <select
+                        value={matrixAssessmentTypeFilter}
+                        onChange={(e) => setMatrixAssessmentTypeFilter(e.target.value)}
+                        className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                      >
+                        <option value="all">All Activities ({activeAssessments.length})</option>
+                        {distinctAssessmentTypes.map(t => (
+                          <option key={t} value={t}>{t}s</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right stats count & reset */}
+                <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-2">
+                  <span>Showing <strong className="text-slate-700 dark:text-slate-200">{matrixStudents.length}</strong> of {activeStudents.length} students</span>
+                  {(matrixSearch || matrixStatusFilter !== 'all' || matrixSortBy !== 'alpha-asc' || matrixAssessmentTypeFilter !== 'all') && (
+                    <button
+                      onClick={() => {
+                        setMatrixSearch('');
+                        setMatrixStatusFilter('all');
+                        setMatrixSortBy('alpha-asc');
+                        setMatrixAssessmentTypeFilter('all');
+                      }}
+                      className="text-[10px] font-bold text-clinical-600 dark:text-clinical-400 hover:underline cursor-pointer"
+                    >
+                      Reset filters
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
                 <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800 border-collapse">
                   <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                     <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left divide-x divide-slate-200 dark:divide-slate-800">
-                      <th className="px-4 py-3 min-w-[180px]">Student Details</th>
-                      {activeAssessments.map(ass => (
+                      <th
+                        onClick={handleToggleStudentSort}
+                        className="px-4 py-3 min-w-[200px] cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-800/60 select-none transition-colors"
+                        title="Click to toggle alphabetical sort"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>Student Details</span>
+                          <span className="flex items-center gap-1 text-[10px] font-semibold text-clinical-600 dark:text-clinical-400">
+                            {matrixSortBy === 'alpha-asc' ? (
+                              <span className="flex items-center gap-0.5">A➔Z <ArrowDownAZ className="w-3.5 h-3.5" /></span>
+                            ) : matrixSortBy === 'alpha-desc' ? (
+                              <span className="flex items-center gap-0.5">Z➔A <ArrowUpZA className="w-3.5 h-3.5" /></span>
+                            ) : (
+                              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                            )}
+                          </span>
+                        </div>
+                      </th>
+                      {matrixAssessments.map(ass => (
                         <th key={ass.id} className="px-3 py-3 text-center min-w-[120px]">
                           <div className="font-bold text-slate-700 dark:text-slate-200">{ass.title}</div>
                           <div className="text-[9px] font-semibold text-clinical-600 dark:text-clinical-400 font-mono mt-0.5">
@@ -1236,20 +1431,20 @@ export const GradeComputation: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
-                    {filteredScoreStudents.length === 0 ? (
+                    {matrixStudents.length === 0 ? (
                       <tr>
-                        <td colSpan={activeAssessments.length + 1} className="py-12 text-center text-slate-400 font-semibold">
-                          No matching student records found.
+                        <td colSpan={matrixAssessments.length + 1} className="py-12 text-center text-slate-400 font-semibold">
+                          No matching student records found for the active filter.
                         </td>
                       </tr>
                     ) : (
-                      filteredScoreStudents.map(student => (
+                      matrixStudents.map(student => (
                         <tr key={student.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/20 divide-x divide-slate-100 dark:divide-slate-800/40">
                           <td className="px-4 py-3">
                             <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">{student.name}</div>
                             <div className="text-[10px] text-slate-400 font-mono">{student.studentId}</div>
                           </td>
-                          {activeAssessments.map(ass => {
+                          {matrixAssessments.map(ass => {
                             const val = matrixScoresState[student.id]?.[ass.id] ?? '';
                             const isValid = validateSingleScore(val, ass.maxScore);
                             return (

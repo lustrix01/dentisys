@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { InstitutionalEmailInput } from '../../components/InstitutionalEmailInput';
 import { getSecretaryProfileApi, updateSecretaryProfileApi } from '../../services/apiClient';
 import { normalizePersonName } from '../../utils/nameNormalization';
 
@@ -204,12 +205,11 @@ export const Profile: React.FC = () => {
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Institutional Email</label>
-                      <input
-                        type="email"
+                      <InstitutionalEmailInput
                         value={editEmail}
                         onChange={(e) => setEditEmail(e.target.value)}
                         required
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
+                        placeholder="username"
                       />
                     </div>
                   </div>

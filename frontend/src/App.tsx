@@ -155,7 +155,7 @@ function App() {
                   <Route path="/faculty/settings" element={<FacultySettings />} />
                 </Route>
 
-                <Route element={<ProtectedRoute allowedRoles={['student']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['student', 'secretary']} />}>
                   <Route path="/student/dashboard" element={<StudentDashboard />} />
                   <Route path="/student/attendance" element={<StudentAttendance />} />
                   <Route path="/student/attendance-logs" element={<StudentAttendanceLogs />} />

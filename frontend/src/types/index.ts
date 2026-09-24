@@ -15,6 +15,7 @@ export interface EnrolledSubject {
   hasRemedial: boolean;
   classId?: string;
   enrollmentId?: string;
+  isRetake?: boolean;
 }
 
 export interface RemedialExam {
@@ -29,6 +30,9 @@ export interface RemedialExam {
   examDate: string;
   status: 'pending' | 'passed' | 'failed';
   notes?: string;
+  attempt?: 1 | 2;
+  subjectType?: 'board' | 'retake'; // Dental Board Subject vs Subject Retake
+  retentionOutcome?: 'retained' | 'remedial_2' | 'retake_subject' | 'shift_transfer';
 }
 
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';

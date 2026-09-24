@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Building2, CheckCircle2, Mail, Save, ShieldCheck, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { InstitutionalEmailInput } from '../../components/InstitutionalEmailInput';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
 import { getAdminProfileApi, updateAdminProfileApi } from '../../services/apiClient';
@@ -89,7 +90,16 @@ export const Profile: React.FC = () => {
                 {message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <Label label="Full name"><input required value={name} onChange={event => setName(event.target.value.replace(/[0-9]/g, ''))} onBlur={() => setName(normalizePersonName(name))} className={inputClass} /></Label>
-                  <Label label="Email address" icon={<Mail className="w-4 h-4" />}><input required type="email" value={email} onChange={event => setEmail(event.target.value)} className={`${inputClass} pl-10`} /></Label>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Email address</label>
+                    <InstitutionalEmailInput
+                      required
+                      icon={<Mail className="w-4 h-4" />}
+                      value={email}
+                      onChange={event => setEmail(event.target.value)}
+                      placeholder="username"
+                    />
+                  </div>
                   <Label label="Office location" icon={<Building2 className="w-4 h-4" />}><input value={office} onChange={event => setOffice(event.target.value)} className={`${inputClass} pl-10`} /></Label>
                 </div>
                 <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
