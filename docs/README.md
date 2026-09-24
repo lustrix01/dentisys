@@ -1,6 +1,7 @@
 # DentiSys Documentation
 
 - [Authoritative product specification](../spec.md)
+- [Current UI migration and 3NF delivery plan](ui-migration-plan.md)
 - [Architecture](architecture.md)
 - [Supported local development environment](development-environment.md)
 - [Manual demo readiness checklist](manual-demo-readiness.md)

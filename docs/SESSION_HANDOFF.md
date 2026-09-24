@@ -2,6 +2,14 @@
 
 This is the durable continuation note for the current local-demo work. It records the repository state and evidence available at the handoff point. It does not amend `spec.md`, change product policy, or declare the one-day demo complete.
 
+## Current Owner direction - 2026-09-24 priority reset
+
+Continue from [UI-first migration plan](ui-migration-plan.md), not the older functional-first continuation prompt below. The Owner explicitly approved specification amendments based on UI Changes.pdf and prioritizes copying the entire `owhie_backend` UI into `lighthal5`, then normalizing the database to 3NF, then wiring and repairing tests. This session changes documentation only. Source UI ref: `bd5ab789cc537f1503fc78357ad5937e7926651a`; functional baseline: `67e16a0`.
+
+Docker recovery and newer validation supersede the outage described below. The plan records continuation-reported passing checks and all six unresolved live failures. Google and real-camera acceptance remain unverified/deferred. Preserve parked work, existing development volumes, and historical evidence. No UI migration or database normalization is claimed complete.
+
+Next action: inventory the complete source UI and begin Phase 1. Do not spend the next session on deferred provider/live-test repair before UI migration. The remainder of this handoff is historical evidence, including its obsolete ready-to-paste prompt.
+
 ## Executive state
 
 The implementation baseline is `gemini/local-demo-frontend` at `08dbdd8935281a2561a4291950d13589200f9d8b` (`fix: close biometric guidance and linking audit gaps`). The implementation review of this commit was reported clean by Luna XHigh. This handoff and the delivery-plan update are carried in the following docs-only commit; the final repository `HEAD` is therefore the handoff commit, immediately after `08dbdd8`. There is no aggregate current-tree runtime-clean claim because Docker-backed mandatory gates were blocked.

@@ -799,6 +799,58 @@ Retention and grading decisions remain server-authoritative through the existing
 
 ---
 
+# 9B. UI and normalized-data amendment - 2026-09-24
+
+**Status: APPROVED by the Owner's explicit request to amend the specification using UI Changes.pdf. Implementation pending.**
+
+## UI-001 - Canonical interface and priority
+
+The complete `owhie_backend` interface is the visual and interaction baseline to migrate into `lighthal5`, supplemented by the nine-page `UI Changes.pdf`. This replaces earlier visual baselines and functional-first priorities. Scope includes every role, route, navigation item, form, table, dialog, style, asset, and responsive state, not only the illustrated screens.
+
+Delivery order is (1) copy the entire UI, (2) normalize the database to third normal form and support the UI's data, (3) connect frontend and backend and repair regressions. Tests may fail during intermediate UI migration; retain the failures as tracked work. Visual parity is not functional completion or proof of persistence.
+
+The source branch defines the interface, not automatic approval of its backend semantics. Explicit requirements below govern PDF/source differences. Unaffected authentication, permissions, privacy, history preservation, Docker/PostgreSQL, and authoritative-data rules remain in force. Unresolved behavior remains OPEN.
+
+## UI-002 - Score entry, deadlines, and weights (PDF pages 1-3)
+
+Provide Single Activity View and Full Matrix View, including course/class filters, for entering one activity or multiple student/activity scores. Both ultimately use the same authoritative score records.
+
+Allow a blank due date for activities without a deadline. Prevent overlapping activity dates; exact collision scope and date-versus-time semantics remain OPEN until clarified. Do not infer a global uniqueness constraint. A blank due date does not waive GRD-001's separate attendance-link requirement.
+
+Explain overall Midterm/Final contributions and each period's category weights clearly, identify the target offering, and show totals. Preserve GRD-002's calculation, saved-configuration, and 100% validation rules; screenshot examples do not override saved values.
+
+## UI-003 - Watchlist and retention (PDF pages 4 and 6)
+
+The Midterm Watchlist stays locked while the applicable student's midterm grades are incomplete and becomes accessible when complete. Authorized Faculty may manually unlock it. Unlocking changes visibility, not missing grades or academic completeness. Record the actor, scope, and timestamp when wiring manual unlocks. Aggregate lock/unlock scope for a multi-student view remains OPEN.
+
+Retention uses final grades, scores, and applicable approved BUCDM policy. Clickable Policy Status displays the student's current stage and progression through the BUCDM retention flow. Distinguish midterm warning from final retention decisions. Do not approve numeric thresholds or policy tracks solely from screenshot examples; unresolved policy-to-stage mapping must be clarified before authoritative wiring.
+
+## UI-004 - Email and invitations (PDF pages 5, 7-8)
+
+All email-entry controls default to `@bicol-u.edu.ph`, allowing local-part-only entry. Complete existing addresses and other server-allowed domains remain supported under AUTH-004. Preserve addresses and prevent duplicated suffixes; this default does not impose a single-domain restriction.
+
+Faculty invitations follow the PDF's structured name fields, institutional email, clear send action, searchable status, and supported lifecycle actions. The Owner's five-part name requirement below supplements the screenshot's subset. Invitation authority, activation, password, and MFA rules remain unchanged.
+
+## UI-005 - Attendance and Secretary context (PDF pages 7-9)
+
+Adopt the source Attendance Monitoring interface, consolidating Start Attendance Session and Session History within it, with class and relevant attendance filters. Reproduce the Secretary/Student toggle and reduced sidebar. The toggle retains the same account and canonical Student identity under BIO-010; it grants no new role or access to another Student.
+
+Use the source start-session presentation with PDF-directed improvements. Existing ATT rules still govern timing, geofence, ownership, correction, history, and Excused approval. A source delete/relaunch control does not authorize erasing attendance history or reusing verification.
+
+## CLS-002 - Current-year creation and historical classes (PDF page 9)
+
+Faculty may create classes only for the current school year. Past-school-year classes are view-only: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. Any historical correction exception requires a separately approved rule.
+
+## ID-002 - Structured names and 3NF
+
+Extend ID-001 to applicable person and invitation records: persist Prefix, First Name, Middle Name, Last Name, and Suffix separately. Prefix, Middle Name, and Suffix may be absent. Compose display names from those fields rather than maintaining another independently editable identity. Preserve canonical links across accounts, Students, Secretaries, Faculty, and invitations.
+
+Normalize affected persistent data to 3NF: atomic attributes, declared candidate keys, no partial dependencies on composite keys, and no transitive dependencies of non-key attributes. Name splitting alone does not establish 3NF. Inventory the complete UI's composite inputs and repeated facts; separate entities and relationships according to their functional dependencies. Do not split arbitrary text or add lookup tables without a real domain relationship.
+
+Use additive ordered migrations and explicit backfill/compatibility handling. Never guess an ambiguous legacy name split: preserve the original for reconciliation. Preserve identifiers, enrollment, raw scores, grades, attendance, audit history, and persisted volumes. No database reset or destructive cleanup is approved.
+
+---
+
 # 10. Specification Change Protocol
 
 Before changing behavior governed by this file:

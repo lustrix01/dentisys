@@ -1,5 +1,9 @@
 # Local integration status
 
+## Current planning amendment - 2026-09-24
+
+The current task checkout started clean at `67e16a0`; the continuation reports local `lighthal5` at the same functional commit. New UI source is `owhie_backend` at `bd5ab789cc537f1503fc78357ad5937e7926651a`. The [UI-first plan](ui-migration-plan.md) supersedes older integration priorities below. This amendment does not merge branches, run migrations, or declare UI/runtime completion. Preserve all parked changes and volumes. Older ref inventories below are timestamped historical snapshots, not current branch verification.
+
 Inventory captured 2026-09-24 01:04:26 +08:00 after integrating the reviewed period-grading line.
 
 ## Integrated line

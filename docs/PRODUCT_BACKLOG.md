@@ -1,5 +1,7 @@
 # DentiSys Product Backlog
 
+> **Owner amendment, 2026-09-24:** The current canonical UI is `owhie_backend` at `bd5ab789cc537f1503fc78357ad5937e7926651a`, supplemented by UI Changes.pdf. Delivery order is entire UI migration into `lighthal5`, 3NF/schema fit, then frontend/backend wiring and test repair. See [the current plan](ui-migration-plan.md) and spec.md section 9B. Earlier visual baselines and conflicting sequencing below are historical. Development ownership follows current AGENTS.md (Luna functional work; Gemini presentation only), superseding the older ownership section below.
+
 > **Status:** Living Owner-approved product backlog  
 > **Canonical visual baseline:** `c58d3004db20280c8827dd10893e9c1058be2eaa` — `Restore canonical UI parity`
 

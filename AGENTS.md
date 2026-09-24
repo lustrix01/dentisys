@@ -34,6 +34,8 @@
 
 ## Validation
 
+- Owner priority amendment (2026-09-24): follow spec.md section 9B and `docs/ui-migration-plan.md`: entire `owhie_backend` UI into `lighthal5`, then 3NF/schema fit, then frontend/backend wiring. Intermediate UI batches may retain failing tests; record exact failures and defer repair to the wiring phase. This overrides functional-first sequencing and intermediate aggregate-pass requirements only. Do not delete meaningful tests, conceal failures, claim functional completion, or waive final integration gates. Database safety and functional/presentation ownership rules remain unchanged.
+
 - While iterating, run syntax/type checks and focused tests for changed behavior. Verify fixture correctness with a cheap check before expensive suites. If a check fails, isolate a minimal reproducer and classify the failure as infrastructure, fixture, or product before rerunning a broad gate.
 - Batch coherent work before the aggregate gates. Review one frozen batch once, then after fixes rerun focused checks and review only evidence materially invalidated by those fixes; do not repeat unchanged passing checks.
 - Documentation or instruction changes: run `git diff --check` and targeted reference checks; run the documentation contract when its covered files or migration naming change.
