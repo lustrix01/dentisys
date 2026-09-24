@@ -77,6 +77,7 @@ if ($LASTEXITCODE -ne 0) { throw 'PHP syntax validation failed.' }
     -v "${root}\tests:/var/www/html/tests:ro" `
     -v "${root}\docs:/var/www/html/docs:ro" `
     -v "${root}\database:/var/www/html/database:ro" `
+    -v "${root}\frontend:/var/www/html/frontend:ro" `
     web sh -lc 'for test in /var/www/html/tests/backend/*_test.php; do php "$test" || exit 1; done'
 if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed.' }
 
