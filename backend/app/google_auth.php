@@ -96,15 +96,17 @@ function google_verify_id_token(array $config, string $credential, ?callable $ve
     }
 
     $hostedDomain = $claims['hd'] ?? null;
-    if (!is_string($hostedDomain) || trim($hostedDomain) === '' || !in_array(strtolower($hostedDomain), $allowedDomains, true)) {
-        throw new GoogleIdentityException('Google Workspace domain is not allowed.', 'domain_not_allowed');
+    if ($hostedDomain !== null) {
+        if (!is_string($hostedDomain) || trim($hostedDomain) === '' || strtolower($hostedDomain) !== $domain) {
+            throw new GoogleIdentityException('Google hosted domain does not match the verified email domain.', 'domain_not_allowed');
+        }
     }
 
     return [
         'sub' => $subject,
         'email' => $email,
         'email_domain' => $domain,
-        'hd' => strtolower($hostedDomain),
+        'hd' => $hostedDomain === null ? null : strtolower($hostedDomain),
         'iss' => $issuer,
         'aud' => $audience,
         'exp' => (int) $expiresAt,
