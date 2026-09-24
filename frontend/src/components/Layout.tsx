@@ -255,11 +255,12 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     void fetchNotifications();
   }, [fetchNotifications]);
 
-  const handleMarkAsRead = async (id: number) => {
+  const handleMarkAsRead = async (rawId: number | string) => {
+    const id = String(rawId);
     try {
       await markNotificationReadApi(id);
       const now = new Date().toISOString();
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, readAt: now } : n));
+      setNotifications(prev => prev.map(n => String(n.id) === id ? { ...n, readAt: now } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (err) {
       console.error('Failed to mark notification read:', err);

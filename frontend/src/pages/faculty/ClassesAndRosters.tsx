@@ -39,6 +39,7 @@ import {
   getAvailableStudentsForClassApi,
   enrollStudentsInClassApi,
   unenrollStudentFromClassApi,
+  updateFacultyStudentApi,
   createStudentInvitation,
   createStudentApi,
   FacultyClassItem,
@@ -126,6 +127,17 @@ export const ClassesAndRosters: React.FC = () => {
   const [editSchoolYear, setEditSchoolYear] = useState('2025-2026');
   const [editError, setEditError] = useState<string | null>(null);
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
+
+  // Student roster profile edit state. Membership and canonical Student number
+  // remain server-owned; this modal edits only the fields in the roster API.
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editStudentFirstName, setEditStudentFirstName] = useState('');
+  const [editStudentMiddleName, setEditStudentMiddleName] = useState('');
+  const [editStudentLastName, setEditStudentLastName] = useState('');
+  const [editStudentEmail, setEditStudentEmail] = useState('');
+  const [editStudentYearLevel, setEditStudentYearLevel] = useState(4);
+  const [editStudentError, setEditStudentError] = useState<string | null>(null);
+  const [isUpdatingStudent, setIsUpdatingStudent] = useState(false);
 
   // Form States: Add Student Manually (C4 Split-Name Interface)
   const [studentIdInput, setStudentIdInput] = useState('');
@@ -300,6 +312,58 @@ export const ClassesAndRosters: React.FC = () => {
     setEditError(null);
   };
 
+  const handleOpenEditStudent = (student: Student) => {
+    const parts = student.name.trim().split(/\s+/).filter(Boolean);
+    setEditingStudent(student);
+    setEditStudentFirstName(parts[0] || '');
+    setEditStudentLastName(parts.length > 1 ? parts[parts.length - 1] : '');
+    setEditStudentMiddleName(parts.length > 2 ? parts.slice(1, -1).join(' ') : '');
+    setEditStudentEmail(student.email || '');
+    setEditStudentYearLevel(student.yearLevel || 4);
+    setEditStudentError(null);
+  };
+
+  const handleUpdateStudent = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingStudent) return;
+
+    const firstName = editStudentFirstName.trim();
+    const middleName = editStudentMiddleName.trim();
+    const lastName = editStudentLastName.trim();
+    const email = editStudentEmail.trim();
+    if (firstName.length < 2 || lastName.length < 2) {
+      setEditStudentError('First name and last name must each contain at least two characters.');
+      return;
+    }
+    if (!email) {
+      setEditStudentError('Institutional email is required for roster edits.');
+      return;
+    }
+    if (!Number.isInteger(editStudentYearLevel) || editStudentYearLevel < 1 || editStudentYearLevel > 4) {
+      setEditStudentError('Year level must be between 1 and 4.');
+      return;
+    }
+
+    setIsUpdatingStudent(true);
+    setEditStudentError(null);
+    try {
+      await updateFacultyStudentApi(editingStudent.id, {
+        firstName,
+        middleName: middleName || undefined,
+        lastName,
+        email,
+        yearLevel: editStudentYearLevel,
+      });
+      setEditingStudent(null);
+      showFeedback(`Updated ${firstName}${middleName ? ` ${middleName}` : ''} ${lastName}.`, 'success');
+      await fetchData();
+    } catch (error) {
+      setEditStudentError(error instanceof Error ? error.message : 'Unable to save Student roster changes.');
+    } finally {
+      setIsUpdatingStudent(false);
+    }
+  };
+
   // Handler: Update Class Section
   const handleUpdateClass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -462,7 +526,11 @@ export const ClassesAndRosters: React.FC = () => {
         const facultySections = (student.classSections || []).filter(s =>
           classes.some(c => String(c.csId) === String(s.classId))
         );
-        if (facultySections.length > 0) {
+        if (facultySections.length > 1) {
+          showFeedback('Select a class section before removing a Student enrolled in multiple assigned classes.', 'info');
+          return;
+        }
+        if (facultySections.length === 1) {
           csId = parseInt(facultySections[0].classId, 10);
         }
       }
@@ -928,6 +996,15 @@ export const ClassesAndRosters: React.FC = () => {
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
+                              onClick={() => handleOpenEditStudent(st)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-600 hover:text-white text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer"
+                              title="Edit Student roster profile"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
                               onClick={() => handleSendStudentEmailInvite(st)}
                               disabled={isSendingInvitations}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-accent-600 hover:text-white dark:hover:bg-accent-600 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
@@ -1367,6 +1444,103 @@ export const ClassesAndRosters: React.FC = () => {
           <option key={room} value={room} />
         ))}
       </datalist>
+
+      {/* Modal: Edit Student roster profile */}
+      {editingStudent && (
+        <Modal
+          isOpen={!!editingStudent}
+          onClose={() => {
+            setEditingStudent(null);
+            setEditStudentError(null);
+          }}
+          title={`Edit Student: ${editingStudent.studentId}`}
+        >
+          <form onSubmit={handleUpdateStudent} className="space-y-4 text-xs">
+            <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Update the canonical roster profile. Student number and class membership stay protected by the server.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
+                First name *
+                <input
+                  required
+                  value={editStudentFirstName}
+                  onChange={event => setEditStudentFirstName(event.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </label>
+              <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
+                Last name *
+                <input
+                  required
+                  value={editStudentLastName}
+                  onChange={event => setEditStudentLastName(event.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </label>
+              <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
+                Middle name
+                <input
+                  value={editStudentMiddleName}
+                  onChange={event => setEditStudentMiddleName(event.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </label>
+              <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
+                Institutional email *
+                <input
+                  required
+                  type="email"
+                  value={editStudentEmail}
+                  onChange={event => setEditStudentEmail(event.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </label>
+              <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
+                Year level *
+                <select
+                  value={editStudentYearLevel}
+                  onChange={event => setEditStudentYearLevel(Number(event.target.value))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                >
+                  <option value={1}>Year 1</option>
+                  <option value={2}>Year 2</option>
+                  <option value={3}>Year 3</option>
+                  <option value={4}>Year 4</option>
+                </select>
+              </label>
+            </div>
+
+            {editStudentError && (
+              <div role="alert" className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <span>{editStudentError}</span>
+              </div>
+            )}
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingStudent(null);
+                  setEditStudentError(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingStudent}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+              >
+                {isUpdatingStudent ? 'Saving Student...' : 'Save Student'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Modal: Edit Class Section Details */}
       {editingClass && (
