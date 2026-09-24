@@ -36,6 +36,70 @@ function faculty_verify_auth(PDO $pdo, array $config): array
     return $authCtx;
 }
 
+/**
+ * Return significant audit events that the authenticated Faculty member is
+ * allowed to review.  This intentionally mirrors the existing Secretary
+ * activity projection and the non-Admin scope used by the Admin audit query:
+ * the Faculty's own events plus events scoped to one of the Faculty's class
+ * sections.  Raw audit state, credentials, and provider details are never
+ * selected for this read surface.
+ */
+function faculty_activity_rows(PDO $pdo, int $userId, int $limit = 100): array
+{
+    $limit = max(1, min(100, $limit));
+    $stmt = $pdo->prepare(
+        'SELECT event_id AS id, occurred_at AS timestamp, actor_username AS user_name,
+                actor_role AS user_role, action_code AS action, module_code AS module,
+                description, event_status AS status, ip_address, user_agent
+           FROM audit_events
+          WHERE actor_user_id = ?
+             OR (
+                canonical_schema_version >= 2
+                AND scope_cs_id IS NOT NULL
+                AND EXISTS (
+                    SELECT 1
+                      FROM class_sections cs
+                     WHERE cs.cs_id = audit_events.scope_cs_id
+                       AND cs.instructor_user_id = ?
+                )
+             )
+          ORDER BY occurred_at DESC, event_id DESC
+          LIMIT ' . $limit
+    );
+    $stmt->execute([$userId, $userId]);
+
+    return array_map(static fn(array $row): array => [
+        'id' => (string) $row['id'],
+        'timestamp' => $row['timestamp'],
+        'userName' => $row['user_name'] ?? null,
+        'userRole' => $row['user_role'] ?? null,
+        'action' => $row['action'] ?? null,
+        'module' => $row['module'] ?? null,
+        'description' => $row['description'] ?? '',
+        'status' => $row['status'] ?? null,
+        'ipAddress' => $row['ip_address'] ?? null,
+        'device' => $row['user_agent'] ?? null,
+    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+}
+
+function handle_faculty_activity_get(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $limit = (int) ($_GET['limit'] ?? 100);
+
+        json_response([
+            'status' => 'ok',
+            'activity' => faculty_activity_rows($pdo, (int) $authCtx['user_id'], $limit),
+        ], 200);
+    } catch (\Throwable $e) {
+        error_log('Faculty activity error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to read Faculty activity.', 500);
+    }
+}
+
 function handle_faculty_dashboard_kpis(): void
 {
     try {

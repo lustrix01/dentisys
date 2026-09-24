@@ -635,6 +635,27 @@ export function getAdminAuditLogsApi(params?: { query?: string; role?: string; m
   return request('GET', `/admin/audit-logs${qs}`);
 }
 
+export interface FacultyActivityRecord {
+  id: string;
+  timestamp: string;
+  userName?: string | null;
+  userRole?: string | null;
+  action?: string | null;
+  module?: string | null;
+  description: string;
+  status?: string | null;
+  ipAddress?: string | null;
+  device?: string | null;
+}
+
+export function getFacultyActivityApi(limit = 100): Promise<{
+  status: string;
+  activity: FacultyActivityRecord[];
+}> {
+  const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  return request('GET', `/faculty/activity?limit=${boundedLimit}`);
+}
+
 export function getAdminProfileApi(): Promise<{
   status: string;
   profile: {

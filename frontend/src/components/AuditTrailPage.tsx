@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, AlertCircle, AlertTriangle, CheckCircle2, Download, FileText, Filter, RefreshCw, Search, ShieldCheck, SlidersHorizontal, XCircle } from 'lucide-react';
 import type { AuditLog, AuditRole, AuditStatus } from '../services/auditService';
-import { getAdminAuditLogsApi, getSecretaryActivityApi } from '../services/apiClient';
+import { getAdminAuditLogsApi, getFacultyActivityApi, getSecretaryActivityApi } from '../services/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
 
@@ -72,9 +72,30 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
         })
         .finally(() => setLoading(false));
     } else {
-      // Faculty role has no general audit log endpoint; email activity is in Email Management
-      setDbLogs([]);
-      setLoading(false);
+      getFacultyActivityApi(100)
+        .then((data) => {
+          if (Array.isArray(data?.activity)) {
+            const mapped: AuditLog[] = data.activity.map((a) => ({
+              id: a.id,
+              timestamp: a.timestamp,
+              userName: a.userName || 'Faculty',
+              userRole: (a.userRole as AuditRole) || 'faculty',
+              action: a.action || 'Activity',
+              module: a.module || 'faculty',
+              description: a.description,
+              status: (a.status as AuditStatus) || 'Success',
+              ipAddress: a.ipAddress || '—',
+              device: a.device || '—',
+            }));
+            setDbLogs(mapped);
+          } else {
+            setDbLogs([]);
+          }
+        })
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : 'Failed to retrieve Faculty activity log.');
+        })
+        .finally(() => setLoading(false));
     }
   };
 
@@ -137,7 +158,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
         <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-800 dark:text-blue-300">
           <p className="font-bold">Faculty Workspace Activity</p>
           <p className="mt-1">
-            System-wide audit trail access is reserved for Administrators (<code className="font-mono text-[11px]">/api/admin/audit-logs</code>), and class section attendance activity is recorded for Secretaries (<code className="font-mono text-[11px]">/api/secretary/activity</code>). Faculty email dispatch activity is tracked under <strong>Email Management</strong>.
+            This view contains your significant Faculty actions and activity scoped to your authorized class sections. System-wide audit trail access remains reserved for Administrators, while Faculty email dispatch activity is tracked under <strong>Email Management</strong>.
           </p>
         </div>
       )}
@@ -281,4 +302,3 @@ const Select = ({ value, onChange, options }: { value: string; onChange: (value:
     ))}
   </select>
 );
-

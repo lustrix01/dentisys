@@ -550,6 +550,32 @@ $secretarySessionActivity = array_values(array_filter(
         && str_contains((string) ($event['description'] ?? ''), $sessionCode)
 ));
 expect_true(count($secretarySessionActivity) >= 1, 'Secretary activity is scoped to the authenticated Secretary and includes its session event');
+[$facultyActivityDeniedStatus] = integration_http_get_json('/api/faculty/activity', $secretaryAccessToken);
+expect_same(403, $facultyActivityDeniedStatus, 'Secretary cannot read the Faculty activity endpoint');
+[$facultyActivityLoginStatus, $facultyActivityLoginBody] = integration_http_json('/api/auth/login', '', [
+    'email' => 'faculty@bicol-u.edu.ph',
+    'password' => $demoPasswords['faculty@bicol-u.edu.ph'],
+]);
+expect_same(200, $facultyActivityLoginStatus, 'Faculty activity integration login returns HTTP 200');
+$facultyActivityAccessToken = (string) ($facultyActivityLoginBody['access_token'] ?? '');
+expect_true($facultyActivityAccessToken !== '', 'Faculty activity integration login returns an access token');
+[$facultyActivityStatus, $facultyActivityBody] = integration_http_get_json('/api/faculty/activity?limit=100', $facultyActivityAccessToken);
+expect_same(200, $facultyActivityStatus, 'Faculty activity read returns HTTP 200');
+$facultyScopedSessionActivity = array_values(array_filter(
+    $facultyActivityBody['activity'] ?? [],
+    static fn(array $event): bool => ($event['action'] ?? $event['actionCode'] ?? null) === 'attendance_session_started'
+        && str_contains((string) ($event['description'] ?? ''), $sessionCode)
+));
+expect_true(count($facultyScopedSessionActivity) >= 1, 'Faculty activity includes attendance events scoped to an authorized class');
+[$facultyActivityRefreshStatus, $facultyActivityRefreshBody] = integration_http_get_json('/api/faculty/activity?limit=100', $facultyActivityAccessToken);
+expect_same(200, $facultyActivityRefreshStatus, 'Faculty activity refresh remains available');
+if (($facultyActivityBody['activity'] ?? []) !== []) {
+    expect_same(
+        $facultyActivityBody['activity'][0]['id'] ?? null,
+        $facultyActivityRefreshBody['activity'][0]['id'] ?? null,
+        'Faculty activity refresh returns the same authoritative latest event'
+    );
+}
 [$secretaryFilteredStatus, $secretaryFilteredBody] = integration_http_get_json(
     '/api/secretary/attendance?date=' . rawurlencode($sessionDate) . '&csId=' . $secretarySessionClassId . '&sessionId=' . $attendanceSessionId,
     $secretaryAccessToken
