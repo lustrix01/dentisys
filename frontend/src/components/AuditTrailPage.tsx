@@ -103,7 +103,9 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
     fetchLogs();
   }, [query, roleFilter, moduleFilter, statusFilter, date]);
 
-  const logs = allLogs ? dbLogs : dbLogs.filter(log => log.userRole === role);
+  // Faculty activity includes authorized class-scoped events from other
+  // actors, so only Admin and Secretary views apply an actor-role projection.
+  const logs = allLogs || role === 'faculty' ? dbLogs : dbLogs.filter(log => log.userRole === role);
   const modules = Array.from(new Set(logs.map(log => log.module))).sort();
 
   const filtered = useMemo(() => logs.filter(log =>

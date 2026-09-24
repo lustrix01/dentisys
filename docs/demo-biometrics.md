@@ -132,11 +132,12 @@ an in-flight server operation cannot be duplicated by a browser timeout.
 
 The PHP-to-sidecar timeout is configured by
 `BIOMETRIC_SIDECAR_TIMEOUT_SECONDS` (the local default is 20 seconds). A
-browser abort does not cancel work already running in PHP. Therefore the
-client request deadline must be longer than the configured sidecar timeout plus
-transport margin, and the client must preserve the idempotency key when it
-retries. The current shared client default of 15 seconds must be aligned before
-calling a timeout path demo-ready.
+browser abort does not cancel work already running in PHP. The biometric
+enrollment and attendance requests use an explicit 30-second browser deadline,
+which leaves transport margin above the local sidecar timeout; the generic
+client default remains 15 seconds for ordinary requests. The client preserves
+the idempotency key when it retries. This timeout alignment does not claim that
+real camera enrollment or attendance has passed.
 
 ## Stable errors
 

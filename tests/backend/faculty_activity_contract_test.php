@@ -45,5 +45,6 @@ assert_faculty_activity_contract(str_contains($page, 'getFacultyActivityApi(100)
 assert_faculty_activity_contract(str_contains($page, 'setLoading(false)'), 'Faculty audit page clears loading state after refresh');
 assert_faculty_activity_contract(str_contains($page, 'setError(err instanceof Error ? err.message'), 'Faculty audit page surfaces request errors');
 assert_faculty_activity_contract(str_contains($page, 'No audit records match the selected filters.'), 'Faculty audit page preserves the truthful empty state');
+assert_faculty_activity_contract(str_contains($page, "allLogs || role === 'faculty' ? dbLogs"), 'Faculty audit page preserves authorized class-scoped actors');
 
 echo "ALL FACULTY ACTIVITY CONTRACT TESTS PASSED\n";
