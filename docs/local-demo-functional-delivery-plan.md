@@ -4,7 +4,7 @@
 
 **Authority correction for this update.** `spec.md` is authoritative. `docs/PRODUCT_BACKLOG.md` informs sequencing only where it is consistent with the specification. Any older audit wording that describes the backlog as more current does not override this rule; unresolved conflicts are listed as Owner approval items below.
 
-**Audit basis.** Reviewed the active frontend routes and actions, the PHP API route/controller surface, persistence and provider seams, current contract/integration tests, and the current checkout at `gemini/period-grading-frontend` (`666ed4e`, “fix(faculty): resolve period grading findings and add regression tests”). The `lighthal5` and `codex/period-grading-config` integration preparation is retained at that baseline; this plan does not merge or overwrite it. The product backlog governs delivery priorities where it is more current than the specification. Browser and running-stack validation was not performed, so code and test evidence is labelled separately from runtime evidence.
+**Audit basis.** The original route/action audit was prepared from the reviewed `666ed4e` period-grading baseline. The current evidence snapshot below was rechecked on 2026-09-24 against `gemini/local-demo-frontend` at `08dbdd8`, after the coherent auth/onboarding/Google/roster/audit/guided-capture implementation (`6f86492`) and its guidance/linking audit fixes (`08dbdd8`). The implementation review was reported clean; the two documentation updates from this snapshot are carried in the following docs-only commit. The older baseline remains historical context, and no aggregate current-tree runtime-clean claim is made. The product backlog governs delivery priorities where it is more current than the specification. Browser and running-stack validation is labelled separately from code and test evidence.
 
 ## Decision summary
 
@@ -22,6 +22,35 @@ This is a timeboxed local-demo plan, not a guarantee that every dependency can b
 - **Blocked** — completion depends on a genuine external/provider or approved product decision.
 - **Unverified runtime** — implementation evidence exists, but no running PostgreSQL/Docker/browser confirmation is claimed.
 
+### Current checkout completion matrix (2026-09-24)
+
+This matrix supersedes the assessment wording in the historical route inventory wherever the two differ. It is evidence-based for the current tree and distinguishes committed code/test evidence from runtime acceptance. Documentation-only unstaged changes do not alter implementation status. No aggregate current-tree runtime-clean claim is made.
+
+### Latest validator evidence
+
+| Check | Result | Boundary |
+|---|---|---|
+| Implementation review of `08dbdd8` | **Clean** | Review result only; it does not establish camera, Google, or full runtime acceptance. |
+| `scripts/check.ps1` at `6f86492` | **Passed: 124 mocked checks** | Passed before the final `08dbdd8` fix; this is pre-fix evidence, not a final aggregate pass. |
+| Focused frontend checks after `08dbdd8` | **Passed: 51** | Validator-reported focused evidence for the committed implementation. |
+| Google/biometric contract PHP checks after `08dbdd8` | **Passed** | Validator-reported contract checks, PHP lint, and diff checks passed. |
+| Latest `scripts/check.ps1` | **Blocked** | Docker Desktop API returned HTTP 500 on `/_ping`; this is infrastructure evidence, not a product pass or fail. |
+| Latest PostgreSQL gate | **Blocked during cleanup** | Disposable stack built/started, then frontend-readiness cleanup hit the same Docker API 500. Cleanup may be incomplete; inspect it before cleanup and do not blindly remove or reuse the development volume. |
+| Manual camera and Google acceptance | **Unresolved** | No real camera enrollment/attendance or live Google verification was recorded. |
+
+| Batch | Current status | Evidence in or against the current checkout | Remaining acceptance or blocker |
+|---|---|---|---|
+| F0 — public/auth/onboarding | **Implemented by committed code/tests; runtime gate blocked/unverified.** | `6f86492` and `08dbdd8` contain the coherent password/onboarding/Google-linking/guided-capture implementation and review fixes; 124 pre-fix mocked checks, 51 post-fix frontend checks, and Google/biometric PHP contract/lint/diff checks were reported passed. | Recover Docker Desktop, rerun only affected mandatory gates on the exact final tree, and record runtime results. Live Google remains blocked without Owner-controlled credentials and expiry/error evidence. |
+| F1 — profile/identity/email | **Implemented by code/tests; runtime gate blocked/unverified.** | Additive migration 017, structured Faculty invitation payload handling, Faculty password-only activation, Student optional Google activation, profile Google-link/status, denial audit, and truthful retry seams are committed and review-clean. | Verify persistence, token invalidation, configured-domain behavior, protected identity fields, and the Owner decision on modern password strength/reuse after Docker recovery. |
+| A1 — Admin | **Partial; code/tests exist for several paths, runtime unverified.** | KPI, invitation lifecycle, report, audit, profile, settings, and notification paths are present; empty/error handling is improved in portions of the frontend. | Remove or truthfully route legacy `/admin/rules`; verify report values come only from authoritative responses; run role/ownership, reload, and audit checks. |
+| F2 — Faculty | **Partial; committed contract evidence, runtime unverified.** | `60ce84e` and `cb71a76` connect authoritative dashboard/report/roster/notification behavior; `b224c95` and `tests/backend/faculty_activity_contract_test.php` add scoped Faculty activity; roster reload and notification contract tests exist. | Freeze and run browser/PostgreSQL checks for edit/reload/ownership/history. Faculty schedule data remains unavailable where no authoritative source exists; Registrar import is blocked by the missing official format. |
+| S1 — Student reads/profile | **Partial; no blanket completion claim.** | Student profile/classes/retention/dashboard API routes and `RealStudentSurfaces` exist, with backend academic contract tests. | The default Student dashboard and some Classes/Retention/Profile paths still retain development/local fallback or face flags. Remove those claims or show truthful unavailable state; verify real Student data and reload against PostgreSQL. |
+| B1 — biometric enrollment/attendance | **Partial; provider and camera acceptance pending.** | Guided capture, consent/session rechecks, liveness guidance, retry copy, challenge/token/idempotency seams, and audit fixes are committed and review-clean. | Manual camera acceptance remains unresolved: no real enrollment, ordered actions, persisted active profile, attendance row, unique-session result, or audit record has been verified. Keep manual fallback and B1 blocked; deferred thresholds/cadence require Owner approval. |
+| C1 — Secretary/session/override/audit | **Partial; code/tests exist, runtime unverified.** | Date → session → records, session lifecycle, protected override, Secretary activity, and role-scoped audit routes are present; PostgreSQL integration assertions cover session/activity paths. | Run the final role matrix and reload/audit checks. Secretary ↔ Student context switching and promotion/removal behavior remain an Owner/product decision if the current account model cannot represent them safely. |
+| X1 — Registrar import/export | **Blocked.** | No official University file layout or validation contract is recorded. | Obtain the file type, headers, identifiers, course/section fields, grading encoding, and output shape before implementing parser/persistence. |
+| X2 — live Google | **Blocked/unverified.** | Verification/link routes and frontend seams exist; development mock identity is not provider evidence. | Supply configured credentials/provider path and capture successful, mismatched, expired, and replay/invalid-credential outcomes. The current expiry failure root cause is unresolved. |
+| X3 — biometric provider prerequisites | **Partial readiness; functional completion blocked.** | Configuration/readiness seams and review fixes are present; no manual camera result is recorded. | Confirm camera permission/cadence, calibration/model thresholds, protected storage, challenge order, cancellation/retry, geofence/time rules, and one real DB-backed enrollment plus attendance. |
+
 ## Route and meaningful-action inventory
 
 The matrix covers active routes and actions that change or display product state. Cosmetic layout, duplicate navigation buttons, and placement-only work are excluded unless the wiring itself is missing.
@@ -33,8 +62,8 @@ The matrix covers active routes and actions that change or display product state
 | `/`, `/landing`, `/login`, `/signup`, `/register`, `/signup/student` | Password sign-in, Google entry point, role onboarding, student registration | **Implemented by code/tests; unverified runtime** for password/MFA; **Blocked** for live Google; **Partial** for invitation lifecycle | `App.tsx`, `SsoLogin.tsx`, auth API client and PHP routes exist. Keep Google as an explicit provider dependency. Do not turn dev/mock sign-in into completion. |
 | `/2fa/verify`, `/mfa/verify`, `/recovery-codes` | Authenticator-app challenge and recovery code use | **Implemented by code/tests; unverified runtime** | Existing API/controller paths cover enrollment, verification, recovery, and settings. Run the local auth smoke and confirm token/session behavior. |
 | `/forgot-password`, `/reset-password` | Issue and consume reset token | **Implemented by code/tests; unverified runtime** | Reset controller increments `token_version`; run persistence and invalidation checks. |
-| `/activate-faculty`, `/activate-student`, `/activate-secretary` | Accept invitation, set credentials, activate account | **Partial** | Invite/activation routes exist, but structured identity, configured domain handling, and the complete Secretary promote/remove lifecycle need one shared contract. |
-| Profile/settings password actions | Change an authenticated password | **Missing** | Add one protected endpoint and shared UI with current/new/confirm fields, accessible reveal and autocomplete semantics, current-password verification, token-version invalidation, and a documented reused-password policy. Exact modern password policy requires the separate Owner decision/research requested by auth audit. |
+| `/activate-faculty`, `/activate-student`, `/activate-secretary` | Accept invitation, set credentials, activate account | **Implemented by code/tests; runtime unverified** | `6f86492` commits the additive structured Faculty names, Faculty password-only activation, and optional Student Google activation; focused contracts passed and `08dbdd8` is review-clean. Secretary promote/remove lifecycle still needs the shared account-model decision. |
+| Profile/settings password actions | Change an authenticated password | **Implemented by code/tests; unverified runtime** | `POST /api/auth/password/change` has the protected current/new/confirm contract, policy validation, rate limit, audit, and token-version invalidation in `docs/contracts/demo-auth.md` and `tests/backend/password_change_test.php`. The modern strength/reuse policy remains an Owner decision and the local runtime gate is still required. |
 | Email entry in onboarding/profile/invites | Suggest institutional email | **Partial** | Use `@bicol-u.edu.ph` as an editable default/suffix suggestion. Preserve existing addresses and configured allowlists; do not enforce the suffix in the UI when the server configuration permits another domain. |
 
 ### Admin
@@ -42,7 +71,7 @@ The matrix covers active routes and actions that change or display product state
 | Route/action | Assessment | Evidence and delivery need |
 |---|---|---|
 | `/dashboard` | **Partial** | KPI API is wired, but announcements/activity are static and the Admin quick action targets `/admin/rules`, which has no route and falls back to `/`. Remove the dead target or wire it to an approved existing action. |
-| `/admin/faculty-invite` | **Partial; P0** | Create/list/reissue APIs exist. Structured Prefix/First/Middle/Last/Suffix, configured-domain validation, pending edit, revoke, and complete invite state lifecycle are absent. |
+| `/admin/faculty-invite` | **Partial; P0; runtime unverified** | Create/list/reissue/update/revoke paths and contract checks exist. `6f86492` commits structured Prefix/First/Middle/Last/Suffix persistence through additive migration 017; pending-state browser and Docker-backed checks remain. |
 | `/admin/reports` | **Partial** | Report API exists, but current rendering can fall back to AppContext data or values such as `1.75`; with Admin AppContext empty this can be empty or misleading. Render only authoritative responses and honest unavailable states. |
 | `/admin/audit-trail` | **Implemented by code/tests; unverified runtime** | Audit read/export/print wiring exists. Verify role scope and persistence against PostgreSQL. |
 | `/admin/profile` | **Partial** | Read/update exists, but full-name/email/office editing does not implement the backlog’s structured identity and protected name/email policy. Add the shared password flow; make email policy server-authoritative. |
@@ -54,14 +83,14 @@ The matrix covers active routes and actions that change or display product state
 | Route/action | Assessment | Evidence and delivery need |
 |---|---|---|
 | `/faculty`/`/dashboard` | **Partial; P0** | KPI API is called, then errors fall back to hardcoded classes, students, attendance, and demo metrics. Remove fabricated success and surface the API error. Static schedule/activity also needs a clear data contract. |
-| `/classes`, `/faculty/classes`, `/faculty/classes-rosters` | **Partial; P0** | Class/course/student CRUD, enroll/unenroll, and invite APIs exist; backend ownership/audit and class-edit integration tests are present. Roster edit is a reported core failure, so the browser persistence path is **unverified** until edit, reload, and role isolation pass against the running stack. |
+| `/classes`, `/faculty/classes`, `/faculty/classes-rosters` | **Partial; P0; runtime unverified** | Class/course/student CRUD, enroll/unenroll, roster edit, ownership/audit, and notification seams have committed contract evidence (`60ce84e`, `cb71a76`, focused roster/notification tests). The browser edit → reload → role-isolation path still needs the final running-stack check. |
 | Roster import action | **Blocked** | `handleImportIctoFile` only parses browser text and reports success; it does not upload, validate the Registrar format, or persist. The actual external file layout is required before implementation can be accepted. |
 | `/grades` | **Partial; P0** | Assessment, score, compute, and period grading configuration APIs have contract/integration evidence and the `666ed4e` frontend tests. Hardcoded subject lists and local fallback state remain; refresh from authoritative classes/scores after each mutation. |
 | `/attendance` | **Partial; P0** | Worksheet, record, correction, session revoke, date/course/section filters, and server ownership APIs exist. Future-date/session rules and persistence require live stack validation. |
 | `/retention`, `/faculty/retention` | **Partial; P0** | API-backed records, scheduling, resolve/status override, and the 75% rule are wired. Remove obsolete midterm/risk-rule presentation, enforce date/period semantics server-side, and emit persistent Student notifications. |
 | `/reports` | **Partial; P0** | Summary API is called, but subjects/classes are hardcoded and CSV/render paths use local records and fallback component/GWA values. Reports must be derived from the API and never invent academic values. |
 | `/email-management` | **Partial** | Invitation and email-log APIs exist, but class lists are hardcoded and the Student invitation lifecycle lacks a visible revoke/cancel path. Use authoritative roster/context and expose only supported lifecycle states. |
-| `/faculty/audit-trail` | **Partial** | Audit UI exists, but its current data source appears to use the broad Admin audit API. Confirm and enforce Faculty/course/attendance scope. |
+| `/faculty/audit-trail` | **Implemented by code/tests; unverified runtime** | `b224c95`, `tests/backend/faculty_activity_contract_test.php`, and the role-aware `AuditTrailPage` use the scoped Faculty activity endpoint; verify persisted scope and reload against PostgreSQL. |
 | `/faculty/profile`, `/faculty/settings` | **Partial** | Read/update and theme/settings paths exist. Apply structured-name, step-up, email-default, and shared password policy; do not revive deprecated academic settings. |
 
 ### Student
@@ -69,9 +98,9 @@ The matrix covers active routes and actions that change or display product state
 | Route/action | Assessment | Evidence and delivery need |
 |---|---|---|
 | `/student/dashboard` | **Partial but not acceptable as authoritative** | Uses hardcoded sessions/Student ID, local face flag, fixed clinical hours, and a 92% fallback. Replace with real APIs or an explicit unavailable state. |
-| `/student/classes`, `/student/retention` | **Blocked/missing authoritative path** | Current real surfaces are gated/unavailable and older paths read empty AppContext/local fallback data. No Student academic read API was found for the displayed data. Add the smallest approved read contract or leave visibly unavailable; mock/localStorage data cannot satisfy the demo requirement. |
+| `/student/classes`, `/student/retention` | **Partial; authoritative read path exists, runtime and fallback cleanup remain** | `/api/student/classes` and `/api/student/retention` plus backend academic contract checks exist, and `RealStudentSurfaces` can consume them. Some default pages still gate development mock users and retain fallback/local data; no mock/localStorage success may be accepted as demo evidence. |
 | `/student/attendance`, `/student/attendance-logs` | **Partial; biometric-blocked** | Authoritative profile/challenge/session/log APIs exist; mock mode is explicitly simulated. Attendance cannot be accepted until the biometric contract and provider pass the integration gate. Logs can be reviewed only when backed by persisted records. |
-| `/student/face-registration` | **Blocked; P0** | Frontend expects `enrolled` while the PHP profile states include `active`, `not_enrolled`, and `enrolling`; this can gate attendance. Current enrollment capture is 20 frames at 60 ms and attendance capture is 5 frames, which is not a reliable ordered-gesture protocol. Align status shape, guided center/action1/action2 capture (proposed about 26 enrollment and 12 attendance frames, within the 30-frame service limit), cancellation (client 15 s vs backend 20 s), challenge/idempotency handling, and server authority. The counts/cadence, blink usability, calibration, model checksum, and secrets remain runtime-unverified. |
+| `/student/face-registration` | **Partial/provider-blocked; P0** | `6f86492`/`08dbdd8` align server status/challenge/idempotency fields, consent/session rechecks, guided capture/audio/guidance seams, and truthful retry behavior; implementation review is clean. Real ordered camera capture, usable-sample cadence, cancellation, protected storage, and the server's persisted active profile remain unverified. The proposed 26/12 cadence is a validation candidate, not an approved threshold. |
 | `/student/profile` | **Partial/unavailable for real Student** | Existing profile data is local/fallback in the active implementation. Use the authoritative profile contract and shared identity/password policy. |
 
 ### Secretary and role context
@@ -82,18 +111,18 @@ The matrix covers active routes and actions that change or display product state
 | `/secretary/start-session` | **Partial; P0** | Start/end/revoke/session APIs and timing checks exist. GPS is initialized to fixed coordinates and development location is used when real geolocation is unavailable; this cannot be accepted as real attendance authority. Live counts also filter local records. |
 | `/secretary/attendance` | **Partial** | Persisted attendance/profile reads exist, but the required date → session → records flow and runtime behavior need completion and validation. |
 | `/secretary/override` | **Partial; P0** | Protected reason/audit mutation exists, but the UI has date/search without an explicit session selector. Enforce the session hierarchy and verify audit persistence. |
-| `/secretary/audit-trail` | **Missing/incorrect scope** | Current shared audit wiring appears to use the Admin-wide endpoint. Provide Secretary own-activity PostgreSQL scope. |
+| `/secretary/audit-trail` | **Implemented by code/tests; unverified runtime** | `/api/secretary/activity` is registered and scoped to the authenticated Secretary; `AuditTrailPage` maps that response. Run the live role and PostgreSQL scope checks before marking complete. |
 | `/secretary/profile`, `/secretary/settings` | **Partial** | Read/update and theme paths exist. Remove UI-only domain restriction in favor of configured server allowlists, add structured identity/password flow, and eliminate local face status as authority. |
 | Secretary sidebar/context links | **Partial** | Student links are exposed in the Secretary sidebar when a linked Student exists. Replace with the approved top-right context switch and preserve role isolation. |
 
 ## Cross-cutting functional gaps
 
-1. **Persistence truth.** `AppContext` starts with empty academic data and continues writing `localStorage` keys used by legacy paths. For Faculty, API synchronization exists; for Student, Secretary metrics, reports, notifications, and several profiles, local state can look successful without a persisted record. Every accepted mutation must round-trip through the API and survive reload.
-2. **Notifications.** No persistent notification table/API was found. Retention/remedial notifications are currently page-local alerts. Add DB-backed create/read/unread/mark-read behavior and role-scoped delivery before calling the remedial workflow complete.
-3. **Biometric provider.** Sidecar configuration requires calibration/model/checksum/storage secrets and a usable sample/challenge protocol. The frontend/backend status mismatch, frame cadence, ignored `challengeId`/idempotency, and cancellation race are functional blockers. A simulated camera or local face flag is not evidence.
+1. **Persistence truth.** `AppContext` still owns legacy/localStorage paths and several Student presentation paths retain development fallbacks. Faculty and Secretary API synchronization exists, but every accepted mutation still needs the final API → PostgreSQL → reload check. A local face flag, fixed academic value, or mock metric is not evidence.
+2. **Notifications.** Migration 016, recipient-scoped list/read/read-all endpoints, remedial emission, and frontend read-state wiring now exist in committed code. The remaining gate is PostgreSQL/browser confirmation that unread counts, deduplication, recipient scope, and reload behavior are truthful.
+3. **Biometric provider.** Commits `6f86492`/`08dbdd8` add guided capture, consent/session rechecks, truthful retry behavior, and a liveness-guidance endpoint. Camera permission, ordered action timing, challenge/idempotency/cancellation behavior, protected storage, and a real DB-backed enrollment/attendance remain unverified. A simulated camera or local face flag is not evidence.
 4. **Identity and security.** Name changes need the structured fields and approved step-up policy. Password change needs current/new/confirm, token invalidation, accessible controls, and a current password/reuse rule. Email UI should suggest `@bicol-u.edu.ph` while retaining server-configured allowlists and existing valid addresses.
 5. **Reports/imports/exports.** Reports, CSV, print, and import actions need authoritative data and truthful error states. The Registrar format and live Google provider are external dependencies; they cannot be closed by dummy success or a mock sign-in.
-6. **Role and audit scope.** Admin, Faculty, and Secretary audit views must query their allowed scope. Secretary context switching and Student visibility must preserve the existing role/account lifecycle.
+6. **Role and audit scope.** Admin, Faculty, and Secretary scoped activity endpoints and role-aware frontend wiring now exist with contract evidence. The final gate must verify their persisted scope. Secretary context switching and Student visibility must preserve the existing role/account lifecycle.
 
 ## One-day parallel delivery bundles
 
@@ -138,7 +167,7 @@ The bundles are ordered by dependency, with one integrator owning the final gate
 
 ## Shared final integration gate
 
-The integrator should run this after the bundles land on the prepared `666ed4e` baseline:
+The integrator should run this after Docker Desktop is recovered, on implementation commit `08dbdd8` plus the docs-only handoff commit (the historical prepared baseline was `666ed4e`):
 
 1. Start the approved Docker Compose stack and verify migrations/configuration without deleting persisted volumes.
 2. For each role, sign in through the supported flow, exercise every P0 route/action above, reload, and confirm the persisted result, authorization boundary, and audit record.
@@ -152,7 +181,7 @@ The integrator should run this after the bundles land on the prepared `666ed4e` 
 - Registrar import: exact external file layout and validation contract.
 - Live Google Sign-In: configured credentials/provider path and Owner approval for the local demo.
 - Facial biometrics: calibrated model/checksum/secrets, usable capture cadence/thresholds, and confirmation of the proposed 26/12 guided protocol against the sidecar. The protocol proposal is not itself evidence of completion.
-- Student academic surfaces: smallest authoritative API/data contract if the backend cannot deliver it in this day.
+- Student academic surfaces: the authoritative read routes exist; remaining work is to remove or truthfully gate legacy development fallbacks and verify a real Student fixture through reload.
 - Password policy: exact modern password/reuse policy after the separate auth audit/Owner decision; the implementation can still establish current-password verification and token invalidation.
 - Secretary linked Student context and promotion/removal lifecycle if the existing account model cannot represent it without a product decision.
 
