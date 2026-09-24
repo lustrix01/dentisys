@@ -30,9 +30,7 @@ const PREFIX_OPTIONS = ['', 'Dr.', 'Prof.', 'DMD', 'Mr.', 'Ms.', 'Mrs.'];
 export const FacultyInvitation: React.FC = () => {
   const config = useRuntimeConfig();
   const allowedDomains = useMemo(() => {
-    return config.allowed_email_domains && config.allowed_email_domains.length > 0
-      ? config.allowed_email_domains
-      : ['bicol-u.edu.ph'];
+    return config.allowed_email_domains;
   }, [config.allowed_email_domains]);
 
   const [invitations, setInvitations] = useState<FacultyInvitationRecord[]>([]);
@@ -59,6 +57,8 @@ export const FacultyInvitation: React.FC = () => {
   const [editMiddleName, setEditMiddleName] = useState('');
   const [editLastName, setEditLastName] = useState('');
   const [editSuffix, setEditSuffix] = useState('');
+  const [editFullName, setEditFullName] = useState('');
+  const [editStructuredName, setEditStructuredName] = useState(false);
   const [editEmail, setEditEmail] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
@@ -161,49 +161,31 @@ export const FacultyInvitation: React.FC = () => {
     setEditError('');
     setEditEmail(invitation.email);
 
-    // Attempt simple name heuristic decomposition for default input fields
-    const parts = invitation.name.trim().split(/\s+/);
-    let potentialPrefix = '';
-    let remaining = [...parts];
-    if (PREFIX_OPTIONS.includes(parts[0])) {
-      potentialPrefix = parts[0];
-      remaining = parts.slice(1);
-    }
-    setEditPrefix(potentialPrefix);
-
-    if (remaining.length === 1) {
-      setEditFirstName(remaining[0]);
-      setEditMiddleName('');
-      setEditLastName(remaining[0]);
-      setEditSuffix('');
-    } else if (remaining.length === 2) {
-      setEditFirstName(remaining[0]);
-      setEditMiddleName('');
-      setEditLastName(remaining[1]);
-      setEditSuffix('');
-    } else if (remaining.length === 3) {
-      setEditFirstName(remaining[0]);
-      setEditMiddleName(remaining[1]);
-      setEditLastName(remaining[2]);
-      setEditSuffix('');
-    } else if (remaining.length > 3) {
-      setEditFirstName(remaining[0]);
-      setEditMiddleName(remaining.slice(1, -1).join(' '));
-      setEditLastName(remaining[remaining.length - 1]);
-      setEditSuffix('');
-    }
+    const hasStructuredName = Boolean(invitation.firstName && invitation.lastName);
+    setEditStructuredName(hasStructuredName);
+    setEditFullName(hasStructuredName ? '' : invitation.name);
+    setEditPrefix(invitation.prefix || '');
+    setEditFirstName(invitation.firstName || '');
+    setEditMiddleName(invitation.middleName || '');
+    setEditLastName(invitation.lastName || '');
+    setEditSuffix(invitation.suffix || '');
   };
 
   const handleSaveEdit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!editingInvitation) return;
 
-    const cleanFirst = editFirstName.trim();
-    const cleanLast = editLastName.trim();
     const cleanEmail = editEmail.trim();
 
-    if (!cleanFirst || !cleanLast) {
+    const cleanFullName = editFullName.trim();
+    const cleanFirst = editFirstName.trim();
+    const cleanLast = editLastName.trim();
+    if (editStructuredName && (!cleanFirst || !cleanLast)) {
       setEditError('Please provide at least a first name and a last name.');
+      return;
+    }
+    if (!editStructuredName && !cleanFullName) {
+      setEditError('Please provide the faculty member\'s full name.');
       return;
     }
 
@@ -216,15 +198,17 @@ export const FacultyInvitation: React.FC = () => {
     setEditSaving(true);
     setEditError('');
     try {
-      const response = await updateFacultyInvitation({
-        id: editingInvitation.id,
-        prefix: editPrefix.trim() || undefined,
-        firstName: cleanFirst,
-        middleName: editMiddleName.trim() || undefined,
-        lastName: cleanLast,
-        suffix: editSuffix.trim() || undefined,
-        email: cleanEmail,
-      });
+      const response = await updateFacultyInvitation(editStructuredName
+        ? {
+            id: editingInvitation.id,
+            prefix: editPrefix.trim() || undefined,
+            firstName: cleanFirst,
+            middleName: editMiddleName.trim() || undefined,
+            lastName: cleanLast,
+            suffix: editSuffix.trim() || undefined,
+            email: cleanEmail,
+          }
+        : { id: editingInvitation.id, name: cleanFullName, email: cleanEmail });
 
       setNotice(response.delivery_status === 'Sent'
         ? `Updated invitation sent to ${cleanEmail}. Previous tokens were revoked.`
@@ -560,6 +544,20 @@ export const FacultyInvitation: React.FC = () => {
               </div>
             )}
 
+            {!editStructuredName ? (
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Faculty name
+                  <input
+                    required
+                    value={editFullName}
+                    onChange={e => setEditFullName(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
+                  />
+                </label>
+                <p className="text-[11px] text-slate-400">This legacy invitation has one stored display name. It is kept intact; name parts are not guessed.</p>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-3">
                 Prefix
@@ -613,6 +611,7 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
             </div>
+            )}
 
             <label className="block space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300">
               Institutional email *

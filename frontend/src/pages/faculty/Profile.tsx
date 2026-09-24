@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BookOpen, BriefcaseBusiness, CheckCircle2, Mail, Phone, Save, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
@@ -75,6 +76,7 @@ export const Profile: React.FC = () => {
             <CardContent className="p-5"><form onSubmit={save} className="space-y-5">{message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}<div className="grid sm:grid-cols-2 gap-4"><Field label="Full faculty name" value={name} setValue={setName} /><Field label="Email address" value={email} setValue={setEmail} type="email" icon={<Mail className="w-4 h-4" />} /><Field label="Contact number" value={phone} setValue={setPhone} icon={<Phone className="w-4 h-4" />} /><Field label="Clinical specialty" value={specialty} setValue={setSpecialty} icon={<BriefcaseBusiness className="w-4 h-4" />} /></div><div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800"><button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/10 transition-all"><Save className="w-4 h-4" />{saved ? 'Profile saved' : 'Save profile'}</button></div></form></CardContent>
           </Card>
           <MfaSettingsCard userEmail={email || 'faculty@bicol-u.edu.ph'} roleName="Faculty Member" />
+          <GoogleLinkCard />
           <PasswordChangeCard />
         </div>
       </div>
@@ -82,4 +84,3 @@ export const Profile: React.FC = () => {
   );
 };
 const Field = ({ label, value, setValue, type = 'text', icon }: { label: string; value: string; setValue: (value: string) => void; type?: string; icon?: React.ReactNode }) => <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}<span className="relative block">{icon && <span className="absolute left-3.5 top-4 text-slate-400">{icon}</span>}<input type={type} required={type === 'email'} value={value} onChange={event => { let val = event.target.value; if (label.toLowerCase().includes('name')) val = val.replace(/[0-9]/g, ''); if (label.toLowerCase().includes('contact')) val = val.replace(/[^0-9\+\-\s\(\)]/g, ''); setValue(val); }} onBlur={() => { if (label.toLowerCase().includes('name')) setValue(normalizePersonName(value)); }} className={`${inputClass} ${icon ? 'pl-10' : ''}`} /></span></label>;
-

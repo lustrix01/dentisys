@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Building2, CheckCircle2, Mail, Save, ShieldCheck, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
@@ -100,6 +101,7 @@ export const Profile: React.FC = () => {
             </CardContent>
           </Card>
           <MfaSettingsCard userEmail={email || 'dean@bicol-u.edu.ph'} roleName="Administrator" />
+          <GoogleLinkCard />
           <PasswordChangeCard />
         </div>
       </div>
@@ -107,4 +109,3 @@ export const Profile: React.FC = () => {
   );
 };
 const Label = ({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) => <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><span className="relative block">{icon && <span className="absolute left-3.5 top-4 z-10 text-slate-400">{icon}</span>}{label}{children}</span></label>;
-

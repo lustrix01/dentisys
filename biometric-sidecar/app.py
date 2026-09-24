@@ -211,6 +211,10 @@ def distance(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 def liveness_action(image: np.ndarray, config: Calibration) -> str | None:
     points = landmark_points(image)
+    return liveness_action_from_points(points, config)
+
+
+def liveness_action_from_points(points: list[tuple[float, float]], config: Calibration) -> str | None:
     left_eye = [33, 160, 158, 133, 153, 144]
     right_eye = [362, 385, 387, 263, 373, 380]
 
@@ -229,6 +233,21 @@ def liveness_action(image: np.ndarray, config: Calibration) -> str | None:
     if yaw_ratio > config.head_turn_ratio:
         return "turn_right"
     return None
+
+
+def guidance_action(image: np.ndarray, config: Calibration) -> tuple[str | None, bool]:
+    """Return transient display guidance without changing challenge state.
+
+    The browser uses this only to pace its prompts. The final enrollment or
+    verification request still runs the authoritative ordered liveness check.
+    """
+    try:
+        points = landmark_points(image)
+    except BiometricError as error:
+        if error.code == "liveness_failed":
+            return None, False
+        raise
+    return liveness_action_from_points(points, config), True
 
 
 def validate_actions(raw: str | None) -> list[str]:
@@ -315,6 +334,13 @@ def uploaded_images() -> list[np.ndarray]:
     return [decode_frame(file.read()) for file in files]
 
 
+def guidance_image() -> np.ndarray:
+    files = request.files.getlist("frame") or request.files.getlist("frames")
+    if len(files) != 1:
+        raise BiometricError("Exactly one guidance frame is required.", "quality_failed")
+    return decode_frame(files[0].read())
+
+
 @app.errorhandler(BiometricError)
 def handle_biometric_error(error: BiometricError):
     return jsonify({"ok": False, "code": error.code, "message": str(error)}), error.status
@@ -388,6 +414,18 @@ def verify():
     if matches < config.match_count:
         raise BiometricError("Face could not be verified.", "biometric_verification_failed")
     return jsonify({"ok": True, "verified": True})
+
+
+@app.post("/v1/guidance")
+def guidance():
+    config = calibration()
+    image = guidance_image()
+    detected_action, face_detected = guidance_action(image, config)
+    return jsonify({
+        "ok": True,
+        "detectedAction": detected_action,
+        "faceDetected": face_detected,
+    })
 
 
 @app.post("/v1/reference/revoke")

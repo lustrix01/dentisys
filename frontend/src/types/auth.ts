@@ -22,7 +22,7 @@ export interface SafeUser {
 }
 
 export interface LoginResponse {
-  type: 'direct_login' | 'two_factor_required' | 'account_link_required';
+  type: 'direct_login' | 'two_factor_required' | 'account_link_required' | 'google_linked';
   two_factor_required: boolean;
   two_factor_enrolled: boolean;
   two_factor_challenge_token?: string;

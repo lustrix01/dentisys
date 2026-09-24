@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Eye, EyeOff, XCircle } from 'lucide-react';
 import { activateStudent, getStudentInvitation, StudentInvitation } from '../../services/apiClient';
+import { validatePasswordRequirements } from '../../services/authService';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 
 export function ActivateStudent() {
@@ -13,12 +15,15 @@ export function ActivateStudent() {
   const [confirmation, setConfirmation] = useState('');
   const [credential, setCredential] = useState('');
   const [googleState, setGoogleState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const googleClientId = runtimeConfig.providers.identity.google.client_id;
   const googleEnabled = runtimeConfig.providers.identity.google.enabled && Boolean(googleClientId);
+  const passwordCriteria = validatePasswordRequirements(password);
 
   useEffect(() => {
     const scrubbed = `${window.location.pathname}${window.location.hash}`;
@@ -32,7 +37,6 @@ export function ActivateStudent() {
       setLoading(true);
       return () => { active = false; };
     }
-    setError('');
     if (!runtimeConfig.features.student_auth_enabled) {
       setError('Student account activation is unavailable.');
       setLoading(false);
@@ -83,6 +87,10 @@ export function ActivateStudent() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!passwordCriteria.isValid) {
+      setError('Password does not meet all security requirements.');
+      return;
+    }
     if (password !== confirmation) {
       setError('Passwords do not match.');
       return;
@@ -114,13 +122,27 @@ export function ActivateStudent() {
               <p className="mt-1 text-slate-600 dark:text-slate-300">{invitation.email}</p>
               <p className="mt-1 text-xs text-slate-500">Class: {invitation.className}</p>
             </div>
-            <label className="mt-5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label htmlFor="student-password" className="mt-5 block text-sm font-semibold text-slate-700 dark:text-slate-200">
               Password
-              <input type="password" autoComplete="new-password" required value={password} onChange={event => setPassword(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 p-3 dark:border-slate-700 dark:bg-slate-800" />
+              <div className="relative mt-2">
+                <input id="student-password" aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={8} aria-describedby="student-password-requirements" value={password} onChange={event => setPassword(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-11 dark:border-slate-700 dark:bg-slate-800" />
+                <button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute inset-y-0 right-0 px-3 text-slate-500">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+              </div>
+              <div id="student-password-requirements" className="mt-2 grid grid-cols-2 gap-1 text-xs" aria-live="polite">
+                <PasswordRequirement valid={passwordCriteria.hasMinLength} label="8+ characters" />
+                <PasswordRequirement valid={passwordCriteria.hasUppercase} label="Uppercase letter" />
+                <PasswordRequirement valid={passwordCriteria.hasLowercase} label="Lowercase letter" />
+                <PasswordRequirement valid={passwordCriteria.hasNumber} label="Number" />
+                <PasswordRequirement valid={passwordCriteria.hasSpecial} label="Special character" />
+              </div>
             </label>
-            <label className="mt-4 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <label htmlFor="student-password-confirmation" className="mt-4 block text-sm font-semibold text-slate-700 dark:text-slate-200">
               Confirm password
-              <input type="password" autoComplete="new-password" required value={confirmation} onChange={event => setConfirmation(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 p-3 dark:border-slate-700 dark:bg-slate-800" />
+              <div className="relative mt-2">
+                <input id="student-password-confirmation" aria-label="Confirm password" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" required minLength={8} aria-invalid={Boolean(confirmation && password !== confirmation)} value={confirmation} onChange={event => setConfirmation(event.target.value)} className="w-full rounded-lg border border-slate-300 p-3 pr-11 dark:border-slate-700 dark:bg-slate-800" />
+                <button type="button" onClick={() => setShowConfirmation(value => !value)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'} className="absolute inset-y-0 right-0 px-3 text-slate-500">{showConfirmation ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+              </div>
+              {confirmation && password !== confirmation && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">Passwords do not match.</p>}
             </label>
             {googleEnabled && <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-700">
               <p className="mb-3 text-center text-xs text-slate-500">Optional: verify this invited institutional email with Google</p>
@@ -128,11 +150,15 @@ export function ActivateStudent() {
               {googleState === 'error' && <p className="text-center text-xs text-rose-600">Google verification could not be loaded. You can continue with your password.</p>}
               {credential && <p className="mt-2 text-center text-xs text-emerald-700">Google identity selected for verification.</p>}
             </div>}
-            <button type="submit" disabled={submitting || !invitation} className="mt-6 w-full rounded-lg bg-accent-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{submitting ? 'Activating…' : 'Accept invitation and activate'}</button>
+            <button type="submit" disabled={submitting || !invitation || !passwordCriteria.isValid || password !== confirmation} className="mt-6 w-full rounded-lg bg-accent-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{submitting ? 'Activating…' : 'Accept invitation and activate'}</button>
           </>
         )}
         <Link to="/login" className="mt-5 block text-center text-sm font-semibold text-accent-600 hover:underline">Back to login</Link>
       </form>
     </main>
   );
+}
+
+function PasswordRequirement({ valid, label }: { valid: boolean; label: string }) {
+  return <span className={valid ? 'text-emerald-600' : 'text-slate-500'}>{valid ? <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" /> : <XCircle className="mr-1 inline h-3.5 w-3.5" />}{label}</span>;
 }

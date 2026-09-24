@@ -22,7 +22,8 @@ function faculty_invitation_token_row(PDO $pdo, string $token): ?array
     $digest = hash('sha256', $token, true);
     $stmt = $pdo->prepare(
         "SELECT t.token_id, t.user_id, t.expires_at, t.used_at, t.revoked_at,
-                ua.login_email, ua.display_name, ua.role, ua.status
+                ua.login_email, ua.display_name, ua.name_prefix, ua.first_name, ua.middle_name,
+                ua.last_name, ua.name_suffix, ua.role, ua.status
            FROM security_tokens t
            JOIN user_accounts ua ON ua.user_id = t.user_id
           WHERE t.purpose = 'faculty_invitation' AND t.token_digest = ?
@@ -46,13 +47,26 @@ function faculty_invitation_row_is_live(array $row): bool
 
 function faculty_invitation_name_from_payload(array $data): string
 {
+    return faculty_invitation_name_parts_from_payload($data)['displayName'];
+}
+
+function faculty_invitation_name_parts_from_payload(array $data): array
+{
     $structured = array_key_exists('firstName', $data)
         || array_key_exists('middleName', $data)
         || array_key_exists('lastName', $data)
         || array_key_exists('prefix', $data)
         || array_key_exists('suffix', $data);
     if (!$structured) {
-        return normalize_person_name(validate_person_name($data, 'name', 2, 255));
+        return [
+            'displayName' => normalize_person_name(validate_person_name($data, 'name', 2, 255)),
+            'structured' => false,
+            'prefix' => null,
+            'firstName' => null,
+            'middleName' => null,
+            'lastName' => null,
+            'suffix' => null,
+        ];
     }
 
     $first = validate_person_name($data, 'firstName', 2, 100);
@@ -60,10 +74,18 @@ function faculty_invitation_name_from_payload(array $data): string
     $middle = validate_optional_person_name($data, 'middleName', 2, 100);
     $prefix = validate_optional_string($data, 'prefix', 1, 50);
     $suffix = validate_optional_string($data, 'suffix', 1, 50);
-    return normalize_person_name(trim(implode(' ', array_filter(
-        [$prefix, $first, $middle, $last, $suffix],
-        static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''
-    ))));
+    return [
+        'displayName' => normalize_person_name(trim(implode(' ', array_filter(
+            [$prefix, $first, $middle, $last, $suffix],
+            static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''
+        )))),
+        'structured' => true,
+        'prefix' => $prefix,
+        'firstName' => $first,
+        'middleName' => $middle,
+        'lastName' => $last,
+        'suffix' => $suffix,
+    ];
 }
 
 function handle_admin_faculty_invitations_list(): void
@@ -73,7 +95,8 @@ function handle_admin_faculty_invitations_list(): void
         $pdo = create_pdo($config);
         admin_verify_auth($pdo, $config);
         $stmt = $pdo->query(
-            "SELECT ua.user_id, ua.login_email, ua.display_name, ua.status, latest.issued_at, latest.expires_at,
+            "SELECT ua.user_id, ua.login_email, ua.display_name, ua.name_prefix, ua.first_name, ua.middle_name,
+                    ua.last_name, ua.name_suffix, ua.status, latest.issued_at, latest.expires_at,
                     latest.used_at, latest.revoked_at
                FROM user_accounts ua
                LEFT JOIN LATERAL (
@@ -102,6 +125,11 @@ function handle_admin_faculty_invitations_list(): void
             return [
                 'id' => (string) $row['user_id'],
                 'name' => (string) $row['display_name'],
+                'prefix' => $row['name_prefix'],
+                'firstName' => $row['first_name'],
+                'middleName' => $row['middle_name'],
+                'lastName' => $row['last_name'],
+                'suffix' => $row['name_suffix'],
                 'email' => (string) $row['login_email'],
                 'invitedAt' => $row['issued_at'],
                 'expiresAt' => $row['expires_at'],
@@ -139,7 +167,8 @@ function handle_admin_faculty_invitation_create(): void
             safe_error_response('Invalid request.', 400);
             return;
         }
-        $name = faculty_invitation_name_from_payload($body['data']);
+        $nameParts = faculty_invitation_name_parts_from_payload($body['data']);
+        $name = $nameParts['displayName'];
         $email = validate_institutional_email((string) ($body['data']['email'] ?? ''));
         $token = faculty_invitation_token();
         $digest = hash('sha256', $token, true);
@@ -164,21 +193,31 @@ function handle_admin_faculty_invitation_create(): void
             if ($existing === false) {
                 $insert = $pdo->prepare(
                     "INSERT INTO user_accounts
-                        (login_email, password_hash, role, display_name, title, status, created_at, updated_at, approved_at, rejected_at, google_subject)
-                     VALUES (?, ?, 'faculty', ?, 'Dental Faculty Member', 'Pending Activation', ?, ?, ?, NULL, NULL)
+                        (login_email, password_hash, role, display_name, name_prefix, first_name, middle_name, last_name, name_suffix,
+                         title, status, created_at, updated_at, approved_at, rejected_at, google_subject)
+                     VALUES (?, ?, 'faculty', ?, ?, ?, ?, ?, ?, 'Dental Faculty Member', 'Pending Activation', ?, ?, ?, NULL, NULL)
                      RETURNING user_id"
                 );
-                $insert->execute([$email, $passwordHash, $name, $nowSql, $nowSql, $nowSql]);
+                $insert->execute([
+                    $email, $passwordHash, $name,
+                    $nameParts['prefix'], $nameParts['firstName'], $nameParts['middleName'],
+                    $nameParts['lastName'], $nameParts['suffix'], $nowSql, $nowSql, $nowSql,
+                ]);
                 $userId = (int) $insert->fetchColumn();
             } else {
                 $userId = (int) $existing['user_id'];
                 $update = $pdo->prepare(
                     "UPDATE user_accounts
-                        SET login_email = ?, password_hash = ?, display_name = ?, status = 'Pending Activation',
+                        SET login_email = ?, password_hash = ?, display_name = ?, name_prefix = ?, first_name = ?,
+                            middle_name = ?, last_name = ?, name_suffix = ?, status = 'Pending Activation',
                             updated_at = ?, approved_at = ?, rejected_at = NULL, google_subject = NULL
                       WHERE user_id = ?"
                 );
-                $update->execute([$email, $passwordHash, $name, $nowSql, $nowSql, $userId]);
+                $update->execute([
+                    $email, $passwordHash, $name,
+                    $nameParts['prefix'], $nameParts['firstName'], $nameParts['middleName'],
+                    $nameParts['lastName'], $nameParts['suffix'], $nowSql, $nowSql, $userId,
+                ]);
             }
 
             $revoke = $pdo->prepare(
@@ -237,6 +276,11 @@ function handle_admin_faculty_invitation_create(): void
             'invitation' => [
                 'id' => (string) $userId,
                 'name' => $name,
+                'prefix' => $nameParts['prefix'],
+                'firstName' => $nameParts['firstName'],
+                'middleName' => $nameParts['middleName'],
+                'lastName' => $nameParts['lastName'],
+                'suffix' => $nameParts['suffix'],
                 'email' => $email,
                 'invitedAt' => $nowSql,
                 'expiresAt' => $expiresSql,
@@ -290,7 +334,8 @@ function handle_admin_faculty_invitation_update(): void
         if ($userId < 1) {
             throw new ValidationException([['field' => 'id', 'message' => 'A valid Faculty account is required.']]);
         }
-        $name = faculty_invitation_name_from_payload($body['data']);
+        $nameParts = faculty_invitation_name_parts_from_payload($body['data']);
+        $name = $nameParts['displayName'];
         $email = validate_institutional_email((string) ($body['data']['email'] ?? ''));
         $token = faculty_invitation_token();
         $digest = hash('sha256', $token, true);
@@ -325,11 +370,15 @@ function handle_admin_faculty_invitation_update(): void
         $auditContext = audit_begin_operation($pdo);
         $update = $pdo->prepare(
             "UPDATE user_accounts
-                SET login_email = ?, display_name = ?, password_hash = ?, google_subject = NULL,
+                SET login_email = ?, display_name = ?, name_prefix = ?, first_name = ?, middle_name = ?,
+                    last_name = ?, name_suffix = ?, password_hash = ?, google_subject = NULL,
                     token_version = token_version + 1, updated_at = ?
               WHERE user_id = ?"
         );
-        $update->execute([$email, $name, $passwordHash, $nowSql, $userId]);
+        $update->execute([
+            $email, $name, $nameParts['prefix'], $nameParts['firstName'], $nameParts['middleName'],
+            $nameParts['lastName'], $nameParts['suffix'], $passwordHash, $nowSql, $userId,
+        ]);
         $revoke = $pdo->prepare(
             "UPDATE security_tokens
                 SET revoked_at = ?, revocation_reason = 'Replaced by edited Faculty invitation'
@@ -382,6 +431,11 @@ function handle_admin_faculty_invitation_update(): void
             'invitation' => [
                 'id' => (string) $userId,
                 'name' => $name,
+                'prefix' => $nameParts['prefix'],
+                'firstName' => $nameParts['firstName'],
+                'middleName' => $nameParts['middleName'],
+                'lastName' => $nameParts['lastName'],
+                'suffix' => $nameParts['suffix'],
                 'email' => $email,
                 'invitedAt' => $nowSql,
                 'expiresAt' => $expiresSql,
@@ -637,6 +691,11 @@ function handle_auth_faculty_invitation_get(): void
             'status' => 'ok',
             'invitation' => [
                 'name' => (string) $row['display_name'],
+                'prefix' => $row['name_prefix'],
+                'firstName' => $row['first_name'],
+                'middleName' => $row['middle_name'],
+                'lastName' => $row['last_name'],
+                'suffix' => $row['name_suffix'],
                 'email' => (string) $row['login_email'],
                 'expiresAt' => (string) $row['expires_at'],
             ],

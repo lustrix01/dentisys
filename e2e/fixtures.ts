@@ -25,7 +25,7 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
 };
 
 const KNOWN_API_PATHS = new Set([
-  '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
+  '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
   '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh',
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
@@ -49,7 +49,7 @@ const KNOWN_API_PATHS = new Set([
 ]);
 
 const GET_ONLY_API_PATHS = new Set([
-  '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
+  '/api/health', '/api/runtime-config', '/api/auth/me', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/student/invitation', '/api/auth/mfa/settings', '/api/admin/faculty-invitations',
   '/api/admin/dashboard/kpis', '/api/admin/audit-logs', '/api/admin/reports/summary', '/api/secretary/invitation', '/api/secretary/invitations',
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/session/active', '/api/secretary/profile', '/api/secretary/settings',
   '/api/secretary/activity',
@@ -88,6 +88,8 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/runtime-config') return { status: 'ok', ...DEFAULT_RUNTIME_CONFIG };
   if (pathname === '/api/auth/refresh') return { access_token: 'mock-refresh-token', user: { user_id: 100 } };
   if (pathname === '/api/auth/me') return { id: 100, user_id: 100, login_email: 'mock@bicol-u.edu.ph', display_name: 'Mock User', role: 'faculty', session_uuid: 'server-fixture-session', authentication_source: 'password' };
+  if (pathname === '/api/auth/google/link/status') return { status: 'ok', linked: false };
+  if (pathname === '/api/auth/google/link/profile') return { type: 'google_linked', status: 'ok', linked: true };
   if (pathname === '/api/auth/development/mock-student-session') return { type: 'direct_login', two_factor_required: false, two_factor_enrolled: false, access_token: 'server-fixture-student-token', user: { user_id: 101 } };
   if (pathname === '/api/health') return { status: 'ok', app: 'DentiSYS API', php: 'up', database: 'up', timestamp: new Date().toISOString() };
   if (pathname === '/api/secretary/dashboard/kpis') return { status: 'ok', kpis: { todayRecords: 0, overriddenCount: 0, assignedStudents: 0, attendanceRate: 0 }, assignedClass: { classId: '1', className: 'CLIN401', classroomName: 'BU Dental Room 101' }, recentActivity: [] };

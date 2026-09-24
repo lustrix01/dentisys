@@ -49,6 +49,18 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/auth/google/link/profile',
+        'handler' => 'handle_google_profile_link',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/auth/google/link/status',
+        'handler' => 'handle_google_link_status',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/auth/student/invitation',
         'handler' => 'handle_student_invitation_get',
@@ -503,6 +515,12 @@ return [
         'method' => 'POST',
         'path' => '/api/student/biometric/liveness/challenge',
         'handler' => 'handle_student_biometric_challenge',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/student/biometric/liveness/guidance',
+        'handler' => 'handle_student_biometric_guidance',
         'has_params' => false,
     ],
     [

@@ -10,6 +10,7 @@ import {
   loginWithGoogle,
   linkGoogleAccount,
   setAccessToken as setApiAccessToken,
+  ApiError,
 } from '../../services/apiClient';
 
 declare global {
@@ -145,6 +146,12 @@ export function SsoLogin() {
         setError('Unexpected linking response.');
       }
     } catch (err: unknown) {
+      if (err instanceof ApiError && (err.code === 'INVALID_LINK_CHALLENGE' || err.code === 'GOOGLE_LINK_CHALLENGE_EXPIRED')) {
+        setLinkChallengeToken(null);
+        setLinkPassword('');
+        setError('The Google linking session expired. Choose Google again and retry.');
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Account linking failed.');
     } finally {
       setIsLoading(false);

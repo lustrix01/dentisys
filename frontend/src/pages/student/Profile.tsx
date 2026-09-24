@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 
 export const Profile: React.FC = () => {
@@ -257,6 +258,7 @@ export const Profile: React.FC = () => {
 
           {/* MFA Security & Account Credentials Card */}
           <MfaSettingsCard userEmail={studentEmail} roleName="Dental Student" />
+          <GoogleLinkCard />
           <PasswordChangeCard />
 
         </div>

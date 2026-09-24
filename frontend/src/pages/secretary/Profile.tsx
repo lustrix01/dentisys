@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { getSecretaryProfileApi, updateSecretaryProfileApi } from '../../services/apiClient';
 import { validateBicolUEmail } from '../../services/authService';
@@ -292,6 +293,7 @@ export const Profile: React.FC = () => {
       <PasswordChangeCard />
 
       <MfaSettingsCard userEmail={editEmail || profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
+      <GoogleLinkCard />
     </div>
   );
 };

@@ -72,9 +72,7 @@ export const StudentManagement: React.FC = () => {
 
   const runtimeConfig = useRuntimeConfig();
   const allowedDomains = useMemo(() => {
-    return runtimeConfig.allowed_email_domains && runtimeConfig.allowed_email_domains.length > 0
-      ? runtimeConfig.allowed_email_domains
-      : ['bicol-u.edu.ph'];
+    return runtimeConfig.allowed_email_domains;
   }, [runtimeConfig.allowed_email_domains]);
 
   const [assignedClasses, setAssignedClasses] = useState<string[]>([]);
@@ -212,7 +210,6 @@ export const StudentManagement: React.FC = () => {
     const normalizedFirstName = normalizePersonName(formFirstName);
     const normalizedMiddleName = normalizeOptionalPersonName(formMiddleName);
     const normalizedLastName = normalizePersonName(formLastName);
-    const fullName = `${normalizedFirstName} ${normalizedMiddleName ? normalizedMiddleName + ' ' : ''}${normalizedLastName}`.trim();
     
     try {
       const res = await createStudentApi({
@@ -220,7 +217,6 @@ export const StudentManagement: React.FC = () => {
         firstName: normalizedFirstName,
         middleName: normalizedMiddleName,
         lastName: normalizedLastName,
-        name: fullName,
         email: formEmail,
         contact: formContact,
         sex: formSex,

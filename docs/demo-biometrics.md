@@ -61,6 +61,15 @@ server verifies that the numeric challenge id identifies the row matched by the
 token, Student, purpose, and attendance session. A mismatch is
 `challenge_invalid`.
 
+During capture the browser may send one temporary `frames[]` image at a time to
+`POST /api/student/biometric/liveness/guidance`, together with the same
+challenge fields and `purpose` (and `attendanceSessionId` for attendance). PHP
+validates the authenticated Student's unconsumed challenge and the private
+sidecar returns only `detectedAction` and `faceDetected`. This endpoint does not
+consume or advance the challenge, retain the image, or decide liveness; it only
+paces the browser's prompts. Enrollment and attendance uploads still perform
+the authoritative ordered liveness check over their candidate frames.
+
 ## Enrollment
 
 `POST /api/student/biometric/enrollment` is multipart form data:

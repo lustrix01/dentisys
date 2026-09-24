@@ -467,6 +467,60 @@ function student_biometric_consume_challenge(
     ];
 }
 
+/**
+ * Validate a live challenge for transient browser guidance without consuming it.
+ * The browser uses the result only to pace prompts; final liveness remains in
+ * the enrollment or attendance sidecar operation.
+ */
+function student_biometric_validate_guidance_challenge(
+    PDO $pdo,
+    int $studentId,
+    string $rawToken,
+    string $purpose,
+    ?int $attendanceSessionId,
+    string $challengeId
+): array {
+    if ($rawToken === '') {
+        throw new StudentBiometricException('Biometric challenge is required.', 422, 'challenge_invalid');
+    }
+    $challengeId = student_biometric_challenge_id($challengeId);
+    $digest = hash('sha256', $rawToken, true);
+    $stmt = $pdo->prepare(
+        "SELECT token_id, related_student_id, expires_at, used_at, revoked_at, metadata_json
+           FROM security_tokens
+          WHERE purpose = 'biometric_challenge'
+            AND related_student_id = ?
+            AND token_digest = ?"
+    );
+    $stmt->bindValue(1, $studentId, PDO::PARAM_INT);
+    pdo_bind_binary($stmt, 2, $digest);
+    $stmt->execute();
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row === false || (string) $row['token_id'] !== $challengeId) {
+        throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
+    }
+    $metadata = json_decode((string) ($row['metadata_json'] ?? '{}'), true);
+    if (!is_array($metadata) || ($metadata['purpose'] ?? null) !== $purpose) {
+        throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
+    }
+    if ($attendanceSessionId !== null
+        && (int) ($metadata['attendance_session_id'] ?? 0) !== $attendanceSessionId) {
+        throw new StudentBiometricException('Biometric challenge is invalid for this session.', 422, 'challenge_invalid');
+    }
+    if ($row['revoked_at'] !== null || $row['used_at'] !== null
+        || ($metadata['submission_state'] ?? null) !== null) {
+        throw new StudentBiometricException('Biometric challenge has already been used.', 422, 'challenge_invalid');
+    }
+    if (new DateTimeImmutable((string) $row['expires_at'], new DateTimeZone('UTC')) <= attendance_session_now_utc()) {
+        throw new StudentBiometricException('Biometric challenge has expired.', 422, 'challenge_expired');
+    }
+    $actions = array_values($metadata['actions'] ?? []);
+    if (count($actions) !== 2 || count(array_unique($actions)) !== 2) {
+        throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
+    }
+    return ['actions' => $actions, 'tokenId' => (int) $row['token_id']];
+}
+
 function student_biometric_complete_challenge(PDO $pdo, int $tokenId, string $idempotencyKey): void
 {
     $idempotencyKey = student_biometric_idempotency_key($idempotencyKey);
@@ -669,6 +723,25 @@ function student_biometric_sidecar_request(array $config, string $path, array $f
         throw new StudentBiometricException((string) ($decoded['message'] ?? 'Biometric verification failed.'), $status >= 400 && $status < 500 ? $status : 503, $code);
     }
     return $decoded;
+}
+
+function student_biometric_sidecar_guidance(array $config, array $frame): array
+{
+    $response = student_biometric_sidecar_request(
+        $config,
+        '/v1/guidance',
+        [],
+        [$frame + ['field' => 'frame']]
+    );
+    $detectedAction = $response['detectedAction'] ?? null;
+    if ($detectedAction !== null
+        && !in_array($detectedAction, ['blink', 'turn_left', 'turn_right'], true)) {
+        throw new StudentBiometricException('Biometric guidance response is invalid.', 503, 'biometric_service_unavailable');
+    }
+    return [
+        'detectedAction' => $detectedAction,
+        'faceDetected' => ($response['faceDetected'] ?? false) === true,
+    ];
 }
 
 function student_biometric_sidecar_revoke(array $config, string $reference): void

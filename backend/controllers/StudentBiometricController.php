@@ -236,6 +236,43 @@ function handle_student_biometric_challenge(): void
     }
 }
 
+function handle_student_biometric_guidance(): void
+{
+    try {
+        [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
+        student_biometric_require_sidecar($config);
+        $purpose = trim((string) ($_POST['purpose'] ?? ''));
+        if (!in_array($purpose, ['enrollment', 'attendance'], true)) {
+            throw new ValidationException([['field' => 'purpose', 'message' => 'Purpose must be enrollment or attendance.']]);
+        }
+        $attendanceSessionId = null;
+        if ($purpose === 'attendance') {
+            $rawSessionId = trim((string) ($_POST['attendanceSessionId'] ?? $_POST['sessionId'] ?? ''));
+            $attendanceSessionId = ctype_digit($rawSessionId) ? (int) $rawSessionId : 0;
+            if ($attendanceSessionId <= 0) {
+                throw new ValidationException([['field' => 'attendanceSessionId', 'message' => 'A valid attendance session is required.']]);
+            }
+        }
+        $challengeId = student_biometric_form_alias('challengeId', 'challenge_id');
+        $challengeToken = student_biometric_form_alias('challengeToken', 'challenge_token');
+        $frames = student_biometric_uploaded_frames();
+        if (count($frames) !== 1) {
+            throw new StudentBiometricException('Exactly one guidance frame is required.', 422, 'quality_failed');
+        }
+        student_biometric_validate_guidance_challenge(
+            $pdo,
+            $identity['student_id'],
+            $challengeToken,
+            $purpose,
+            $attendanceSessionId,
+            $challengeId
+        );
+        json_response(student_biometric_sidecar_guidance($config, $frames[0]), 200);
+    } catch (Throwable $e) {
+        student_biometric_emit_exception($e);
+    }
+}
+
 function handle_student_biometric_enrollment(): void
 {
     $context = student_biometric_http_context();

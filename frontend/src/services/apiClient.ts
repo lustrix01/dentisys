@@ -11,6 +11,7 @@ import type {
   BiometricConsentResponse,
   LivenessChallengeRequest,
   LivenessChallengeResponse,
+  LivenessGuidanceResponse,
   BiometricEnrollmentResponse,
   BiometricRevocationResponse,
   StudentActiveSessionsResponse,
@@ -144,6 +145,15 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
     const code = typeof dataObj.code === 'string' ? dataObj.code : undefined;
     if (code) {
       const codeMessages: Record<string, string> = {
+        GOOGLE_NOT_CONFIGURED: 'Google Sign-In is not configured in this environment.',
+        GOOGLE_DOMAIN_NOT_ALLOWED: 'This Google account is outside the approved institutional domains.',
+        GOOGLE_EMAIL_MISMATCH: 'Choose the Google account that uses this DentiSys institutional email.',
+        GOOGLE_LINK_CONFLICT: 'This DentiSys account or Google identity is already linked elsewhere.',
+        GOOGLE_LINK_PASSWORD_INVALID: 'Incorrect DentiSys password.',
+        INVALID_GOOGLE_IDENTITY: 'Google identity could not be verified. Choose Google again and retry.',
+        GOOGLE_LINK_CHALLENGE_EXPIRED: 'The Google linking session expired. Choose Google again and retry.',
+        INVALID_LINK_CHALLENGE: 'The Google linking session expired. Choose Google again and retry.',
+        AUTHENTICATION_REQUIRED: 'Your session has expired. Please log in again.',
         consent_required: 'Biometric consent is required before proceeding.',
         biometric_not_enrolled: 'Face registration is required before taking session attendance.',
         not_enrolled: 'Face registration is required before taking session attendance.',
@@ -317,10 +327,11 @@ export function login(email: string, password: string): Promise<LoginResponse> {
 }
 
 export interface GoogleLoginResponse extends LoginResponse {
-  type: 'direct_login' | 'two_factor_required' | 'account_link_required';
+  type: 'direct_login' | 'two_factor_required' | 'account_link_required' | 'google_linked';
   account_link_required?: boolean;
   email?: string;
   link_challenge_token?: string;
+  linked?: boolean;
 }
 
 export function loginWithGoogle(credential: string): Promise<GoogleLoginResponse> {
@@ -329,6 +340,19 @@ export function loginWithGoogle(credential: string): Promise<GoogleLoginResponse
 
 export function linkGoogleAccount(linkChallengeToken: string, password: string): Promise<GoogleLoginResponse> {
   return request<GoogleLoginResponse>('POST', '/auth/google/link', { password }, linkChallengeToken);
+}
+
+export interface GoogleLinkStatusResponse {
+  status: 'ok';
+  linked: boolean;
+}
+
+export function getGoogleLinkStatus(): Promise<GoogleLinkStatusResponse> {
+  return request<GoogleLinkStatusResponse>('GET', '/auth/google/link/status');
+}
+
+export function linkCurrentGoogleAccount(credential: string, password: string): Promise<GoogleLoginResponse> {
+  return request<GoogleLoginResponse>('POST', '/auth/google/link/profile', { credential, password });
 }
 
 export interface StudentInvitation {
@@ -473,6 +497,11 @@ export interface FacultyInvitation {
   id: string;
   email: string;
   name: string;
+  prefix?: string | null;
+  firstName?: string | null;
+  middleName?: string | null;
+  lastName?: string | null;
+  suffix?: string | null;
   status: string;
   invitedAt: string | null;
   expiresAt: string | null;
@@ -528,13 +557,22 @@ export function reissueFacultyInvitation(id: string): Promise<{
 
 export function getFacultyInvitation(token: string): Promise<{
   status: string;
-  invitation: { name: string; email: string; expiresAt: string };
+  invitation: {
+    name: string;
+    email: string;
+    expiresAt: string;
+    prefix?: string | null;
+    firstName?: string | null;
+    middleName?: string | null;
+    lastName?: string | null;
+    suffix?: string | null;
+  };
 }> {
   return request('GET', `/auth/faculty/invitation?token=${encodeURIComponent(token)}`);
 }
 
-export function activateFacultyInvitation(token: string, password: string, credential?: string): Promise<{ status: string; message: string }> {
-  return request('POST', '/auth/faculty/activate', { token, password, ...(credential ? { credential } : {}) });
+export function activateFacultyInvitation(token: string, password: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/faculty/activate', { token, password });
 }
 
 export function inviteSecretaryApi(data: { student_name: string; student_number?: string; class_name: string; email: string }): Promise<{ status: string; token: string; invitation_link: string; message: string }> {
@@ -794,7 +832,6 @@ export function createStudentApi(data: {
   firstName: string;
   middleName?: string;
   lastName: string;
-  name?: string;
   email?: string;
   contact?: string;
   sex?: string;
@@ -1716,6 +1753,10 @@ export function updateStudentBiometricConsent(payload: BiometricConsentPayload):
 
 export function createBiometricLivenessChallenge(payload: LivenessChallengeRequest): Promise<LivenessChallengeResponse> {
   return request<LivenessChallengeResponse>('POST', '/student/biometric/liveness/challenge', payload);
+}
+
+export function requestBiometricLivenessGuidance(formData: FormData, signal?: AbortSignal): Promise<LivenessGuidanceResponse> {
+  return request<LivenessGuidanceResponse>('POST', '/student/biometric/liveness/guidance', formData, undefined, 5000, signal);
 }
 
 export function submitBiometricEnrollment(formData: FormData, signal?: AbortSignal): Promise<BiometricEnrollmentResponse> {

@@ -321,17 +321,24 @@ function handle_faculty_student_create(): void
         }
 
         $data = $body['data'];
+        $allowed = [
+            'studentNumber', 'studentId', 'firstName', 'middleName', 'lastName',
+            'email', 'contact', 'sex', 'yearLevel', 'status', 'admissionDate',
+            'birthdate', 'classId',
+        ];
+        $unknown = array_values(array_diff(array_keys($data), $allowed));
+        if ($unknown !== []) {
+            $errors = [];
+            foreach ($unknown as $field) {
+                $errors[$field] = 'Whole-name input is not supported; provide firstName, middleName, and lastName fields.';
+            }
+            validation_error_response($errors);
+            return;
+        }
         $studentNumber = trim((string) ($data['studentNumber'] ?? $data['studentId'] ?? ''));
         $firstName = normalize_person_name((string) ($data['firstName'] ?? ''));
         $middleName = normalize_person_name((string) ($data['middleName'] ?? ''));
         $lastName = normalize_person_name((string) ($data['lastName'] ?? ''));
-        $name = trim((string) ($data['name'] ?? ''));
-
-        if (empty($firstName) && !empty($name)) {
-            $parts = explode(' ', $name);
-            $lastName = array_pop($parts);
-            $firstName = implode(' ', $parts) ?: $lastName;
-        }
 
         $email = trim((string) ($data['email'] ?? ''));
         $contact = trim((string) ($data['contact'] ?? ''));
@@ -343,8 +350,8 @@ function handle_faculty_student_create(): void
         $admissionDate = !empty($data['admissionDate']) ? $data['admissionDate'] : null;
         $birthdate = !empty($data['birthdate']) ? $data['birthdate'] : null;
 
-        if (empty($studentNumber) || (empty($firstName) && empty($name))) {
-            safe_error_response('Student ID number and student name are required.', 400);
+        if (empty($studentNumber) || empty($firstName) || empty($lastName)) {
+            safe_error_response('Student ID number, first name, and last name are required.', 400);
             return;
         }
 

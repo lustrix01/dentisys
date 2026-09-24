@@ -92,33 +92,7 @@ test.describe('Auth Module E2E Tests', () => {
     expect(acceptedPayload).toEqual({ token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', password: 'FacultyPass123!' });
   });
 
-  test('Faculty invitation acceptance may verify Google and preserves the invitation on a mismatch', async ({ page }) => {
-    await installMockGoogleIdentityServices(page);
-    await page.route('**/api/runtime-config', async route => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_RUNTIME_CONFIG) });
-    });
-    await page.route('**/api/auth/faculty/invitation**', async route => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-        status: 'ok', invitation: { name: 'Dr. Test Faculty', email: 'test.faculty@bicol-u.edu.ph', expiresAt: '2026-09-25T00:00:00Z' },
-      }) });
-    });
-    let submittedPayload: Record<string, unknown> | null = null;
-    await page.route('**/api/auth/faculty/activate', async route => {
-      submittedPayload = route.request().postDataJSON() as Record<string, unknown>;
-      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'Google identity does not match the invited Faculty email.' }) });
-    });
-    await page.goto('/activate-faculty?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
-    await page.getByRole('button', { name: 'Continue with Google' }).click();
-    await page.getByLabel(/^Password$/i).fill('FacultyPass123!');
-    await page.getByLabel(/Confirm password/i).fill('FacultyPass123!');
-    await page.getByRole('button', { name: /Accept invitation and activate/i }).click();
-    await expect(page.getByRole('alert')).toContainText(/does not match the invited Faculty email/i);
-    await expect(page).toHaveURL('/activate-faculty');
-    expect(submittedPayload).toMatchObject({ credential: 'mock-google-credential', token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' });
-  });
-
-  test('Faculty invitation acceptance can complete with matching optional Google verification and password', async ({ page }) => {
-    await installMockGoogleIdentityServices(page);
+  test('Faculty invitation acceptance keeps password-only onboarding when Google is configured', async ({ page }) => {
     await page.route('**/api/runtime-config', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_RUNTIME_CONFIG) });
     });
@@ -133,16 +107,12 @@ test.describe('Auth Module E2E Tests', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Faculty account activated.' }) });
     });
     await page.goto('/activate-faculty?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
-    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
     await page.getByLabel(/^Password$/i).fill('FacultyPass123!');
     await page.getByLabel(/Confirm password/i).fill('FacultyPass123!');
     await page.getByRole('button', { name: /Accept invitation and activate/i }).click();
     await expect(page).toHaveURL('/login?activated=1');
-    expect(submittedPayload).toEqual({
-      token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-      password: 'FacultyPass123!',
-      credential: 'mock-google-credential',
-    });
+    expect(submittedPayload).toEqual({ token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', password: 'FacultyPass123!' });
   });
 
   test('Admin Faculty invitation screen creates and reissues invitations using server state', async ({ page }) => {
@@ -442,7 +412,7 @@ test('mocked Google direct login completes normal authentication', async ({ page
 
     await page.goto('/login');
     await page.getByRole('button', { name: 'Continue with Google' }).click();
-    await expect(page.getByText('Google Workspace domain is not allowed.')).toBeVisible();
+    await expect(page.getByText('This Google account is outside the approved institutional domains.')).toBeVisible();
   });
 
   test('password reset and login lifecycle remains available', async ({ page }) => {

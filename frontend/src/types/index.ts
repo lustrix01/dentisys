@@ -214,6 +214,11 @@ export interface LivenessChallengeResponse {
   expiresAt: string;
 }
 
+export interface LivenessGuidanceResponse {
+  detectedAction: LivenessAction | null;
+  faceDetected: boolean;
+}
+
 export interface BiometricEnrollmentResponse {
   enrollmentStatus: BiometricEnrollmentStatus;
   usableSampleCount: number;
