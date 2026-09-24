@@ -72,6 +72,20 @@ try {
     }
     if (-not $healthy) { throw 'Integration PostgreSQL/web services did not become healthy.' }
 
+    # The frontend has no Compose healthcheck because Vite's development
+    # server is the test surface. Wait for the actual HTTP entrypoint before
+    # launching live Playwright so a cold-start race cannot invalidate the
+    # entire browser gate.
+    $frontendReady = $false
+    for ($attempt = 0; $attempt -lt 60; $attempt++) {
+        try {
+            $frontendResponse = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:15173/'
+            if ($frontendResponse.StatusCode -eq 200) { $frontendReady = $true; break }
+        } catch { }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $frontendReady) { throw 'Integration frontend did not become ready.' }
+
     # Exercise the public runtime-config contract over HTTP, including the
     # cache-safety headers and method guard. This runs against the disposable
     # integration web service only.
