@@ -12,10 +12,16 @@ import {
   Eye,
   RotateCcw,
   Loader2,
+  Play,
+  ArrowLeft,
+  Square,
+  Sparkles,
+  Lock,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
+import { BiometricRadialScanner } from '../../components/BiometricRadialScanner';
 import { canAccessAuthoritativeStudentBiometrics } from './studentGates';
 import { StudentUnavailable } from './RealStudentSurfaces';
 import {
@@ -37,6 +43,11 @@ import {
   startCameraStream,
   type CameraDevice,
 } from '../../utils/camera';
+import {
+  analyzeFaceFrame,
+  captureVideoFrameBlob,
+  verifyFaceInVideo,
+} from '../../utils/faceDetection';
 
 function formatAction(action: LivenessAction): { title: string; instruction: string } {
   switch (action) {
@@ -91,9 +102,29 @@ export const FaceRegistration: React.FC = () => {
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const selectedCameraIdRef = useRef('');
   const [livenessChallenge, setLivenessChallenge] = useState<LivenessChallengeResponse | null>(null);
-  const [activeActionIndex, setActiveActionIndex] = useState<0 | 1>(0);
   const [isProcessingEnrollment, setIsProcessingEnrollment] = useState(false);
   const [serverUsableCount, setServerUsableCount] = useState(0);
+
+  // Step-by-step Gated Biometric Capture State
+  const [activeActionStep, setActiveActionStep] = useState<1 | 2 | 3 | 4>(1);
+  const [centerFrames, setCenterFrames] = useState<Blob[]>([]);
+  const [action1Frames, setAction1Frames] = useState<Blob[]>([]);
+  const [action2Frames, setAction2Frames] = useState<Blob[]>([]);
+  const [isRecordingStep, setIsRecordingStep] = useState(false);
+  const [recordingProgress, setRecordingProgress] = useState(0);
+  const [recordingStepLabel, setRecordingStepLabel] = useState('');
+  const captureAbortRef = useRef<AbortController | null>(null);
+
+  // Automated Real-Time Scanning State
+  const [scanPrompt, setScanPrompt] = useState('Position your face inside the oval looking directly at the camera.');
+  const [stepVerified, setStepVerified] = useState(false);
+  const [isFaceDetected, setIsFaceDetected] = useState(true);
+  const [holdProgress, setHoldProgress] = useState(0);
+
+  const baselineEyeRef = useRef(0.12);
+  const isCapturingRef = useRef(false);
+  const activeStepRef = useRef(activeActionStep);
+  activeStepRef.current = activeActionStep;
 
   // Revocation Modal
   const [showRevokeModal, setShowRevokeModal] = useState(false);
@@ -114,8 +145,53 @@ export const FaceRegistration: React.FC = () => {
   const [mockScanning, setMockScanning] = useState(false);
   const [mockProgress, setMockProgress] = useState(0);
 
+  // --- RESET STEPS HELPER ---
+  const handleResetSteps = useCallback(() => {
+    captureAbortRef.current?.abort();
+    captureAbortRef.current = null;
+    isCapturingRef.current = false;
+    setCenterFrames([]);
+    setAction1Frames([]);
+    setAction2Frames([]);
+    setActiveActionStep(1);
+    setStepVerified(false);
+    setHoldProgress(0);
+    setIsRecordingStep(false);
+    setRecordingProgress(0);
+    setRecordingStepLabel('');
+    setScanPrompt('Position your face in the circle looking straight ahead.');
+  }, []);
+
+  // --- RETAKE STEP HELPER ---
+  const handleRetakeStep = useCallback((step: 1 | 2 | 3) => {
+    captureAbortRef.current?.abort();
+    captureAbortRef.current = null;
+    isCapturingRef.current = false;
+    setIsRecordingStep(false);
+    setRecordingProgress(0);
+    setRecordingStepLabel('');
+    setStepVerified(false);
+    setHoldProgress(0);
+    if (step === 1) {
+      setCenterFrames([]);
+      setAction1Frames([]);
+      setAction2Frames([]);
+      setActiveActionStep(1);
+      setScanPrompt('Position your face in the circle looking straight ahead.');
+    } else if (step === 2) {
+      setAction1Frames([]);
+      setAction2Frames([]);
+      setActiveActionStep(2);
+    } else if (step === 3) {
+      setAction2Frames([]);
+      setActiveActionStep(3);
+    }
+  }, []);
+
   // --- STOP CAMERA HELPER ---
   const stopCamera = useCallback(() => {
+    captureAbortRef.current?.abort();
+    captureAbortRef.current = null;
     cameraAbortRef.current?.abort();
     cameraAbortRef.current = null;
     if (streamRef.current) {
@@ -125,6 +201,8 @@ export const FaceRegistration: React.FC = () => {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setIsRecordingStep(false);
+    setRecordingProgress(0);
   }, []);
 
   // Teardown camera on unmount or when step changes
@@ -190,7 +268,7 @@ export const FaceRegistration: React.FC = () => {
     if (!preserveMessage) {
       setAuthError(null);
     }
-    setActiveActionIndex(0);
+    handleResetSteps();
     setLivenessChallenge(null);
     stopCamera();
     const abortController = new AbortController();
@@ -268,46 +346,215 @@ export const FaceRegistration: React.FC = () => {
     }
   };
 
-  // --- STEP 2: FRAME CAPTURE & SERVER ENROLLMENT ---
-  const captureCandidateFrames = async (count: number): Promise<Blob[]> => {
+  // --- STEP 2: GUIDED FRAME CAPTURE & SERVER ENROLLMENT ---
+  const captureSingleFrame = async (): Promise<Blob | null> => {
     const video = videoRef.current;
-    if (!video || !video.videoWidth) return [];
+    if (!video || !video.videoWidth || !video.videoHeight) return null;
 
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return [];
+    if (!ctx) return null;
 
-    const blobs: Blob[] = [];
-    for (let i = 0; i < count; i++) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise<Blob | null>(resolve => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.85);
-      });
-      if (blob) {
-        blobs.push(blob);
-      }
-      // Small pause between frame captures
-      await new Promise(r => setTimeout(r, 60));
-    }
-    return blobs;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return new Promise<Blob | null>(resolve => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.85);
+    });
   };
 
-  const handleCaptureAndEnroll = async () => {
-    if (!livenessChallenge || isProcessingEnrollment) return;
+  const recordStepFrames = async (
+    targetCount: number,
+    durationMs: number,
+    label: string
+  ): Promise<Blob[]> => {
+    captureAbortRef.current?.abort();
+    const abortController = new AbortController();
+    captureAbortRef.current = abortController;
+    const { signal } = abortController;
+
+    setIsRecordingStep(true);
+    setRecordingStepLabel(label);
+    setRecordingProgress(0);
+
+    const stepBlobs: Blob[] = [];
+    const intervalMs = Math.floor(durationMs / targetCount);
+    const startTime = Date.now();
+
+    try {
+      for (let i = 0; i < targetCount; i++) {
+        if (signal.aborted) throw new Error('Recording cancelled');
+        const blob = await captureSingleFrame();
+        if (blob) {
+          stepBlobs.push(blob);
+        }
+        setRecordingProgress(Math.min(100, Math.round(((i + 1) / targetCount) * 100)));
+        const nextTargetTime = startTime + (i + 1) * intervalMs;
+        const waitMs = Math.max(25, nextTargetTime - Date.now());
+        await new Promise(r => setTimeout(r, waitMs));
+      }
+      return stepBlobs;
+    } finally {
+      if (captureAbortRef.current === abortController) {
+        setIsRecordingStep(false);
+        setRecordingProgress(0);
+        setRecordingStepLabel('');
+      }
+    }
+  };
+
+  // --- AUTOMATED REAL-TIME SCANNER LOOP (PHONE FACE ID ACCUMULATOR) ---
+  useEffect(() => {
+    if (!isAuthoritative || authStep !== 2 || !livenessChallenge || isProcessingEnrollment) {
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      const video = videoRef.current;
+      if (!video || !video.videoWidth || !video.videoHeight || video.readyState < 2) {
+        return;
+      }
+
+      if (isCapturingRef.current) return;
+
+      const analysis = analyzeFaceFrame(video, baselineEyeRef.current);
+      setIsFaceDetected(analysis.detected);
+
+      if (!analysis.detected) {
+        setScanPrompt(analysis.reason || 'Position your face in the circle');
+        setStepVerified(false);
+        return;
+      }
+
+      // Step 1: Center Face (collect 10 frames)
+      if (activeStepRef.current === 1) {
+        if (analysis.isCentered && (analysis.detectedAction === 'center' || analysis.detectedAction === 'none')) {
+          baselineEyeRef.current = Math.max(0.05, analysis.eyeDarkRatio);
+          setScanPrompt('Looking straight… hold steady');
+
+          isCapturingRef.current = true;
+          try {
+            const blob = await captureVideoFrameBlob(video);
+            if (blob) {
+              setCenterFrames(prev => {
+                if (prev.length >= 10) return prev;
+                const next = [...prev, blob];
+                if (next.length === 10) {
+                  setStepVerified(true);
+                  setScanPrompt('✓ Center face captured!');
+                  setTimeout(() => {
+                    setActiveActionStep(2);
+                    setStepVerified(false);
+                  }, 400);
+                }
+                return next;
+              });
+            }
+          } finally {
+            isCapturingRef.current = false;
+          }
+        } else {
+          setScanPrompt('Look directly into the center of the circle');
+        }
+      }
+      // Step 2: Action 1 (collect 9 frames)
+      else if (activeStepRef.current === 2) {
+        const targetAction = livenessChallenge.actions[0];
+        const isMatched = analysis.detectedAction === targetAction;
+
+        if (isMatched) {
+          setStepVerified(true);
+          setScanPrompt(`✓ ${formatAction(targetAction).title} detected!`);
+
+          isCapturingRef.current = true;
+          try {
+            const blob = await captureVideoFrameBlob(video);
+            if (blob) {
+              setAction1Frames(prev => {
+                if (prev.length >= 9) return prev;
+                const next = [...prev, blob];
+                if (next.length === 9) {
+                  setStepVerified(true);
+                  setScanPrompt(`✓ ${formatAction(targetAction).title} completed!`);
+                  setTimeout(() => {
+                    setActiveActionStep(3);
+                    setStepVerified(false);
+                  }, 400);
+                }
+                return next;
+              });
+            }
+          } finally {
+            isCapturingRef.current = false;
+          }
+        } else {
+          setStepVerified(false);
+          setScanPrompt(formatAction(targetAction).instruction);
+        }
+      }
+      // Step 3: Action 2 (collect 9 frames)
+      else if (activeStepRef.current === 3) {
+        const targetAction = livenessChallenge.actions[1];
+        const isMatched = analysis.detectedAction === targetAction;
+
+        if (isMatched) {
+          setStepVerified(true);
+          setScanPrompt(`✓ ${formatAction(targetAction).title} detected!`);
+
+          isCapturingRef.current = true;
+          try {
+            const blob = await captureVideoFrameBlob(video);
+            if (blob) {
+              setAction2Frames(prev => {
+                if (prev.length >= 9) return prev;
+                const next = [...prev, blob];
+                if (next.length === 9) {
+                  setStepVerified(true);
+                  setScanPrompt('✓ All 28 samples verified! Ready to submit.');
+                  setTimeout(() => {
+                    setActiveActionStep(4);
+                    setStepVerified(false);
+                  }, 400);
+                }
+                return next;
+              });
+            }
+          } finally {
+            isCapturingRef.current = false;
+          }
+        } else {
+          setStepVerified(false);
+          setScanPrompt(formatAction(targetAction).instruction);
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isAuthoritative, authStep, livenessChallenge, isProcessingEnrollment]);
+
+
+  const handleSubmitEnrollment = async () => {
+    if (
+      !livenessChallenge
+      || isProcessingEnrollment
+      || isRecordingStep
+      || centerFrames.length === 0
+      || action1Frames.length === 0
+      || action2Frames.length === 0
+    ) {
+      return;
+    }
+
+    const allFrames = [...centerFrames, ...action1Frames, ...action2Frames];
+    if (allFrames.length < 20) {
+      setAuthError('Not enough frames stored. Please retake the steps.');
+      return;
+    }
 
     setIsProcessingEnrollment(true);
     setAuthError(null);
 
     try {
-      // Capture 20 candidate frames from camera feed
-      const frames = await captureCandidateFrames(20);
-      if (frames.length === 0) {
-        throw new Error('Could not capture frames from camera. Please verify video feed.');
-      }
-
-      // Build multipart request
       const formData = new FormData();
       formData.append('challengeId', livenessChallenge.challengeId);
       formData.append('challenge_id', livenessChallenge.challengeId);
@@ -319,14 +566,11 @@ export const FaceRegistration: React.FC = () => {
       formData.append('idempotencyKey', idempotencyKey);
       formData.append('idempotency_key', idempotencyKey);
 
-      frames.forEach((blob, idx) => {
+      allFrames.forEach((blob, idx) => {
         formData.append('frames[]', blob, `sample_${idx}.jpg`);
       });
 
-      // Submit to server
       const result = await submitBiometricEnrollment(formData);
-
-      // Server determines authoritative usable sample count
       setServerUsableCount(result.usableSampleCount);
 
       if (result.enrollmentStatus === 'enrolled') {
@@ -340,20 +584,20 @@ export const FaceRegistration: React.FC = () => {
         } : null);
         setAuthStep(3);
       } else {
-        // Partial or quality failure: prompt retry without claiming completion
-        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again.');
-        // Re-request fresh challenge for retry
+        setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please retake steps with clear lighting.');
         void startCameraAndChallenge(undefined, true);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Facial enrollment failed. Please try again.';
       setAuthError(msg);
-      // Re-request fresh challenge for retry
       void startCameraAndChallenge(undefined, true);
     } finally {
       setIsProcessingEnrollment(false);
     }
   };
+
+  // Backward compatibility aliases
+  const handleCaptureAndEnroll = handleSubmitEnrollment;
 
   // --- REVOCATION ---
   const handleConfirmRevocation = async () => {
@@ -444,7 +688,9 @@ export const FaceRegistration: React.FC = () => {
 
   // Active step for current mode
   const currentStep = isAuthoritative ? authStep : mockStep;
+  const isScanning = isRecordingStep || isProcessingEnrollment;
   const captureDisabled = isProcessingEnrollment
+    || isRecordingStep
     || mockScanning
     || (isAuthoritative && (cameraLoading || Boolean(cameraError) || !livenessChallenge));
 
@@ -692,84 +938,143 @@ export const FaceRegistration: React.FC = () => {
               )}
 
               {/* Server Liveness Instructions (Authoritative) */}
-              {isAuthoritative && livenessChallenge && (
-                <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4" />
-                      Server-Directed Active Liveness Instructions
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">
-                      Step {activeActionIndex + 1} of 2
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {livenessChallenge.actions.map((act, idx) => {
-                      const details = formatAction(act);
-                      const isActive = activeActionIndex === idx;
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => setActiveActionIndex(idx as 0 | 1)}
-                          className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${isActive
-                            ? 'bg-white dark:bg-slate-900 border-blue-500 shadow-xs'
-                            : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-70'
-                            }`}
-                        >
-                          <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
-                            {act === 'blink' ? <Eye className="w-4 h-4 text-blue-600" /> : <RotateCcw className="w-4 h-4 text-blue-600" />}
-                            <span>Action {idx + 1}: {details.title}</span>
-                          </div>
-                          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            {details.instruction}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {isAuthoritative && livenessChallenge && (() => {
+                const act1 = formatAction(livenessChallenge.actions[0]);
+                const act2 = formatAction(livenessChallenge.actions[1]);
+                const totalStored = centerFrames.length + action1Frames.length + action2Frames.length;
 
-              {/* Video Element Viewport */}
-              <div className="relative w-full max-w-md mx-auto aspect-[4/3] bg-slate-900 rounded-2xl overflow-hidden shadow-inner border border-slate-800">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover scale-x-[-1]"
+                return (
+                  <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4" />
+                        Gated Liveness Sequence (Stored: {totalStored} / 30 Samples)
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {activeActionStep === 1
+                          ? 'Step 1 of 3: Center Face'
+                          : activeActionStep === 2
+                            ? `Step 2 of 3: ${act1.title}`
+                            : activeActionStep === 3
+                              ? `Step 3 of 3: ${act2.title}`
+                              : 'Ready to Submit'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {/* Phase 1 Pill */}
+                      <div className={`p-2.5 rounded-xl border text-xs transition-all ${
+                        centerFrames.length > 0
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                          : activeActionStep === 1
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm ring-2 ring-blue-400/30'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}>
+                        <div className="flex items-center justify-between gap-1.5 font-bold">
+                          <div className="flex items-center gap-1.5">
+                            <Camera className="w-3.5 h-3.5" />
+                            <span>1. Center Face</span>
+                          </div>
+                          {centerFrames.length > 0 ? (
+                            <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400">✓ Done ({centerFrames.length})</span>
+                          ) : activeActionStep === 1 ? (
+                            <span className="text-[10px] font-extrabold text-white animate-pulse">Current</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">Pending</span>
+                          )}
+                        </div>
+                        <p className={`mt-0.5 text-[10px] ${activeActionStep === 1 && centerFrames.length === 0 ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                          {centerFrames.length > 0 ? `${centerFrames.length} samples stored` : 'Neutral frontal look'}
+                        </p>
+                      </div>
+
+                      {/* Phase 2 Pill */}
+                      <div className={`p-2.5 rounded-xl border text-xs transition-all ${
+                        action1Frames.length > 0
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                          : activeActionStep === 2
+                            ? 'bg-amber-500 text-white border-amber-500 shadow-sm ring-2 ring-amber-400/30'
+                            : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500'
+                      }`}>
+                        <div className="flex items-center justify-between gap-1.5 font-bold">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {livenessChallenge.actions[0] === 'blink' ? <Eye className="w-3.5 h-3.5 flex-shrink-0" /> : <RotateCcw className="w-3.5 h-3.5 flex-shrink-0" />}
+                            <span className="truncate">2. {act1.title}</span>
+                          </div>
+                          {action1Frames.length > 0 ? (
+                            <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 flex-shrink-0">✓ Done ({action1Frames.length})</span>
+                          ) : activeActionStep === 2 ? (
+                            <span className="text-[10px] font-extrabold text-white animate-pulse flex-shrink-0">Current</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1 flex-shrink-0">
+                              <Lock className="w-2.5 h-2.5" />
+                              <span>Locked</span>
+                            </span>
+                          )}
+                        </div>
+                        <p className={`mt-0.5 text-[10px] truncate ${activeActionStep === 2 && action1Frames.length === 0 ? 'text-amber-100' : centerFrames.length === 0 ? 'text-slate-400 italic' : 'text-slate-500 dark:text-slate-400'}`}>
+                          {centerFrames.length === 0 ? 'Pending Step 1' : action1Frames.length > 0 ? `${action1Frames.length} samples stored` : act1.instruction}
+                        </p>
+                      </div>
+
+                      {/* Phase 3 Pill */}
+                      <div className={`p-2.5 rounded-xl border text-xs transition-all ${
+                        action2Frames.length > 0
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                          : activeActionStep === 3
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-2 ring-emerald-400/30'
+                            : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500'
+                      }`}>
+                        <div className="flex items-center justify-between gap-1.5 font-bold">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {livenessChallenge.actions[1] === 'blink' ? <Eye className="w-3.5 h-3.5 flex-shrink-0" /> : <RotateCcw className="w-3.5 h-3.5 flex-shrink-0" />}
+                            <span className="truncate">3. {act2.title}</span>
+                          </div>
+                          {action2Frames.length > 0 ? (
+                            <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 flex-shrink-0">✓ Done ({action2Frames.length})</span>
+                          ) : activeActionStep === 3 ? (
+                            <span className="text-[10px] font-extrabold text-white animate-pulse flex-shrink-0">Current</span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1 flex-shrink-0">
+                              <Lock className="w-2.5 h-2.5" />
+                              <span>Locked</span>
+                            </span>
+                          )}
+                        </div>
+                        <p className={`mt-0.5 text-[10px] truncate ${activeActionStep === 3 && action2Frames.length === 0 ? 'text-emerald-100' : action1Frames.length === 0 ? 'text-slate-400 italic' : 'text-slate-500 dark:text-slate-400'}`}>
+                          {action1Frames.length === 0 ? 'Pending Step 2' : action2Frames.length > 0 ? `${action2Frames.length} samples stored` : act2.instruction}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Phone Face ID Radial Scanner Viewport */}
+              <div className="relative flex flex-col items-center justify-center">
+                <BiometricRadialScanner
+                  videoRef={videoRef}
+                  totalTicks={28}
+                  capturedCount={centerFrames.length + action1Frames.length + action2Frames.length}
+                  currentStep={activeActionStep as 1 | 2 | 3 | 4}
+                  currentActionType={
+                    activeActionStep === 1
+                      ? 'center'
+                      : activeActionStep === 2
+                        ? (livenessChallenge?.actions[0] || 'center')
+                        : activeActionStep === 3
+                          ? (livenessChallenge?.actions[1] || 'center')
+                          : 'complete'
+                  }
+                  instruction={scanPrompt}
+                  isFaceDetected={isFaceDetected}
+                  stepVerified={stepVerified}
                 />
 
                 {cameraLoading && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/75 text-white">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/75 text-white rounded-full z-20">
                     <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
                     <span className="text-xs font-semibold">Starting camera…</span>
-                  </div>
-                )}
-
-                {/* Face Alignment Target Oval Overlay */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className={`w-52 h-64 rounded-[50%] border-2 transition-all ${isProcessingEnrollment || mockScanning
-                    ? 'border-blue-400 shadow-[0_0_25px_rgba(59,130,246,0.5)]'
-                    : 'border-white/60 border-dashed'
-                    }`} />
-                </div>
-
-                {/* Scanning / Uploading Overlay */}
-                {(isProcessingEnrollment || mockScanning) && (
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-4 text-center text-white space-y-1.5">
-                    <p className="text-xs font-bold animate-pulse flex items-center justify-center gap-1.5">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      {isAuthoritative
-                        ? 'Capturing candidate frames & transmitting to server…'
-                        : `Extracting Facial Feature Vector... ${mockProgress}%`}
-                    </p>
-                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                      <div
-                        className="bg-blue-500 h-full transition-all duration-300"
-                        style={{ width: isAuthoritative ? '100%' : `${mockProgress}%` }}
-                      />
-                    </div>
                   </div>
                 )}
               </div>
@@ -792,7 +1097,7 @@ export const FaceRegistration: React.FC = () => {
                       setSelectedCameraId(deviceId);
                       void startCameraAndChallenge(deviceId);
                     }}
-                    disabled={cameraLoading || isProcessingEnrollment}
+                    disabled={cameraLoading || isProcessingEnrollment || isRecordingStep}
                     className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs"
                   >
                     {cameraDevices.map(device => (
@@ -804,30 +1109,98 @@ export const FaceRegistration: React.FC = () => {
                 </label>
               )}
 
-              <div className="text-center space-y-3">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Ensure good lighting, look directly into the camera, and follow the liveness prompt above.
-                </p>
+              {/* In-Card Error Notice */}
+              {authError && (
+                <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2.5 max-w-md mx-auto animate-fade-in text-left">
+                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block font-bold">Face Detection Required</strong>
+                    <p className="mt-0.5 leading-relaxed">{authError}</p>
+                  </div>
+                </div>
+              )}
 
-                <button
-                  onClick={isAuthoritative ? handleCaptureAndEnroll : handleMockStartCapture}
-                  disabled={captureDisabled}
-                  className={`px-8 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 mx-auto ${captureDisabled
-                    ? 'bg-blue-400 text-white cursor-wait'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
-                    }`}
-                >
-                  {isProcessingEnrollment ? (
-                    <>
+              <div className="text-center space-y-3">
+                {isAuthoritative && livenessChallenge ? (
+                  isProcessingEnrollment ? (
+                    <button
+                      disabled
+                      className="px-8 py-3 rounded-xl font-bold text-xs bg-blue-500 text-white shadow-md flex items-center gap-2 mx-auto cursor-wait opacity-80"
+                    >
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Verifying with Server…</span>
-                    </>
-                  ) : mockScanning ? (
-                    <span>Scanning...</span>
+                      <span>Submitting 28 biometric samples to server…</span>
+                    </button>
+                  ) : activeActionStep < 4 ? (
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-800 dark:text-blue-300 max-w-md mx-auto flex items-center gap-3">
+                        <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 animate-pulse" />
+                        <div className="text-left">
+                          <strong className="block font-bold">Face ID Radial Scanner Active</strong>
+                          <p className="mt-0.5 text-slate-600 dark:text-slate-400">
+                            Follow the on-screen prompt. Move your head smoothly as the green ticks fill up the circle!
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-center gap-3">
+                        <button
+                          onClick={handleResetSteps}
+                          className="px-4 py-2.5 rounded-xl font-bold text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Restart Scan</span>
+                        </button>
+                      </div>
+                    </div>
                   ) : (
-                    <span>Capture & Submit Enrollment</span>
-                  )}
-                </button>
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs max-w-md mx-auto flex items-center gap-3">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0" />
+                        <div className="text-left">
+                          <strong className="block font-bold">All 28 Biometric Samples Verified!</strong>
+                          <p className="mt-0.5 text-emerald-700 dark:text-emerald-300">
+                            Center face (10), {formatAction(livenessChallenge.actions[0]).title} (9), and {formatAction(livenessChallenge.actions[1]).title} (9) captured successfully.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-center gap-3">
+                        <button
+                          onClick={handleSubmitEnrollment}
+                          disabled={captureDisabled}
+                          className="px-8 py-3.5 rounded-xl font-bold text-xs shadow-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25 active:scale-[0.99] cursor-pointer flex items-center gap-2"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Submit Facial Enrollment (28 Samples)</span>
+                        </button>
+                        <button
+                          onClick={handleResetSteps}
+                          disabled={captureDisabled}
+                          className="px-4 py-3.5 rounded-xl font-bold text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Restart Scan</span>
+                        </button>
+                      </div>
+                    </div>
+                  )
+                ) : !isAuthoritative ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Ensure good lighting, look directly into the camera, and follow the liveness prompt above.
+                    </p>
+                    <button
+                      onClick={handleMockStartCapture}
+                      disabled={captureDisabled}
+                      className={`px-8 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 mx-auto ${
+                        captureDisabled
+                          ? 'bg-blue-400 text-white cursor-wait'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
+                      }`}
+                    >
+                      {mockScanning ? <span>Scanning...</span> : <span>Capture & Submit Enrollment</span>}
+                    </button>
+                  </div>
+                ) : null}
               </div>
           </div>
         </div>

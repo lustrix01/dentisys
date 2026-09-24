@@ -119,6 +119,8 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
         geofence_failed: 'You are outside the designated attendance area for this session.',
         already_recorded: 'Attendance has already been recorded for this session.',
         biometric_service_unavailable: 'Biometric verification is temporarily unavailable. Please request manual attendance.',
+        quality_failed: 'At least 20 clear face samples are required. Please keep your face inside the oval with good lighting and follow each action carefully.',
+        enrollment_samples_insufficient: 'At least 20 clear face samples are required. Please center your face inside the oval and try again.',
       };
       if (codeMessages[code]) {
         return codeMessages[code];
@@ -164,10 +166,7 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   if (statusMap && statusMap[backendMessage]) {
     return statusMap[backendMessage];
   }
-  if (status === 400 && backendMessage && backendMessage !== 'Validation failed.') {
-    return backendMessage;
-  }
-  if (status === 403) {
+  if (backendMessage && backendMessage !== 'Validation failed.' && backendMessage !== 'Internal server error.') {
     return backendMessage;
   }
   if (status === 400) return 'Please check your input and try again.';
