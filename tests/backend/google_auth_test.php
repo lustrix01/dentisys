@@ -109,6 +109,14 @@ $linkChallenge = google_issue_link_challenge($config, [
 google_test_assert(is_string($linkChallenge['token']) && $linkChallenge['expires_in'] === 300, 'Google link challenge initializes through shared challenge state');
 google_test_assert(google_auth_identity_error_status('domain_not_allowed') === 403, 'Disallowed Google domains map to HTTP 403');
 google_test_assert(google_auth_identity_error_status('invalid_google_identity') === 401, 'Invalid Google identities map to HTTP 401');
+$googleController = file_get_contents(__DIR__ . '/../../backend/controllers/GoogleAuthController.php');
+google_test_assert(
+    is_string($googleController)
+        && str_contains($googleController, 'function google_auth_profile_link_audit_failure')
+        && str_contains($googleController, "'google_profile_link_denied'")
+        && str_contains($googleController, "'google_profile_link_success'"),
+    'Profile Google linking audits both denied and successful binding attempts'
+);
 
 foreach (glob($config['rate_limit']['storage_dir'] . '/*') ?: [] as $path) {
     @unlink($path);

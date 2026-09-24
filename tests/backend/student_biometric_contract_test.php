@@ -155,6 +155,7 @@ foreach ([
     ['GET', '/api/student/biometric/profile'],
     ['PUT', '/api/student/biometric/consent'],
     ['POST', '/api/student/biometric/liveness/challenge'],
+    ['POST', '/api/student/biometric/liveness/guidance'],
     ['POST', '/api/student/biometric/enrollment'],
     ['DELETE', '/api/student/biometric/profile'],
     ['GET', '/api/student/attendance/sessions/active'],
@@ -173,6 +174,19 @@ foreach (['consent_required', 'biometric_not_enrolled', 'enrollment_expired', 's
     biometric_expect_true(str_contains($biometricSource, "'{$errorCode}'"), "Stable biometric error code {$errorCode} is represented");
 }
 biometric_expect_true(str_contains($controller, "status = 'revoked'") && str_contains($controller, "attendance_session_fetch_for_student"), 'Revocation blocks Student capture while preserving the session record path');
+biometric_expect_true(
+    str_contains($controller, 'function handle_student_biometric_guidance')
+        && str_contains($controller, 'student_biometric_validate_guidance_challenge')
+        && str_contains($controller, 'attendance_session_timing_decision')
+        && str_contains($controller, "'consent_required'"),
+    'Guidance rechecks consent, challenge binding, and live attendance timing before sidecar processing'
+);
+biometric_expect_true(
+    str_contains($biometricHelpers, 'function student_biometric_validate_guidance_challenge')
+        && str_contains($biometricHelpers, "['submission_state'] ?? null")
+        && str_contains($biometricHelpers, 'return [\'actions\' => $actions'),
+    'Guidance challenge validation is non-consuming and rejects completed or invalid challenges'
+);
 biometric_expect_true(str_contains($controller, 'function handle_student_attendance_logs') && str_contains($controller, 'WHERE e.student_id = ?'), 'Student attendance logs are scoped to the authenticated Student identity');
 biometric_expect_true(str_contains($controller, "biometric_enrollment_succeeded") && str_contains($controller, "biometric_enrollment_revoked"), 'Biometric profile lifecycle actions are audited');
 $facultyController = file_get_contents(dirname(__DIR__, 2) . '/backend/controllers/FacultyController.php');

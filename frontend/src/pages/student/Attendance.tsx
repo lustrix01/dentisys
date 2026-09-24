@@ -890,7 +890,7 @@ export const Attendance: React.FC = () => {
                 <div>
                   <strong className="block font-bold">Network or Biometric Service Interruption</strong>
                   <p className="mt-0.5 leading-relaxed">
-                    Your 25 captured frames and attendance challenge have been preserved. You can retry submission with the same idempotency key without re-capturing.
+                    Your captured frames and attendance challenge have been preserved. You can retry submission with the same idempotency key without re-capturing.
                   </p>
                 </div>
               </div>

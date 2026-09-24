@@ -252,6 +252,24 @@ function handle_student_biometric_guidance(): void
             if ($attendanceSessionId <= 0) {
                 throw new ValidationException([['field' => 'attendanceSessionId', 'message' => 'A valid attendance session is required.']]);
             }
+            $session = attendance_session_fetch_for_student($pdo, $attendanceSessionId, $identity['student_id']);
+            if ($session === null) {
+                throw new StudentBiometricException('Attendance session is not active for this Student.', 409, 'session_not_active');
+            }
+            $decision = attendance_session_timing_decision($session, attendance_session_now_utc(), $config);
+            if (!$decision['allowed']) {
+                throw new StudentBiometricException('Attendance capture is not available for this session.', 409, (string) $decision['code']);
+            }
+        }
+        $profile = student_biometric_profile($pdo, $identity['student_id']);
+        if ($profile === null || $profile['consent_status'] !== 'approved') {
+            throw new StudentBiometricException(
+                $purpose === 'attendance'
+                    ? 'Biometric consent is required before attendance capture.'
+                    : 'Biometric consent is required before enrollment.',
+                409,
+                'consent_required'
+            );
         }
         $challengeId = student_biometric_form_alias('challengeId', 'challenge_id');
         $challengeToken = student_biometric_form_alias('challengeToken', 'challenge_token');

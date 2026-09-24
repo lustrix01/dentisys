@@ -1062,7 +1062,7 @@ export const FaceRegistration: React.FC = () => {
                     <div>
                       <strong className="block font-bold">Network or Biometric Service Disruption</strong>
                       <p className="mt-0.5 leading-relaxed">
-                        Your 25 captured candidate frames and server challenge session have been preserved. You can retry submission with the same idempotency key without re-capturing.
+                        Your captured candidate frames and server challenge session have been preserved. You can retry submission with the same idempotency key without re-capturing.
                       </p>
                     </div>
                   </div>

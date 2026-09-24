@@ -286,6 +286,19 @@ function handle_google_link(): void
     }
 }
 
+function google_auth_profile_link_audit_failure(
+    ?PDO $pdo,
+    array $config,
+    array $context,
+    ?int $userId,
+    string $description
+): void {
+    if (!$pdo instanceof PDO) {
+        return;
+    }
+    google_auth_audit($pdo, $config, $context, 'google_profile_link_denied', 'Failed', $userId, $description);
+}
+
 /**
  * Link Google from an already authenticated Profile Settings session.
  *
@@ -309,6 +322,7 @@ function handle_google_profile_link(): void
             || !isset($body['data']['credential'])
             || !is_string($body['data']['credential'])
             || trim($body['data']['credential']) === '') {
+            google_auth_profile_link_audit_failure($pdo, $config, $context, (int) ($authContext['user_id'] ?? 0), 'Invalid Google identity payload.');
             google_auth_error('INVALID_GOOGLE_IDENTITY', 'Invalid Google identity.', 400);
             return;
         }
@@ -418,6 +432,7 @@ function handle_google_profile_link(): void
             'linked' => true,
         ], 200));
     } catch (GoogleIdentityException $e) {
+        google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, $e->getMessage());
         $code = match ($e->reason()) {
             'email_mismatch' => 'GOOGLE_EMAIL_MISMATCH',
             'link_conflict' => 'GOOGLE_LINK_CONFLICT',
@@ -431,18 +446,25 @@ function handle_google_profile_link(): void
         }
         google_auth_error($code, $e->getMessage(), $status);
     } catch (InvalidCredentialsException $e) {
+        google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Incorrect ownership password.');
         google_auth_error('GOOGLE_LINK_PASSWORD_INVALID', 'Incorrect ownership password.', 401);
     } catch (AuthException | ChallengeException $e) {
+        google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Authenticated profile session was invalid or expired.');
         google_auth_error('AUTHENTICATION_REQUIRED', 'Your session has expired. Please log in again.', 401);
     } catch (InactiveAccountException $e) {
+        google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Account is inactive.');
         google_auth_error('ACCOUNT_INACTIVE', 'This account is not active.', 403);
     } catch (TooManyMfaCredentialsException $e) {
+        google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Multiple enabled authenticator credentials found.');
         google_auth_error('AUTHENTICATION_ERROR', 'Authentication could not be completed.', 500);
     } catch (RateLimitException $e) {
+        google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Google linking rate limit exceeded.');
         google_auth_error('RATE_LIMITED', 'Too many attempts.', 429);
     } catch (ValidationException $e) {
+        google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Invalid Google identity payload.');
         google_auth_error('INVALID_GOOGLE_IDENTITY', 'Invalid Google identity.', 401);
     } catch (Throwable $e) {
+        google_auth_profile_link_audit_failure($pdo, $config, $context, isset($authContext['user_id']) ? (int) $authContext['user_id'] : null, 'Google profile linking failed.');
         error_log('Google profile link error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
         google_auth_error('AUTHENTICATION_ERROR', 'Authentication could not be completed.', 500);
     }
@@ -469,3 +491,4 @@ function handle_google_link_status(): void
         google_auth_error('AUTHENTICATION_ERROR', 'Authentication could not be completed.', 500);
     }
 }
+
