@@ -79,9 +79,28 @@ try {
     $frontendReady = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
         try {
-            $frontendResponse = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:15173/'
-            if ($frontendResponse.StatusCode -eq 200) { $frontendReady = $true; break }
-        } catch { }
+            $frontendReady = $true
+            foreach ($warmupUri in @(
+                'http://127.0.0.1:15173/',
+                'http://127.0.0.1:15173/@vite/client'
+            )) {
+                $frontendResponse = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri $warmupUri
+                if ($frontendResponse.StatusCode -ne 200) { $frontendReady = $false; break }
+            }
+            if ($frontendReady) {
+                $mainResponse = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri 'http://127.0.0.1:15173/src/main.tsx'
+                if ($mainResponse.StatusCode -ne 200) { $frontendReady = $false }
+                $dependencyUris = [regex]::Matches(
+                    [string] $mainResponse.Content,
+                    '/node_modules/\.vite/deps/[^"'' ]+'
+                ) | ForEach-Object Value | Select-Object -Unique
+                foreach ($dependencyUri in $dependencyUris) {
+                    $dependencyResponse = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri ("http://127.0.0.1:15173$dependencyUri")
+                    if ($dependencyResponse.StatusCode -ne 200) { $frontendReady = $false; break }
+                }
+            }
+            if ($frontendReady) { break }
+        } catch { $frontendReady = $false }
         Start-Sleep -Seconds 2
     }
     if (-not $frontendReady) { throw 'Integration frontend did not become ready.' }
