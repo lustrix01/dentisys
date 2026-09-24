@@ -215,6 +215,7 @@ $expectedMigrations = [
     '014_grading_period_memberships.sql',
     '015_period_attendance_ranges_and_sources.sql',
     '016_academic_notifications.sql',
+    '017_faculty_structured_name.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
