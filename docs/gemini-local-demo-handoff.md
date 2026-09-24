@@ -2,38 +2,33 @@
 
 **Purpose:** ready-to-relay frontend work order for the one-day DentiSys local demo.
 
-**Baseline:** start an isolated frontend branch from reviewed commit `666ed4e` (`fix(faculty): resolve period grading findings and add regression tests`). Do not branch from an unreviewed biometric worktree, stash, or alternate history. The user relays backend contract updates manually.
+**Baseline:** start an isolated presentation branch from reviewed commit `666ed4e` (`fix(faculty): resolve period grading findings and add regression tests`) after Luna's functional baseline is ready. Do not branch from an unreviewed biometric worktree, stash, or alternate history. The user manually relays this UI-only prompt.
 
-**Scope:** make every existing frontend route and action complete against an authoritative backend path, or show a truthful supported-unavailable/error state with the exact dependency. Cosmetic cleanup is secondary. A mock, localStorage-only result, fixed demo metric, or success toast without a persisted response is not completion.
+**Functional scope:** every existing frontend route and action still needs an authoritative backend path, or a truthful supported-unavailable/error state with the exact dependency. Luna XHigh owns that functional implementation, including API/state/business logic, event handlers, validation, calculations, authentication, functional accessibility/interaction, focused tests, integration, and tools. A mock, localStorage-only result, fixed demo metric, or success toast without a persisted response is not completion.
+
+**Gemini UI-only scope:** after Luna's functional baseline is available, Gemini may make presentation changes only: visual JSX/CSS, layout, styles, spacing, typography, presentational labels, contrast, focus styling, and other non-authoritative visual accessibility polish. Gemini must not change API calls/routes/types, event handlers, React state/context, validation, calculations, auth, persistence, role/permission logic, business wording that defines product behavior, or test expectations. Luna owns functional accessibility and interaction behavior. JSX/CSS and shared files may overlap, so the parent assigns exclusive ownership for each pass; Gemini reports conflicts rather than resolving functional code.
 
 **Read with the relay:** `docs/local-demo-functional-delivery-plan.md` is the existing route/action inventory and batch map; `docs/integration-status.md` records the integrated `666ed4e` line and parked candidates; `docs/PRODUCT_BACKLOG.md` supplies backlog detail; `spec.md` and `docs/roadmap.md` remain authoritative for approved behavior and deferred decisions.
 
-This handoff is a delivery plan, not a change to `spec.md`. `spec.md` remains authoritative. The backlog supplies sequencing and implementation detail only where it does not conflict with the specification. Do not change the specification, add deployment/provider infrastructure, or ask Gemini to edit backend code.
+This handoff is a delivery plan, not a change to `spec.md`. `spec.md` remains authoritative. The backlog supplies sequencing and implementation detail only where it does not conflict with the specification. Do not change the specification, add deployment/provider infrastructure, or ask Gemini to edit backend code or functional frontend behavior. The user manually relays this UI-only handoff; the parent handles detailed dispatch and waits without routine supervision.
 
 ## Copy/paste initial prompt
 
 ```text
-Work only on the DentiSys frontend from baseline 666ed4e in an isolated frontend branch. Do not edit PHP, migrations, Docker/Compose, provider configuration, backend tests, or backend routes. The parent/user will relay exact backend contracts and integrate after the shared gate.
+Work only on presentational frontend changes on top of Luna XHigh's functional baseline from reviewed commit 666ed4e. Do not edit PHP, migrations, Docker/Compose, provider configuration, backend tests, backend routes, API clients/routes/types, event handlers, state/context, validation, calculations, authentication, persistence, roles/permissions, business logic, or functional accessibility/interaction behavior.
 
-Your mission is broad functional coverage for the one-day local Docker Compose demo. Every existing frontend route and action must either:
-1. complete against an authoritative persisted API response;
-2. show an actionable supported-unavailable/error state naming the missing API/provider; or
-3. be explicitly marked as an external or Owner decision blocker.
+Your mission is a UI-only presentation pass for the one-day local Docker Compose demo. You may adjust visual JSX/CSS, layout, styles, spacing, typography, responsive presentation, presentational labels, contrast, focus styling, and loading/error/empty/unavailable presentation when those states already exist. Do not add or remove routes/actions, invent data or status, change authoritative business wording, or make any UI imply a successful API/provider result that the functional code did not receive.
 
-Never report success from localStorage, hardcoded data, a fixed metric, a local face flag, or a mock provider. Never invent request fields or endpoint paths. Wait for the backend contract packet when a page requires a new API. You may prepare loading, validation, empty, error, and unavailable states before the contract arrives.
+If you find a missing API, state transition, validation rule, calculation, auth/permission issue, persistence problem, or functional accessibility/interaction defect, leave the behavior unchanged and report it to Luna. Do not use localStorage, hardcoded data, a fixed metric, a local face flag, or a mock provider to make a screen look complete.
 
-Use the owned page files listed in docs/gemini-local-demo-handoff.md. frontend/src/services/apiClient.ts, frontend/src/types/index.ts, frontend/src/types/auth.ts, shared auth/context, App.tsx, and Layout.tsx have one frontend owner; queue changes to those files instead of editing them in parallel with another page bundle.
+Visual JSX/CSS may touch files that Luna owns functionally, including shared pages and layout. The parent assigns exclusive file ownership for each pass; stop and report a conflict rather than editing functional code or resolving a merge. Do not merge, rebase, or apply another branch or stash.
 
-For every mutation, verify positive response, invalid input, unauthorized/cross-owner response, and reload/refetch persistence. Refresh authoritative state after a successful write. Do not use a fallback academic value when an API call fails.
-
-Biometric attendance is urgent but real only. The server status/challenge contract is authoritative. The current status mismatch (frontend enrolled versus backend active/not_enrolled/enrolling), ignored challenge/idempotency fields, ordered two-action liveness, cancellation race, camera permission, GPS permission, and sidecar health must be handled explicitly. The proposed 26 enrollment/12 attendance capture is a validation candidate, not an approved threshold. The specification requires 20 usable enrollment samples and no more than 30 accepted; two randomized server actions; no browser-authoritative pass/fail; and manual attendance when real infrastructure is unavailable. Simulation is not demo acceptance. Never show verified attendance unless the real server/provider response says so.
-
-Do not merge or rebase another branch. At handoff, report changed files, consumed API contracts, assumptions, tests run, browser/runtime evidence, and blockers. Stop and report a blocker when the backend contract or Owner decision is missing; do not fill the gap with a guessed payload.
+At handoff, report the branch and baseline, changed presentation files, visual/accessibility checks run, screenshots or browser paths if available, and any functional blocker or shared-file conflict. Do not report API contracts consumed or functional tests as Gemini-owned evidence; Luna and the parent own those checks.
 ```
 
 ## Frontend ownership
 
-Use one Gemini branch and one frontend owner for shared files. Work by page domain:
+Luna XHigh owns all frontend functional implementation and tests, including the shared contract files. Gemini may receive an exclusive presentation-only pass over a file or page after Luna's functional work; the pass may include visual JSX/CSS and presentational labels/contrast/layout, but never event handlers, API/state/business logic, validation, calculations, auth, persistence, roles/permissions, functional accessibility/interaction, or authoritative business wording. Work by page domain for Luna's functional delivery:
 
 | Bundle | Owned files or domain | Required result |
 |---|---|---|
@@ -42,13 +37,13 @@ Use one Gemini branch and one frontend owner for shared files. Work by page doma
 | F2 Faculty | `frontend/src/pages/faculty/*`, `frontend/src/pages/faculty/StudentManagement.tsx` | Classes/rosters, grades, attendance, retention, reports, email management, audit, profile, and settings round-trip through API state |
 | S1/B1 Student | `frontend/src/pages/student/*`, `frontend/src/utils/camera.ts`, biometric tests | Student academic pages use real read APIs or supported-unavailable states; face enrollment/attendance uses server status/challenge and never simulation as success |
 | C1 Secretary | `frontend/src/pages/secretary/*` | Dashboard, date-session-record attendance flow, manual override, own audit, profile/settings, and approved Student context switch use role-scoped API state |
-| Shared contract owner | `frontend/src/services/apiClient.ts`, `frontend/src/types/index.ts`, `frontend/src/types/auth.ts`, `frontend/src/context/*`, minimal `App.tsx`/`Layout.tsx` | Integrate exact backend paths/types/error envelope once, with no competing edits |
+| Shared contract owner (Luna) | `frontend/src/services/apiClient.ts`, `frontend/src/types/index.ts`, `frontend/src/types/auth.ts`, `frontend/src/context/*`, minimal `App.tsx`/`Layout.tsx` | Integrate exact backend paths/types/error envelope once, with no competing functional edits; Gemini may touch presentation only when explicitly assigned |
 
-Do not make broad formatting or style changes. Do not remove a route merely to hide an unfinished function; either wire it, show the approved unavailable state, or identify the external/policy blocker.
+Do not make broad formatting or style changes. Do not remove a route merely to hide an unfinished function; Luna must wire it, show the approved unavailable state, or identify the external/policy blocker. Gemini must leave missing behavior visible and report it.
 
-## Contract gate before wiring
+## Contract gate before functional wiring (Luna-owned)
 
-Ask the parent/user for the contract packet if it is not already present. The packet must identify the exact method/path, request and response fields, role/ownership rule, error codes, idempotency/retry behavior, and reload/refetch expectation.
+Luna owns contract packets and functional wiring. The packet must identify the exact method/path, request and response fields, role/ownership rule, error codes, idempotency/retry behavior, and reload/refetch expectation. Gemini does not consume new API contracts or wire actions; report any missing state or dependency to Luna.
 
 The following points are already required by the plan and specification:
 
@@ -59,7 +54,9 @@ The following points are already required by the plan and specification:
 5. Notifications are database-backed. The bell consumes recipient-scoped list/unread/read/mark-read data; remedial assignment is not a local alert.
 6. Attendance uses server-authoritative session time in `Asia/Manila`, server-owned class/section permissions, temporary GPS evaluation without storing exact Student coordinates, one result per session, duplicate outcomes, and correction provenance.
 
-## Required page work
+## Required functional page work (Luna-owned; retained scope)
+
+The following requirements remain the approved functional scope for Luna and the integrated demo. Gemini may only present the resulting states visually and must not implement or alter their behavior.
 
 ### F0/F1: authentication, profiles, and email
 
@@ -119,21 +116,20 @@ For each bundle, record a compact row in the handoff result:
 | Persistence | Reload or re-login shows the server result; no localStorage-only business state is required |
 | Audit/history | Required audit/notification/history event appears when the contract calls for it |
 
-Run the focused frontend checks already defined in `frontend/package.json`: `npm test`, `npm run build`, and `npm run lint` as applicable to the changed files. Existing unit/contract tests are supporting evidence only; they do not replace browser and PostgreSQL verification. The parent runs the integrated repository checks and local stack/PostgreSQL gates.
+Luna owns the focused functional frontend checks already defined in `frontend/package.json`: `npm test`, `npm run build`, and `npm run lint` as applicable to functional changes. Gemini may run build/lint or targeted visual/accessibility checks for presentation-only changes. Existing unit/contract tests are supporting evidence only; they do not replace browser and PostgreSQL verification. The parent runs the integrated repository checks and local stack/PostgreSQL gates.
 
-Before handoff, check the diff for accidental backend files, invented API fields, fabricated fallback values, style churn, and edits to shared files outside the agreed frontend owner. Report the exact browser/runtime paths exercised separately from unit or mocked-test results.
+Before handoff, check the diff for accidental backend files, API/state/business-logic edits, invented fields, fabricated fallback values, style churn, and edits to shared files outside the exclusive presentation assignment. Report visual/browser paths separately from Luna's functional and PostgreSQL evidence.
 
 ## Communication protocol
 
-The user relays backend contracts and blockers. Do not request routine supervision. Send one concise handoff update when a contract is consumed and one final result containing:
+The user manually relays this UI-only prompt. Gemini does not consume backend contracts or request routine supervision. Send one concise update when a presentation pass is ready and one final result containing:
 
 - branch and baseline;
-- changed frontend files by bundle;
-- exact backend paths/types consumed;
-- tests/build/lint run and results;
-- browser/runtime evidence, if available;
-- unresolved blockers with the owner or prerequisite;
-- any shared-file conflict requiring the parent to integrate.
+- changed presentation files by page/domain;
+- visual/accessibility checks and build/lint run, if any;
+- browser or screenshot evidence, if available;
+- unresolved functional blockers reported to Luna;
+- any shared-file conflict requiring the parent to assign or integrate.
 
 If a contract, policy decision, provider prerequisite, or external file format is missing, stop that slice and report it in this form:
 

@@ -28,7 +28,7 @@
 
 ## Collaboration workflow
 
-- Start each feature with a stable contract: agree on fields, errors, and examples before implementation. Luna owns backend code and focused tests together; hand the stable contract to Gemini for frontend work, with the Owner relaying that handoff manually. Parallelize independent slices only when file ownership is explicit.
+- Start each feature with a stable contract: agree on fields, errors, and examples before implementation. Luna XHigh owns backend and frontend functional implementation, focused tests, integration, and tools. Gemini is limited to a presentation pass: visual JSX/CSS, layout, styles, presentational labels, contrast, and other non-authoritative visual accessibility polish. Gemini must not change event handlers, API clients/routes/types, state, validation, calculations, authentication, persistence, roles/permissions, business logic, or authoritative business wording. Luna owns functional accessibility and interaction behavior as needed. Visual JSX/CSS may overlap functional files, so the parent assigns exclusive ownership and coordinates conflicts; Gemini reports a conflict instead of resolving functional code. The user manually relays Gemini's UI prompt, while the parent owns detailed dispatch and waits without routine supervision.
 - Keep one Owner responsible for the shared disposable test environment. Reuse a running stack when safe and avoid unnecessary rebuilds; never delete the development database or volume. Use the separate disposable integration project for destructive validation.
 - Prefer Luna XHigh for delegated tools and implementation. The parent agent coordinates waits and uses compact progress only when needed; do not create routine monitoring work.
 

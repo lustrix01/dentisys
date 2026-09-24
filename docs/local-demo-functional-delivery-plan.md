@@ -99,7 +99,7 @@ The matrix covers active routes and actions that change or display product state
 
 The bundles are ordered by dependency, with one integrator owning the final gate. They are work packages, not a promise that every blocked external capability fits in a day.
 
-### A. Luna — backend and persistence contracts (P0)
+### A. Luna XHigh — backend, frontend functional implementation, integration, tools, and tests (P0)
 
 - Diagnose and fix Faculty class/roster edit from request payload through PostgreSQL reload; retain ownership and audit checks.
 - Add authenticated password change with current/new/confirm validation, token-version invalidation, and a clearly documented reuse/strength policy pending the separate Owner NIST decision.
@@ -107,20 +107,19 @@ The bundles are ordered by dependency, with one integrator owning the final gate
 - Align biometric status names and server authority; implement challenge/idempotency/cancellation contract and guided ordered sample acceptance. Add no “success” bypass when sidecar health/calibration is unavailable.
 - Add persistent notification schema/API and retention/remedial emission, read, unread, and mark-read behavior.
 - Provide the smallest Student academic read contract needed by active Student pages, or return an explicit supported-unavailable response rather than empty/fallback data. Correct Secretary audit scope and session hierarchy.
+- Own the functional frontend implementation for every route/action in the inventory, including API/state wiring, event handlers, validation, calculations, authentication, persistence, roles/permissions, functional accessibility/interaction, and focused tests. The required page work and function-to-batch acceptance below remain Luna-owned even where earlier wording assigned them to Gemini.
 
 **Acceptance:** each write is authorized, audited where required, persisted, and visible after reload; API responses match active frontend types; no endpoint reports success for an external/provider action it did not perform.
 
-### B. Gemini — frontend wiring and truthful states (P0/P1)
+### B. Gemini — UI-only visual/layout/accessibility presentation pass (P1)
 
-- Remove hardcoded/fabricated Faculty/Admin/Student report, dashboard, retention, class, attendance, and GWA fallbacks. Render API data or an actionable unavailable/error state.
-- Repair the active roster edit form and post-save reload; remove the dummy Registrar import success and show external-format blocked status.
-- Wire Admin invite edit/revoke/structured fields and the missing Admin rules navigation target.
-- Use authoritative data for Faculty classes/grades/attendance/retention/reports/email; refresh after mutation; remove obsolete retention settings/risk-rule presentation.
-- Build the shared password-change and structured profile flow, editable suggested `@bicol-u.edu.ph` entry, and server error handling.
-- Replace Student mock/localStorage business displays with the new Student API or honest unavailable surfaces; integrate biometric status/guided capture/cancel/error states without treating simulation as completion.
-- Complete Secretary date → session → record selection, real geolocation/error path, own audit view, role context switch, and server-configured email policy. Wire persistent notification bell.
+- Apply visual JSX/CSS, layout, spacing, typography, responsive presentation, presentational labels, contrast, focus styling, and visual polish to Luna's functional baseline.
+- Improve the presentation of existing loading, empty, error, unavailable, blocked, and success states without changing their event handlers, API/state semantics, validation, calculations, auth, persistence, roles/permissions, or authoritative business wording.
+- Keep the existing route/action inventory visible. Do not add/remove actions, invent data/status, revive fallback values, or imply functional completion from presentation changes.
+- Treat functional accessibility and interaction behavior as Luna-owned. Gemini may adjust presentation-only labels and contrast when they do not redefine product meaning; report semantic, keyboard, focus-order, validation, or state behavior issues to Luna.
+- Coordinate exclusive ownership for any JSX/CSS or shared file overlap. Stop and report a conflict rather than editing Luna's functional code, merging, rebasing, or applying a stash.
 
-**Acceptance:** every active button either completes its supported API action, shows a truthful blocked/unavailable reason, or is removed from the active workflow; no localStorage-only academic/security result is presented as authoritative.
+**Acceptance:** the UI clearly presents Luna's existing functional states and does not introduce a false success, altered business meaning, or functional behavior change. Functional completion remains subject to Luna's route/action acceptance matrix and the parent's shared gate.
 
 ### C. Provider and local-operations owner (parallel; conditional)
 
@@ -131,7 +130,7 @@ The bundles are ordered by dependency, with one integrator owning the final gate
 
 ### D. Tests, relays, and evidence owner
 
-- Extend targeted frontend contract tests for profile/password, roster edit, authoritative no-fallback states, biometric response mapping, and notification reads.
+- Luna extends targeted frontend contract tests for profile/password, roster edit, authoritative no-fallback states, biometric response mapping, and notification reads. Gemini reports only presentation checks and visual evidence.
 - Run backend PostgreSQL integration tests for invitation lifecycle, class edit, grades, attendance/override, audit scope, token invalidation, and notifications.
 - Run mocked Playwright tests only as interaction evidence. Then run the local stack checks and `docs/manual-demo-readiness.md` checklist; record live browser/DB outcomes rather than inferring them from mocked tests.
 
@@ -165,7 +164,7 @@ This section is the executable one-day plan. It supersedes the earlier A-D bundl
 
 ### Contract and ownership rules
 
-The parent agent owns coordination, Luna XHigh owns backend/integration/tool work, and the user relays the Gemini frontend handoff. Gemini works in an isolated frontend branch from the reviewed `666ed4e` baseline and does not edit PHP, migrations, Docker, provider configuration, or backend tests. No branch is merged until the shared gate below has evidence.
+The parent agent owns coordination. Luna XHigh owns backend and frontend functional implementation, focused tests, integration, and tools. The user manually relays the Gemini UI-only handoff. Gemini works in an isolated presentation branch from the reviewed `666ed4e` baseline and does not edit PHP, migrations, Docker, provider configuration, backend tests, or frontend functional behavior. No branch is merged until the shared gate below has evidence.
 
 Run at most three backend slots concurrently. Keep their file ownership separate:
 
@@ -177,9 +176,9 @@ Run at most three backend slots concurrently. Keep their file ownership separate
 
 The parent is the only integrator for shared migrations, `backend/routes/api.php`, response/error conventions, Compose configuration, and the running or disposable stack. Each backend slot owns tests for its code. Do not have two slots edit the same controller, migration sequence, route table, or shared response helper without a handoff.
 
-Gemini owns frontend page wiring and tests. `frontend/src/services/apiClient.ts`, `frontend/src/types/index.ts`, `frontend/src/types/auth.ts`, and shared auth/context components have one frontend owner; other frontend work submits changes to that owner instead of editing them in parallel. Page ownership is by domain: `frontend/src/pages/auth/*`, `admin/*`, `faculty/*`, `student/*`, `secretary/*`, plus the smallest required `App.tsx` or `Layout.tsx` change. Preserve existing styles and assets unless a wiring defect prevents the action.
+Luna owns frontend page wiring and tests. `frontend/src/services/apiClient.ts`, `frontend/src/types/index.ts`, `frontend/src/types/auth.ts`, shared auth/context components, event handlers, state, validation, calculations, authentication, persistence, role/permission logic, and functional accessibility/interaction have one functional owner. Page ownership is by domain: `frontend/src/pages/auth/*`, `admin/*`, `faculty/*`, `student/*`, `secretary/*`, plus the smallest required `App.tsx` or `Layout.tsx` change. Gemini may receive an exclusive presentation-only pass over a file or page for visual JSX/CSS, layout, styles, presentational labels, contrast, focus styling, and other non-authoritative visual polish. JSX/CSS and shared files may overlap; the parent coordinates exclusive ownership, and Gemini reports conflicts instead of editing functional code or resolving merges.
 
-Before Gemini consumes a new API, Luna provides a short contract packet with the exact path/method, request and response fields, role/ownership rule, error codes, idempotency/retry rule, and reload expectation. Gemini must not invent a payload because a UI control exists. If the contract is late, the UI may prepare loading/error/unavailable states and local form validation but must not claim a successful mutation.
+Before Luna wires a new API, the contract packet must identify the exact path/method, request and response fields, role/ownership rule, error codes, idempotency/retry rule, and reload expectation. Gemini does not consume new API contracts or wire actions. If a contract or state is late, Gemini may only present existing loading/error/unavailable states and must report the functional gap to Luna; it must not change local validation or claim a successful mutation.
 
 ### Function-to-batch map and acceptance
 
@@ -220,10 +219,10 @@ These are scheduling windows, not guaranteed completion times. The parent can st
 
 | Local window | Work and owner | Exit evidence |
 |---|---|---|
-| 00:00-00:30 | Parent freezes baseline, assigns the three Luna slots, names the single stack owner, and relays the Gemini handoff | Contract sheet, file ownership, and blocker register exist; no spec edit or volume reset |
-| 00:30-02:00 | Luna A/B/C inspect current routes/tests and publish exact API contracts. Gemini maps each page to F0-C1 and prepares loading/error/unavailable states | No frontend payload invented; every inventory item has a batch and owner |
-| 02:00-05:00 | Luna A implements identity/invite contracts; Luna B fixes roster/academic persistence; Luna C fixes attendance/biometric/Secretary contracts. Gemini wires independent page-local changes against released contracts | Focused tests pass per slot; response shapes and permission failures are documented |
-| 05:00-07:00 | Gemini completes page wiring and no-fallback behavior; parent integrates backend slices in dependency order and resolves shared route/types/migration conflicts | Frontend build/tests and backend focused tests pass on one integrated tree |
+| 00:00-00:30 | Parent freezes baseline, assigns the three Luna slots, names the single stack owner, and manually relays the Gemini UI-only handoff | Contract sheet, file ownership, and blocker register exist; no spec edit or volume reset |
+| 00:30-02:00 | Luna A/B/C inspect current routes/tests and publish exact API contracts. Luna maps every page to F0-C1 and owns loading/error/unavailable behavior; Gemini may receive a later presentation assignment | No frontend payload invented; every inventory item has a batch and owner |
+| 02:00-05:00 | Luna A implements identity/invite contracts; Luna B fixes roster/academic persistence; Luna C fixes attendance/biometric/Secretary contracts and the required frontend functional behavior. Gemini remains UI-only against released functional surfaces | Focused tests pass per slot; response shapes and permission failures are documented |
+| 05:00-07:00 | Parent integrates backend and frontend functional slices in dependency order, resolves shared route/types/migration conflicts, and assigns any exclusive Gemini presentation pass | Frontend build/tests and backend focused tests pass on one integrated tree; visual changes do not alter behavior |
 | 07:00-08:30 | Stack owner runs Docker Compose, migrations/config checks, Mailpit, camera/GPS permission checks, and role fixtures. Biometric owner attempts real enrollment/attendance only if prerequisites exist | Runtime evidence is recorded; failed prerequisites are labeled blocked |
 | 08:30-10:30 | Parent runs the role-by-role browser/DB matrix: public/auth, Admin, Faculty, Student, Secretary; each mutation gets negative, permission, reload, and audit checks | No P0 item is marked complete from mocks or static data |
 | 10:30-12:00 | Freeze the tree, run required repository gates, capture final evidence and exact blockers, and prepare the local walkthrough | One final status matrix and test outputs identify what can be shown |
