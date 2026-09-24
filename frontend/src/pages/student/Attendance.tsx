@@ -24,6 +24,7 @@ import { StudentUnavailable } from './RealStudentSurfaces';
 import {
   getStudentBiometricProfile,
   getStudentActiveAttendanceSessions,
+  getStudentAttendanceLogs,
   createBiometricLivenessChallenge,
   submitBiometricAttendance,
   isTransportOrBiometricUnavailable,
@@ -206,8 +207,10 @@ export const Attendance: React.FC = () => {
         uploadAbortRef.current = null;
         stopCamera();
         setCapturePhase('idle');
-        setPendingAttendancePayload(null);
-        setCanRetryUpload(false);
+        // Keep a captured operation in memory while the server may still
+        // commit after a browser abort. The idempotency key is never written
+        // to persistent storage and can be retried or reconciled on return.
+        setCanRetryUpload(Boolean(pendingAttendancePayload));
         setLivenessChallenge(null);
         setCameraLoading(false);
         if (checkInStage === 'camera' || checkInStage === 'verifying') {
@@ -223,31 +226,37 @@ export const Attendance: React.FC = () => {
       document.removeEventListener('visibilitychange', releaseCameraWhenHidden);
       window.removeEventListener('pagehide', releaseCameraWhenHidden);
     };
-  }, [checkInStage, stopCamera]);
+  }, [checkInStage, pendingAttendancePayload, stopCamera]);
 
   // Load Authoritative Sessions and Profile
   const loadAuthoritativeData = useCallback(async () => {
     if (!isAuthoritative) return;
     setInitialLoading(true);
     setAuthError(null);
-    try {
-      const [profileData, sessionsData] = await Promise.all([
-        getStudentBiometricProfile().catch(() => null),
-        getStudentActiveAttendanceSessions().catch(() => ({ sessions: [] })),
-      ]);
-      setProfile(profileData);
-      setActiveSessions(sessionsData.sessions);
-      if (sessionsData.sessions.length > 0) {
-        setSelectedSessionId(sessionsData.sessions[0].id);
-      } else {
-        setSelectedSessionId(null);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load attendance session data.';
-      setAuthError(msg);
-    } finally {
-      setInitialLoading(false);
+    const [profileResult, sessionsResult] = await Promise.allSettled([
+      getStudentBiometricProfile(),
+      getStudentActiveAttendanceSessions(),
+    ]);
+    const errors: string[] = [];
+    if (profileResult.status === 'fulfilled') {
+      setProfile(profileResult.value);
+    } else {
+      setProfile(null);
+      errors.push(profileResult.reason instanceof Error ? profileResult.reason.message : 'Biometric profile is unavailable.');
     }
+    if (sessionsResult.status === 'fulfilled') {
+      const sessions = sessionsResult.value.sessions;
+      setActiveSessions(sessions);
+      setSelectedSessionId(sessions[0]?.id ?? null);
+    } else {
+      setActiveSessions([]);
+      setSelectedSessionId(null);
+      errors.push(sessionsResult.reason instanceof Error ? sessionsResult.reason.message : 'Attendance sessions are unavailable.');
+    }
+    setAuthError(errors.length > 0
+      ? `${errors.join(' ')} Automated attendance is unavailable until the data can be loaded. Please use the authorized Secretary or Faculty manual attendance path.`
+      : null);
+    setInitialLoading(false);
   }, [isAuthoritative]);
 
   useEffect(() => {
@@ -414,6 +423,7 @@ export const Attendance: React.FC = () => {
 
     const abortController = new AbortController();
     uploadAbortRef.current = abortController;
+    setPendingAttendancePayload(payload);
 
     try {
       const formData = new FormData();
@@ -447,6 +457,8 @@ export const Attendance: React.FC = () => {
       void loadAuthoritativeData();
     } catch (err) {
       if (abortController.signal.aborted) {
+        setCanRetryUpload(true);
+        setFailureNotice('The browser stopped waiting, but the server may still be completing attendance. Retry with the same operation key after reconciling the attendance log.');
         return;
       }
       if (isTransportOrBiometricUnavailable(err)) {
@@ -571,16 +583,25 @@ export const Attendance: React.FC = () => {
   };
 
   const handleCancelAttendance = () => {
+    const submissionInFlight = Boolean(uploadAbortRef.current || pendingAttendancePayload);
     abortCaptureRef.current = true;
     uploadAbortRef.current?.abort();
     uploadAbortRef.current = null;
     stopCamera();
     setCapturePhase('idle');
-    setPendingAttendancePayload(null);
-    setCanRetryUpload(false);
     setCapturedFrameCount(0);
     setLivenessChallenge(null);
     setCheckInStage('idle');
+    if (submissionInFlight) {
+      // An abort can race with a committed server write. Keep the same
+      // in-memory operation available for retry/reconciliation.
+      setCanRetryUpload(true);
+      setFailureNotice('Submission cancelled locally. The server may still be processing it; retry with the existing operation or return to reconcile it.');
+      return;
+    }
+    setPendingAttendancePayload(null);
+    setCanRetryUpload(false);
+    setFailureNotice(null);
   };
 
   const handleRetryAttendanceUpload = () => {
@@ -588,12 +609,51 @@ export const Attendance: React.FC = () => {
     void uploadAttendance(pendingAttendancePayload);
   };
 
-  const handleDiscardAndRestart = () => {
+  const reconcilePendingAttendance = useCallback(async (): Promise<boolean> => {
+    const payload = pendingAttendancePayload;
+    if (!payload) return false;
+    try {
+      const logs = await getStudentAttendanceLogs();
+      const existing = logs.records.find(record => record.sessionId === payload.attendanceSessionId);
+      if (!existing) return false;
+      setPendingAttendancePayload(null);
+      setCanRetryUpload(false);
+      setVerificationResult({
+        status: 'already_recorded',
+        message: 'Attendance was already recorded for this session.',
+        recordedAt: undefined,
+      });
+      setCheckInStage('result');
+      void loadAuthoritativeData();
+      return true;
+    } catch {
+      return false;
+    }
+  }, [loadAuthoritativeData, pendingAttendancePayload]);
+
+  useEffect(() => {
+    const reconcileOnReturn = (): void => {
+      if (document.visibilityState === 'visible' && pendingAttendancePayload) {
+        void reconcilePendingAttendance();
+      }
+    };
+    document.addEventListener('visibilitychange', reconcileOnReturn);
+    return () => document.removeEventListener('visibilitychange', reconcileOnReturn);
+  }, [pendingAttendancePayload, reconcilePendingAttendance]);
+
+  const handleDiscardAndRestart = async () => {
+    if (await reconcilePendingAttendance()) return;
     setPendingAttendancePayload(null);
     setCanRetryUpload(false);
     setCapturedFrameCount(0);
     setFailureNotice(null);
-    void startCameraAndChallenge();
+    stopCamera();
+    setLivenessChallenge(null);
+    setCameraError(null);
+    setCameraLoading(false);
+    setCapturePhase('idle');
+    setActiveActionIndex(0);
+    setCheckInStage('camera');
   };
 
   // --- MOCK SIMULATION STATE ---
@@ -791,7 +851,16 @@ export const Attendance: React.FC = () => {
       {authError && (
         <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3 animate-fade-in">
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p className="leading-relaxed">{authError}</p>
+          <div className="space-y-2">
+            <p className="leading-relaxed">{authError}</p>
+            <button
+              type="button"
+              onClick={() => { void loadAuthoritativeData(); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Retry data load
+            </button>
+          </div>
         </div>
       )}
 
@@ -800,6 +869,35 @@ export const Attendance: React.FC = () => {
       {/* ========================================================================= */}
       {isAuthoritative && (
         <div className="space-y-6">
+
+          {canRetryUpload && pendingAttendancePayload && checkInStage !== 'result' && (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-3">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-bold">Network or Biometric Service Interruption</strong>
+                  <p className="mt-0.5 leading-relaxed">
+                    Your 25 captured frames and attendance challenge have been preserved. You can retry submission with the same idempotency key without re-capturing.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                <button
+                  onClick={handleDiscardAndRestart}
+                  className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                >
+                  Discard & Fresh Challenge
+                </button>
+                <button
+                  onClick={handleRetryAttendanceUpload}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry Submission</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* SUCCESS RESULT VIEW */}
           {checkInStage === 'result' && verificationResult && (
@@ -941,9 +1039,9 @@ export const Attendance: React.FC = () => {
                                 <MapPin className="w-3.5 h-3.5 text-blue-500" />
                                 <span>{requiresGeofence ? 'Geofence Verification Required' : 'No Geofence Required'}</span>
                               </p>
-                              {sess.attendedStatus && (
+                              {sess.alreadyRecordedStatus && (
                                 <p className="text-emerald-600 dark:text-emerald-400 font-semibold pt-1">
-                                  ✓ Already recorded as {sess.attendedStatus}
+                                  ✓ Already recorded as {sess.alreadyRecordedStatus}
                                 </p>
                               )}
                             </div>
@@ -1109,36 +1207,6 @@ export const Attendance: React.FC = () => {
                     </label>
                   )}
 
-                  {/* Preserved Retry Submission Card */}
-                  {canRetryUpload && pendingAttendancePayload && (
-                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 space-y-3">
-                      <div className="flex items-start gap-2.5">
-                        <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <strong className="block font-bold">Network or Biometric Service Interruption</strong>
-                          <p className="mt-0.5 leading-relaxed">
-                            Your 25 captured frames and attendance challenge have been preserved. You can retry submission with the same idempotency key without re-capturing.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                        <button
-                          onClick={handleDiscardAndRestart}
-                          className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
-                        >
-                          Discard & Fresh Challenge
-                        </button>
-                        <button
-                          onClick={handleRetryAttendanceUpload}
-                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 cursor-pointer"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          <span>Retry Submission</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                   <div className="text-center space-y-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Look directly into the camera, follow the paced liveness actions, and complete verification.
@@ -1221,14 +1289,14 @@ export const Attendance: React.FC = () => {
 
                   <button
                     onClick={() => { void handleStartAuthoritativeCheckIn(); }}
-                    disabled={!isAuthoritativeActiveEnrolled(profile?.enrollmentStatus)}
-                    className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 flex-shrink-0 ${isAuthoritativeActiveEnrolled(profile?.enrollmentStatus)
+                    disabled={!isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) || Boolean(currentSelectedSession.alreadyRecordedStatus)}
+                    className={`px-6 py-3 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-2 flex-shrink-0 ${isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && !currentSelectedSession.alreadyRecordedStatus
                       ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/20 active:scale-[0.99] cursor-pointer'
                       : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                       }`}
                   >
                     <Camera className="w-4 h-4" />
-                    <span>Begin Attendance Check-In</span>
+                    <span>{currentSelectedSession.alreadyRecordedStatus ? 'Attendance Already Recorded' : 'Begin Attendance Check-In'}</span>
                   </button>
                 </div>
               )}

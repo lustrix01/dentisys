@@ -335,6 +335,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   const startPromise = page.waitForResponse(
     response => response.url().includes('/api/secretary/attendance/session') && response.request().method() === 'POST'
   );
+  await page.getByText('Enforce GPS Geofence Verification').click();
   await page.getByRole('button', { name: /Start Class Session Now/i }).click();
 
   const startResponse = await startPromise;

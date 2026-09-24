@@ -202,8 +202,8 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page.getByRole('link', { name: 'Daily Attendance' })).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'Attendance Logs' })).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'Face Registration' })).toHaveCount(1);
-    await expect(page.getByRole('link', { name: 'My Classes' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Retention Monitoring' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'My Classes' })).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'Retention Monitoring' })).toHaveCount(1);
 
     await page.goto('/student/profile');
     await expect(page.getByRole('main').getByRole('heading', { name: 'My Profile' })).toBeVisible();

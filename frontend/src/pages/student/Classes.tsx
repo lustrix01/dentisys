@@ -25,7 +25,9 @@ export const Classes: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(isAuthoritative);
   const [error, setError] = useState<string | null>(null);
 
-  const retentionThreshold = settings?.retentionThreshold || 2.5;
+  const retentionThreshold = typeof settings?.retentionThreshold === 'number'
+    ? settings.retentionThreshold
+    : null;
 
   useEffect(() => {
     if (!isAuthoritative) return;
@@ -91,13 +93,15 @@ export const Classes: React.FC = () => {
     );
   }
 
-  const failingAuthClasses = dbClasses.filter(
-    cls => cls.isClinical && cls.grade !== null && cls.grade > retentionThreshold
+  const failingAuthClasses = dbClasses.filter(cls =>
+    ['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()),
   );
 
-  const mockFailing = (currentMockStudent?.enrolledSubjects || []).filter(
-    subj => subj.isClinical && subj.grade > retentionThreshold
-  );
+  const mockFailing = retentionThreshold === null
+    ? []
+    : (currentMockStudent?.enrolledSubjects || []).filter(
+      subj => subj.isClinical && subj.grade > retentionThreshold,
+    );
 
   const failingCount = isAuthoritative ? failingAuthClasses.length : mockFailing.length;
 
@@ -142,12 +146,12 @@ export const Classes: React.FC = () => {
                 Retention Standing Warning
               </span>
               <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
-                You have {failingCount} clinical course(s) exceeding the {retentionThreshold.toFixed(2)} GWA retention threshold limit.
+                You have {failingCount} clinical course(s) requiring server retention review.
               </h3>
             </div>
           </div>
           <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pl-13">
-            According to Bicol University College of Dentistry retention guidelines, students with clinical grades higher than 2.50 must complete remedial evaluations or faculty counseling to maintain active standing.
+            The server retention state is authoritative. Review the course record or contact Faculty when a retention review is shown.
           </p>
         </div>
       )}
@@ -161,9 +165,11 @@ export const Classes: React.FC = () => {
             </div>
           ) : (
             dbClasses.map(cls => {
-              const isFailing = cls.isClinical && cls.grade !== null && cls.grade > retentionThreshold;
+              const retentionState = cls.retentionState?.toLowerCase();
+              const isFailing = ['warning', 'critical', 'remedial'].includes(retentionState);
               const isPending = cls.grade === null;
-              const isAtRisk = ['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase());
+              const hasRetentionState = Boolean(retentionState);
+              const isAtRisk = ['warning', 'critical', 'remedial'].includes(retentionState);
 
               return (
                 <Card key={cls.enrollmentId} className="p-5 sm:p-6 overflow-hidden">
@@ -177,11 +183,19 @@ export const Classes: React.FC = () => {
                           {cls.courseName}
                         </h3>
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                          isFailing || isAtRisk
+                          !isPending && isFailing
                             ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : hasRetentionState && !isPending
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                         }`}>
-                          {isFailing ? '⚠️ Retention Risk (> 2.50 Limit)' : (isAtRisk ? `⚠️ ${cls.retentionState}` : '✓ Retention Compliant')}
+                          {isPending
+                            ? '⏳ Retention state pending'
+                            : isAtRisk
+                              ? `⚠️ ${cls.retentionState}`
+                              : hasRetentionState
+                                ? '✓ Retention Compliant'
+                                : 'Retention state unavailable'}
                         </span>
                       </div>
 
@@ -198,7 +212,7 @@ export const Classes: React.FC = () => {
                           Overall Percentage: <strong className="text-slate-800 dark:text-slate-100">{cls.percentage !== null ? `${cls.percentage}%` : '—'}</strong>
                         </span>
                         <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize">
-                          Status: <strong className="text-slate-800 dark:text-slate-100">{cls.retentionState || 'Good Standing'}</strong>
+                          Status: <strong className="text-slate-800 dark:text-slate-100">{isPending ? 'Pending' : cls.retentionState || 'Unavailable'}</strong>
                         </span>
                       </div>
                     </div>
@@ -218,7 +232,7 @@ export const Classes: React.FC = () => {
                         }`}>
                           {isPending ? 'Pending' : cls.grade?.toFixed(2)}
                         </p>
-                        <p className="text-[9px] text-slate-400">Limit: ≤2.50</p>
+                        <p className="text-[9px] text-slate-400">Server retention state</p>
                       </div>
                     </div>
                   </div>
@@ -228,7 +242,7 @@ export const Classes: React.FC = () => {
           )
         ) : (
           (currentMockStudent?.enrolledSubjects || []).map(subject => {
-            const isFailingRetention = subject.isClinical && subject.grade > retentionThreshold;
+            const isFailingRetention = retentionThreshold !== null && subject.isClinical && subject.grade > retentionThreshold;
             const subjectRecords = attendanceRecords.filter(
               r => r.studentId === currentMockStudent?.id && r.subjectCode === subject.code
             );
@@ -250,7 +264,7 @@ export const Classes: React.FC = () => {
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
                         isFailingRetention ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                       }`}>
-                        {isFailingRetention ? '⚠️ Retention Risk (> 2.50 Limit)' : '✓ Retention Compliant'}
+                        {isFailingRetention ? '⚠️ Retention Review' : '✓ Retention Compliant'}
                       </span>
                     </div>
 
@@ -260,10 +274,10 @@ export const Classes: React.FC = () => {
 
                     <div className="flex flex-wrap gap-2 pt-2 text-[11px]">
                       <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        Quizzes ({subject.components.quizzes}%): <strong className="text-slate-800 dark:text-slate-100">85%</strong>
+                        Quizzes ({subject.components.quizzes}%): <strong className="text-slate-800 dark:text-slate-100">Unavailable</strong>
                       </span>
                       <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        Exams ({subject.components.exams}%): <strong className="text-slate-800 dark:text-slate-100">82%</strong>
+                        Exams ({subject.components.exams}%): <strong className="text-slate-800 dark:text-slate-100">Unavailable</strong>
                       </span>
                       <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                         Attendance: <strong className="text-slate-800 dark:text-slate-100">{attRate !== null ? `${attRate}%` : '—'}</strong>
@@ -284,7 +298,7 @@ export const Classes: React.FC = () => {
                       <p className={`text-2xl font-extrabold font-mono mt-0.5 ${isFailingRetention ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'}`}>
                         {subject.grade.toFixed(2)}
                       </p>
-                      <p className="text-[9px] text-slate-400">Limit: ≤2.50</p>
+                      <p className="text-[9px] text-slate-400">Retention threshold unavailable</p>
                     </div>
                   </div>
                 </div>
@@ -302,16 +316,16 @@ export const Classes: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600 dark:text-slate-300">
           <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] uppercase">1. Grade Threshold (2.50)</span>
-            <p>Students must maintain a GWA of 2.50 or better in all clinical dentistry major subjects.</p>
+            <span className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] uppercase">1. Server retention state</span>
+            <p>The authoritative course retention state determines whether review is required.</p>
           </div>
           <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] uppercase">2. Attendance Standard (85%)</span>
-            <p>Classroom and clinical practicum attendance must not fall below 85% per semester.</p>
+            <span className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] uppercase">2. Attendance</span>
+            <p>Attendance values are shown when authoritative attendance data is available.</p>
           </div>
           <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
             <span className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] uppercase">3. Remedial Evaluation</span>
-            <p>Students flagged with retention warnings may qualify for approved remedial coursework or re-examinations.</p>
+            <p>Students flagged by the server retention state may require approved Faculty remedial review.</p>
           </div>
         </div>
       </Card>

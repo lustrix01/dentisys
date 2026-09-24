@@ -240,7 +240,9 @@ export interface StudentActiveSession {
   geofenceRequired?: boolean;
   geofenceEnabled?: boolean;
   isOpen?: boolean;
-  attendedStatus?: 'present' | 'late' | 'already_recorded' | null;
+  alreadyRecordedStatus?: 'present' | 'late' | 'absent' | 'excused' | 'unresolved' | null;
+  /** @deprecated Use alreadyRecordedStatus, which mirrors the API contract. */
+  attendedStatus?: 'present' | 'late' | 'absent' | 'excused' | 'unresolved' | null;
   openingTime?: string | null;
   presentCutoff?: string | null;
   lateCutoff?: string | null;
@@ -272,11 +274,13 @@ export interface BiometricAttendanceResponse {
   };
 }
 
-export type AttendanceVerificationMethod = 'biometric' | 'faculty_manual' | 'secretary_manual';
+export type AttendanceVerificationMethod = 'biometric' | 'faculty_manual' | 'secretary_manual' | 'system_resolution' | 'unknown';
 
 export interface StudentAttendanceLogRecord {
   id: number;
   sessionId?: number;
+  sessionCode?: string;
+  classSection?: { id: string; name: string };
   courseCode: string;
   courseName: string;
   room?: string;

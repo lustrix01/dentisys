@@ -198,7 +198,7 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <button
                 onClick={() => navigate('/student/face-registration')}
                 className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/60 dark:border-slate-800/80 hover:border-teal-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
@@ -225,18 +225,6 @@ export const Dashboard: React.FC = () => {
                 </p>
               </button>
 
-              <button
-                onClick={() => navigate('/student/classes')}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/60 dark:border-slate-800/80 hover:border-purple-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
-              >
-                <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider block">Academic Roster</span>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-0.5 group-hover:text-purple-600 transition-colors">
-                  My Classes & Retention
-                </h4>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Student subjects & retention status
-                </p>
-              </button>
             </div>
           </div>
 

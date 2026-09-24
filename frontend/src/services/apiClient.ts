@@ -13,10 +13,8 @@ import type {
   LivenessChallengeResponse,
   BiometricEnrollmentResponse,
   BiometricRevocationResponse,
-  StudentActiveSession,
   StudentActiveSessionsResponse,
   BiometricAttendanceResponse,
-  StudentAttendanceLogRecord,
   StudentAttendanceLogsResponse,
   PasswordChangePayload,
   PasswordChangeResponse,
@@ -27,9 +25,14 @@ import type {
   StudentAcademicRetentionResponse,
   FacultyInvitationUpdatePayload,
 } from '../types';
+import {
+  normalizeStudentActiveSession,
+  normalizeStudentAttendanceLogRecord,
+} from './attendanceNormalization';
+export { normalizeStudentActiveSession, normalizeStudentAttendanceLogRecord } from './attendanceNormalization';
 
 
-const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim();
+const configuredBase = import.meta.env?.VITE_API_BASE_URL?.trim();
 const API_BASE_URL = configuredBase
   ? configuredBase.replace(/\/+$/, '')
   : '/api';
@@ -1705,15 +1708,15 @@ export function revokeStudentBiometricProfile(): Promise<BiometricRevocationResp
 export async function getStudentActiveAttendanceSessions(): Promise<StudentActiveSessionsResponse> {
   const raw = await request<unknown>('GET', '/student/attendance/sessions/active');
   if (Array.isArray(raw)) {
-    return { sessions: raw as StudentActiveSession[] };
+    return { sessions: raw.map(normalizeStudentActiveSession) };
   }
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>;
     if (Array.isArray(obj.sessions)) {
-      return { sessions: obj.sessions as StudentActiveSession[] };
+      return { sessions: obj.sessions.map(normalizeStudentActiveSession) };
     }
     if (Array.isArray(obj.data)) {
-      return { sessions: obj.data as StudentActiveSession[] };
+      return { sessions: obj.data.map(normalizeStudentActiveSession) };
     }
   }
   return { sessions: [] };
@@ -1737,20 +1740,23 @@ export async function getStudentAttendanceLogs(params?: {
   const qs = query.toString() ? `?${query.toString()}` : '';
   const raw = await request<unknown>('GET', `/student/attendance/logs${qs}`);
   if (Array.isArray(raw)) {
-    return { records: raw as StudentAttendanceLogRecord[], total: raw.length };
+    const records = raw.map(normalizeStudentAttendanceLogRecord);
+    return { records, total: records.length };
   }
   if (raw && typeof raw === 'object') {
     const obj = raw as Record<string, unknown>;
-    if (Array.isArray(obj.records)) {
+    const source = Array.isArray(obj.records)
+      ? obj.records
+      : Array.isArray(obj.logs)
+        ? obj.logs
+        : Array.isArray(obj.data)
+          ? obj.data
+          : null;
+    if (source) {
+      const records = source.map(normalizeStudentAttendanceLogRecord);
       return {
-        records: obj.records as StudentAttendanceLogRecord[],
-        total: typeof obj.total === 'number' ? obj.total : obj.records.length,
-      };
-    }
-    if (Array.isArray(obj.data)) {
-      return {
-        records: obj.data as StudentAttendanceLogRecord[],
-        total: typeof obj.total === 'number' ? obj.total : obj.data.length,
+        records,
+        total: typeof obj.total === 'number' ? obj.total : records.length,
       };
     }
   }

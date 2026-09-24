@@ -3673,7 +3673,7 @@ function handle_faculty_attendance_session_create(): void
             );
             $insert->execute([
                 $csId, $secretaryUserId, $authCtx['user_id'], $sessionDate, $sessionCode, $room,
-                $nowSql, $geofenceEnabled, $latitude, $longitude, $radius, $biometricRequired,
+                $nowSql, $geofenceEnabled ? 1 : 0, $latitude, $longitude, $radius, $biometricRequired ? 1 : 0,
                 $openingTime, $presentCutoff, $lateCutoff, $nowSql, $nowSql,
             ]);
             $sessionId = (int) $insert->fetchColumn();
@@ -4784,6 +4784,7 @@ function handle_faculty_reports_summary(): void
                 ? json_decode($s['grade_components_json'], true)
                 : null;
             $grouped[$id]['enrolledSubjects'][] = [
+                'classId' => (string) $s['cs_id'],
                 'code' => $s['course_code'],
                 'name' => $s['course_name'],
                 'units' => (float) $s['units'],

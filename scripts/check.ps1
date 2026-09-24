@@ -67,10 +67,17 @@ foreach ($file in $activeFiles) {
 & docker compose run --rm --no-deps frontend npm run build
 if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed.' }
 
-& docker compose run --rm --no-deps web sh -lc 'find /var/www/html/backend /var/www/html/tests/backend -name "*.php" -print0 | xargs -0 -n1 php -l'
+& docker compose run --rm --no-deps `
+    -v "${root}\tests:/var/www/html/tests:ro" `
+    -v "${root}\docs:/var/www/html/docs:ro" `
+    web sh -lc 'find /var/www/html/backend /var/www/html/tests/backend -name "*.php" -print0 | xargs -0 -n1 php -l'
 if ($LASTEXITCODE -ne 0) { throw 'PHP syntax validation failed.' }
 
-& docker compose run --rm --no-deps -v "${root}\database:/var/www/html/database:ro" web sh -lc 'for test in /var/www/html/tests/backend/*_test.php; do php "$test" || exit 1; done'
+& docker compose run --rm --no-deps `
+    -v "${root}\tests:/var/www/html/tests:ro" `
+    -v "${root}\docs:/var/www/html/docs:ro" `
+    -v "${root}\database:/var/www/html/database:ro" `
+    web sh -lc 'for test in /var/www/html/tests/backend/*_test.php; do php "$test" || exit 1; done'
 if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed.' }
 
 & docker compose run --rm --no-deps -v "${root}:/workspace:ro" web php /workspace/tests/documentation/doc_contract_test.php

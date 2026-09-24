@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   Play, 
   Square, 
@@ -61,11 +61,11 @@ export const StartSession: React.FC = () => {
   const [geofenceRadius, setGeofenceRadius] = useState(200);
 
   // Secretary GPS state (kept as prototype location fixture)
-  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number; address: string } | null>({
+  const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number; address: string } | null>(simulationEnabled ? {
     lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
     lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
     address: 'BU Dental Room Location Verified (13.1436°, 123.7438°)',
-  });
+  } : null);
   const [isLocating, setIsLocating] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [liveAttendanceRecords, setLiveAttendanceRecords] = useState<Array<{ id: string; status: string; date: string }>>([]);
@@ -134,6 +134,19 @@ export const StartSession: React.FC = () => {
   useEffect(() => {
     void loadInitialData();
   }, []);
+
+  // Never retain the development fixture when the real location provider is active.
+  useEffect(() => {
+    if (simulationEnabled) {
+      setGpsLocation((current) => current ?? {
+        lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436,
+        lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438,
+        address: 'BU Dental Room Location Verified (13.1436°, 123.7438°)',
+      });
+    } else {
+      setGpsLocation(null);
+    }
+  }, [simulationEnabled]);
 
   // Update elapsed time every second while an active session exists
   useEffect(() => {
@@ -248,10 +261,14 @@ export const StartSession: React.FC = () => {
         openingTime: openingTimeStr,
         presentCutoff: presentCutoffStr,
         lateCutoff: lateCutoffStr,
-        geofenceLatitude: gpsLocation?.lat,
-        geofenceLongitude: gpsLocation?.lng,
-        latitude: gpsLocation?.lat,
-        longitude: gpsLocation?.lng,
+        ...(requireGeo && gpsLocation
+          ? {
+              geofenceLatitude: gpsLocation.lat,
+              geofenceLongitude: gpsLocation.lng,
+              latitude: gpsLocation.lat,
+              longitude: gpsLocation.lng,
+            }
+          : {}),
       };
 
       const res = await startSecretaryAttendanceSessionApi(payload);

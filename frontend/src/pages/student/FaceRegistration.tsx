@@ -167,8 +167,10 @@ export const FaceRegistration: React.FC = () => {
         stopCamera();
         setCapturePhase('idle');
         setIsProcessingEnrollment(false);
-        setPendingPayload(null);
-        setCanRetryUpload(false);
+        // Keep the in-memory payload and idempotency key while PHP/sidecar
+        // work may still commit after the browser aborts. Raw frames never
+        // enter persistent browser storage.
+        setCanRetryUpload(Boolean(pendingPayload));
         setLivenessChallenge(null);
         setCameraLoading(false);
         setCameraError('Camera access and capture were paused because this tab is no longer active. Choose Retry Camera Access when you return.');
@@ -181,7 +183,7 @@ export const FaceRegistration: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibilityOrPageHide);
       window.removeEventListener('pagehide', handleVisibilityOrPageHide);
     };
-  }, [stopCamera]);
+  }, [pendingPayload, stopCamera]);
 
   // --- LOAD AUTHORITATIVE PROFILE ---
   const loadAuthoritativeProfile = useCallback(async () => {
@@ -314,6 +316,20 @@ export const FaceRegistration: React.FC = () => {
     });
   };
 
+  const buildEnrollmentFormData = (payload: PendingEnrollmentPayload): FormData => {
+    const formData = new FormData();
+    formData.append('challengeId', payload.challengeId);
+    formData.append('challenge_id', payload.challengeId);
+    formData.append('challengeToken', payload.challengeToken);
+    formData.append('challenge_token', payload.challengeToken);
+    formData.append('idempotencyKey', payload.idempotencyKey);
+    formData.append('idempotency_key', payload.idempotencyKey);
+    payload.frames.forEach((blob, idx) => {
+      formData.append('frames[]', blob, `sample_${idx}.jpg`);
+    });
+    return formData;
+  };
+
   const uploadEnrollment = async (payload: PendingEnrollmentPayload) => {
     setIsProcessingEnrollment(true);
     setCapturePhase('uploading');
@@ -322,21 +338,10 @@ export const FaceRegistration: React.FC = () => {
 
     const abortController = new AbortController();
     uploadAbortRef.current = abortController;
+    setPendingPayload(payload);
 
     try {
-      const formData = new FormData();
-      formData.append('challengeId', payload.challengeId);
-      formData.append('challenge_id', payload.challengeId);
-      formData.append('challengeToken', payload.challengeToken);
-      formData.append('challenge_token', payload.challengeToken);
-      formData.append('idempotencyKey', payload.idempotencyKey);
-      formData.append('idempotency_key', payload.idempotencyKey);
-
-      payload.frames.forEach((blob, idx) => {
-        formData.append('frames[]', blob, `sample_${idx}.jpg`);
-      });
-
-      const result = await submitBiometricEnrollment(formData, abortController.signal);
+      const result = await submitBiometricEnrollment(buildEnrollmentFormData(payload), abortController.signal);
 
       setServerUsableCount(result.usableSampleCount);
       setPendingPayload(null);
@@ -360,6 +365,8 @@ export const FaceRegistration: React.FC = () => {
       }
     } catch (err) {
       if (abortController.signal.aborted) {
+        setCanRetryUpload(true);
+        setAuthError('The browser stopped waiting, but the server may still be completing enrollment. Reconcile the profile before starting a fresh capture.');
         return;
       }
       if (isTransportOrBiometricUnavailable(err)) {
@@ -478,14 +485,22 @@ export const FaceRegistration: React.FC = () => {
   };
 
   const handleCancelCapture = () => {
+    const submissionInFlight = Boolean(uploadAbortRef.current || pendingPayload);
     abortCaptureRef.current = true;
     uploadAbortRef.current?.abort();
     uploadAbortRef.current = null;
     setIsProcessingEnrollment(false);
     setCapturePhase('idle');
+    setCapturedFrameCount(0);
+    if (submissionInFlight) {
+      // Preserve the same in-memory operation because the server may have
+      // committed before the browser observed the abort.
+      setCanRetryUpload(true);
+      setAuthError('Submission cancelled locally. The server may still be processing it; retry with the existing operation or return to reconcile it.');
+      return;
+    }
     setPendingPayload(null);
     setCanRetryUpload(false);
-    setCapturedFrameCount(0);
     setAuthError('Capture cancelled.');
     void startCameraAndChallenge(undefined, true);
   };
@@ -495,7 +510,53 @@ export const FaceRegistration: React.FC = () => {
     void uploadEnrollment(pendingPayload);
   };
 
-  const handleDiscardAndRecapture = () => {
+  const reconcilePendingEnrollment = useCallback(async (): Promise<boolean> => {
+    if (!pendingPayload) return false;
+    setIsProcessingEnrollment(true);
+    setCapturePhase('uploading');
+    setPhaseInstruction('Checking the server for the preserved enrollment operation…');
+    try {
+      // Re-submit the same operation so the server can return its idempotent
+      // result. A separate profile read cannot distinguish this operation
+      // from an older active enrollment that was already on the account.
+      const result = await submitBiometricEnrollment(buildEnrollmentFormData(pendingPayload));
+      setServerUsableCount(result.usableSampleCount);
+      if (isAuthoritativeActiveEnrolled(result.enrollmentStatus)) {
+        setPendingPayload(null);
+        setCanRetryUpload(false);
+        setProfile(prev => prev ? {
+          ...prev,
+          enrollmentStatus: 'active',
+          enrolledAt: result.enrolledAt || prev.enrolledAt,
+          expiresAt: result.expiresAt || prev.expiresAt,
+          usableSampleCount: result.usableSampleCount,
+        } : prev);
+        setAuthStep(3);
+        stopCamera();
+        return true;
+      }
+      setAuthError(result.message || 'The preserved enrollment operation did not complete. Retry the upload or start a fresh capture.');
+    } catch {
+      // Keep the operation payload so the user can retry with the same key.
+    } finally {
+      setIsProcessingEnrollment(false);
+      setCapturePhase('idle');
+    }
+    return false;
+  }, [pendingPayload, stopCamera]);
+
+  useEffect(() => {
+    const reconcileOnReturn = (): void => {
+      if (document.visibilityState === 'visible' && pendingPayload) {
+        void reconcilePendingEnrollment();
+      }
+    };
+    document.addEventListener('visibilitychange', reconcileOnReturn);
+    return () => document.removeEventListener('visibilitychange', reconcileOnReturn);
+  }, [pendingPayload, reconcilePendingEnrollment]);
+
+  const handleDiscardAndRecapture = async () => {
+    if (await reconcilePendingEnrollment()) return;
     setPendingPayload(null);
     setCanRetryUpload(false);
     setCapturedFrameCount(0);

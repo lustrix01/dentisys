@@ -354,14 +354,16 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.goto('/secretary/start-session');
     await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
 
+    await page.getByText('Enforce GPS Geofence Verification').click();
     await page.getByRole('button', { name: /Start Class Session Now/i }).click();
 
     await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
     await expect(page.getByText('Code: CS8-20260921-XYZ999', { exact: true })).toBeVisible();
     expect(startApiPayload).not.toBeNull();
     expect((startApiPayload as Record<string, unknown>)?.csId).toBe(8);
-    expect((startApiPayload as Record<string, unknown>)?.geofenceLatitude).toBe(13.1436);
-    expect((startApiPayload as Record<string, unknown>)?.geofenceLongitude).toBe(123.7438);
+    expect((startApiPayload as Record<string, unknown>)?.geofenceEnabled).toBe(false);
+    expect((startApiPayload as Record<string, unknown>)?.geofenceLatitude).toBeUndefined();
+    expect((startApiPayload as Record<string, unknown>)?.geofenceLongitude).toBeUndefined();
 
     const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
     expect(storedItem).toBeNull();
@@ -469,6 +471,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
 
     await page.goto('/secretary/start-session');
+    await page.getByText('Enforce GPS Geofence Verification').click();
     await page.getByRole('button', { name: /Start Class Session Now/i }).click();
 
     await expect(page.getByText('An active attendance session already exists for this class section.')).toBeVisible();

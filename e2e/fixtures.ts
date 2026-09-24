@@ -54,7 +54,7 @@ const GET_ONLY_API_PATHS = new Set([
   '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/session/active', '/api/secretary/profile', '/api/secretary/settings',
   '/api/secretary/activity',
   '/api/faculty/dashboard/kpis', '/api/faculty/students', '/api/faculty/assessments',
-  '/api/faculty/attendance', '/api/faculty/email-logs', '/api/faculty/reports/summary', '/api/faculty/courses',
+  '/api/faculty/attendance', '/api/faculty/email-logs', '/api/faculty/reports/summary', '/api/faculty/courses', '/api/faculty/retention',
   '/api/faculty/classes/available-students',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
   '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/biometric/profile',

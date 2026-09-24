@@ -9,7 +9,7 @@ import type { Student, StudentAcademicClass } from '../../types';
 
 export const RetentionMonitoring: React.FC = () => {
   const { user } = useAuth();
-  const { students = [], settings = { retentionThreshold: 2.5 } } = useApp();
+  const { students = [], settings } = useApp();
 
   const isAuthoritative = canAccessAuthoritativeStudentBiometrics(user);
 
@@ -18,7 +18,9 @@ export const RetentionMonitoring: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(isAuthoritative);
   const [error, setError] = useState<string | null>(null);
 
-  const threshold = settings?.retentionThreshold || 2.5;
+  const threshold = typeof settings?.retentionThreshold === 'number'
+    ? settings.retentionThreshold
+    : null;
 
   useEffect(() => {
     if (!isAuthoritative) return;
@@ -132,8 +134,10 @@ export const RetentionMonitoring: React.FC = () => {
   }
 
   const deficientCount = isAuthoritative
-    ? authRecords.filter(r => r.grade !== null && r.grade > threshold).length
-    : (currentMockStudent?.enrolledSubjects || []).filter(s => s.grade > threshold).length;
+    ? atRiskCount
+    : threshold === null
+      ? 0
+      : (currentMockStudent?.enrolledSubjects || []).filter(s => s.grade > threshold).length;
 
   const isAtRisk = isAuthoritative
     ? (atRiskCount > 0 || deficientCount > 0)
@@ -174,8 +178,8 @@ export const RetentionMonitoring: React.FC = () => {
             
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
               {isAtRisk 
-                ? `You have ${deficientCount} subject(s) with midterm grades exceeding the ${threshold.toFixed(2)} retention limit or requiring faculty monitoring. Please review your subject performance below.`
-                : `Your academic performance is currently in good standing! All enrolled subject midterm grades meet College of Dental Medicine retention criteria (${threshold.toFixed(2)} or better per subject).`
+                ? `You have ${deficientCount} subject(s) requiring Faculty retention review. Please review your authoritative subject records below.`
+                : 'Your authoritative retention records currently show good standing.'
               }
             </p>
           </div>
@@ -195,7 +199,7 @@ export const RetentionMonitoring: React.FC = () => {
                 Subject Grade Limit
               </span>
               <span className="text-2xl font-extrabold font-mono text-slate-700 dark:text-slate-200">
-                {threshold.toFixed(2)}
+                {isAuthoritative ? 'Server state' : threshold !== null ? threshold.toFixed(2) : 'Unavailable'}
               </span>
             </div>
           </div>
@@ -235,8 +239,12 @@ export const RetentionMonitoring: React.FC = () => {
                 ) : (
                   authRecords.map(cls => {
                     const isPending = cls.grade === null;
-                    const isPassing = isPending || (cls.grade !== null && cls.grade <= threshold);
-                    const isAtRiskRow = ['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase());
+                    const retentionState = cls.retentionState?.toLowerCase();
+                    const isAtRiskRow = ['warning', 'critical', 'remedial'].includes(retentionState);
+                    const hasRetentionState = Boolean(retentionState);
+                    const isPassing = !isPending && (isAuthoritative
+                      ? !isAtRiskRow
+                      : threshold !== null && cls.grade !== null && cls.grade <= threshold);
 
                     return (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -267,11 +275,13 @@ export const RetentionMonitoring: React.FC = () => {
 
                         <td className="py-3.5 px-4 text-right">
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                            isAtRiskRow
+                            !isPending && isAtRiskRow
                               ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60'
-                              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
+                              : hasRetentionState && !isPending
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60'
                           }`}>
-                            {cls.retentionState || 'Passing'}
+                            {isPending ? 'Pending' : cls.retentionState || 'State unavailable'}
                           </span>
                         </td>
                       </tr>
@@ -280,7 +290,7 @@ export const RetentionMonitoring: React.FC = () => {
                 )
               ) : (
                 (currentMockStudent?.enrolledSubjects || []).map(subj => {
-                  const isPassing = subj.grade <= threshold;
+                  const isPassing = threshold !== null && subj.grade <= threshold;
                   return (
                     <tr key={subj.code} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
@@ -330,23 +340,23 @@ export const RetentionMonitoring: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
           <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">1. Per-Subject Passing Limit</span>
+            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">1. Server retention state</span>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Students must maintain a grade of 2.50 or better in each enrolled dental subject to avoid retention warning.
+              The authoritative retention state determines whether a course requires review.
             </p>
           </div>
 
           <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">2. Remedial Exam Policy</span>
+            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">2. Remedial review</span>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Assigned remedial exams require a score of 75% or higher to resolve retention warnings and clear subject deficiency.
+              Faculty records remedial assignments and outcomes through the authoritative retention workflow.
             </p>
           </div>
 
           <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
             <span className="font-extrabold text-slate-800 dark:text-slate-100 block">3. Clinical Attendance</span>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              A minimum attendance rate of 85% is required in clinical laboratories for eligibility to take final examinations.
+              Attendance values are shown when authoritative attendance data is available.
             </p>
           </div>
         </div>

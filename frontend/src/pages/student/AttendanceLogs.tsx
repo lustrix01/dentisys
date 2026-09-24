@@ -29,6 +29,10 @@ function formatVerificationMethod(method: AttendanceVerificationMethod): { label
       return { label: 'Faculty Manual Entry', icon: UserCheck };
     case 'secretary_manual':
       return { label: 'Secretary Manual Entry', icon: ClipboardCheck };
+    case 'system_resolution':
+      return { label: 'Automatic System Resolution', icon: AlertCircle };
+    case 'unknown':
+      return { label: 'Verification Method Unavailable', icon: AlertCircle };
     default:
       return { label: 'Manual Entry', icon: UserCheck };
   }

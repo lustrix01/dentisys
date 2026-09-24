@@ -201,7 +201,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'face')) {
         items.push({ name: 'Face Registration', path: '/student/face-registration', icon: UserCheck });
       }
-      if (isStudentPrototypeAllowed(user, config, 'academic')) {
+      // Academic self-service is backed by the Student-role endpoints. Keep
+      // it visible for canonical Student accounts in every real auth mode;
+      // development mock Students remain gated by the prototype predicate.
+      if (user?.role === 'student' && (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'academic'))) {
         items.push(
           { name: 'My Classes', path: '/student/classes', icon: BookOpen },
           { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
@@ -557,7 +560,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
                   {currentUser.role === 'secretary' && user?.student && (
                     <Link
-                      to="/student/dashboard"
+                      to="/student/attendance"
                       onClick={() => setIsProfileOpen(false)}
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-semibold transition-all"
                     >
@@ -734,7 +737,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             {currentUser.role === 'secretary' && user?.student && (
               <button
                 type="button"
-                onClick={() => navigate('/student/dashboard')}
+                onClick={() => navigate('/student/attendance')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-500/20 transition-all cursor-pointer"
                 title="Switch to Linked Student Self-Service"
               >

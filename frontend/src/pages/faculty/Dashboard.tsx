@@ -6,16 +6,27 @@ import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
-import { getFacultyDashboardKpisApi } from '../../services/apiClient';
+import {
+  getFacultyDashboardKpisApi,
+  getFacultyRetentionApi,
+  getNotificationsApi,
+  saveFacultyRemedialApi,
+  type FacultyRetentionRecord,
+} from '../../services/apiClient';
+import type { NotificationItem } from '../../types';
 
 export const Dashboard: React.FC = () => {
-  const { students, updateRemedialExam } = useApp();
+  const { students } = useApp();
   const { user } = useAuth();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState('');
   const [dashboardKpis, setDashboardKpis] = useState<Awaited<ReturnType<typeof getFacultyDashboardKpisApi>> | null>(null);
+  const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
+  const [retentionError, setRetentionError] = useState('');
+  const [announcements, setAnnouncements] = useState<NotificationItem[]>([]);
+  const [announcementsError, setAnnouncementsError] = useState('');
 
   // Search input state
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,14 +34,34 @@ export const Dashboard: React.FC = () => {
   const loadDashboard = useCallback(() => {
     setLoading(true);
     setDashboardError('');
-    getFacultyDashboardKpisApi()
-      .then((res) => {
-        setDashboardKpis(res);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setDashboardKpis(null);
-        setDashboardError(err instanceof Error ? err.message : 'Unable to connect to backend server.');
+    Promise.allSettled([getFacultyDashboardKpisApi(), getFacultyRetentionApi(), getNotificationsApi({ limit: 5 })])
+      .then(([kpiResult, retentionResult, announcementsResult]) => {
+        if (kpiResult.status === 'fulfilled') {
+          setDashboardKpis(kpiResult.value);
+        } else {
+          setDashboardKpis(null);
+          setDashboardError(kpiResult.reason instanceof Error ? kpiResult.reason.message : 'Unable to connect to backend server.');
+        }
+        if (retentionResult.status === 'fulfilled') {
+          setRetentionRecords(Array.isArray(retentionResult.value.retention) ? retentionResult.value.retention : []);
+          setRetentionError('');
+        } else {
+          setRetentionRecords([]);
+          setRetentionError(retentionResult.reason instanceof Error
+            ? retentionResult.reason.message
+            : 'Authoritative retention data is unavailable.');
+        }
+        if (announcementsResult.status === 'fulfilled') {
+          setAnnouncements(Array.isArray(announcementsResult.value.notifications)
+            ? announcementsResult.value.notifications
+            : []);
+          setAnnouncementsError('');
+        } else {
+          setAnnouncements([]);
+          setAnnouncementsError(announcementsResult.reason instanceof Error
+            ? announcementsResult.reason.message
+            : 'Authoritative announcements are unavailable.');
+        }
         setLoading(false);
       });
   }, []);
@@ -55,6 +86,7 @@ export const Dashboard: React.FC = () => {
   const [selectedRemedialId, setSelectedRemedialId] = useState<string | null>(null);
   const [remedialScore, setRemedialScore] = useState<string>('');
   const [remedialNotes, setRemedialNotes] = useState<string>('');
+  const [remedialOutcome, setRemedialOutcome] = useState<'passed' | 'failed'>('passed');
 
   // Extract unique subjects
   const allSubjects = Array.from(
@@ -107,29 +139,53 @@ export const Dashboard: React.FC = () => {
   const atRiskCount = dashboardKpis?.kpis.retentionAlerts ?? 0;
 
   // Pending remedials
-  const pendingRemedials = facultyStudents.flatMap(s => 
-    s.remedialExams.filter(rem => rem.status === 'pending' && assignedSubjects.includes(rem.subjectCode)).map(rem => ({
-      ...rem,
-      studentName: s.name,
-    }))
-  );
+  const pendingRemedials = retentionRecords.flatMap(record => {
+    const remedial = record.remedial;
+    if (!remedial || remedial.status !== 'pending') return [];
+    return [{
+      id: record.enrollmentId,
+      studentName: record.studentName || 'Student name unavailable',
+      subjectCode: record.subjectCode || 'Subject unavailable',
+      originalGrade: record.gwa,
+      record,
+      remedial,
+    }];
+  });
 
   // Calculate class-specific attendance rate
   const selectedClassSummary = dashboardKpis?.classes.find(classItem => classItem.id === selectedClassId);
   const classAttendanceRate = selectedClassSummary?.attendance ?? null;
 
-  const handleResolveRemedial = (e: React.FormEvent) => {
+  const handleResolveRemedial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRemedialId) return;
-    const scoreVal = parseInt(remedialScore);
+    const scoreVal = Number(remedialScore);
     if (isNaN(scoreVal) || scoreVal < 0 || scoreVal > 100) {
       showFeedback('Please enter a valid score (0-100).', 'error');
       return;
     }
-    updateRemedialExam(selectedRemedialId, scoreVal, remedialNotes);
-    setSelectedRemedialId(null);
-    setRemedialScore('');
-    setRemedialNotes('');
+    const selected = pendingRemedials.find(row => row.id === selectedRemedialId);
+    if (!selected) return;
+    try {
+      await saveFacultyRemedialApi({
+        enrollmentId: selected.record.enrollmentId,
+        studentId: selected.record.studentId,
+        classId: selected.record.classId,
+        remedial: {
+          ...(selected.remedial || {}),
+          status: remedialOutcome,
+          remedialScore: scoreVal,
+          notes: remedialNotes.trim() || undefined,
+        },
+      });
+      setSelectedRemedialId(null);
+      setRemedialScore('');
+      setRemedialNotes('');
+      setRemedialOutcome('passed');
+      loadDashboard();
+    } catch (err) {
+      showFeedback(err instanceof Error ? err.message : 'Unable to persist the remedial result.', 'error');
+    }
   };
 
   const activeRemedialToRecord = pendingRemedials.find(r => r.id === selectedRemedialId);
@@ -383,39 +439,62 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-                <span className="text-[9px] font-bold text-clinical-600 dark:text-clinical-400 uppercase tracking-wider">
-                  Academic Notice
-                </span>
-                <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  Midterm Grade Encoding Deadline
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Faculty members must submit midterm evaluation grades before Friday, 5:00 PM.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
-                <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                  Clinical Operations
-                </span>
-                <h4 className="font-bold text-slate-800 dark:text-slate-100">
-                  Facial Verification & Attendance Guidelines
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Class Secretaries may submit daily attendance logs for faculty audit verification.
-                </p>
-              </div>
+              {announcementsError ? (
+                <p className="text-xs text-amber-700 dark:text-amber-300">{announcementsError}</p>
+              ) : announcements.length === 0 ? (
+                <p className="text-xs text-slate-400">No authoritative announcements are available.</p>
+              ) : announcements.map(notification => (
+                <div key={notification.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
+                  <span className="text-[9px] font-bold text-clinical-600 dark:text-clinical-400 uppercase tracking-wider">
+                    {notification.type || 'Notification'}
+                  </span>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">{notification.title}</h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{notification.body}</p>
+                  <time className="text-[10px] text-slate-400 block mt-1" dateTime={notification.createdAt}>{notification.createdAt}</time>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* Widget 2: Today's Schedule */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">Pending Remedials</h3>
+              <span className="text-[10px] text-slate-400 font-semibold">Authoritative</span>
+            </div>
+            {retentionError ? (
+              <p className="text-xs text-amber-700 dark:text-amber-300">{retentionError}</p>
+            ) : pendingRemedials.length === 0 ? (
+              <p className="text-xs text-slate-400">No pending remedial records.</p>
+            ) : (
+              <div className="space-y-2">
+                {pendingRemedials.slice(0, 5).map(remedial => (
+                  <button
+                    key={remedial.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedRemedialId(remedial.id);
+                      setRemedialScore('');
+                      setRemedialNotes(typeof remedial.remedial.notes === 'string' ? remedial.remedial.notes : '');
+                      setRemedialOutcome('passed');
+                    }}
+                    className="w-full text-left p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 hover:border-clinical-400 transition-colors"
+                  >
+                    <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">{remedial.studentName}</span>
+                    <span className="block text-[10px] text-slate-500 dark:text-slate-400">{remedial.subjectCode} · Record result</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Widget 3: Today's Schedule */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Today's Schedule
+                Class Details
               </h3>
-              <span className="text-[10px] text-slate-400 font-semibold">Active Term</span>
+              <span className="text-[10px] text-slate-400 font-semibold">Schedule unavailable</span>
             </div>
 
             <div className="space-y-2.5 text-xs">
@@ -431,14 +510,14 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 bg-clinical-100 text-clinical-700 dark:bg-clinical-950 dark:text-clinical-300 rounded-md">
-                    Lecture Hall
+                    Room unavailable from class endpoint
                   </span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Widget 3: Recent Activity */}
+          {/* Widget 4: Recent Activity */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
@@ -455,15 +534,9 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-3 text-xs">
               <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                 <p className="text-slate-700 dark:text-slate-300 text-xs font-medium">
-                  Updated class section rosters & grade calculations.
+                  Faculty activity records are unavailable because no faculty activity API is registered.
                 </p>
-                <span className="text-[10px] text-slate-400 block mt-1">System Sync • Active</span>
-              </div>
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <p className="text-slate-700 dark:text-slate-300 text-xs font-medium">
-                  Evaluated retention watch thresholds for assigned students.
-                </p>
-                <span className="text-[10px] text-slate-400 block mt-1">Retention Module • Today</span>
+                <span className="text-[10px] text-slate-400 block mt-1">Open My Activity Log for the same status.</span>
               </div>
             </div>
           </div>
@@ -500,6 +573,21 @@ export const Dashboard: React.FC = () => {
                 onChange={(e) => setRemedialScore(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-clinical-500 text-xs outline-none"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Authoritative Outcome
+              </label>
+              <select
+                value={remedialOutcome}
+                onChange={event => setRemedialOutcome(event.target.value as 'passed' | 'failed')}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-clinical-500 text-xs outline-none"
+              >
+                <option value="passed">Passed</option>
+                <option value="failed">Failed</option>
+              </select>
+              <p className="text-[10px] text-slate-400">The Faculty records the outcome; no client-side score threshold is inferred.</p>
             </div>
 
             <div className="space-y-1.5">

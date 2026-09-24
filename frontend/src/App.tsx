@@ -239,11 +239,16 @@ function App() {
                   <Route path="/faculty/settings" element={<FacultySettings />} />
                 </Route>
 
+                {/* Biometric self-service also supports a Secretary's own linked
+                    Student identity. Academic endpoints remain Student-role only. */}
                 <Route element={<ProtectedRoute allowedRoles={['student', 'secretary']} />}>
-                  <Route path="/student/dashboard" element={<StudentDashboardRoute />} />
                   <Route path="/student/attendance" element={<StudentAttendanceRoute />} />
                   <Route path="/student/attendance-logs" element={<StudentAttendanceLogsRoute />} />
                   <Route path="/student/face-registration" element={<StudentFaceRegistrationRoute />} />
+                </Route>
+
+                <Route element={<ProtectedRoute allowedRoles={['student']} />}>
+                  <Route path="/student/dashboard" element={<StudentDashboardRoute />} />
                   <Route path="/student/classes" element={<StudentClassesRoute />} />
                   <Route path="/student/retention" element={<StudentRetentionRoute />} />
                   <Route path="/student/profile" element={<StudentProfileRoute />} />

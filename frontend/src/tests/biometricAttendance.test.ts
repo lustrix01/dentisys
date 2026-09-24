@@ -309,7 +309,7 @@ test('Attendance Logs: provenance values are limited to approved methods', () =>
     },
   ];
 
-  const allowedMethods = new Set(['biometric', 'faculty_manual', 'secretary_manual']);
+  const allowedMethods = new Set(['biometric', 'faculty_manual', 'secretary_manual', 'system_resolution', 'unknown']);
   for (const r of records) {
     assert.ok(allowedMethods.has(r.verificationMethod));
   }
