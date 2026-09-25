@@ -138,6 +138,20 @@ function integration_http_get_json(string $path, string $accessToken): array
     return [$status, is_string($body) ? (json_decode($body, true) ?: []) : []];
 }
 
+function integration_mailpit_json(string $path): array
+{
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'header' => "Accept: application/json\r\n",
+            'ignore_errors' => true,
+            'timeout' => 10,
+        ],
+    ]);
+    $body = @file_get_contents('http://mailpit:8025' . $path, false, $context);
+    return is_string($body) ? (json_decode($body, true) ?: []) : [];
+}
+
 function integration_http_async_json(string $path, string $accessToken, array $payload)
 {
     $socket = @stream_socket_client('tcp://127.0.0.1:80', $errno, $errstr, 2);
@@ -224,9 +238,17 @@ $expectedMigrations = [
     '023_canonical_identity_writes.sql',
     '024_reconcile_missing_identity_copies.sql',
     '025_allow_structured_student_enrichment.sql',
+    '026_validate_attendance_enrollment_updates.sql',
+    '027_provisional_course_remedial_threshold.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
+$retentionPolicyValue = $pdo->query(
+    "SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy'"
+)->fetchColumn();
+$retentionPolicy = is_string($retentionPolicyValue) ? json_decode($retentionPolicyValue, true, 512, JSON_THROW_ON_ERROR) : [];
+expect_same('GTE', $retentionPolicy['initial_trigger_operator'] ?? null, 'Migration 027 records the inclusive course-grade trigger operator');
+expect_same(2.5, (float) ($retentionPolicy['retention_threshold'] ?? 0), 'The existing retention-policy threshold remains the sole course-grade trigger value');
 $facultyInvitationPurposeConstraint = (string) $pdo->query(
     "SELECT pg_get_constraintdef(oid)
        FROM pg_constraint
@@ -479,6 +501,25 @@ try {
     $invalidForeignKeyRejected = ($e->errorInfo[0] ?? (string) $e->getCode()) === '23503';
 }
 expect_true($invalidForeignKeyRejected, 'Invalid attendance-session foreign keys are rejected by PostgreSQL');
+
+$crossClassEnrollmentStmt = $pdo->prepare(
+    'SELECT enrollment_id FROM enrollments WHERE cs_id <> ? ORDER BY enrollment_id LIMIT 1'
+);
+$crossClassEnrollmentStmt->execute([$secretarySessionClassId]);
+$crossClassEnrollmentId = (int) $crossClassEnrollmentStmt->fetchColumn();
+expect_true($crossClassEnrollmentId > 0, 'A cross-class enrollment fixture exists for attendance ownership validation');
+
+$crossClassEnrollmentRejected = false;
+try {
+    $crossClassEnrollmentUpdate = $pdo->prepare(
+        'UPDATE attendance_records SET enrollment_id = ? WHERE record_id = ?'
+    );
+    $crossClassEnrollmentUpdate->execute([$crossClassEnrollmentId, $sessionAttendanceRecordId]);
+} catch (PDOException $e) {
+    $crossClassEnrollmentRejected = ($e->errorInfo[0] ?? (string) $e->getCode()) === 'P0001'
+        && str_contains($e->getMessage(), 'does not belong to its attendance session class');
+}
+expect_true($crossClassEnrollmentRejected, 'Linked attendance cannot be reassigned to an enrollment from another class');
 
 [$endSessionStatus, $endSessionBody] = integration_http_json('/api/secretary/attendance/session/end', $secretaryAccessToken, [
     'sessionId' => (string) $attendanceSessionId,
@@ -861,6 +902,129 @@ $config = app_config([
 ]);
 $config['rate_limit']['storage_dir'] = sys_get_temp_dir() . '/dentisys-postgres-test-' . bin2hex(random_bytes(4));
 mkdir($config['rate_limit']['storage_dir'], 0700, true);
+
+// Password recovery is exercised through the live route and PostgreSQL token
+// rows. The test environment deliberately keeps the raw reset link out of the
+// API response, so Mailpit is the delivery evidence and known disposable
+// tokens cover confirm/expiry/replay behavior without exposing secrets.
+$resetRequestMessage = 'If an account exists with that email address, password reset instructions have been issued.';
+[$resetRequestStatus, $resetRequestBody] = integration_http_json('/api/auth/password/reset-request', '', ['email' => $email]);
+expect_same(200, $resetRequestStatus, 'Password reset request returns HTTP 200 for an existing Faculty account');
+expect_same($resetRequestMessage, $resetRequestBody['message'] ?? null, 'Password reset request uses the generic non-enumerating message');
+expect_same(null, $resetRequestBody['token'] ?? null, 'Test environment does not expose the raw reset token in the API response');
+expect_same(null, $resetRequestBody['reset_link'] ?? null, 'Test environment does not expose the reset link in the API response');
+
+$mailpitMessages = integration_mailpit_json('/api/v1/messages');
+$resetMessageId = null;
+foreach (($mailpitMessages['messages'] ?? []) as $message) {
+    if (!is_array($message) || ($message['Subject'] ?? null) !== 'DentiSys Password Reset Request') {
+        continue;
+    }
+    foreach (($message['To'] ?? []) as $recipient) {
+        if (is_array($recipient) && strtolower((string) ($recipient['Address'] ?? '')) === strtolower($email)) {
+            $resetMessageId = (string) ($message['ID'] ?? '');
+            break 2;
+        }
+    }
+}
+expect_true($resetMessageId !== null && $resetMessageId !== '', 'Password reset email is delivered to Mailpit for the existing account');
+$resetMessageDetail = integration_mailpit_json('/api/v1/message/' . rawurlencode((string) $resetMessageId));
+expect_true(
+    preg_match('/reset-password\?token=[a-f0-9]{32}/', json_encode($resetMessageDetail, JSON_THROW_ON_ERROR)) === 1,
+    'Mailpit password reset message contains an opaque reset link'
+);
+
+[$unknownResetStatus, $unknownResetBody] = integration_http_json('/api/auth/password/reset-request', '', [
+    'email' => 'missing-reset-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph',
+]);
+expect_same(200, $unknownResetStatus, 'Password reset request returns HTTP 200 for an unknown account');
+expect_same($resetRequestMessage, $unknownResetBody['message'] ?? null, 'Unknown-account password reset response is indistinguishable from the existing-account response');
+
+$insertPasswordResetToken = static function (PDO $pdo, int $targetUserId, string $rawToken, string $expiresAt, ?string $usedAt = null): int {
+    $stmt = $pdo->prepare(
+        'INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at, used_at)
+         VALUES (\'password_reset\', ?, ?, CURRENT_TIMESTAMP(6), ?, ?)
+         RETURNING token_id'
+    );
+    $stmt->execute([$targetUserId, hash('sha256', $rawToken), $expiresAt, $usedAt]);
+    return (int) $stmt->fetchColumn();
+};
+$resetNow = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$expiredResetToken = bin2hex(random_bytes(16));
+$expiredResetTokenId = $insertPasswordResetToken(
+    $pdo,
+    $userId,
+    $expiredResetToken,
+    $resetNow->sub(new DateInterval('PT1M'))->format('Y-m-d H:i:s.u')
+);
+[$expiredResetStatus] = integration_http_json('/api/auth/password/reset-confirm', '', [
+    'token' => $expiredResetToken,
+    'password' => 'ExpiredResetPass123!',
+]);
+expect_same(400, $expiredResetStatus, 'Expired password reset tokens are rejected');
+$expiredTokenStateStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
+$expiredTokenStateStmt->execute([$expiredResetTokenId]);
+expect_same(null, $expiredTokenStateStmt->fetchColumn(), 'Expired password reset tokens remain unused for auditability');
+
+$usedResetToken = bin2hex(random_bytes(16));
+$usedResetTokenId = $insertPasswordResetToken(
+    $pdo,
+    $userId,
+    $usedResetToken,
+    $resetNow->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u'),
+    $resetNow->format('Y-m-d H:i:s.u')
+);
+[$usedResetStatus] = integration_http_json('/api/auth/password/reset-confirm', '', [
+    'token' => $usedResetToken,
+    'password' => 'UsedResetPass123!',
+]);
+expect_same(400, $usedResetStatus, 'Used password reset tokens are rejected');
+$usedTokenStateStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
+$usedTokenStateStmt->execute([$usedResetTokenId]);
+expect_true($usedTokenStateStmt->fetchColumn() !== null, 'Used password reset tokens retain their consumed timestamp');
+
+$validResetToken = bin2hex(random_bytes(16));
+$validResetTokenId = $insertPasswordResetToken(
+    $pdo,
+    $userId,
+    $validResetToken,
+    $resetNow->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u')
+);
+[$weakResetStatus] = integration_http_json('/api/auth/password/reset-confirm', '', [
+    'token' => $validResetToken,
+    'password' => 'weak',
+]);
+expect_same(422, $weakResetStatus, 'Password reset enforces the existing password policy');
+$unusedValidTokenStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
+$unusedValidTokenStmt->execute([$validResetTokenId]);
+expect_same(null, $unusedValidTokenStmt->fetchColumn(), 'Password-policy rejection leaves the valid reset token unused');
+
+$newResetPassword = 'ResetFacultyPass123!';
+[$confirmResetStatus, $confirmResetBody] = integration_http_json('/api/auth/password/reset-confirm', '', [
+    'token' => $validResetToken,
+    'password' => $newResetPassword,
+]);
+expect_same(200, $confirmResetStatus, 'Valid password reset token changes the password');
+expect_same('ok', $confirmResetBody['status'] ?? null, 'Valid password reset returns the standard success status');
+$usedValidTokenStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
+$usedValidTokenStmt->execute([$validResetTokenId]);
+expect_true($usedValidTokenStmt->fetchColumn() !== null, 'Successful password reset consumes the token');
+[$replayResetStatus] = integration_http_json('/api/auth/password/reset-confirm', '', [
+    'token' => $validResetToken,
+    'password' => 'ReplayResetPass123!',
+]);
+expect_same(400, $replayResetStatus, 'Successful password reset cannot be replayed');
+[$oldPasswordLoginStatus] = integration_http_json('/api/auth/login', '', [
+    'email' => $email,
+    'password' => 'TestPass1!',
+]);
+expect_same(401, $oldPasswordLoginStatus, 'Password reset invalidates the old password');
+[$newPasswordLoginStatus, $newPasswordLoginBody] = integration_http_json('/api/auth/login', '', [
+    'email' => $email,
+    'password' => $newResetPassword,
+]);
+expect_same(200, $newPasswordLoginStatus, 'Password reset permits login with the new password');
+expect_true((string) ($newPasswordLoginBody['access_token'] ?? '') !== '', 'Password reset login returns an access token');
 
 $googleContext = [
     'request_id' => 'google-integration-' . bin2hex(random_bytes(4)),

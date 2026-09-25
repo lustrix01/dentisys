@@ -2161,6 +2161,20 @@ function faculty_percentage_to_gwa(float $percentage): float
     return 5.0;
 }
 
+/**
+ * Apply the provisional professional-course trigger to an authoritative GWA.
+ * The comparison intentionally uses the stored precision: no one-decimal
+ * rounding is performed before the inclusive threshold comparison.
+ */
+function faculty_course_grade_retention_state(?float $gwa, float $threshold): ?string
+{
+    if ($gwa === null || !is_finite($gwa) || !is_finite($threshold)) {
+        return null;
+    }
+
+    return $gwa >= $threshold ? 'remedial' : 'active';
+}
+
 function faculty_transmutation_defaults(PDO $pdo): array
 {
     $stmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults' LIMIT 1");
@@ -2986,7 +3000,6 @@ function handle_faculty_grades_compute(): void
         if ($retentionThreshold < 1.0 || $retentionThreshold > 5.0) {
             throw new RuntimeException('Persisted retention threshold is invalid.');
         }
-        $warningUpperBound = min(5.0, $retentionThreshold + 0.5);
 
         $pdo->beginTransaction();
         $lockEnrollmentsSql =
@@ -3186,9 +3199,10 @@ function handle_faculty_grades_compute(): void
                     2
                 );
                 $gwa = faculty_percentage_to_gwa($percentage);
-                $retention = $gwa <= $retentionThreshold
-                    ? 'active'
-                    : ($gwa <= $warningUpperBound ? 'warning' : 'critical');
+                $retention = faculty_course_grade_retention_state($gwa, $retentionThreshold);
+                if ($retention === null) {
+                    throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
+                }
                 $periodBreakdown['percentage'] = $percentage;
                 $periodBreakdown['gwa'] = $gwa;
                 $periodBreakdown['retentionState'] = $retention;
@@ -3286,9 +3300,10 @@ function handle_faculty_grades_compute(): void
                 }
                 $percentage = round($percentage, 2);
                 $gwa = faculty_percentage_to_gwa($percentage);
-                $retention = $gwa <= $retentionThreshold
-                    ? 'active'
-                    : ($gwa <= $warningUpperBound ? 'warning' : 'critical');
+                $retention = faculty_course_grade_retention_state($gwa, $retentionThreshold);
+                if ($retention === null) {
+                    throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
+                }
                 $breakdown = [
                     'calculationMode' => 'authoritative_categories',
                     'categories' => $categoryBreakdown,
@@ -3365,9 +3380,10 @@ function handle_faculty_grades_compute(): void
                 2
             );
             $gwa = faculty_percentage_to_gwa($percentage);
-            $retention = $gwa <= $retentionThreshold
-                ? 'active'
-                : ($gwa <= $warningUpperBound ? 'warning' : 'critical');
+            $retention = faculty_course_grade_retention_state($gwa, $retentionThreshold);
+            if ($retention === null) {
+                throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
+            }
             $breakdown = [
                 'assessmentPercentage' => round($assessmentPercentage, 2),
                 'assessmentWeight' => $assessmentWeight,

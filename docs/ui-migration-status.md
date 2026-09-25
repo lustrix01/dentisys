@@ -4,13 +4,21 @@ Current destination: local `lighthal5`, based on `f9ac7df`. The original functio
 
 ## Current handoff — 2026-09-26
 
-The normal development database is migrated through 025 after a verified
-pre-migration dump; no volume or existing data was reset or deleted. The
-historical Docker interruption and earlier pre-022-025 4/8 live result are
+The normal development database is migrated through 027 after a verified
+pre-migration dump; no volume or existing data was reset, deleted, or bulk-
+recomputed. Migrations 026-027 are additive: 026 closes the linked-attendance
+update validation gap, and 027 records the Owner-approved provisional
+professional-course trigger in the existing retention-policy configuration.
+The historical Docker interruption and earlier pre-022-025 4/8 live result are
 separate from the successful kept disposable `dentisys-final-0926b` run, which
-passed migrations 001-025 and all 8/8 live workflows. The accepted route and
-dialog visual evidence below is unchanged. Whole-schema 3NF, BUCDM policy, and
-real Google/camera acceptance remain explicitly unresolved or manual.
+passed migrations 001-025 and all 8/8 live workflows. That run is historical for
+the older tree. The current tree passed `scripts/check-postgres.ps1 -KeepStack
+-ComposeProject dentisys-final-0926c -BackendHttpPort 18084
+-FrontendHttpPort 15177 -MailpitUiPort 18029`: the 001-027 ledger, focused
+PostgreSQL integration, smoke/log checks, and all 8/8 live workflows passed.
+The accepted route and dialog visual evidence below is unchanged. Whole-schema
+3NF, remaining BUCDM decisions, and real Google/camera acceptance remain
+explicitly unresolved or manual.
 
 ## Implemented in this working batch
 
@@ -28,6 +36,9 @@ real Google/camera acceptance remain explicitly unresolved or manual.
 - Migration 021 is the ordered corrective migration for 020's overescaped decimal regex. It repairs `normalization_jsonb_number` and regenerates normalized grade/remedial facts from preserved legacy JSON. The focused decimal assertions and the final disposable PostgreSQL/live-browser gate pass.
 - Migration 022 moves active Faculty grading-period configuration create/update/delete to `grading_category_period_memberships`, derives ownership through `grading_categories`, and keeps `grading_category_periods` as a guarded one-way compatibility projection without circular triggers.
 - Migrations 023-025 complete the ID-002 canonical structured-name write path. Canonical person updates synchronize compatibility fields in one transaction, preserve non-empty conflicting legacy values for reconciliation, backfill empty copies, and allow only deterministic initial Student enrichment. Role-specific authoritative names are not an approved alternative.
+- Migration 026 applies the existing attendance-session consistency function to enrollment changes as well as inserts/session-field updates, preventing a cross-class reassignment from bypassing validation.
+- Migration 027 records `initial_trigger_operator = GTE` in the existing `retention_policy` configuration. `retention_policy.retention_threshold` remains the sole active course-grade trigger value at `2.50`; the older `initial_trigger_grade` field is retained compatibility metadata and is not a second consumer authority. Active computation compares the authoritative GWA at stored precision: values below 2.50 are `active`, values at or above 2.50 are `remedial`, and missing/incomplete values remain unresolved. The remedial-exam percentage threshold remains a separate unanswered policy item.
+- Password-recovery API/database coverage exercises generic responses, Mailpit delivery, opaque links, expiry, replay, password-policy rejection, and successful token consumption. The two recovery-page presentation files remain separately owned until their handoff.
 
 ## PDF and visual evidence
 
@@ -42,18 +53,18 @@ real Google/camera acceptance remain explicitly unresolved or manual.
 - All 51 frontend contract/unit checks passed again after the profile changes. `git diff --check` passed.
 - PHP syntax, backend contract, and documentation checks pass in the final aggregate gate.
 - The pre-fix integrated tree passed `scripts/check.ps1`, including the production frontend build, PHP checks, documentation contract, backend contracts, and 124 mocked UI E2E tests. Its separate pre-022-025 PostgreSQL/live run passed only 4/8 live workflows; those results remain historical evidence for that earlier tree and are not used for current acceptance.
-- Final integrated-tree PostgreSQL/live evidence is the kept disposable project `dentisys-final-0926b`, run with backend `18082`, frontend `15175`, and Mailpit `18027`. `scripts/check-postgres.ps1 -KeepStack -ComposeProject dentisys-final-0926b -BackendHttpPort 18082 -FrontendHttpPort 15175 -MailpitUiPort 18027` exited 0: migrations 001-025/idempotency, seed/sequence checks, backup/restore, the UI migration API test, full PostgreSQL integration (including decimal/backfill, canonical period CRUD/ownership/null/rollback, onboarding person reuse, cross-role profile consistency, and mismatched biometric denial), smoke/log checks, and all 8/8 live Playwright workflows passed. The run used offline Google configuration; it is not real Google-provider or camera acceptance.
-- `scripts/migrate.ps1` applied additive migrations 018-025 to the existing development volume. Migration 020/021 preserve and regenerate 25 normalized grade-breakdown rows and 1 remedial-state row; no development volume was reset or deleted. The updated normal stack passed `scripts/smoke.ps1`, and rollback-only canonical identity/grading probes left no persistent fixture data.
+- Historical integrated-tree PostgreSQL/live evidence is the kept disposable project `dentisys-final-0926b`, run with backend `18082`, frontend `15175`, and Mailpit `18027`. `scripts/check-postgres.ps1 -KeepStack -ComposeProject dentisys-final-0926b ...` exited 0 for migrations 001-025/idempotency, seed/sequence checks, backup/restore, UI migration/API tests, full PostgreSQL integration, smoke/log checks, and all 8/8 live Playwright workflows. It used offline Google configuration and is not evidence for current migrations 026-027 or real Google-provider/camera acceptance.
+- `scripts/migrate.ps1` applied additive migrations 018-027 to the existing development volume. Migration 020/021 preserve and regenerate 25 normalized grade-breakdown rows and 1 remedial-state row; 027 changes only retention-policy configuration and does not bulk-recompute historical outcomes. No development volume was reset or deleted. The updated normal stack passed smoke checks and rollback-only canonical identity/grading probes left no persistent fixture data.
 - The disposable browser gate sets `GOOGLE_CLIENT_ID=''` so offline validation does not depend on Google GIS network/provider behavior. Real Google provider and camera acceptance remain separate manual checks.
 - Focused disposable API/database test at `tests/database/ui_migration_test.php` passes. It includes compound-name round-trips, null clearing, validation, year restrictions, ownership, unlock reload/idempotency and audit. `tests/database/postgres_integration_test.php` retains the decimal/backfill assertions and now exercises canonical period create/update/delete, derived ownership, null rejection, rollback, onboarding person reuse, cross-role profile consistency, and mismatched identity/biometric denial; its earlier polluted-stack attempt is not counted as a final pass.
 - Independent review found that migration 020's decimal parser returned NULL for `0.9` and `22.5`. Migration 021 is applied to the preserved development database; the direct parser probe, rollback-only trigger probe, strengthened decimal/backfill regression, and complete final gates all pass.
-- Auto Review helper could not connect under sandbox restrictions. Escalation was rejected because export of the diff needs explicit user authorization; approval question is pending. Manual review found and fixed missing SQL columns and a closure capture in the interrupted delegated edits.
-- September 26 continuation: the stable source/destination route matrix remains accepted without rerun. The remaining disabled Faculty and Secretary dialog states were enabled with a disposable API/DB fixture and captured at both required viewports. Canonical period/identity code and focused behavior checks are integrated. Docker recovered through ordinary non-destructive use; the final disposable PostgreSQL/live gate and the repository gate are now green.
+- Auto Review was previously unavailable under sandbox restrictions and the dirty-tree bundle exceeded its input limit because preserved `tmp/` evidence was untracked. The committed change is reviewed separately after commit; no prior historical review is relabeled as current.
+- September 26 continuation: the stable source/destination route matrix remains accepted without rerun. The remaining disabled Faculty and Secretary dialog states were enabled with a disposable API/DB fixture and captured at both required viewports. Canonical period/identity code and focused behavior checks are integrated. Docker recovered through ordinary non-destructive use; the current 027 disposable PostgreSQL/live gate and repository gate are green.
 
 ## Remaining work — no full-completion claim
 
 1. Full whole-schema 3NF remains unclaimed: compatibility storage is still required for attendance/incomplete fields, remedial policy-opaque fields, and other response fields whose relational contract is not approved. Period configuration and structured identity now have canonical active writers.
-2. Exact BUCDM policy progression rules, remedial attempt history, Registrar import format, real-camera enrollment/attendance, and real Google provider acceptance remain separate unresolved work.
+2. The Owner-approved provisional course-grade trigger is implemented. Remaining BUCDM decisions include the remedial-exam percentage boundary/cost-recovery rule, scope and recording authority for clinic/revalida/pre-board stages, and any required date/threshold boundaries. Do not manufacture historical attempts.
 3. ID-002 resolves identity-conflict precedence: canonical composed person names win; non-empty legacy conflicts are preserved and fail closed. `title` semantics remain unchanged until an actual ambiguous stored value or concrete UI requirement is supplied.
 
 ## Next action

@@ -1,28 +1,39 @@
-# Current continuation: UI migration on lighthal5
+# Current continuation: UI migration and normalization on lighthal5
 
-The current task has integrated `f9ac7df` into local `lighthal5` and recovered the unfinished `c9fe` UI edits. New UI, migration, and API edits are in the working tree. Read [ui-migration-status.md](ui-migration-status.md) first; the functional-first evidence below is historical. Do not rerun the earlier camera/Google investigation or recopy parked changes.
+Continue the existing `lighthal5` tree and preserve the accepted visual evidence. The current working batch adds ordered migrations 026-027, focused password-recovery and grading assertions, and the narrow Owner-approved provisional course-grade trigger. The two password-recovery page files remain Gemini-owned presentation work until handoff. Read [ui-migration-status.md](ui-migration-status.md) first; older implementation narratives below are historical. Do not rerun unchanged route/dialog comparisons or the earlier camera/Google investigation.
 
 Owner clarifications: overlapping activity deadlines are allowed; watchlist unlock covers the selected class; current school year is 2026-2027.
 
 ## Current closeout - 2026-09-26
 
-The normal development database is migrated through 025. A custom-format dump
-was verified before applying 022-025; no volume or existing data was reset or
-deleted. The updated normal stack passed smoke checks and rollback-only probes
-for canonical profile synchronization and grading-period projection.
+The normal development database is migrated through 027. A verified backup
+preceded the additive application of 022-027; no development volume or existing
+data was reset, deleted, or bulk-recomputed. Migration 026 tightens the linked
+attendance update trigger. Migration 027 records the Owner-approved provisional
+professional-course trigger (`< 2.50` allowed, `>= 2.50` remedial) in the
+existing retention-policy configuration without rewriting historical outcomes.
 
 The historical Docker interruption and pre-022-025 4/8 live result belong to an
-earlier tree. They are superseded by the kept disposable
-`dentisys-final-0926b` run, which passed migrations 001-025, full PostgreSQL
-integration, smoke/log checks, and 8/8 live browser workflows. The repository
-gate also passed with 124 mocked UI tests. The accepted 156-capture visual
-matrix and dialog evidence remain unchanged; invitation Edit is destination-
-only, while Secretary review/override is shared source and destination.
+earlier tree. The successful kept disposable `dentisys-final-0926b` run is also
+historical: it covered migrations 001-025, not the current 027 tree. The current
+tree passed `scripts/check-postgres.ps1 -KeepStack -ComposeProject
+dentisys-final-0926c -BackendHttpPort 18084 -FrontendHttpPort 15177
+-MailpitUiPort 18029`: the 001-027 ledger, focused PostgreSQL integration,
+smoke/log checks, and all 8/8 live workflows passed. The accepted 156-capture
+visual matrix and dialog evidence remain unchanged; invitation Edit is
+destination-only, while Secretary review/override is shared source and
+destination.
 
-Whole-schema 3NF is not certified. BUCDM policy, title semantics if an actual
-ambiguous value arises, real Google provider acceptance, and physical-camera
-acceptance remain separate decisions or manual checks. The application does
-not invent remedial attempt history.
+Focused visual follow-up evidence now covers the changed password-recovery
+presentation at both required viewports; it is recorded as a scoped destination
+presentation deviation with the source semantics preserved. Focused local
+behavior evidence covers the seven exact course-grade boundaries,
+unresolved missing grades, password-reset delivery/expiry/replay, and migration
+026's cross-class attendance update rejection. Whole-schema 3NF is not
+certified. BUCDM policy beyond the approved provisional course-grade trigger,
+title semantics if an actual ambiguous value arises, real Google provider
+acceptance, and physical-camera acceptance remain separate decisions or manual
+checks. The application does not invent remedial attempt history.
 
 # DentiSys session handoff — 2026-09-24
 

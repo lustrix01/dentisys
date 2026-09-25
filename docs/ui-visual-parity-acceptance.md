@@ -6,12 +6,15 @@
 
 ## Current handoff — 2026-09-26
 
-The accepted visual evidence below is unchanged and was not rerun. The normal
-development database is now migrated through 025. The historical Docker
+The accepted stable visual evidence below is unchanged and was not rerun. A
+focused follow-up was captured for the two password-recovery pages after their
+Gemini-owned presentation pass. The normal
+development database is now migrated through 027. The historical Docker
 interruption and pre-fix 4/8 live result belong to an earlier tree; the kept
-disposable `dentisys-final-0926b` run passed the post-change PostgreSQL and 8/8
-live browser gate. This document covers visual evidence only; real Google and
-physical-camera acceptance remain separate manual checks.
+disposable `dentisys-final-0926b` run passed migrations 001-025 and the 8/8 live
+browser gate, but is not current 026-027 evidence. This document covers visual
+evidence only; real Google and physical-camera acceptance remain separate
+manual checks.
 
 ## Stable route coverage
 
@@ -29,6 +32,24 @@ The generated coverage manifest is:
 ```text
 C:\Users\decha\.codex\visualizations\2026\09\25\01a0d7d2-8945-7cc2-8d71-1d6545638ae9\matched-source-destination-stable\coverage-compact.json
 ```
+
+## Password-recovery follow-up
+
+The current destination captures for Forgot Password and Reset Password at
+both required viewports are under:
+
+```text
+C:\Users\decha\.codex\visualizations\2026\09\25\01a0d7d2-8945-7cc2-8d71-1d6545638ae9\matched-source-destination-stable\password-recovery-follow-up
+```
+
+Inspection against the frozen-source captures confirms that the email field,
+institutional suffix, password/confirmation fields, reset actions, and return
+links remain present and usable. The destination deliberately uses Gemini's
+approved presentation-only two-panel treatment rather than the source's
+single-column styling. This is a destination presentation deviation, not a
+missing recovery capability; password recovery remains required by
+[`AUTH-005`](../spec.md#auth-005-password-authentication), and the live API,
+Mailpit delivery, expiry, replay, policy, and token-consumption checks pass.
 
 The route groups explicitly covered are:
 

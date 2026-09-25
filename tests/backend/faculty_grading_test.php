@@ -38,6 +38,25 @@ assert_faculty_grading(
     'Disabled transmutation preserves the raw percentage'
 );
 
+foreach ([
+    [1.00, 'active'],
+    [2.39, 'active'],
+    [2.40, 'active'],
+    [2.49, 'active'],
+    [2.50, 'remedial'],
+    [2.60, 'remedial'],
+    [5.00, 'remedial'],
+] as [$gwa, $expectedState]) {
+    assert_faculty_grading(
+        faculty_course_grade_retention_state($gwa, 2.50) === $expectedState,
+        "Course-grade threshold classifies {$gwa} at established precision"
+    );
+}
+assert_faculty_grading(
+    faculty_course_grade_retention_state(null, 2.50) === null,
+    'Missing or incomplete course grades remain unresolved'
+);
+
 $periodDefaults = faculty_grading_default_period_template();
 assert_faculty_grading($periodDefaults['schemaMode'] === 'periods', 'Unconfigured grading defaults use period mode');
 assert_faculty_grading($periodDefaults['termRatio']['midterm'] === 40 && $periodDefaults['termRatio']['final'] === 60, 'Faculty default term ratio is 40/60');

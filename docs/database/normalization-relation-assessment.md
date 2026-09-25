@@ -6,16 +6,19 @@
 
 ## Current handoff — 2026-09-26
 
-The normal development database is now at migration 025 after a verified
-pre-migration dump and additive application of 022-025. The kept disposable
-`dentisys-final-0926b` run is separate evidence: it passed the ledger through
-025 and the post-change PostgreSQL/live gates. Earlier Docker failures and the
+The normal development database is now at migration 027 after a verified
+pre-migration dump and additive application of 022-027. Migrations 026-027 do
+not alter preserved grade facts: 026 tightens attendance-update validation and
+027 records the provisional course-grade threshold in existing configuration.
+The kept disposable `dentisys-final-0926b` run is separate historical evidence:
+it passed the ledger through 025 and the post-change PostgreSQL/live gates, but
+does not cover the current 026-027 tree. Earlier Docker failures and the
 pre-022-025 4/8 live result are historical, not current status. The focused
 normal-stack probes verified canonical identity synchronization and grading
 membership projection inside rolled-back transactions.
 
 This assessment covers every application relation present in the active PostgreSQL
-schema after migrations 001-025. It is a read-only classification of the current
+schema after migrations 001-027. It is a read-only classification of the current
 tree; it does not change runtime code, migrations, tests, frontend files, or any
 other document. `_schema_migrations` is included
 only as migration-control metadata, not as product data in the 3NF scope.
@@ -46,8 +49,8 @@ Read-only repository inspection covered:
   GRD-002, ATT-001 through ATT-006, BIO-001 through BIO-010, and the 9B UI and
   normalized-data amendment.
 - Ordered active migrations `database/migrations/001_baseline_schema.sql`
-  through `025_allow_structured_student_enrichment.sql`, with particular
-  attention to 005, 008-016, 017-025.
+  through `027_provisional_course_remedial_threshold.sql`, with particular
+  attention to 005, 008-016, 017-027.
 - Current active consumers under `backend/app`, `backend/controllers`, and
   `backend/routes/api.php`, including `AdminController.php`,
   `FacultyController.php`, `SecretaryController.php`, `StudentAcademicController.php`,
@@ -620,8 +623,8 @@ application dependency.
 
 - The live `information_schema` inventory confirmed the relation/key shape
   listed above, including primary keys, unique constraints/indexes, foreign
-  keys, migration-020 projections, and migration-022/023/024/025 guards and
-  backfills.
+  keys, migration-020 projections, migration-022/023/024/025 guards and
+  backfills, and the current 027 policy configuration.
 - Static migration inspection confirmed that 020 creates
   `person_identities`, `grading_category_period_memberships`,
   `enrollment_grade_breakdowns`, `enrollment_grade_breakdown_categories`, and
@@ -629,7 +632,13 @@ application dependency.
   021 replaces the overescaped decimal regex and regenerates projections from
   preserved JSON. Migrations 022-025 then move period writes to the canonical
   relation, enforce ID-002 canonical identity writes, reconcile empty copies,
-  and permit only deterministic initial Student enrichment.
+  and permit only deterministic initial Student enrichment. Migration 026
+  closes the enrollment-change validation event, while 027 updates only the
+  existing `retention_policy` setting to `GTE`; the active consumer continues to
+  use the single `retention_threshold` value of `2.50`. The older
+  `initial_trigger_grade` key is retained compatibility metadata, not a second
+  consumer authority. Migration 027 does not invent attempts or bulk-recompute
+  historical outcomes.
 - The completed consumer audit covers Admin, Secretary, invitation/onboarding,
   biometric, shared auth/session, reporting, and profile paths. The remaining
   legacy access is classified: compatibility writes and fallback response
@@ -642,12 +651,19 @@ application dependency.
   before migrations 022-025 and is not post-fix proof. Current post-fix focused
   evidence includes the migration ledger through 025, the UI migration
   database/API pass, canonical identity assertions, and the four disposable
-  dialog captures. The final integrated-tree disposable run is
+  dialog captures. The kept integrated-tree disposable run is
   `dentisys-final-0926b` with backend `18082`, frontend `15175`, and Mailpit
   `18027`; it passed the ledger through 025, focused and full PostgreSQL tests,
-  smoke/log checks, and all 8/8 live Playwright workflows. The repository gate
-  separately passed all backend/documentation checks and 124 mocked UI tests.
-  These current results are distinct from the historical pre-022-025 8/8
-  record.
-- Migrations 022-025 are additive; no database volume or preserved data was
+  smoke/log checks, and all 8/8 live Playwright workflows. That result is
+  historical for the current 026-027 tree. The current disposable project
+  `dentisys-final-0926c` passed the 001-027 ledger, focused and full PostgreSQL
+  tests, smoke/log checks, and all 8/8 live Playwright workflows.
+- Migrations 022-027 are additive; no database volume or preserved data was
   deleted.
+
+The policy setting updated by migration 027 is configuration metadata, not a
+new relation or a claim that all progression facts are normalized. The current
+grade projection retains the authoritative stored grade and its captured
+calculation context; historical snapshots and compatibility JSON remain
+separate classifications. The remedial-exam percentage rule and later BUCDM
+stages remain unresolved, so no attempt-history relation is invented here.
