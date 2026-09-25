@@ -24,7 +24,7 @@ test.describe('Faculty Module E2E Tests', () => {
     });
 
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
@@ -115,7 +115,7 @@ test.describe('Faculty Module E2E Tests', () => {
       });
 
       await appPage.goto('/login');
-      await appPage.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
+      await appPage.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
       await appPage.fill('input[type="password"]', 'Password123!');
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
@@ -190,7 +190,7 @@ test.describe('Faculty Module E2E Tests', () => {
         return json(request.method() === 'GET' ? [] : { status: 'ok', message: 'ok' });
       });
       await appPage.goto('/login');
-      await appPage.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
+      await appPage.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
       await appPage.fill('input[type="password"]', 'Password123!');
       await appPage.click('button[type="submit"]');
       await expect(appPage).toHaveURL('/');
@@ -412,7 +412,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');

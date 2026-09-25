@@ -24,7 +24,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
     });
 
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'secretary@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'secretary@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
@@ -41,6 +41,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
   });
 
   test('secretary can navigate to Manual Attendance Override page', async ({ page }) => {
+    await page.click('a[href="/secretary/attendance"]');
     await page.click('a[href="/secretary/override"]');
     await expect(page).toHaveURL('/secretary/override');
     await expect(page.locator('body')).toContainText(/Override|Manual|Correction|Status/i);
@@ -279,7 +280,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
 
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'secretary@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'secretary@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');

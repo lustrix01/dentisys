@@ -22,7 +22,7 @@ async function login(page: Page, role: 'admin' | 'faculty') {
     });
   });
   await page.goto('/login');
-  await page.fill('input[type="email"]', `${role}@bicol-u.edu.ph`);
+  await page.fill('input[inputmode="email"]', `${role}@bicol-u.edu.ph`);
   await page.fill('input[type="password"]', 'Password123!');
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL('/');

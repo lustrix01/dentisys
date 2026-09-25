@@ -599,7 +599,7 @@ export const GradeComputation: React.FC = () => {
         classId: assClassId,
         gradingPeriod: assPeriod,
         maxScore: assMaxScore,
-        dueDate: assDueDate,
+        dueDate: assDueDate || null,
         instructions: assInstructions,
         remarks: assRemarks,
         status: assStatus as 'Active' | 'Closed' | 'Archived',
@@ -619,7 +619,7 @@ export const GradeComputation: React.FC = () => {
         classId: assClassId,
         gradingPeriod: assPeriod,
         maxScore: assMaxScore,
-        dueDate: assDueDate,
+        dueDate: assDueDate || null,
         instructions: assInstructions,
         remarks: assRemarks,
         status: assStatus as 'Active' | 'Closed' | 'Archived',
@@ -2406,7 +2406,7 @@ export const GradeComputation: React.FC = () => {
                         <div><span className="text-slate-400 font-semibold">Type:</span> {activeAssessment.type}</div>
                         <div><span className="text-slate-400 font-semibold">Grading Period:</span> {activeAssessment.gradingPeriod}</div>
                         <div><span className="text-slate-400 font-semibold">Max Score:</span> {activeAssessment.maxScore} points</div>
-                        <div><span className="text-slate-400 font-semibold">Due Date:</span> {activeAssessment.dueDate}</div>
+                        <div><span className="text-slate-400 font-semibold">Due Date:</span> {activeAssessment.dueDate || 'No deadline'}</div>
                         {activeAssessment.instructions && (
                           <div>
                             <span className="text-slate-400 font-semibold">Instructions:</span>
@@ -2716,7 +2716,7 @@ export const GradeComputation: React.FC = () => {
                       </td>
                       <td className="px-5 py-3.5 font-semibold text-slate-700 dark:text-slate-350">{ass.gradingPeriod}</td>
                       <td className="px-5 py-3.5 text-center font-extrabold text-slate-800 dark:text-slate-100">{ass.maxScore} pts</td>
-                      <td className="px-5 py-3.5 font-mono text-slate-450 dark:text-slate-500">{ass.dueDate}</td>
+                      <td className="px-5 py-3.5 font-mono text-slate-450 dark:text-slate-500">{ass.dueDate || 'No deadline'}</td>
                       <td className="px-5 py-3.5">
                         <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${
                           ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-650'
@@ -2791,7 +2791,7 @@ export const GradeComputation: React.FC = () => {
                   Grade Weights & Schema Editor
                 </CardTitle>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  Configure dynamic grading categories and percentage weights for your course offering.
+                  Configure the selected course offering in plain terms: the Midterm and Finals contributions must total 100%, and each period's categories must total 100%.
                 </p>
               </div>
 
@@ -4248,11 +4248,11 @@ export const GradeComputation: React.FC = () => {
               </label>
               <input
                 type="date"
-                required
                 value={assDueDate}
                 onChange={(e) => setAssDueDate(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
               />
+              <p className="text-[10px] text-slate-400">Optional. Leave blank for activities without a specific deadline.</p>
             </div>
           </div>
 

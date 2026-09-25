@@ -106,6 +106,8 @@ export const StudentManagement: React.FC = () => {
 
   // Form states for all DB columns
   const [formFirstName, setFormFirstName] = useState('');
+  const [formPrefix, setFormPrefix] = useState('');
+  const [formSuffix, setFormSuffix] = useState('');
   const [formMiddleName, setFormMiddleName] = useState('');
   const [formLastName, setFormLastName] = useState('');
   const [formEmail, setFormEmail] = useState('');
@@ -148,7 +150,7 @@ export const StudentManagement: React.FC = () => {
       errors.lastName = 'Last Name can only contain letters, spaces, hyphens, and apostrophes.';
     }
 
-    const cleanEmail = formEmail.trim();
+    const cleanEmail = formEmail.trim() && (formEmail.includes('@') ? formEmail.trim() : `${formEmail.trim()}@bicol-u.edu.ph`);
     if (cleanEmail) {
       const emailValidation = validateBicolUEmail(cleanEmail, allowedDomains);
       if (!emailValidation.isValid) {
@@ -215,9 +217,11 @@ export const StudentManagement: React.FC = () => {
       const res = await createStudentApi({
         studentId: formStudentId,
         firstName: normalizedFirstName,
+        prefix: formPrefix.trim(),
+        suffix: formSuffix.trim(),
         middleName: normalizedMiddleName,
         lastName: normalizedLastName,
-        email: formEmail,
+        email: formEmail.trim() && (formEmail.includes('@') ? formEmail.trim() : `${formEmail.trim()}@bicol-u.edu.ph`),
         contact: formContact,
         sex: formSex,
         yearLevel: yearNum,
@@ -239,6 +243,8 @@ export const StudentManagement: React.FC = () => {
 
       // Reset Form
       setFormFirstName('');
+      setFormPrefix('');
+      setFormSuffix('');
       setFormMiddleName('');
       setFormLastName('');
       setFormEmail('');
@@ -572,6 +578,10 @@ export const StudentManagement: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide" htmlFor="student-prefix">Prefix</label>
+                  <input id="student-prefix" type="text" maxLength={50} placeholder="e.g. Ms." value={formPrefix} onChange={e => setFormPrefix(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500" />
+                </div>
+                <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">First Name *</label>
                   <input
                     type="text"
@@ -618,11 +628,18 @@ export const StudentManagement: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Institutional Email Address</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide" htmlFor="student-suffix">Suffix</label>
+                  <input id="student-suffix" type="text" maxLength={50} placeholder="e.g. Jr., III" value={formSuffix} onChange={e => setFormSuffix(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide" htmlFor="student-email">Institutional Email Address</label>
+                  <div className="flex items-center gap-2">
                   <input
-                    type="email"
+                    id="student-email"
+                    type="text"
+                    inputMode="email"
                     list="student-email-suggestions"
-                    placeholder="e.g. angela@bicol-u.edu.ph"
+                    placeholder="e.g. angela"
                     value={formEmail}
                     onChange={(e) => {
                       setFormEmail(e.target.value);
@@ -630,6 +647,8 @@ export const StudentManagement: React.FC = () => {
                     }}
                     className={`w-full px-4 py-2.5 rounded-xl border ${formErrors.email ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200 dark:border-slate-800'} bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500`}
                   />
+                  {!formEmail.includes('@') && <span className="text-xs font-bold text-clinical-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
+                  </div>
                   <datalist id="student-email-suggestions">
                     {formEmail && !formEmail.includes('@') && allowedDomains.map(dom => (
                       <option key={`prefix-${dom}`} value={`${formEmail.trim()}@${dom}`} />

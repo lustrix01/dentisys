@@ -1,5 +1,7 @@
 # Frontend Overview
 
+The current UI migration follows [UI-first migration plan](ui-migration-plan.md): copy the complete frozen `owhie_backend` interface into `lighthal5`, reconcile UI Changes.pdf, then normalize data and complete wiring. Existing functionality described below is the protected starting point, not evidence that every migrated screen is integrated. Preserve authentication/role boundaries while recording intermediate UI and test gaps.
+
 The frontend is a React 19, TypeScript, Vite, React Router, and Tailwind application in `frontend/`. It uses context for client state and calls the PHP API through Vite's `/api` proxy.
 
 Authentication routes include password login, authenticator 2FA verification at `/2fa/verify`, invitation activation, password reset, and recovery-code display. Public signup URLs redirect to login with an invitation-required notice. The removed `/mfa/select` email/authenticator choice no longer exists.

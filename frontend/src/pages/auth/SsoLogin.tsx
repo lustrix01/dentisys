@@ -13,6 +13,14 @@ import {
   ApiError,
 } from '../../services/apiClient';
 
+const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+
+function completeInstitutionalEmail(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('@')) return trimmed;
+  return `${trimmed}@${DEFAULT_EMAIL_DOMAIN}`;
+}
+
 declare global {
   interface Window {
     google?: {
@@ -178,7 +186,8 @@ export function SsoLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    const loginEmail = completeInstitutionalEmail(email);
+    if (!loginEmail || !password) {
       setError('Please fill in all fields.');
       return;
     }
@@ -188,7 +197,7 @@ export function SsoLogin() {
     setError('');
 
     try {
-      const result = await apiLogin(email, password);
+      const result = await apiLogin(loginEmail, password);
 
       if (result.type === 'direct_login' && result.access_token) {
         await completeServerAuthentication(result.access_token);
@@ -415,26 +424,36 @@ export function SsoLogin() {
               {/* Form */}
               <form className="space-y-3.5" onSubmit={handleLogin}>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  <label htmlFor="login-email" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                     Bicol University Email Address
                   </label>
                   <div className="relative rounded-xl shadow-xs group">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-accent-500 transition-colors">
                       <Mail className="h-4 w-4" />
                     </div>
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="username@bicol-u.edu.ph"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs sm:text-sm outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400"
-                    />
+                    <div className="flex">
+                      <input
+                        type="text"
+                        id="login-email"
+                        autoComplete="username"
+                        inputMode="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder={email.includes('@') ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username'}
+                        className={`min-w-0 flex-1 pl-10 pr-4 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 ${email.includes('@') ? 'rounded-xl' : 'rounded-l-xl'} focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs sm:text-sm outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400`}
+                      />
+                      {!email.includes('@') && (
+                        <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-accent-700 dark:border-slate-700 dark:bg-slate-800 dark:text-accent-300">
+                          @{DEFAULT_EMAIL_DOMAIN}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  <label htmlFor="login-password" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                     Password
                   </label>
                   <div className="relative rounded-xl shadow-xs group">
@@ -443,6 +462,8 @@ export function SsoLogin() {
                     </div>
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      id="login-password"
+                      autoComplete="current-password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -452,6 +473,7 @@ export function SsoLogin() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                       className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

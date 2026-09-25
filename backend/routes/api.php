@@ -586,6 +586,12 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/faculty/retention/watchlist/unlock',
+        'handler' => 'handle_faculty_watchlist_unlock',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/faculty/retention/remedial',
         'handler' => 'handle_faculty_retention_remedial_save',
         'has_params' => false,

@@ -102,9 +102,17 @@ function handle_student_invitation_create(): void
         $pdo->beginTransaction();
         try {
             $studentStmt = $pdo->prepare(
-                "SELECT s.student_id, s.student_number, s.first_name, s.last_name, s.bu_email, s.status,
-                        s.student_account_user_id, s.user_id, cs.cs_id, cs.cs_name
+                "SELECT s.student_id, s.person_id, s.student_number,
+                        COALESCE(pi.name_prefix, s.name_prefix) AS canonical_name_prefix,
+                        COALESCE(pi.first_name, s.first_name) AS canonical_first_name,
+                        COALESCE(pi.middle_name, s.middle_name) AS canonical_middle_name,
+                        COALESCE(pi.last_name, s.last_name) AS canonical_last_name,
+                        COALESCE(pi.name_suffix, s.name_suffix) AS canonical_name_suffix,
+                        s.name_prefix, s.first_name, s.middle_name, s.last_name, s.name_suffix,
+                        s.bu_email, s.status,
+                        s.student_account_user_id, s.user_id, cs.cs_id, cs.cs_name, cs.school_year
                    FROM students s
+                   JOIN person_identities pi ON pi.person_id = s.person_id
                    JOIN enrollments e ON e.student_id = s.student_id
                    JOIN class_sections cs ON cs.cs_id = e.cs_id
                   WHERE s.student_id = ? AND cs.cs_id = ? AND e.status = 'Active'
@@ -116,6 +124,9 @@ function handle_student_invitation_create(): void
             if ($student === false || strtolower((string) $student['status']) !== 'active') {
                 throw new DomainException('Student must be active and enrolled in a class assigned to this Faculty member.');
             }
+            if (!academic_school_year_is_current($pdo, (string) ($student['school_year'] ?? ''))) {
+                throw new DomainException('Historical class sections are view-only and cannot issue Student invitations.');
+            }
             if ($student['user_id'] !== null) {
                 throw new DomainException('This canonical Student record is linked to a Secretary account and cannot be invited as a Student.');
             }
@@ -123,7 +134,9 @@ function handle_student_invitation_create(): void
             $account = null;
             if ($student['student_account_user_id'] !== null) {
                 $accountStmt = $pdo->prepare(
-                    'SELECT user_id, login_email, role, status, display_name, google_subject FROM user_accounts WHERE user_id = ? FOR UPDATE'
+                    'SELECT user_id, person_id, login_email, role, status, display_name, google_subject
+                       FROM user_accounts
+                      WHERE user_id = ? FOR UPDATE'
                 );
                 $accountStmt->execute([(int) $student['student_account_user_id']]);
                 $account = $accountStmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -132,6 +145,11 @@ function handle_student_invitation_create(): void
                     || strtolower(trim((string) $account['login_email'])) !== strtolower(trim($email))) {
                     throw new DomainException('This Student identity is already linked to an account that cannot be re-invited. Manual reconciliation is required.');
                 }
+                account_identity_require_same_person(
+                    $account['person_id'] !== null ? (int) $account['person_id'] : null,
+                    $student['person_id'] !== null ? (int) $student['person_id'] : null,
+                    'This Student account is linked to a conflicting person identity. Manual reconciliation is required.'
+                );
                 if (!empty($account['google_subject'])) {
                     $evidence = $pdo->prepare(
                         "SELECT COUNT(*) FROM security_tokens
@@ -151,17 +169,41 @@ function handle_student_invitation_create(): void
                     throw new DomainException('An account already exists for this institutional email. Manual reconciliation is required.');
                 }
                 $placeholderHash = password_hash(student_auth_activation_raw_token(), PASSWORD_DEFAULT);
-                $displayName = trim((string) $student['first_name'] . ' ' . (string) $student['last_name']);
+                $displayName = student_auth_student_display_name($student);
                 $insertAccount = $pdo->prepare(
-                    "INSERT INTO user_accounts (login_email, password_hash, role, display_name, status, created_at)
-                     VALUES (?, ?, 'student', ?, 'Pending Activation', CURRENT_TIMESTAMP(6)) RETURNING user_id"
+                    "INSERT INTO user_accounts
+                        (person_id, login_email, password_hash, role, display_name,
+                         name_prefix, first_name, middle_name, last_name, name_suffix,
+                         status, created_at)
+                     VALUES (?, ?, ?, 'student', ?, ?, ?, ?, ?, ?, 'Pending Activation', CURRENT_TIMESTAMP(6))
+                     RETURNING user_id, person_id"
                 );
-                $insertAccount->execute([$email, $placeholderHash, $displayName]);
-                $accountId = (int) $insertAccount->fetchColumn();
+                $insertAccount->execute([
+                    (int) $student['person_id'], $email, $placeholderHash, $displayName,
+                    $student['canonical_name_prefix'], $student['canonical_first_name'],
+                    $student['canonical_middle_name'], $student['canonical_last_name'],
+                    $student['canonical_name_suffix'],
+                ]);
+                $insertedAccount = $insertAccount->fetch(PDO::FETCH_ASSOC);
+                $accountId = (int) ($insertedAccount['user_id'] ?? 0);
+                account_identity_require_same_person(
+                    $insertedAccount['person_id'] !== null ? (int) $insertedAccount['person_id'] : null,
+                    (int) $student['person_id'],
+                    'Student invitation could not preserve the canonical person identity.'
+                );
                 $linkStudent = $pdo->prepare(
-                    'UPDATE students SET student_account_user_id = ? WHERE student_id = ? AND student_account_user_id IS NULL AND user_id IS NULL'
+                    'UPDATE students
+                        SET student_account_user_id = ?,
+                            name_prefix = ?, first_name = ?, middle_name = ?, last_name = ?, name_suffix = ?
+                      WHERE student_id = ? AND student_account_user_id IS NULL AND user_id IS NULL'
                 );
-                $linkStudent->execute([$accountId, (int) $student['student_id']]);
+                $linkStudent->execute([
+                    $accountId,
+                    $student['canonical_name_prefix'], $student['canonical_first_name'],
+                    $student['canonical_middle_name'], $student['canonical_last_name'],
+                    $student['canonical_name_suffix'],
+                    (int) $student['student_id'],
+                ]);
                 if ($linkStudent->rowCount() !== 1) {
                     throw new DomainException('Student identity changed while issuing the invitation.');
                 }
@@ -171,7 +213,33 @@ function handle_student_invitation_create(): void
                     'role' => 'student',
                     'status' => 'Pending Activation',
                     'display_name' => $displayName,
+                    'person_id' => (int) $student['person_id'],
                 ];
+            }
+
+            $displayName = student_auth_student_display_name($student);
+            $syncName = $pdo->prepare(
+                "UPDATE user_accounts
+                    SET display_name = ?, name_prefix = ?, first_name = ?, middle_name = ?, last_name = ?, name_suffix = ?, updated_at = CURRENT_TIMESTAMP(6)
+                  WHERE user_id = ? AND role = 'student' AND status = 'Pending Activation'"
+            );
+            $syncName->execute([
+                $displayName, $student['canonical_name_prefix'], $student['canonical_first_name'],
+                $student['canonical_middle_name'], $student['canonical_last_name'],
+                $student['canonical_name_suffix'], (int) $account['user_id'],
+            ]);
+            $syncStudent = $pdo->prepare(
+                "UPDATE students
+                    SET name_prefix = ?, first_name = ?, middle_name = ?, last_name = ?, name_suffix = ?
+                  WHERE student_id = ? AND student_account_user_id = ? AND user_id IS NULL"
+            );
+            $syncStudent->execute([
+                $student['canonical_name_prefix'], $student['canonical_first_name'],
+                $student['canonical_middle_name'], $student['canonical_last_name'],
+                $student['canonical_name_suffix'], (int) $student['student_id'], (int) $account['user_id'],
+            ]);
+            if ($syncStudent->rowCount() !== 1) {
+                throw new DomainException('Student identity changed while refreshing the invitation.');
             }
 
             $accountId = (int) $account['user_id'];
@@ -208,7 +276,7 @@ function handle_student_invitation_create(): void
             );
             $outbox->execute([
                 $authCtx['user_id'], $email,
-                trim((string) $student['first_name'] . ' ' . (string) $student['last_name']),
+                student_auth_student_display_name($student),
                 $subject, $messageBody, uuid_v4_string(),
             ]);
             $emailId = (int) $outbox->fetchColumn();
@@ -296,12 +364,20 @@ function handle_student_invitation_get(): void
             return;
         }
         $stmt = $pdo->prepare(
-            "SELECT s.student_id, s.student_number, s.first_name, s.last_name, s.bu_email,
+            "SELECT s.student_id, s.person_id, s.student_number,
+                    pi.name_prefix AS canonical_name_prefix,
+                    pi.first_name AS canonical_first_name,
+                    pi.middle_name AS canonical_middle_name,
+                    pi.last_name AS canonical_last_name,
+                    pi.name_suffix AS canonical_name_suffix,
+                    s.bu_email, ua.person_id AS account_person_id,
                     ua.login_email, cs.cs_name
                FROM students s
                JOIN user_accounts ua ON ua.user_id = ?
+               JOIN person_identities pi ON pi.person_id = s.person_id
                JOIN class_sections cs ON cs.cs_id = ?
               WHERE s.student_id = ? AND s.student_account_user_id = ua.user_id
+                AND s.person_id = ua.person_id
                 AND s.user_id IS NULL AND ua.role = 'student' AND ua.status = 'Pending Activation'
                 AND lower(s.status) = 'active' AND lower(s.bu_email) = lower(ua.login_email)"
         );
@@ -320,7 +396,12 @@ function handle_student_invitation_get(): void
         student_auth_success_response([
             'status' => 'ok',
             'invitation' => [
-                'studentName' => trim((string) $student['first_name'] . ' ' . (string) $student['last_name']),
+                'studentName' => student_auth_student_display_name($student),
+                'prefix' => $student['canonical_name_prefix'],
+                'firstName' => $student['canonical_first_name'],
+                'middleName' => $student['canonical_middle_name'],
+                'lastName' => $student['canonical_last_name'],
+                'suffix' => $student['canonical_name_suffix'],
                 'studentNumber' => (string) $student['student_number'],
                 'email' => (string) $student['login_email'],
                 'className' => (string) $student['cs_name'],
@@ -385,10 +466,12 @@ function handle_student_activate(): void
         }
 
         $identityStmt = $pdo->prepare(
-            "SELECT ua.login_email
+            "SELECT ua.login_email, ua.person_id AS account_person_id,
+                    s.person_id AS student_person_id
                FROM user_accounts ua
                JOIN students s ON s.student_account_user_id = ua.user_id
               WHERE ua.user_id = ? AND s.student_id = ? AND s.user_id IS NULL
+                AND s.person_id = ua.person_id
                 AND ua.role = 'student' AND ua.status = 'Pending Activation'
                 AND lower(s.status) = 'active' AND lower(s.bu_email) = lower(ua.login_email)"
         );
@@ -430,8 +513,15 @@ function handle_student_activate(): void
                 : false;
 
             $accountStmt = $pdo->prepare(
-                "SELECT user_id, login_email, role, display_name, status, google_subject
-                   FROM user_accounts WHERE user_id = ? FOR UPDATE"
+                "SELECT ua.user_id, ua.person_id, ua.login_email, ua.role,
+                        COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(pi.name_prefix, ''),
+                            NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''),
+                            NULLIF(pi.last_name, ''), NULLIF(pi.name_suffix, '')), ''),
+                            ua.display_name) AS display_name,
+                        ua.status, ua.google_subject
+                   FROM user_accounts ua
+                   JOIN person_identities pi ON pi.person_id = ua.person_id
+                  WHERE ua.user_id = ? FOR UPDATE OF ua, pi"
             );
             $accountStmt->execute([(int) $contextRow['user_id']]);
             $account = $accountStmt->fetch(PDO::FETCH_ASSOC);
@@ -466,6 +556,9 @@ function handle_student_activate(): void
                 && $account['status'] === 'Pending Activation'
                 && $account['role'] === 'student'
                 && (int) $student['student_account_user_id'] === (int) $account['user_id']
+                && $student['person_id'] !== null
+                && $account['person_id'] !== null
+                && (int) $student['person_id'] === (int) $account['person_id']
                 && $student['user_id'] === null
                 && strtolower((string) $student['status']) === 'active'
                 && $student['bu_email'] !== null
@@ -548,11 +641,17 @@ function handle_development_mock_student_session(): void
         $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare(
-                "SELECT user_id, login_email, password_hash, role, display_name, status, token_version
-                   FROM user_accounts
-                  WHERE login_email = 'student@bicol-u.edu.ph'
+                "SELECT ua.user_id, ua.login_email, ua.password_hash, ua.role,
+                        COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(pi.name_prefix, ''),
+                            NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''),
+                            NULLIF(pi.last_name, ''), NULLIF(pi.name_suffix, '')), ''),
+                            ua.display_name) AS display_name,
+                        ua.status, ua.token_version
+                   FROM user_accounts ua
+                   JOIN person_identities pi ON pi.person_id = ua.person_id
+                  WHERE ua.login_email = 'student@bicol-u.edu.ph'
                     AND role = 'student'
-                  FOR UPDATE"
+                  FOR UPDATE OF ua, pi"
             );
             $stmt->execute();
             $user = $stmt->fetch(PDO::FETCH_ASSOC);

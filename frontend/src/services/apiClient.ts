@@ -571,8 +571,12 @@ export function getFacultyInvitation(token: string): Promise<{
   return request('GET', `/auth/faculty/invitation?token=${encodeURIComponent(token)}`);
 }
 
-export function activateFacultyInvitation(token: string, password: string): Promise<{ status: string; message: string }> {
-  return request('POST', '/auth/faculty/activate', { token, password });
+export function activateFacultyInvitation(token: string, password: string, credential?: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/faculty/activate', {
+    token,
+    password,
+    ...(credential ? { credential } : {}),
+  });
 }
 
 export function inviteSecretaryApi(data: { student_name: string; student_number?: string; class_name: string; email: string }): Promise<{ status: string; token: string; invitation_link: string; message: string }> {
@@ -697,6 +701,7 @@ export function getFacultyActivityApi(limit = 100): Promise<{
 export function getAdminProfileApi(): Promise<{
   status: string;
   profile: {
+    prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string;
     id: string;
     name: string;
     email: string;
@@ -708,7 +713,7 @@ export function getAdminProfileApi(): Promise<{
   return request('GET', '/admin/profile');
 }
 
-export function updateAdminProfileApi(data: { name: string; email: string; office?: string }): Promise<{ status: string; message: string }> {
+export function updateAdminProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string; email: string; office?: string }): Promise<{ status: string; message: string }> {
   return request('POST', '/admin/profile', data);
 }
 
@@ -780,6 +785,11 @@ export function getFacultyDashboardKpisApi(): Promise<{
 export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial' | 'archived';
 
 export interface FacultyRetentionRecord {
+  midtermComplete?: boolean;
+  midtermPercentage?: number | null;
+  watchlistUnlocked?: boolean;
+  unlockedAt?: string | null;
+  schoolYear?: string;
   enrollmentId: string;
   studentId: string;
   studentNumber: string | null;
@@ -800,8 +810,17 @@ export function getFacultyRetentionApi(): Promise<{
   return request('GET', '/faculty/retention');
 }
 
+export function unlockFacultyWatchlistApi(classId: string): Promise<{ status: string; classId: string; watchlistUnlocked: boolean }> {
+  return request('POST', '/faculty/retention/watchlist/unlock', { classId });
+}
+
 export function getFacultyStudentsApi(): Promise<Array<{
   id: string;
+  prefix?: string | null;
+  firstName?: string;
+  middleName?: string | null;
+  lastName?: string;
+  suffix?: string | null;
   studentId: string;
   name: string;
   email: string;
@@ -829,6 +848,8 @@ export function getFacultyStudentsApi(): Promise<Array<{
 
 export function createStudentApi(data: {
   studentId: string;
+  prefix?: string;
+  suffix?: string;
   firstName: string;
   middleName?: string;
   lastName: string;
@@ -849,6 +870,8 @@ export function createStudentApi(data: {
 }
 
 export function updateFacultyStudentApi(studentId: string | number, data: {
+  prefix?: string;
+  suffix?: string;
   firstName?: string;
   middleName?: string;
   lastName?: string;
@@ -1075,6 +1098,7 @@ export function computeFacultyGradesApi(classId?: string): Promise<FacultyComput
 export function getFacultyProfileApi(): Promise<{
   status: string;
   profile: {
+    prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string;
     id: string;
     name: string;
     email: string;
@@ -1086,7 +1110,7 @@ export function getFacultyProfileApi(): Promise<{
   return request('GET', '/faculty/profile');
 }
 
-export function updateFacultyProfileApi(data: { name: string; email: string }): Promise<{ status: string; message: string }> {
+export function updateFacultyProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string; email: string }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/profile', data);
 }
 
@@ -1198,6 +1222,7 @@ export function getSecretaryActivityApi(limit = 50): Promise<{
 export function getSecretaryProfileApi(): Promise<{
   status: string;
   profile: {
+    prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string;
     id: string;
     name: string;
     email: string;
@@ -1210,7 +1235,7 @@ export function getSecretaryProfileApi(): Promise<{
   return request('GET', '/secretary/profile');
 }
 
-export function updateSecretaryProfileApi(data: { name: string; email: string }): Promise<{ status: string; message: string }> {
+export function updateSecretaryProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string; email: string }): Promise<{ status: string; message: string }> {
   return request('POST', '/secretary/profile', data);
 }
 
@@ -1343,6 +1368,8 @@ export function getFacultyEmailLogsApi(): Promise<{
 
 // Class Management API Services
 export interface FacultyClassItem {
+  isHistorical?: boolean;
+  isCurrentSchoolYear?: boolean;
   id: string;
   csId: number;
   csName: string;
@@ -1372,7 +1399,7 @@ export interface CourseCatalogItem {
   isClinical: boolean;
 }
 
-export function getFacultyClassesApi(): Promise<{ status: string; classes: FacultyClassItem[] }> {
+export function getFacultyClassesApi(): Promise<{ status: string; currentSchoolYear?: string; classes: FacultyClassItem[] }> {
   return request('GET', '/faculty/classes');
 }
 

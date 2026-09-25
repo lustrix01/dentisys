@@ -1,3 +1,4 @@
+import { PersonNameFields, emptyNameParts, composePersonName } from '../../components/PersonNameFields';
 import React, { useEffect, useState } from 'react';
 import { BookOpen, BriefcaseBusiness, CheckCircle2, Mail, Phone, Save, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
@@ -9,9 +10,18 @@ import { recordAudit } from '../../services/auditService';
 import { getFacultyProfileApi, updateFacultyProfileApi, getFacultyClassesApi } from '../../services/apiClient';
 import { normalizePersonName } from '../../utils/nameNormalization';
 
+const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+
+function completeInstitutionalEmail(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('@')) return trimmed;
+  return `${trimmed}@${DEFAULT_EMAIL_DOMAIN}`;
+}
+
 const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-clinical-500';
 
 export const Profile: React.FC = () => {
+  const [nameParts, setNameParts] = useState(emptyNameParts);
   const { user } = useAuth();
   const [name, setName] = useState(user?.display_name || 'Faculty Member');
   const [email, setEmail] = useState(user?.login_email || '');
@@ -25,6 +35,7 @@ export const Profile: React.FC = () => {
     getFacultyProfileApi()
       .then((res) => {
         if (res.profile) {
+          setNameParts({ prefix: res.profile.prefix || '', firstName: res.profile.firstName || '', middleName: res.profile.middleName || '', lastName: res.profile.lastName || '', suffix: res.profile.suffix || '' });
           if (res.profile.name) setName(res.profile.name);
           if (res.profile.email) setEmail(res.profile.email);
         }
@@ -46,9 +57,11 @@ export const Profile: React.FC = () => {
     event.preventDefault();
     setMessage(null);
     try {
-      const normalizedName = normalizePersonName(name);
-      await updateFacultyProfileApi({ name: normalizedName, email });
+      const normalizedName = composePersonName(nameParts);
+      const completedEmail = completeInstitutionalEmail(email);
+      await updateFacultyProfileApi({ ...nameParts, name: normalizedName, email: completedEmail });
       setName(normalizedName);
+      setEmail(completedEmail);
       recordAudit({ action: 'Updated profile', module: 'Profile', description: 'Updated faculty professional profile details.', status: 'Success' });
       setSaved(true);
       setMessage({ type: 'success', text: 'Profile saved successfully.' });
@@ -73,7 +86,7 @@ export const Profile: React.FC = () => {
         <div className="lg:col-span-8 space-y-5">
           <Card className="p-0 overflow-hidden">
             <CardHeader className="border-b border-slate-100 dark:border-slate-800/80"><CardTitle className="flex items-center gap-2 text-sm"><UserRound className="w-4.5 h-4.5 text-clinical-550" />Professional information</CardTitle></CardHeader>
-            <CardContent className="p-5"><form onSubmit={save} className="space-y-5">{message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}<div className="grid sm:grid-cols-2 gap-4"><Field label="Full faculty name" value={name} setValue={setName} /><Field label="Email address" value={email} setValue={setEmail} type="email" icon={<Mail className="w-4 h-4" />} /><Field label="Contact number" value={phone} setValue={setPhone} icon={<Phone className="w-4 h-4" />} /><Field label="Clinical specialty" value={specialty} setValue={setSpecialty} icon={<BriefcaseBusiness className="w-4 h-4" />} /></div><div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800"><button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/10 transition-all"><Save className="w-4 h-4" />{saved ? 'Profile saved' : 'Save profile'}</button></div></form></CardContent>
+            <CardContent className="p-5"><form onSubmit={save} className="space-y-5">{message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}<div className="grid sm:grid-cols-2 gap-4"><div className="sm:col-span-2"><PersonNameFields value={nameParts} onChange={setNameParts} /></div><Field label="Email address" value={email} setValue={setEmail} type="email" icon={<Mail className="w-4 h-4" />} /><Field label="Contact number" value={phone} setValue={setPhone} icon={<Phone className="w-4 h-4" />} /><Field label="Clinical specialty" value={specialty} setValue={setSpecialty} icon={<BriefcaseBusiness className="w-4 h-4" />} /></div><div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800"><button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/10 transition-all"><Save className="w-4 h-4" />{saved ? 'Profile saved' : 'Save profile'}</button></div></form></CardContent>
           </Card>
           <MfaSettingsCard userEmail={email || 'faculty@bicol-u.edu.ph'} roleName="Faculty Member" />
           <GoogleLinkCard />
@@ -83,4 +96,4 @@ export const Profile: React.FC = () => {
     </div>
   );
 };
-const Field = ({ label, value, setValue, type = 'text', icon }: { label: string; value: string; setValue: (value: string) => void; type?: string; icon?: React.ReactNode }) => <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}<span className="relative block">{icon && <span className="absolute left-3.5 top-4 text-slate-400">{icon}</span>}<input type={type} required={type === 'email'} value={value} onChange={event => { let val = event.target.value; if (label.toLowerCase().includes('name')) val = val.replace(/[0-9]/g, ''); if (label.toLowerCase().includes('contact')) val = val.replace(/[^0-9\+\-\s\(\)]/g, ''); setValue(val); }} onBlur={() => { if (label.toLowerCase().includes('name')) setValue(normalizePersonName(value)); }} className={`${inputClass} ${icon ? 'pl-10' : ''}`} /></span></label>;
+const Field = ({ label, value, setValue, type = 'text', icon }: { label: string; value: string; setValue: (value: string) => void; type?: string; icon?: React.ReactNode }) => { const isEmail = type === 'email'; const hasDomain = value.includes('@'); return <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}<span className="relative block">{icon && <span className="absolute left-3.5 top-4 text-slate-400">{icon}</span>}<span className="flex"><input type={isEmail ? 'text' : type} inputMode={isEmail ? 'email' : undefined} required={isEmail} placeholder={isEmail ? (hasDomain ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username') : undefined} value={value} onChange={event => { let val = event.target.value; if (label.toLowerCase().includes('name')) val = val.replace(/[0-9]/g, ''); if (label.toLowerCase().includes('contact')) val = val.replace(/[^0-9\+\-\s\(\)]/g, ''); setValue(val); }} onBlur={() => { if (label.toLowerCase().includes('name')) setValue(normalizePersonName(value)); }} className={`${inputClass} ${icon ? 'pl-10' : ''} ${isEmail && !hasDomain ? 'rounded-l-xl rounded-r-none' : 'rounded-xl'}`} />{isEmail && !hasDomain && <span className="mt-1.5 flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-clinical-700 dark:border-slate-800 dark:bg-slate-900 dark:text-clinical-300">@{DEFAULT_EMAIL_DOMAIN}</span>}</span></span></label>; };

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Pencil, Plus, Search } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Lock, Pencil, Plus, Search, Unlock } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
@@ -7,6 +7,7 @@ import {
   getFacultyRetentionApi,
   saveFacultyRemedialApi,
   updateFacultyRetentionStatusApi,
+  unlockFacultyWatchlistApi,
 } from '../../services/apiClient';
 import type {
   FacultyRetentionRecord,
@@ -169,7 +170,7 @@ export const RetentionMonitoring: React.FC = () => {
 
   const [selectedClassId, setSelectedClassId] = useState('all');
   const [selectedSubjectCode, setSelectedSubjectCode] = useState('all');
-  const [activeTab, setActiveTab] = useState<'watchlist' | 'remedials' | 'risk-rules'>('watchlist');
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'midterm' | 'remedials' | 'risk-rules'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');
 
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
@@ -185,6 +186,9 @@ export const RetentionMonitoring: React.FC = () => {
   const [selectedOverrideEnrollmentId, setSelectedOverrideEnrollmentId] = useState<string | null>(null);
   const [overrideStatus, setOverrideStatus] = useState<'active' | 'warning' | 'critical' | 'remedial'>('warning');
   const [overrideRemarks, setOverrideRemarks] = useState('');
+
+  const [selectedPolicyRecord, setSelectedPolicyRecord] = useState<FacultyRetentionRecord | null>(null);
+  const [isPolicyOpen, setIsPolicyOpen] = useState(false);
 
   const refreshRetention = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
@@ -472,6 +476,25 @@ export const RetentionMonitoring: React.FC = () => {
     </span>
   );
 
+  const openPolicyProgression = (record: FacultyRetentionRecord) => {
+    setSelectedPolicyRecord(record);
+    setIsPolicyOpen(true);
+  };
+
+  const handleManualWatchlistUnlock = async () => {
+    if (selectedClassId === 'all' || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await unlockFacultyWatchlistApi(selectedClassId);
+      await refreshRetention();
+      setNotification({ type: 'success', message: 'Midterm Watchlist unlocked for every student in the selected class. Grades are unchanged.' });
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : 'Unable to unlock the watchlist.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
@@ -505,6 +528,7 @@ export const RetentionMonitoring: React.FC = () => {
 
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit overflow-x-auto">
+          <button type="button" onClick={() => setActiveTab('midterm')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap ${activeTab === 'midterm' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Midterm Watchlist</button>
           <button type="button" onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'watchlist' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Retention Watchlist ({watchlistRecords.length})</button>
           <button type="button" onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'remedials' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Remedial Exams ({pendingRemedialCount} Pending)</button>
           <button type="button" onClick={() => { setActiveTab('risk-rules'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'risk-rules' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Midterm Evaluation Rules</button>
@@ -530,10 +554,34 @@ export const RetentionMonitoring: React.FC = () => {
         </div>
       </div>
 
+      {activeTab === 'midterm' && (
+        <Card className="p-6 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Midterm Watchlist</h2><p className="mt-1 text-xs text-slate-500">Access opens as each student's midterm grades become complete. Manual unlock covers the selected class.</p></div>
+            <button type="button" disabled={selectedClassId === 'all' || isSubmitting || isLoading} onClick={() => void handleManualWatchlistUnlock()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"><Unlock className="h-4 w-4" />{isSubmitting ? 'Unlocking...' : 'Unlock selected class'}</button>
+          </div>
+          {selectedClassId === 'all' && <p className="text-xs text-amber-700 dark:text-amber-400">Choose one class above to unlock its watchlist.</p>}
+          <div className="overflow-x-auto"><table className="w-full text-left text-xs">
+            <thead className="text-[10px] uppercase text-slate-400"><tr><th className="p-3">Student</th><th className="p-3">Class</th><th className="p-3">Midterm score</th><th className="p-3">Access</th></tr></thead>
+            <tbody>{filteredRecords.map(record => {
+              const accessible = record.midtermComplete === true || record.watchlistUnlocked === true;
+              return <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="p-3 font-bold">{record.studentName}<span className="block text-[10px] font-normal text-slate-400">{record.studentNumber}</span></td>
+                <td className="p-3">{record.className}</td>
+                <td className="p-3">{!accessible ? 'Locked' : isFiniteNumber(record.midtermPercentage) ? `${record.midtermPercentage.toFixed(2)}%` : 'Grades incomplete'}</td>
+                <td className="p-3"><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${accessible ? 'bg-emerald-500/10 text-emerald-700' : 'bg-amber-500/10 text-amber-700'}`}>{accessible ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}{record.watchlistUnlocked ? 'Class manually unlocked' : record.midtermComplete ? 'Grades complete' : 'Grades incomplete'}</span></td>
+              </tr>;
+            })}</tbody>
+          </table></div>
+          {filteredRecords.length === 0 && <p className="py-8 text-center text-xs text-slate-400">{isLoading ? 'Loading watchlist...' : 'No students match these filters.'}</p>}
+          <p className="text-[11px] text-slate-500">Midterm scores provide an early review. Final retention decisions remain in Retention Watchlist.</p>
+        </Card>
+      )}
+
       {activeTab === 'watchlist' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-400">Only server-persisted retention states and academic values are shown.</p></div>
+            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-400">Final grades and saved retention decisions. Select a status to view policy progression.</p></div>
             <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all"><Plus className="w-3.5 h-3.5" /><span>Schedule Remedial Exam</span></button>
           </div>
           <div className="overflow-x-auto">
@@ -547,7 +595,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4 font-mono">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
                     <td className="py-3.5 px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
                     <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? record.gwa.toFixed(2) : 'GWA unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
-                    <td className="py-3.5 px-4">{renderStatusBadge(record.state)}</td>
+                    <td className="py-3.5 px-4"><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
                     <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button><button type="button" onClick={() => openOverride(record)} disabled={!canOverrideRecord(record)} title={!canOverrideRecord(record) ? (record.state === 'archived' ? 'Status override unavailable for archived enrollments.' : 'Status override unavailable: persisted identifiers are missing.') : 'Override retention status'} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 text-[11px] font-bold"><Pencil className="w-3.5 h-3.5" /></button></div></td>
                   </tr>
                 ))}
@@ -565,14 +613,14 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Exam Date</th><th className="py-3 px-4">Score & Outcome</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Exam Date</th><th className="py-3 px-4">Score & Policy Status</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {remedialRows.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No persisted remedial records match the selected filters.'}</td></tr> : remedialRows.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">{row.remedial.examDate ?? 'Exam date unavailable'}</td>
-                    <td className="py-3.5 px-4">{row.remedial.status === 'passed' ? <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">PASSED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'failed' ? <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">FAILED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'pending' ? <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">Scheduled / Pending Exam</span> : <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-bold text-[11px] border border-slate-200">Outcome unavailable</span>}</td>
+                    <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2">{row.remedial.status === 'passed' ? <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">PASSED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'failed' ? <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">FAILED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'pending' ? <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">Scheduled / Pending Exam</span> : <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-bold text-[11px] border border-slate-200">Outcome unavailable</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current retention policy stage">Policy status <ChevronRight className="h-3 w-3" /></button></div></td>
                     <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{row.remedial.status === 'pending' && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Exam</button>}{row.remedial.status === 'unavailable' && <span className="text-[10px] text-amber-600" title="Persisted remedial data does not include an actionable status">Outcome unavailable</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
                   </tr>
                 ))}
@@ -614,6 +662,42 @@ export const RetentionMonitoring: React.FC = () => {
             <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Reason for Override</label><textarea rows={3} required value={overrideRemarks} onChange={(event) => setOverrideRemarks(event.target.value)} placeholder="Enter at least eight characters..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
             <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetOverrideForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Save Override'}</button></div>
           </form>
+        </Modal>
+      )}
+
+      {isPolicyOpen && selectedPolicyRecord && (
+        <Modal
+          isOpen={isPolicyOpen}
+          onClose={() => {
+            setIsPolicyOpen(false);
+            setSelectedPolicyRecord(null);
+          }}
+          title="Retention Policy Progression"
+        >
+          <div className="space-y-4 text-xs">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedPolicyRecord.studentName, 'Student name unavailable')}</p>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{textOrUnavailable(selectedPolicyRecord.subjectCode, 'Subject code unavailable')} · {textOrUnavailable(selectedPolicyRecord.className, `Class name unavailable (${selectedPolicyRecord.classId})`)}</p>
+                </div>
+                {renderStatusBadge(selectedPolicyRecord.state)}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Final grade / GWA</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? selectedPolicyRecord.gwa.toFixed(2) : 'Unavailable'}</span></div>
+                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Recorded score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {([selectedPolicyRecord.state] as FacultyRetentionState[]).map((stage) => (
+                <div key={stage} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${selectedPolicyRecord.state === stage ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950'}`}>
+                  <div className="flex-1"><p className="font-bold text-slate-800 dark:text-slate-100">{retentionStateLabel(stage)}</p><p className="text-[10px] text-slate-400">Current saved status</p></div>
+                  {selectedPolicyRecord.state === stage && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                </div>
+              ))}
+            </div>
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">The displayed status and score facts are read from persisted retention data. Detailed policy progression is unavailable for this view.</p>
+          </div>
         </Modal>
       )}
     </div>

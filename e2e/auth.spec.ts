@@ -48,7 +48,7 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page.locator('h1')).toContainText('DentiSYS');
     await expect(page.locator('h2')).toContainText('Login to Your Account');
 
-    const emailInput = page.locator('input[type="email"]');
+    const emailInput = page.locator('input[inputmode="email"]');
     const passwordInput = page.locator('input[type="password"]');
     const submitButton = page.locator('button[type="submit"]');
 
@@ -129,14 +129,14 @@ test.describe('Auth Module E2E Tests', () => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', invitations }) });
         return;
       }
-      const body = route.request().postDataJSON() as { name: string; email: string };
-      if (body.name.includes(',')) {
-        await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ status: 'error', code: 'VALIDATION_ERROR', message: 'Validation failed.', errors: [{ field: 'name', message: 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.' }] }) });
+      const body = route.request().postDataJSON() as { firstName: string; lastName: string; email: string };
+      if (body.firstName.includes(',')) {
+        await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ status: 'error', code: 'VALIDATION_ERROR', message: 'Validation failed.', errors: [{ field: 'firstName', message: 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.' }] }) });
         return;
       }
       const existing = invitations.find(invitation => invitation.email === body.email);
       if (existing) existing.invitedAt = new Date().toISOString();
-      else invitations.push({ id: '17', name: body.name, email: body.email, status: 'Pending', invitedAt: new Date().toISOString(), expiresAt: '2026-09-26T00:00:00Z' });
+      else invitations.push({ id: '17', name: `${body.firstName} ${body.lastName}`, email: body.email, status: 'Pending', invitedAt: new Date().toISOString(), expiresAt: '2026-09-26T00:00:00Z' });
       const invitation = invitations.find(item => item.email === body.email);
       await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', delivery_status: 'Sent', invitation }) });
     });
@@ -153,11 +153,13 @@ test.describe('Auth Module E2E Tests', () => {
     });
     await page.goto('/admin/faculty-invite');
     await expect(page.getByRole('main').getByRole('heading', { name: 'Faculty Invitations' })).toBeVisible();
-    await page.getByLabel('Faculty name').fill('Dr. Invalid, DMD');
+    await page.getByLabel('First name *').fill('Maria,');
+    await page.getByLabel('Last name *').fill('Invalid');
     await page.getByLabel('Institutional email').fill('invalid.faculty@bicol-u.edu.ph');
     await page.getByRole('button', { name: 'Send invite' }).click();
     await expect(page.getByRole('alert')).toContainText(/Name can only contain letters/i);
-    await page.getByLabel('Faculty name').fill('Dr. Test Faculty');
+    await page.getByLabel('First name *').fill('Test');
+    await page.getByLabel('Last name *').fill('Faculty');
     await page.getByLabel('Institutional email').fill('test.faculty@bicol-u.edu.ph');
     await page.getByRole('button', { name: 'Send invite' }).click();
     await expect(page.getByText('test.faculty@bicol-u.edu.ph')).toBeVisible();
@@ -220,7 +222,7 @@ test.describe('Auth Module E2E Tests', () => {
     });
 
     await page.goto('/forgot-password');
-    await page.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
     await page.click('button[type="submit"]');
 
     await expect(page.locator('body')).toContainText(/Check your email/i);
@@ -246,7 +248,7 @@ test.describe('Auth Module E2E Tests', () => {
     });
 
     await page.goto('/forgot-password');
-    await page.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
     await page.click('button[type="submit"]');
 
     await expect(page.locator('body')).toContainText(/Check your email/i);
@@ -276,7 +278,7 @@ test.describe('Auth Module E2E Tests', () => {
     });
 
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
 
@@ -320,7 +322,7 @@ test.describe('Auth Module E2E Tests', () => {
     });
 
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'mfa_user@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'mfa_user@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
 
@@ -437,7 +439,7 @@ test('mocked Google direct login completes normal authentication', async ({ page
 
     // Navigate to /forgot-password and submit reset request
     await page.goto('/forgot-password');
-    await page.fill('input[type="email"]', testEmail);
+    await page.fill('input[inputmode="email"]', testEmail);
     await page.click('button[type="submit"]');
 
     // Assert development reset link is displayed
@@ -489,7 +491,7 @@ test('mocked Google direct login completes normal authentication', async ({ page
     // Assert redirection to /login or navigate to /login and verify logging in with new password
     await page.waitForURL('**/login');
     await expect(page.locator('h2')).toContainText('Login to Your Account');
-    await page.fill('input[type="email"]', testEmail);
+    await page.fill('input[inputmode="email"]', testEmail);
     await page.fill('input[type="password"]', testPassword);
     await page.click('button[type="submit"]');
 
@@ -517,6 +519,6 @@ test('configured Google Sign-In reports GIS script load failure without blocking
 
   await page.goto('/login');
   await expect(page.getByRole('alert')).toContainText('Google Sign-In could not be loaded.');
-  await expect(page.locator('input[type="email"]')).toBeVisible();
+  await expect(page.locator('input[inputmode="email"]')).toBeVisible();
   await expect(page.locator('input[type="password"]')).toBeVisible();
 });

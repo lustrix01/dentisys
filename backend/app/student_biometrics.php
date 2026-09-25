@@ -49,10 +49,13 @@ function student_biometric_identity(PDO $pdo, array $config, array $authCtx): ar
 
     $stmt = $pdo->prepare(
         "SELECT s.student_id, s.student_number, s.bu_email, s.status AS student_status,
-                ua.login_email, ua.status AS account_status
+                ua.login_email, ua.status AS account_status,
+                s.person_id AS student_person_id, ua.person_id AS account_person_id
            FROM students s
            JOIN user_accounts ua ON ua.user_id = ?
+           JOIN person_identities pi ON pi.person_id = s.person_id
           WHERE (s.student_account_user_id = ? OR s.user_id = ?)
+            AND s.person_id = ua.person_id
           ORDER BY s.student_id"
     );
     $userId = (int) $authCtx['user_id'];
@@ -64,6 +67,10 @@ function student_biometric_identity(PDO $pdo, array $config, array $authCtx): ar
     $row = $rows[0];
     if ($row['account_status'] !== 'Active' || strtolower((string) $row['student_status']) !== 'active') {
         throw new StudentBiometricException('Student identity is not active.', 403, 'STUDENT_IDENTITY_UNAVAILABLE');
+    }
+    if ($row['student_person_id'] === null || $row['account_person_id'] === null
+        || (int) $row['student_person_id'] !== (int) $row['account_person_id']) {
+        throw new StudentBiometricException('Secretary Student identity is unavailable.', 403, 'STUDENT_IDENTITY_UNAVAILABLE');
     }
     if ($row['bu_email'] === null || strtolower(trim((string) $row['bu_email'])) !== strtolower(trim((string) $row['login_email']))) {
         throw new StudentBiometricException('Secretary Student identity is unavailable.', 403, 'STUDENT_IDENTITY_UNAVAILABLE');

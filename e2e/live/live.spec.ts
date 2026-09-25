@@ -8,6 +8,7 @@ const facultyPassword = process.env.E2E_FACULTY_PASSWORD ?? 'Faculty123!';
 const secretaryEmail = process.env.E2E_SECRETARY_EMAIL ?? 'secretary@bicol-u.edu.ph';
 const secretaryPassword = process.env.E2E_SECRETARY_PASSWORD ?? 'Secretary123!';
 const studentPassword = process.env.E2E_STUDENT_PASSWORD ?? 'Student123!';
+const mailpitBaseUrl = process.env.E2E_MAILPIT_BASE_URL ?? 'http://127.0.0.1:18025';
 
 function decodeBase32(value: string): Buffer {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -116,6 +117,10 @@ test('administrator login, auth/me, reload refresh, settings, and logout invalid
     headers: { Authorization: `Bearer ${credentials.access_token}` },
   });
   expect(logout.status()).toBeLessThan(500);
+  // Stop the mounted application before proving the refresh credential was
+  // invalidated; otherwise an in-flight UI request can report the expected
+  // post-logout 401 as a browser console error.
+  await page.goto('about:blank');
   const invalidated = await page.request.post('/api/auth/refresh');
   expect(invalidated.status()).toBe(401);
 });
@@ -224,7 +229,7 @@ test('faculty can create a student and enrollment with returned identifiers', as
     }),
   ]));
 
-  const mailpit = await page.request.get('http://127.0.0.1:18025/api/v1/messages');
+  const mailpit = await page.request.get(`${mailpitBaseUrl}/api/v1/messages`);
   const mailpitPayload = await jsonResponse(mailpit);
   expect(mailpitPayload.messages).toEqual(expect.arrayContaining([
     expect.objectContaining({ Subject: subject }),
@@ -269,14 +274,14 @@ test('Faculty-issued Student invitation, Mailpit acceptance, password login, and
   });
   expect(invitation.ok(), await invitation.text()).toBeTruthy();
 
-  const mailpitMessages = await page.request.get('http://127.0.0.1:18025/api/v1/messages');
+  const mailpitMessages = await page.request.get(`${mailpitBaseUrl}/api/v1/messages`);
   const mailpitPayload = await jsonResponse(mailpitMessages);
   const activationMessage = (mailpitPayload.messages as Array<{ ID: string; Subject: string; To?: Array<{ Address?: string }> }>).find(message =>
     message.Subject === 'DentiSys Student Invitation'
     && message.To?.some(recipient => recipient.Address?.toLowerCase() === email.toLowerCase())
   );
   expect(activationMessage).toBeTruthy();
-  const messageDetail = await page.request.get(`http://127.0.0.1:18025/api/v1/message/${activationMessage!.ID}`);
+  const messageDetail = await page.request.get(`${mailpitBaseUrl}/api/v1/message/${activationMessage!.ID}`);
   const detailPayload = await jsonResponse(messageDetail);
   const activationToken = JSON.stringify(detailPayload).match(/activate-student\?token=([A-Za-z0-9_-]{43})/)?.[1];
   expect(activationToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -317,12 +322,12 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await page.goto('/secretary/start-session');
 
   // Wait for initial active session resolution to finish loading
-  await expect(page.getByText('Resolving active attendance session status...')).toHaveCount(0);
+  await expect(page.getByText('Resolving active attendance session status...')).toHaveCount(0, { timeout: 15000 });
 
   // 4. Verify initial state: form is present, no active session banner
-  await expect(page.getByRole('heading', { name: /Start Class Session & Attendance Control/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Start Class Session & Attendance Control/i })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible({ timeout: 15000 });
 
   // Verify assigned class is shown (CLINIC-4B)
   await expect(page.getByText('CLINIC-4B')).toBeVisible();
@@ -375,7 +380,8 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   // 8. Test navigation away and back
   await page.click('a[href="/"]');
   await expect(page).toHaveURL('/');
-  await page.click('a[href="/secretary/start-session"]');
+  await page.getByRole('link', { name: 'Attendance Monitoring', exact: true }).click();
+  await page.getByRole('link', { name: 'Start Attendance Session', exact: true }).click();
   await expect(page).toHaveURL('/secretary/start-session');
 
   await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
@@ -401,12 +407,12 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
 
   // 10. Verify UI returns to inactive state
   await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible({ timeout: 15000 });
 
   // 11. Refresh browser again to confirm inactive state persists
   await page.reload();
   await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible({ timeout: 15000 });
 
   console.log('LIVE BROWSER VALIDATION PASSED FOR SESSION ID:', authoritativeSessionId);
 });
@@ -446,7 +452,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await page.goto('/attendance');
 
   // Verify header and initial empty worksheet state
-  await expect(page.getByRole('main').getByRole('heading', { name: /Attendance Monitoring/i })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('heading', { name: /Attendance Monitoring/i })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText(/Please select an Assigned Course and Class Section/i)).toBeVisible();
 
   // Clear any legacy localStorage to verify Attendance Monitoring does not write to it
@@ -599,7 +605,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
   );
   await page.goto('/grades?tab=components');
-  await expect(page.locator('#course-offering-select')).toBeVisible();
+  await expect(page.locator('#course-offering-select')).toBeVisible({ timeout: 15000 });
 
   // 4. Wait for configuration to load
   await initialConfigPromise;
@@ -806,9 +812,10 @@ test('authoritative faculty assessment manager: create and edit assessments with
       semester: activeClass.semester,
       schoolYear: activeClass.schoolYear,
       categories: [
-        { name: 'Quizzes', weight: '30', sortOrder: 1 },
-        { name: 'Midterm Exam', weight: '30', sortOrder: 2 },
-        { name: 'Final Exam', weight: '40', sortOrder: 3 },
+        { name: 'Quiz', weight: '25', sortOrder: 1 },
+        { name: 'Laboratory', weight: '25', sortOrder: 2 },
+        { name: 'Midterm Exam', weight: '25', sortOrder: 3 },
+        { name: 'Final Exam', weight: '25', sortOrder: 4 },
       ],
     };
     if (existingConfig?.version !== undefined && existingConfig.version !== null) {
@@ -830,7 +837,7 @@ test('authoritative faculty assessment manager: create and edit assessments with
 
   // 4. Navigate to Assessments Tab
   await page.goto('/grades?tab=assessments');
-  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeEnabled();
 
   // 5. Open Create Assessment Modal

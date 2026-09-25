@@ -19,7 +19,6 @@ import {
   ChevronDown,
   LogOut,
   User,
-  ClipboardPenLine,
   Video,
   ListChecks,
   Mail,
@@ -28,7 +27,6 @@ import {
   BookOpen,
   Camera,
   History,
-  Play,
   CheckCheck,
   Loader2,
 } from 'lucide-react';
@@ -60,10 +58,13 @@ const ROLE_TITLES: Record<string, string> = {
 
 const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const linkedStudentView = user?.role === 'secretary' && Boolean(user.student)
+    && location.pathname.startsWith('/student/');
   const currentUser = {
     name: user?.display_name ?? '',
     email: user?.login_email ?? '',
-    role: user?.role ?? 'faculty',
+    role: linkedStudentView ? 'student' : (user?.role ?? 'faculty'),
     authentication_source: user?.authentication_source ?? 'password',
   };
 
@@ -148,7 +149,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const location = useLocation();
   const navigate = useNavigate();
 
   const toggleTheme = () => {
@@ -179,9 +179,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     if (currentUser.role === 'secretary') {
       return [
         { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-        { name: 'Start New Session', path: '/secretary/start-session', icon: Play },
-        { name: 'Attendance List', path: '/secretary/attendance', icon: CalendarDays },
-        { name: 'Manual Override', path: '/secretary/override', icon: ClipboardPenLine },
+        { name: 'Attendance Monitoring', path: '/secretary/attendance', icon: CalendarDays },
         { name: 'My Activity Log', path: '/secretary/audit-trail', icon: ListChecks },
         { name: 'Secretary Profile', path: '/secretary/profile', icon: UserCircle },
         { name: 'Settings', path: '/secretary/settings', icon: SettingsIcon },
@@ -189,7 +187,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     }
 
     if (currentUser.role === 'student') {
-      const items: NavItem[] = [
+      const items: NavItem[] = linkedStudentView ? [] : [
         { name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
       ];
       if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'attendance')) {
@@ -210,7 +208,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
         );
       }
-      items.push({ name: 'My Profile', path: '/student/profile', icon: UserCircle });
+      items.push({ name: 'My Profile', path: linkedStudentView ? '/secretary/profile' : '/student/profile', icon: UserCircle });
       return items;
     }
     
@@ -540,7 +538,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   </div>
 
                   <Link
-                    to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
+                    to={currentUser.role === 'admin' ? '/admin/profile' : user?.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
                     onClick={() => setIsProfileOpen(false)}
                     className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                   >
@@ -636,6 +634,29 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
           </button>
         </div>
+
+        {user?.role === 'secretary' && (
+          <div className="mb-5 rounded-xl bg-slate-200/60 dark:bg-slate-800 p-1 flex gap-1" aria-label="Account view">
+            <Link
+              to="/secretary/attendance"
+              aria-current={!linkedStudentView ? 'page' : undefined}
+              title="Secretary view"
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold ${!linkedStudentView ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500'}`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />{!isSidebarCollapsed && 'Secretary'}
+            </Link>
+            <button
+              type="button"
+              disabled={!user.student}
+              aria-pressed={linkedStudentView}
+              title={user.student ? 'Your linked Student view' : 'A linked Student identity is required'}
+              onClick={() => navigate('/student/attendance')}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed ${linkedStudentView ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500'}`}
+            >
+              <User className="w-3.5 h-3.5" />{!isSidebarCollapsed && 'Student'}
+            </button>
+          </div>
+        )}
 
         {/* Navigation Items */}
         <nav className="flex-1 space-y-1.5 overflow-y-auto">
@@ -822,7 +843,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     </div>
 
                     <Link
-                      to={currentUser.role === 'admin' ? '/admin/profile' : currentUser.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
+                      to={currentUser.role === 'admin' ? '/admin/profile' : user?.role === 'secretary' ? '/secretary/profile' : currentUser.role === 'student' ? '/student/profile' : '/faculty/profile'}
                       onClick={() => setIsProfileOpen(false)}
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >

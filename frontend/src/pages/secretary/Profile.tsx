@@ -1,3 +1,4 @@
+import { PersonNameFields, emptyNameParts, composePersonName } from '../../components/PersonNameFields';
 import React, { useEffect, useState, useMemo } from 'react';
 import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
@@ -9,7 +10,16 @@ import { validateBicolUEmail } from '../../services/authService';
 import { normalizePersonName } from '../../utils/nameNormalization';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 
+const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+
+function completeInstitutionalEmail(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('@')) return trimmed;
+  return `${trimmed}@${DEFAULT_EMAIL_DOMAIN}`;
+}
+
 export const Profile: React.FC = () => {
+  const [nameParts, setNameParts] = useState(emptyNameParts);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -46,6 +56,7 @@ export const Profile: React.FC = () => {
     getSecretaryProfileApi()
       .then(res => {
         if (res.profile) {
+          setNameParts({ prefix: res.profile.prefix || '', firstName: res.profile.firstName || '', middleName: res.profile.middleName || '', lastName: res.profile.lastName || '', suffix: res.profile.suffix || '' });
           setProfile(res.profile);
           setEditName(res.profile.name);
           setEditEmail(res.profile.email);
@@ -61,8 +72,8 @@ export const Profile: React.FC = () => {
     event.preventDefault();
     setMessage(null);
 
-    const trimmedName = normalizePersonName(editName);
-    const trimmedEmail = editEmail.trim();
+    const trimmedName = composePersonName(nameParts);
+    const trimmedEmail = completeInstitutionalEmail(editEmail);
 
     if (trimmedName.length < 2) {
       setMessage({ type: 'error', text: 'Name must be at least 2 characters long.' });
@@ -77,7 +88,7 @@ export const Profile: React.FC = () => {
 
     setSaving(true);
     try {
-      const res = await updateSecretaryProfileApi({ name: trimmedName, email: trimmedEmail });
+      const res = await updateSecretaryProfileApi({ ...nameParts, name: trimmedName, email: trimmedEmail });
       setProfile(prev => ({ ...prev, name: trimmedName, email: trimmedEmail }));
       setMessage({ type: 'success', text: res.message || 'Profile updated successfully.' });
     } catch (err) {
@@ -203,27 +214,22 @@ export const Profile: React.FC = () => {
                   )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Display Name</label>
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value.replace(/[0-9]/g, ''))}
-                        onBlur={() => setEditName(normalizePersonName(editName))}
-                        required
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
-                      />
-                    </div>
+                    <div className="sm:col-span-2"><PersonNameFields value={nameParts} onChange={setNameParts} /></div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Institutional Email</label>
-                      <input
-                        type="email"
-                        value={editEmail}
-                        onChange={(e) => setEditEmail(e.target.value)}
-                        list="secretary-email-suggestions"
-                        required
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100"
-                      />
+                        <span className="flex">
+                          <input
+                            type="text"
+                            inputMode="email"
+                            placeholder={editEmail.includes('@') ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username'}
+                            value={editEmail}
+                            onChange={(e) => setEditEmail(e.target.value)}
+                            list="secretary-email-suggestions"
+                            required
+                            className={`min-w-0 flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100 ${editEmail.includes('@') ? '' : 'rounded-r-none'}`}
+                          />
+                          {!editEmail.includes('@') && <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-blue-700 dark:border-slate-800 dark:bg-slate-900 dark:text-blue-300">@{DEFAULT_EMAIL_DOMAIN}</span>}
+                        </span>
                       <datalist id="secretary-email-suggestions">
                         {editEmail && !editEmail.includes('@') && allowedDomains.map(dom => (
                           <option key={`prefix-${dom}`} value={`${editEmail.trim()}@${dom}`} />

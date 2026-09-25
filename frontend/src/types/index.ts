@@ -76,6 +76,11 @@ export interface RetentionLog {
 
 export interface Student {
   id: string;
+  prefix?: string | null;
+  firstName?: string;
+  middleName?: string | null;
+  lastName?: string;
+  suffix?: string | null;
   studentId: string;    // e.g. "DENT-2023-0142"
   name: string;
   email: string;
@@ -330,6 +335,8 @@ export interface StudentAcademicAccount {
 }
 
 export interface StudentAcademicProfile {
+  prefix?: string | null;
+  suffix?: string | null;
   id: string;
   studentNumber: string;
   firstName: string;

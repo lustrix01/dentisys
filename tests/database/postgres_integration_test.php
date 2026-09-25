@@ -216,6 +216,14 @@ $expectedMigrations = [
     '015_period_attendance_ranges_and_sources.sql',
     '016_academic_notifications.sql',
     '017_faculty_structured_name.sql',
+    '018_student_structured_name.sql',
+    '019_class_watchlist_unlock.sql',
+    '020_3nf_identity_academic_facts.sql',
+    '021_fix_normalization_decimal_backfill.sql',
+    '022_canonical_grading_period_writes.sql',
+    '023_canonical_identity_writes.sql',
+    '024_reconcile_missing_identity_copies.sql',
+    '025_allow_structured_student_enrichment.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -873,7 +881,9 @@ $seedFacultyAccessToken = $facultyAccessToken;
 
 $facultyInvitationEmail = 'invite-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
 [$facultyInvitationStatus, $facultyInvitationBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
-    'name' => 'Dr. Invitation Faculty',
+    'prefix' => 'Dr.',
+    'firstName' => 'Invitation',
+    'lastName' => 'Faculty',
     'email' => $facultyInvitationEmail,
 ]);
 expect_same(201, $facultyInvitationStatus, 'Admin can issue a Faculty invitation');
@@ -957,7 +967,7 @@ $reissuedFacultyAccountStmt = $pdo->prepare('SELECT login_email, display_name, s
 $reissuedFacultyAccountStmt->execute([(int) $facultyInvitationAccount['user_id']]);
 $reissuedFacultyAccount = $reissuedFacultyAccountStmt->fetch(PDO::FETCH_ASSOC);
 expect_same($facultyInvitationEmail, $reissuedFacultyAccount['login_email'] ?? null, 'Faculty reissue preserves the stored email identity');
-expect_same($legacyFacultyName, $reissuedFacultyAccount['display_name'] ?? null, 'Faculty reissue preserves the stored display name');
+expect_same('Dr. Edited Pending Faculty', $reissuedFacultyAccount['display_name'] ?? null, 'Faculty reissue uses the composed canonical display name');
 expect_same('Pending Activation', $reissuedFacultyAccount['status'] ?? null, 'Faculty reissue returns the account to pending activation');
 [$facultyReissueMismatchStatus] = integration_http_json('/api/admin/faculty-invitations/reissue', $adminAccessToken, [
     'id' => (string) $facultyInvitationAccount['user_id'],
@@ -980,12 +990,14 @@ expect_same('Pending', $listedFacultyInvitation['status'] ?? null, 'Faculty invi
 $listedLegacyFaculty = array_values(array_filter($facultyListBody['invitations'] ?? [], static fn(array $item): bool => $item['email'] === 'faculty@bicol-u.edu.ph'))[0] ?? null;
 expect_same('Not invited', $listedLegacyFaculty['status'] ?? null, 'Legacy Active Faculty is not falsely labeled as having accepted an invitation');
 [$nonAdminInviteStatus] = integration_http_json('/api/admin/faculty-invitations', $facultyAccessToken, [
-    'name' => 'Unauthorized Faculty',
+    'firstName' => 'Unauthorized',
+    'lastName' => 'Faculty',
     'email' => 'unauthorized-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph',
 ]);
 expect_same(403, $nonAdminInviteStatus, 'Faculty cannot issue Admin-authorized Faculty invitations');
 [$activeFacultyConflictStatus] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
-    'name' => 'Existing Faculty',
+    'firstName' => 'Existing',
+    'lastName' => 'Faculty',
     'email' => 'faculty@bicol-u.edu.ph',
 ]);
 expect_same(409, $activeFacultyConflictStatus, 'Admin invitation does not overwrite an Active Faculty account');
@@ -1128,7 +1140,8 @@ expect_same('Sent', $studentEmailOutbox['status'] ?? null, 'Sent Student invitat
 expect_same('Student Invitation', $studentEmailOutbox['email_type'] ?? null, 'Student invitation history retains its email category');
 expect_same($invitedStudentEmail, $studentEmailOutbox['recipient_email'] ?? null, 'Student invitation history retains the canonical recipient');
 $pendingStudentStmt = $pdo->prepare(
-    'SELECT ua.user_id, ua.role, ua.status, s.student_account_user_id
+    'SELECT ua.user_id, ua.person_id AS account_person_id, ua.role, ua.status,
+            s.person_id AS student_person_id, s.student_account_user_id
        FROM students s JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
       WHERE s.student_id = ?'
 );
@@ -1137,6 +1150,41 @@ $pendingStudent = $pendingStudentStmt->fetch(PDO::FETCH_ASSOC);
 expect_same('student', $pendingStudent['role'] ?? null, 'Student invitation creates a Student account');
 expect_same('Pending Activation', $pendingStudent['status'] ?? null, 'Invited Student cannot log in before acceptance');
 expect_same((int) $pendingStudent['user_id'], (int) $pendingStudent['student_account_user_id'], 'Student invitation sets the canonical account link');
+expect_same((int) $pendingStudent['student_person_id'], (int) $pendingStudent['account_person_id'], 'Student onboarding reuses the canonical Student person identity');
+
+[$studentProfileUpdateStatus] = integration_http_put_json('/api/faculty/students/' . $invitedStudentId, $facultyAccessToken, [
+    'firstName' => 'Invited Renamed',
+    'middleName' => 'Canonical',
+    'lastName' => 'Student',
+]);
+expect_same(200, $studentProfileUpdateStatus, 'Student profile update accepts a structured canonical name');
+$studentProfileConsistencyStmt = $pdo->prepare(
+    'SELECT pi.first_name AS canonical_first_name, pi.middle_name AS canonical_middle_name,
+            pi.last_name AS canonical_last_name,
+            s.first_name AS student_first_name, s.middle_name AS student_middle_name,
+            s.last_name AS student_last_name,
+            ua.first_name AS account_first_name, ua.middle_name AS account_middle_name,
+            ua.last_name AS account_last_name
+       FROM students s
+       JOIN person_identities pi ON pi.person_id = s.person_id
+       JOIN user_accounts ua ON ua.person_id = s.person_id
+      WHERE s.student_id = ? AND ua.user_id = s.student_account_user_id'
+);
+$studentProfileConsistencyStmt->execute([$invitedStudentId]);
+$studentProfileConsistency = $studentProfileConsistencyStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(
+    is_array($studentProfileConsistency)
+        && $studentProfileConsistency['canonical_first_name'] === 'Invited Renamed'
+        && $studentProfileConsistency['canonical_middle_name'] === 'Canonical'
+        && $studentProfileConsistency['canonical_last_name'] === 'Student'
+        && $studentProfileConsistency['student_first_name'] === $studentProfileConsistency['canonical_first_name']
+        && $studentProfileConsistency['student_middle_name'] === $studentProfileConsistency['canonical_middle_name']
+        && $studentProfileConsistency['student_last_name'] === $studentProfileConsistency['canonical_last_name']
+        && $studentProfileConsistency['account_first_name'] === $studentProfileConsistency['canonical_first_name']
+        && $studentProfileConsistency['account_middle_name'] === $studentProfileConsistency['canonical_middle_name']
+        && $studentProfileConsistency['account_last_name'] === $studentProfileConsistency['canonical_last_name'],
+    'Student profile updates remain consistent across canonical, Student, and account roles'
+);
 $studentTokenStmt = $pdo->prepare(
     "SELECT related_student_id, related_cs_id, octet_length(token_digest) AS digest_length,
             (expires_at - issued_at) >= INTERVAL '23 hours' AS day_lifetime
@@ -1192,8 +1240,44 @@ expect_same('Active', $acceptedStudent['status'] ?? null, 'Eligible invited Stud
 expect_true(password_verify('StudentInvitePass123!', (string) ($acceptedStudent['password_hash'] ?? '')), 'Student acceptance stores the created DentiSys password');
 expect_same(null, $acceptedStudent['user_id'] ?? null, 'Student acceptance does not rewrite a Secretary link');
 expect_same((int) $pendingStudent['user_id'], (int) $acceptedStudent['student_account_user_id'], 'Student acceptance preserves its canonical account relationship');
-[$acceptedStudentLoginStatus] = integration_http_json('/api/auth/login', '', ['email' => $invitedStudentEmail, 'password' => 'StudentInvitePass123!']);
+[$acceptedStudentLoginStatus, $acceptedStudentLoginBody] = integration_http_json('/api/auth/login', '', ['email' => $invitedStudentEmail, 'password' => 'StudentInvitePass123!']);
 expect_same(200, $acceptedStudentLoginStatus, 'Activated Student can use password authentication');
+$acceptedStudentAccessToken = (string) ($acceptedStudentLoginBody['access_token'] ?? '');
+expect_true($acceptedStudentAccessToken !== '', 'Activated Student login returns an access token for identity-bound checks');
+
+// A deliberately mismatched account/person link must fail closed for both
+// password authentication and biometric self-service. The temporary person
+// uses the same structured values so the trigger permits the link mutation;
+// the Student relation remains attached to its original person.
+$acceptedStudentIdentityStmt = $pdo->prepare(
+    'SELECT s.person_id, pi.name_prefix, pi.first_name, pi.middle_name, pi.last_name, pi.name_suffix,
+            ua.user_id
+       FROM students s
+       JOIN person_identities pi ON pi.person_id = s.person_id
+       JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
+      WHERE s.student_id = ?'
+);
+$acceptedStudentIdentityStmt->execute([$invitedStudentId]);
+$acceptedStudentIdentity = $acceptedStudentIdentityStmt->fetch(PDO::FETCH_ASSOC);
+$acceptedStudentPersonId = (int) ($acceptedStudentIdentity['person_id'] ?? 0);
+$acceptedStudentAccountId = (int) ($acceptedStudentIdentity['user_id'] ?? 0);
+$mismatchPersonStmt = $pdo->prepare(
+    'INSERT INTO person_identities (name_prefix, first_name, middle_name, last_name, name_suffix)
+     VALUES (?, ?, ?, ?, ?) RETURNING person_id'
+);
+$mismatchPersonStmt->execute([
+    $acceptedStudentIdentity['name_prefix'], $acceptedStudentIdentity['first_name'],
+    $acceptedStudentIdentity['middle_name'], $acceptedStudentIdentity['last_name'],
+    $acceptedStudentIdentity['name_suffix'],
+]);
+$mismatchPersonId = (int) $mismatchPersonStmt->fetchColumn();
+$pdo->prepare('UPDATE user_accounts SET person_id = ? WHERE user_id = ?')->execute([$mismatchPersonId, $acceptedStudentAccountId]);
+[$mismatchedLoginStatus] = integration_http_json('/api/auth/login', '', ['email' => $invitedStudentEmail, 'password' => 'StudentInvitePass123!']);
+expect_same(401, $mismatchedLoginStatus, 'Mismatched Student identity cannot authenticate');
+[$mismatchedBiometricStatus] = integration_http_get_json('/api/student/biometric/profile', $acceptedStudentAccessToken);
+expect_same(401, $mismatchedBiometricStatus, 'Mismatched Student identity cannot access biometric self-service');
+$pdo->prepare('UPDATE user_accounts SET person_id = ? WHERE user_id = ?')->execute([$acceptedStudentPersonId, $acceptedStudentAccountId]);
+$pdo->prepare('DELETE FROM person_identities WHERE person_id = ?')->execute([$mismatchPersonId]);
 
 $unscopedEmail = 'unscoped-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
 $unscopedStudentInsert = $pdo->prepare(
@@ -3602,6 +3686,81 @@ foreach ($periodSourceKinds as $periodSourceKind) {
 expect_true(in_array('attendance', $periodSourceKindsByPeriod['Midterm'] ?? [], true), 'Midterm Attendance category is persisted as an attendance source');
 expect_true(in_array('attendance', $periodSourceKindsByPeriod['Final'] ?? [], true), 'Final Attendance category is persisted as an attendance source');
 
+$canonicalPeriodConfigColumnStmt = $pdo->prepare(
+    "SELECT COUNT(*) FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'grading_category_period_memberships'
+        AND column_name = 'config_id'"
+);
+$canonicalPeriodConfigColumnStmt->execute();
+expect_same(0, (int) $canonicalPeriodConfigColumnStmt->fetchColumn(), 'Canonical period memberships derive ownership through grading_categories');
+$periodRoundTripCategoryStmt = $pdo->prepare(
+    "INSERT INTO grading_categories (config_id, name, weight, sort_order, grading_period)
+     VALUES (?, ?, 10, 9, NULL)
+     RETURNING category_id"
+);
+$pdo->beginTransaction();
+$periodRoundTripCategoryStmt->execute([$periodConfigId, 'Rollback period fixture ' . $periodFixtureSuffix]);
+$periodRoundTripCategoryId = (int) $periodRoundTripCategoryStmt->fetchColumn();
+$periodRoundTripMembershipStmt = $pdo->prepare(
+    "INSERT INTO grading_category_period_memberships
+        (category_id, grading_period, name, weight, sort_order, source_kind)
+     VALUES (?, 'Midterm', ?, 10, 9, 'assessment')
+     RETURNING category_period_id"
+);
+$periodRoundTripMembershipStmt->execute([$periodRoundTripCategoryId, 'Rollback membership ' . $periodFixtureSuffix]);
+$periodRoundTripMembershipId = (int) $periodRoundTripMembershipStmt->fetchColumn();
+$periodRoundTripOwnerStmt = $pdo->prepare(
+    'SELECT gc.config_id, gcp.name
+       FROM grading_category_period_memberships gcp
+       JOIN grading_categories gc ON gc.category_id = gcp.category_id
+      WHERE gcp.category_period_id = ?'
+);
+$periodRoundTripOwnerStmt->execute([$periodRoundTripMembershipId]);
+$periodRoundTripOwner = $periodRoundTripOwnerStmt->fetch(PDO::FETCH_ASSOC);
+expect_same((string) $periodConfigId, (string) ($periodRoundTripOwner['config_id'] ?? ''), 'Canonical period membership resolves configuration ownership from its category');
+expect_same('Rollback membership ' . $periodFixtureSuffix, $periodRoundTripOwner['name'] ?? null, 'Canonical period membership create is readable');
+$pdo->exec('SAVEPOINT period_membership_null_probe');
+$periodNullRejected = false;
+$periodRoundTripMembershipStmt = $pdo->prepare(
+    'UPDATE grading_category_period_memberships SET name = ?, weight = NULL WHERE category_period_id = ?'
+);
+// The relation intentionally rejects a null weight; verify the transaction is
+// still recoverable through a savepoint, then exercise a valid update/delete.
+try {
+    $periodRoundTripMembershipStmt->execute(['Updated rollback membership ' . $periodFixtureSuffix, $periodRoundTripMembershipId]);
+} catch (PDOException $e) {
+    $periodNullRejected = true;
+    $pdo->exec('ROLLBACK TO SAVEPOINT period_membership_null_probe');
+}
+expect_true($periodNullRejected, 'Canonical period membership rejects null weights without poisoning the transaction');
+$periodRoundTripMembershipStmt = $pdo->prepare(
+    'UPDATE grading_category_period_memberships SET name = ?, updated_at = CURRENT_TIMESTAMP(6) WHERE category_period_id = ?'
+);
+$periodRoundTripMembershipStmt->execute(['Updated rollback membership ' . $periodFixtureSuffix, $periodRoundTripMembershipId]);
+$periodLegacyRoundTripStmt = $pdo->prepare(
+    'SELECT config_id, name FROM grading_category_periods WHERE category_period_id = ?'
+);
+$periodLegacyRoundTripStmt->execute([$periodRoundTripMembershipId]);
+$periodLegacyRoundTrip = $periodLegacyRoundTripStmt->fetch(PDO::FETCH_ASSOC);
+expect_same((string) $periodConfigId, (string) ($periodLegacyRoundTrip['config_id'] ?? ''), 'Compatibility period projection derives the same category owner');
+expect_same('Updated rollback membership ' . $periodFixtureSuffix, $periodLegacyRoundTrip['name'] ?? null, 'Canonical period update synchronizes the compatibility projection');
+$pdo->exec('SAVEPOINT legacy_period_projection_guard');
+$legacyPeriodWriteRejected = false;
+try {
+    $legacyPeriodWriteStmt = $pdo->prepare(
+        'UPDATE grading_category_periods SET name = ? WHERE category_period_id = ?'
+    );
+    $legacyPeriodWriteStmt->execute(['Unauthorized legacy write ' . $periodFixtureSuffix, $periodRoundTripMembershipId]);
+} catch (PDOException $e) {
+    $legacyPeriodWriteRejected = true;
+    $pdo->exec('ROLLBACK TO SAVEPOINT legacy_period_projection_guard');
+}
+expect_true($legacyPeriodWriteRejected, 'Legacy grading-period projection rejects direct writes');
+$pdo->prepare('DELETE FROM grading_category_period_memberships WHERE category_period_id = ?')->execute([$periodRoundTripMembershipId]);
+expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM grading_category_periods WHERE category_period_id = {$periodRoundTripMembershipId}")->fetchColumn(), 'Canonical period delete removes its compatibility projection');
+$pdo->rollBack();
+expect_same(0, (int) $pdo->query("SELECT COUNT(*) FROM grading_categories WHERE category_id = {$periodRoundTripCategoryId}")->fetchColumn(), 'Rolled-back canonical period fixture preserves existing data');
+
 [$periodAttendanceAssessmentStatus, $periodAttendanceAssessmentBody] = integration_http_json('/api/faculty/assessments', $facultyAccessToken, [[
     'title' => 'Rejected attendance-source assessment ' . $periodFixtureSuffix,
     'type' => 'Quiz',
@@ -3942,13 +4101,12 @@ $periodDuplicatePersistedCategoryStmt->execute([
 ]);
 $periodDuplicatePersistedCategoryId = (int) $periodDuplicatePersistedCategoryStmt->fetchColumn();
 $periodDuplicatePersistedMembershipStmt = $pdo->prepare(
-    "INSERT INTO grading_category_periods
-        (config_id, category_id, grading_period, name, weight, sort_order, source_kind)
-     VALUES (?, ?, 'Midterm', ?, ?, ?, 'attendance')
+    "INSERT INTO grading_category_period_memberships
+        (category_id, grading_period, name, weight, sort_order, source_kind)
+     VALUES (?, 'Midterm', ?, ?, ?, 'attendance')
      RETURNING category_period_id"
 );
 $periodDuplicatePersistedMembershipStmt->execute([
-    $periodConfigId,
     $periodDuplicatePersistedCategoryId,
     'Persisted duplicate participation ' . $periodFixtureSuffix,
     25,
@@ -3965,7 +4123,7 @@ expect_true(
     in_array('duplicate_attendance_sources', array_column($periodDuplicateResult['periods']['midterm']['incomplete'] ?? [], 'reason'), true),
     'Legacy duplicate Attendance sources report an explicit incomplete reason'
 );
-$pdo->prepare('DELETE FROM grading_category_periods WHERE category_period_id = ?')->execute([$periodDuplicatePersistedMembershipId]);
+$pdo->prepare('DELETE FROM grading_category_period_memberships WHERE category_period_id = ?')->execute([$periodDuplicatePersistedMembershipId]);
 $pdo->prepare('DELETE FROM grading_categories WHERE category_id = ?')->execute([$periodDuplicatePersistedCategoryId]);
 
 expect_same('incomplete_period', $periodInitialIncomplete['status'] ?? null, 'Enrollment with no usable attendance remains incomplete');

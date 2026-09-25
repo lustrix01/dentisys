@@ -246,11 +246,11 @@ export const Dashboard: React.FC = () => {
         {/* Right Sidebar Panel (Spans 4) */}
         <div className="lg:col-span-4 space-y-5">
           
-          {/* Administrative Overview */}
+          {/* Source UI parity: announcement, service, and audit widgets. */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
-                Administration Overview
+                Announcements
               </h3>
               <span className="text-[10px] font-bold text-accent-600 bg-[#EAE5F8] dark:bg-accent-950/60 px-2 py-0.5 rounded-full">
                 Dean's Office
@@ -260,35 +260,62 @@ export const Dashboard: React.FC = () => {
             <div className="space-y-3 text-xs">
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[9px] font-bold text-accent-600 dark:text-accent-400 uppercase tracking-wider">
-                  Faculty Accounts
+                  Governance Directive
                 </span>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                  {totalFaculty} authorized faculty accounts. Manage onboarding via email invitations.
+                <h4 className="font-bold text-slate-800 dark:text-slate-100">Midterm Retention Review Session</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Academic committee review for students under critical retention standing.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin/faculty-invite')}
-                  className="text-[10px] font-bold text-accent-600 dark:text-accent-400 hover:underline pt-1 block cursor-pointer"
-                >
-                  Manage Faculty Invitations →
-                </button>
               </div>
 
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
                 <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
-                  Audit Logging
+                  Faculty Invitations
                 </span>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
-                  Permanent accountability logging for faculty invitations, attendance overrides, and administrative actions.
+                <h4 className="font-bold text-slate-800 dark:text-slate-100">Invitation Status</h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {totalFaculty} authorized Faculty accounts are available for onboarding review.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => navigate('/admin/audit-trail')}
-                  className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:underline pt-1 block cursor-pointer"
-                >
-                  View System Audit Trail →
-                </button>
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                System Health &amp; Services
+              </h3>
+              <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md">
+                Configured
+              </span>
+            </div>
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+              <div>
+                <h4 className="font-bold text-slate-800 dark:text-slate-100">PostgreSQL-backed services</h4>
+                <p className="text-[10px] text-slate-400">Runtime health is reported by each screen as it loads.</p>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded-md">
+                Monitored
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+                Recent Audit Trail
+              </h3>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/audit-trail')}
+                className="text-[10px] font-bold text-accent-600 dark:text-accent-400 hover:underline cursor-pointer"
+              >
+                View Audit
+              </button>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+              <p className="text-slate-700 dark:text-slate-300 text-xs font-medium">Review security policies and active sessions.</p>
+              <span className="text-[10px] text-slate-400 block mt-1">Audit Trail • System</span>
             </div>
           </div>
 

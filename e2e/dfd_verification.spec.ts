@@ -34,7 +34,7 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
       });
 
       await page.goto('/login');
-      await page.fill('input[type="email"]', 'dean@bicol-u.edu.ph');
+      await page.fill('input[inputmode="email"]', 'dean@bicol-u.edu.ph');
       await page.fill('input[type="password"]', 'Password123!');
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL('/');
@@ -105,7 +105,7 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
       });
 
       await page.goto('/login');
-      await page.fill('input[type="email"]', 'faculty@bicol-u.edu.ph');
+      await page.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
       await page.fill('input[type="password"]', 'Password123!');
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL('/');
@@ -189,7 +189,7 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
         });
       });
       await page.goto('/login');
-      await page.fill('input[type="email"]', 'student@bicol-u.edu.ph');
+      await page.fill('input[inputmode="email"]', 'student@bicol-u.edu.ph');
       await page.fill('input[type="password"]', 'Password123!');
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL('/student/dashboard');
@@ -237,13 +237,14 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
       });
 
       await page.goto('/login');
-      await page.fill('input[type="email"]', 'secretary@bicol-u.edu.ph');
+      await page.fill('input[inputmode="email"]', 'secretary@bicol-u.edu.ph');
       await page.fill('input[type="password"]', 'Password123!');
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL('/');
     });
 
     test('Workflow: Manual Attendance Overrides', async ({ page }) => {
+      await page.click('a[href="/secretary/attendance"]');
       await page.click('a[href="/secretary/override"]');
       await expect(page).toHaveURL('/secretary/override');
       await expect(page.locator('body')).toContainText(/Override|Manual|Correction|Status/i);

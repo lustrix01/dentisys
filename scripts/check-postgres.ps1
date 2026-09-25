@@ -1,13 +1,20 @@
 [CmdletBinding()]
 param(
-    [switch] $KeepStack
+    [switch] $KeepStack,
+    [ValidatePattern('^dentisys-[a-z0-9-]+$')]
+    [string] $ComposeProject = 'dentisys-integration',
+    [int] $BackendHttpPort = 18080,
+    [int] $FrontendHttpPort = 15173,
+    [int] $MailpitUiPort = 18025
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $root
 
-$project = 'dentisys-integration'
+$project = $ComposeProject
+$backendBaseUrl = "http://127.0.0.1:$BackendHttpPort"
+$frontendBaseUrl = "http://127.0.0.1:$FrontendHttpPort"
 $composeFiles = @('-p', $project, '-f', 'docker-compose.yml', '-f', 'docker-compose.test.yml')
 $expectedMigrations = @(Get-ChildItem -LiteralPath (Join-Path $root 'database\migrations') -File -Filter '*.sql' | Sort-Object Name | ForEach-Object Name)
 if ($expectedMigrations.Count -eq 0) { throw 'No active PostgreSQL migrations were found.' }
@@ -16,13 +23,16 @@ $env:DB_ADMIN_PASS = 'integration-postgres-admin'
 $env:DB_NAME = 'dentisys'
 $env:DB_USER = 'dentisys'
 $env:DB_PASS = 'integration-development-password'
-$env:BACKEND_HTTP_PORT = '18080'
-$env:FRONTEND_HTTP_PORT = '15173'
-$env:MAILPIT_UI_PORT = '18025'
+$env:BACKEND_HTTP_PORT = [string] $BackendHttpPort
+$env:FRONTEND_HTTP_PORT = [string] $FrontendHttpPort
+$env:MAILPIT_UI_PORT = [string] $MailpitUiPort
 $env:JWT_SIGNING_KEY_B64 = 'SkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSkpKSko='
 $env:MFA_ENCRYPTION_KEY_B64 = 'RUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUU='
 $env:AUDIT_MAC_KEY_B64 = 'TU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU0='
 $env:STUDENT_AUTH_ENABLED = 'true'
+# Keep the disposable browser gate deterministic and offline. Real Google
+# provider acceptance is intentionally a separate manual/provider check.
+$env:GOOGLE_CLIENT_ID = ''
 
 function Invoke-Compose {
     param([string[]] $Arguments)
@@ -81,21 +91,21 @@ try {
         try {
             $frontendReady = $true
             foreach ($warmupUri in @(
-                'http://127.0.0.1:15173/',
-                'http://127.0.0.1:15173/@vite/client'
+                "$frontendBaseUrl/",
+                "$frontendBaseUrl/@vite/client"
             )) {
                 $frontendResponse = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri $warmupUri
                 if ($frontendResponse.StatusCode -ne 200) { $frontendReady = $false; break }
             }
             if ($frontendReady) {
-                $mainResponse = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri 'http://127.0.0.1:15173/src/main.tsx'
+                $mainResponse = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri "$frontendBaseUrl/src/main.tsx"
                 if ($mainResponse.StatusCode -ne 200) { $frontendReady = $false }
                 $dependencyUris = [regex]::Matches(
                     [string] $mainResponse.Content,
                     '/node_modules/\.vite/deps/[^"'' ]+'
                 ) | ForEach-Object Value | Select-Object -Unique
                 foreach ($dependencyUri in $dependencyUris) {
-                    $dependencyResponse = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri ("http://127.0.0.1:15173$dependencyUri")
+                    $dependencyResponse = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri ("$frontendBaseUrl$dependencyUri")
                     if ($dependencyResponse.StatusCode -ne 200) { $frontendReady = $false; break }
                 }
             }
@@ -108,7 +118,7 @@ try {
     # Exercise the public runtime-config contract over HTTP, including the
     # cache-safety headers and method guard. This runs against the disposable
     # integration web service only.
-    $runtimeResponse = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:18080/api/runtime-config'
+    $runtimeResponse = Invoke-WebRequest -UseBasicParsing -Uri "$backendBaseUrl/api/runtime-config"
     if ($runtimeResponse.StatusCode -ne 200) { throw "Runtime configuration endpoint returned HTTP $($runtimeResponse.StatusCode)." }
     if (($runtimeResponse.Headers['Cache-Control'] -as [string]) -notmatch 'no-store') {
         throw 'Runtime configuration endpoint must send Cache-Control: no-store.'
@@ -127,7 +137,7 @@ try {
     }
     $postStatus = 0
     try {
-        Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://127.0.0.1:18080/api/runtime-config' -Body '' | Out-Null
+        Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$backendBaseUrl/api/runtime-config" -Body '' | Out-Null
     } catch {
         if ($_.Exception.Response) { $postStatus = [int]$_.Exception.Response.StatusCode }
     }
@@ -180,7 +190,7 @@ FROM (
 
     # Prove backup/restore only inside this disposable integration project.
     # The normal development volume is never targeted by this rehearsal.
-    if ($project -ne 'dentisys-integration') { throw 'Backup/restore guard rejected an unexpected Compose project.' }
+    if ($project -notmatch '^dentisys-(integration|final)(-[a-z0-9-]+)?$') { throw 'Backup/restore guard rejected an unexpected disposable Compose project.' }
     $backupPath = '/tmp/dentisys-p02.backup'
     $restoreDatabase = 'dentisys_p02_restore'
     $countQuery = @"
@@ -213,11 +223,13 @@ FROM (
         try { Invoke-Compose @('exec', '-T', 'db', 'rm', '-f', $backupPath) } catch { Write-Warning $_ }
     }
 
+    Invoke-Compose @('exec', '-T', 'web', 'php', '/var/www/html/tests/database/ui_migration_test.php')
     Invoke-Compose @('exec', '-T', '-e', 'DB_TEST_HOST=db', '-e', 'DB_TEST_PORT=5432', '-e', 'DB_TEST_NAME=dentisys', '-e', 'DB_TEST_USER=dentisys', '-e', 'DB_TEST_PASS=integration-development-password', 'web', 'php', '/var/www/html/tests/database/postgres_integration_test.php')
 
-    & (Join-Path $PSScriptRoot 'smoke.ps1') -BackendUrl 'http://127.0.0.1:18080'
+    & (Join-Path $PSScriptRoot 'smoke.ps1') -BackendUrl $backendBaseUrl
 
-    $env:E2E_BASE_URL = 'http://127.0.0.1:15173'
+    $env:E2E_BASE_URL = $frontendBaseUrl
+    $env:E2E_MAILPIT_BASE_URL = "http://127.0.0.1:$MailpitUiPort"
     & npm run test:e2e:live
     if ($LASTEXITCODE -ne 0) { throw 'Live Playwright tests failed.' }
 

@@ -31,6 +31,11 @@ function admin_verify_auth(PDO $pdo, array $config): array
         exit;
     }
 
+    if (account_identity_fetch($pdo, (int) $authCtx['user_id']) === null) {
+        safe_error_response('Administrator identity is unavailable.', 409);
+        exit;
+    }
+
     return $authCtx;
 }
 
@@ -46,31 +51,40 @@ function handle_admin_dashboard_kpis(): void
             SELECT 
                 s.student_id, 
                 s.student_number, 
-                s.first_name, 
-                s.last_name, 
+                COALESCE(pi.first_name, s.first_name) AS first_name,
+                COALESCE(pi.last_name, s.last_name) AS last_name,
                 s.year_level, 
                 s.status AS student_status,
-                AVG(e.final_gwa) AS final_gwa,
-                MAX(CASE e.retention_state
+                AVG(COALESCE(egb.final_gwa, e.final_gwa)) AS final_gwa,
+                MAX(CASE COALESCE(egb.retention_state, e.retention_state)
                     WHEN 'critical' THEN 4 WHEN 'remedial' THEN 3
                     WHEN 'warning' THEN 2 WHEN 'active' THEN 1 ELSE 0 END) AS risk_score
             FROM students s
             LEFT JOIN enrollments e ON s.student_id = e.student_id
-            GROUP BY s.student_id, s.student_number, s.first_name, s.last_name, s.year_level, s.status
+            LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+            GROUP BY s.student_id, s.student_number, pi.first_name, s.first_name,
+                     pi.last_name, s.last_name, s.year_level, s.status
         ");
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $facultyStmt = $pdo->query(
-            "SELECT u.user_id, u.display_name, u.login_email, u.status,
+            "SELECT u.user_id,
+                    COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(pi.name_prefix, ''),
+                        NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''),
+                        NULLIF(pi.last_name, ''), NULLIF(pi.name_suffix, '')), ''), u.display_name) AS display_name,
+                    u.login_email, u.status,
                     STRING_AGG(DISTINCT cs.cs_name, ', ' ORDER BY cs.cs_name) AS classes,
                     STRING_AGG(DISTINCT c.course_code, ', ' ORDER BY c.course_code) AS subjects,
                     COUNT(DISTINCT e.student_id) AS student_count
              FROM user_accounts u
+             LEFT JOIN person_identities pi ON pi.person_id = u.person_id
              LEFT JOIN class_sections cs ON cs.instructor_user_id = u.user_id
              LEFT JOIN courses c ON c.course_id = cs.course_id
              LEFT JOIN enrollments e ON e.cs_id = cs.cs_id
              WHERE u.role = 'faculty'
-             GROUP BY u.user_id, u.display_name, u.login_email, u.status"
+             GROUP BY u.user_id, u.display_name, u.login_email, u.status,
+                      pi.name_prefix, pi.first_name, pi.middle_name, pi.last_name, pi.name_suffix"
         );
         $faculty = $facultyStmt ? $facultyStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
@@ -392,11 +406,9 @@ function handle_admin_profile_get(): void
         $pdo = create_pdo($config);
         $authCtx = admin_verify_auth($pdo, $config);
 
-        $stmt = $pdo->prepare("SELECT user_id, login_email, display_name, title, theme FROM user_accounts WHERE user_id = ?");
-        $stmt->execute([$authCtx['user_id']]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = account_identity_fetch($pdo, (int) $authCtx['user_id']);
 
-        if ($user === false) {
+        if ($user === null) {
             safe_error_response('User profile not found.', 404);
             return;
         }
@@ -404,8 +416,9 @@ function handle_admin_profile_get(): void
         json_response([
             'status' => 'ok',
             'profile' => [
+                ...account_identity_profile_parts($user ?: []),
                 'id' => (string) $user['user_id'],
-                'name' => $user['display_name'],
+                'name' => account_identity_display_name($user),
                 'email' => $user['login_email'],
                 'title' => $user['title'] ?? 'Academic Dean',
                 'office' => 'Dean Office, BU Dental Medicine',
@@ -432,10 +445,11 @@ function handle_admin_profile_update(): void
         }
 
         $data = $body['data'];
-        $name = validate_person_name($data, 'name', 2, 255);
+        $nameParts = account_identity_name_parts($data);
+        $name = $nameParts !== null ? account_identity_composed_name($nameParts) : validate_person_name($data, 'name', 2, 255);
         $email = validate_institutional_email($data['email'] ?? '');
 
-        update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
+        update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
 
         json_response(['status' => 'ok', 'message' => 'Profile details updated successfully.'], 200);
     } catch (ValidationException $e) {
@@ -598,12 +612,28 @@ function handle_admin_reports_summary(): void
 
         // Fetch students with biometric consent
         $stmt = $pdo->query(
-            "SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+            "SELECT s.student_id,
+                    COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                    COALESCE(pi.first_name, s.first_name) AS first_name,
+                    COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                    COALESCE(pi.last_name, s.last_name) AS last_name,
+                    COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
-                    e.final_gwa, e.retention_state, e.remedial_state_json, e.grade_components_json,
+                    COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                    COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                    e.remedial_state_json, ers.status AS normalized_remedial_status,
+                    ers.original_grade AS normalized_original_grade,
+                    ers.remedial_score AS normalized_remedial_score,
+                    ers.remedial_grade AS normalized_remedial_grade,
+                    ers.exam_date AS normalized_exam_date,
+                    ers.notes AS normalized_remedial_notes,
+                    e.grade_components_json,
                     cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name, c.units, c.is_clinical
              FROM students s
+             LEFT JOIN person_identities pi ON pi.person_id = s.person_id
              LEFT JOIN enrollments e ON e.student_id = s.student_id
+             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+             LEFT JOIN enrollment_remedial_states ers ON ers.enrollment_id = e.enrollment_id
              LEFT JOIN class_sections cs ON cs.cs_id = e.cs_id
              LEFT JOIN courses c ON c.course_id = cs.course_id
              LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
@@ -649,8 +679,20 @@ function handle_admin_reports_summary(): void
                     'hasRemedial' => $s['retention_state'] === 'remedial',
                     'components' => $s['grade_components_json'] ? json_decode($s['grade_components_json'], true) : null,
                 ];
-                if ($s['remedial_state_json']) {
-                    $grouped[$id]['remedialExams'][] = json_decode($s['remedial_state_json'], true);
+                if ($s['remedial_state_json'] || $s['normalized_remedial_status'] !== null) {
+                    $remedial = $s['remedial_state_json'] ? json_decode($s['remedial_state_json'], true) : [];
+                    if (!is_array($remedial)) {
+                        $remedial = [];
+                    }
+                    if ($s['normalized_remedial_status'] !== null) {
+                        $remedial['status'] = $s['normalized_remedial_status'];
+                        $remedial['originalGrade'] = $s['normalized_original_grade'] !== null ? (float) $s['normalized_original_grade'] : null;
+                        $remedial['remedialScore'] = $s['normalized_remedial_score'] !== null ? (float) $s['normalized_remedial_score'] : null;
+                        $remedial['remedialGrade'] = $s['normalized_remedial_grade'] !== null ? (float) $s['normalized_remedial_grade'] : null;
+                        $remedial['examDate'] = $s['normalized_exam_date'];
+                        $remedial['notes'] = $s['normalized_remedial_notes'];
+                    }
+                    $grouped[$id]['remedialExams'][] = $remedial;
                 }
             }
         }

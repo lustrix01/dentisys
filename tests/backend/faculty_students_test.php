@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../backend/app/validation.php';
 require_once __DIR__ . '/../../backend/controllers/FacultyController.php';
 
 function assert_faculty_students(bool $condition, string $label): void

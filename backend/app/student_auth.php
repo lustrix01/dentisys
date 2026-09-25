@@ -77,10 +77,15 @@ function auth_assert_student_eligible(PDO $pdo, array $config, int $userId, bool
 
     $lockSql = $lock ? ' FOR UPDATE' : '';
     $stmt = $pdo->prepare(
-        "SELECT ua.user_id, ua.login_email, ua.role, ua.display_name, ua.status,
+        "SELECT ua.user_id, ua.person_id AS account_person_id,
+                s.person_id AS student_person_id,
+                ua.login_email, ua.role, ua.display_name, ua.status,
                 s.student_id, s.student_number, s.status AS student_status, s.bu_email
            FROM user_accounts ua
-           JOIN students s ON s.student_account_user_id = ua.user_id
+           JOIN students s
+             ON s.student_account_user_id = ua.user_id
+            AND s.person_id = ua.person_id
+           JOIN person_identities pi ON pi.person_id = ua.person_id
           WHERE ua.user_id = ?{$lockSql}"
     );
     $stmt->execute([$userId]);
@@ -179,9 +184,20 @@ function student_auth_activation_raw_token(): string
     return base64url_encode(random_bytes(32));
 }
 
+function student_auth_student_display_name(array $student): string
+{
+    return normalize_person_name(trim(implode(' ', array_filter([
+        $student['canonical_name_prefix'] ?? $student['name_prefix'] ?? null,
+        $student['canonical_first_name'] ?? $student['first_name'] ?? null,
+        $student['canonical_middle_name'] ?? $student['middle_name'] ?? null,
+        $student['canonical_last_name'] ?? $student['last_name'] ?? null,
+        $student['canonical_name_suffix'] ?? $student['name_suffix'] ?? null,
+    ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))));
+}
+
 function student_auth_activation_email(array $student, string $link): string
 {
-    $name = htmlspecialchars(trim((string) ($student['first_name'] . ' ' . $student['last_name'])));
+    $name = htmlspecialchars(student_auth_student_display_name($student), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     $safeLink = htmlspecialchars($link);
     return "<p>Hello {$name},</p>"
         . '<p>A Faculty member has invited you to activate your DentiSys Student account.</p>'

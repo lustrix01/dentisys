@@ -8,11 +8,15 @@ import {
   RefreshCw,
   ShieldCheck,
   UserCircle,
+  Camera,
+  ArrowRight,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
+import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import {
   getStudentAcademicDashboardApi,
   getStudentAcademicProfileApi,
@@ -28,7 +32,7 @@ export const StudentUnavailable: React.FC<{ title: string }> = ({ title }) => (
       <ShieldCheck className="h-8 w-8 text-amber-600 dark:text-amber-400" />
       <h1 className="mt-4 font-heading font-extrabold text-2xl text-amber-950 dark:text-amber-100">{title}</h1>
       <p className="mt-2 text-sm text-amber-900/80 dark:text-amber-200/80 leading-relaxed">
-        Academic services are unavailable until the authoritative Student APIs are enabled.
+        Academic services are currently unavailable. Please try again later.
       </p>
     </Card>
   </div>
@@ -38,20 +42,36 @@ export function StudentIdentityFields({ profile }: { profile?: StudentAcademicPr
   const { user } = useAuth();
   const student = user?.student;
 
-  const displayName = user?.display_name || profile?.name || '—';
+  const displayName = profile?.name || user?.display_name || '—';
   const loginEmail = user?.login_email || profile?.account?.email || '—';
   const studentNum = student?.student_number || profile?.studentNumber || '—';
-  const studentStatus = student?.status || profile?.status || 'Active';
+  const studentStatus = profile?.status || student?.status || '—';
+  const initials = displayName === '—' ? '—' : displayName.split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase();
 
   return (
-    <Card className="p-6 space-y-4">
-      <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-        <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
-          <UserCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-          Authoritative Student Identity
-        </h3>
+    <Card className="p-6 space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 border-b border-slate-100 dark:border-slate-800 pb-6">
+        <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-extrabold text-2xl shadow-lg shadow-blue-500/20 shrink-0">{initials}</div>
+        <div className="space-y-1.5 flex-1 min-w-0">
+          <h2 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 break-words">{displayName}</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 break-all">{loginEmail}</p>
+          <span className="inline-flex px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 text-[11px] font-bold">Student · {studentNum}</span>
+        </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        {profile && [
+          ['Prefix', profile.prefix],
+          ['First Name', profile.firstName],
+          ['Middle Name', profile.middleName],
+          ['Last Name', profile.lastName],
+          ['Suffix', profile.suffix],
+        ].map(([label, value]) => (
+          <div key={label} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{label}</span>
+            <p className="font-bold text-slate-800 dark:text-slate-100 text-sm break-words">{value || '—'}</p>
+          </div>
+        ))}
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Full Name</span>
           <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{displayName}</p>
@@ -100,7 +120,7 @@ export const RealStudentDashboard: React.FC = () => {
     return (
       <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
         <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
-        Loading authoritative student dashboard…
+        Loading student dashboard…
       </div>
     );
   }
@@ -136,27 +156,36 @@ export const RealStudentDashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Student Academic Dashboard
+            Welcome back, {student.name}!
           </h1>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Authoritative enrollment standing, general weighted average, attendance compliance, and clinical progress.
+            Monitor your clinical attendance, academic progress, and retention standing.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
+            <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{student.studentNumber || '—'}</span>
+          </div>
           <button
             onClick={() => navigate('/student/attendance')}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
           >
-            <CalendarDays className="w-4 h-4" />
-            <span>Daily Attendance</span>
+            <Camera className="w-4 h-4" />
+            <span>Daily Check-In</span>
+            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Identity Card */}
-      <StudentIdentityFields profile={student} />
-
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="lg:col-span-8 space-y-6">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-5">
+        <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
+          <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-widest block">Student Workspace</span>
+          <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100 mt-0.5">Academic Progress Overview</h2>
+        </div>
       {/* Summary KPI Cards (Preserves nulls without converting to 0!) */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
@@ -207,6 +236,24 @@ export const RealStudentDashboard: React.FC = () => {
             {summary.retentionAlerts}
           </span>
         </Card>
+      </div>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-xs font-bold font-heading text-slate-500 dark:text-slate-400 uppercase tracking-wider">Quick Actions</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            ['Session Check-In', 'Daily Attendance', 'Facial + Geofence verification', '/student/attendance'],
+            ['Audit Trail', 'Attendance Logs', 'Full historical log entries', '/student/attendance-logs'],
+            ['Biometrics', 'Face Registration', 'Enroll or update face model', '/student/face-registration'],
+          ].map(([label, title, description, path]) => (
+            <button key={path} onClick={() => navigate(path)} className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-blue-500/50 hover:shadow-xs transition-all text-left group cursor-pointer">
+              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">{label}</span>
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-blue-600 transition-colors">{title}</h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">{description}</p>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Active Classes Table */}
@@ -289,6 +336,30 @@ export const RealStudentDashboard: React.FC = () => {
           )}
         </CardContent>
       </Card>
+      </div>
+      <div className="lg:col-span-4 space-y-5">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+          <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-3">Verification Steps</h3>
+          <div className="space-y-3 text-xs">
+            {[
+              ['Step 1: Select Class', 'Choose your enrolled subject in Daily Attendance.'],
+              ['Step 2: Session Check', 'Check the active session and its room location.'],
+              ['Step 3: Geofence & Face', 'Allow location and camera access, then follow the verification instructions.'],
+            ].map(([title, description]) => (
+              <div key={title} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-1">
+                <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">{title}</span>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{description}</p>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => navigate('/student/attendance')} className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"><Camera className="w-4 h-4" />Go to Attendance Check-In</button>
+        </div>
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
+          <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" /><h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">Designated Attendance Location</h4></div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">Check the session's location before checking in. Contact your Secretary or Faculty for authorized manual attendance assistance.</p>
+        </div>
+      </div>
+      </div>
     </div>
   );
 };
@@ -320,17 +391,17 @@ export const RealStudentProfile: React.FC = () => {
     return (
       <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
         <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
-        Loading authoritative student profile…
+        Loading student profile…
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       <div className="border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <h1 className="font-heading font-extrabold text-2xl text-slate-900 dark:text-slate-100">My Profile</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Authoritative academic registry and credentials information from Bicol University.
+          View your personal enrollment record and account security settings.
         </p>
       </div>
 
@@ -385,6 +456,7 @@ export const RealStudentProfile: React.FC = () => {
 
         <div className="lg:col-span-5 space-y-6">
           <MfaSettingsCard userEmail={profile?.email || user?.login_email} roleName="Student" />
+          <GoogleLinkCard />
           <PasswordChangeCard />
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { PersonNameFields, emptyNameParts, composePersonName } from '../../components/PersonNameFields';
 import React, { useEffect, useState } from 'react';
 import { Building2, CheckCircle2, Mail, Save, ShieldCheck, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
@@ -9,8 +10,17 @@ import { recordAudit } from '../../services/auditService';
 import { getAdminProfileApi, updateAdminProfileApi } from '../../services/apiClient';
 import { normalizePersonName } from '../../utils/nameNormalization';
 
+const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+
+function completeInstitutionalEmail(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('@')) return trimmed;
+  return `${trimmed}@${DEFAULT_EMAIL_DOMAIN}`;
+}
+
 const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-accent-500';
 export const Profile: React.FC = () => {
+  const [nameParts, setNameParts] = useState(emptyNameParts);
   const { user } = useAuth();
   const [name, setName] = useState(user?.display_name || 'Academic Dean');
   const [email, setEmail] = useState(user?.login_email || '');
@@ -22,6 +32,7 @@ export const Profile: React.FC = () => {
     getAdminProfileApi()
       .then((res) => {
         if (res.profile) {
+          setNameParts({ prefix: res.profile.prefix || '', firstName: res.profile.firstName || '', middleName: res.profile.middleName || '', lastName: res.profile.lastName || '', suffix: res.profile.suffix || '' });
           if (res.profile.name) setName(res.profile.name);
           if (res.profile.email) setEmail(res.profile.email);
           if (res.profile.office) setOffice(res.profile.office);
@@ -35,9 +46,11 @@ export const Profile: React.FC = () => {
     event.preventDefault();
     setMessage(null);
     try {
-      const normalizedName = normalizePersonName(name);
-      await updateAdminProfileApi({ name: normalizedName, email, office });
+      const normalizedName = composePersonName(nameParts);
+      const completedEmail = completeInstitutionalEmail(email);
+      await updateAdminProfileApi({ ...nameParts, name: normalizedName, email: completedEmail, office });
       setName(normalizedName);
+      setEmail(completedEmail);
       recordAudit({ action: 'Updated profile', module: 'Profile', description: 'Updated Dean executive profile details.', status: 'Success' });
       setSaved(true);
       setMessage({ type: 'success', text: 'Profile saved successfully.' });
@@ -90,8 +103,8 @@ export const Profile: React.FC = () => {
               <form onSubmit={save} className="space-y-5">
                 {message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <Label label="Full name"><input required value={name} onChange={event => setName(event.target.value.replace(/[0-9]/g, ''))} onBlur={() => setName(normalizePersonName(name))} className={inputClass} /></Label>
-                  <Label label="Email address" icon={<Mail className="w-4 h-4" />}><input required type="email" value={email} onChange={event => setEmail(event.target.value)} className={`${inputClass} pl-10`} /></Label>
+                  <div className="sm:col-span-2"><PersonNameFields value={nameParts} onChange={setNameParts} /></div>
+                  <Label label="Email address" icon={<Mail className="w-4 h-4" />}><span className="flex"><input required type="text" inputMode="email" value={email} onChange={event => setEmail(event.target.value)} placeholder={email.includes('@') ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username'} className={`${inputClass} pl-10 ${email.includes('@') ? 'rounded-xl' : 'rounded-l-xl rounded-r-none'}`} />{!email.includes('@') && <span className="mt-1.5 flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-accent-700 dark:border-slate-800 dark:bg-slate-900 dark:text-accent-300">@{DEFAULT_EMAIL_DOMAIN}</span>}</span></Label>
                   <Label label="Office location" icon={<Building2 className="w-4 h-4" />}><input value={office} onChange={event => setOffice(event.target.value)} className={`${inputClass} pl-10`} /></Label>
                 </div>
                 <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800">

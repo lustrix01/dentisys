@@ -1,10 +1,10 @@
 # UI-first migration into lighthal5
 
-Owner priority reset: 2026-09-24. Governed by spec.md section 9B. This amendment is documentation only; UI migration, SQL changes, and wiring remain to be implemented.
+Owner priority reset: 2026-09-24. Governed by spec.md section 9B. The approved amendment is integrated into local lighthal5. UI migration and targeted data/API work are in progress; see ui-migration-status.md for current evidence.
 
 ## Frozen sources
 
-- UI: local `owhie_backend` at `bd5ab789cc537f1503fc78357ad5937e7926651a`. Do not confuse it with `owhie-backend`.
+- UI: refreshed local `owhie_backend` at frozen batch SHA `e9ead0b3f8a4b0c49904a2274d3e80264203098b` (fast-forward from the superseded pin `bd5ab789cc537f1503fc78357ad5937e7926651a`). Do not confuse it with `owhie-backend`.
 - Functional baseline: `67e16a0`; destination `lighthal5`.
 - Design/requirements: `C:\Users\decha\Downloads\UI Changes.pdf`, nine pages, text and screenshots inspected. Preserve access to the original; it is not a repository artifact.
 
@@ -37,7 +37,7 @@ Verify roles, validation, persistence, audit, grades, historical read-only class
 | Page | Requirement | Source surface | Spec |
 |---|---|---|---|
 | 1 | Single Activity / Full Matrix and filters | faculty/GradeComputation | UI-002 |
-| 2 | Optional deadline, no overlap | Assessment dialog | UI-002 |
+| 2 | Optional deadline; overlap allowed by Owner clarification | Assessment dialog | UI-002 |
 | 3 | Clear period/category weights | faculty/GradeComputation | UI-002 / GRD-002 |
 | 4 | Incomplete lock and manual unlock | faculty/RetentionMonitoring | UI-003 |
 | 5 | Default email suffix | All email forms / roster | UI-004 |
@@ -52,8 +52,8 @@ Verify roles, validation, persistence, audit, grades, historical read-only class
 
 - Source GradeComputation contains Single Activity View and Full Matrix View; this does not prove persistence.
 - Source FacultyInvitation still uses one `name` field. Apply the PDF/Owner's structured form instead of reproducing that discrepancy.
-- Activity overlap scope and date/time semantics are unresolved; do not invent a database uniqueness constraint.
-- Aggregate watchlist lock/unlock scope and exact BUCDM policy mapping need clarification before wiring, without blocking visual copying.
+- Owner clarification: all activity due-date overlaps are allowed, within/across classes, courses, and Faculty. Do not add a collision constraint.
+- Manual watchlist unlock applies to every Student in the selected class. Exact BUCDM policy-to-stage mapping still requires Owner input.
 - Default email suffix coexists with multi-domain allowlisting. Sample screenshot thresholds, people, grades, badges, and session actions are not backend acceptance evidence.
 
 ## Deferred evidence and blockers
@@ -68,4 +68,4 @@ Registrar format, unapproved policy details, Google, and camera acceptance stay 
 
 ## Next execution packet
 
-Start Phase 1 from the frozen refs; produce the full route/state/file inventory and migrate coherent UI batches while retaining a recoverable functional baseline. Use AGENTS.md ownership rules. This priority change does not grant Gemini authority over functional code. Final integration into `lighthal5` must identify exactly which state is visual-only, schema-ready, or fully wired.
+Continue from the current lighthal5 working tree; do not restart or recopy the parked worktree. Use ui-migration-status.md and ui-source-inventory.md to inspect remaining differences. Use AGENTS.md ownership rules. This priority change does not grant Gemini authority over functional code. Final integration into `lighthal5` must identify exactly which state is visual-only, schema-ready, or fully wired.

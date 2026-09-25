@@ -3,6 +3,14 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail, Check, Copy, ExternalLink } from 'lucide-react';
 import { requestPasswordReset } from '../../services/authService';
 
+const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+
+function completeInstitutionalEmail(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('@')) return trimmed;
+  return `${trimmed}@${DEFAULT_EMAIL_DOMAIN}`;
+}
+
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -23,9 +31,11 @@ export function ForgotPassword() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const res = await requestPasswordReset(email);
+    const completedEmail = completeInstitutionalEmail(email);
+    const res = await requestPasswordReset(completedEmail);
     setLoading(false);
     if (res.success) {
+      setEmail(completedEmail);
       setDevResetLink(res.resetLink || null);
       setSubmitted(true);
     } else {
@@ -66,17 +76,25 @@ export function ForgotPassword() {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Mail className="h-5 w-5 text-slate-400" aria-hidden="true" />
                   </div>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="focus:ring-2 focus:ring-clinical-500 focus:border-clinical-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-xl py-2.5 border transition-all"
-                    placeholder="you@example.com"
-                  />
+                  <div className="flex">
+                    <input
+                      id="email"
+                      name="email"
+                      type="text"
+                      inputMode="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className={`min-w-0 flex-1 focus:ring-2 focus:ring-clinical-500 focus:border-clinical-500 block w-full pl-10 sm:text-sm border-slate-300 ${email.includes('@') ? 'rounded-xl' : 'rounded-l-xl'} py-2.5 border transition-all`}
+                      placeholder={email.includes('@') ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username'}
+                    />
+                    {!email.includes('@') && (
+                      <span className="flex items-center rounded-r-xl border border-l-0 border-slate-300 bg-slate-100 px-3 text-xs font-bold text-clinical-700">
+                        @{DEFAULT_EMAIL_DOMAIN}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 

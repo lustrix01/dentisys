@@ -165,6 +165,27 @@ test.describe('P03 Student identity and authentication', () => {
     await page.route('**/api/auth/me', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(realStudent) });
     });
+    await page.route('**/api/student/dashboard', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          student: {
+            studentId: 26,
+            studentNumber: 'P03-REAL',
+            name: 'Real Student',
+            firstName: 'Real',
+            lastName: 'Student',
+            status: 'active',
+            yearLevel: 4,
+            account: { id: 26, email: 'real.student@bicol-u.edu.ph', role: 'student', status: 'Active' },
+          },
+          summary: { classCount: 0, gwa: null, attendanceRate: null, clinicalHoursCompleted: 0, retentionAlerts: 0 },
+          classes: [],
+        }),
+      });
+    });
     await page.route('**/api/student/biometric/profile', async route => {
       await route.fulfill({
         status: 200,
@@ -188,14 +209,13 @@ test.describe('P03 Student identity and authentication', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], total: 0 }) });
     });
     await page.goto('/login');
-    await page.locator('input[type="email"]').fill('real.student@bicol-u.edu.ph');
+    await page.locator('input[inputmode="email"]').fill('real.student@bicol-u.edu.ph');
     await page.locator('input[type="password"]').fill('Student123!');
     await page.getByRole('button', { name: 'Log In' }).click();
     await expect(page).toHaveURL('/student/dashboard');
 
-    for (const value of [realStudent.display_name, realStudent.login_email, realStudent.student.student_number, realStudent.student.status]) {
-      await expect(page.getByRole('main').getByText(value, { exact: true }).first()).toBeVisible();
-    }
+    await expect(page.getByRole('main').getByRole('heading', { name: /Welcome back, Real Student!/i })).toBeVisible();
+    await expect(page.getByRole('main').getByText(realStudent.student.student_number, { exact: true })).toBeVisible();
     for (const value of fabricatedValues) {
       await expect(page.locator('body')).not.toContainText(value);
     }

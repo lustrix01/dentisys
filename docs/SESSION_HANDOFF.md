@@ -1,14 +1,40 @@
+# Current continuation: UI migration on lighthal5
+
+The current task has integrated `f9ac7df` into local `lighthal5` and recovered the unfinished `c9fe` UI edits. New UI, migration, and API edits are in the working tree. Read [ui-migration-status.md](ui-migration-status.md) first; the functional-first evidence below is historical. Do not rerun the earlier camera/Google investigation or recopy parked changes.
+
+Owner clarifications: overlapping activity deadlines are allowed; watchlist unlock covers the selected class; current school year is 2026-2027.
+
+## Current closeout - 2026-09-26
+
+The normal development database is migrated through 025. A custom-format dump
+was verified before applying 022-025; no volume or existing data was reset or
+deleted. The updated normal stack passed smoke checks and rollback-only probes
+for canonical profile synchronization and grading-period projection.
+
+The historical Docker interruption and pre-022-025 4/8 live result belong to an
+earlier tree. They are superseded by the kept disposable
+`dentisys-final-0926b` run, which passed migrations 001-025, full PostgreSQL
+integration, smoke/log checks, and 8/8 live browser workflows. The repository
+gate also passed with 124 mocked UI tests. The accepted 156-capture visual
+matrix and dialog evidence remain unchanged; invitation Edit is destination-
+only, while Secretary review/override is shared source and destination.
+
+Whole-schema 3NF is not certified. BUCDM policy, title semantics if an actual
+ambiguous value arises, real Google provider acceptance, and physical-camera
+acceptance remain separate decisions or manual checks. The application does
+not invent remedial attempt history.
+
 # DentiSys session handoff — 2026-09-24
 
 This is the durable continuation note for the current local-demo work. It records the repository state and evidence available at the handoff point. It does not amend `spec.md`, change product policy, or declare the one-day demo complete.
 
 ## Current Owner direction - 2026-09-24 priority reset
 
-Continue from [UI-first migration plan](ui-migration-plan.md), not the older functional-first continuation prompt below. The Owner explicitly approved specification amendments based on UI Changes.pdf and prioritizes copying the entire `owhie_backend` UI into `lighthal5`, then normalizing the database to 3NF, then wiring and repairing tests. This session changes documentation only. Source UI ref: `bd5ab789cc537f1503fc78357ad5937e7926651a`; functional baseline: `67e16a0`.
+Continue from [UI-first migration plan](ui-migration-plan.md), not the older functional-first continuation prompt below. The Owner explicitly approved specification amendments based on UI Changes.pdf and prioritizes copying the entire `owhie_backend` UI into `lighthal5`, then normalizing the database to 3NF, then wiring and repairing tests. The current implementation batch refreshed and froze source UI at `e9ead0b3f8a4b0c49904a2274d3e80264203098b`; `bd5ab789cc537f1503fc78357ad5937e7926651a` is historical evidence only. Functional baseline: `67e16a0`.
 
 Docker recovery and newer validation supersede the outage described below. The plan records continuation-reported passing checks and all six unresolved live failures. Google and real-camera acceptance remain unverified/deferred. Preserve parked work, existing development volumes, and historical evidence. No UI migration or database normalization is claimed complete.
 
-Next action: inventory the complete source UI and begin Phase 1. Do not spend the next session on deferred provider/live-test repair before UI migration. The remainder of this handoff is historical evidence, including its obsolete ready-to-paste prompt.
+Next action for a continuation is to repair Docker Desktop's locked runtime socket without resetting volumes, then rerun the post-fix aggregate gates once. The migration correction, canonical-consumer wiring, and source/destination visual comparison are already evidenced above; do not repeat those unchanged checks. The remainder of this handoff is historical evidence, including its obsolete ready-to-paste prompt.
 
 ## Executive state
 
@@ -85,3 +111,8 @@ At closeout, report exact branch/commit/status, commands and outputs, code/test 
 ## Handoff closeout rule
 
 The handoff is complete only when the parent has reviewed this document against the final frozen tree and records the final validator result. Until then, this document intentionally keeps “implemented by code/tests”, “unverified runtime”, “pending review”, and “blocked” separate.
+# September 25 UI-first continuation
+
+Owner's revised AGENTS.md explicitly defers intermediate test repairs to wiring. Continue the remaining source presentation migration; do not spend the UI phase rerunning aggregate gates. Real Student dashboard/profile presentation was extended, including five separately displayed name parts. Login labels now associate with inputs and the password reveal button has an accessible name. Latest frontend build and diff whitespace check pass.
+
+Database evidence: migrations 018/019, focused UI API tests, full PostgreSQL PHP integration tests, backup/restore and health checks passed on the disposable stack. Fixed roster reload query's missing school-year parameter and a unit-test dependency. Initial live browser gate passed 7/8; remaining failure was old Secretary sidebar navigation, now updated. Subsequent gate session output could not be recovered; no aggregate completion claim. Mocked Admin/auth focus passed 24/25; remaining Faculty invitation test uses obsolete whole-name fields/request data. Preserve assertions and repair in wiring phase. Auto Review export still awaits authorization; do not bypass its earlier rejection. See `docs/ui-migration-status.md` for remaining scope.

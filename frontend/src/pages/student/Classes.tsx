@@ -280,6 +280,9 @@ export const Classes: React.FC = () => {
                         Exams ({subject.components.exams}%): <strong className="text-slate-800 dark:text-slate-100">Unavailable</strong>
                       </span>
                       <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        Practicum ({subject.components.practicum}%): <strong className="text-slate-800 dark:text-slate-100">Unavailable</strong>
+                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                         Attendance: <strong className="text-slate-800 dark:text-slate-100">{attRate !== null ? `${attRate}%` : '—'}</strong>
                       </span>
                     </div>
@@ -291,6 +294,7 @@ export const Classes: React.FC = () => {
                       <p className="text-xl font-extrabold font-mono mt-0.5 text-slate-800 dark:text-slate-100">
                         {attRate !== null ? `${attRate}%` : '—'}
                       </p>
+                      <p className="text-[9px] text-slate-400">Recorded sessions only</p>
                     </div>
 
                     <div className="text-center min-w-[90px]">

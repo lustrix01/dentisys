@@ -199,22 +199,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAssessments(loadedAssessments);
         setAttendanceRecords(attendanceData.records as AttendanceRecord[]);
 
-        const scoreCollections = await Promise.all(loadedAssessments.map(async assessment => {
+        // Keep the authoritative score hydration bounded.  The seeded Faculty view can
+        // contain dozens of assessments; opening a route must not create one burst of
+        // concurrent requests that starves the route-specific API calls.
+        const scoreCollections: AssessmentScore[][] = [];
+        for (const assessment of loadedAssessments) {
+          if (ignore) return;
           try {
             const response = await getFacultyAssessmentScoresApi(assessment.id);
-            return response.scores.map(score => ({
+            scoreCollections.push(response.scores.map(score => ({
               id: score.id,
               assessmentId: assessment.id,
               studentId: score.studentId,
               score: Number(score.score),
               remarks: score.remarks,
               submittedAt: score.submittedAt,
-            }));
+            })));
           } catch (err) {
             console.warn(`Backend score sync warning for assessment ${assessment.id}:`, err);
-            return [];
+            scoreCollections.push([]);
           }
-        }));
+        }
         if (ignore) return;
         setAssessmentScores(scoreCollections.flat());
       } catch (err) {

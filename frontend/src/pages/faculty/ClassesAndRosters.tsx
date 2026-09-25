@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import {
   BookOpen,
   Search,
@@ -64,6 +64,8 @@ const ROOM_OPTIONS = [
   'Simulation Lab',
 ];
 
+const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+
 
 export const ClassesAndRosters: React.FC = () => {
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
@@ -108,7 +110,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [newCourseName, setNewCourseName] = useState('');
   const [newCsName, setNewCsName] = useState('');
   const [newBlock, setNewBlock] = useState('Section 4-A');
-  const [newSchoolYear, setNewSchoolYear] = useState('2025-2026');
+  const [newSchoolYear, setNewSchoolYear] = useState('');
   const [newSemester, setNewSemester] = useState('1st Semester');
   const [newYearLevel, setNewYearLevel] = useState(4);
   const [newLecRoom, setNewLecRoom] = useState('Lecture Hall A');
@@ -132,6 +134,8 @@ export const ClassesAndRosters: React.FC = () => {
   // remain server-owned; this modal edits only the fields in the roster API.
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editStudentFirstName, setEditStudentFirstName] = useState('');
+  const [editStudentPrefix, setEditStudentPrefix] = useState('');
+  const [editStudentSuffix, setEditStudentSuffix] = useState('');
   const [editStudentMiddleName, setEditStudentMiddleName] = useState('');
   const [editStudentLastName, setEditStudentLastName] = useState('');
   const [editStudentEmail, setEditStudentEmail] = useState('');
@@ -142,6 +146,8 @@ export const ClassesAndRosters: React.FC = () => {
   // Form States: Add Student Manually (C4 Split-Name Interface)
   const [studentIdInput, setStudentIdInput] = useState('');
   const [studentFirstName, setStudentFirstName] = useState('');
+  const [studentPrefix, setStudentPrefix] = useState('');
+  const [studentSuffix, setStudentSuffix] = useState('');
   const [studentMiddleName, setStudentMiddleName] = useState('');
   const [studentLastName, setStudentLastName] = useState('');
   const [studentEmailInput, setStudentEmailInput] = useState('');
@@ -150,10 +156,10 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Derived read-only composed name preview
   const composedStudentName = useMemo(() => {
-    return [studentFirstName.trim(), studentMiddleName.trim(), studentLastName.trim()]
+    return [studentPrefix.trim(), studentFirstName.trim(), studentMiddleName.trim(), studentLastName.trim(), studentSuffix.trim()]
       .filter(Boolean)
       .join(' ');
-  }, [studentFirstName, studentMiddleName, studentLastName]);
+  }, [studentPrefix, studentFirstName, studentMiddleName, studentLastName, studentSuffix]);
 
   // Form States: Import iBU File Data
   const [ictoFileText, setIctoFileText] = useState('');
@@ -175,6 +181,7 @@ export const ClassesAndRosters: React.FC = () => {
 
       const classData = Array.isArray(clsRes.classes) ? clsRes.classes : [];
       setClasses(classData);
+      setNewSchoolYear(clsRes.currentSchoolYear || '');
 
       const courseData = Array.isArray(crsRes.courses) ? crsRes.courses : [];
       setCourses(courseData);
@@ -204,9 +211,18 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Available School Years derived from classes
   const availableSchoolYears = useMemo(() => {
-    const years = new Set(['2025-2026', '2024-2025', ...classes.map(c => c.schoolYear).filter(Boolean)]);
+    const years = new Set([newSchoolYear, ...classes.map(c => c.schoolYear)].filter(Boolean));
     return Array.from(years);
-  }, [classes]);
+  }, [classes, newSchoolYear]);
+
+  // The server supplies eligibility; do not infer an academic year from the clock.
+  const isHistoricalClass = useCallback((classItem: FacultyClassItem | null | undefined) => {
+    const record = classItem as (FacultyClassItem & {
+      isHistorical?: boolean;
+      isCurrentSchoolYear?: boolean;
+    }) | null | undefined;
+    return record?.isHistorical === true || record?.isCurrentSchoolYear === false;
+  }, []);
 
   // Filtered assigned classes by School Year and Search
   const filteredClasses = useMemo(() => {
@@ -272,9 +288,17 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Open the Add / Enroll Student modal
   const handleOpenAddStudent = async (cls?: FacultyClassItem) => {
+    if (cls && isHistoricalClass(cls)) {
+      showFeedback('Past school-year classes are view-only. Adding students is unavailable.', 'info');
+      return;
+    }
     const targetId = cls
       ? cls.csId
-      : (selectedClassFilterId !== 'all' ? Number(selectedClassFilterId) : (classes[0]?.csId || 0));
+      : (selectedClassFilterId !== 'all' ? Number(selectedClassFilterId) : (classes.find(c => !isHistoricalClass(c))?.csId || 0));
+    if (!targetId || isHistoricalClass(classes.find(c => c.csId === targetId))) {
+      showFeedback('Select a current school-year class to enroll students.', 'info');
+      return;
+    }
 
     setTargetEnrollCsId(targetId);
     if (cls) {
@@ -300,6 +324,10 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Handler: Open Edit Class Section Modal
   const handleOpenEditClass = (cls: FacultyClassItem) => {
+    if (isHistoricalClass(cls)) {
+      showFeedback('Past school-year classes are view-only. Editing is unavailable.', 'info');
+      return;
+    }
     setEditingClass(cls);
     setEditCourseCode(cls.courseCode || '');
     setEditCourseName(cls.courseName || '');
@@ -313,11 +341,17 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
   const handleOpenEditStudent = (student: Student) => {
-    const parts = student.name.trim().split(/\s+/).filter(Boolean);
+    if (selectedClassFilterId !== 'all' && isHistoricalClass(classes.find(c => String(c.csId) === selectedClassFilterId))) {
+      showFeedback('Past school-year rosters are view-only.', 'info');
+      return;
+    }
     setEditingStudent(student);
-    setEditStudentFirstName(parts[0] || '');
-    setEditStudentLastName(parts.length > 1 ? parts[parts.length - 1] : '');
-    setEditStudentMiddleName(parts.length > 2 ? parts.slice(1, -1).join(' ') : '');
+    // Never infer name boundaries from a display name: compound names are ambiguous.
+    setEditStudentPrefix(student.prefix || '');
+    setEditStudentFirstName(student.firstName || '');
+    setEditStudentMiddleName(student.middleName || '');
+    setEditStudentLastName(student.lastName || '');
+    setEditStudentSuffix(student.suffix || '');
     setEditStudentEmail(student.email || '');
     setEditStudentYearLevel(student.yearLevel || 4);
     setEditStudentError(null);
@@ -330,7 +364,8 @@ export const ClassesAndRosters: React.FC = () => {
     const firstName = editStudentFirstName.trim();
     const middleName = editStudentMiddleName.trim();
     const lastName = editStudentLastName.trim();
-    const email = editStudentEmail.trim();
+    const email = editStudentEmail.trim() && (editStudentEmail.includes('@')
+      ? editStudentEmail.trim() : `${editStudentEmail.trim()}@bicol-u.edu.ph`);
     if (firstName.length < 2 || lastName.length < 2) {
       setEditStudentError('First name and last name must each contain at least two characters.');
       return;
@@ -348,8 +383,10 @@ export const ClassesAndRosters: React.FC = () => {
     setEditStudentError(null);
     try {
       await updateFacultyStudentApi(editingStudent.id, {
+        prefix: editStudentPrefix.trim(),
+        suffix: editStudentSuffix.trim(),
         firstName,
-        middleName: middleName || undefined,
+        middleName,
         lastName,
         email,
         yearLevel: editStudentYearLevel,
@@ -412,6 +449,10 @@ export const ClassesAndRosters: React.FC = () => {
   // Handler: Create Class via authoritative API
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newSchoolYear) {
+      showFeedback('Current school year is unavailable. Reload before creating a class.', 'error');
+      return;
+    }
 
     if (!newCourseId || newCourseId <= 0) {
       showFeedback('Please select a course from the catalog.', 'error');
@@ -493,10 +534,12 @@ export const ClassesAndRosters: React.FC = () => {
     try {
       const res = await createStudentApi({
         studentId: studentIdInput.trim(),
+        prefix: studentPrefix.trim(),
+        suffix: studentSuffix.trim(),
         firstName: studentFirstName.trim(),
         middleName: studentMiddleName.trim() || undefined,
         lastName: studentLastName.trim(),
-        email: studentEmailInput.trim().toLowerCase(),
+        email: (studentEmailInput.includes('@') ? studentEmailInput.trim() : `${studentEmailInput.trim()}@bicol-u.edu.ph`).toLowerCase(),
         yearLevel: studentYearInput,
         classId: String(targetEnrollCsId),
       });
@@ -505,6 +548,8 @@ export const ClassesAndRosters: React.FC = () => {
       setIsAddStudentOpen(false);
       setStudentIdInput('');
       setStudentFirstName('');
+      setStudentPrefix('');
+      setStudentSuffix('');
       setStudentMiddleName('');
       setStudentLastName('');
       setStudentEmailInput('');
@@ -542,6 +587,10 @@ export const ClassesAndRosters: React.FC = () => {
     }
 
     const targetClass = classes.find(c => c.csId === csId);
+    if (isHistoricalClass(targetClass)) {
+      showFeedback('Past school-year classes are view-only. Students cannot be removed.', 'info');
+      return;
+    }
     const className = targetClass ? `${targetClass.courseCode} (${targetClass.block})` : `Class #${csId}`;
 
     const confirmed = await requestConfirmation(
@@ -574,7 +623,10 @@ export const ClassesAndRosters: React.FC = () => {
     if (!/^\d+$/.test(student.id)) return null;
     const sections = student.classSections ?? [];
     const selected = sections.find(section => String(section.classId) === String(selectedClassFilterId));
-    const target = selectedClassFilterId === 'all' ? sections[0] : selected;
+    const target = selectedClassFilterId === 'all'
+      ? sections.find(section => classes.some(c => String(c.csId) === String(section.classId) && !isHistoricalClass(c)))
+      : selected;
+    if (target && isHistoricalClass(classes.find(c => String(c.csId) === String(target.classId)))) return null;
     return target && /^\d+$/.test(String(target.classId)) ? String(target.classId) : null;
   };
 
@@ -657,12 +709,16 @@ export const ClassesAndRosters: React.FC = () => {
           <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-2">
             Authoritative records: class sections and enrollments are synced with the server. Development preview: registrar/iBU roster file imports remain browser-local / externally blocked awaiting official University layout specification (Batch X1).
           </p>
+          <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
+            {newSchoolYear ? `Current school year: ${newSchoolYear}. Past school-year classes are view-only.` : 'Current school year is unavailable. Class creation is disabled.'}
+          </p>
         </div>
 
         {/* Action Buttons */}
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full sm:w-auto">
           <button
             onClick={() => setIsCreateClassOpen(true)}
+            disabled={!newSchoolYear}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -807,6 +863,7 @@ export const ClassesAndRosters: React.FC = () => {
               {!searchQuery && (
                 <button
                   onClick={() => setIsCreateClassOpen(true)}
+                  disabled={!newSchoolYear}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-md shadow-emerald-600/20"
                 >
                   <Plus className="w-4 h-4" />
@@ -816,14 +873,17 @@ export const ClassesAndRosters: React.FC = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredClasses.map((cls) => (
-                <Card key={cls.id} className="p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+              {filteredClasses.map((cls) => {
+                const historicalClass = isHistoricalClass(cls);
+                return (
+                <Card key={cls.id} className={`p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4 ${historicalClass ? 'border-slate-300/80 dark:border-slate-700' : ''}`}>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
                         {cls.courseCode} &bull; Year {cls.yearLevel}
                       </span>
                       <div className="flex items-center gap-2">
+                        {historicalClass && <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 text-[9px] font-extrabold uppercase tracking-wider">View only</span>}
                         <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
                           {cls.csName || cls.block}
                         </span>
@@ -860,8 +920,9 @@ export const ClassesAndRosters: React.FC = () => {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button
                         onClick={() => handleOpenEditClass(cls)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer"
-                        title="Edit Class Section Details"
+                        disabled={historicalClass}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        title={historicalClass ? 'Past school-year classes are view-only.' : 'Edit Class Section Details'}
                       >
                         <Pencil className="w-3 h-3" />
                         <span>Edit</span>
@@ -869,7 +930,9 @@ export const ClassesAndRosters: React.FC = () => {
 
                       <button
                         onClick={() => handleOpenAddStudent(cls)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-600 hover:text-white transition-all cursor-pointer"
+                        disabled={historicalClass}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-600 hover:text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        title={historicalClass ? 'Past school-year classes are view-only.' : 'Add student to class roster'}
                       >
                         <UserPlus className="w-3 h-3" />
                         <span>Add Student</span>
@@ -885,7 +948,8 @@ export const ClassesAndRosters: React.FC = () => {
                     </div>
                   </div>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -1056,7 +1120,7 @@ export const ClassesAndRosters: React.FC = () => {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
               >
                 {classes.map(c => (
-                  <option key={c.csId} value={c.csId}>{c.courseCode} - {c.courseName} ({c.block})</option>
+                  <option key={c.csId} value={c.csId} disabled={isHistoricalClass(c)}>{c.courseCode} - {c.courseName} ({c.block}){isHistoricalClass(c) ? ' - View only' : ''}</option>
                 ))}
               </select>
             </div>
@@ -1205,6 +1269,11 @@ export const ClassesAndRosters: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <label className="font-bold text-slate-700 dark:text-slate-300">
+                    Prefix
+                    <input value={studentPrefix} onChange={e => setStudentPrefix(e.target.value)} maxLength={50} placeholder="e.g. Ms."
+                      className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
+                  </label>
                   <div>
                     <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">First Name *</label>
                     <input
@@ -1239,6 +1308,11 @@ export const ClassesAndRosters: React.FC = () => {
                   </div>
                 </div>
 
+                <label className="block font-bold text-slate-700 dark:text-slate-300">
+                  Suffix
+                  <input value={studentSuffix} onChange={e => setStudentSuffix(e.target.value)} maxLength={50} placeholder="e.g. Jr., III"
+                    className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
+                </label>
                 <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
                   <span className="font-semibold text-slate-400">Composed Name Preview:</span>
                   <span className="font-bold font-mono text-slate-800 dark:text-slate-100">
@@ -1248,14 +1322,18 @@ export const ClassesAndRosters: React.FC = () => {
 
                 <div>
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Bicol University Email</label>
+                  <div className="flex items-center gap-2">
                   <input
-                    type="email"
+                    type="text"
+                    inputMode="email"
                     required
                     value={studentEmailInput}
                     onChange={(e) => setStudentEmailInput(e.target.value)}
-                    placeholder="username@bicol-u.edu.ph"
+                    placeholder="username"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                   />
+                  {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
+                  </div>
                 </div>
 
                 <div>
@@ -1356,10 +1434,11 @@ export const ClassesAndRosters: React.FC = () => {
                   type="text"
                   required
                   value={newSchoolYear}
-                  onChange={(e) => setNewSchoolYear(e.target.value)}
-                  placeholder="2025-2026"
+                  readOnly
+                  placeholder="Current school year unavailable"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                <p className="mt-1 text-[10px] text-slate-400">The server validates whether this is the current school year before saving.</p>
               </div>
             </div>
 
@@ -1462,6 +1541,16 @@ export const ClassesAndRosters: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
+                Prefix
+                <input value={editStudentPrefix} onChange={e => setEditStudentPrefix(e.target.value)} maxLength={50}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900" />
+              </label>
+              <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
+                Suffix
+                <input value={editStudentSuffix} onChange={e => setEditStudentSuffix(e.target.value)} maxLength={50}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900" />
+              </label>
+              <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 First name *
                 <input
                   required
@@ -1489,13 +1578,17 @@ export const ClassesAndRosters: React.FC = () => {
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
                 Institutional email *
+                <span className="flex items-center gap-2">
                 <input
                   required
-                  type="email"
+                  type="text"
+                  inputMode="email"
                   value={editStudentEmail}
                   onChange={event => setEditStudentEmail(event.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                {!editStudentEmail.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
+                </span>
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 Year level *

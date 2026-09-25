@@ -58,6 +58,12 @@ function handle_secretary_invite(): void
             safe_error_response('Access denied. Faculty or administrator privileges required.', 403);
             return;
         }
+        $actorIdentity = account_identity_fetch($pdo, (int) $authCtx['user_id']);
+        if ($actorIdentity === null) {
+            safe_error_response('Inviting account identity is unavailable.', 409);
+            return;
+        }
+        $actorDisplayName = account_identity_display_name($actorIdentity);
 
         $body = request_body();
         if (!$body['has_body']) {
@@ -71,10 +77,15 @@ function handle_secretary_invite(): void
         $className = validate_required_string($data, 'class_name', 2, 255);
         $email = validate_institutional_email($data['email'] ?? '');
 
-        $scopeSql = "SELECT s.student_id, s.user_id AS student_user_id, s.bu_email,
-                            CONCAT_WS(' ', s.first_name, NULLIF(s.middle_name, ''), s.last_name) AS persisted_name,
+        $scopeSql = "SELECT s.student_id, s.person_id, s.user_id AS student_user_id,
+                            s.student_account_user_id, s.bu_email,
+                            COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(pi.name_prefix, ''),
+                                NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''),
+                                NULLIF(pi.last_name, ''), NULLIF(pi.name_suffix, '')), ''),
+                                CONCAT_WS(' ', s.first_name, NULLIF(s.middle_name, ''), s.last_name)) AS persisted_name,
                             cs.cs_id, cs.cs_name
                      FROM students s
+                     JOIN person_identities pi ON pi.person_id = s.person_id
                      JOIN enrollments e ON e.student_id = s.student_id
                      JOIN class_sections cs ON cs.cs_id = e.cs_id
                      WHERE s.student_number = ? AND cs.cs_name = ?";
@@ -100,10 +111,13 @@ function handle_secretary_invite(): void
             safe_error_response('Invitation name must match the selected student record.', 422);
             return;
         }
-        $accountCheck = $pdo->prepare("SELECT user_id FROM user_accounts WHERE login_email = ? LIMIT 1");
+        $accountCheck = $pdo->prepare("SELECT user_id FROM user_accounts WHERE lower(login_email) = lower(?) LIMIT 1");
         $accountCheck->execute([$persistedEmail]);
-        if ($accountCheck->fetchColumn() !== false || $assignment['student_user_id'] !== null) {
-            safe_error_response('This student already has an account. Revoke or reassign the existing secretary account instead.', 409);
+        if ($accountCheck->fetchColumn() !== false
+            || $assignment['student_user_id'] !== null
+            || $assignment['student_account_user_id'] !== null
+            || $assignment['person_id'] === null) {
+            safe_error_response('This canonical Student identity already has an account or cannot be safely linked.', 409);
             return;
         }
         $studentName = $persistedName;
@@ -122,7 +136,7 @@ function handle_secretary_invite(): void
             'student_number' => $studentNumber,
             'class_name' => $className,
             'email' => $email,
-            'faculty_name' => $authCtx['display_name'],
+            'faculty_name' => $actorDisplayName,
         ], JSON_UNESCAPED_SLASHES);
 
         $pdo->beginTransaction();
@@ -148,7 +162,7 @@ function handle_secretary_invite(): void
                 'actor_user_id' => $authCtx['user_id'],
                 'actor_username' => $authCtx['login_email'],
                 'actor_role' => $authCtx['role'],
-                'actor_display_name' => $authCtx['display_name'],
+                'actor_display_name' => $actorDisplayName,
                 'session_id' => $authCtx['session_id'],
                 'scope_cs_id' => (int) $assignment['cs_id'],
                 'target_type' => 'security_token',
@@ -170,7 +184,7 @@ function handle_secretary_invite(): void
 
         $invitationLink = app_url($config, '/activate-secretary', ['token' => $invToken]);
         $subject = 'DentiSys Class Secretary Invitation';
-        $facultyName = htmlspecialchars((string) $authCtx['display_name']);
+        $facultyName = htmlspecialchars((string) $actorDisplayName);
         $safeStudentName = htmlspecialchars((string) $studentName);
         $safeClassName = htmlspecialchars((string) $className);
         $safeLink = htmlspecialchars($invitationLink);
@@ -407,7 +421,6 @@ function handle_secretary_activate(): void
 
         $meta = json_decode($row['metadata_json'] ?? '{}', true);
         $email = $meta['email'] ?? '';
-        $displayName = $meta['student_name'] ?? 'Class Secretary';
 
         if ($email === '') {
             safe_error_response('Invitation metadata corrupted.', 500);
@@ -423,9 +436,16 @@ function handle_secretary_activate(): void
             $auditCtx = audit_begin_operation($pdo);
 
             $studentLock = $pdo->prepare(
-                "SELECT student_id, user_id, student_account_user_id, bu_email
-                    FROM students
-                   WHERE student_id = ?
+                "SELECT s.student_id, s.person_id, s.user_id, s.student_account_user_id, s.bu_email,
+                        pi.name_prefix AS canonical_name_prefix,
+                        pi.first_name AS canonical_first_name,
+                        pi.middle_name AS canonical_middle_name,
+                        pi.last_name AS canonical_last_name,
+                        pi.name_suffix AS canonical_name_suffix,
+                        s.name_prefix, s.first_name, s.middle_name, s.last_name, s.name_suffix
+                    FROM students s
+                    JOIN person_identities pi ON pi.person_id = s.person_id
+                   WHERE s.student_id = ?
                    FOR UPDATE"
             );
             $studentLock->execute([(int) $row['related_student_id']]);
@@ -437,24 +457,63 @@ function handle_secretary_activate(): void
             ) {
                 throw new DomainException('Invitation no longer matches an unlinked student account.');
             }
+            $displayName = account_identity_display_name($student);
+            if ($displayName === '' || !hash_equals(
+                strtolower(trim((string) $student['bu_email'])),
+                strtolower(trim((string) $email))
+            )) {
+                throw new DomainException('Invitation no longer matches the canonical Student identity.');
+            }
 
-            $chk = $pdo->prepare("SELECT user_id FROM user_accounts WHERE login_email = ? FOR UPDATE");
+            $chk = $pdo->prepare("SELECT user_id FROM user_accounts WHERE lower(login_email) = lower(?) FOR UPDATE");
             $chk->execute([$email]);
             $existingUser = $chk->fetch(PDO::FETCH_ASSOC);
             if ($existingUser !== false) {
                 throw new DomainException('An account now exists for this email; activation was not applied.');
             }
             $ins = $pdo->prepare(
-                "INSERT INTO user_accounts (login_email, password_hash, role, display_name, title, status, created_at)
-                 VALUES (?, ?, 'secretary', ?, 'Class Secretary', 'Active', ?) RETURNING user_id"
+                "INSERT INTO user_accounts
+                    (person_id, login_email, password_hash, role, display_name,
+                     name_prefix, first_name, middle_name, last_name, name_suffix,
+                     title, status, created_at)
+                 VALUES (?, ?, ?, 'secretary', ?, ?, ?, ?, ?, ?, 'Class Secretary', 'Active', ?)
+                 RETURNING user_id, person_id"
             );
-            $ins->execute([$email, $passwordHash, $displayName, $nowSql]);
-            $userId = (int) $ins->fetchColumn();
+            $ins->execute([
+                (int) $student['person_id'], $email, $passwordHash, $displayName,
+                $student['canonical_name_prefix'], $student['canonical_first_name'],
+                $student['canonical_middle_name'], $student['canonical_last_name'],
+                $student['canonical_name_suffix'], $nowSql,
+            ]);
+            $account = $ins->fetch(PDO::FETCH_ASSOC);
+            $userId = (int) ($account['user_id'] ?? 0);
+            account_identity_require_same_person(
+                (int) ($account['person_id'] ?? 0),
+                (int) $student['person_id'],
+                'Secretary activation could not preserve the canonical Student identity.'
+            );
 
-            $linkStudent = $pdo->prepare("UPDATE students SET user_id = ? WHERE student_id = ? AND user_id IS NULL");
-            $linkStudent->execute([$userId, (int) $row['related_student_id']]);
+            $linkStudent = $pdo->prepare(
+                "UPDATE students
+                    SET user_id = ?,
+                        name_prefix = ?, first_name = ?, middle_name = ?, last_name = ?, name_suffix = ?
+                  WHERE student_id = ? AND user_id IS NULL"
+            );
+            $linkStudent->execute([
+                $userId,
+                $student['canonical_name_prefix'], $student['canonical_first_name'],
+                $student['canonical_middle_name'], $student['canonical_last_name'],
+                $student['canonical_name_suffix'],
+                (int) $row['related_student_id'],
+            ]);
+            if ($linkStudent->rowCount() !== 1) {
+                throw new DomainException('Student identity changed while activating the Secretary account.');
+            }
             $assignSection = $pdo->prepare("UPDATE class_sections SET secretary_user_id = ? WHERE cs_id = ?");
             $assignSection->execute([$userId, (int) $row['related_cs_id']]);
+            if ($assignSection->rowCount() !== 1) {
+                throw new DomainException('The invited class section is no longer available for Secretary activation.');
+            }
 
             // Mark token as used
             $markUsed = $pdo->prepare("UPDATE security_tokens SET used_at = ? WHERE token_id = ?");
@@ -525,6 +584,11 @@ function secretary_verify_auth(PDO $pdo, array $config): array
         exit;
     }
 
+    if (account_identity_fetch($pdo, (int) $authCtx['user_id']) === null) {
+        safe_error_response('Secretary identity is unavailable.', 409);
+        exit;
+    }
+
     return $authCtx;
 }
 
@@ -590,8 +654,12 @@ function handle_secretary_dashboard_kpis(): void
         $classroomName = ($csRow['lab_room'] ?? null) ?: ($csRow['lec_room'] ?? null) ?: '';
         $classId = $csRow ? (string) $csRow['cs_id'] : '';
 
-        $studentSql = "SELECT DISTINCT s.student_id, s.first_name, s.last_name, s.student_number
+        $studentSql = "SELECT DISTINCT s.student_id,
+                    COALESCE(pi.first_name, s.first_name) AS first_name,
+                    COALESCE(pi.last_name, s.last_name) AS last_name,
+                    s.student_number
              FROM students s
+             JOIN person_identities pi ON pi.person_id = s.person_id
              JOIN enrollments e ON e.student_id = s.student_id AND LOWER(e.status) = 'active'
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              WHERE cs.secretary_user_id = ?";
@@ -855,11 +923,16 @@ function secretary_attendance_session_fetch(
                    s.present_cutoff_time, s.late_cutoff_time, s.revoked_at,
                    s.revoked_by_user_id, s.revocation_reason, s.created_at,
                    s.updated_at, cs.cs_name, cs.block, c.course_id,
-                   c.course_code, c.name AS course_name, u.display_name AS instructor_name
+                   c.course_code, c.name AS course_name,
+                   COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(pi.name_prefix, ''),
+                       NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''),
+                       NULLIF(pi.last_name, ''), NULLIF(pi.name_suffix, '')), ''),
+                       u.display_name) AS instructor_name
             FROM attendance_sessions s
             JOIN class_sections cs ON cs.cs_id = s.cs_id
             JOIN courses c ON c.course_id = cs.course_id
             LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
+            LEFT JOIN person_identities pi ON pi.person_id = u.person_id
             WHERE " . implode(' AND ', $where) . "
             ORDER BY s.started_at DESC
             LIMIT 1";
@@ -1442,10 +1515,16 @@ function handle_secretary_attendance_get(): void
         $recordSql =
             "SELECT r.record_id, r.enrollment_id, r.attendance_session_id, r.session_date, r.session_code, r.status,
                     r.override_reason, r.override_at, s.student_id, s.student_number,
-                    s.first_name, s.middle_name, s.last_name, cs.cs_id, cs.cs_name, c.course_code
+                    COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                    COALESCE(pi.first_name, s.first_name) AS first_name,
+                    COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                    COALESCE(pi.last_name, s.last_name) AS last_name,
+                    COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
+                    cs.cs_id, cs.cs_name, c.course_code
              FROM attendance_records r
              JOIN enrollments e ON r.enrollment_id = e.enrollment_id
              JOIN students s ON e.student_id = s.student_id
+             JOIN person_identities pi ON pi.person_id = s.person_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
              WHERE cs.secretary_user_id = ?";
@@ -1473,7 +1552,7 @@ function handle_secretary_attendance_get(): void
                 'attendanceSessionId' => $r['attendance_session_id'] !== null ? (string) $r['attendance_session_id'] : null,
                 'studentId' => (string) $r['student_id'],
                 'studentNumber' => $r['student_number'],
-                'studentName' => trim(implode(' ', array_filter([$r['first_name'], $r['middle_name'], $r['last_name']], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))),
+                'studentName' => account_identity_display_name($r),
                 'date' => $r['session_date'],
                 'subjectCode' => $r['course_code'],
                 'classId' => (string) $r['cs_id'],
@@ -1627,9 +1706,7 @@ function handle_secretary_profile_get(): void
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
 
-        $stmt = $pdo->prepare("SELECT user_id, login_email, display_name, title, theme FROM user_accounts WHERE user_id = ?");
-        $stmt->execute([$authCtx['user_id']]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        $user = account_identity_fetch($pdo, (int) $authCtx['user_id']);
 
         $csStmt = $pdo->prepare("SELECT cs_name, lab_room, lec_room FROM class_sections WHERE secretary_user_id = ? ORDER BY cs_id LIMIT 1");
         $csStmt->execute([$authCtx['user_id']]);
@@ -1638,8 +1715,9 @@ function handle_secretary_profile_get(): void
         json_response([
             'status' => 'ok',
             'profile' => [
+                ...account_identity_profile_parts($user ?: []),
                 'id' => (string) ($user['user_id'] ?? $authCtx['user_id']),
-                'name' => $user['display_name'] ?? $authCtx['display_name'],
+                'name' => $user !== null ? account_identity_display_name($user) : $authCtx['display_name'],
                 'email' => $user['login_email'] ?? $authCtx['login_email'],
                 'title' => $user['title'] ?? 'Class Secretary',
                 'assignedClassName' => $csRow['cs_name'] ?? '',
@@ -1670,38 +1748,37 @@ function handle_secretary_profile_update(): void
         $data = $body['data'];
         $email = validate_institutional_email($data['email'] ?? '');
 
-        $hasSplitName = array_key_exists('firstName', $data)
-            || array_key_exists('middleName', $data)
-            || array_key_exists('lastName', $data);
-        if ($hasSplitName && (!array_key_exists('firstName', $data) || !array_key_exists('lastName', $data))) {
-            throw new ValidationException([
-                'firstName' => 'First name and last name are both required when split name fields are provided.',
-                'lastName' => 'First name and last name are both required when split name fields are provided.',
-            ]);
+        $nameParts = account_identity_name_parts($data);
+        if ($nameParts === null) {
+            throw new ValidationException([['field' => 'firstName', 'message' => 'Provide the separate name fields; combined names are not split automatically.']]);
         }
-
-        if ($hasSplitName) {
-            $firstName = validate_person_name($data, 'firstName', 2, 100);
-            $middleName = validate_optional_person_name($data, 'middleName', 2, 100);
-            $lastName = validate_person_name($data, 'lastName', 2, 100);
-            $name = array_key_exists('name', $data)
-                ? validate_person_name($data, 'name', 2, 255)
-                : normalize_person_name(implode(' ', array_filter([$firstName, $middleName, $lastName])));
-        } else {
-            $name = validate_person_name($data, 'name', 2, 255);
-            $components = secretary_student_name_components($name);
-            $firstName = validate_person_name(['name' => $components['firstName']], 'name', 2, 100);
-            $middleName = $components['middleName'] === null
-                ? null
-                : validate_person_name(['name' => $components['middleName']], 'name', 2, 100);
-            $lastName = validate_person_name(['name' => $components['lastName']], 'name', 2, 100);
-        }
+        $name = account_identity_composed_name($nameParts);
 
         $pdo->beginTransaction();
         try {
-            update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
-            $updStudent = $pdo->prepare("UPDATE students SET first_name = ?, middle_name = ?, last_name = ?, bu_email = ? WHERE user_id = ?");
-            $updStudent->execute([$firstName, $middleName, $lastName, $email, $authCtx['user_id']]);
+            $identityStmt = $pdo->prepare(
+                'SELECT ua.person_id AS account_person_id, s.person_id AS student_person_id
+                   FROM user_accounts ua
+                   LEFT JOIN students s ON s.user_id = ua.user_id
+                  WHERE ua.user_id = ?
+                  FOR UPDATE OF ua'
+            );
+            $identityStmt->execute([(int) $authCtx['user_id']]);
+            $identities = $identityStmt->fetchAll(PDO::FETCH_ASSOC);
+            if (count($identities) !== 1) {
+                throw new DomainException('Secretary identity is unavailable.');
+            }
+            $identity = $identities[0];
+            if ($identity['student_person_id'] !== null) {
+                account_identity_require_same_person(
+                    $identity['account_person_id'] !== null ? (int) $identity['account_person_id'] : null,
+                    (int) $identity['student_person_id'],
+                    'Secretary profile cannot update a conflicting Student identity.'
+                );
+            }
+            update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
+            $updStudent = $pdo->prepare("UPDATE students SET bu_email = ? WHERE user_id = ? AND person_id = ?");
+            $updStudent->execute([$email, $authCtx['user_id'], (int) $identity['account_person_id']]);
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
@@ -1713,6 +1790,8 @@ function handle_secretary_profile_update(): void
         json_response(['status' => 'ok', 'message' => 'Class Secretary profile updated successfully.'], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
+    } catch (DomainException $e) {
+        safe_error_response($e->getMessage(), 409);
     } catch (\Throwable $e) {
         error_log('Secretary profile update error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);

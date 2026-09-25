@@ -22,10 +22,15 @@ function faculty_invitation_token_row(PDO $pdo, string $token): ?array
     $digest = hash('sha256', $token, true);
     $stmt = $pdo->prepare(
         "SELECT t.token_id, t.user_id, t.expires_at, t.used_at, t.revoked_at,
-                ua.login_email, ua.display_name, ua.name_prefix, ua.first_name, ua.middle_name,
-                ua.last_name, ua.name_suffix, ua.role, ua.status
+                ua.login_email, ua.display_name, ua.role, ua.status,
+                pi.name_prefix AS canonical_name_prefix,
+                pi.first_name AS canonical_first_name,
+                pi.middle_name AS canonical_middle_name,
+                pi.last_name AS canonical_last_name,
+                pi.name_suffix AS canonical_name_suffix
            FROM security_tokens t
            JOIN user_accounts ua ON ua.user_id = t.user_id
+           JOIN person_identities pi ON pi.person_id = ua.person_id
           WHERE t.purpose = 'faculty_invitation' AND t.token_digest = ?
           LIMIT 1"
     );
@@ -58,15 +63,9 @@ function faculty_invitation_name_parts_from_payload(array $data): array
         || array_key_exists('prefix', $data)
         || array_key_exists('suffix', $data);
     if (!$structured) {
-        return [
-            'displayName' => normalize_person_name(validate_person_name($data, 'name', 2, 255)),
-            'structured' => false,
-            'prefix' => null,
-            'firstName' => null,
-            'middleName' => null,
-            'lastName' => null,
-            'suffix' => null,
-        ];
+        throw new ValidationException([
+            ['field' => 'firstName', 'message' => 'Provide separate firstName, middleName, and lastName fields; combined names are not split automatically.'],
+        ]);
     }
 
     $first = validate_person_name($data, 'firstName', 2, 100);
@@ -95,10 +94,16 @@ function handle_admin_faculty_invitations_list(): void
         $pdo = create_pdo($config);
         admin_verify_auth($pdo, $config);
         $stmt = $pdo->query(
-            "SELECT ua.user_id, ua.login_email, ua.display_name, ua.name_prefix, ua.first_name, ua.middle_name,
-                    ua.last_name, ua.name_suffix, ua.status, latest.issued_at, latest.expires_at,
+            "SELECT ua.user_id, ua.login_email, ua.display_name, ua.status,
+                    pi.name_prefix AS canonical_name_prefix,
+                    pi.first_name AS canonical_first_name,
+                    pi.middle_name AS canonical_middle_name,
+                    pi.last_name AS canonical_last_name,
+                    pi.name_suffix AS canonical_name_suffix,
+                    latest.issued_at, latest.expires_at,
                     latest.used_at, latest.revoked_at
                FROM user_accounts ua
+               JOIN person_identities pi ON pi.person_id = ua.person_id
                LEFT JOIN LATERAL (
                    SELECT issued_at, expires_at, used_at, revoked_at
                      FROM security_tokens
@@ -124,12 +129,19 @@ function handle_admin_faculty_invitations_list(): void
             }
             return [
                 'id' => (string) $row['user_id'],
-                'name' => (string) $row['display_name'],
-                'prefix' => $row['name_prefix'],
-                'firstName' => $row['first_name'],
-                'middleName' => $row['middle_name'],
-                'lastName' => $row['last_name'],
-                'suffix' => $row['name_suffix'],
+                'name' => account_identity_display_name([
+                    'canonical_name_prefix' => $row['canonical_name_prefix'] ?? null,
+                    'canonical_first_name' => $row['canonical_first_name'] ?? null,
+                    'canonical_middle_name' => $row['canonical_middle_name'] ?? null,
+                    'canonical_last_name' => $row['canonical_last_name'] ?? null,
+                    'canonical_name_suffix' => $row['canonical_name_suffix'] ?? null,
+                    'display_name' => $row['display_name'] ?? null,
+                ]),
+                'prefix' => $row['canonical_name_prefix'],
+                'firstName' => $row['canonical_first_name'],
+                'middleName' => $row['canonical_middle_name'],
+                'lastName' => $row['canonical_last_name'],
+                'suffix' => $row['canonical_name_suffix'],
                 'email' => (string) $row['login_email'],
                 'invitedAt' => $row['issued_at'],
                 'expiresAt' => $row['expires_at'],
@@ -206,6 +218,12 @@ function handle_admin_faculty_invitation_create(): void
                 $userId = (int) $insert->fetchColumn();
             } else {
                 $userId = (int) $existing['user_id'];
+                $personStmt = $pdo->prepare('SELECT person_id FROM user_accounts WHERE user_id = ? FOR UPDATE');
+                $personStmt->execute([$userId]);
+                $personId = $personStmt->fetchColumn();
+                if ($personId !== false && $personId !== null) {
+                    account_identity_sync_canonical_person($pdo, (int) $personId, $nameParts);
+                }
                 $update = $pdo->prepare(
                     "UPDATE user_accounts
                         SET login_email = ?, password_hash = ?, display_name = ?, name_prefix = ?, first_name = ?,
@@ -346,7 +364,7 @@ function handle_admin_faculty_invitation_update(): void
 
         $pdo->beginTransaction();
         $accountStmt = $pdo->prepare(
-            'SELECT user_id, login_email, display_name, role, status
+            'SELECT user_id, person_id, login_email, display_name, role, status
                FROM user_accounts WHERE user_id = ? FOR UPDATE'
         );
         $accountStmt->execute([$userId]);
@@ -368,6 +386,7 @@ function handle_admin_faculty_invitation_update(): void
         }
 
         $auditContext = audit_begin_operation($pdo);
+        account_identity_sync_canonical_person($pdo, (int) ($account['person_id'] ?? 0), $nameParts);
         $update = $pdo->prepare(
             "UPDATE user_accounts
                 SET login_email = ?, display_name = ?, name_prefix = ?, first_name = ?, middle_name = ?,
@@ -575,7 +594,16 @@ function handle_admin_faculty_invitation_reissue(): void
         $pdo->beginTransaction();
         try {
             $accountStmt = $pdo->prepare(
-                'SELECT user_id, login_email, display_name, role, status FROM user_accounts WHERE user_id = ? FOR UPDATE'
+                'SELECT ua.user_id, ua.login_email, ua.display_name, ua.role, ua.status,
+                        pi.name_prefix AS canonical_name_prefix,
+                        pi.first_name AS canonical_first_name,
+                        pi.middle_name AS canonical_middle_name,
+                        pi.last_name AS canonical_last_name,
+                        pi.name_suffix AS canonical_name_suffix
+                   FROM user_accounts ua
+                   JOIN person_identities pi ON pi.person_id = ua.person_id
+                  WHERE ua.user_id = ?
+                  FOR UPDATE OF ua, pi'
             );
             $accountStmt->execute([$userId]);
             $account = $accountStmt->fetch(PDO::FETCH_ASSOC);
@@ -624,7 +652,8 @@ function handle_admin_faculty_invitation_reissue(): void
                 'session_id' => $actor['session_id'],
                 'target_type' => 'security_token',
                 'target_id' => (string) $tokenId,
-                'description' => "Admin reissued Faculty invitation for {$account['display_name']} ({$account['login_email']}).",
+                'description' => 'Admin reissued Faculty invitation for '
+                    . account_identity_display_name($account) . " ({$account['login_email']}).",
                 'reason' => null,
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],
@@ -638,7 +667,7 @@ function handle_admin_faculty_invitation_reissue(): void
             throw $e;
         }
 
-        $name = (string) $account['display_name'];
+        $name = account_identity_display_name($account);
         $email = (string) $account['login_email'];
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
         $safeName = htmlspecialchars($name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -690,12 +719,19 @@ function handle_auth_faculty_invitation_get(): void
         auth_controller_emit(auth_build_no_store_json_response([
             'status' => 'ok',
             'invitation' => [
-                'name' => (string) $row['display_name'],
-                'prefix' => $row['name_prefix'],
-                'firstName' => $row['first_name'],
-                'middleName' => $row['middle_name'],
-                'lastName' => $row['last_name'],
-                'suffix' => $row['name_suffix'],
+                'name' => account_identity_display_name([
+                    'canonical_name_prefix' => $row['canonical_name_prefix'] ?? null,
+                    'canonical_first_name' => $row['canonical_first_name'] ?? null,
+                    'canonical_middle_name' => $row['canonical_middle_name'] ?? null,
+                    'canonical_last_name' => $row['canonical_last_name'] ?? null,
+                    'canonical_name_suffix' => $row['canonical_name_suffix'] ?? null,
+                    'display_name' => $row['display_name'] ?? null,
+                ]),
+                'prefix' => $row['canonical_name_prefix'],
+                'firstName' => $row['canonical_first_name'],
+                'middleName' => $row['canonical_middle_name'],
+                'lastName' => $row['canonical_last_name'],
+                'suffix' => $row['canonical_name_suffix'],
                 'email' => (string) $row['login_email'],
                 'expiresAt' => (string) $row['expires_at'],
             ],

@@ -109,10 +109,11 @@ test.describe('P02 development safety seams', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 300, login_email: 'secretary@bicol-u.edu.ph', display_name: 'Secretary', role: 'secretary' }) });
     });
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'secretary@bicol-u.edu.ph');
+    await page.fill('input[inputmode="email"]', 'secretary@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
+    await page.click('a[href="/secretary/attendance"]');
     await page.click('a[href="/secretary/start-session"]');
     await page.getByRole('button', { name: /Locate My GPS/i }).click();
     await expect(page.getByText(/BU Dental Room Location Verified/i)).toBeVisible();

@@ -243,7 +243,7 @@ export const RetentionMonitoring: React.FC = () => {
                     const isAtRiskRow = ['warning', 'critical', 'remedial'].includes(retentionState);
                     const hasRetentionState = Boolean(retentionState);
                     const isPassing = !isPending && (isAuthoritative
-                      ? !isAtRiskRow
+                      ? hasRetentionState && !isAtRiskRow
                       : threshold !== null && cls.grade !== null && cls.grade <= threshold);
 
                     return (

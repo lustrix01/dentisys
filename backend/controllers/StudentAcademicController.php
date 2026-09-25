@@ -32,11 +32,17 @@ function student_academic_verify_auth(PDO $pdo, array $config): array
 function student_academic_profile(PDO $pdo, int $studentId): ?array
 {
     $stmt = $pdo->prepare(
-        'SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+        'SELECT s.student_id, s.student_number,
+                COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                COALESCE(pi.first_name, s.first_name) AS first_name,
+                COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                COALESCE(pi.last_name, s.last_name) AS last_name,
+                COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
                 s.bu_email, s.contact, s.sex, s.year_level, s.status, s.admission_date,
                 s.birthdate, ua.user_id AS account_user_id, ua.login_email,
                 ua.role AS account_role, ua.status AS account_status
            FROM students s
+           LEFT JOIN person_identities pi ON pi.person_id = s.person_id
            LEFT JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
           WHERE s.student_id = ?
           LIMIT 1'
@@ -50,13 +56,17 @@ function student_academic_profile(PDO $pdo, int $studentId): ?array
     return [
         'id' => (string) $row['student_id'],
         'studentNumber' => (string) $row['student_number'],
+        'prefix' => $row['name_prefix'],
+        'suffix' => $row['name_suffix'],
         'firstName' => (string) $row['first_name'],
         'middleName' => $row['middle_name'] !== null ? (string) $row['middle_name'] : null,
         'lastName' => (string) $row['last_name'],
         'name' => trim(implode(' ', array_filter([
+            $row['name_prefix'],
             $row['first_name'],
             $row['middle_name'],
             $row['last_name'],
+            $row['name_suffix'],
         ], static fn(mixed $value): bool => $value !== null && trim((string) $value) !== ''))),
         'email' => $row['bu_email'] !== null ? (string) $row['bu_email'] : null,
         'contact' => $row['contact'] !== null ? (string) $row['contact'] : null,
@@ -78,11 +88,15 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
 {
     $stmt = $pdo->prepare(
         'SELECT e.enrollment_id, e.cs_id, e.status AS enrollment_status, e.date_enrolled,
-                e.final_percentage, e.final_gwa, e.grade_components_json,
-                e.retention_state, e.remedial_state_json, e.clinic_hours_completed,
+                COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
+                COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                e.grade_components_json,
+                COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                e.remedial_state_json, e.clinic_hours_completed,
                 cs.cs_name, cs.semester, cs.school_year, cs.year_level AS class_year_level,
                 c.course_id, c.course_code, c.name AS course_name, c.units, c.is_clinical
            FROM enrollments e
+           LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
            JOIN class_sections cs ON cs.cs_id = e.cs_id
            JOIN courses c ON c.course_id = cs.course_id
           WHERE e.student_id = ?

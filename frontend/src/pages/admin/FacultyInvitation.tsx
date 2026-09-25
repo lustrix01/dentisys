@@ -26,6 +26,13 @@ import {
 } from '../../services/apiClient';
 
 const PREFIX_OPTIONS = ['', 'Dr.', 'Prof.', 'DMD', 'Mr.', 'Ms.', 'Mrs.'];
+const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
+
+function completeInstitutionalEmail(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('@')) return trimmed;
+  return `${trimmed}@${DEFAULT_EMAIL_DOMAIN}`;
+}
 
 export const FacultyInvitation: React.FC = () => {
   const config = useRuntimeConfig();
@@ -41,8 +48,6 @@ export const FacultyInvitation: React.FC = () => {
   const [notice, setNotice] = useState('');
 
   // Creation state
-  const [fullName, setFullName] = useState('');
-  const [useStructuredName, setUseStructuredName] = useState(false);
   const [prefix, setPrefix] = useState('');
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
@@ -94,21 +99,15 @@ export const FacultyInvitation: React.FC = () => {
 
   const handleCreateInvitation = async (event: React.FormEvent) => {
     event.preventDefault();
-    const cleanEmail = email.trim();
+    // The UI presents the institutional suffix by default while still
+    // allowing every configured domain and complete email address.
+    const cleanEmail = completeInstitutionalEmail(email);
 
-    if (useStructuredName) {
-      const cleanFirst = firstName.trim();
-      const cleanLast = lastName.trim();
-      if (!cleanFirst || !cleanLast) {
-        setError('Please provide at least a first name and a last name.');
-        return;
-      }
-    } else {
-      const cleanName = fullName.trim();
-      if (!cleanName) {
-        setError('Please provide the faculty member\'s name.');
-        return;
-      }
+    const cleanFirst = firstName.trim();
+    const cleanLast = lastName.trim();
+    if (!cleanFirst || !cleanLast) {
+      setError('Please provide at least a first name and a last name.');
+      return;
     }
 
     const emailCheck = validateBicolUEmail(cleanEmail, allowedDomains);
@@ -121,19 +120,14 @@ export const FacultyInvitation: React.FC = () => {
     setError('');
     setNotice('');
     try {
-      const payload = useStructuredName
-        ? {
-            prefix: prefix.trim() || undefined,
-            firstName: firstName.trim(),
-            middleName: middleName.trim() || undefined,
-            lastName: lastName.trim(),
-            suffix: suffix.trim() || undefined,
-            email: cleanEmail,
-          }
-        : {
-            name: fullName.trim(),
-            email: cleanEmail,
-          };
+      const payload = {
+        prefix: prefix.trim() || undefined,
+        firstName: cleanFirst,
+        middleName: middleName.trim() || undefined,
+        lastName: cleanLast,
+        suffix: suffix.trim() || undefined,
+        email: cleanEmail,
+      };
 
       const response = await createFacultyInvitation(payload);
 
@@ -141,7 +135,6 @@ export const FacultyInvitation: React.FC = () => {
         ? `Invitation sent to ${cleanEmail}. The Admin invitation authorizes account setup.`
         : `Invitation created for ${cleanEmail}, but email delivery failed. Verify Mailpit or email settings.`);
 
-      setFullName('');
       setPrefix('');
       setFirstName('');
       setMiddleName('');
@@ -175,7 +168,7 @@ export const FacultyInvitation: React.FC = () => {
     event.preventDefault();
     if (!editingInvitation) return;
 
-    const cleanEmail = editEmail.trim();
+    const cleanEmail = completeInstitutionalEmail(editEmail);
 
     const cleanFullName = editFullName.trim();
     const cleanFirst = editFirstName.trim();
@@ -313,21 +306,7 @@ export const FacultyInvitation: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <form onSubmit={handleCreateInvitation} className="space-y-4">
-          <div className="flex items-center justify-between text-xs pb-1">
-            <span className="text-[11px] font-semibold text-slate-500">
-              {useStructuredName ? 'Structured name mode' : 'Standard name input'}
-            </span>
-            <button
-              type="button"
-              onClick={() => setUseStructuredName(prev => !prev)}
-              className="text-accent-600 hover:text-accent-700 font-bold underline cursor-pointer"
-            >
-              {useStructuredName ? '← Switch to Single Name input' : 'Switch to Structured Name fields (Prefix, First, Middle, Last, Suffix) →'}
-            </button>
-          </div>
-
-          {useStructuredName ? (
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
               <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
                 Prefix
                 <select
@@ -382,34 +361,31 @@ export const FacultyInvitation: React.FC = () => {
                   placeholder="DMD, Jr."
                 />
               </label>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3">
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300">
-                Faculty name
-                <input
-                  required
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
-                  placeholder="Dr. Maria Santos, DMD"
-                />
-              </label>
-            </div>
-          )}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
             <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-9">
               Institutional email *
-              <input
-                required
-                type="email"
-                list="admin-faculty-create-email-domains"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
-                placeholder="faculty@bicol-u.edu.ph"
-              />
+              <div className="flex">
+                <input
+                  required
+                  type="text"
+                  inputMode="email"
+                  list="admin-faculty-create-email-domains"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className={`min-w-0 flex-1 border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-900 ${email.includes('@') ? 'rounded-xl' : 'rounded-l-xl'}`}
+                  placeholder={email.includes('@') ? `faculty@${DEFAULT_EMAIL_DOMAIN}` : 'username'}
+                />
+                {!email.includes('@') && (
+                  <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-accent-700 dark:border-slate-700 dark:bg-slate-800 dark:text-accent-300">
+                    @{DEFAULT_EMAIL_DOMAIN}
+                  </span>
+                )}
+              </div>
+              <span className="mt-1 block text-[10px] font-medium text-slate-400">
+                Enter a local part to use @{DEFAULT_EMAIL_DOMAIN}; other configured domains remain supported.
+              </span>
               <datalist id="admin-faculty-create-email-domains">
                 {allowedDomains.map(d => (
                   <option key={d} value={emailLocalPart ? `${emailLocalPart}@${d}` : `@${d}`} />
@@ -615,14 +591,23 @@ export const FacultyInvitation: React.FC = () => {
 
             <label className="block space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300">
               Institutional email *
-              <input
-                required
-                type="email"
-                list="admin-faculty-edit-email-domains"
-                value={editEmail}
-                onChange={e => setEditEmail(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
-              />
+              <div className="flex">
+                <input
+                  required
+                  type="text"
+                  inputMode="email"
+                  list="admin-faculty-edit-email-domains"
+                  value={editEmail}
+                  onChange={e => setEditEmail(e.target.value)}
+                  className={`min-w-0 flex-1 border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-900 ${editEmail.includes('@') ? 'rounded-xl' : 'rounded-l-xl'}`}
+                  placeholder={editEmail.includes('@') ? `faculty@${DEFAULT_EMAIL_DOMAIN}` : 'username'}
+                />
+                {!editEmail.includes('@') && (
+                  <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-accent-700 dark:border-slate-700 dark:bg-slate-800 dark:text-accent-300">
+                    @{DEFAULT_EMAIL_DOMAIN}
+                  </span>
+                )}
+              </div>
               <datalist id="admin-faculty-edit-email-domains">
                 {allowedDomains.map(d => (
                   <option key={d} value={editEmailLocalPart ? `${editEmailLocalPart}@${d}` : `@${d}`} />

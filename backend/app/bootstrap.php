@@ -15,6 +15,7 @@ require_once __DIR__ . '/response.php';
 require_once __DIR__ . '/router.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/validation.php';
+require_once __DIR__ . '/academic_year.php';
 require_once __DIR__ . '/jwt.php';
 require_once __DIR__ . '/mfa.php';
 require_once __DIR__ . '/account_identity.php';

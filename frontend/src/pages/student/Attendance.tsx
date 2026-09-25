@@ -877,6 +877,27 @@ export const Attendance: React.FC = () => {
         </div>
       )}
 
+      {isAuthoritative && (
+        <div className="grid grid-cols-3 gap-3" aria-label="Attendance check-in progress">
+          {[
+            { number: '1', label: 'Select Session', active: checkInStage === 'idle' && !currentSelectedSession?.alreadyRecordedStatus },
+            { number: '2', label: 'Location Check', active: checkInStage === 'location' },
+            { number: '3', label: 'Liveness & Submit', active: checkInStage === 'camera' || checkInStage === 'verifying' || checkInStage === 'result' },
+          ].map((step) => (
+            <div
+              key={step.number}
+              className={`p-3 rounded-2xl border text-center transition-all ${step.active
+                ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
+                : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
+                }`}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wider block">Step {step.number}</span>
+              <span className="text-xs font-extrabold block mt-0.5">{step.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* AUTHORITATIVE FLOW */}
       {/* ========================================================================= */}

@@ -5,6 +5,7 @@ import {
   Search,
   Clock,
   Camera,
+  MapPin,
   Filter,
   UserCheck,
   ShieldCheck,
@@ -128,6 +129,9 @@ export const AttendanceLogs: React.FC = () => {
   const excusedCount = isAuthoritative
     ? logs.filter(r => r.status === 'excused').length
     : mockStudentRecords.filter(r => r.status === 'excused').length;
+  const attendanceRate = totalCount > 0
+    ? Math.round(((presentCount + lateCount) / totalCount) * 100)
+    : null;
 
   const uniqueSubjects = Array.from(
     new Set(
@@ -178,7 +182,7 @@ export const AttendanceLogs: React.FC = () => {
         </div>
       )}
 
-      {/* 4 Summary Metric Cards */}
+      {/* Summary metric cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-left">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Recorded Sessions</span>
@@ -188,24 +192,25 @@ export const AttendanceLogs: React.FC = () => {
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Present</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1">
+            {attendanceRate !== null ? `${attendanceRate}%` : '—'}
+          </span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">On-Time Check-Ins</span>
           <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1">
             {presentCount}
           </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Late</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Late Entries</span>
           <span className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1">
             {lateCount}
           </span>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Excused</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-purple-600 dark:text-purple-400 block mt-1">
-            {excusedCount}
-          </span>
+          {excusedCount > 0 && <span className="text-[10px] text-slate-400 block mt-0.5">{excusedCount} excused</span>}
         </div>
       </div>
 
@@ -266,8 +271,14 @@ export const AttendanceLogs: React.FC = () => {
         </div>
       </div>
 
-      {/* Logs Table / List */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs overflow-hidden">
+      {/* Attendance history table */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+            Attendance Log Entries ({displayRecords.length})
+          </h3>
+          <span className="text-[10px] text-slate-400 font-mono hidden sm:block">Student: {studentName} ({studentIdNum})</span>
+        </div>
         {authLoading ? (
           <div className="flex flex-col items-center justify-center py-20 space-y-3 text-slate-500">
             <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -285,11 +296,13 @@ export const AttendanceLogs: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
-                  <th className="py-3.5 px-5">Date & Time</th>
-                  <th className="py-3.5 px-5">Course</th>
-                  <th className="py-3.5 px-5">Status</th>
-                  <th className="py-3.5 px-5">Verification Method</th>
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                  <th className="pb-3">Date</th>
+                  <th className="pb-3">Class Subject</th>
+                  <th className="pb-3">Check-In Time</th>
+                  <th className="pb-3">Verification Method</th>
+                  <th className="pb-3">Session Location</th>
+                  <th className="pb-3 text-right">Attendance Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -299,21 +312,34 @@ export const AttendanceLogs: React.FC = () => {
                     const MethodIcon = methodInfo.icon;
                     return (
                       <tr key={rec.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-4 px-5">
+                        <td className="py-3.5">
                           <span className="font-bold text-slate-800 dark:text-slate-100 block">{rec.date}</span>
-                          <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                            <Clock className="w-3 h-3" />
-                            {rec.time}
-                          </span>
                         </td>
-                        <td className="py-4 px-5">
+                        <td className="py-3.5">
                           <span className="font-mono font-bold text-blue-600 dark:text-blue-400 block">{rec.courseCode}</span>
                           <span className="text-slate-600 dark:text-slate-300 text-[11px] block">{rec.courseName}</span>
                           {rec.room && (
                             <span className="text-slate-400 text-[10px] block mt-0.5">{rec.room}</span>
                           )}
                         </td>
-                        <td className="py-4 px-5">
+                        <td className="py-3.5 text-slate-500">
+                          {rec.time}
+                        </td>
+                        <td className="py-3.5">
+                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                            <MethodIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                            <span>{methodInfo.label}</span>
+                          </span>
+                          {rec.instructorName && (
+                            <span className="text-[10px] text-slate-400 block mt-0.5">By {rec.instructorName}</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 text-slate-500">
+                          {rec.room ? (
+                            <span className="flex items-center gap-1"><MapPin className="w-3 h-3 text-blue-600" />{rec.room}</span>
+                          ) : '—'}
+                        </td>
+                        <td className="py-3.5 text-right">
                           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${rec.status === 'present'
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
                             : rec.status === 'late'
@@ -327,32 +353,37 @@ export const AttendanceLogs: React.FC = () => {
                             {rec.status === 'unresolved' ? 'Pending' : rec.status}
                           </span>
                         </td>
-                        <td className="py-4 px-5">
-                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
-                            <MethodIcon className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                            <span>{methodInfo.label}</span>
-                          </span>
-                          {rec.instructorName && (
-                            <span className="text-[10px] text-slate-400 block mt-0.5">By {rec.instructorName}</span>
-                          )}
-                        </td>
                       </tr>
                     );
                   })
                   : (displayRecords as typeof mockStudentRecords).map((rec) => (
                     <tr key={rec.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-4 px-5">
+                      <td className="py-3.5">
                         <span className="font-bold text-slate-800 dark:text-slate-100 block">{rec.date}</span>
                         <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                           <Clock className="w-3 h-3" />
                           {rec.verifiedAt?.split(' ')[1] || '08:15 AM'}
                         </span>
                       </td>
-                      <td className="py-4 px-5">
+                      <td className="py-3.5">
                         <span className="font-mono font-bold text-blue-600 dark:text-blue-400 block">{rec.subjectCode}</span>
                         <span className="text-slate-400 text-[10px] block mt-0.5">{rec.verifiedLocationName || 'BU Dental Clinic'}</span>
                       </td>
-                      <td className="py-4 px-5">
+                      <td className="py-3.5 text-slate-500">
+                        {rec.verifiedAt?.split(' ')[1] || '—'}
+                      </td>
+                      <td className="py-3.5">
+                        <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                          <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                          <span>Facial & Geofence Verified</span>
+                        </span>
+                      </td>
+                      <td className="py-3.5 text-slate-500">
+                        {rec.verifiedLocationName ? (
+                          <span className="flex items-center gap-1"><MapPin className="w-3 h-3 text-blue-600" />{rec.verifiedLocationName}</span>
+                        ) : '—'}
+                      </td>
+                      <td className="py-3.5 text-right">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${rec.status === 'present'
                           ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
                           : rec.status === 'late'
@@ -361,13 +392,7 @@ export const AttendanceLogs: React.FC = () => {
                           }`}>
                           {rec.status}
                         </span>
-                      </td>
-                      <td className="py-4 px-5">
-                        <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
-                          <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                          <span>Facial & Geofence Verified</span>
-                        </span>
-                      </td>
+                        </td>
                     </tr>
                   ))}
               </tbody>

@@ -207,14 +207,22 @@ function faculty_map_student_rows(array $rows): array
     foreach ($rows as $row) {
         $id = (string) $row['student_id'];
         if (!isset($byStudent[$id])) {
-            $fullName = trim($row['first_name'] . ($row['middle_name'] ? ' ' . $row['middle_name'] : '') . ' ' . $row['last_name']);
+            $fullName = normalize_person_name(trim(implode(' ', array_filter([
+                $row['name_prefix'] ?? null,
+                $row['first_name'] ?? null,
+                $row['middle_name'] ?? null,
+                $row['last_name'] ?? null,
+                $row['name_suffix'] ?? null,
+            ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))));
             $byStudent[$id] = [
                 'id' => $id,
                 'studentId' => $row['student_number'],
                 'name' => $fullName,
+                'prefix' => $row['name_prefix'] ?? null,
                 'firstName' => $row['first_name'],
                 'middleName' => $row['middle_name'] ?? '',
                 'lastName' => $row['last_name'],
+                'suffix' => $row['name_suffix'] ?? null,
                 'email' => $row['bu_email'] ?? '',
                 'contact' => $row['contact'] ?? '',
                 'sex' => $row['sex'] ?? '',
@@ -280,17 +288,27 @@ function handle_faculty_students(): void
         $authCtx = faculty_verify_auth($pdo, $config);
 
         $stmt = $pdo->prepare("
-            SELECT DISTINCT 
-                s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, 
+            SELECT DISTINCT
+                s.student_id, s.student_number,
+                COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                COALESCE(pi.first_name, s.first_name) AS first_name,
+                COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                COALESCE(pi.last_name, s.last_name) AS last_name,
+                COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
                 s.bu_email, s.contact, s.sex, s.year_level, s.status, s.admission_date, 
                 s.birthdate, b.consent_status, b.face_enrolled,
-                cs.cs_id, cs.cs_name, e.enrollment_id, e.final_gwa, e.grade_components_json,
-                e.retention_state, e.clinic_hours_completed, c.course_code,
+                cs.cs_id, cs.cs_name, e.enrollment_id,
+                COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                e.grade_components_json,
+                COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                e.clinic_hours_completed, c.course_code,
                 c.name AS course_name, c.units, c.is_clinical
             FROM students s
             JOIN enrollments e ON s.student_id = e.student_id
             JOIN class_sections cs ON e.cs_id = cs.cs_id
             JOIN courses c ON c.course_id = cs.course_id
+            LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
             LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
              WHERE cs.instructor_user_id = :faculty_id
                AND LOWER(e.status) = 'active'
@@ -322,7 +340,7 @@ function handle_faculty_student_create(): void
 
         $data = $body['data'];
         $allowed = [
-            'studentNumber', 'studentId', 'firstName', 'middleName', 'lastName',
+            'studentNumber', 'studentId', 'prefix', 'firstName', 'middleName', 'lastName', 'suffix',
             'email', 'contact', 'sex', 'yearLevel', 'status', 'admissionDate',
             'birthdate', 'classId',
         ];
@@ -336,9 +354,15 @@ function handle_faculty_student_create(): void
             return;
         }
         $studentNumber = trim((string) ($data['studentNumber'] ?? $data['studentId'] ?? ''));
+        $prefix = array_key_exists('prefix', $data) && $data['prefix'] !== null
+            ? validate_optional_string($data, 'prefix', 1, 50)
+            : null;
         $firstName = normalize_person_name((string) ($data['firstName'] ?? ''));
         $middleName = normalize_person_name((string) ($data['middleName'] ?? ''));
         $lastName = normalize_person_name((string) ($data['lastName'] ?? ''));
+        $suffix = array_key_exists('suffix', $data) && $data['suffix'] !== null
+            ? validate_optional_string($data, 'suffix', 1, 50)
+            : null;
 
         $email = trim((string) ($data['email'] ?? ''));
         $contact = trim((string) ($data['contact'] ?? ''));
@@ -401,11 +425,18 @@ function handle_faculty_student_create(): void
             safe_error_response('Create or select an assigned class before registering a student.', 422);
             return;
         }
+        $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
+        $classYearStmt->execute([$csId]);
+        $classSchoolYear = $classYearStmt->fetchColumn();
+        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear)) {
+            safe_error_response('Historical class sections are view-only and cannot add Students.', 409);
+            return;
+        }
 
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare("INSERT INTO students (student_number, first_name, middle_name, last_name, bu_email, contact, sex, year_level, status, admission_date, birthdate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(6)) RETURNING student_id");
+        $stmt = $pdo->prepare("INSERT INTO students (student_number, name_prefix, first_name, middle_name, last_name, name_suffix, bu_email, contact, sex, year_level, status, admission_date, birthdate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(6)) RETURNING student_id");
         $stmt->execute([
-            $studentNumber, $firstName, $middleName ?: null, $lastName, $email ?: null,
+            $studentNumber, $prefix, $firstName, $middleName ?: null, $lastName, $suffix, $email ?: null,
             $contact ?: null, $sex ?: null, $yearLevel, $status, $admissionDate, $birthdate
         ]);
         $newId = (int) $stmt->fetchColumn();
@@ -417,7 +448,10 @@ function handle_faculty_student_create(): void
         $className = (string) $classInfo->fetchColumn();
         $pdo->commit();
 
-        $fullName = trim($firstName . ($middleName ? ' ' . $middleName : '') . ' ' . $lastName);
+        $fullName = normalize_person_name(trim(implode(' ', array_filter(
+            [$prefix, $firstName, $middleName, $lastName, $suffix],
+            static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''
+        ))));
 
         json_response([
             'status' => 'ok',
@@ -426,9 +460,11 @@ function handle_faculty_student_create(): void
                 'id' => (string) $newId,
                 'studentId' => $studentNumber,
                 'name' => $fullName,
+                'prefix' => $prefix,
                 'firstName' => $firstName,
                 'middleName' => $middleName,
                 'lastName' => $lastName,
+                'suffix' => $suffix,
                 'email' => $email,
                 'contact' => $contact,
                 'sex' => $sex,
@@ -449,6 +485,10 @@ function handle_faculty_student_create(): void
     } catch (\Throwable $e) {
         if (isset($pdo) && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty student create error: ' . sanitize_for_log($e));
+        if ($e instanceof ValidationException) {
+            validation_error_response($e->getErrors());
+            return;
+        }
         if ($e instanceof PDOException && (string) $e->getCode() === '23000') {
             safe_error_response('Student number or email already exists.', 409);
             return;
@@ -490,7 +530,7 @@ function handle_faculty_student_update(array $params = []): void
 
         $data = $body['data'];
         $allowed = [
-            'studentId', 'id', 'firstName', 'middleName', 'lastName', 'email',
+            'studentId', 'id', 'prefix', 'firstName', 'middleName', 'lastName', 'suffix', 'email',
             'contact', 'sex', 'yearLevel', 'status', 'admissionDate', 'birthdate',
         ];
         $errors = [];
@@ -508,8 +548,8 @@ function handle_faculty_student_update(array $params = []): void
 
         $pdo->beginTransaction();
         $select = $pdo->prepare(
-            'SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
-                    s.bu_email, s.student_account_user_id, s.contact, s.sex, s.year_level, s.status,
+            'SELECT s.student_id, s.student_number, s.person_id, s.name_prefix, s.first_name, s.middle_name, s.last_name, s.name_suffix,
+                    s.bu_email, s.student_account_user_id, s.user_id, s.contact, s.sex, s.year_level, s.status,
                     s.admission_date, s.birthdate
                FROM students s
               WHERE s.student_id = ?
@@ -517,11 +557,11 @@ function handle_faculty_student_update(array $params = []): void
                     SELECT 1 FROM enrollments e
                     JOIN class_sections cs ON cs.cs_id = e.cs_id
                     WHERE e.student_id = s.student_id
-                      AND cs.instructor_user_id = ?
+                      AND cs.instructor_user_id = ? AND UPPER(cs.school_year) = UPPER(?)
                 )
               FOR UPDATE'
         );
-        $select->execute([$studentId, (int) $authCtx['user_id']]);
+        $select->execute([$studentId, (int) $authCtx['user_id'], academic_current_school_year($pdo)]);
         $before = $select->fetch(PDO::FETCH_ASSOC);
         if (!is_array($before)) {
             $pdo->rollBack();
@@ -531,17 +571,33 @@ function handle_faculty_student_update(array $params = []): void
 
         $updates = [];
         $values = [];
+        $namePartsChanged = false;
+        $nameParts = [
+            'prefix' => $before['name_prefix'],
+            'firstName' => $before['first_name'],
+            'middleName' => $before['middle_name'],
+            'lastName' => $before['last_name'],
+            'suffix' => $before['name_suffix'],
+        ];
+        if (array_key_exists('prefix', $data)) {
+            $namePartsChanged = true;
+            $nameParts['prefix'] = $data['prefix'] === null ? null : validate_optional_string($data, 'prefix', 1, 50);
+        }
         if (array_key_exists('firstName', $data)) {
-            $updates[] = 'first_name = ?';
-            $values[] = validate_person_name($data, 'firstName', 2, 100);
+            $namePartsChanged = true;
+            $nameParts['firstName'] = validate_person_name($data, 'firstName', 2, 100);
         }
         if (array_key_exists('middleName', $data)) {
-            $updates[] = 'middle_name = ?';
-            $values[] = validate_optional_person_name($data, 'middleName', 2, 100);
+            $namePartsChanged = true;
+            $nameParts['middleName'] = validate_optional_person_name($data, 'middleName', 2, 100);
         }
         if (array_key_exists('lastName', $data)) {
-            $updates[] = 'last_name = ?';
-            $values[] = validate_person_name($data, 'lastName', 2, 100);
+            $namePartsChanged = true;
+            $nameParts['lastName'] = validate_person_name($data, 'lastName', 2, 100);
+        }
+        if (array_key_exists('suffix', $data)) {
+            $namePartsChanged = true;
+            $nameParts['suffix'] = $data['suffix'] === null ? null : validate_optional_string($data, 'suffix', 1, 50);
         }
         if (array_key_exists('email', $data)) {
             $email = trim((string) $data['email']);
@@ -592,14 +648,20 @@ function handle_faculty_student_update(array $params = []): void
                 $values[] = ($value === '' ? null : $value);
             }
         }
-        if ($updates === []) {
+        if ($updates === [] && !$namePartsChanged) {
             throw new ValidationException([['field' => 'fields', 'message' => 'At least one editable Student field is required.']]);
         }
 
-        $values[] = $studentId;
-        $pdo->prepare('UPDATE students SET ' . implode(', ', $updates) . ', updated_at = CURRENT_TIMESTAMP(6) WHERE student_id = ?')
-            ->execute($values);
-        $select->execute([$studentId, (int) $authCtx['user_id']]);
+        if ($namePartsChanged) {
+            account_identity_sync_canonical_person($pdo, (int) $before['person_id'], $nameParts);
+        }
+
+        if ($updates !== []) {
+            $values[] = $studentId;
+            $pdo->prepare('UPDATE students SET ' . implode(', ', $updates) . ', updated_at = CURRENT_TIMESTAMP(6) WHERE student_id = ?')
+                ->execute($values);
+        }
+        $select->execute([$studentId, (int) $authCtx['user_id'], academic_current_school_year($pdo)]);
         $after = $select->fetch(PDO::FETCH_ASSOC);
         if (!is_array($after)) {
             throw new RuntimeException('Updated Student could not be reloaded.');
@@ -633,10 +695,15 @@ function handle_faculty_student_update(array $params = []): void
             'student' => [
                 'id' => (string) $after['student_id'],
                 'studentId' => (string) $after['student_number'],
+                'prefix' => $after['name_prefix'],
                 'firstName' => $after['first_name'],
                 'middleName' => $after['middle_name'],
                 'lastName' => $after['last_name'],
-                'name' => trim(implode(' ', array_filter([$after['first_name'], $after['middle_name'], $after['last_name']], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))),
+                'suffix' => $after['name_suffix'],
+                'name' => normalize_person_name(trim(implode(' ', array_filter([
+                    $after['name_prefix'], $after['first_name'], $after['middle_name'],
+                    $after['last_name'], $after['name_suffix'],
+                ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== '')))),
                 'email' => $after['bu_email'],
                 'contact' => $after['contact'],
                 'sex' => $after['sex'],
@@ -1192,8 +1259,9 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
                            AND UPPER(cs.semester) = ?
                            AND UPPER(cs.school_year) = ?
                     ) AS in_use
-               FROM grading_category_periods gcp
-              WHERE gcp.config_id = ?
+               FROM grading_category_period_memberships gcp
+               JOIN grading_categories gc_config ON gc_config.category_id = gcp.category_id
+              WHERE gc_config.config_id = ?
               ORDER BY gcp.grading_period, gcp.sort_order, gcp.category_period_id"
         );
         $stmt->execute([
@@ -1677,9 +1745,10 @@ function handle_faculty_grading_config_save(): void
             }
             if ($schemaMode === 'periods') {
                 $deleteRemovedMemberships = $pdo->prepare(
-                    "DELETE FROM grading_category_periods WHERE config_id = ? AND category_id IN ({$placeholders})"
+                    "DELETE FROM grading_category_period_memberships
+                      WHERE category_id IN ({$placeholders})"
                 );
-                $deleteRemovedMemberships->execute(array_merge([$configId], $removedCategoryIds));
+                $deleteRemovedMemberships->execute($removedCategoryIds);
             }
             $deleteCategory = $pdo->prepare("DELETE FROM grading_categories WHERE config_id = ? AND category_id IN ({$placeholders})");
             $deleteCategory->execute(array_merge([$configId], $removedCategoryIds));
@@ -1746,7 +1815,10 @@ function handle_faculty_grading_config_save(): void
 
         if ($schemaMode === 'periods') {
             $existingMembershipStmt = $pdo->prepare(
-                'SELECT category_period_id, category_id, grading_period, source_kind FROM grading_category_periods WHERE config_id = ?'
+                'SELECT gcp.category_period_id, gcp.category_id, gcp.grading_period, gcp.source_kind
+                   FROM grading_category_period_memberships gcp
+                   JOIN grading_categories gc ON gc.category_id = gcp.category_id
+                  WHERE gc.config_id = ?'
             );
             $existingMembershipStmt->execute([$configId]);
             $existingMemberships = [];
@@ -1944,41 +2016,43 @@ function handle_faculty_grading_config_save(): void
 
             if ($existingMemberships !== []) {
                 $temporaryMembershipName = $pdo->prepare(
-                    'UPDATE grading_category_periods SET name = ? WHERE config_id = ? AND category_period_id = ?'
+                    'UPDATE grading_category_period_memberships SET name = ? WHERE category_period_id = ?'
                 );
                 foreach ($existingMemberships as $existingMembership) {
                     $temporaryMembershipName->execute([
                         '__grading_period_pending_' . $existingMembership['categoryId'] . '_' . $existingMembership['gradingPeriod'],
-                        $configId,
                         $existingMembership['categoryPeriodId'],
                     ]);
                 }
             }
 
             $deleteMissingMembership = $pdo->prepare(
-                'DELETE FROM grading_category_periods WHERE config_id = ? AND category_id = ? AND grading_period = ?'
+                'DELETE FROM grading_category_period_memberships
+                  WHERE category_id = ? AND grading_period = ?'
             );
             foreach ($removedMemberships as $removedMembership) {
                 $deleteMissingMembership->execute([
-                    $configId,
                     $removedMembership['categoryId'],
                     $removedMembership['gradingPeriod'],
                 ]);
             }
 
+            // The canonical relation owns active configuration writes. Its
+            // one-way projection trigger keeps the config_id-bearing legacy
+            // relation synchronized without a circular trigger path.
             $upsertMembership = $pdo->prepare(
-                "INSERT INTO grading_category_periods
-                    (config_id, category_id, grading_period, name, weight, sort_order, source_kind)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                 ON CONFLICT (config_id, category_id, grading_period) DO UPDATE
+                "INSERT INTO grading_category_period_memberships
+                    (category_id, grading_period, name, weight, sort_order, source_kind)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT (category_id, grading_period) DO UPDATE
                  SET name = EXCLUDED.name,
                      weight = EXCLUDED.weight,
                      sort_order = EXCLUDED.sort_order,
+                     source_kind = EXCLUDED.source_kind,
                      updated_at = CURRENT_TIMESTAMP(6)"
             );
             foreach ($incomingMemberships as $membership) {
                 $upsertMembership->execute([
-                    $configId,
                     $membership['categoryId'],
                     $membership['gradingPeriod'],
                     $membership['name'],
@@ -2248,10 +2322,11 @@ function faculty_period_attendance_summary(
 function faculty_compute_period_result(PDO $pdo, array $group, string $period): array
 {
     $membershipStmt = $pdo->prepare(
-        'SELECT category_id, name, weight, sort_order, source_kind
-           FROM grading_category_periods
-          WHERE config_id = ? AND grading_period = ?
-          ORDER BY sort_order, category_period_id'
+        'SELECT gcp.category_id, gcp.name, gcp.weight, gcp.sort_order, gcp.source_kind
+           FROM grading_category_period_memberships gcp
+           JOIN grading_categories gc ON gc.category_id = gcp.category_id
+          WHERE gc.config_id = ? AND gcp.grading_period = ?
+          ORDER BY gcp.sort_order, gcp.category_period_id'
     );
     $membershipStmt->execute([(int) $group['configId'], $period]);
     $memberships = $membershipStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2556,15 +2631,13 @@ function handle_faculty_assessments_save(): void
                             gcp.source_kind,
                             EXISTS (
                                 SELECT 1
-                                  FROM grading_category_periods gcp
-                                 WHERE gcp.config_id = gc.config_id
-                                   AND gcp.category_id = gc.category_id
+                                  FROM grading_category_period_memberships gcp
+                                 WHERE gcp.category_id = gc.category_id
                                    AND gcp.grading_period = ?
                             ) AS period_membership
                        FROM grading_categories gc
-                       LEFT JOIN grading_category_periods gcp
-                         ON gcp.config_id = gc.config_id
-                        AND gcp.category_id = gc.category_id
+                       LEFT JOIN grading_category_period_memberships gcp
+                         ON gcp.category_id = gc.category_id
                         AND gcp.grading_period = ?
                       WHERE gc.config_id = ? AND gc.category_id = ?"
                 );
@@ -2948,7 +3021,9 @@ function handle_faculty_grades_compute(): void
         $lockConfigs->execute($lockConfigParams);
 
         $sql = "SELECT e.enrollment_id, e.student_id, e.cs_id,
-                       e.final_percentage, e.final_gwa, e.grade_components_json,
+                       COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
+                       COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                       e.grade_components_json,
                        a.assessment_id, a.title, a.grading_period, a.grading_category_id,
                        a.weight, a.max_score, a.transmutation_enabled,
                        a.transmutation_minimum_percentage, a.transmutation_maximum_percentage,
@@ -2968,6 +3043,7 @@ function handle_faculty_grades_compute(): void
                        att.attendance_percentage
                 FROM enrollments e
                 JOIN class_sections cs ON cs.cs_id = e.cs_id
+                LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
                 LEFT JOIN assessments a ON a.cs_id = e.cs_id AND a.status <> 'Archived'
                 LEFT JOIN grading_configs gc
                        ON gc.faculty_user_id = cs.instructor_user_id
@@ -2977,9 +3053,8 @@ function handle_faculty_grades_compute(): void
                 LEFT JOIN grading_categories gcat
                        ON gcat.config_id = gc.config_id
                       AND gcat.category_id = a.grading_category_id
-                LEFT JOIN grading_category_periods gcp
-                       ON gcp.config_id = gc.config_id
-                      AND gcp.category_id = a.grading_category_id
+                LEFT JOIN grading_category_period_memberships gcp
+                       ON gcp.category_id = a.grading_category_id
                       AND gcp.grading_period = a.grading_period
                 LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = e.student_id
                 LEFT JOIN attendance_records linked_att
@@ -3057,6 +3132,9 @@ function handle_faculty_grades_compute(): void
                     $grouped[$enrollmentId]['assessments'][] = $row;
                 }
         }
+        // The legacy JSON remains the response-compatible write surface;
+        // migration 020's trigger refreshes the normalized scalar/category
+        // projection atomically.
         $updateWithBreakdown = $pdo->prepare(
             "UPDATE enrollments
              SET final_percentage = ?, final_gwa = ?, retention_state = ?, grade_components_json = ?
@@ -4311,6 +4389,102 @@ function handle_faculty_attendance_override(): void
     }
 }
 
+function handle_faculty_watchlist_unlock(): void
+{
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $auth = faculty_verify_auth($pdo, $config);
+        $body = request_body();
+        $classId = faculty_attendance_positive_int($body['data']['classId'] ?? null);
+        if ($classId === null) {
+            throw new ValidationException([['field' => 'classId', 'message' => 'Select a class to unlock.']]);
+        }
+        $pdo->beginTransaction();
+        $class = $pdo->prepare('SELECT cs_id, school_year FROM class_sections WHERE cs_id = ? AND instructor_user_id = ? FOR UPDATE');
+        $class->execute([$classId, $auth['user_id']]);
+        $row = $class->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            $pdo->rollBack();
+            safe_error_response('Class not found in your assigned classes.', 404);
+            return;
+        }
+        if (!academic_school_year_is_current($pdo, (string) $row['school_year'])) {
+            $pdo->rollBack();
+            safe_error_response('Past school-year classes are view-only.', 409);
+            return;
+        }
+        $insert = $pdo->prepare('INSERT INTO class_watchlist_unlocks (cs_id, unlocked_by) VALUES (?, ?) ON CONFLICT (cs_id) DO NOTHING');
+        $insert->execute([$classId, $auth['user_id']]);
+        if ($insert->rowCount() > 0) {
+            $audit = audit_begin_operation($pdo);
+            audit_finish_operation($pdo, $audit, [
+                'module_code' => 'faculty_retention', 'action_code' => 'watchlist_unlock',
+                'event_status' => 'Success', 'actor_user_id' => $auth['user_id'],
+                'actor_username' => $auth['login_email'], 'actor_role' => $auth['role'],
+                'actor_display_name' => $auth['display_name'], 'session_id' => $auth['session_id'],
+                'scope_cs_id' => $classId, 'target_type' => 'class_section', 'target_id' => (string) $classId,
+                'description' => 'Manually unlocked the Midterm Watchlist for the selected class. Grades are unchanged.',
+                'http_method' => request_method(), 'endpoint' => request_path(), 'request_id' => request_id(),
+                'ip_address' => request_ip(), 'user_agent' => request_user_agent(),
+            ], config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY'),
+                ['unlocked' => false], ['unlocked' => true, 'classId' => $classId]);
+        }
+        $pdo->commit();
+        json_response(['status' => 'ok', 'classId' => (string) $classId, 'watchlistUnlocked' => true], 200);
+    } catch (\Throwable $e) {
+        if ($pdo && $pdo->inTransaction()) $pdo->rollBack();
+        if ($e instanceof ValidationException) {
+            validation_error_response($e->getErrors());
+            return;
+        }
+        error_log('Watchlist unlock error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to unlock the watchlist.', 500);
+    }
+}
+
+function faculty_watchlist_midterm(PDO $pdo, array $enrollment): array
+{
+    // Recompute the existing period calculation read-only so a newly added or
+    // cleared score cannot leave the watchlist open from a stale saved result.
+    $config = $pdo->prepare(
+        "SELECT gc.config_id, gc.midterm_start_date, gc.midterm_end_date
+           FROM grading_configs gc JOIN class_sections cs
+             ON gc.faculty_user_id = cs.instructor_user_id AND gc.course_id = cs.course_id
+            AND gc.semester = UPPER(cs.semester) AND gc.school_year = UPPER(cs.school_year)
+          WHERE cs.cs_id = ? AND gc.schema_mode = 'periods'
+            AND EXISTS (
+                SELECT 1
+                  FROM grading_category_period_memberships gcp
+                  JOIN grading_categories gc_period ON gc_period.category_id = gcp.category_id
+                 WHERE gc_period.config_id = gc.config_id
+                   AND gcp.grading_period = 'Midterm'
+            )"
+    );
+    $config->execute([$enrollment['cs_id']]);
+    $grading = $config->fetch(PDO::FETCH_ASSOC);
+    if (!$grading) return ['complete' => false, 'percentage' => null];
+    $assessments = $pdo->prepare(
+        "SELECT a.*, sc.score_id, sc.score, ar.status AS linked_attendance_status
+           FROM assessments a
+           LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = ?
+           LEFT JOIN attendance_records ar ON ar.enrollment_id = ?
+             AND ar.session_date = a.attendance_session_date AND ar.session_code = a.attendance_session_code
+          WHERE a.cs_id = ? AND a.grading_period = 'Midterm' AND a.status <> 'Archived'"
+    );
+    $assessments->execute([$enrollment['student_id'], $enrollment['enrollment_id'], $enrollment['cs_id']]);
+    $rows = $assessments->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$assessment) $assessment['_has_score'] = $assessment['score_id'] !== null;
+    unset($assessment);
+    $result = faculty_compute_period_result($pdo, [
+        'configId' => $grading['config_id'], 'csId' => $enrollment['cs_id'],
+        'enrollmentId' => $enrollment['enrollment_id'], 'assessments' => $rows,
+        'attendanceDateRanges' => ['midterm' => ['startDate' => $grading['midterm_start_date'], 'endDate' => $grading['midterm_end_date']]],
+    ], 'Midterm');
+    return ['complete' => $result['status'] === 'computed', 'percentage' => $result['percentage']];
+}
+
 function handle_faculty_retention_get(): void
 {
     try {
@@ -4319,19 +4493,33 @@ function handle_faculty_retention_get(): void
         $authCtx = faculty_verify_auth($pdo, $config);
 
         $stmt = $pdo->prepare(
-            "SELECT e.enrollment_id, e.student_id, e.final_percentage, e.final_gwa,
-                    e.retention_state, e.remedial_state_json, s.student_number,
-                    s.first_name, s.middle_name, s.last_name, cs.cs_id, cs.cs_name, c.course_code
+            "SELECT e.enrollment_id, e.student_id,
+                    COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
+                    COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                    COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                    e.remedial_state_json, s.student_number,
+                    COALESCE(pi.first_name, s.first_name) AS first_name,
+                    COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                    COALESCE(pi.last_name, s.last_name) AS last_name,
+                    cs.cs_id, cs.cs_name, c.course_code,
+                    wu.unlocked_at, cs.school_year, e.grade_components_json
              FROM enrollments e
              JOIN students s ON s.student_id = e.student_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
+             LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+             LEFT JOIN class_watchlist_unlocks wu ON wu.cs_id = cs.cs_id
              WHERE cs.instructor_user_id = ?
                AND LOWER(e.status) = 'active'
-             ORDER BY e.retention_state DESC, s.last_name, s.first_name"
+             ORDER BY COALESCE(egb.retention_state, e.retention_state) DESC,
+                      COALESCE(pi.last_name, s.last_name),
+                      COALESCE(pi.first_name, s.first_name)"
         );
         $stmt->execute([$authCtx['user_id']]);
-        $retention = array_map(static fn(array $row): array => [
+        $retention = array_map(static function (array $row) use ($pdo): array {
+            $midterm = faculty_watchlist_midterm($pdo, $row);
+            return [
             'enrollmentId' => (string) $row['enrollment_id'],
             'studentId' => (string) $row['student_id'],
             'studentNumber' => $row['student_number'],
@@ -4343,7 +4531,13 @@ function handle_faculty_retention_get(): void
             'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
             'state' => $row['retention_state'],
             'remedial' => $row['remedial_state_json'] ? json_decode($row['remedial_state_json'], true) : null,
-        ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+            'watchlistUnlocked' => $row['unlocked_at'] !== null,
+            'unlockedAt' => $row['unlocked_at'],
+            'schoolYear' => $row['school_year'],
+            'midtermComplete' => $midterm['complete'],
+            'midtermPercentage' => $midterm['percentage'],
+        ];
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC));
         json_response([
             'status' => 'ok',
             'retention' => $retention,
@@ -4388,6 +4582,8 @@ function handle_faculty_retention_remedial_save(): void
         $where = $enrollmentId > 0
             ? 'e.enrollment_id = ?'
             : 'e.student_id = ? AND e.cs_id = ?';
+        // Remedial JSON retains policy-opaque fields; migration 020 mirrors
+        // only the understood current-state fields to its normalized table.
         $stmt = $pdo->prepare(
             "UPDATE enrollments AS e
              SET remedial_state_json = ?, retention_state = ?
@@ -4540,13 +4736,25 @@ function handle_faculty_profile_get(): void
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
 
-        $stmt = $pdo->prepare("SELECT user_id, login_email, display_name, title, theme FROM user_accounts WHERE user_id = ?");
+        $stmt = $pdo->prepare(
+            "SELECT ua.user_id, ua.login_email, ua.display_name,
+                    COALESCE(pi.name_prefix, ua.name_prefix) AS canonical_name_prefix,
+                    COALESCE(pi.first_name, ua.first_name) AS canonical_first_name,
+                    COALESCE(pi.middle_name, ua.middle_name) AS canonical_middle_name,
+                    COALESCE(pi.last_name, ua.last_name) AS canonical_last_name,
+                    COALESCE(pi.name_suffix, ua.name_suffix) AS canonical_name_suffix,
+                    ua.title, ua.theme
+               FROM user_accounts ua
+               LEFT JOIN person_identities pi ON pi.person_id = ua.person_id
+              WHERE ua.user_id = ?"
+        );
         $stmt->execute([$authCtx['user_id']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         json_response([
             'status' => 'ok',
             'profile' => [
+                ...account_identity_profile_parts($user ?: []),
                 'id' => (string) ($user['user_id'] ?? $authCtx['user_id']),
                 'name' => $user['display_name'] ?? 'Faculty Member',
                 'email' => $user['login_email'] ?? '',
@@ -4575,10 +4783,11 @@ function handle_faculty_profile_update(): void
         }
 
         $data = $body['data'];
-        $name = validate_person_name($data, 'name', 2, 255);
+        $nameParts = account_identity_name_parts($data);
+        $name = $nameParts !== null ? account_identity_composed_name($nameParts) : validate_person_name($data, 'name', 2, 255);
         $email = validate_institutional_email($data['email'] ?? '');
 
-        update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email);
+        update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
 
         json_response(['status' => 'ok', 'message' => 'Faculty profile updated successfully.'], 200);
     } catch (ValidationException $e) {
@@ -4813,15 +5022,23 @@ function handle_faculty_reports_summary(): void
         $authCtx = faculty_verify_auth($pdo, $config);
 
         $stmt = $pdo->prepare(
-            "SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+            "SELECT s.student_id, s.student_number,
+                    COALESCE(pi.first_name, s.first_name) AS first_name,
+                    COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                    COALESCE(pi.last_name, s.last_name) AS last_name,
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
-                    e.final_gwa, e.final_percentage, e.retention_state, e.remedial_state_json,
+                    COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                    COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
+                    COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                    e.remedial_state_json,
                     e.grade_components_json, e.clinic_hours_completed, cs.cs_id, cs.cs_name,
                     c.course_code, c.name AS course_name, c.units, c.is_clinical
              FROM students s
              JOIN enrollments e ON e.student_id = s.student_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
+             LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
              LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
              WHERE cs.instructor_user_id = ?
                AND LOWER(e.status) = 'active'
@@ -4901,6 +5118,7 @@ function handle_faculty_classes_get(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
+        $currentSchoolYear = academic_current_school_year($pdo);
 
         $stmt = $pdo->prepare("
             SELECT 
@@ -4931,7 +5149,7 @@ function handle_faculty_classes_get(): void
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $mapped = array_map(function ($cls) {
+        $mapped = array_map(function ($cls) use ($currentSchoolYear) {
             return [
                 'id' => (string) $cls['cs_id'],
                 'csId' => (int) $cls['cs_id'],
@@ -4941,6 +5159,8 @@ function handle_faculty_classes_get(): void
                 'courseName' => $cls['course_name'] ?? $cls['cs_name'],
                 'units' => (float) ($cls['units'] ?? 3.0),
                 'schoolYear' => $cls['school_year'],
+                'isCurrentSchoolYear' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) === 0,
+                'isHistorical' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
                 'semester' => $cls['semester'],
                 'yearLevel' => (int) ($cls['year_level'] ?? 1),
                 'block' => $cls['block'] ?? 'A',
@@ -4957,6 +5177,7 @@ function handle_faculty_classes_get(): void
 
         json_response([
             'status' => 'ok',
+            'currentSchoolYear' => $currentSchoolYear,
             'classes' => $mapped,
         ], 200);
     } catch (\Throwable $e) {
@@ -5023,6 +5244,7 @@ function handle_faculty_class_create(): void
         $courseId = (int) ($data['courseId'] ?? 0);
         $semester = validate_required_string($data, 'semester', 1, 20);
         $schoolYear = validate_required_string($data, 'schoolYear', 4, 20);
+        academic_require_current_school_year($pdo, $schoolYear);
         $yearLevel = (int) ($data['yearLevel'] ?? 1);
         $block = validate_optional_string($data, 'block', 1, 50) ?? 'A';
         $labRoom = validate_optional_string($data, 'labRoom', 1, 100);
@@ -5211,6 +5433,11 @@ function handle_faculty_class_update(): void
                 safe_error_response('Class section not found or not assigned to this faculty member.', 403);
                 return;
             }
+            if (!academic_school_year_is_current($pdo, (string) $before['school_year'])) {
+                $pdo->rollBack();
+                safe_error_response('Historical class sections are view-only and cannot be edited.', 409);
+                return;
+            }
 
             $update = $pdo->prepare(
                 'UPDATE class_sections SET ' . implode(', ', $updates) . ' WHERE cs_id = ? AND instructor_user_id = ?'
@@ -5288,7 +5515,7 @@ function handle_faculty_class_available_students(): void
         }
 
         $stmt = $pdo->prepare("
-            SELECT s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.bu_email, s.year_level, s.status
+            SELECT s.student_id, s.student_number, s.name_prefix, s.first_name, s.middle_name, s.last_name, s.name_suffix, s.bu_email, s.year_level, s.status
             FROM students s
             WHERE LOWER(s.status) = 'active'
               AND NOT EXISTS (
@@ -5301,11 +5528,18 @@ function handle_faculty_class_available_students(): void
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $mapped = array_map(function ($s) {
-            $fullName = trim($s['first_name'] . ($s['middle_name'] ? ' ' . $s['middle_name'] : '') . ' ' . $s['last_name']);
+            $fullName = normalize_person_name(trim(implode(' ', array_filter([
+                $s['name_prefix'], $s['first_name'], $s['middle_name'], $s['last_name'], $s['name_suffix'],
+            ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))));
             return [
                 'id' => (string) $s['student_id'],
                 'studentId' => $s['student_number'],
                 'name' => $fullName,
+                'prefix' => $s['name_prefix'],
+                'firstName' => $s['first_name'],
+                'middleName' => $s['middle_name'],
+                'lastName' => $s['last_name'],
+                'suffix' => $s['name_suffix'],
                 'email' => $s['bu_email'] ?? '',
                 'yearLevel' => $s['year_level'] !== null ? (int) $s['year_level'] : null,
                 'status' => strtolower($s['status'] ?? 'active'),
@@ -5353,6 +5587,13 @@ function handle_faculty_class_enroll_students(): void
         }
         if (faculty_owned_class_id($pdo, (int) $authCtx['user_id'], (string) $csId) <= 0) {
             safe_error_response('Class is not assigned to this faculty member.', 403);
+            return;
+        }
+        $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
+        $classYearStmt->execute([$csId]);
+        $classSchoolYear = $classYearStmt->fetchColumn();
+        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear)) {
+            safe_error_response('Historical class sections are view-only and cannot add Students.', 409);
             return;
         }
 
@@ -5473,6 +5714,13 @@ function handle_faculty_class_unenroll_student(): void
         }
         if (faculty_owned_class_id($pdo, (int) $authCtx['user_id'], (string) $csId) <= 0) {
             safe_error_response('Class is not assigned to this faculty member.', 403);
+            return;
+        }
+        $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
+        $classYearStmt->execute([$csId]);
+        $classSchoolYear = $classYearStmt->fetchColumn();
+        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear)) {
+            safe_error_response('Historical class sections are view-only and cannot remove Students.', 409);
             return;
         }
 

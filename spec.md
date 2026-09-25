@@ -815,13 +815,13 @@ The source branch defines the interface, not automatic approval of its backend s
 
 Provide Single Activity View and Full Matrix View, including course/class filters, for entering one activity or multiple student/activity scores. Both ultimately use the same authoritative score records.
 
-Allow a blank due date for activities without a deadline. Prevent overlapping activity dates; exact collision scope and date-versus-time semantics remain OPEN until clarified. Do not infer a global uniqueness constraint. A blank due date does not waive GRD-001's separate attendance-link requirement.
+Allow a blank due date for activities without a deadline. The Owner clarified on 2026-09-24 that activity due dates MAY overlap, including multiple activities in one class and activities across classes, Faculty, and courses. This corrects the PDF's no-overlap instruction; no collision restriction or uniqueness constraint applies to due dates. A blank due date does not waive GRD-001's separate attendance-link requirement.
 
 Explain overall Midterm/Final contributions and each period's category weights clearly, identify the target offering, and show totals. Preserve GRD-002's calculation, saved-configuration, and 100% validation rules; screenshot examples do not override saved values.
 
 ## UI-003 - Watchlist and retention (PDF pages 4 and 6)
 
-The Midterm Watchlist stays locked while the applicable student's midterm grades are incomplete and becomes accessible when complete. Authorized Faculty may manually unlock it. Unlocking changes visibility, not missing grades or academic completeness. Record the actor, scope, and timestamp when wiring manual unlocks. Aggregate lock/unlock scope for a multi-student view remains OPEN.
+The Midterm Watchlist stays locked while the applicable student's midterm grades are incomplete and becomes accessible when complete. Authorized Faculty may manually unlock it for every student in the selected class, as clarified by the Owner on 2026-09-24. Unlocking changes visibility, not missing grades or academic completeness. Persist the class, actor, and timestamp; do not unlock another class implicitly.
 
 Retention uses final grades, scores, and applicable approved BUCDM policy. Clickable Policy Status displays the student's current stage and progression through the BUCDM retention flow. Distinguish midterm warning from final retention decisions. Do not approve numeric thresholds or policy tracks solely from screenshot examples; unresolved policy-to-stage mapping must be clarified before authoritative wiring.
 
@@ -839,7 +839,7 @@ Use the source start-session presentation with PDF-directed improvements. Existi
 
 ## CLS-002 - Current-year creation and historical classes (PDF page 9)
 
-Faculty may create classes only for the current school year. Past-school-year classes are view-only: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. Any historical correction exception requires a separately approved rule.
+Faculty may create classes only for the current school year. Past-school-year classes are view-only: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. The Owner selected 2026-2027 as the current school year on 2026-09-24. Any historical correction exception requires a separately approved rule.
 
 ## ID-002 - Structured names and 3NF
 
