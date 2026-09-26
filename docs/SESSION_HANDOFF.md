@@ -1,26 +1,27 @@
 # Current continuation: UI migration and normalization on lighthal5
 
-Continue the existing `lighthal5` tree and preserve the accepted visual evidence. The current working batch adds ordered migrations 026-028, focused password-recovery and grading assertions, and the narrow Owner-approved provisional course-grade trigger. The two password-recovery page files remain Gemini-owned presentation work until handoff. Read [ui-migration-status.md](ui-migration-status.md) first; older implementation narratives below are historical. Do not rerun unchanged route/dialog comparisons or the earlier camera/Google investigation.
+Continue the existing `lighthal5` tree and preserve the accepted visual evidence. The current working batch adds ordered migrations 026-029, focused password-recovery and grading assertions, the narrow Owner-approved provisional course-grade trigger, and the approved two-attempt remedial progression. The two password-recovery page files remain Gemini-owned presentation work until handoff. Read [ui-migration-status.md](ui-migration-status.md) first; older implementation narratives below are historical. Do not rerun unchanged route/dialog comparisons or the earlier camera/Google investigation.
 
 Owner clarifications: overlapping activity deadlines are allowed; watchlist unlock covers the selected class; current school year is 2026-2027.
 
 ## Current closeout - 2026-09-26
 
-The normal development database is migrated through 028. A verified backup
-preceded the additive application of 022-028; no development volume or existing
+The normal development database is migrated through 029. A verified backup
+preceded the additive application of 022-029; no development volume or existing
 data was reset, deleted, or bulk-recomputed. Migration 026 tightens the linked
 attendance update trigger. Migration 027 records compatibility metadata, and
-migration 028 establishes `retention_policy.retention_threshold` as the
+Migration 028 establishes `retention_policy.retention_threshold` as the
 canonical Owner-approved professional-course trigger (`< 2.50` allowed,
 `>= 2.50` remedial), synchronizing the retained grading-default mirror without
-rewriting historical outcomes.
+rewriting historical outcomes. Migration 029 adds two transaction-safe,
+server-derived remedial attempts and leaves the original grade untouched.
 
 The historical Docker interruption and pre-022-025 4/8 live result belong to an
 earlier tree. The successful kept disposable `dentisys-final-0926b` run is also
-historical: it covered migrations 001-025, not the current 028 tree. The current
+historical: it covered migrations 001-025, not the current 029 tree. The current
 tree passed `scripts/check-postgres.ps1 -KeepStack -ComposeProject
-dentisys-final-0926c -BackendHttpPort 18084 -FrontendHttpPort 15177
--MailpitUiPort 18029`: the 001-028 ledger, focused PostgreSQL integration,
+dentisys-final-0926k -BackendHttpPort 18090 -FrontendHttpPort 15183
+-MailpitUiPort 18035`: the 001-029 ledger, focused PostgreSQL integration,
 smoke/log checks, and all 8/8 live workflows passed. The accepted 156-capture
 visual matrix and dialog evidence remain unchanged; invitation Edit is
 destination-only, while Secretary review/override is shared source and
@@ -32,7 +33,8 @@ presentation deviation with the source semantics preserved. Focused local
 behavior evidence covers the seven exact course-grade boundaries,
 unresolved missing grades, password-reset delivery/expiry/replay, and migration
 026's cross-class attendance update rejection. Whole-schema 3NF is not
-certified. BUCDM policy beyond the approved provisional course-grade trigger,
+certified. BUCDM policy beyond the approved provisional course-grade and
+two-attempt remedial amendment,
 title semantics if an actual ambiguous value arises, real Google provider
 acceptance, and physical-camera acceptance remain separate decisions or manual
 checks. The application does not invent remedial attempt history.

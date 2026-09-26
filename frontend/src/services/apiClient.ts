@@ -783,6 +783,31 @@ export function getFacultyDashboardKpisApi(): Promise<{
 }
 
 export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial' | 'archived';
+export type FacultyRemedialProgressionStage =
+  | 'none'
+  | 'attempt_1_pending'
+  | 'attempt_2_available'
+  | 'attempt_2_pending'
+  | 'passed'
+  | 'cost_recovery_required'
+  | 'legacy_unclassified';
+
+export interface FacultyRemedialAttempt {
+  attemptNumber: 1 | 2;
+  scheduledDate: string | null;
+  percentage: number | null;
+  outcome: 'pending' | 'passed' | 'failed';
+  actorUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FacultyRemedialProgression {
+  stage: FacultyRemedialProgressionStage;
+  attempts: FacultyRemedialAttempt[];
+  passedAttempt: 1 | 2 | null;
+  legacyUnclassified: boolean;
+}
 
 export interface FacultyRetentionRecord {
   midtermComplete?: boolean;
@@ -801,6 +826,7 @@ export interface FacultyRetentionRecord {
   gwa: number | null;
   state: FacultyRetentionState;
   remedial: Record<string, unknown> | null;
+  remedialProgression?: FacultyRemedialProgression;
 }
 
 export function getFacultyRetentionApi(): Promise<{
@@ -1073,8 +1099,17 @@ export function saveFacultyRemedialApi(data: {
   enrollmentId?: string;
   studentId?: string;
   classId?: string;
-  remedial: Record<string, unknown>;
-}): Promise<{ status: string; message: string; enrollmentId: string | null }> {
+  attemptNumber?: 1 | 2;
+  scheduledDate?: string | null;
+  percentage?: number;
+  remedial?: Record<string, unknown>;
+}): Promise<{
+  status: string;
+  message: string;
+  enrollmentId: string | null;
+  progression?: FacultyRemedialProgression;
+  notification?: { created: boolean } | null;
+}> {
   return request('POST', '/faculty/retention/remedial', data);
 }
 

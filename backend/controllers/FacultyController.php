@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/app/remedial_attempts.php';
 require_once dirname(__DIR__) . '/app/notifications.php';
 
 if (!function_exists('sanitize_for_log')) {
@@ -4548,10 +4549,19 @@ function handle_faculty_retention_get(): void
                       COALESCE(pi.first_name, s.first_name)"
         );
         $stmt->execute([$authCtx['user_id']]);
-        $retention = array_map(static function (array $row) use ($pdo): array {
+        $dbRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $enrollmentIds = array_map(static fn(array $row): int => (int) $row['enrollment_id'], $dbRows);
+        $legacyByEnrollment = [];
+        foreach ($dbRows as $row) {
+            $legacyByEnrollment[(int) $row['enrollment_id']] = $row['remedial_state_json'] !== null;
+        }
+        $progressions = remedial_attempts_load($pdo, $enrollmentIds, $legacyByEnrollment);
+
+        $retention = array_map(static function (array $row) use ($pdo, $progressions): array {
+            $enrollmentId = (int) $row['enrollment_id'];
             $midterm = faculty_watchlist_midterm($pdo, $row);
             return [
-            'enrollmentId' => (string) $row['enrollment_id'],
+            'enrollmentId' => (string) $enrollmentId,
             'studentId' => (string) $row['student_id'],
             'studentNumber' => $row['student_number'],
             'studentName' => trim($row['first_name'] . ' ' . ($row['middle_name'] ? $row['middle_name'] . ' ' : '') . $row['last_name']),
@@ -4562,13 +4572,14 @@ function handle_faculty_retention_get(): void
             'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
             'state' => $row['retention_state'],
             'remedial' => $row['remedial_state_json'] ? json_decode($row['remedial_state_json'], true) : null,
+            'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'watchlistUnlocked' => $row['unlocked_at'] !== null,
             'unlockedAt' => $row['unlocked_at'],
             'schoolYear' => $row['school_year'],
             'midtermComplete' => $midterm['complete'],
             'midtermPercentage' => $midterm['percentage'],
         ];
-        }, $stmt->fetchAll(PDO::FETCH_ASSOC));
+        }, $dbRows);
         json_response([
             'status' => 'ok',
             'retention' => $retention,
@@ -4577,6 +4588,91 @@ function handle_faculty_retention_get(): void
         error_log('Faculty retention get error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
+}
+
+/**
+ * Preserve the pre-progression route payload for existing clients. A legacy
+ * object has no trustworthy attempt number, so it remains in the compatibility
+ * JSON and is classified as legacy_unclassified by the read projection. This
+ * branch never inserts into enrollment_remedial_attempts.
+ */
+function faculty_retention_save_legacy_remedial(PDO $pdo, array $authCtx, array $data, array $remedial): void
+{
+    $enrollmentId = (int) ($data['enrollmentId'] ?? 0);
+    $studentId = (int) ($data['studentId'] ?? 0);
+    $classId = (int) ($data['classId'] ?? 0);
+    if (($enrollmentId <= 0 && ($studentId <= 0 || $classId <= 0))) {
+        safe_error_response('Enrollment or student/class identifiers and remedial details are required.', 422);
+        return;
+    }
+
+    $json = json_encode($remedial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        safe_error_response('Remedial details could not be encoded.', 422);
+        return;
+    }
+    $remedialStatus = (string) ($remedial['status'] ?? 'pending');
+    $state = in_array($remedialStatus, ['passed', 'removed'], true) ? 'active' : 'remedial';
+    $where = $enrollmentId > 0
+        ? 'e.enrollment_id = ?'
+        : 'e.student_id = ? AND e.cs_id = ?';
+    $params = $enrollmentId > 0
+        ? [$json, $state, $enrollmentId, $authCtx['user_id']]
+        : [$json, $state, $studentId, $classId, $authCtx['user_id']];
+
+    $pdo->beginTransaction();
+    $stmt = $pdo->prepare(
+        "UPDATE enrollments AS e
+            SET remedial_state_json = ?, retention_state = ?
+          FROM class_sections AS cs
+         WHERE {$where} AND cs.cs_id = e.cs_id AND cs.instructor_user_id = ?
+           AND LOWER(e.status) = 'active'"
+    );
+    $stmt->execute($params);
+    if ($stmt->rowCount() === 0) {
+        $pdo->rollBack();
+        safe_error_response('Enrollment not found in an assigned class.', 404);
+        return;
+    }
+
+    $recipientWhere = $enrollmentId > 0 ? 'e.enrollment_id = ?' : 'e.student_id = ? AND e.cs_id = ?';
+    $recipient = $pdo->prepare(
+        "SELECT e.enrollment_id, s.student_account_user_id, c.course_code
+           FROM enrollments e
+           JOIN students s ON s.student_id = e.student_id
+           JOIN class_sections cs ON cs.cs_id = e.cs_id
+           JOIN courses c ON c.course_id = cs.course_id
+          WHERE {$recipientWhere} AND cs.instructor_user_id = ?"
+    );
+    $recipientParams = $enrollmentId > 0
+        ? [$enrollmentId, $authCtx['user_id']]
+        : [$studentId, $classId, $authCtx['user_id']];
+    $recipient->execute($recipientParams);
+    $target = $recipient->fetch(PDO::FETCH_ASSOC);
+    $notification = null;
+    if (is_array($target) && $target['student_account_user_id'] !== null) {
+        $notification = notification_create_idempotent(
+            $pdo,
+            (int) $target['student_account_user_id'],
+            'remedial_assignment',
+            'Remedial update for ' . (string) $target['course_code'],
+            $state === 'remedial'
+                ? 'A Faculty member recorded a remedial action for your course enrollment.'
+                : 'Your course remedial state was updated to ' . $state . '.',
+            'enrollment',
+            (string) $target['enrollment_id'],
+            'remedial:' . (string) $target['enrollment_id'] . ':' . $remedialStatus
+        );
+    }
+    $pdo->commit();
+    json_response([
+        'status' => 'ok',
+        'message' => 'Remedial record persisted successfully.',
+        'enrollmentId' => is_array($target)
+            ? (string) $target['enrollment_id']
+            : ($enrollmentId > 0 ? (string) $enrollmentId : null),
+        'notification' => $notification !== null ? ['created' => $notification['created']] : null,
+    ], 200);
 }
 
 function handle_faculty_retention_remedial_save(): void
@@ -4591,83 +4687,254 @@ function handle_faculty_retention_remedial_save(): void
             safe_error_response('Request body required.', 400);
             return;
         }
-        $data = $body['data'];
-        $enrollmentId = (int) ($data['enrollmentId'] ?? 0);
-        $studentId = (int) ($data['studentId'] ?? 0);
-        $classId = (int) ($data['classId'] ?? 0);
-        $remedialValue = $data['remedial'] ?? null;
-        $remedial = is_array($remedialValue)
-            ? $remedialValue
-            : ($remedialValue instanceof \stdClass ? get_object_vars($remedialValue) : null);
-        if (($enrollmentId <= 0 && ($studentId <= 0 || $classId <= 0)) || !is_array($remedial)) {
-            safe_error_response('Enrollment or student/class identifiers and remedial details are required.', 422);
+        $requestData = $body['data'];
+        $legacyValue = $requestData['remedial'] ?? null;
+        $legacyRemedial = is_array($legacyValue)
+            ? $legacyValue
+            : ($legacyValue instanceof \stdClass ? get_object_vars($legacyValue) : null);
+        $hasTopLevelAttempt = array_key_exists('attemptNumber', $requestData);
+        $hasNestedAttempt = is_array($legacyRemedial) && array_key_exists('attemptNumber', $legacyRemedial);
+        if (!$hasTopLevelAttempt && is_array($legacyRemedial) && !$hasNestedAttempt) {
+            faculty_retention_save_legacy_remedial($pdo, $authCtx, $requestData, $legacyRemedial);
             return;
         }
-        $json = json_encode($remedial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        if ($json === false) {
-            safe_error_response('Remedial details could not be encoded.', 422);
-            return;
+        // The route keeps compatibility with the accepted UI while it moves
+        // from the legacy object shape: the canonical fields may arrive in a
+        // nested `remedial` object, but only attemptNumber/percentage/date are
+        // read and client status/outcome is never trusted.
+        if (!array_key_exists('attemptNumber', $requestData)
+            && is_array($legacyRemedial)
+        ) {
+            $requestData = array_merge(
+                $legacyRemedial,
+                ['enrollmentId' => $requestData['enrollmentId'] ?? ($legacyRemedial['enrollmentId'] ?? null)]
+            );
         }
-        $remedialStatus = (string) ($remedial['status'] ?? 'pending');
-        $state = in_array($remedialStatus, ['passed', 'removed'], true) ? 'active' : 'remedial';
-        $where = $enrollmentId > 0
-            ? 'e.enrollment_id = ?'
-            : 'e.student_id = ? AND e.cs_id = ?';
-        // Remedial JSON retains policy-opaque fields; migration 020 mirrors
-        // only the understood current-state fields to its normalized table.
-        $stmt = $pdo->prepare(
-            "UPDATE enrollments AS e
-             SET remedial_state_json = ?, retention_state = ?
-             FROM class_sections AS cs
-             WHERE {$where} AND cs.cs_id = e.cs_id AND cs.instructor_user_id = ?
-               AND LOWER(e.status) = 'active'"
-        );
-        $params = $enrollmentId > 0
-            ? [$json, $state, $enrollmentId, $authCtx['user_id']]
-            : [$json, $state, $studentId, $classId, $authCtx['user_id']];
+        $request = remedial_attempts_parse_request($requestData);
+        $enrollmentId = (int) $request['enrollmentId'];
+        $attemptNumber = (int) $request['attemptNumber'];
+        if ($attemptNumber < 1 || $attemptNumber > 2) {
+            throw remedial_attempts_error(
+                'Only remedial attempts 1 and 2 are supported.',
+                'REMEDIAL_ATTEMPT_UNSUPPORTED'
+            );
+        }
+        // Recheck the parser's finite/range contract at the write boundary;
+        // outcomes remain server-derived at the approved 50 percent threshold.
+        if ($request['hasPercentage'] && (!is_finite((float) $request['percentage'])
+            || (float) $request['percentage'] < 0 || (float) $request['percentage'] > 100)) {
+            throw remedial_attempts_error(
+                'percentage must be a finite number from 0 to 100.',
+                'REMEDIAL_SCORE_RANGE'
+            );
+        }
+
         $pdo->beginTransaction();
-        $stmt->execute($params);
-        if ($stmt->rowCount() === 0) {
+        // Lock the parent enrollment before reading or writing attempts. Every
+        // canonical progression mutation for an enrollment uses this lock, so
+        // two Faculty submissions cannot pass the same stage concurrently.
+        $targetStmt = $pdo->prepare(
+            "SELECT e.enrollment_id, e.student_id, e.cs_id, e.status AS enrollment_status,
+                    e.remedial_state_json,
+                    COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                    cs.instructor_user_id, cs.status AS class_status,
+                    s.status AS student_status, s.student_account_user_id,
+                    c.course_code
+               FROM enrollments e
+               JOIN class_sections cs ON cs.cs_id = e.cs_id
+               JOIN students s ON s.student_id = e.student_id
+               JOIN courses c ON c.course_id = cs.course_id
+               LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+              WHERE e.enrollment_id = ?
+              FOR UPDATE OF e"
+        );
+        $targetStmt->execute([$enrollmentId]);
+        $target = $targetStmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($target)) {
             $pdo->rollBack();
-            safe_error_response('Enrollment not found in an assigned class.', 404);
+            safe_error_response('Enrollment was not found.', 404);
             return;
         }
-        $recipientWhere = $enrollmentId > 0 ? 'e.enrollment_id = ?' : 'e.student_id = ? AND e.cs_id = ?';
-        $recipient = $pdo->prepare(
-            "SELECT e.enrollment_id, s.student_account_user_id, c.course_code
-               FROM enrollments e
-               JOIN students s ON s.student_id = e.student_id
-               JOIN class_sections cs ON cs.cs_id = e.cs_id
-               JOIN courses c ON c.course_id = cs.course_id
-              WHERE {$recipientWhere} AND cs.instructor_user_id = ?"
+        if ((int) $target['instructor_user_id'] !== (int) $authCtx['user_id']) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'The enrollment is not in a class assigned to this Faculty member.',
+                'REMEDIAL_NOT_ASSIGNED_FACULTY',
+                403
+            ));
+            return;
+        }
+        if (strtolower((string) $target['enrollment_status']) !== 'active'
+            || strtolower((string) $target['class_status']) !== 'active'
+            || in_array(strtolower((string) $target['student_status']), ['archived', 'disabled'], true)
+        ) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'Remedial progression is unavailable for this archived or inactive enrollment.',
+                'REMEDIAL_ENROLLMENT_READ_ONLY',
+                409
+            ));
+            return;
+        }
+
+        $attemptRows = remedial_attempts_lock_rows($pdo, $enrollmentId);
+        // A legacy current-state JSON payload has no trustworthy attempt order.
+        // Classify it before grade-readiness checks so reconciliation remains
+        // the actionable error even when the historical grade is incomplete.
+        $progression = remedial_attempts_progression_from_rows(
+            $attemptRows,
+            $target['remedial_state_json'] !== null
         );
-        $recipientParams = $enrollmentId > 0
-            ? [$enrollmentId, $authCtx['user_id']]
-            : [$studentId, $classId, $authCtx['user_id']];
-        $recipient->execute($recipientParams);
-        $target = $recipient->fetch(PDO::FETCH_ASSOC);
+        if ($progression['legacyUnclassified']) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'This enrollment has an unclassified legacy remedial record and requires reconciliation before a new attempt can be recorded.',
+                'REMEDIAL_LEGACY_UNCLASSIFIED',
+                409
+            ));
+            return;
+        }
+
+        if ($target['final_gwa'] === null) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'Remedial progression is unresolved until the final course grade is recorded.',
+                'REMEDIAL_GRADE_UNRESOLVED',
+                409
+            ));
+            return;
+        }
+        $threshold = remedial_attempts_course_grade_threshold($pdo);
+        if ((float) $target['final_gwa'] < $threshold) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'Remedial progression is only available when the final course grade meets the configured trigger.',
+                'REMEDIAL_NOT_REQUIRED',
+                409
+            ));
+            return;
+        }
+
+        $stage = (string) $progression['stage'];
+        $existing = null;
+        foreach ($attemptRows as $attemptRow) {
+            if ((int) $attemptRow['attempt_number'] === $attemptNumber) {
+                $existing = $attemptRow;
+                break;
+            }
+        }
+        if ($existing !== null && (string) $existing['outcome'] !== 'pending') {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'This remedial attempt has already been recorded and cannot be changed.',
+                'REMEDIAL_ATTEMPT_DUPLICATE',
+                409
+            ));
+            return;
+        }
+
+        $expectedAttempt = match ($stage) {
+            'none', 'attempt_1_pending' => 1,
+            'attempt_2_available', 'attempt_2_pending' => 2,
+            default => null,
+        };
+        if ($expectedAttempt === null) {
+            $code = $stage === 'cost_recovery_required'
+                ? 'REMEDIAL_COST_RECOVERY_REQUIRED'
+                : 'REMEDIAL_PROGRESSION_COMPLETE';
+            $message = $stage === 'cost_recovery_required'
+                ? 'Cost recovery required; no further remedial attempt may be recorded.'
+                : 'Remedial progression is already complete; no further attempt may be recorded.';
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error($message, $code, 409));
+            return;
+        }
+        if ($attemptNumber !== $expectedAttempt) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                $expectedAttempt === 2
+                    ? 'The first remedial attempt must fail before the second attempt is available.'
+                    : 'The first remedial attempt must be recorded before any later stage.',
+                'REMEDIAL_ATTEMPT_STAGE',
+                409
+            ));
+            return;
+        }
+
+        $hasScheduledDate = array_key_exists('scheduledDate', $requestData);
+        $outcome = $request['hasPercentage']
+            ? ((float) $request['percentage'] >= 50.0 ? 'passed' : 'failed')
+            : 'pending';
+        if ($existing === null) {
+            $insert = $pdo->prepare(
+                'INSERT INTO enrollment_remedial_attempts
+                    (enrollment_id, attempt_number, scheduled_date, percentage, outcome, actor_user_id)
+                 VALUES (?, ?, ?, ?, ?, ?)'
+            );
+            $insert->execute([
+                $enrollmentId,
+                $attemptNumber,
+                $request['scheduledDate'],
+                $request['percentage'],
+                $outcome,
+                (int) $authCtx['user_id'],
+            ]);
+        } else {
+            $scheduledDate = $hasScheduledDate
+                ? $request['scheduledDate']
+                : $existing['scheduled_date'];
+            $update = $pdo->prepare(
+                'UPDATE enrollment_remedial_attempts
+                    SET scheduled_date = ?, percentage = ?, outcome = ?,
+                        actor_user_id = ?, updated_at = CURRENT_TIMESTAMP(6)
+                  WHERE remedial_attempt_id = ?'
+            );
+            $update->execute([
+                $scheduledDate,
+                $request['percentage'],
+                $outcome,
+                (int) $authCtx['user_id'],
+                (int) $existing['remedial_attempt_id'],
+            ]);
+        }
+
+        $updatedRows = remedial_attempts_lock_rows($pdo, $enrollmentId);
+        $updatedProgression = remedial_attempts_progression_from_rows($updatedRows);
         $notification = null;
-        if (is_array($target) && $target['student_account_user_id'] !== null) {
+        if ($target['student_account_user_id'] !== null) {
+            $notificationStage = (string) $updatedProgression['stage'];
+            $notificationBody = match ($notificationStage) {
+                'attempt_1_pending' => 'A Faculty member scheduled your first remedial exam.',
+                'attempt_2_available' => 'Your first remedial exam was not passed. A second attempt is available.',
+                'attempt_2_pending' => 'A Faculty member scheduled your second remedial exam.',
+                'passed' => 'Your remedial progression is passed. Your original course grade remains unchanged.',
+                'cost_recovery_required' => 'Your second remedial exam was not passed. Cost recovery required.',
+                default => 'Your remedial progression was updated.',
+            };
             $notification = notification_create_idempotent(
                 $pdo,
                 (int) $target['student_account_user_id'],
                 'remedial_assignment',
                 'Remedial update for ' . (string) $target['course_code'],
-                $state === 'remedial'
-                    ? 'A Faculty member recorded a remedial action for your course enrollment.'
-                    : 'Your course remedial state was updated to ' . $state . '.',
+                $notificationBody,
                 'enrollment',
-                (string) $target['enrollment_id'],
-                'remedial:' . (string) $target['enrollment_id'] . ':' . $remedialStatus
+                (string) $enrollmentId,
+                'attempt-progress:' . $enrollmentId . ':' . $attemptNumber . ':' . $outcome
             );
         }
         $pdo->commit();
         json_response([
             'status' => 'ok',
-            'message' => 'Remedial record persisted successfully.',
-            'enrollmentId' => is_array($target) ? (string) $target['enrollment_id'] : ($enrollmentId > 0 ? (string) $enrollmentId : null),
+            'message' => $outcome === 'pending'
+                ? 'Remedial attempt scheduled successfully.'
+                : ($outcome === 'passed' ? 'Remedial attempt recorded as passed.' : 'Remedial attempt recorded as failed.'),
+            'enrollmentId' => (string) $enrollmentId,
+            'progression' => $updatedProgression,
             'notification' => $notification !== null ? ['created' => $notification['created']] : null,
         ], 200);
+    } catch (RemedialAttemptException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        remedial_attempts_error_response($e);
     } catch (\Throwable $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty retention remedial save error: ' . sanitize_for_log($e));

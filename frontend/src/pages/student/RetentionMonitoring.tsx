@@ -7,6 +7,125 @@ import { canAccessAuthoritativeStudentBiometrics } from './studentGates';
 import { getStudentAcademicRetentionApi } from '../../services/apiClient';
 import type { Student, StudentAcademicClass } from '../../types';
 
+type RemedialStage =
+  | 'none'
+  | 'attempt_1_pending'
+  | 'attempt_2_available'
+  | 'attempt_2_pending'
+  | 'passed'
+  | 'cost_recovery_required'
+  | 'legacy_unclassified';
+
+type RemedialAttemptStatus = 'pending' | 'passed' | 'failed';
+
+interface RemedialAttemptView {
+  attemptNumber: 1 | 2;
+  scheduledDate: string | null;
+  percentage: number | null;
+  status: RemedialAttemptStatus | null;
+}
+
+interface RemedialProgressionView {
+  stage: RemedialStage;
+  attempts: RemedialAttemptView[];
+  passedAttempt: 1 | 2 | null;
+  legacyUnclassified: boolean;
+}
+
+const isRecordValue = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
+
+const readAttemptNumber = (value: unknown): 1 | 2 | null => (
+  value === 1 || value === 2 || value === '1' || value === '2'
+    ? Number(value) as 1 | 2
+    : null
+);
+
+const readProgressionStage = (value: unknown): RemedialStage | null => (
+  value === 'none'
+    || value === 'attempt_1_pending'
+    || value === 'attempt_2_available'
+    || value === 'attempt_2_pending'
+    || value === 'passed'
+    || value === 'cost_recovery_required'
+    || value === 'legacy_unclassified'
+    ? value
+    : null
+);
+
+const readRemedialProgression = (record: StudentAcademicClass): RemedialProgressionView => {
+  const source = record as unknown as { remedialProgression?: unknown; remedial?: unknown };
+  const rawProgression = source.remedialProgression
+    ?? (isRecordValue(source.remedial) && 'stage' in source.remedial ? source.remedial : null);
+
+  if (isRecordValue(rawProgression)) {
+    const declaredStage = readProgressionStage(rawProgression.stage);
+    const rawLegacyUnclassified = rawProgression.legacyUnclassified === true
+      || rawProgression.legacy_unclassified === true;
+    const stage = rawLegacyUnclassified ? 'legacy_unclassified' : (declaredStage ?? 'legacy_unclassified');
+    const attempts = Array.isArray(rawProgression.attempts)
+      ? rawProgression.attempts.flatMap(value => {
+        if (!isRecordValue(value)) return [];
+        const attemptNumber = readAttemptNumber(value.attemptNumber ?? value.attempt_number);
+        if (!attemptNumber) return [];
+        const rawDate = value.scheduledDate ?? value.scheduled_date;
+        const rawStatus = value.outcome ?? value.status;
+        return [{
+          attemptNumber,
+          scheduledDate: typeof rawDate === 'string' && rawDate.trim().length > 0 ? rawDate : null,
+          percentage: typeof value.percentage === 'number' && Number.isFinite(value.percentage) ? value.percentage : null,
+          status: rawStatus === 'pending' || rawStatus === 'passed' || rawStatus === 'failed' ? rawStatus : null,
+        } as RemedialAttemptView];
+      })
+      : [];
+    const passedAttempt = readAttemptNumber(rawProgression.passedAttempt ?? rawProgression.passed_attempt);
+    const legacyUnclassified = rawLegacyUnclassified || stage === 'legacy_unclassified';
+    return { stage, attempts, passedAttempt, legacyUnclassified };
+  }
+
+  if (isRecordValue(source.remedial) && Object.keys(source.remedial).length > 0) {
+    return { stage: 'legacy_unclassified', attempts: [], passedAttempt: null, legacyUnclassified: true };
+  }
+  return { stage: 'none', attempts: [], passedAttempt: null, legacyUnclassified: false };
+};
+
+const attemptStatus = (progression: RemedialProgressionView, attemptNumber: 1 | 2): RemedialAttemptStatus | 'available' | 'not_started' => {
+  const attempt = progression.attempts.find(item => item.attemptNumber === attemptNumber);
+  if (attempt?.status) return attempt.status;
+  if (progression.stage === 'attempt_1_pending' && attemptNumber === 1) return 'pending';
+  if (progression.stage === 'attempt_2_available' && attemptNumber === 1) return 'failed';
+  if (progression.stage === 'attempt_2_available' && attemptNumber === 2) return 'available';
+  if (progression.stage === 'attempt_2_pending') return attemptNumber === 1 ? 'failed' : 'pending';
+  if (progression.stage === 'passed') return progression.passedAttempt === attemptNumber ? 'passed' : attemptNumber < (progression.passedAttempt ?? 2) ? 'failed' : 'not_started';
+  if (progression.stage === 'cost_recovery_required') return 'failed';
+  return 'not_started';
+};
+
+const stageLabel = (stage: RemedialStage): string => {
+  switch (stage) {
+    case 'none': return 'No remedial attempt assigned';
+    case 'attempt_1_pending': return 'Attempt 1 pending';
+    case 'attempt_2_available': return 'Attempt 2 available';
+    case 'attempt_2_pending': return 'Attempt 2 pending';
+    case 'passed': return 'Passed';
+    case 'cost_recovery_required': return 'Cost recovery required';
+    case 'legacy_unclassified': return 'Legacy / unclassified';
+    default: return 'Progression unavailable';
+  }
+};
+
+const attemptStatusLabel = (status: RemedialAttemptStatus | 'available' | 'not_started'): string => {
+  switch (status) {
+    case 'pending': return 'Pending';
+    case 'passed': return 'Passed';
+    case 'failed': return 'Failed';
+    case 'available': return 'Available';
+    case 'not_started': return 'Not started';
+    default: return 'Unavailable';
+  }
+};
+
 export const RetentionMonitoring: React.FC = () => {
   const { user } = useAuth();
   const { students = [], settings } = useApp();
@@ -231,6 +350,7 @@ export const RetentionMonitoring: React.FC = () => {
                 <th className="py-3 px-4 text-center">Score %</th>
                 <th className="py-3 px-4 text-center">Grade</th>
                 <th className="py-3 px-4">Course Type</th>
+                <th className="py-3 px-4">Remedial progression</th>
                 <th className="py-3 px-4 text-right">Standing</th>
               </tr>
             </thead>
@@ -238,7 +358,7 @@ export const RetentionMonitoring: React.FC = () => {
               {isAuthoritative ? (
                 authRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-10 text-center text-slate-400">
+                    <td colSpan={6} className="py-10 text-center text-slate-400">
                       No course records registered.
                     </td>
                   </tr>
@@ -249,6 +369,7 @@ export const RetentionMonitoring: React.FC = () => {
                     const isAtRiskRow = ['warning', 'critical', 'remedial'].includes(retentionState);
                     const hasRetentionState = Boolean(retentionState);
                     const isPassing = !isPending && hasRetentionState && !isAtRiskRow;
+                    const progression = readRemedialProgression(cls);
 
                     return (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -275,6 +396,19 @@ export const RetentionMonitoring: React.FC = () => {
                           <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
                             {cls.isClinical ? 'Clinical Lab Course' : 'Lecture Course'}
                           </span>
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="min-w-[190px] space-y-1.5">
+                            <span className={`inline-flex rounded-lg border px-2 py-1 text-[10px] font-extrabold ${progression.stage === 'passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : progression.stage === 'cost_recovery_required' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>
+                              {stageLabel(progression.stage)}
+                            </span>
+                            {progression.stage !== 'none' && progression.stage !== 'legacy_unclassified' && ([1, 2] as const).map(attemptNumber => {
+                              const attempt = progression.attempts.find(item => item.attemptNumber === attemptNumber);
+                              const statusLabel = attemptStatusLabel(attemptStatus(progression, attemptNumber));
+                              return <p key={attemptNumber} className="text-[10px] text-slate-500 dark:text-slate-400">Attempt {attemptNumber}: {statusLabel}{typeof attempt?.percentage === 'number' ? ` · ${attempt.percentage.toFixed(2)}%` : ''}{attempt?.scheduledDate ? ` · ${attempt.scheduledDate}` : ''}</p>;
+                            })}
+                          </div>
                         </td>
 
                         <td className="py-3.5 px-4 text-right">
@@ -318,6 +452,12 @@ export const RetentionMonitoring: React.FC = () => {
                         </span>
                       </td>
 
+                      <td className="py-3.5 px-4">
+                        <span className="inline-flex rounded-lg border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
+                          Authoritative progression unavailable
+                        </span>
+                      </td>
+
                       <td className="py-3.5 px-4 text-right">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
                           isPassing 
@@ -353,7 +493,7 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
             <span className="font-extrabold text-slate-800 dark:text-slate-100 block">2. Remedial review</span>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Faculty records remedial assignments and outcomes through the authoritative retention workflow.
+              Faculty records up to two server-authorized remedial attempts. A pass changes progression readiness only; your original course grade remains unchanged.
             </p>
           </div>
 

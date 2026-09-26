@@ -371,7 +371,34 @@ export interface StudentAcademicClass {
   gradeComponents: Record<string, unknown> | null;
   retentionState: string;
   remedial: Record<string, unknown> | null;
+  remedialProgression?: RemedialProgression;
   clinicHoursCompleted: number;
+}
+
+export type RemedialProgressionStage =
+  | 'none'
+  | 'attempt_1_pending'
+  | 'attempt_2_available'
+  | 'attempt_2_pending'
+  | 'passed'
+  | 'cost_recovery_required'
+  | 'legacy_unclassified';
+
+export interface RemedialAttempt {
+  attemptNumber: 1 | 2;
+  scheduledDate: string | null;
+  percentage: number | null;
+  outcome: 'pending' | 'passed' | 'failed';
+  actorUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RemedialProgression {
+  stage: RemedialProgressionStage;
+  attempts: RemedialAttempt[];
+  passedAttempt: 1 | 2 | null;
+  legacyUnclassified: boolean;
 }
 
 export interface StudentAcademicDashboardSummary {

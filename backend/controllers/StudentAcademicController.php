@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/app/remedial_attempts.php';
+
 function student_academic_verify_auth(PDO $pdo, array $config): array
 {
     $authHeader = request_header('Authorization') ?? '';
@@ -105,10 +107,22 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
           ORDER BY cs.school_year DESC, cs.semester, c.course_code, e.enrollment_id'
     );
     $stmt->execute([$studentId]);
+    $dbRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $enrollmentIds = array_map(static fn(array $row): int => (int) $row['enrollment_id'], $dbRows);
+    $legacyByEnrollment = [];
+    foreach ($dbRows as $row) {
+        $legacyByEnrollment[(int) $row['enrollment_id']] = $row['remedial_state_json'] !== null;
+    }
+    // remedial_attempts_load performs one bounded read from
+    // enrollment_remedial_attempts ordered by attempt_number and derives the
+    // server-owned stage; this is intentionally not an N+1 lookup.
+    $progressions = remedial_attempts_load($pdo, $enrollmentIds, $legacyByEnrollment);
+
     $rows = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    foreach ($dbRows as $row) {
+        $enrollmentId = (int) $row['enrollment_id'];
         $rows[] = [
-            'enrollmentId' => (string) $row['enrollment_id'],
+            'enrollmentId' => (string) $enrollmentId,
             'classId' => (string) $row['cs_id'],
             'className' => (string) $row['cs_name'],
             'courseId' => (string) $row['course_id'],
@@ -129,6 +143,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'remedial' => $row['remedial_state_json'] !== null
                 ? json_decode((string) $row['remedial_state_json'], true)
                 : null,
+            'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'clinicHoursCompleted' => (int) $row['clinic_hours_completed'],
         ];
     }

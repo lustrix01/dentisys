@@ -6,20 +6,22 @@
 
 ## Current handoff — 2026-09-26
 
-The normal development database is now at migration 028 after a verified
-pre-migration dump and additive application of 022-028. Migrations 026-028 do
+The normal development database is now at migration 029 after a verified
+pre-migration dump and additive application of 022-029. Migrations 026-029 do
 not alter preserved grade facts: 026 tightens attendance-update validation and
 027 records compatibility metadata and 028 establishes the canonical
 `retention_policy.retention_threshold` value in existing configuration.
+029 adds the approved two-attempt remedial relation without backfilling
+ambiguous legacy current-state JSON or replacing original grades.
 The kept disposable `dentisys-final-0926b` run is separate historical evidence:
 it passed the ledger through 025 and the post-change PostgreSQL/live gates, but
-does not cover the current 026-028 tree. Earlier Docker failures and the
+does not cover the current 026-029 tree. Earlier Docker failures and the
 pre-022-025 4/8 live result are historical, not current status. The focused
 normal-stack probes verified canonical identity synchronization and grading
 membership projection inside rolled-back transactions.
 
 This assessment covers every application relation present in the active PostgreSQL
-schema after migrations 001-028. It is a read-only classification of the current
+schema after migrations 001-029. It is a read-only classification of the current
 tree; it does not change runtime code, migrations, tests, frontend files, or any
 other document. `_schema_migrations` is included
 only as migration-control metadata, not as product data in the 3NF scope.
@@ -50,8 +52,8 @@ Read-only repository inspection covered:
   GRD-002, ATT-001 through ATT-006, BIO-001 through BIO-010, and the 9B UI and
   normalized-data amendment.
 - Ordered active migrations `database/migrations/001_baseline_schema.sql`
-  through `028_authoritative_course_grade_threshold.sql`, with particular
-  attention to 005, 008-016, 017-028.
+  through `029_remedial_attempt_progression.sql`, with particular attention to
+  005, 008-016, and 017-029.
 - Current active consumers under `backend/app`, `backend/controllers`, and
   `backend/routes/api.php`, including `AdminController.php`,
   `FacultyController.php`, `SecretaryController.php`, `StudentAcademicController.php`,
@@ -64,7 +66,7 @@ Read-only repository inspection covered:
   audit context and left unmodified.
 
 A read-only `information_schema` inventory of the active database returned these
-26 application relations:
+27 application relations:
 
 ```text
 assessment_scores                    assessments
@@ -73,7 +75,8 @@ audit_events                         auth_sessions
 biometric_profiles                   class_sections
 class_watchlist_unlocks              courses
 email_outbox                         enrollment_grade_breakdown_categories
-enrollment_grade_breakdowns          enrollment_remedial_states
+enrollment_grade_breakdowns          enrollment_remedial_attempts
+enrollment_remedial_states
 enrollments                           grading_categories
 grading_category_period_memberships   grading_category_periods
 grading_configs                       notifications
@@ -99,7 +102,7 @@ The current application is not uniformly canonical yet:
 | Person names and Student authentication | `account_identity.php`, `student_auth.php`, `StudentAcademicController.php`, `AdminController.php`, `SecretaryController.php`, `StudentAuthController.php`, `FacultyInvitationController.php`, and `student_biometrics.php` use `person_identities` for approved identity reads and fail closed where the account/role/person link is inconsistent. | ID-002's composed structured name rule is the canonical write contract. `account_identity_sync_canonical_person()` updates the canonical row and compatibility copies in one transaction. Non-empty legacy mismatches are preserved in `legacy_conflicts_json` and rejected for reconciliation; null/empty copies may be filled deterministically. |
 | Period category membership | Faculty snapshots, validation, computation, watchlist checks, and configuration save/delete paths use `grading_category_period_memberships`. Ownership is derived by joining `category_id` to `grading_categories`. | Migration 022 makes the canonical relation authoritative and projects one-way to `grading_category_periods`; direct legacy writes are rejected while nested projection writes are allowed. |
 | Current grade facts | Student Academic and selected Faculty reads use `enrollment_grade_breakdowns` and retain the legacy fallback. Grade writes still update `enrollments` scalar fields and `grade_components_json`; migration 020/021 refreshes the normalized projection. | Projection is synchronized and decimal-safe, but the full JSON contract is not represented relationally. |
-| Remedial state | Current API consumers still need the full `remedial_state_json` payload. `enrollment_remedial_states` contains only known current fields. | Safe scalar projection only; no attempt history or BUCDM stage is inferred. |
+| Remedial state | Faculty writes and Faculty/Student retention reads use `enrollment_remedial_attempts` for the approved first/second course-remedial progression. `enrollment_remedial_states` remains the known-field projection of legacy current-state JSON. | Attempt rows are normalized source records with a unique `(enrollment_id, attempt_number)` key; legacy JSON remains an opaque compatibility/historical representation and is exposed as unclassified when it cannot prove attempt order. |
 | Attendance | Session-aware consumers use `attendance_sessions` and `attendance_session_id`; `attendance_records` retains date/code/time values. | Linked rows have an authoritative session relationship; historical/unlinked rows retain snapshots. |
 | Invitations and onboarding | Faculty, Secretary, Student, and Google invitation flows use `security_tokens` plus role-specific account/Student rows and canonical person joins where the flow represents the same person. | Token identity is normalized by token keys; ID-002 resolves shared-name conflict precedence to the composed canonical person, while unsafe non-empty legacy mismatches are preserved and rejected rather than silently overwritten. |
 | Biometric attendance | Biometric controllers use `biometric_profiles`, challenge tokens, sessions, and attendance records. | Current relation is one profile per Student; provider/camera acceptance is separate from this schema assessment. |
@@ -428,11 +431,31 @@ where the partial unique predicate is true.
   known fields are a controlled projection. The JSON retains extra keys such as
   override metadata and counters, but those keys have not been assigned a
   policy-defined dependency or history meaning.
-- **Required implementation:** keep the projection for known scalar reads;
-  migrate only responses whose semantics are fully represented. A future
-  attempt relation requires an approved definition of an attempt, attempt
-  number, outcome, policy version, and ordering. Do not derive attempt history
-  from a current JSON object or audit text.
+- **Required implementation:** keep the projection for known scalar reads and
+  preserve the JSON for policy-opaque fields. The approved course-remedial
+  attempt history is a separate relation below; legacy JSON is never used to
+  infer its rows.
+
+#### `enrollment_remedial_attempts`
+
+- **Classification:** normalized source relation for the approved first and
+  second professional-course remedial attempts.
+- **Candidate keys and FDs:** `remedial_attempt_id ->` all row attributes;
+  `(enrollment_id, attempt_number) -> scheduled_date, percentage, outcome,
+  actor_user_id, created_at, updated_at` by the declared unique constraint.
+  `attempt_number` alone is not a determinant because it repeats across
+  enrollments.
+- **3NF result:** no relation-local violation is demonstrated. Enrollment,
+  actor, and original course-grade facts are referenced rather than copied;
+  attempt outcome is derived from the stored percentage by the authoritative
+  application write path and constrained to `pending`, `passed`, or `failed`.
+  The stage transition invariant spans two rows and is enforced by the locked
+  enrollment/attempt transaction, not by an invented dependency in this table.
+- **Required implementation:** retain the unique attempt numbering and
+  0-100, two-decimal score constraints. Allow attempt 2 only after a failed
+  attempt 1, reject a third attempt and conflicting repeat submissions, and
+  preserve ambiguous legacy current-state JSON as `legacy_unclassified` for
+  reconciliation rather than assigning historical attempt numbers.
 
 ### Attendance and biometric relations
 
@@ -625,7 +648,8 @@ application dependency.
 - The live `information_schema` inventory confirmed the relation/key shape
   listed above, including primary keys, unique constraints/indexes, foreign
   keys, migration-020 projections, migration-022/023/024/025 guards and
-  backfills, and the current 028 policy configuration.
+  backfills, and the current 029 policy configuration plus remedial-attempt
+  relation.
 - Static migration inspection confirmed that 020 creates
   `person_identities`, `grading_category_period_memberships`,
   `enrollment_grade_breakdowns`, `enrollment_grade_breakdown_categories`, and
@@ -639,9 +663,9 @@ application dependency.
   `retention_policy.retention_threshold` is the single canonical active
   consumer value of `2.50`. The older `initial_trigger_grade` and
   `grading_defaults.retention_gwa_threshold` keys are retained synchronized
-  compatibility metadata, not second consumer authorities. Migrations 027-028
-  do not invent attempts or bulk-recompute
-  historical outcomes.
+  compatibility metadata, not second consumer authorities. Migration 029 adds
+  the approved first/second attempt source without inferring legacy attempts or
+  bulk-recomputing historical outcomes.
 - The completed consumer audit covers Admin, Secretary, invitation/onboarding,
   biometric, shared auth/session, reporting, and profile paths. The remaining
   legacy access is classified: compatibility writes and fallback response
@@ -658,15 +682,16 @@ application dependency.
   `dentisys-final-0926b` with backend `18082`, frontend `15175`, and Mailpit
   `18027`; it passed the ledger through 025, focused and full PostgreSQL tests,
   smoke/log checks, and all 8/8 live Playwright workflows. That result is
-  historical for the current 026-028 tree. The current disposable project
-  `dentisys-final-0926c` passed the 001-028 ledger, focused and full PostgreSQL
+  historical for the current 026-029 tree. The current disposable project
+  `dentisys-final-0926k` passed the 001-029 ledger, focused and full PostgreSQL
   tests, smoke/log checks, and all 8/8 live Playwright workflows.
-- Migrations 022-028 are additive; no database volume or preserved data was
+- Migrations 022-029 are additive; no database volume or preserved data was
   deleted.
 
 The policy settings updated by migrations 027-028 are configuration metadata, not a
-new relation or a claim that all progression facts are normalized. The current
-grade projection retains the authoritative stored grade and its captured
-calculation context; historical snapshots and compatibility JSON remain
-separate classifications. The remedial-exam percentage rule and later BUCDM
-stages remain unresolved, so no attempt-history relation is invented here.
+claim that all progression facts are normalized. Migration 029 adds the
+normalized `enrollment_remedial_attempts` source for the approved two-attempt
+course rule. The current grade projection retains the authoritative stored grade
+and its captured calculation context; historical snapshots and compatibility
+JSON remain separate classifications. Later BUCDM stages and cost-recovery
+completion remain unresolved.

@@ -827,6 +827,8 @@ Retention uses final grades, scores, and applicable approved BUCDM policy. Click
 
 Owner clarification (2026-09-26, provisional): For the professional-course final-grade trigger, 1.0 is best. Compare the authoritative final grade at its established precision; do not round to one decimal before comparison. A final grade numerically below 2.50 is allowed, including 2.40-2.49. A final grade numerically at or above 2.50 requires remediation. This course-grade trigger is distinct from the remedial-exam percentage passing threshold. The provisional threshold may change. Missing or incomplete grades remain unresolved, and this clarification does not create a separate warning band or authorize any other unanswered BUCDM policy decision.
 
+Owner-approved amendment (2026-09-26): Each of the first two remedial exams passes at 50% or higher. Failure of the first permits the second; failure of the second requires cost recovery. Remedial outcomes do not replace the original course grade. DentiSys records the first and second attempts separately, derives Pass/Fail from the stored percentage, and does not offer a third remedial attempt. Cost-recovery scoring, completion, and final-failure rules remain outside this amendment.
+
 ## UI-004 - Email and invitations (PDF pages 5, 7-8)
 
 All email-entry controls default to `@bicol-u.edu.ph`, allowing local-part-only entry. Complete existing addresses and other server-allowed domains remain supported under AUTH-004. Preserve addresses and prevent duplicated suffixes; this default does not impose a single-domain restriction.

@@ -14,17 +14,38 @@ import type {
   FacultyRetentionState,
 } from '../../services/apiClient';
 
-interface RetentionRemedialRecord {
-  status: 'pending' | 'passed' | 'failed' | 'unavailable';
-  remedialScore: number | null;
-  examDate: string | null;
-  notes: string | null;
+type RemedialStage =
+  | 'none'
+  | 'attempt_1_pending'
+  | 'attempt_2_available'
+  | 'attempt_2_pending'
+  | 'passed'
+  | 'cost_recovery_required'
+  | 'legacy_unclassified';
+
+type RemedialAttemptStatus = 'pending' | 'passed' | 'failed';
+
+interface RemedialAttemptView {
+  attemptNumber: 1 | 2;
+  scheduledDate: string | null;
+  percentage: number | null;
+  status: RemedialAttemptStatus | null;
+}
+
+interface RemedialProgressionView {
+  stage: RemedialStage;
+  attempts: RemedialAttemptView[];
+  passedAttempt: 1 | 2 | null;
+  legacyUnclassified: boolean;
 }
 
 interface RetentionRemedialRow {
   record: FacultyRetentionRecord;
-  remedial: RetentionRemedialRecord;
+  progression: RemedialProgressionView;
 }
+
+type AllowedAttempt = 1 | 2;
+type RemedialDisplayStatus = RemedialAttemptStatus | 'available' | 'not_started';
 
 type Notification = {
   type: 'success' | 'info';
@@ -45,12 +66,6 @@ const hasPersistedIdentifiers = (record: FacultyRetentionRecord): boolean => (
   && isPersistedText(record.classId)
 );
 
-const canScheduleRecord = (record: FacultyRetentionRecord): boolean => (
-  hasPersistedIdentifiers(record)
-  && record.state !== 'archived'
-  && isPersistedText(record.subjectCode)
-);
-
 const canOverrideRecord = (record: FacultyRetentionRecord): boolean => (
   hasPersistedIdentifiers(record) && record.state !== 'archived'
 );
@@ -59,84 +74,153 @@ const textOrUnavailable = (value: string | null | undefined, label: string): str
   isPersistedText(value) ? value : label
 );
 
-const readRemedialRecord = (value: Record<string, unknown> | null): RetentionRemedialRecord | null => {
-  if (!value) return null;
+const isRecordValue = (value: unknown): value is Record<string, unknown> => (
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+);
 
-  const status = value.status;
-  const legacyPendingExams = value.pendingExams;
-  const hasRemedialShape = status === 'pending'
-    || status === 'passed'
-    || status === 'failed'
-    || Object.prototype.hasOwnProperty.call(value, 'status')
-    || typeof legacyPendingExams === 'number'
-    || typeof value.examDate === 'string'
-    || typeof value.dueDate === 'string'
-    || typeof value.remedialScore === 'number'
-    || typeof value.notes === 'string'
-    || typeof value.subjectCode === 'string'
-    || typeof value.completedRemedials === 'number';
-  if (!hasRemedialShape) return null;
+const hasRemedialShape = (value: unknown): value is Record<string, unknown> => (
+  isRecordValue(value)
+);
 
-  const normalizedStatus = status === 'pending' || status === 'passed' || status === 'failed'
-    ? status
-    : typeof legacyPendingExams === 'number' && Number.isFinite(legacyPendingExams) && legacyPendingExams > 0
-      ? 'pending'
-      : 'unavailable';
-
-  const rawScore = value.remedialScore;
-  const remedialScore = typeof rawScore === 'number' && Number.isFinite(rawScore)
-    ? rawScore
-    : null;
-  const persistedExamDate = typeof value.examDate === 'string' && value.examDate.trim().length > 0
-    ? value.examDate
-    : typeof value.dueDate === 'string' && value.dueDate.trim().length > 0
-      ? value.dueDate
-    : null;
-  const notes = typeof value.notes === 'string' && value.notes.trim().length > 0
-    ? value.notes
-    : null;
-
-  return { status: normalizedStatus, remedialScore, examDate: persistedExamDate, notes };
+const legacyEvidenceLabel = (value: unknown): string | null => {
+  if (!hasRemedialShape(value)) return null;
+  const row = { remedial: value };
+  const existing = {
+    examDate: typeof value.examDate === 'string' ? value.examDate : '',
+    dueDate: typeof value.dueDate === 'string' ? value.dueDate : '',
+  };
+  const hasLegacyDates = existing.examDate.trim().length > 0 || existing.dueDate.trim().length > 0;
+  const legacyPending = row.remedial.status === 'pending';
+  return hasLegacyDates || legacyPending ? 'Outcome unavailable pending reconciliation.' : null;
 };
 
-const buildRemedialPayload = (
-  record: FacultyRetentionRecord,
-  status: 'pending' | 'passed' | 'failed',
-  options: { examDate?: string; notes?: string; remedialScore?: number },
-  existing: Record<string, unknown> | null,
-): Record<string, unknown> => {
-  const payload: Record<string, unknown> = {
-    status,
-    studentId: record.studentId,
-    classId: record.classId,
+const REMEDIAL_STAGES: RemedialStage[] = [
+  'none',
+  'attempt_1_pending',
+  'attempt_2_available',
+  'attempt_2_pending',
+  'passed',
+  'cost_recovery_required',
+  'legacy_unclassified',
+];
+
+const readRemedialStage = (value: unknown): RemedialStage | null => (
+  typeof value === 'string' && REMEDIAL_STAGES.includes(value as RemedialStage)
+    ? value as RemedialStage
+    : null
+);
+
+const readAttemptNumber = (value: unknown): AllowedAttempt | null => (
+  value === 1 || value === 2 || value === '1' || value === '2'
+    ? Number(value) as AllowedAttempt
+    : null
+);
+
+const readAttemptStatus = (value: unknown): RemedialAttemptStatus | null => (
+  value === 'pending' || value === 'passed' || value === 'failed'
+    ? value
+    : null
+);
+
+const readAttempt = (value: unknown): RemedialAttemptView | null => {
+  if (!isRecordValue(value)) return null;
+  const attemptNumber = readAttemptNumber(value.attemptNumber ?? value.attempt_number);
+  if (!attemptNumber) return null;
+
+  const rawDate = value.scheduledDate ?? value.scheduled_date;
+  const percentage = typeof value.percentage === 'number' && Number.isFinite(value.percentage)
+    ? value.percentage
+    : null;
+  return {
+    attemptNumber,
+    scheduledDate: typeof rawDate === 'string' && rawDate.trim().length > 0 ? rawDate : null,
+    percentage,
+    status: readAttemptStatus(value.outcome ?? value.status),
   };
+};
 
-  if (isPersistedText(record.subjectCode)) payload.subjectCode = record.subjectCode;
-  if (isPersistedText(record.studentName)) payload.studentName = record.studentName;
-  if (isPersistedText(record.studentNumber)) payload.studentNumber = record.studentNumber;
-  if (isPersistedText(record.className)) payload.className = record.className;
-  if (isFiniteNumber(record.gwa)) payload.originalGrade = record.gwa;
+const readRemedialProgression = (record: FacultyRetentionRecord): RemedialProgressionView => {
+  const source = record as unknown as { remedialProgression?: unknown; remedial?: unknown };
+  const rawProgression = source.remedialProgression
+    ?? (isRecordValue(source.remedial) && 'stage' in source.remedial ? source.remedial : null);
 
-  const persistedExamDate = existing && typeof existing.examDate === 'string' && existing.examDate.trim().length > 0
-    ? existing.examDate.trim()
-    : existing && typeof existing.dueDate === 'string' && existing.dueDate.trim().length > 0
-      ? existing.dueDate.trim()
-      : '';
-  const examDate = typeof options.examDate === 'string' && options.examDate.trim().length > 0
-    ? options.examDate.trim()
-    : persistedExamDate;
-  if (examDate.length > 0) payload.examDate = examDate;
+  if (isRecordValue(rawProgression)) {
+    const declaredStage = readRemedialStage(rawProgression.stage);
+    const rawLegacyUnclassified = rawProgression.legacyUnclassified === true
+      || rawProgression.legacy_unclassified === true;
+    const stage = rawLegacyUnclassified ? 'legacy_unclassified' : (declaredStage ?? 'legacy_unclassified');
+    const attempts = Array.isArray(rawProgression.attempts)
+      ? rawProgression.attempts.map(readAttempt).filter((attempt): attempt is RemedialAttemptView => attempt !== null)
+      : [];
+    const passedAttempt = readAttemptNumber(rawProgression.passedAttempt ?? rawProgression.passed_attempt);
+    const legacyUnclassified = rawLegacyUnclassified || stage === 'legacy_unclassified';
+    return { stage, attempts, passedAttempt, legacyUnclassified };
+  }
 
-  const notes = typeof options.notes === 'string' && options.notes.trim().length > 0
-    ? options.notes.trim()
-    : existing && typeof existing.notes === 'string' && existing.notes.trim().length > 0
-      ? existing.notes.trim()
-      : '';
-  if (notes.length > 0) payload.notes = notes;
+  // A legacy current-state JSON blob is deliberately not interpreted as an attempt.
+  // The server must classify it before Faculty can write a new progression.
+  if (hasRemedialShape(source.remedial) && Object.keys(source.remedial).length > 0) {
+    return { stage: 'legacy_unclassified', attempts: [], passedAttempt: null, legacyUnclassified: true };
+  }
+  return { stage: 'none', attempts: [], passedAttempt: null, legacyUnclassified: false };
+};
 
-  if (isFiniteNumber(options.remedialScore)) payload.remedialScore = options.remedialScore;
+const allowedAttemptNumbers = (progression: RemedialProgressionView): AllowedAttempt[] => {
+  if (progression.stage === 'none') return [1];
+  if (progression.stage === 'attempt_2_available') return [2];
+  return [];
+};
 
-  return payload;
+const pendingAttemptNumber = (progression: RemedialProgressionView): AllowedAttempt | null => {
+  if (progression.stage === 'attempt_1_pending') return 1;
+  if (progression.stage === 'attempt_2_pending') return 2;
+  return null;
+};
+
+const canScheduleRecord = (record: FacultyRetentionRecord): boolean => (
+  hasPersistedIdentifiers(record)
+  && record.state !== 'archived'
+  && isPersistedText(record.subjectCode)
+  && allowedAttemptNumbers(readRemedialProgression(record)).length > 0
+);
+
+const stageLabel = (stage: RemedialStage): string => {
+  switch (stage) {
+    case 'none': return 'No remedial attempt assigned';
+    case 'attempt_1_pending': return 'Attempt 1 pending';
+    case 'attempt_2_available': return 'Attempt 2 available';
+    case 'attempt_2_pending': return 'Attempt 2 pending';
+    case 'passed': return 'Passed';
+    case 'cost_recovery_required': return 'Cost recovery required';
+    case 'legacy_unclassified': return 'Legacy / unclassified';
+    default: return 'Progression unavailable';
+  }
+};
+
+const attemptStatus = (
+  progression: RemedialProgressionView,
+  attemptNumber: AllowedAttempt,
+): RemedialDisplayStatus => {
+  const attempt = progression.attempts.find(item => item.attemptNumber === attemptNumber);
+  if (attempt?.status) return attempt.status;
+  if (progression.stage === 'attempt_1_pending' && attemptNumber === 1) return 'pending';
+  if (progression.stage === 'attempt_2_available' && attemptNumber === 1) return 'failed';
+  if (progression.stage === 'attempt_2_pending') return attemptNumber === 1 ? 'failed' : 'pending';
+  if (progression.stage === 'passed') return progression.passedAttempt === attemptNumber ? 'passed' : attemptNumber < (progression.passedAttempt ?? 2) ? 'failed' : 'not_started';
+  if (progression.stage === 'cost_recovery_required') return 'failed';
+  if (progression.stage === 'attempt_2_available' && attemptNumber === 2) return 'available';
+  return 'not_started';
+};
+
+const attemptStatusLabel = (status: RemedialDisplayStatus): string => {
+  switch (status) {
+    case 'pending': return 'Pending';
+    case 'passed': return 'Passed';
+    case 'failed': return 'Failed';
+    case 'available': return 'Available';
+    case 'not_started': return 'Not started';
+    default: return 'Unavailable';
+  }
 };
 
 const retentionStateLabel = (state: FacultyRetentionState): string => {
@@ -175,12 +259,12 @@ export const RetentionMonitoring: React.FC = () => {
 
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [selectedScheduleEnrollmentId, setSelectedScheduleEnrollmentId] = useState('');
+  const [scheduleAttempt, setScheduleAttempt] = useState<AllowedAttempt>(1);
   const [scheduleDate, setScheduleDate] = useState('');
-  const [scheduleNotes, setScheduleNotes] = useState('');
 
   const [selectedResolveEnrollmentId, setSelectedResolveEnrollmentId] = useState<string | null>(null);
+  const [resolveAttemptNumber, setResolveAttemptNumber] = useState<AllowedAttempt | null>(null);
   const [remedialScore, setRemedialScore] = useState('');
-  const [remedialNotes, setRemedialNotes] = useState('');
 
   const [isOverrideOpen, setIsOverrideOpen] = useState(false);
   const [selectedOverrideEnrollmentId, setSelectedOverrideEnrollmentId] = useState<string | null>(null);
@@ -265,8 +349,8 @@ export const RetentionMonitoring: React.FC = () => {
   const remedialRows = useMemo<RetentionRemedialRow[]>(() => {
     const rows: RetentionRemedialRow[] = [];
     filteredRecords.forEach(record => {
-      const remedial = readRemedialRecord(record.remedial);
-      if (remedial) rows.push({ record, remedial });
+      const progression = readRemedialProgression(record);
+      if (progression.stage !== 'none') rows.push({ record, progression });
     });
     return rows;
   }, [filteredRecords]);
@@ -291,7 +375,21 @@ export const RetentionMonitoring: React.FC = () => {
     [selectedOverrideEnrollmentId, usableRecords],
   );
 
-  const pendingRemedialCount = remedialRows.filter(row => row.remedial.status === 'pending').length;
+  const selectedScheduleProgression = selectedScheduleRecord
+    ? readRemedialProgression(selectedScheduleRecord)
+    : null;
+
+  const selectedResolveProgression = selectedResolveRecord
+    ? readRemedialProgression(selectedResolveRecord)
+    : null;
+
+  const selectedPolicyProgression = selectedPolicyRecord
+    ? readRemedialProgression(selectedPolicyRecord)
+    : null;
+
+  const pendingExams = remedialRows.filter(row => (
+    row.progression.stage === 'attempt_1_pending' || row.progression.stage === 'attempt_2_pending'
+  )).length;
 
   const openSchedule = (preferredRecord?: FacultyRetentionRecord) => {
     const candidate = preferredRecord && canScheduleRecord(preferredRecord)
@@ -302,15 +400,21 @@ export const RetentionMonitoring: React.FC = () => {
       return;
     }
     setSelectedScheduleEnrollmentId(candidate.enrollmentId);
+    const allowedAttempts = allowedAttemptNumbers(readRemedialProgression(candidate));
+    setScheduleAttempt(allowedAttempts[0] ?? 1);
     setScheduleDate('');
-    setScheduleNotes('');
     setIsScheduleOpen(true);
   };
 
   const openResolve = (row: RetentionRemedialRow) => {
+    const attemptNumber = pendingAttemptNumber(row.progression);
+    if (!attemptNumber) {
+      showFeedback('Only a server-authorized pending attempt can be graded.', 'info');
+      return;
+    }
     setSelectedResolveEnrollmentId(row.record.enrollmentId);
+    setResolveAttemptNumber(attemptNumber);
     setRemedialScore('');
-    setRemedialNotes(row.remedial.notes ?? '');
   };
 
   const openOverride = (record: FacultyRetentionRecord) => {
@@ -331,14 +435,14 @@ export const RetentionMonitoring: React.FC = () => {
   const resetScheduleForm = () => {
     setIsScheduleOpen(false);
     setSelectedScheduleEnrollmentId('');
+    setScheduleAttempt(1);
     setScheduleDate('');
-    setScheduleNotes('');
   };
 
   const resetResolveForm = () => {
     setSelectedResolveEnrollmentId(null);
+    setResolveAttemptNumber(null);
     setRemedialScore('');
-    setRemedialNotes('');
   };
 
   const resetOverrideForm = () => {
@@ -353,8 +457,9 @@ export const RetentionMonitoring: React.FC = () => {
       showFeedback('Scheduling is unavailable because the selected record lacks persisted identifiers.', 'info');
       return;
     }
-    if (scheduleDate.trim().length === 0) {
-      showFeedback('Select a remedial exam date.', 'error');
+    const allowedAttempts = allowedAttemptNumbers(readRemedialProgression(selectedScheduleRecord));
+    if (!allowedAttempts.includes(scheduleAttempt)) {
+      showFeedback('This remedial attempt is no longer available. Refresh the authoritative records and try again.', 'error');
       return;
     }
 
@@ -364,12 +469,8 @@ export const RetentionMonitoring: React.FC = () => {
         enrollmentId: selectedScheduleRecord.enrollmentId,
         studentId: selectedScheduleRecord.studentId,
         classId: selectedScheduleRecord.classId,
-        remedial: buildRemedialPayload(
-          selectedScheduleRecord,
-          'pending',
-          { examDate: scheduleDate, notes: scheduleNotes },
-          null,
-        ),
+        attemptNumber: scheduleAttempt,
+        scheduledDate: scheduleDate.trim().length > 0 ? scheduleDate.trim() : null,
       });
       const refreshed = await refreshRetention();
       resetScheduleForm();
@@ -396,6 +497,15 @@ export const RetentionMonitoring: React.FC = () => {
       showFeedback('Remedial resolution is unavailable for archived enrollments.', 'info');
       return;
     }
+    if (!selectedResolveProgression || !resolveAttemptNumber) {
+      showFeedback('Only a server-authorized pending attempt can be graded.', 'info');
+      return;
+    }
+
+    if (remedialScore.trim().length === 0) {
+      showFeedback('Enter a percentage score from 0 to 100.', 'error');
+      return;
+    }
 
     const score = Number(remedialScore);
     if (!Number.isFinite(score) || score < 0 || score > 100) {
@@ -403,19 +513,19 @@ export const RetentionMonitoring: React.FC = () => {
       return;
     }
 
-    const status = score >= 75 ? 'passed' : 'failed';
+    if (pendingAttemptNumber(selectedResolveProgression) !== resolveAttemptNumber) {
+      showFeedback('This remedial attempt is no longer pending. Refresh the authoritative records and try again.', 'error');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await saveFacultyRemedialApi({
         enrollmentId: selectedResolveRecord.enrollmentId,
         studentId: selectedResolveRecord.studentId,
         classId: selectedResolveRecord.classId,
-        remedial: buildRemedialPayload(
-          selectedResolveRecord,
-          status,
-          { notes: remedialNotes, remedialScore: score },
-          selectedResolveRecord.remedial,
-        ),
+        attemptNumber: resolveAttemptNumber,
+        percentage: score,
       });
       const refreshed = await refreshRetention();
       resetResolveForm();
@@ -530,7 +640,7 @@ export const RetentionMonitoring: React.FC = () => {
         <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit overflow-x-auto">
           <button type="button" onClick={() => setActiveTab('midterm')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap ${activeTab === 'midterm' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Midterm Watchlist</button>
           <button type="button" onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'watchlist' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Retention Watchlist ({watchlistRecords.length})</button>
-          <button type="button" onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'remedials' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Remedial Exams ({pendingRemedialCount} Pending)</button>
+          <button type="button" onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'remedials' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Remedial Exams ({pendingExams} Pending)</button>
           <button type="button" onClick={() => { setActiveTab('risk-rules'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'risk-rules' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Midterm Evaluation Rules</button>
         </div>
 
@@ -608,20 +718,20 @@ export const RetentionMonitoring: React.FC = () => {
       {activeTab === 'remedials' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Persisted Remedial Records ({remedialRows.length})</h2><p className="text-xs text-slate-400">Remedial state is read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
+            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Remedial Progression ({remedialRows.length})</h2><p className="text-xs text-slate-400">Attempt stages, scores and outcomes are read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
             <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all"><Plus className="w-3.5 h-3.5" /><span>Schedule Remedial Exam</span></button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Exam Date</th><th className="py-3 px-4">Score & Policy Status</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {remedialRows.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No persisted remedial records match the selected filters.'}</td></tr> : remedialRows.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">{row.remedial.examDate ?? 'Exam date unavailable'}</td>
-                    <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2">{row.remedial.status === 'passed' ? <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-[11px] border border-emerald-200/60">PASSED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'failed' ? <span className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[11px] border border-rose-200/60">FAILED ({isFiniteNumber(row.remedial.remedialScore) ? `${row.remedial.remedialScore}%` : 'Score unavailable'})</span> : row.remedial.status === 'pending' ? <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 font-bold text-[11px] border border-amber-200/60">Scheduled / Pending Exam</span> : <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 font-bold text-[11px] border border-slate-200">Outcome unavailable</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current retention policy stage">Policy status <ChevronRight className="h-3 w-3" /></button></div></td>
-                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{row.remedial.status === 'pending' && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Exam</button>}{row.remedial.status === 'unavailable' && <span className="text-[10px] text-amber-600" title="Persisted remedial data does not include an actionable status">Outcome unavailable</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
+                    <td className="py-3.5 px-4"><div className="space-y-1.5">{([1, 2] as AllowedAttempt[]).map(attemptNumber => { const attempt = row.progression.attempts.find(item => item.attemptNumber === attemptNumber); const status = attemptStatus(row.progression, attemptNumber); const statusClass = status === 'passed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : status === 'failed' ? 'bg-rose-50 text-rose-700 border-rose-200/60' : status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200/60' : status === 'available' ? 'bg-sky-50 text-sky-700 border-sky-200/60' : 'bg-slate-100 text-slate-600 border-slate-200'; return <div key={attemptNumber} className="flex flex-wrap items-center gap-1.5"><span className="font-bold text-slate-700 dark:text-slate-300">Attempt {attemptNumber}</span><span className={`rounded-lg border px-2 py-1 text-[10px] font-bold ${statusClass}`}>{attemptStatusLabel(status)}{isFiniteNumber(attempt?.percentage) ? ` · ${attempt.percentage.toFixed(2)}%` : ''}</span>{attempt?.scheduledDate && <span className="text-[10px] text-slate-400">{attempt.scheduledDate}</span>}</div>; })}</div></td>
+                    <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${row.progression.stage === 'passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : row.progression.stage === 'cost_recovery_required' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : row.progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>{stageLabel(row.progression.stage)}</span>{row.progression.legacyUnclassified && <span className="text-[10px] text-slate-500">{legacyEvidenceLabel((row.record as unknown as { remedial?: unknown }).remedial) ?? 'Outcome unavailable pending reconciliation.'}</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current remedial progression">Details <ChevronRight className="h-3 w-3" /></button></div></td>
+                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Attempt {pendingAttemptNumber(row.progression)}</button>}{row.progression.legacyUnclassified && <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">Legacy / unclassified</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -636,8 +746,8 @@ export const RetentionMonitoring: React.FC = () => {
         <Modal isOpen={isScheduleOpen} onClose={resetScheduleForm} title="Schedule Remedial Exam">
           <form onSubmit={handleScheduleSubmit} className="space-y-4 text-xs">
             <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select persisted enrollment</label><select required value={selectedScheduleEnrollmentId} onChange={(event) => setSelectedScheduleEnrollmentId(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer">{scheduleCandidates.map(record => <option key={record.enrollmentId} value={record.enrollmentId}>{textOrUnavailable(record.studentName, 'Student name unavailable')} — {textOrUnavailable(record.studentNumber, 'Student number unavailable')} · {textOrUnavailable(record.subjectCode, 'Subject code unavailable')} · {textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</option>)}</select>{scheduleCandidates.length === 0 && <p className="text-[11px] text-amber-600 mt-1">Scheduling unavailable: no persisted enrollment with a subject code is available.</p>}</div>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date</label><input type="date" required value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Notes / Instructions</label><textarea rows={3} value={scheduleNotes} onChange={(event) => setScheduleNotes(event.target.value)} placeholder="Optional faculty notes..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Attempt</label><select required value={scheduleAttempt} onChange={(event) => setScheduleAttempt(Number(event.target.value) as AllowedAttempt)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer" disabled={!selectedScheduleProgression || allowedAttemptNumbers(selectedScheduleProgression).length <= 1}>{selectedScheduleProgression && allowedAttemptNumbers(selectedScheduleProgression).map(attemptNumber => <option key={attemptNumber} value={attemptNumber}>Attempt {attemptNumber}</option>)}</select><p className="mt-1 text-[11px] text-slate-400">The server-authorized stage determines whether Attempt 1 or Attempt 2 can be scheduled.</p></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date <span className="font-normal text-slate-400">(optional)</span></label><input type="date" value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
             <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetScheduleForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting || !selectedScheduleRecord || !canScheduleRecord(selectedScheduleRecord)} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Confirm & Schedule Exam'}</button></div>
           </form>
         </Modal>
@@ -647,8 +757,7 @@ export const RetentionMonitoring: React.FC = () => {
         <Modal isOpen={Boolean(selectedResolveRecord)} onClose={resetResolveForm} title="Grade Remedial Exam Result">
           <form onSubmit={handleResolveRemedial} className="space-y-4 text-xs">
             <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(selectedResolveRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(selectedResolveRecord.subjectCode, 'Subject code unavailable')}</p>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Percentage Score (%)</label><input type="number" min="0" max="100" required value={remedialScore} onChange={(event) => setRemedialScore(event.target.value)} placeholder="Enter score" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm" /><span className="text-[11px] text-slate-400 block mt-1">Scores at or above 75% are submitted as passed.</span></div>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Faculty Remarks</label><textarea rows={3} value={remedialNotes} onChange={(event) => setRemedialNotes(event.target.value)} placeholder="Optional faculty notes..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Percentage Score (%)</label><input type="number" min="0" max="100" step="any" required value={remedialScore} onChange={(event) => setRemedialScore(event.target.value)} placeholder="Enter score" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm" /><span className="text-[11px] text-slate-400 block mt-1">The server determines Pass or Fail at 50% or higher. This form sends only the attempt number and percentage.</span></div>
             <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetResolveForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Save Exam Grade'}</button></div>
           </form>
         </Modal>
@@ -688,15 +797,22 @@ export const RetentionMonitoring: React.FC = () => {
                 <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Recorded score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
               </div>
             </div>
-            <div className="space-y-2">
-              {([selectedPolicyRecord.state] as FacultyRetentionState[]).map((stage) => (
-                <div key={stage} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${selectedPolicyRecord.state === stage ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950'}`}>
-                  <div className="flex-1"><p className="font-bold text-slate-800 dark:text-slate-100">{retentionStateLabel(stage)}</p><p className="text-[10px] text-slate-400">Current saved status</p></div>
-                  {selectedPolicyRecord.state === stage && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+            {selectedPolicyProgression && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                  <div><p className="font-bold text-emerald-800 dark:text-emerald-200">{stageLabel(selectedPolicyProgression.stage)}</p><p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80">Server-authoritative remedial stage</p></div>
+                  {selectedPolicyProgression.stage === 'passed' && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
                 </div>
-              ))}
-            </div>
-            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">The displayed status and score facts are read from persisted retention data. Detailed policy progression is unavailable for this view.</p>
+                <div className="space-y-2">
+                  {([1, 2] as AllowedAttempt[]).map(attemptNumber => {
+                    const attempt = selectedPolicyProgression.attempts.find(item => item.attemptNumber === attemptNumber);
+                    const status = attemptStatus(selectedPolicyProgression, attemptNumber);
+                    return <div key={attemptNumber} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950"><div className="flex-1"><p className="font-bold text-slate-800 dark:text-slate-100">Attempt {attemptNumber}</p><p className="text-[10px] text-slate-400">{attempt?.scheduledDate ? `Scheduled ${attempt.scheduledDate} · ` : ''}{isFiniteNumber(attempt?.percentage) ? `${attempt.percentage.toFixed(2)}% · ` : ''}{attemptStatusLabel(status)}</p></div><span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{status === 'passed' ? 'Passed' : status === 'failed' ? 'Failed' : status === 'pending' ? 'Pending' : status === 'available' ? 'Available' : 'Not started'}</span></div>;
+                  })}
+                </div>
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">Original final grade and GWA remain unchanged. A remedial pass changes progression readiness only. Legacy records are not interpreted as a new attempt.</p>
+              </div>
+            )}
           </div>
         </Modal>
       )}

@@ -241,6 +241,7 @@ $expectedMigrations = [
     '026_validate_attendance_enrollment_updates.sql',
     '027_provisional_course_remedial_threshold.sql',
     '028_authoritative_course_grade_threshold.sql',
+    '029_remedial_attempt_progression.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -1431,8 +1432,9 @@ $invitedStudentInsert = $pdo->prepare(
 );
 $invitedStudentInsert->execute([$invitedStudentNumber, 'Invited', 'Student', $invitedStudentEmail, 'active']);
 $invitedStudentId = (int) $invitedStudentInsert->fetchColumn();
-$invitedEnrollmentInsert = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active')");
+$invitedEnrollmentInsert = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active') RETURNING enrollment_id");
 $invitedEnrollmentInsert->execute([$invitedStudentId, $studentClassId]);
+$invitedEnrollmentId = (int) $invitedEnrollmentInsert->fetchColumn();
 [$emailOnlyStatus] = integration_http_json('/api/auth/student/signup', '', ['email' => $invitedStudentEmail]);
 expect_same(404, $emailOnlyStatus, 'Student email alone cannot begin onboarding');
 $uninvitedLinkStmt = $pdo->prepare('SELECT student_account_user_id FROM students WHERE student_id = ?');
@@ -2023,6 +2025,203 @@ $studentRetentionNotificationRow = array_values(array_filter(
         && ($row['type'] ?? null) === 'retention_status'
 ))[0] ?? null;
 expect_true(is_array($studentRetentionNotificationRow), 'Student notification list returns the retention status notification');
+
+// Approved two-attempt remedial progression is exercised through the real
+// Faculty route. These disposable invitation fixtures have no legacy attempt
+// history, so the canonical API may start a sequence without interpreting
+// current-state JSON. The original course grade is snapshotted before every
+// progression and checked again after ordinary grade recomputation.
+$remedialFixtureEnrollmentStmt = $pdo->prepare(
+    "UPDATE enrollments
+        SET final_percentage = ?, final_gwa = ?, retention_state = 'active', remedial_state_json = NULL
+      WHERE enrollment_id = ?"
+);
+$remedialFixtureEnrollmentStmt->execute(['68.00', '2.50', $invitedEnrollmentId]);
+$remedialFixtureEnrollmentStmt->execute(['64.00', '2.64', $unscopedEnrollmentId = (int) $pdo->query(
+    'SELECT e.enrollment_id FROM enrollments e WHERE e.student_id = ' . (int) $unscopedStudentId . ' LIMIT 1'
+)->fetchColumn()]);
+$remedialCostStudentInsert = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, ?, ?, ?, 'active') RETURNING student_id"
+);
+$remedialCostStudentInsert->execute([
+    'REM-' . bin2hex(random_bytes(4)),
+    'Remedial',
+    'CostRecovery',
+    'remedial-cost-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph',
+]);
+$remedialCostStudentId = (int) $remedialCostStudentInsert->fetchColumn();
+$remedialCostEnrollmentInsert = $pdo->prepare(
+    "INSERT INTO enrollments (student_id, cs_id, status, final_percentage, final_gwa, retention_state)
+     VALUES (?, ?, 'Active', 62.00, 2.62, 'active') RETURNING enrollment_id"
+);
+$remedialCostEnrollmentInsert->execute([$remedialCostStudentId, $studentClassId]);
+$remedialCostEnrollmentId = (int) $remedialCostEnrollmentInsert->fetchColumn();
+expect_true($invitedEnrollmentId > 0 && $unscopedEnrollmentId > 0 && $remedialCostEnrollmentId > 0, 'Remedial progression fixtures have persisted enrollment IDs');
+
+$remedialPost = static function (int $enrollmentId, array $data, string $token): array {
+    return integration_http_json('/api/faculty/retention/remedial', $token, array_merge(
+        ['enrollmentId' => (string) $enrollmentId],
+        $data,
+    ));
+};
+$remedialErrorCode = static fn(array $body): ?string => isset($body['code']) ? (string) $body['code'] : null;
+
+foreach ([
+    ['', 'REMEDIAL_SCORE_REQUIRED'],
+    [-0.01, 'REMEDIAL_SCORE_RANGE'],
+    [100.01, 'REMEDIAL_SCORE_RANGE'],
+    ['Infinity', 'REMEDIAL_SCORE_INVALID'],
+    ['NaN', 'REMEDIAL_SCORE_INVALID'],
+] as [$invalidScore, $invalidCode]) {
+    [$invalidStatus, $invalidBody] = $remedialPost($invitedEnrollmentId, [
+        'attemptNumber' => 1,
+        'percentage' => $invalidScore,
+    ], $seedFacultyAccessToken);
+    expect_same(422, $invalidStatus, "Invalid remedial percentage {$invalidCode} returns HTTP 422");
+    expect_same($invalidCode, $remedialErrorCode($invalidBody), "Invalid remedial percentage {$invalidCode} returns its bounded error code");
+}
+$remedialRowsStmt = $pdo->prepare('SELECT COUNT(*) FROM enrollment_remedial_attempts WHERE enrollment_id = ?');
+$remedialRowsStmt->execute([$invitedEnrollmentId]);
+expect_same('0', (string) $remedialRowsStmt->fetchColumn(), 'Rejected remedial inputs leave no partial attempt row behind');
+[$skipAttemptStatus, $skipAttemptBody] = $remedialPost($invitedEnrollmentId, ['attemptNumber' => 2, 'percentage' => 50], $seedFacultyAccessToken);
+expect_same(409, $skipAttemptStatus, 'Second remedial attempt cannot skip a missing first attempt');
+expect_same('REMEDIAL_ATTEMPT_STAGE', $remedialErrorCode($skipAttemptBody), 'Skipped remedial attempt returns a stage error');
+$wrongOwnerCredentials = auth_runtime_login($pdo, $config, [
+    'email' => $email,
+    'password' => $newResetPassword,
+], [
+    'request_id' => 'remedial-owner-' . bin2hex(random_bytes(4)),
+    'ip_address' => '127.0.0.1',
+    'user_agent' => 'PostgreSQL Remedial Integration Test',
+    'http_method' => 'POST',
+    'endpoint' => '/api/auth/login',
+]);
+expect_same('direct_login', $wrongOwnerCredentials['type'] ?? null, 'Unassigned Faculty remedial fixture login succeeds');
+$wrongOwnerAccessToken = (string) ($wrongOwnerCredentials['credentials']['access_token'] ?? '');
+[$wrongOwnerStatus, $wrongOwnerBody] = $remedialPost($invitedEnrollmentId, ['attemptNumber' => 1, 'percentage' => 50], $wrongOwnerAccessToken);
+expect_same(403, $wrongOwnerStatus, 'Unassigned Faculty cannot record another class remedial attempt');
+expect_same('REMEDIAL_NOT_ASSIGNED_FACULTY', $remedialErrorCode($wrongOwnerBody), 'Unassigned remedial write returns the ownership error');
+$pdo->prepare("UPDATE enrollments SET status = 'Archived' WHERE enrollment_id = ?")->execute([$remedialCostEnrollmentId]);
+[$archivedRemedialStatus, $archivedRemedialBody] = $remedialPost($remedialCostEnrollmentId, ['attemptNumber' => 1, 'percentage' => 50], $seedFacultyAccessToken);
+expect_same(409, $archivedRemedialStatus, 'Archived enrollments cannot start remedial progression');
+expect_same('REMEDIAL_ENROLLMENT_READ_ONLY', $remedialErrorCode($archivedRemedialBody), 'Archived remedial writes return the read-only error');
+$pdo->prepare("UPDATE enrollments SET status = 'Active' WHERE enrollment_id = ?")->execute([$remedialCostEnrollmentId]);
+
+$remedialOriginalStmt = $pdo->prepare(
+    'SELECT final_percentage, final_gwa, grade_components_json::text AS grade_components_json FROM enrollments WHERE enrollment_id = ?'
+);
+$remedialOriginalStmt->execute([$invitedEnrollmentId]);
+$remedialOriginalGrade = $remedialOriginalStmt->fetch(PDO::FETCH_ASSOC);
+[$remedialScheduleStatus, $remedialScheduleBody] = $remedialPost($invitedEnrollmentId, [
+    'attemptNumber' => 1,
+    'scheduledDate' => '2027-01-10',
+], $seedFacultyAccessToken);
+expect_same(200, $remedialScheduleStatus, 'Faculty schedules remedial attempt 1 through the canonical route');
+expect_same('attempt_1_pending', $remedialScheduleBody['progression']['stage'] ?? null, 'Scheduled attempt 1 is pending');
+[$remedialFirstFailStatus, $remedialFirstFailBody] = $remedialPost($invitedEnrollmentId, [
+    'attemptNumber' => 1,
+    'percentage' => 49.99,
+    'status' => 'passed',
+], $seedFacultyAccessToken);
+expect_same(200, $remedialFirstFailStatus, 'Faculty records a 49.99 remedial result');
+expect_same('attempt_2_available', $remedialFirstFailBody['progression']['stage'] ?? null, 'A first-attempt result below 50 opens only attempt 2');
+[$remedialDuplicateStatus, $remedialDuplicateBody] = $remedialPost($invitedEnrollmentId, ['attemptNumber' => 1, 'percentage' => 50], $seedFacultyAccessToken);
+expect_same(409, $remedialDuplicateStatus, 'A completed first remedial attempt cannot be overwritten');
+expect_same('REMEDIAL_ATTEMPT_DUPLICATE', $remedialErrorCode($remedialDuplicateBody), 'Duplicate remedial submission returns the duplicate error');
+[$remedialSecondScheduleStatus, $remedialSecondScheduleBody] = $remedialPost($invitedEnrollmentId, [
+    'attemptNumber' => 2,
+    'scheduledDate' => '2027-01-17',
+], $seedFacultyAccessToken);
+expect_same(200, $remedialSecondScheduleStatus, 'Faculty schedules the newly available second remedial attempt');
+expect_same('attempt_2_pending', $remedialSecondScheduleBody['progression']['stage'] ?? null, 'Scheduled attempt 2 is pending');
+[$remedialSecondPassStatus, $remedialSecondPassBody] = $remedialPost($invitedEnrollmentId, [
+    'attemptNumber' => 2,
+    'percentage' => 50.01,
+    'outcome' => 'failed',
+], $seedFacultyAccessToken);
+expect_same(200, $remedialSecondPassStatus, 'Faculty records a 50.01 second-attempt result');
+expect_same('passed', $remedialSecondPassBody['progression']['stage'] ?? null, 'A second-attempt result at or above 50 passes');
+expect_same(2, $remedialSecondPassBody['progression']['passedAttempt'] ?? null, 'The server reports the passing attempt number');
+$remedialRowsStmt = $pdo->prepare(
+    'SELECT attempt_number, scheduled_date, percentage, outcome FROM enrollment_remedial_attempts WHERE enrollment_id = ? ORDER BY attempt_number'
+);
+$remedialRowsStmt->execute([$invitedEnrollmentId]);
+$remedialRows = $remedialRowsStmt->fetchAll(PDO::FETCH_ASSOC);
+expect_same(2, count($remedialRows), 'Canonical remedial storage contains exactly two distinct attempts');
+expect_same(['1', '2'], array_map(static fn(mixed $value): string => (string) $value, array_column($remedialRows, 'attempt_number')), 'Canonical remedial storage preserves attempt numbering');
+expect_same(['49.99', '50.01'], array_column($remedialRows, 'percentage'), 'Canonical remedial storage preserves exact percentage precision');
+expect_same(['failed', 'passed'], array_column($remedialRows, 'outcome'), 'Canonical remedial outcomes are server-derived');
+$remedialOriginalStmt->execute([$invitedEnrollmentId]);
+expect_same($remedialOriginalGrade, $remedialOriginalStmt->fetch(PDO::FETCH_ASSOC), 'Recording remedial outcomes leaves the original grade and raw grade components unchanged');
+
+[$remedialFacultyGetStatus, $remedialFacultyGetBody] = integration_http_get_json('/api/faculty/retention', $seedFacultyAccessToken);
+expect_same(200, $remedialFacultyGetStatus, 'Faculty retention reload returns HTTP 200 after canonical remedial writes');
+$remedialReloadRow = array_values(array_filter(
+    $remedialFacultyGetBody['retention'] ?? [],
+    static fn(array $row): bool => (string) ($row['enrollmentId'] ?? '') === (string) $invitedEnrollmentId,
+))[0] ?? null;
+expect_true(is_array($remedialReloadRow), 'Faculty retention reload includes the canonical remedial enrollment');
+expect_same('passed', $remedialReloadRow['remedialProgression']['stage'] ?? null, 'Faculty reload preserves the passed progression stage');
+
+[$remedialStudentGetStatus, $remedialStudentGetBody] = integration_http_get_json('/api/student/retention', $acceptedStudentAccessToken);
+expect_same(200, $remedialStudentGetStatus, 'Student retention reload returns HTTP 200 after Faculty remedial writes');
+$remedialStudentRow = array_values(array_filter(
+    $remedialStudentGetBody['retention']['records'] ?? [],
+    static fn(array $row): bool => (string) ($row['enrollmentId'] ?? '') === (string) $invitedEnrollmentId,
+))[0] ?? null;
+expect_true(is_array($remedialStudentRow), 'Student retention reload includes the canonical remedial enrollment');
+expect_same('passed', $remedialStudentRow['remedialProgression']['stage'] ?? null, 'Student sees the same server-owned remedial stage as Faculty');
+
+[$remedialComputeStatus] = integration_http_json('/api/faculty/grades/compute', $seedFacultyAccessToken, ['classId' => (string) $studentClassId]);
+expect_same(200, $remedialComputeStatus, 'Ordinary grade recomputation returns HTTP 200 after remedial progression');
+$remedialRowsStmt->execute([$invitedEnrollmentId]);
+expect_same(2, count($remedialRowsStmt->fetchAll(PDO::FETCH_ASSOC)), 'Ordinary grade recomputation does not erase canonical remedial progression');
+$remedialOriginalStmt->execute([$invitedEnrollmentId]);
+expect_same($remedialOriginalGrade, $remedialOriginalStmt->fetch(PDO::FETCH_ASSOC), 'Ordinary grade recomputation preserves the saved original grade');
+
+// Concurrent submissions serialize on the enrollment row: exactly one
+// request may convert the pending attempt into a recorded result.
+[$concurrentScheduleStatus] = $remedialPost($unscopedEnrollmentId, ['attemptNumber' => 1], $seedFacultyAccessToken);
+expect_same(200, $concurrentScheduleStatus, 'Concurrent remedial fixture starts with a pending first attempt');
+$concurrentRemedialPayload = ['enrollmentId' => (string) $unscopedEnrollmentId, 'attemptNumber' => 1, 'percentage' => 50];
+$concurrentRemedialSocketA = integration_http_async_json('/api/faculty/retention/remedial', $seedFacultyAccessToken, $concurrentRemedialPayload);
+$concurrentRemedialSocketB = integration_http_async_json('/api/faculty/retention/remedial', $seedFacultyAccessToken, $concurrentRemedialPayload);
+[$concurrentRemedialStatusA] = integration_http_async_read($concurrentRemedialSocketA);
+[$concurrentRemedialStatusB] = integration_http_async_read($concurrentRemedialSocketB);
+$concurrentRemedialStatuses = [$concurrentRemedialStatusA, $concurrentRemedialStatusB];
+sort($concurrentRemedialStatuses);
+expect_same([200, 409], $concurrentRemedialStatuses, 'Concurrent submissions produce exactly one success and one duplicate conflict');
+$concurrentCountStmt = $pdo->prepare('SELECT COUNT(*), MAX(outcome) FROM enrollment_remedial_attempts WHERE enrollment_id = ? AND attempt_number = 1');
+$concurrentCountStmt->execute([$unscopedEnrollmentId]);
+$concurrentCountRow = $concurrentCountStmt->fetch(PDO::FETCH_NUM);
+expect_same('1', (string) ($concurrentCountRow[0] ?? ''), 'Concurrent submissions persist one first attempt');
+expect_same('passed', $concurrentCountRow[1] ?? null, 'Concurrent submissions persist the server-derived passing outcome once');
+
+[$costFirstStatus] = $remedialPost($remedialCostEnrollmentId, ['attemptNumber' => 1, 'percentage' => 49.99], $seedFacultyAccessToken);
+expect_same(200, $costFirstStatus, 'Cost-recovery fixture records a failed first attempt');
+[$costSecondScheduleStatus] = $remedialPost($remedialCostEnrollmentId, ['attemptNumber' => 2], $seedFacultyAccessToken);
+expect_same(200, $costSecondScheduleStatus, 'Cost-recovery fixture schedules its second attempt');
+[$costSecondStatus, $costSecondBody] = $remedialPost($remedialCostEnrollmentId, ['attemptNumber' => 2, 'percentage' => 49.99], $seedFacultyAccessToken);
+expect_same(200, $costSecondStatus, 'Cost-recovery fixture records a failed second attempt');
+expect_same('cost_recovery_required', $costSecondBody['progression']['stage'] ?? null, 'Two failed remedial attempts truthfully require cost recovery');
+[$thirdAttemptStatus, $thirdAttemptBody] = $remedialPost($remedialCostEnrollmentId, ['attemptNumber' => 3, 'percentage' => 100], $seedFacultyAccessToken);
+expect_same(422, $thirdAttemptStatus, 'A third remedial attempt is rejected');
+expect_same('REMEDIAL_ATTEMPT_UNSUPPORTED', $remedialErrorCode($thirdAttemptBody), 'Third remedial attempt returns the bounded unsupported error');
+
+$legacyClassificationStmt = $pdo->prepare('SELECT remedial_state_json::text FROM enrollments WHERE enrollment_id = ?');
+$legacyClassificationStmt->execute([(int) $studentNotificationTarget['enrollment_id']]);
+expect_true((string) $legacyClassificationStmt->fetchColumn() !== '', 'Legacy remedial JSON remains preserved after canonical migration');
+[$legacyFacultyGetStatus, $legacyFacultyGetBody] = integration_http_get_json('/api/faculty/retention', $seedFacultyAccessToken);
+expect_same(200, $legacyFacultyGetStatus, 'Faculty retention reads legacy remedial records after migration');
+$legacyReloadRow = array_values(array_filter(
+    $legacyFacultyGetBody['retention'] ?? [],
+    static fn(array $row): bool => (string) ($row['enrollmentId'] ?? '') === (string) $studentNotificationTarget['enrollment_id'],
+))[0] ?? null;
+expect_same('legacy_unclassified', $legacyReloadRow['remedialProgression']['stage'] ?? null, 'Legacy current-state JSON is exposed as unclassified rather than inferred as an attempt');
+[$legacyCanonicalWriteStatus, $legacyCanonicalWriteBody] = $remedialPost((int) $studentNotificationTarget['enrollment_id'], ['attemptNumber' => 1, 'percentage' => 50], $seedFacultyAccessToken);
+expect_same(409, $legacyCanonicalWriteStatus, 'Canonical remedial write does not start a sequence from ambiguous legacy JSON');
+expect_same('REMEDIAL_LEGACY_UNCLASSIFIED', $remedialErrorCode($legacyCanonicalWriteBody), 'Ambiguous legacy remedial data returns a reconciliation error');
 
 $studentRefresh = auth_runtime_refresh($pdo, $studentConfig, $studentContext, $studentCredentials['refresh_token']);
 expect_same('rotated', $studentRefresh['type'], 'Established Student refresh succeeds when Student auth is disabled');
