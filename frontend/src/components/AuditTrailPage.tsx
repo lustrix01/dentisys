@@ -17,6 +17,13 @@ const statusClass: Record<AuditStatus, string> = {
   Failed: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400',
 };
 
+function localDateKey(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return timestamp.slice(0, 10);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+}
+
 export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs = false, accent }) => {
   const theme = themes[accent];
   const [query, setQuery] = useState('');
@@ -113,7 +120,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
     (roleFilter === 'all' || log.userRole === roleFilter) &&
     (moduleFilter === 'all' || log.module === moduleFilter) &&
     (statusFilter === 'all' || log.status === statusFilter) &&
-    (!date || log.timestamp.startsWith(date))
+    (!date || localDateKey(log.timestamp) === date)
   ).sort((a, b) => sort === 'newest' ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)),
   [logs, query, roleFilter, moduleFilter, statusFilter, date, sort]);
 

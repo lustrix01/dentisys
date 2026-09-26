@@ -28,7 +28,7 @@ const formatSessionTime = (value?: string) => {
 };
 
 const formatCheckInTime = (value?: string | null) => {
-  if (!value) return '08:04 AM';
+  if (!value) return '—';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     const match = value.match(/(\d{1,2}):(\d{2})/);
@@ -42,6 +42,24 @@ const formatCheckInTime = (value?: string | null) => {
     return value;
   }
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const attendanceMethodLabel = (method?: string | null, overrideReason?: string | null): string => {
+  if (overrideReason) return 'Manual Override';
+  switch (method) {
+    case 'biometric':
+      return 'Face Biometric';
+    case 'manual_faculty':
+    case 'faculty_manual':
+      return 'Faculty Manual Entry';
+    case 'manual_secretary':
+    case 'secretary_manual':
+      return 'Secretary Manual Entry';
+    case 'system_resolution':
+      return 'System Resolution';
+    default:
+      return 'Not recorded';
+  }
 };
 
 export const AttendanceList: React.FC = () => {
@@ -199,7 +217,7 @@ export const AttendanceList: React.FC = () => {
                       <td className="px-6 py-4">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
                           <Camera className="w-3.5 h-3.5 stroke-[2.2]" />
-                          <span>{record.overrideReason ? 'Manual Override' : 'Face Biometric + Geofence'}</span>
+                          <span>{attendanceMethodLabel(record.verificationMethod, record.overrideReason)}</span>
                         </span>
                       </td>
 

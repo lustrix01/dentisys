@@ -607,7 +607,7 @@ function secretary_activity_rows(PDO $pdo, int $userId, int $limit = 20): array
     $stmt->execute([$userId]);
     return array_map(static fn(array $row): array => [
         'id' => (string) $row['id'],
-        'timestamp' => $row['timestamp'],
+        'timestamp' => attendance_session_timestamp($row['timestamp']),
         'userName' => $row['user_name'] ?? null,
         'userRole' => $row['user_role'] ?? null,
         'action' => $row['action'] ?? null,
@@ -1556,7 +1556,7 @@ function handle_secretary_attendance_get(): void
                 'studentName' => account_identity_display_name($r),
                 'yearLevel' => isset($r['year_level']) ? (int) $r['year_level'] : 1,
                 'date' => $r['session_date'],
-                'timeRecorded' => $r['time_recorded'] ?? null,
+                'timeRecorded' => attendance_session_timestamp($r['time_recorded'] ?? null),
                 'verificationMethod' => $r['verification_method'] ?? 'face_biometric_geofence',
                 'subjectCode' => $r['course_code'],
                 'classId' => (string) $r['cs_id'],

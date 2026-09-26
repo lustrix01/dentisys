@@ -71,7 +71,7 @@ function faculty_activity_rows(PDO $pdo, int $userId, int $limit = 100): array
 
     return array_map(static fn(array $row): array => [
         'id' => (string) $row['id'],
-        'timestamp' => $row['timestamp'],
+        'timestamp' => attendance_session_timestamp($row['timestamp']),
         'userName' => $row['user_name'] ?? null,
         'userRole' => $row['user_role'] ?? null,
         'action' => $row['action'] ?? null,
@@ -3541,7 +3541,7 @@ function faculty_attendance_record_payload(array $row): array
         'attendanceSessionId' => $row['attendance_session_id'] !== null ? (string) $row['attendance_session_id'] : null,
         'status' => $row['status'],
         'verificationMethod' => $row['verification_method'],
-        'timeRecorded' => $row['time_recorded'],
+        'timeRecorded' => attendance_session_timestamp($row['time_recorded']),
         'overrideReason' => $row['override_reason'],
         'overrideAt' => $row['override_at'],
     ];

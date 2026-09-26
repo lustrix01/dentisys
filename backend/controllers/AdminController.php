@@ -324,7 +324,7 @@ function handle_admin_audit_logs(): void
         $status = $_GET['status'] ?? 'all';
         $date = $_GET['date'] ?? '';
 
-        $sql = "SELECT event_id AS id, event_uuid, occurred_at AS timestamp, actor_username AS userName, actor_role AS userRole, action_code AS action, module_code AS module, description, event_status AS status, ip_address AS ipAddress, user_agent AS device
+        $sql = "SELECT event_id AS id, event_uuid, occurred_at AS timestamp, actor_username AS \"userName\", actor_role AS \"userRole\", action_code AS action, module_code AS module, description, event_status AS status, ip_address AS \"ipAddress\", user_agent AS device
                 FROM audit_events WHERE 1=1";
         $params = [];
 
@@ -360,11 +360,11 @@ function handle_admin_audit_logs(): void
             $params[] = $status;
         }
         if ($date !== '') {
-            $sql .= " AND DATE(occurred_at) = ?";
+            $sql .= " AND DATE((occurred_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Manila') = ?";
             $params[] = $date;
         }
         if ($query !== '') {
-            $sql .= " AND (actor_username LIKE ? OR action_code LIKE ? OR description LIKE ?)";
+            $sql .= " AND (actor_username ILIKE ? OR action_code ILIKE ? OR description ILIKE ?)";
             $params[] = "%{$query}%";
             $params[] = "%{$query}%";
             $params[] = "%{$query}%";
@@ -380,7 +380,7 @@ function handle_admin_audit_logs(): void
         $normalized = array_map(function ($l) {
             return [
                 'id' => (string) $l['id'],
-                'timestamp' => $l['timestamp'],
+                'timestamp' => attendance_session_timestamp($l['timestamp']),
                 'userName' => $l['userName'] ?? 'System',
                 'userRole' => $l['userRole'] ?? 'system',
                 'action' => $l['action'] ?? 'Operation',
