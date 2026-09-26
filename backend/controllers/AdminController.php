@@ -454,6 +454,16 @@ function handle_admin_profile_update(): void
         json_response(['status' => 'ok', 'message' => 'Profile details updated successfully.'], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
+    } catch (\PDOException $e) {
+        error_log('Profile update database error: ' . sanitize_for_log($e));
+        $sqlState = (string) $e->getCode();
+        if ($sqlState === '23505') {
+            safe_error_response('That email address is already used by another account.', 409);
+        } elseif ($sqlState === '23514' || $sqlState === 'P0001') {
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the administrator.', 409);
+        } else {
+            safe_error_response('Internal server error.', 500);
+        }
     } catch (\Throwable $e) {
         error_log('Admin profile update error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
