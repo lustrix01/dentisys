@@ -105,7 +105,7 @@ services:
       mailpit:
         condition: service_healthy
       biometric:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "php -r '$$r = @file_get_contents(\"http://127.0.0.1/healthcheck.php\"); $$j = json_decode((string) $$r, true); exit(($$j[\"status\"] ?? \"\") === \"ok\" && ($$j[\"database\"] ?? \"\") === \"up\" ? 0 : 1);'"]
       interval: 10s

@@ -27,6 +27,7 @@ export interface GuidedCaptureOptions {
   samplingIntervalMs?: number;
   successPauseMs?: number;
   baselineFrames?: number;
+  maxConsecutiveAnalyzeFailures?: number;
 }
 
 export type GuidedCaptureResult =
@@ -38,6 +39,11 @@ export type GuidedCaptureResult =
       expectedAction: LivenessAction;
       reason: 'face_not_detected' | 'action_not_observed' | 'camera_frame_unavailable';
     };
+
+interface CapturedFrame {
+  order: number;
+  frame: Blob;
+}
 
 const defaultWait = (milliseconds: number): Promise<void> => new Promise(resolve => setTimeout(resolve, milliseconds));
 
@@ -59,6 +65,13 @@ function actionInstruction(action: LivenessAction): string {
 /**
  * Pace capture from measured sidecar guidance. The guidance result only
  * controls prompts; the final upload remains the server liveness authority.
+ *
+ * Only useful frames are kept: frames showing one neutral face, plus the two
+ * frames in which the required actions were observed. Unusable frames are
+ * discarded instead of consuming the upload budget, so a slower student is not
+ * timed out just because the frame counter filled up during the baseline.
+ * Returned frames stay in capture order so the server sees the actions in the
+ * challenge order.
  */
 export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<GuidedCaptureResult> {
   const wait = options.wait ?? defaultWait;
@@ -67,54 +80,69 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
   const baselineFrames = options.baselineFrames ?? 3;
   const targetFrames = Math.min(30, Math.max(20, options.targetFrames));
   const maxAttempts = options.maxAttempts ?? targetFrames * 8;
-  const frames: Blob[] = [];
+  const maxConsecutiveAnalyzeFailures = options.maxConsecutiveAnalyzeFailures ?? 3;
+  const neutralTarget = targetFrames - 2;
+
+  const neutralFrames: CapturedFrame[] = [];
+  const actionFrames: CapturedFrame[] = [];
+  let nextOrder = 0;
   let attempts = 0;
   let phase: 'baseline' | 'action' | 'complete' = 'baseline';
   let actionIndex: 0 | 1 = 0;
   let neutralStreak = 0;
   let sawFace = false;
+  let capturedAny = false;
+  let consecutiveAnalyzeFailures = 0;
+
+  const selectedFrames = (): Blob[] =>
+    [...actionFrames, ...neutralFrames.slice(-neutralTarget)]
+      .sort((a, b) => a.order - b.order)
+      .map(item => item.frame);
+
+  const reportCount = (): void => {
+    options.onFrameCount(Math.min(neutralFrames.length, neutralTarget) + actionFrames.length);
+  };
 
   options.onPhase('phase1_neutral', 'Look directly into the camera and hold still.');
 
-  while (frames.length < targetFrames && attempts < maxAttempts) {
-    if (options.isCancelled()) return { status: 'cancelled', frames };
+  while (attempts < maxAttempts) {
+    if (phase === 'complete' && neutralFrames.length >= neutralTarget) break;
+    if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
     attempts += 1;
     const frame = await options.captureFrame();
     if (!frame) {
       await wait(samplingIntervalMs);
       continue;
     }
+    capturedAny = true;
+    if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
 
-    frames.push(frame);
-    options.onFrameCount(frames.length);
-    if (options.isCancelled()) return { status: 'cancelled', frames };
-
-    const guidance = await options.analyzeFrame(frame);
-    if (options.isCancelled()) return { status: 'cancelled', frames };
-    sawFace ||= guidance.faceDetected;
-
-    if (phase === 'complete') {
+    let guidance: GuidedFrameGuidance;
+    try {
+      guidance = await options.analyzeFrame(frame);
+      consecutiveAnalyzeFailures = 0;
+    } catch (error) {
+      if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
+      consecutiveAnalyzeFailures += 1;
+      if (consecutiveAnalyzeFailures >= maxConsecutiveAnalyzeFailures) throw error;
       await wait(samplingIntervalMs);
       continue;
     }
+    if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
+    sawFace ||= guidance.faceDetected;
 
-    if (phase === 'baseline') {
-      if (guidance.faceDetected && guidance.detectedAction === null) {
-        neutralStreak += 1;
-      } else {
-        neutralStreak = 0;
-      }
-      if (neutralStreak >= baselineFrames) {
-        phase = 'action';
-        neutralStreak = 0;
-        options.onPhase(actionPhase(actionIndex), actionInstruction(options.actions[actionIndex]));
-      }
-    } else if (guidance.detectedAction === options.actions[actionIndex]) {
+    const frameOrder = nextOrder;
+    nextOrder += 1;
+    const isNeutral = guidance.faceDetected && guidance.detectedAction === null;
+
+    if (phase === 'action' && guidance.faceDetected && guidance.detectedAction === options.actions[actionIndex]) {
+      actionFrames.push({ order: frameOrder, frame });
+      reportCount();
       const completedAction = options.actions[actionIndex];
       await options.onActionSuccess?.(actionIndex, completedAction);
-      if (options.isCancelled()) return { status: 'cancelled', frames };
+      if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
       await wait(successPauseMs);
-      if (options.isCancelled()) return { status: 'cancelled', frames };
+      if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
 
       if (actionIndex === 1) {
         phase = 'complete';
@@ -122,22 +150,41 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
       } else {
         actionIndex = 1;
         phase = 'baseline';
+        neutralStreak = 0;
         options.onPhase('phase1_neutral', 'Return to a neutral forward position, then hold still.');
+      }
+      await wait(samplingIntervalMs);
+      continue;
+    }
+
+    if (isNeutral) {
+      neutralFrames.push({ order: frameOrder, frame });
+      // Keep memory bounded; only the most recent neutral frames are uploaded.
+      if (neutralFrames.length > targetFrames) neutralFrames.shift();
+      reportCount();
+    }
+
+    if (phase === 'baseline') {
+      neutralStreak = isNeutral ? neutralStreak + 1 : 0;
+      if (neutralStreak >= baselineFrames) {
+        phase = 'action';
+        neutralStreak = 0;
+        options.onPhase(actionPhase(actionIndex), actionInstruction(options.actions[actionIndex]));
       }
     }
 
     await wait(samplingIntervalMs);
   }
 
-  if (options.isCancelled()) return { status: 'cancelled', frames };
-  if (phase === 'complete' && frames.length >= targetFrames) {
-    return { status: 'complete', frames };
+  if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
+  if (phase === 'complete' && neutralFrames.length >= neutralTarget) {
+    return { status: 'complete', frames: selectedFrames() };
   }
   return {
     status: 'timeout',
-    frames,
+    frames: selectedFrames(),
     expectedAction: options.actions[actionIndex],
-    reason: frames.length === 0
+    reason: !capturedAny
       ? 'camera_frame_unavailable'
       : sawFace
         ? 'action_not_observed'

@@ -228,9 +228,12 @@ def liveness_action_from_points(points: list[tuple[float, float]], config: Calib
     eye_center = (points[33][0] + points[263][0]) / 2
     eye_width = max(distance(points[33], points[263]), 1e-9)
     yaw_ratio = (nose_x - eye_center) / eye_width
-    if yaw_ratio < -config.head_turn_ratio:
-        return "turn_left"
+    # Uploaded frames are unmirrored camera images while the student sees a
+    # mirrored preview. When the student turns toward their own left, the
+    # nose moves toward the right edge of the unmirrored image.
     if yaw_ratio > config.head_turn_ratio:
+        return "turn_left"
+    if yaw_ratio < -config.head_turn_ratio:
         return "turn_right"
     return None
 
@@ -366,7 +369,6 @@ def enrollment():
     config = calibration()
     actions = validate_actions(request.form.get("challengeActions"))
     images = uploaded_images()
-    usable_images: list[np.ndarray] = []
     crops: list[np.ndarray] = []
     for image in images:
         try:
@@ -375,11 +377,12 @@ def enrollment():
             if error.code != "quality_failed":
                 raise
             continue
-        usable_images.append(image)
         crops.append(crop)
     if len(crops) < 20:
         raise BiometricError("At least twenty usable enrollment samples are required.", "quality_failed")
-    verify_liveness(usable_images, actions, config)
+    # Head-turn frames often fail the frontal detector, so liveness is checked
+    # on every uploaded frame, in upload order.
+    verify_liveness(images, actions, config)
     usable = min(len(crops), 30)
     reference = "lbph/" + uuid.uuid4().hex
     path = model_reference_path(reference)
@@ -406,11 +409,20 @@ def verify():
     model = decrypt_model(model_reference_path(reference).read_bytes(), reference)
     recognizer = recognizer_from_model(model, config)
     matches = 0
+    usable = 0
     for image in images:
-        crop = face_crop(image, config)
+        try:
+            crop = face_crop(image, config)
+        except BiometricError as error:
+            if error.code != "quality_failed":
+                raise
+            continue
+        usable += 1
         label, confidence = recognizer.predict(crop)
         if int(label) == 1 and float(confidence) <= config.lbph_threshold:
             matches += 1
+    if usable < config.match_count:
+        raise BiometricError("Not enough clear face frames were captured. Face the camera in good light and retry.", "quality_failed")
     if matches < config.match_count:
         raise BiometricError("Face could not be verified.", "biometric_verification_failed")
     return jsonify({"ok": True, "verified": True})
