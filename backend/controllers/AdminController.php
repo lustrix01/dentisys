@@ -620,7 +620,7 @@ function handle_admin_reports_summary(): void
 
         // Fetch students with biometric consent
         $stmt = $pdo->query(
-            "SELECT s.student_id,
+            "SELECT s.student_id, s.student_number,
                     COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
                     COALESCE(pi.first_name, s.first_name) AS first_name,
                     COALESCE(pi.middle_name, s.middle_name) AS middle_name,

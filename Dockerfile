@@ -14,6 +14,7 @@ WORKDIR /var/www/html
 RUN sed -ri 's!/var/www/html!/var/www/html/backend/public!g' /etc/apache2/sites-available/*.conf \
     && sed -ri 's!/var/www/!/var/www/html/backend/public!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
+COPY docker/php/zz-dentisys.ini /usr/local/etc/php/conf.d/zz-dentisys.ini
 COPY --chown=www-data:www-data backend/ /var/www/html/backend/
 COPY --from=composer --chown=www-data:www-data /app/vendor /var/www/html/backend/vendor
 CMD ["sh", "-c", "php /var/www/html/backend/bin/validate-config.php && exec apache2-foreground"]

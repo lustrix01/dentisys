@@ -66,6 +66,12 @@ function validate_person_name(array $data, string $field, int $minBytes = 2, int
     $raw = array_key_exists($field, $data) ? (string) $data[$field] : '';
     $name = normalize_person_name($raw);
 
+    if ($name === '') {
+        $labels = ['firstName' => 'First name', 'lastName' => 'Last name', 'middleName' => 'Middle name'];
+        $label = $labels[$field] ?? 'Name';
+        throw new ValidationException([['field' => $field, 'message' => "{$label} is required."]]);
+    }
+
     if (!preg_match('/^[\p{L}\s\'’\-\.]+$/u', $name)) {
         throw new ValidationException([['field' => $field, 'message' => 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.']]);
     }
