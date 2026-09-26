@@ -150,6 +150,18 @@ function google_auth_audit(PDO $pdo, array $config, array $context, string $acti
             $pdo->beginTransaction();
             $startedTransaction = true;
         }
+        // Keep Google-auth audit writes in the same lock order as password,
+        // refresh, and logout flows: account first, then the shared audit
+        // chain. This also protects the actor FK while the audit row is made.
+        if ($userId !== null) {
+            $accountLock = $pdo->prepare(
+                'SELECT user_id FROM user_accounts WHERE user_id = ? FOR UPDATE'
+            );
+            $accountLock->execute([$userId]);
+            if ($accountLock->fetchColumn() === false) {
+                throw new RuntimeException('Google audit actor account is unavailable.');
+            }
+        }
         $auditCtx = audit_begin_operation($pdo);
         audit_finish_operation($pdo, $auditCtx, [
             'module_code' => 'auth',

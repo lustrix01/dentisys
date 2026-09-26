@@ -400,7 +400,7 @@ export const DeanReports: React.FC = () => {
                         <td className="py-2.5 px-3">{sub.components?.exams !== undefined ? `${sub.components.exams}%` : '—'}</td>
                         <td className="py-2.5 px-3">{sub.isClinical ? (sub.components?.practicum !== undefined ? `${sub.components.practicum}%` : '—') : '—'}</td>
                         <td className="py-2.5 px-3">{sub.components?.attendance !== undefined ? `${sub.components.attendance}%` : '—'}</td>
-                        <td className={`py-2.5 px-3 font-extrabold ${Number(sub.grade || 0) > 2.5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        <td className={`py-2.5 px-3 font-extrabold ${sub.isClinical && Number(sub.grade || 0) >= retentionThreshold ? 'text-rose-600' : 'text-emerald-600'}`}>
                           {sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? Number(sub.grade).toFixed(2) : '—'}
                         </td>
                         <td className="py-2.5 px-3">

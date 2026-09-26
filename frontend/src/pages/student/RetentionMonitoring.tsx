@@ -57,6 +57,12 @@ export const RetentionMonitoring: React.FC = () => {
     ? (user?.student?.status || 'active')
     : (currentMockStudent?.status || 'active');
 
+  const requiresRetentionReview = (subject: { grade: number; isClinical?: boolean }) => (
+    subject.isClinical === true
+    && threshold !== null
+    && subject.grade >= threshold
+  );
+
   const getStatusBadge = (st: Student['status'] | string) => {
     const norm = (st || 'active').toLowerCase();
     const isWarn = norm === 'warning';
@@ -135,9 +141,9 @@ export const RetentionMonitoring: React.FC = () => {
 
   const deficientCount = isAuthoritative
     ? atRiskCount
-    : threshold === null
-      ? 0
-      : (currentMockStudent?.enrolledSubjects || []).filter(s => s.grade >= threshold).length;
+      : threshold === null
+        ? 0
+      : (currentMockStudent?.enrolledSubjects || []).filter(requiresRetentionReview).length;
 
   const isAtRisk = isAuthoritative
     ? (atRiskCount > 0 || deficientCount > 0)
@@ -242,9 +248,7 @@ export const RetentionMonitoring: React.FC = () => {
                     const retentionState = cls.retentionState?.toLowerCase();
                     const isAtRiskRow = ['warning', 'critical', 'remedial'].includes(retentionState);
                     const hasRetentionState = Boolean(retentionState);
-                    const isPassing = !isPending && (isAuthoritative
-                      ? hasRetentionState && !isAtRiskRow
-                      : threshold !== null && cls.grade !== null && cls.grade <= threshold);
+                    const isPassing = !isPending && hasRetentionState && !isAtRiskRow;
 
                     return (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -290,7 +294,7 @@ export const RetentionMonitoring: React.FC = () => {
                 )
               ) : (
                 (currentMockStudent?.enrolledSubjects || []).map(subj => {
-                  const isPassing = threshold !== null && subj.grade <= threshold;
+                  const isPassing = !requiresRetentionReview(subj);
                   return (
                     <tr key={subj.code} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
