@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   buildDefaultPeriodDraft,
   validateDateRanges,
@@ -11,6 +14,16 @@ import {
   isValidCalendarDate,
 } from '../utils/periodGradingHelper.ts';
 import type { FacultyPeriodModeComputedResult, FacultyPeriodModeIncompleteResult } from '../services/apiClient.ts';
+
+test('Faculty grade views use the inclusive authoritative retention boundary', () => {
+  const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+  const gradeComputation = fs.readFileSync(
+    path.join(currentDirectory, '../pages/faculty/GradeComputation.tsx'),
+    'utf8'
+  );
+  assert.equal((gradeComputation.match(/> settings\.retentionThreshold/g) ?? []).length, 0);
+  assert.equal((gradeComputation.match(/>= settings\.retentionThreshold/g) ?? []).length, 4);
+});
 
 test('Period Draft: buildDefaultPeriodDraft produces the exact approved starting preset', () => {
   const draft = buildDefaultPeriodDraft();

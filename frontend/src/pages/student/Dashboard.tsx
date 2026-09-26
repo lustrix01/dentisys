@@ -76,7 +76,7 @@ export const Dashboard: React.FC = () => {
 
   const enrolledSubjects = currentStudent?.enrolledSubjects || [];
   const failingSubjects = enrolledSubjects.filter(
-    subj => subj.isClinical && subj.grade > retentionThreshold
+    subj => subj.isClinical && subj.grade >= retentionThreshold
   );
 
   const studentRecords = attendanceRecords.filter(r => r.studentId === currentStudent?.id);
@@ -157,7 +157,7 @@ export const Dashboard: React.FC = () => {
                 You are currently flagged for clinical retention monitoring.
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                Academic policy requires maintaining a GWA of <strong className="text-slate-800 dark:text-slate-200">2.50 or better</strong> in clinical subjects and an attendance rate of <strong className="text-slate-800 dark:text-slate-200">85% or higher</strong>.
+                Professional-course grades below <strong className="text-slate-800 dark:text-slate-200">{retentionThreshold.toFixed(2)}</strong> are allowed; grades at or above that threshold require remediation. Attendance remains <strong className="text-slate-800 dark:text-slate-200">85% or higher</strong>.
               </p>
 
               <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs space-y-1">

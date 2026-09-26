@@ -185,6 +185,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             email: s.email,
             yearLevel: (s.yearLevel || 4) as 1 | 2 | 3 | 4,
             status: (s.status || 'active') as Student['status'],
+            ...(typeof s.retentionThreshold === 'number' ? { retentionThreshold: s.retentionThreshold } : {}),
             classSections: s.classSections,
             overallGWA: s.overallGWA ?? 0,
             clinicHoursCompleted: s.clinicHoursCompleted ?? 0,
@@ -193,6 +194,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             remedialExams: [],
             enrolledSubjects: s.enrolledSubjects ?? [],
           }));
+          const persistedRetentionThreshold = data.find(
+            student => typeof student.retentionThreshold === 'number'
+          )?.retentionThreshold;
+          if (typeof persistedRetentionThreshold === 'number') {
+            setSettings(prev => ({ ...prev, retentionThreshold: persistedRetentionThreshold }));
+          }
           setStudents(mapped);
         }
         const loadedAssessments = Array.isArray(assessmentData) ? assessmentData as Assessment[] : [];
@@ -402,7 +409,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (isAuthoritativePeriods) {
           const preservedGrade = subj.grade ?? rawSub?.grade ?? null;
-          const isClinicalViolation = subj.isClinical && typeof preservedGrade === 'number' && preservedGrade > settings.retentionThreshold;
+          const isClinicalViolation = subj.isClinical && typeof preservedGrade === 'number' && preservedGrade >= settings.retentionThreshold;
           const isFailing = preservedGrade === 5.0;
           const needsRemedial = isClinicalViolation || isFailing;
           return {
@@ -440,7 +447,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         let computedGrade = computeSubjectGrade(components, settings.weights);
 
-        const isClinicalViolation = subj.isClinical && computedGrade > settings.retentionThreshold;
+        const isClinicalViolation = subj.isClinical && computedGrade >= settings.retentionThreshold;
         const isFailing = computedGrade === 5.0;
         const needsRemedial = isClinicalViolation || isFailing;
 
@@ -486,7 +493,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       const clinicalFails = updatedSubjects.filter(
-        subj => subj.isClinical && subj.grade > settings.retentionThreshold
+        subj => subj.isClinical && subj.grade >= settings.retentionThreshold
       );
       const outrightFails = updatedSubjects.filter(subj => subj.grade === 5.0);
       const pendingRemedials = remedialExams.filter(rem => rem.status === 'pending');
@@ -564,7 +571,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           let computedGrade = isPeriod && typeof subj.grade === 'number'
             ? subj.grade
             : computeSubjectGrade(components, settings.weights);
-          const isClinicalViolation = subj.isClinical && typeof computedGrade === 'number' && computedGrade > settings.retentionThreshold;
+          const isClinicalViolation = subj.isClinical && typeof computedGrade === 'number' && computedGrade >= settings.retentionThreshold;
           const isFailing = computedGrade === 5.0;
           const needsRemedial = isClinicalViolation || isFailing;
 

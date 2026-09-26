@@ -83,5 +83,7 @@ assert_faculty_students(abs($ana['overallGWA'] - 2.5) < 0.00001, 'Only non-null 
 assert_faculty_students($ana['clinicHoursCompleted'] === 30, 'Clinic hours are summed across enrollments');
 assert_faculty_students($ana['status'] === 'critical', 'Aggregate status uses critical-first priority');
 assert_faculty_students($students[1]['overallGWA'] === null, 'All-null enrollment grades remain null');
+$thresholdStudents = faculty_map_student_rows($rows, 2.75);
+assert_faculty_students($thresholdStudents[0]['retentionThreshold'] === 2.75, 'Faculty student payload carries the canonical configured retention threshold');
 
 echo "ALL FACULTY STUDENT MAPPING TESTS PASSED\n";

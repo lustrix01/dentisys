@@ -240,6 +240,7 @@ $expectedMigrations = [
     '025_allow_structured_student_enrichment.sql',
     '026_validate_attendance_enrollment_updates.sql',
     '027_provisional_course_remedial_threshold.sql',
+    '028_authoritative_course_grade_threshold.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -248,7 +249,68 @@ $retentionPolicyValue = $pdo->query(
 )->fetchColumn();
 $retentionPolicy = is_string($retentionPolicyValue) ? json_decode($retentionPolicyValue, true, 512, JSON_THROW_ON_ERROR) : [];
 expect_same('GTE', $retentionPolicy['initial_trigger_operator'] ?? null, 'Migration 027 records the inclusive course-grade trigger operator');
-expect_same(2.5, (float) ($retentionPolicy['retention_threshold'] ?? 0), 'The existing retention-policy threshold remains the sole course-grade trigger value');
+expect_same(2.5, (float) ($retentionPolicy['retention_threshold'] ?? 0), 'Migration 028 establishes retention_policy.retention_threshold as the canonical course-grade trigger');
+$gradingDefaultsValue = $pdo->query(
+    "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"
+)->fetchColumn();
+$gradingDefaults = is_string($gradingDefaultsValue) ? json_decode($gradingDefaultsValue, true, 512, JSON_THROW_ON_ERROR) : [];
+expect_same(2.5, (float) ($gradingDefaults['retention_gwa_threshold'] ?? 0), 'Migration 028 synchronizes the grading-default compatibility threshold');
+
+// Exercise the upgrade path from a pre-028 mismatch without changing the
+// disposable database state. Saved grade/outcome fields are snapshotted before
+// the additive migration and must be byte-for-byte unchanged afterward.
+$historicalGradeSnapshot = $pdo->query(
+    "SELECT enrollment_id, final_percentage, final_gwa, retention_state,
+            grade_components_json::text AS grade_components_json,
+            remedial_state_json::text AS remedial_state_json
+       FROM enrollments
+      ORDER BY enrollment_id
+      LIMIT 1"
+)->fetch(PDO::FETCH_ASSOC);
+$pdo->beginTransaction();
+try {
+    $pdo->exec(
+        "UPDATE system_settings
+            SET setting_value = jsonb_set(
+                jsonb_set(
+                    jsonb_set(setting_value, '{retention_threshold}', to_jsonb(2.75::numeric), true),
+                    '{initial_trigger_grade}', to_jsonb(2.75::numeric), true
+                ),
+                '{initial_trigger_operator}', to_jsonb('GT'::text), true
+            )
+          WHERE setting_key = 'retention_policy'"
+    );
+    $pdo->exec(
+        "UPDATE system_settings
+            SET setting_value = jsonb_set(setting_value, '{retention_gwa_threshold}', to_jsonb(2.75::numeric), true)
+          WHERE setting_key = 'grading_defaults'"
+    );
+    $pdo->exec(file_get_contents(dirname(__DIR__, 2) . '/database/migrations/028_authoritative_course_grade_threshold.sql'));
+    $upgradeRetention = json_decode((string) $pdo->query(
+        "SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy'"
+    )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
+    $upgradeGrading = json_decode((string) $pdo->query(
+        "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"
+    )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
+    expect_same(2.5, (float) ($upgradeRetention['retention_threshold'] ?? 0), 'Upgrade migration repairs a mismatched canonical retention threshold');
+    expect_same(2.5, (float) ($upgradeRetention['initial_trigger_grade'] ?? 0), 'Upgrade migration repairs the compatibility initial grade');
+    expect_same('GTE', $upgradeRetention['initial_trigger_operator'] ?? null, 'Upgrade migration repairs the compatibility inclusive operator');
+    expect_same(2.5, (float) ($upgradeGrading['retention_gwa_threshold'] ?? 0), 'Upgrade migration repairs the grading-default compatibility threshold');
+    if (is_array($historicalGradeSnapshot)) {
+        $historicalGradeCheckStmt = $pdo->prepare(
+            "SELECT enrollment_id, final_percentage, final_gwa, retention_state,
+                    grade_components_json::text AS grade_components_json,
+                    remedial_state_json::text AS remedial_state_json
+               FROM enrollments WHERE enrollment_id = ?"
+        );
+        $historicalGradeCheckStmt->execute([(int) $historicalGradeSnapshot['enrollment_id']]);
+        expect_same($historicalGradeSnapshot, $historicalGradeCheckStmt->fetch(PDO::FETCH_ASSOC), 'Threshold upgrade leaves saved grades and remedial outcomes unchanged');
+    }
+    $pdo->rollBack();
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) { $pdo->rollBack(); }
+    throw $e;
+}
 $facultyInvitationPurposeConstraint = (string) $pdo->query(
     "SELECT pg_get_constraintdef(oid)
        FROM pg_constraint
@@ -681,6 +743,9 @@ $originalAdminGradingDefaultsJson = (string) $pdo->query(
     "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"
 )->fetchColumn();
 $originalAdminGradingDefaults = json_decode($originalAdminGradingDefaultsJson, true, 512, JSON_THROW_ON_ERROR);
+$originalAdminRetentionPolicyJson = (string) $pdo->query(
+    "SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy'"
+)->fetchColumn();
 $unrelatedSettingsKey = 'admin_settings_integration_' . bin2hex(random_bytes(4));
 $unrelatedSettingsValue = ['marker' => bin2hex(random_bytes(8)), 'nested' => ['preserve' => true]];
 $gradingDefaultsWithSentinel = $originalAdminGradingDefaults;
@@ -697,14 +762,17 @@ expect_same(50, $adminSettingsBefore['transmutationDefaults']['minimumPercentage
 expect_same(100, $adminSettingsBefore['transmutationDefaults']['maximumPercentage'] ?? null, 'Admin settings API initially reads maximum 100');
 
 $validAdminSettings = $adminSettingsBefore;
+$validAdminSettings['retentionThreshold'] = 2.75;
 $validAdminSettings['transmutationDefaults'] = ['minimumPercentage' => 55, 'maximumPercentage' => 100];
 [$adminSettingsSaveStatus, $adminSettingsSaveBody] = integration_http_json('/api/admin/settings', $adminAccessToken, $validAdminSettings);
 expect_same(200, $adminSettingsSaveStatus, 'Valid Admin transmutation-default update returns HTTP 200');
+expect_same(2.75, $adminSettingsSaveBody['settings']['retentionThreshold'] ?? null, 'Admin settings save reports the updated canonical retention threshold');
 expect_same(55, $adminSettingsSaveBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Admin settings save response reports minimum 55');
 expect_same(100, $adminSettingsSaveBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Admin settings save response reports maximum 100');
 
 [$adminSettingsReloadStatus, $adminSettingsReloadBody] = integration_http_get_json('/api/admin/settings', $adminAccessToken);
 expect_same(200, $adminSettingsReloadStatus, 'Admin settings reload returns HTTP 200 after valid save');
+expect_same(2.75, $adminSettingsReloadBody['settings']['retentionThreshold'] ?? null, 'Admin settings reload preserves the updated canonical retention threshold');
 expect_same(55, $adminSettingsReloadBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Admin settings reload persists minimum 55');
 expect_same(100, $adminSettingsReloadBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Admin settings reload persists maximum 100');
 
@@ -718,10 +786,17 @@ expect_true(str_contains((string) ($invalidAdminSettingsBody['message'] ?? ''), 
 expect_same(200, $adminSettingsAfterInvalidStatus, 'Admin settings remain readable after rejected invalid bounds');
 expect_same(55, $adminSettingsAfterInvalidBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Rejected Admin settings update does not persist invalid minimum');
 expect_same(100, $adminSettingsAfterInvalidBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Rejected Admin settings update does not persist invalid maximum');
+expect_same(2.75, $adminSettingsAfterInvalidBody['settings']['retentionThreshold'] ?? null, 'Rejected Admin settings update does not change the canonical retention threshold');
 
 $updatedAdminGradingDefaults = json_decode((string) $pdo->query(
     "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"
 )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
+$updatedAdminRetentionPolicy = json_decode((string) $pdo->query(
+    "SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy'"
+)->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
+expect_same(2.75, (float) ($updatedAdminRetentionPolicy['retention_threshold'] ?? 0), 'Admin settings writes the canonical retention threshold');
+expect_same(2.75, (float) ($updatedAdminRetentionPolicy['initial_trigger_grade'] ?? 0), 'Admin settings keeps the initial-trigger compatibility mirror synchronized');
+expect_same(2.75, (float) ($updatedAdminGradingDefaults['retention_gwa_threshold'] ?? 0), 'Admin settings keeps the grading-default compatibility mirror synchronized');
 expect_same($unrelatedSettingsValue, $updatedAdminGradingDefaults[$unrelatedSettingsKey] ?? null, 'Admin settings save preserves unrelated grading-default JSONB keys');
 $expectedUnrelatedAdminSettings = array_diff_key(
     $gradingDefaultsWithSentinel,
@@ -737,6 +812,10 @@ $pdo->prepare(
     "UPDATE system_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP(6)
      WHERE setting_key = 'grading_defaults'"
 )->execute([$originalAdminGradingDefaultsJson]);
+$pdo->prepare(
+    "UPDATE system_settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP(6)
+     WHERE setting_key = 'retention_policy'"
+)->execute([$originalAdminRetentionPolicyJson]);
 echo "PASS: Admin settings API persistence, validation, and JSONB preservation verified.\n";
 
 $expectedColumns = [
@@ -940,13 +1019,20 @@ expect_true(
 expect_same(200, $unknownResetStatus, 'Password reset request returns HTTP 200 for an unknown account');
 expect_same($resetRequestMessage, $unknownResetBody['message'] ?? null, 'Unknown-account password reset response is indistinguishable from the existing-account response');
 
-$insertPasswordResetToken = static function (PDO $pdo, int $targetUserId, string $rawToken, string $expiresAt, ?string $usedAt = null): int {
+$insertPasswordResetToken = static function (
+    PDO $pdo,
+    int $targetUserId,
+    string $rawToken,
+    string $expiresAt,
+    ?string $usedAt = null,
+    ?string $revokedAt = null
+): int {
     $stmt = $pdo->prepare(
-        'INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at, used_at)
-         VALUES (\'password_reset\', ?, ?, CURRENT_TIMESTAMP(6), ?, ?)
+        'INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at, used_at, revoked_at)
+         VALUES (\'password_reset\', ?, ?, CURRENT_TIMESTAMP(6), ?, ?, ?)
          RETURNING token_id'
     );
-    $stmt->execute([$targetUserId, hash('sha256', $rawToken), $expiresAt, $usedAt]);
+    $stmt->execute([$targetUserId, hash('sha256', $rawToken), $expiresAt, $usedAt, $revokedAt]);
     return (int) $stmt->fetchColumn();
 };
 $resetNow = new DateTimeImmutable('now', new DateTimeZone('UTC'));
@@ -982,6 +1068,72 @@ expect_same(400, $usedResetStatus, 'Used password reset tokens are rejected');
 $usedTokenStateStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
 $usedTokenStateStmt->execute([$usedResetTokenId]);
 expect_true($usedTokenStateStmt->fetchColumn() !== null, 'Used password reset tokens retain their consumed timestamp');
+
+$revokedResetToken = bin2hex(random_bytes(16));
+$revokedResetTokenId = $insertPasswordResetToken(
+    $pdo,
+    $userId,
+    $revokedResetToken,
+    $resetNow->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u'),
+    null,
+    $resetNow->format('Y-m-d H:i:s.u')
+);
+[$revokedResetStatus] = integration_http_json('/api/auth/password/reset-confirm', '', [
+    'token' => $revokedResetToken,
+    'password' => 'RevokedResetPass123!',
+]);
+expect_same(400, $revokedResetStatus, 'Revoked password reset tokens are rejected');
+$revokedTokenStateStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
+$revokedTokenStateStmt->execute([$revokedResetTokenId]);
+expect_same(null, $revokedTokenStateStmt->fetchColumn(), 'Revoked password reset tokens remain unconsumed');
+
+$requestRaceResetToken = bin2hex(random_bytes(16));
+$requestRaceResetTokenId = $insertPasswordResetToken(
+    $pdo,
+    $userId,
+    $requestRaceResetToken,
+    $resetNow->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u')
+);
+$requestRaceSocketA = integration_http_async_json('/api/auth/password/reset-request', '', [
+    'email' => $email,
+]);
+$requestRaceSocketB = integration_http_async_json('/api/auth/password/reset-confirm', '', [
+    'token' => $requestRaceResetToken,
+    'password' => 'RequestRaceResetPass123!',
+]);
+[$requestRaceStatusA] = integration_http_async_read($requestRaceSocketA);
+[$requestRaceStatusB] = integration_http_async_read($requestRaceSocketB);
+$requestRaceStatuses = [$requestRaceStatusA, $requestRaceStatusB];
+sort($requestRaceStatuses, SORT_NUMERIC);
+expect_same([200, 200], $requestRaceStatuses, 'Concurrent reset request and confirmation avoid the shared audit lock deadlock');
+$requestRaceTokenStateStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
+$requestRaceTokenStateStmt->execute([$requestRaceResetTokenId]);
+expect_true($requestRaceTokenStateStmt->fetchColumn() !== null, 'Concurrent reset confirmation still consumes its valid token');
+
+$concurrentResetToken = bin2hex(random_bytes(16));
+$concurrentResetTokenId = $insertPasswordResetToken(
+    $pdo,
+    $userId,
+    $concurrentResetToken,
+    $resetNow->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u')
+);
+$concurrentResetPassword = 'ConcurrentResetPass123!';
+$concurrentSocketA = integration_http_async_json('/api/auth/password/reset-confirm', '', [
+    'token' => $concurrentResetToken,
+    'password' => $concurrentResetPassword,
+]);
+$concurrentSocketB = integration_http_async_json('/api/auth/password/reset-confirm', '', [
+    'token' => $concurrentResetToken,
+    'password' => $concurrentResetPassword,
+]);
+[$concurrentStatusA] = integration_http_async_read($concurrentSocketA);
+[$concurrentStatusB] = integration_http_async_read($concurrentSocketB);
+$concurrentStatuses = [$concurrentStatusA, $concurrentStatusB];
+sort($concurrentStatuses, SORT_NUMERIC);
+expect_same([200, 400], $concurrentStatuses, 'Concurrent password reset submissions produce exactly one success');
+$concurrentTokenStateStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
+$concurrentTokenStateStmt->execute([$concurrentResetTokenId]);
+expect_true($concurrentTokenStateStmt->fetchColumn() !== null, 'Concurrent password reset consumption leaves one committed used timestamp');
 
 $validResetToken = bin2hex(random_bytes(16));
 $validResetTokenId = $insertPasswordResetToken(

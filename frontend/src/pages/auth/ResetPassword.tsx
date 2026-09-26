@@ -108,7 +108,7 @@ export function ResetPassword() {
                 Create new password
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Your new password must be different from previous used passwords.
+                Choose a strong password for your account.
               </p>
             </div>
 

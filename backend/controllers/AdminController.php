@@ -481,6 +481,9 @@ function handle_admin_settings_get(): void
              WHERE setting_key IN ('retention_policy', 'grading_defaults')"
         );
         $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_KEY_PAIR) : [];
+        // retention_policy.retention_threshold is the canonical course-grade
+        // trigger. grading_defaults.retention_gwa_threshold is compatibility
+        // metadata kept synchronized for existing consumers.
         $retention = isset($rows['retention_policy']) ? json_decode($rows['retention_policy'], true) : [];
         $grading = isset($rows['grading_defaults']) ? json_decode($rows['grading_defaults'], true) : [];
         $transmutation = $grading['transmutation_defaults'] ?? [];
@@ -565,12 +568,17 @@ function handle_admin_settings_update(): void
         $themeStmt = $pdo->prepare("UPDATE user_accounts SET theme = ? WHERE user_id = ?");
         $themeStmt->execute([$theme, $authCtx['user_id']]);
         $retentionStmt = $pdo->prepare(
+            // Keep the canonical retention-policy field and its compatibility
+            // mirror synchronized in the same settings transaction below.
             "UPDATE system_settings
-             SET setting_value = setting_value || jsonb_build_object('retention_threshold', ?::numeric),
+             SET setting_value = setting_value || jsonb_build_object(
+                    'retention_threshold', ?::numeric,
+                    'initial_trigger_grade', ?::numeric
+                 ),
                  updated_at = CURRENT_TIMESTAMP(6), updated_by_user_id = ?
              WHERE setting_key = 'retention_policy'"
         );
-        $retentionStmt->execute([$threshold, $authCtx['user_id']]);
+        $retentionStmt->execute([$threshold, $threshold, $authCtx['user_id']]);
         $gradingStmt = $pdo->prepare(
             "UPDATE system_settings
              SET setting_value = jsonb_set(setting_value, '{default_weights}',

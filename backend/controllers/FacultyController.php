@@ -200,7 +200,7 @@ function handle_faculty_dashboard_kpis(): void
     }
 }
 
-function faculty_map_student_rows(array $rows): array
+function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null): array
 {
     $byStudent = [];
     $statusPriority = ['active' => 0, 'warning' => 1, 'remedial' => 2, 'critical' => 3];
@@ -238,6 +238,9 @@ function faculty_map_student_rows(array $rows): array
                 'enrolledSubjects' => [],
                 '_grades' => [],
             ];
+            if ($retentionThreshold !== null) {
+                $byStudent[$id]['retentionThreshold'] = $retentionThreshold;
+            }
         }
         $entry = &$byStudent[$id];
         $state = strtolower((string) ($row['retention_state'] ?? 'active'));
@@ -316,7 +319,17 @@ function handle_faculty_students(): void
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-        $mapped = faculty_map_student_rows($students);
+        $retentionPolicyValue = $pdo->query(
+            "SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy' LIMIT 1"
+        )->fetchColumn();
+        $retentionPolicy = is_string($retentionPolicyValue)
+            ? json_decode($retentionPolicyValue, true, 512, JSON_THROW_ON_ERROR)
+            : [];
+        $retentionThreshold = (float) ($retentionPolicy['retention_threshold'] ?? 2.5);
+        if ($retentionThreshold < 1.0 || $retentionThreshold > 5.0) {
+            throw new RuntimeException('Persisted retention threshold is invalid.');
+        }
+        $mapped = faculty_map_student_rows($students, $retentionThreshold);
 
         json_response($mapped, 200);
     } catch (\Throwable $e) {
@@ -2996,6 +3009,8 @@ function handle_faculty_grades_compute(): void
         $attendanceWeight = max(0.0, min(100.0, (float) ($gradingSettings['default_weights']['attendance'] ?? 0)));
         $retentionStmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy' LIMIT 1");
         $retentionSettings = json_decode((string) ($retentionStmt->fetchColumn() ?: '{}'), true);
+        // retention_policy.retention_threshold is the canonical course-grade
+        // trigger; the grading-default and initial-trigger keys are mirrors.
         $retentionThreshold = (float) ($retentionSettings['retention_threshold'] ?? 2.5);
         if ($retentionThreshold < 1.0 || $retentionThreshold > 5.0) {
             throw new RuntimeException('Persisted retention threshold is invalid.');

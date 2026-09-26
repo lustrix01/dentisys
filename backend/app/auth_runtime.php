@@ -631,8 +631,6 @@ function auth_runtime_logout(PDO $pdo, array $config, array $context, string $re
 
     $pdo->beginTransaction();
     try {
-        $auditCtx = audit_begin_operation($pdo);
-
         $stmtLock = $pdo->prepare(
             "SELECT * FROM security_tokens
              WHERE token_id = ? AND purpose = 'refresh'
@@ -665,6 +663,10 @@ function auth_runtime_logout(PDO $pdo, array $config, array $context, string $re
             $pdo->commit();
             return ['type' => 'completed'];
         }
+
+        // Match refresh, password change, and password reset lock ordering:
+        // token/session/account first, then the shared audit-chain row.
+        $auditCtx = audit_begin_operation($pdo);
 
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         auth_revoke_session($pdo, $sessionRow['session_id'], 'User logout', $now);

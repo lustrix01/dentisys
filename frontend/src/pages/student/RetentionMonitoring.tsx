@@ -137,7 +137,7 @@ export const RetentionMonitoring: React.FC = () => {
     ? atRiskCount
     : threshold === null
       ? 0
-      : (currentMockStudent?.enrolledSubjects || []).filter(s => s.grade > threshold).length;
+      : (currentMockStudent?.enrolledSubjects || []).filter(s => s.grade >= threshold).length;
 
   const isAtRisk = isAuthoritative
     ? (atRiskCount > 0 || deficientCount > 0)

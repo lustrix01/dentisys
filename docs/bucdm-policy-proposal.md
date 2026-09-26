@@ -17,7 +17,7 @@ Source: `C:\Users\decha\Downloads\CANDL& - BUCDM Interview Transcript.pdf`, inte
 
 ## Current implementation gaps
 
-- The provisional course-grade trigger is now server-side and uses the Owner-approved 2.50 inclusive boundary. `RetentionMonitoring.tsx` still uses its existing 75% remedial-exam percentage for the current-state control; the Owner has not approved changing that percentage, so it remains a separate open decision.
+- The provisional course-grade trigger is now server-side and uses the Owner-approved 2.50 inclusive boundary. The interview evidence says that a remedial score of at least 50% passes either attempt and that a remedial pass does not replace the original course grade; the exact UI-003 amendment still requires explicit Owner approval. Until that approval, `RetentionMonitoring.tsx` correctly remains on its existing 75% remedial-exam percentage and must be treated as pending policy, not as the approved BUCDM rule.
 - `handle_faculty_retention_remedial_save()` accepts a client-provided status/current JSON object. It does not implement ordered server-authoritative attempts, cost recovery, comprehensive/revalida, or pre-board eligibility.
 - Current remedial records are current-state payloads. Existing rows cannot be assigned attempt numbers or policy stages without evidence.
 - Final grade/GWA must remain separate from progression outcomes. Existing saved grades and weights must not be rewritten automatically.
@@ -36,7 +36,7 @@ This addition is not ready to merge until the unresolved boundaries are answered
 
 ## Consolidated Owner decisions
 
-1. **Remedial/cost-recovery boundary:** Does a remedial exam score of at least 50% pass both attempts, as stated in the interview, and what exact cost-recovery pass boundary and direction apply? Do not use the course-grade 2.50 trigger for the remedial percentage.
+1. **Owner approval and cost-recovery boundary:** Approve or reject the exact UI-003 amendment reflecting the interview rule that a remedial exam score of at least 50% passes either attempt and that a remedial pass does not replace the original course grade. Separately, what exact cost-recovery pass boundary and direction apply? Do not use the course-grade 2.50 trigger for the remedial percentage.
 2. **Scope and official results:** How are professional courses and clinic eligibility identified in current course/student data? May the existing assigned Faculty record official Pass/Fail for comprehensive/revalida/pre-board (whose score thresholds are absent), or is another role responsible? Is the pre-board wait measured as one calendar year from the failed exam date?
 3. **Grading conflict:** Retain the currently approved editable GRD-002 weights and attendance category, or propose a separate amendment adopting the interview's fixed weights/no attendance grade? This choice must not retroactively alter saved grades. The 20%-absence rule also needs its exact consequence and treatment of excused absences before automation.
 4. **Specification approval:** Approve the remaining UI-003 progression amendment before implementing authoritative progression. Any GRD amendment will be shown separately if requested.

@@ -67,8 +67,10 @@ export const StudentManagement: React.FC = () => {
     students, 
     addStudent, 
     updateStudent,
-    enrollStudentFace
+    enrollStudentFace,
+    settings,
   } = useApp();
+  const retentionThreshold = settings?.retentionThreshold ?? 2.5;
 
   const runtimeConfig = useRuntimeConfig();
   const allowedDomains = useMemo(() => {
@@ -1004,8 +1006,8 @@ export const StudentManagement: React.FC = () => {
                           <td className="px-3 py-1.5 font-bold text-slate-700 dark:text-slate-350">{sub.code}</td>
                           <td className="px-3 py-1.5 font-extrabold text-slate-800 dark:text-slate-100 text-center">{sub.grade.toFixed(2)}</td>
                           <td className="px-3 py-1.5 text-right">
-                            <span className={sub.grade > 2.5 && sub.isClinical ? 'text-rose-500 font-semibold' : 'text-emerald-500'}>
-                              {sub.grade > 2.5 && sub.isClinical ? 'Fails Ret.' : 'Passing'}
+                            <span className={sub.grade >= retentionThreshold && sub.isClinical ? 'text-rose-500 font-semibold' : 'text-emerald-500'}>
+                              {sub.grade >= retentionThreshold && sub.isClinical ? 'Fails Ret.' : 'Passing'}
                             </span>
                           </td>
                         </tr>

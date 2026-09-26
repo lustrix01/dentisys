@@ -830,6 +830,7 @@ export function getFacultyStudentsApi(): Promise<Array<{
   consentStatus: string;
   classSections: Array<{ classId: string; className: string; enrollmentId: string }>;
   overallGWA?: number;
+  retentionThreshold?: number;
   clinicHoursCompleted?: number;
   enrolledSubjects?: Array<{
     code: string;

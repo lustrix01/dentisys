@@ -9,10 +9,10 @@
 The accepted stable visual evidence below is unchanged and was not rerun. A
 focused follow-up was captured for the two password-recovery pages after their
 Gemini-owned presentation pass. The normal
-development database is now migrated through 027. The historical Docker
+development database is now migrated through 028. The historical Docker
 interruption and pre-fix 4/8 live result belong to an earlier tree; the kept
 disposable `dentisys-final-0926b` run passed migrations 001-025 and the 8/8 live
-browser gate, but is not current 026-027 evidence. This document covers visual
+browser gate, but is not current 026-028 evidence. This document covers visual
 evidence only; real Google and physical-camera acceptance remain separate
 manual checks.
 

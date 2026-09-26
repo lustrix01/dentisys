@@ -100,7 +100,7 @@ export const Classes: React.FC = () => {
   const mockFailing = retentionThreshold === null
     ? []
     : (currentMockStudent?.enrolledSubjects || []).filter(
-      subj => subj.isClinical && subj.grade > retentionThreshold,
+      subj => subj.isClinical && subj.grade >= retentionThreshold,
     );
 
   const failingCount = isAuthoritative ? failingAuthClasses.length : mockFailing.length;
@@ -242,7 +242,7 @@ export const Classes: React.FC = () => {
           )
         ) : (
           (currentMockStudent?.enrolledSubjects || []).map(subject => {
-            const isFailingRetention = retentionThreshold !== null && subject.isClinical && subject.grade > retentionThreshold;
+            const isFailingRetention = retentionThreshold !== null && subject.isClinical && subject.grade >= retentionThreshold;
             const subjectRecords = attendanceRecords.filter(
               r => r.studentId === currentMockStudent?.id && r.subjectCode === subject.code
             );

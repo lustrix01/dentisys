@@ -24,9 +24,10 @@ const PRINT_STYLES = `
   @page { margin: 1.2cm; }
 }`;
 
-import { getAdminReportsSummaryApi } from '../../services/apiClient';
+import { getAdminReportsSummaryApi, getAdminSettingsApi } from '../../services/apiClient';
 
 export const DeanReports: React.FC = () => {
+  const [retentionThreshold, setRetentionThreshold] = useState(2.5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dbStudents, setDbStudents] = useState<any[]>([]);
@@ -52,6 +53,16 @@ export const DeanReports: React.FC = () => {
 
   React.useEffect(() => {
     fetchReportData();
+  }, []);
+
+  React.useEffect(() => {
+    getAdminSettingsApi()
+      .then((res) => {
+        if (typeof res.settings?.retentionThreshold === 'number') {
+          setRetentionThreshold(res.settings.retentionThreshold);
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   const students = dbStudents;
@@ -447,13 +458,13 @@ export const DeanReports: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {filtered.map((s: any) => {
-                      const flagged = (s.enrolledSubjects || []).filter((sub: any) => sub.grade > 2.5 && sub.isClinical).length;
+                      const flagged = (s.enrolledSubjects || []).filter((sub: any) => sub.grade >= retentionThreshold && sub.isClinical).length;
                       const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                           <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
                           <td className="py-3 px-3 text-slate-500">{s.classId}</td>
-                          <td className={`py-3 px-3 font-extrabold ${Number(s.overallGWA || 0) > 2.5 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          <td className={`py-3 px-3 font-extrabold ${['warning', 'critical', 'remedial'].includes(String(s.status || '').toLowerCase()) ? 'text-rose-600' : 'text-emerald-600'}`}>
                             {s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—'}
                           </td>
                           <td className="py-3 px-3"><StatusBadge status={s.status} /></td>

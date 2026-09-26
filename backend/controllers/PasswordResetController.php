@@ -55,37 +55,52 @@ function handle_password_reset_request(): void
 
             $pdo->beginTransaction();
             try {
-                $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
-                $auditCtx = audit_begin_operation($pdo);
-
-                $ins = $pdo->prepare(
-                    "INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at)
-                     VALUES ('password_reset', ?, ?, ?, ?) RETURNING token_id"
+                // Lock the account before the shared audit-chain row. Reset
+                // confirmation takes the same account-before-audit path after
+                // it locks and revalidates its token.
+                $lockUser = $pdo->prepare(
+                    "SELECT user_id, login_email, display_name, role
+                     FROM user_accounts WHERE user_id = ? FOR UPDATE"
                 );
-                $ins->execute([$user['user_id'], $tokenHash, $nowSql, $expiresSql]);
-                $stId = (int) $ins->fetchColumn();
+                $lockUser->execute([(int) $user['user_id']]);
+                $lockedUser = $lockUser->fetch(PDO::FETCH_ASSOC);
+                if ($lockedUser === false) {
+                    $pdo->rollBack();
+                    $user = false;
+                } else {
+                    $user = $lockedUser;
+                    $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+                    $auditCtx = audit_begin_operation($pdo);
 
-                audit_finish_operation($pdo, $auditCtx, [
-                    'module_code' => 'auth',
-                    'action_code' => 'password_reset_requested',
-                    'event_status' => 'Success',
-                    'actor_user_id' => $user['user_id'],
-                    'actor_username' => $email,
-                    'actor_role' => $user['role'],
-                    'actor_display_name' => $user['display_name'],
-                    'session_id' => null,
-                    'target_type' => 'security_token',
-                    'target_id' => (string) $stId,
-                    'description' => 'Password reset requested.',
-                    'reason' => null,
-                    'http_method' => $context['http_method'],
-                    'endpoint' => $context['endpoint'],
-                    'request_id' => $context['request_id'],
-                    'ip_address' => $context['ip_address'],
-                    'user_agent' => $context['user_agent'],
-                ], $macKey);
+                    $ins = $pdo->prepare(
+                        "INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at, expires_at)
+                         VALUES ('password_reset', ?, ?, ?, ?) RETURNING token_id"
+                    );
+                    $ins->execute([$user['user_id'], $tokenHash, $nowSql, $expiresSql]);
+                    $stId = (int) $ins->fetchColumn();
 
-                $pdo->commit();
+                    audit_finish_operation($pdo, $auditCtx, [
+                        'module_code' => 'auth',
+                        'action_code' => 'password_reset_requested',
+                        'event_status' => 'Success',
+                        'actor_user_id' => $user['user_id'],
+                        'actor_username' => $email,
+                        'actor_role' => $user['role'],
+                        'actor_display_name' => $user['display_name'],
+                        'session_id' => null,
+                        'target_type' => 'security_token',
+                        'target_id' => (string) $stId,
+                        'description' => 'Password reset requested.',
+                        'reason' => null,
+                        'http_method' => $context['http_method'],
+                        'endpoint' => $context['endpoint'],
+                        'request_id' => $context['request_id'],
+                        'ip_address' => $context['ip_address'],
+                        'user_agent' => $context['user_agent'],
+                    ], $macKey);
+
+                    $pdo->commit();
+                }
             } catch (\Throwable $e) {
                 if ($pdo->inTransaction()) { $pdo->rollBack(); }
                 throw $e;
@@ -159,59 +174,86 @@ function handle_password_reset_confirm(): void
         validate_password_policy($password);
 
         $tokenHash = hash('sha256', $token);
-        $stmt = $pdo->prepare(
-            "SELECT token_id, user_id, issued_at, expires_at, used_at, revoked_at
-             FROM security_tokens
-             WHERE purpose = 'password_reset' AND secret_hash = ?"
-        );
-        $stmt->execute([$tokenHash]);
-        $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
+        $pdo->beginTransaction();
+        try {
+            // Revalidate the token inside the same transaction as the
+            // password update. Concurrent submissions serialize on this row;
+            // only the first request can consume it.
+            $stmt = $pdo->prepare(
+                "SELECT token_id, user_id, issued_at, expires_at, used_at, revoked_at
+                 FROM security_tokens
+                 WHERE purpose = 'password_reset' AND secret_hash = ?
+                 FOR UPDATE"
+            );
+            $stmt->execute([$tokenHash]);
+            $tokenRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($tokenRow === false || $tokenRow['revoked_at'] !== null || $tokenRow['used_at'] !== null) {
-            safe_error_response('Invalid or expired password reset token.', 400);
-            return;
-        }
-
-        $expiresAt = new DateTimeImmutable($tokenRow['expires_at'], new DateTimeZone('UTC'));
-        if ($expiresAt <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
-            safe_error_response('Password reset token has expired.', 400);
-            return;
-        }
-
-        $userId = (int) $tokenRow['user_id'];
-        $userStmt = $pdo->prepare("SELECT user_id, login_email, display_name, role FROM user_accounts WHERE user_id = ?");
-        $userStmt->execute([$userId]);
-        $user = $userStmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($user === false) {
-            safe_error_response('User account not found.', 404);
-            return;
-        }
-
-        if ($user['role'] === 'student') {
-            try {
-                auth_assert_student_eligible($pdo, $config, $userId);
-            } catch (AuthException $e) {
+            if ($tokenRow === false || $tokenRow['revoked_at'] !== null || $tokenRow['used_at'] !== null) {
+                $pdo->rollBack();
                 safe_error_response('Invalid or expired password reset token.', 400);
                 return;
             }
-        }
 
-        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-        $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+            $expiresAt = new DateTimeImmutable($tokenRow['expires_at'], new DateTimeZone('UTC'));
+            if ($expiresAt <= new DateTimeImmutable('now', new DateTimeZone('UTC'))) {
+                $pdo->rollBack();
+                safe_error_response('Password reset token has expired.', 400);
+                return;
+            }
 
-        $pdo->beginTransaction();
-        try {
+            $userId = (int) $tokenRow['user_id'];
+            $userStmt = $pdo->prepare(
+                "SELECT user_id, login_email, display_name, role
+                 FROM user_accounts WHERE user_id = ? FOR UPDATE"
+            );
+            $userStmt->execute([$userId]);
+            $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($user === false) {
+                $pdo->rollBack();
+                safe_error_response('User account not found.', 404);
+                return;
+            }
+
+            if ($user['role'] === 'student') {
+                try {
+                    auth_assert_student_eligible($pdo, $config, $userId);
+                } catch (AuthException $e) {
+                    $pdo->rollBack();
+                    safe_error_response('Invalid or expired password reset token.', 400);
+                    return;
+                }
+            }
+
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
+            // All auth mutation paths lock account/session/token rows before
+            // the shared audit-chain row. Keep eligibility checks before this
+            // lock because denied Student checks may audit on another PDO.
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
 
             // Update password and increment token_version to invalidate existing sessions
             $upd = $pdo->prepare("UPDATE user_accounts SET password_hash = ?, token_version = token_version + 1 WHERE user_id = ?");
             $upd->execute([$passwordHash, $userId]);
+            if ($upd->rowCount() !== 1) {
+                throw new RuntimeException('Password reset account update did not affect exactly one row.');
+            }
 
-            // Mark token as used
-            $markUsed = $pdo->prepare("UPDATE security_tokens SET used_at = ? WHERE token_id = ?");
+            // Conditional consumption is a second guard against an accidental
+            // future change that bypasses the row lock.
+            $markUsed = $pdo->prepare(
+                "UPDATE security_tokens
+                    SET used_at = ?
+                  WHERE token_id = ?
+                    AND purpose = 'password_reset'
+                    AND used_at IS NULL
+                    AND revoked_at IS NULL"
+            );
             $markUsed->execute([$nowSql, $tokenRow['token_id']]);
+            if ($markUsed->rowCount() !== 1) {
+                throw new RuntimeException('Password reset token consumption did not affect exactly one row.');
+            }
 
             audit_finish_operation($pdo, $auditCtx, [
                 'module_code' => 'auth',
