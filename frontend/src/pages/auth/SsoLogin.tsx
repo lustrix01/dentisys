@@ -311,7 +311,7 @@ export function SsoLogin() {
               </p>
             </div>
 
-            <div className="absolute bottom-6 flex items-center gap-1.5 text-[10px] font-bold text-accent-600/60 dark:text-accent-500/60 uppercase tracking-wider">
+            <div className="mt-6 flex items-center gap-1.5 text-[10px] font-bold text-accent-600/60 dark:text-accent-500/60 uppercase tracking-wider md:absolute md:bottom-6 md:mt-0">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Secure Access Portal</span>
             </div>
@@ -534,7 +534,7 @@ export function SsoLogin() {
           <div className="text-slate-300 font-medium">
             © 2026 Bicol University College of Dental Medicine. All rights reserved.
           </div>
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 text-slate-400">
+          <div className="hidden sm:flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 text-slate-400">
             <div className="flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" />
               <span>Legazpi City</span>

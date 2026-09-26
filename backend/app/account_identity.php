@@ -44,7 +44,8 @@ function account_identity_display_name(array $row): string
         return $composed;
     }
 
-    return normalize_person_name((string) ($row['display_name'] ?? ''));
+    // Legacy unsplit names are shown as stored; re-casing breaks degrees such as "DMD, PhD".
+    return trim((string) (preg_replace('/\s+/u', ' ', (string) ($row['display_name'] ?? '')) ?? ''));
 }
 
 function account_identity_fetch(PDO $pdo, int $userId, bool $forUpdate = false): ?array

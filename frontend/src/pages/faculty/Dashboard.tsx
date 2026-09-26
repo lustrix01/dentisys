@@ -7,10 +7,14 @@ import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import {
+  getFacultyActivityApi,
+  getFacultyClassesApi,
   getFacultyDashboardKpisApi,
   getFacultyRetentionApi,
   getNotificationsApi,
   saveFacultyRemedialApi,
+  type FacultyActivityRecord,
+  type FacultyClassItem,
   type FacultyRetentionRecord,
 } from '../../services/apiClient';
 import type { NotificationItem } from '../../types';
@@ -27,6 +31,9 @@ export const Dashboard: React.FC = () => {
   const [retentionError, setRetentionError] = useState('');
   const [announcements, setAnnouncements] = useState<NotificationItem[]>([]);
   const [announcementsError, setAnnouncementsError] = useState('');
+  const [recentActivity, setRecentActivity] = useState<FacultyActivityRecord[]>([]);
+  const [activityError, setActivityError] = useState('');
+  const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
 
   // Search input state
   const [searchQuery, setSearchQuery] = useState('');
@@ -34,8 +41,20 @@ export const Dashboard: React.FC = () => {
   const loadDashboard = useCallback(() => {
     setLoading(true);
     setDashboardError('');
-    Promise.allSettled([getFacultyDashboardKpisApi(), getFacultyRetentionApi(), getNotificationsApi({ limit: 5 })])
-      .then(([kpiResult, retentionResult, announcementsResult]) => {
+    Promise.allSettled([getFacultyDashboardKpisApi(), getFacultyRetentionApi(), getNotificationsApi({ limit: 5 }), getFacultyActivityApi(5), getFacultyClassesApi()])
+      .then(([kpiResult, retentionResult, announcementsResult, activityResult, classesResult]) => {
+        if (activityResult.status === 'fulfilled') {
+          setRecentActivity(Array.isArray(activityResult.value.activity) ? activityResult.value.activity : []);
+          setActivityError('');
+        } else {
+          setRecentActivity([]);
+          setActivityError(activityResult.reason instanceof Error ? activityResult.reason.message : 'Recent activity is unavailable.');
+        }
+        if (classesResult.status === 'fulfilled') {
+          setFacultyClasses(Array.isArray(classesResult.value.classes) ? classesResult.value.classes : []);
+        } else {
+          setFacultyClasses([]);
+        }
         if (kpiResult.status === 'fulfilled') {
           setDashboardKpis(kpiResult.value);
         } else {
@@ -281,7 +300,10 @@ export const Dashboard: React.FC = () => {
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
                 <span className="text-lg font-extrabold text-clinical-600 dark:text-clinical-400 block mt-0.5">
-                  {classAttendanceRate === null ? 'N/A' : `${classAttendanceRate}%`}
+                  {(() => {
+                    const rate = classAttendanceRate ?? dashboardKpis?.kpis.averageAttendance ?? null;
+                    return rate === null ? 'N/A' : `${rate}%`;
+                  })()}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
@@ -481,7 +503,7 @@ export const Dashboard: React.FC = () => {
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                 Class Details
               </h3>
-              <span className="text-[10px] text-slate-400 font-semibold">Schedule unavailable</span>
+              <span className="text-[10px] text-slate-400 font-semibold">Current classes</span>
             </div>
 
             <div className="space-y-2.5 text-xs">
@@ -497,7 +519,11 @@ export const Dashboard: React.FC = () => {
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 bg-clinical-100 text-clinical-700 dark:bg-clinical-950 dark:text-clinical-300 rounded-md">
-                    Room unavailable from class endpoint
+                    {(() => {
+                      const match = facultyClasses.find(c => c.courseCode === subj.code && c.isCurrentSchoolYear !== false)
+                        ?? facultyClasses.find(c => c.courseCode === subj.code);
+                      return match?.lecRoom || match?.labRoom || 'Room not set';
+                    })()}
                   </span>
                 </div>
               ))}
@@ -519,12 +545,20 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <p className="text-slate-700 dark:text-slate-300 text-xs font-medium">
-                  Faculty activity records are unavailable because no faculty activity API is registered.
-                </p>
-                <span className="text-[10px] text-slate-400 block mt-1">Open My Activity Log for the same status.</span>
-              </div>
+              {activityError ? (
+                <p className="p-2.5 text-slate-500 dark:text-slate-400">{activityError}</p>
+              ) : recentActivity.length === 0 ? (
+                <p className="p-2.5 text-slate-500 dark:text-slate-400">No recent activity recorded.</p>
+              ) : (
+                recentActivity.map(entry => (
+                  <div key={entry.id} className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                    <p className="text-slate-700 dark:text-slate-300 text-xs font-medium">{entry.description}</p>
+                    <span className="text-[10px] text-slate-400 block mt-1">
+                      {new Date(entry.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

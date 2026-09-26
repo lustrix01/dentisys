@@ -227,6 +227,15 @@ export const ClassesAndRosters: React.FC = () => {
     return record?.isHistorical === true || record?.isCurrentSchoolYear === false;
   }, []);
 
+  const isStudentEditable = useCallback((student: Student) => {
+    const sections = student.classSections ?? [];
+    if (sections.length === 0) return false;
+    return sections.some(section => {
+      const classItem = classes.find(c => String(c.csId) === String(section.classId));
+      return Boolean(classItem) && !isHistoricalClass(classItem);
+    });
+  }, [classes, isHistoricalClass]);
+
   // Map classId to schoolYear for fast lookup in student filtering
   const classSchoolYearMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -388,7 +397,8 @@ export const ClassesAndRosters: React.FC = () => {
   };
 
   const handleOpenEditStudent = (student: Student) => {
-    if (selectedClassFilterId !== 'all' && isHistoricalClass(classes.find(c => String(c.csId) === selectedClassFilterId))) {
+    if (!isStudentEditable(student)
+      || (selectedClassFilterId !== 'all' && isHistoricalClass(classes.find(c => String(c.csId) === selectedClassFilterId)))) {
       showFeedback('Past school-year rosters are view-only.', 'info');
       return;
     }
@@ -1091,7 +1101,7 @@ export const ClassesAndRosters: React.FC = () => {
                             )}
                             {cls.labRoom && (
                               <div>
-                                <span className="font-bold text-slate-700 dark:text-slate-200">{cls.labRoom.includes('(') ? 'Lab:' : 'Sched:'}</span> {cls.labRoom}
+                                <span className="font-bold text-slate-700 dark:text-slate-200">{'Lab:'}</span> {cls.labRoom}
                               </div>
                             )}
                             {!cls.lecRoom && !cls.labRoom && <div>Venue / Schedule TBA</div>}
@@ -1259,8 +1269,9 @@ export const ClassesAndRosters: React.FC = () => {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => handleOpenEditStudent(st)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-600 hover:text-white text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer"
-                              title="Edit Student roster profile"
+                              disabled={!isStudentEditable(st)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-600 hover:text-white text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-50 disabled:hover:text-blue-700"
+                              title={isStudentEditable(st) ? 'Edit Student roster profile' : 'Past school-year records are view-only'}
                             >
                               <Pencil className="w-3 h-3" />
                               <span>Edit</span>
