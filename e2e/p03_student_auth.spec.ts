@@ -67,7 +67,7 @@ test.describe('P03 Student identity and authentication', () => {
       }) });
     });
     await page.route('**/api/auth/student/activate', async route => {
-      const payload = route.request().postDataJSON() as { token?: string };
+      const payload = route.request().postDataJSON() as { token?: string; password?: string };
       expect(payload.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(payload.password).toBe('Student123!');
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Student account activated. You may now sign in.' }) });

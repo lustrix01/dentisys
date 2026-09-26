@@ -364,8 +364,10 @@ export const FacultyInvitation: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-            <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-9">
-              Institutional email *
+            <div className="space-y-1 sm:col-span-9">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Institutional email *
+              </label>
               <div className="flex">
                 <input
                   required
@@ -383,7 +385,7 @@ export const FacultyInvitation: React.FC = () => {
                   </span>
                 )}
               </div>
-              <span className="mt-1 block text-[10px] font-medium text-slate-400">
+              <span className="block text-[10px] font-medium text-slate-400">
                 Enter a local part to use @{DEFAULT_EMAIL_DOMAIN}; other configured domains remain supported.
               </span>
               <datalist id="admin-faculty-create-email-domains">
@@ -391,16 +393,16 @@ export const FacultyInvitation: React.FC = () => {
                   <option key={d} value={emailLocalPart ? `${emailLocalPart}@${d}` : `@${d}`} />
                 ))}
               </datalist>
-            </label>
+            </div>
 
-            <div className="sm:col-span-3">
+            <div className="sm:col-span-3 self-end pb-[18px]">
               <button
                 type="submit"
                 disabled={sending}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent-600 px-4 py-2.5 text-xs font-bold text-white shadow-md hover:bg-accent-700 active:scale-[0.99] disabled:opacity-50 cursor-pointer"
               >
                 {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Send invite
+                Send Invite
               </button>
             </div>
           </div>
@@ -461,39 +463,39 @@ export const FacultyInvitation: React.FC = () => {
                     <td className="px-4 py-3.5">{statusBadge(invitation.status)}</td>
                     <td className="px-4 py-3.5 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {invitation.status === 'Pending' && (
+                        {invitation.status !== 'Accepted' && (
                           <>
                             <button
                               type="button"
                               onClick={() => openEditModal(invitation)}
                               disabled={sending}
                               className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/40 flex items-center gap-1 cursor-pointer"
-                              title="Edit pending invitation"
+                              title="Edit invitation"
                             >
                               <Edit3 className="w-3 h-3" />
                               Edit
                             </button>
+                            {invitation.status === 'Pending' && (
+                              <button
+                                type="button"
+                                onClick={() => setRevokingInvitation(invitation)}
+                                disabled={sending}
+                                className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/40 flex items-center gap-1 cursor-pointer"
+                                title="Revoke invitation"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                Revoke
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => setRevokingInvitation(invitation)}
                               disabled={sending}
-                              className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-900/40 flex items-center gap-1 cursor-pointer"
-                              title="Revoke invitation"
+                              onClick={() => void handleReissue(invitation)}
+                              className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
                             >
-                              <Trash2 className="w-3 h-3" />
-                              Revoke
+                              Reissue
                             </button>
                           </>
-                        )}
-                        {invitation.status !== 'Accepted' && (
-                          <button
-                            type="button"
-                            disabled={sending}
-                            onClick={() => void handleReissue(invitation)}
-                            className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-                          >
-                            Reissue
-                          </button>
                         )}
                       </div>
                     </td>
@@ -505,12 +507,12 @@ export const FacultyInvitation: React.FC = () => {
         </div>
       </Card>
 
-      {/* Edit Pending Invitation Modal */}
+      {/* Edit Invitation Modal */}
       {editingInvitation && (
         <Modal
           isOpen={true}
           onClose={() => setEditingInvitation(null)}
-          title="Edit Pending Faculty Invitation"
+          title={`Edit Faculty Invitation${editingInvitation.status !== 'Pending' ? ` (${editingInvitation.status})` : ''}`}
         >
           <form onSubmit={handleSaveEdit} className="space-y-4">
             {editError && (
@@ -616,7 +618,9 @@ export const FacultyInvitation: React.FC = () => {
             </label>
 
             <p className="text-[11px] text-slate-400">
-              Updating a pending invitation revokes all previous security tokens and dispatches an updated invitation link.
+              {editingInvitation?.status === 'Pending'
+                ? 'Updating a pending invitation revokes all previous security tokens and dispatches an updated invitation link.'
+                : 'Updating an expired or revoked invitation corrects the stored record. Use Reissue to send a new activation link.'}
             </p>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">

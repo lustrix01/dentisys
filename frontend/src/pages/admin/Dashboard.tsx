@@ -73,14 +73,6 @@ export const Dashboard: React.FC = () => {
             Oversee university faculty email invitations, student attendance logs, system reports, and activity audit trails.
           </p>
         </div>
-
-        <button
-          onClick={() => navigate('/admin/faculty-invite')}
-          className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-accent-600 hover:bg-accent-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-accent-600/20 transition-all cursor-pointer flex-shrink-0"
-        >
-          <span>Invite Faculty</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
       </div>
 
       {/* 2-Column Layout */}
