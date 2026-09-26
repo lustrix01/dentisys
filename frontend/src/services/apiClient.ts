@@ -140,6 +140,10 @@ const KNOWN_MESSAGES: Record<number, Record<string, string>> = {
 };
 
 function mapError(status: number, backendMessage: string, responseData?: unknown): string {
+  // Login failures reuse the generic 401 code; the message is the precise signal.
+  if (status === 401 && backendMessage === 'Invalid credentials.') {
+    return 'Invalid email or password.';
+  }
   if (responseData && typeof responseData === 'object') {
     const dataObj = responseData as Record<string, unknown>;
     const code = typeof dataObj.code === 'string' ? dataObj.code : undefined;

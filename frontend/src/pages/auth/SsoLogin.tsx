@@ -67,6 +67,8 @@ export function SsoLogin() {
     navigate(user.role === 'student' ? '/student/dashboard' : '/', { replace: true });
   };
 
+  const googleCredentialHandlerRef = useRef<(credential: string) => Promise<void>>(async () => undefined);
+
   const handleGoogleCredential = async (credential: string) => {
     beginLogin();
     setIsLoading(true);
@@ -90,27 +92,33 @@ export function SsoLogin() {
       setIsLoading(false);
     }
   };
+  googleCredentialHandlerRef.current = handleGoogleCredential;
 
   useEffect(() => {
-    if (!googleEnabled || !runtimeConfig.providers.identity.google.client_id || !googleButtonRef.current) return;
+    const clientId = runtimeConfig.providers.identity.google.client_id;
+    if (!googleEnabled || !clientId || linkChallengeToken || !googleButtonRef.current) return;
     setGoogleLoadState('loading');
+    let cancelled = false;
     const render = () => {
+      if (cancelled) return;
       try {
-        if (!window.google || !googleButtonRef.current) {
+        const container = googleButtonRef.current;
+        if (!window.google || !container) {
           setGoogleLoadState('error');
           return;
         }
         window.google.accounts.id.initialize({
-          client_id: runtimeConfig.providers.identity.google.client_id as string,
+          client_id: clientId,
           ux_mode: 'popup',
-          callback: ({ credential }) => { void handleGoogleCredential(credential); },
+          callback: ({ credential }) => { void googleCredentialHandlerRef.current(credential); },
         });
-        googleButtonRef.current.innerHTML = '';
-        window.google.accounts.id.renderButton(googleButtonRef.current, {
+        container.innerHTML = '';
+        const availableWidth = container.parentElement?.clientWidth ?? 360;
+        window.google.accounts.id.renderButton(container, {
           type: 'standard',
           theme: 'outline',
           size: 'large',
-          width: 360,
+          width: Math.max(200, Math.min(360, Math.floor(availableWidth))),
           text: 'signin_with',
         });
         setGoogleLoadState('ready');
@@ -118,25 +126,28 @@ export function SsoLogin() {
         setGoogleLoadState('error');
       }
     };
-    const handleScriptError = () => setGoogleLoadState('error');
+    const handleScriptError = () => { if (!cancelled) setGoogleLoadState('error'); };
     if (window.google) {
       render();
-      return;
+      return () => { cancelled = true; };
     }
     const existing = document.getElementById('google-gis-client');
     const script = existing instanceof HTMLScriptElement ? existing : document.createElement('script');
-    script.id = 'google-gis-client';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = render;
-    script.onerror = handleScriptError;
-    if (!existing) document.head.appendChild(script);
+    script.addEventListener('load', render);
+    script.addEventListener('error', handleScriptError);
+    if (!existing) {
+      script.id = 'google-gis-client';
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
     return () => {
-      script.onload = null;
-      script.onerror = null;
+      cancelled = true;
+      script.removeEventListener('load', render);
+      script.removeEventListener('error', handleScriptError);
     };
-  }, [googleEnabled, runtimeConfig.providers.identity.google.client_id]);
+  }, [googleEnabled, runtimeConfig.providers.identity.google.client_id, linkChallengeToken]);
 
   const handleGoogleLink = async (event: React.FormEvent) => {
     event.preventDefault();

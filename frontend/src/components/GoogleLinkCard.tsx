@@ -86,7 +86,7 @@ export const GoogleLinkCard: React.FC = () => {
           type: 'standard',
           theme: 'outline',
           size: 'large',
-          width: 360,
+          width: Math.max(200, Math.min(360, Math.floor(buttonRef.current.parentElement?.clientWidth ?? 360))),
           text: 'continue_with',
         });
         setLoadState('ready');
@@ -106,14 +106,14 @@ export const GoogleLinkCard: React.FC = () => {
       script.src = 'https://accounts.google.com/gsi/client';
       script.async = true;
       script.defer = true;
-      script.onload = handleLoad;
-      script.onerror = handleError;
+      script.addEventListener('load', handleLoad);
+      script.addEventListener('error', handleError);
       if (!existing) document.head.appendChild(script);
     }
     return () => {
       cancelled = true;
-      script.onload = null;
-      script.onerror = null;
+      script.removeEventListener('load', handleLoad);
+      script.removeEventListener('error', handleError);
     };
   }, [clientId, enabled, handleCredential, linked]);
 

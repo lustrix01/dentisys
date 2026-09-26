@@ -32,6 +32,18 @@ function google_auth_cache_pool(): FileSystemCacheItemPool
  * Verify a Google ID token and apply DentiSys identity policy.
  * The callable seam is used by deterministic tests and must return claims.
  */
+/**
+ * Seconds of clock difference tolerated when the Google library checks the
+ * token's iat/nbf/exp. Docker Desktop VM clocks can lag after host sleep.
+ */
+const GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS = 300;
+
+function google_identity_reject(string $logReason, string $message = 'Invalid Google identity.', string $reason = 'invalid_google_identity'): never
+{
+    error_log('Google identity rejected: ' . $logReason);
+    throw new GoogleIdentityException($message, $reason);
+}
+
 function google_verify_id_token(array $config, string $credential, ?callable $verifier = null): array
 {
     $clientId = trim((string) ($config['providers']['identity']['google']['client_id'] ?? ''));
@@ -40,6 +52,12 @@ function google_verify_id_token(array $config, string $credential, ?callable $ve
     }
     if ($credential === '' || strlen($credential) > 8192) {
         throw new GoogleIdentityException();
+    }
+
+    if ($verifier === null
+        && class_exists(\Firebase\JWT\JWT::class)
+        && \Firebase\JWT\JWT::$leeway < GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS) {
+        \Firebase\JWT\JWT::$leeway = GOOGLE_ID_TOKEN_CLOCK_SKEW_SECONDS;
     }
 
     try {
@@ -52,47 +70,49 @@ function google_verify_id_token(array $config, string $credential, ?callable $ve
     } catch (GoogleIdentityException $e) {
         throw $e;
     } catch (Throwable $e) {
-        throw new GoogleIdentityException('Invalid Google identity.', 'invalid_google_identity');
+        // The message never contains the token; it names the failed check
+        // (for example "Cannot handle token with iat prior to …").
+        google_identity_reject(get_class($e) . ': ' . substr($e->getMessage(), 0, 200));
     }
 
     if (!is_array($claims)) {
-        throw new GoogleIdentityException();
+        google_identity_reject('claims are not an array');
     }
 
     $issuer = $claims['iss'] ?? null;
     if (!is_string($issuer) || !in_array($issuer, ['accounts.google.com', 'https://accounts.google.com'], true)) {
-        throw new GoogleIdentityException();
+        google_identity_reject('unexpected issuer');
     }
 
     $audience = $claims['aud'] ?? null;
     if (!is_string($audience) || !hash_equals($clientId, $audience)) {
-        throw new GoogleIdentityException();
+        google_identity_reject('audience mismatch');
     }
 
     $expiresAt = $claims['exp'] ?? null;
     if ((!is_int($expiresAt) && !is_float($expiresAt) && !(is_string($expiresAt) && ctype_digit($expiresAt)))
         || (int) $expiresAt <= time()) {
-        throw new GoogleIdentityException();
+        google_identity_reject('token expired or exp missing');
     }
 
     $subject = $claims['sub'] ?? null;
     if (!is_string($subject) || trim($subject) === '' || strlen($subject) > 255) {
-        throw new GoogleIdentityException();
+        google_identity_reject('subject missing');
     }
 
     if (($claims['email_verified'] ?? null) !== true) {
-        throw new GoogleIdentityException();
+        google_identity_reject('email not verified by Google');
     }
 
     try {
         $email = validate_email((string) ($claims['email'] ?? ''));
     } catch (ValidationException $e) {
-        throw new GoogleIdentityException();
+        google_identity_reject('email claim invalid');
     }
     $domain = substr(strrchr($email, '@'), 1);
     $allowedDomains = $config['app']['allowed_email_domains'] ?? [];
     if (!is_array($allowedDomains) || !in_array($domain, $allowedDomains, true)) {
-        throw new GoogleIdentityException('Google account domain is not allowed.', 'domain_not_allowed');
+        google_identity_reject('domain not allowed: ' . $domain, 'Google account domain is not allowed.', 'domain_not_allowed');
     }
 
     $hostedDomain = $claims['hd'] ?? null;
