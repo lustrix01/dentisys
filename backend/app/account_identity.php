@@ -191,7 +191,7 @@ function update_account_identity(PDO $pdo, int $userId, string $displayName, str
                     pi.last_name AS canonical_last_name,
                     pi.name_suffix AS canonical_name_suffix
                FROM user_accounts ua
-               LEFT JOIN person_identities pi ON pi.person_id = ua.person_id
+               JOIN person_identities pi ON pi.person_id = ua.person_id
               WHERE ua.user_id = ?
               FOR UPDATE'
         );

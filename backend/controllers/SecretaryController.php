@@ -1763,7 +1763,7 @@ function handle_secretary_profile_update(): void
             $identityStmt = $pdo->prepare(
                 'SELECT ua.person_id AS account_person_id, s.person_id AS student_person_id
                    FROM user_accounts ua
-                   LEFT JOIN students s ON s.user_id = ua.user_id
+                   JOIN students s ON s.user_id = ua.user_id
                   WHERE ua.user_id = ?
                   FOR UPDATE OF ua'
             );
