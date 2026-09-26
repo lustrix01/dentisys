@@ -254,9 +254,9 @@ export const Dashboard: React.FC = () => {
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Clinical Hours</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Enrolled Subjects</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
-                  — <span className="text-[10px] font-normal text-slate-400">pending sync</span>
+                  {enrolledSubjects.length}
                 </span>
               </div>
             </div>
@@ -269,15 +269,15 @@ export const Dashboard: React.FC = () => {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
-                onClick={() => navigate('/student/attendance')}
+                onClick={() => navigate('/student/classes')}
                 className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-blue-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
               >
-                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">Session Check-In</span>
+                <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider block">Academic Roster</span>
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-blue-600 transition-colors">
-                  Daily Attendance
+                  Enrolled Courses
                 </h4>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Facial + Geofence verification
+                  View grades & schedules
                 </p>
               </button>
 
@@ -318,12 +318,6 @@ export const Dashboard: React.FC = () => {
                 </h3>
                 <p className="text-[10px] text-slate-400 mt-0.5">Track Time-In & Time-Out for today's scheduled classes</p>
               </div>
-              <button
-                onClick={() => navigate('/student/attendance')}
-                className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
-              >
-                Check-in portal <ArrowRight className="w-3.5 h-3.5" />
-              </button>
             </div>
 
             <div className="overflow-x-auto">
@@ -457,14 +451,6 @@ export const Dashboard: React.FC = () => {
                 </p>
               </div>
             </div>
-
-            <button
-              onClick={() => navigate('/student/attendance')}
-              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Camera className="w-4 h-4" />
-              <span>Go to Attendance Check-In</span>
-            </button>
           </div>
 
           {/* Location Area Info Widget */}

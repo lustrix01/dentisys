@@ -110,8 +110,8 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            {/* Concise Admin Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-left">
+            {/* Consolidated Admin Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-left">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Faculty</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
@@ -131,37 +131,18 @@ export const Dashboard: React.FC = () => {
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">At Risk</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">At-Risk Count</span>
                 <span className="text-lg font-extrabold text-amber-600 dark:text-amber-400 block mt-0.5">
                   {atRisk}
                 </span>
               </div>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
+                <span className="text-lg font-extrabold text-accent-600 dark:text-accent-400 block mt-0.5">
+                  {typeof attendanceRate === 'number' ? `${attendanceRate}%` : '—'}
+                </span>
+              </div>
             </div>
-          </div>
-
-          {/* 3. Dashboard Overview (4 Metric Cards) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Total Faculty</span>
-              <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">{totalFaculty}</span>
-            </Card>
-
-            <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Total Students</span>
-              <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">{totalStudents}</span>
-            </Card>
-
-            <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">At-Risk Count</span>
-              <span className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1">{atRisk}</span>
-            </Card>
-
-            <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Attendance Rate</span>
-              <span className="text-2xl font-extrabold text-accent-600 dark:text-accent-400 block mt-1">
-                {typeof attendanceRate === 'number' ? `${attendanceRate}%` : '—'}
-              </span>
-            </Card>
           </div>
 
           {/* 4. Quick Actions Panel */}

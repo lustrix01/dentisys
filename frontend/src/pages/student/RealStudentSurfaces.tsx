@@ -243,7 +243,7 @@ export const RealStudentDashboard: React.FC = () => {
         <h3 className="text-xs font-bold font-heading text-slate-500 dark:text-slate-400 uppercase tracking-wider">Quick Actions</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            ['Session Check-In', 'Daily Attendance', 'Facial + Geofence verification', '/student/attendance'],
+            ['Academic Roster', 'Enrolled Courses', 'View schedule and grades', '/student/classes'],
             ['Audit Trail', 'Attendance Logs', 'Full historical log entries', '/student/attendance-logs'],
             ['Biometrics', 'Face Registration', 'Enroll or update face model', '/student/face-registration'],
           ].map(([label, title, description, path]) => (

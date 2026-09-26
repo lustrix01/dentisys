@@ -264,8 +264,8 @@ export const Dashboard: React.FC = () => {
               </button>
             </div>
 
-            {/* Concise Workspace Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-left">
+            {/* Consolidated Faculty Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-left">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Classes</span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
@@ -284,32 +284,19 @@ export const Dashboard: React.FC = () => {
                   {classAttendanceRate === null ? 'N/A' : `${classAttendanceRate}%`}
                 </span>
               </div>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">At-Risk Watchlist</span>
+                <span className={`text-lg font-extrabold block mt-0.5 ${atRiskCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                  {atRiskCount}
+                </span>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pending Remedials</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
+                  {dashboardKpis?.kpis.remedialCount ?? 0}
+                </span>
+              </div>
             </div>
-          </div>
-
-          {/* 3. Dashboard Overview (4 Metrics Row) */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Total Classes</span>
-              <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">{dashboardKpis?.kpis.activeClasses ?? 0}</span>
-            </Card>
-
-            <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Students Handled</span>
-              <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">{facultyTotalStudents}</span>
-            </Card>
-
-            <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">At-Risk Watchlist</span>
-              <span className={`text-2xl font-extrabold block mt-1 ${atRiskCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}`}>
-                {atRiskCount}
-              </span>
-            </Card>
-
-            <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-              <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Pending Remedials</span>
-              <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">{dashboardKpis?.kpis.remedialCount ?? 0}</span>
-            </Card>
           </div>
 
           {/* 4. Quick Actions Panel (Clean Typography Cards) */}
