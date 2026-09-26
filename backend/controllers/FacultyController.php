@@ -3535,6 +3535,7 @@ function faculty_attendance_record_payload(array $row): array
             $row['middle_name'] ?? null,
             $row['last_name'] ?? null,
         ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))),
+        'yearLevel' => isset($row['year_level']) ? (int) $row['year_level'] : 1,
         'date' => $row['session_date'],
         'sessionCode' => $row['session_code'],
         'attendanceSessionId' => $row['attendance_session_id'] !== null ? (string) $row['attendance_session_id'] : null,
@@ -3651,7 +3652,7 @@ function handle_faculty_attendance_get(): void
 
         if ($sessionId !== null) {
             $rosterStmt = $pdo->prepare(
-                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.year_level,
                         r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
                         r.verification_method, r.time_recorded, r.override_reason, r.override_at
                  FROM enrollments e
@@ -3666,7 +3667,7 @@ function handle_faculty_attendance_get(): void
             $rosterStmt->execute([$sessionId, $worksheetDate, $csId]);
         } elseif ($selectedSession !== null) {
             $rosterStmt = $pdo->prepare(
-                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.year_level,
                         r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
                         r.verification_method, r.time_recorded, r.override_reason, r.override_at
                  FROM enrollments e
@@ -3687,7 +3688,7 @@ function handle_faculty_attendance_get(): void
             $rosterStmt->execute([$worksheetDate, (int) $selectedSession['session_id'], (int) $selectedSession['session_id'], $csId]);
         } else {
             $rosterStmt = $pdo->prepare(
-                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name,
+                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.year_level,
                         r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
                         r.verification_method, r.time_recorded, r.override_reason, r.override_at
                  FROM enrollments e
@@ -5525,6 +5526,117 @@ function handle_faculty_courses_get(): void
     }
 }
 
+function faculty_check_schedule_conflict(PDO $pdo, string $schoolYear, int $instructorId, ?string $lecRoom, ?string $labRoom, int $excludeCsId = 0): ?string
+{
+    if (empty($lecRoom) && empty($labRoom)) {
+        return null;
+    }
+
+    $daysList = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    $parseSession = function (?string $text) use ($daysList): ?array {
+        if (!$text) return null;
+        if (!preg_match('/(\d{1,2}:\d{2}\s*(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM))/i', $text, $tm)) {
+            return null;
+        }
+
+        $toMinutes = function (string $ts): ?int {
+            if (!preg_match('/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i', trim($ts), $m)) return null;
+            $h = (int) $m[1];
+            $min = (int) $m[2];
+            $mer = strtoupper($m[3]);
+            if ($mer === 'PM' && $h < 12) $h += 12;
+            if ($mer === 'AM' && $h === 12) $h = 0;
+            return $h * 60 + $min;
+        };
+
+        $start = $toMinutes($tm[1]);
+        $end = $toMinutes($tm[2]);
+        if ($start === null || $end === null || $start >= $end) return null;
+
+        $foundDays = [];
+        foreach ($daysList as $d) {
+            if (preg_match('/\b' . $d . '\b/i', $text)) {
+                $foundDays[] = $d;
+            }
+        }
+        if (empty($foundDays)) return null;
+
+        $room = '';
+        if (preg_match('/^([^(]+)\s*\(/', $text, $rm)) {
+            $room = trim($rm[1]);
+        }
+
+        return ['room' => strtolower($room), 'days' => $foundDays, 'start' => $start, 'end' => $end, 'raw' => $text];
+    };
+
+    $proposed = [];
+    $pLec = $parseSession($lecRoom);
+    if ($pLec) {
+        if (empty($pLec['room']) && !empty($lecRoom)) $pLec['room'] = strtolower(trim($lecRoom));
+        $proposed[] = $pLec;
+    }
+    $pLab = $parseSession($labRoom);
+    if ($pLab) {
+        if (empty($pLab['room']) && !empty($labRoom)) $pLab['room'] = strtolower(trim($labRoom));
+        $proposed[] = $pLab;
+    }
+
+    if (empty($proposed)) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT cs_id, cs_name, instructor_user_id, lec_room, lab_room
+          FROM class_sections
+         WHERE school_year = ?
+           AND status = 'Active'
+    ");
+    $stmt->execute([$schoolYear]);
+    $existing = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    foreach ($existing as $row) {
+        if ($excludeCsId > 0 && (int) $row['cs_id'] === $excludeCsId) {
+            continue;
+        }
+
+        $existSessions = [];
+        $eLec = $parseSession($row['lec_room']);
+        if ($eLec) {
+            if (empty($eLec['room']) && !empty($row['lec_room'])) $eLec['room'] = strtolower(trim($row['lec_room']));
+            $existSessions[] = $eLec;
+        }
+        $eLab = $parseSession($row['lab_room']);
+        if ($eLab) {
+            if (empty($eLab['room']) && !empty($row['lab_room'])) $eLab['room'] = strtolower(trim($row['lab_room']));
+            $existSessions[] = $eLab;
+        }
+
+        foreach ($proposed as $prop) {
+            foreach ($existSessions as $ex) {
+                $common = array_intersect(array_map('strtolower', $prop['days']), array_map('strtolower', $ex['days']));
+                if (empty($common)) continue;
+
+                $overlap = $prop['start'] < $ex['end'] && $ex['start'] < $prop['end'];
+                if (!$overlap) continue;
+
+                // Room conflict
+                if (!empty($prop['room']) && !empty($ex['room']) && $prop['room'] === $ex['room']) {
+                    $conflictRoom = !empty($row['lec_room']) ? $row['lec_room'] : $row['lab_room'];
+                    return "Room conflict: '{$conflictRoom}' is already booked on " . implode('/', $common) . " by {$row['cs_name']}.";
+                }
+
+                // Instructor conflict
+                if ((int) $row['instructor_user_id'] === $instructorId) {
+                    return "Instructor schedule conflict: You already have class '{$row['cs_name']}' scheduled on " . implode('/', $common) . " at this time.";
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
 function handle_faculty_class_create(): void
 {
     $context = [
@@ -5559,6 +5671,12 @@ function handle_faculty_class_create(): void
 
         if ($courseId <= 0) {
             safe_error_response('Valid courseId is required.', 400);
+            return;
+        }
+
+        $conflictErr = faculty_check_schedule_conflict($pdo, $schoolYear, (int) $authCtx['user_id'], $lecRoom, $labRoom);
+        if ($conflictErr !== null) {
+            safe_error_response($conflictErr, 422);
             return;
         }
 
@@ -5743,6 +5861,15 @@ function handle_faculty_class_update(): void
             if (!academic_school_year_is_current($pdo, (string) $before['school_year'])) {
                 $pdo->rollBack();
                 safe_error_response('Historical class sections are view-only and cannot be edited.', 409);
+                return;
+            }
+
+            $checkLec = array_key_exists('lecRoom', $data) ? $data['lecRoom'] : ($before['lec_room'] ?? null);
+            $checkLab = array_key_exists('labRoom', $data) ? $data['labRoom'] : ($before['lab_room'] ?? null);
+            $conflictErr = faculty_check_schedule_conflict($pdo, (string) $before['school_year'], (int) $authCtx['user_id'], $checkLec, $checkLab, $csId);
+            if ($conflictErr !== null) {
+                $pdo->rollBack();
+                safe_error_response($conflictErr, 422);
                 return;
             }
 

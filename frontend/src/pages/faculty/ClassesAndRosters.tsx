@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import {
   BookOpen,
   Search,
@@ -46,23 +46,17 @@ import {
   CourseCatalogItem
 } from '../../services/apiClient';
 
-const ROOM_OPTIONS = [
-  'Lecture Hall A',
-  'Lecture Hall B',
-  'Dental Clinic Lab 1',
-  'Dental Clinic Lab 2',
-  'Room 101',
-  'Room 102',
-  'Room 201',
-  'Room 202',
-  'Room 301',
-  'Room 302',
-  'Oral Anatomy Lab',
-  'Prosthodontics Lab',
-  'Periodontics Lab',
-  'Auditorium',
-  'Simulation Lab',
-];
+import {
+  ClassSessionSlot,
+  ROOM_OPTIONS,
+  SCHEDULE_DAYS,
+  SCHEDULE_PRESETS,
+  SCHEDULE_TIME_SLOTS,
+  checkScheduleConflicts,
+  formatSessionsForSubmission,
+} from '../../utils/scheduleHelper';
+import { RoomSelector } from '../../components/RoomSelector';
+import { RosterImportModal } from '../../components/RosterImportModal';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
 
@@ -81,6 +75,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('all');
   const [selectedClassFilterId, setSelectedClassFilterId] = useState<string>('all');
+  const syInitializedRef = useRef(false);
 
   // Selected Class & Modals
   const [selectedClass, setSelectedClass] = useState<FacultyClassItem | null>(null);
@@ -89,6 +84,7 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Student Enrollment Modal States
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
+  const [isImportRosterOpen, setIsImportRosterOpen] = useState(false);
   const [targetEnrollCsId, setTargetEnrollCsId] = useState<number>(0);
   const [enrollTab, setEnrollTab] = useState<'directory' | 'manual'>('directory');
   const [availableStudents, setAvailableStudents] = useState<Array<{
@@ -108,13 +104,22 @@ export const ClassesAndRosters: React.FC = () => {
   const [newCourseId, setNewCourseId] = useState<number>(0);
   const [newCourseCode, setNewCourseCode] = useState('');
   const [newCourseName, setNewCourseName] = useState('');
-  const [newCsName, setNewCsName] = useState('');
-  const [newBlock, setNewBlock] = useState('Section 4-A');
+  const [newBlock, setNewBlock] = useState('');
   const [newSchoolYear, setNewSchoolYear] = useState('');
   const [newSemester, setNewSemester] = useState('1st Semester');
   const [newYearLevel, setNewYearLevel] = useState(4);
-  const [newLecRoom, setNewLecRoom] = useState('Lecture Hall A');
-  const [newLabRoom, setNewLabRoom] = useState('Dental Clinic Lab 1');
+
+  // Session Slots: User can customize sessions (Lecture/Lab, Room, Days, Time)
+  const [sessionSlots, setSessionSlots] = useState<ClassSessionSlot[]>([
+    {
+      id: 'session-1',
+      type: 'Lecture',
+      room: '',
+      days: [],
+      startTime: '08:00 AM',
+      endTime: '09:00 AM',
+    },
+  ]);
   const [isSubmittingClass, setIsSubmittingClass] = useState(false);
 
   // Form States: Edit Class Section
@@ -181,17 +186,15 @@ export const ClassesAndRosters: React.FC = () => {
 
       const classData = Array.isArray(clsRes.classes) ? clsRes.classes : [];
       setClasses(classData);
-      setNewSchoolYear(clsRes.currentSchoolYear || '');
+      const currentSy = clsRes.currentSchoolYear || '';
+      setNewSchoolYear(currentSy);
+      if (!syInitializedRef.current && currentSy) {
+        setSelectedSchoolYear(currentSy);
+        syInitializedRef.current = true;
+      }
 
       const courseData = Array.isArray(crsRes.courses) ? crsRes.courses : [];
       setCourses(courseData);
-      if (courseData.length > 0) {
-        setNewCourseId(prev => prev > 0 ? prev : courseData[0].id);
-        setNewCourseCode(prev => prev || courseData[0].courseCode);
-        setNewCourseName(prev => prev || courseData[0].name);
-        setNewYearLevel(prev => prev || courseData[0].yearLevel);
-        setNewCsName(prev => prev || `${courseData[0].courseCode}-Section 4-A`);
-      }
 
       const studentData = Array.isArray(rosterRes) ? (rosterRes as unknown as Student[]) : [];
       setStudentsList(studentData);
@@ -224,40 +227,84 @@ export const ClassesAndRosters: React.FC = () => {
     return record?.isHistorical === true || record?.isCurrentSchoolYear === false;
   }, []);
 
-  // Filtered assigned classes by School Year and Search
+  // Map classId to schoolYear for fast lookup in student filtering
+  const classSchoolYearMap = useMemo(() => {
+    const map = new Map<string, string>();
+    classes.forEach(c => {
+      map.set(String(c.id), c.schoolYear);
+      map.set(String(c.csId), c.schoolYear);
+    });
+    return map;
+  }, [classes]);
+
+  // Available class sections for the class section filter dropdown (constrained by school year if chosen)
+  const availableClassFilterOptions = useMemo(() => {
+    if (selectedSchoolYear === 'all') return classes;
+    return classes.filter(c => c.schoolYear === selectedSchoolYear);
+  }, [classes, selectedSchoolYear]);
+
+  // Keep selectedClassFilterId valid when school year changes
+  useEffect(() => {
+    if (selectedClassFilterId !== 'all') {
+      const exists = availableClassFilterOptions.some(
+        c => String(c.id) === String(selectedClassFilterId) || String(c.csId) === String(selectedClassFilterId)
+      );
+      if (!exists) {
+        setSelectedClassFilterId('all');
+      }
+    }
+  }, [availableClassFilterOptions, selectedClassFilterId]);
+
+  // Filtered assigned classes by School Year, Class Section, and Search
   const filteredClasses = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
     return classes.filter(cls => {
       const matchesSearch =
-        cls.courseCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cls.courseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cls.block.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cls.csName.toLowerCase().includes(searchQuery.toLowerCase());
+        !query ||
+        cls.courseCode.toLowerCase().includes(query) ||
+        cls.courseName.toLowerCase().includes(query) ||
+        cls.block.toLowerCase().includes(query) ||
+        cls.csName.toLowerCase().includes(query) ||
+        (cls.lecRoom && cls.lecRoom.toLowerCase().includes(query)) ||
+        (cls.labRoom && cls.labRoom.toLowerCase().includes(query));
 
       const matchesSchoolYear = selectedSchoolYear === 'all' || cls.schoolYear === selectedSchoolYear;
 
-      return matchesSearch && matchesSchoolYear;
-    });
-  }, [classes, searchQuery, selectedSchoolYear]);
+      const matchesClass = selectedClassFilterId === 'all' ||
+        String(cls.id) === String(selectedClassFilterId) ||
+        String(cls.csId) === String(selectedClassFilterId);
 
-  // Filtered student roster by Search and Class Filter
+      return matchesSearch && matchesSchoolYear && matchesClass;
+    });
+  }, [classes, searchQuery, selectedSchoolYear, selectedClassFilterId]);
+
+  // Filtered student roster by Search, Class Filter, and School Year Filter
   const filteredStudents = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
     return studentsList.filter((student) => {
-      const query = searchQuery.toLowerCase();
-      const matchesSearch = (
-        student.name.toLowerCase().includes(query) ||
-        student.studentId.toLowerCase().includes(query) ||
-        student.email.toLowerCase().includes(query)
+      const matchesSearch = !query || (
+        (student.name && student.name.toLowerCase().includes(query)) ||
+        (student.studentId && student.studentId.toLowerCase().includes(query)) ||
+        (student.email && student.email.toLowerCase().includes(query))
       );
 
       const matchesClass = selectedClassFilterId === 'all' ||
-        (student.classSections && student.classSections.some(sec => String(sec.classId) === String(selectedClassFilterId)));
+        (student.classSections && student.classSections.some(sec => String(sec.classId) === String(selectedClassFilterId))) ||
+        String(student.classId) === String(selectedClassFilterId);
 
-      return matchesSearch && matchesClass;
+      const matchesSchoolYear = selectedSchoolYear === 'all' ||
+        (student.classSections && student.classSections.some(sec => classSchoolYearMap.get(String(sec.classId)) === selectedSchoolYear)) ||
+        (student.classId && classSchoolYearMap.get(String(student.classId)) === selectedSchoolYear);
+
+      return matchesSearch && matchesClass && matchesSchoolYear;
     });
-  }, [studentsList, searchQuery, selectedClassFilterId]);
+  }, [studentsList, searchQuery, selectedClassFilterId, selectedSchoolYear, classSchoolYearMap]);
 
   const handleOpenClassRoster = (cls: FacultyClassItem) => {
     setSelectedClass(cls);
+    if (cls.schoolYear && selectedSchoolYear !== 'all' && selectedSchoolYear !== cls.schoolYear) {
+      setSelectedSchoolYear(cls.schoolYear);
+    }
     setSelectedClassFilterId(cls.id);
     setActiveTab('roster');
   };
@@ -446,40 +493,176 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
-  // Handler: Create Class via authoritative API
+  // Schedule Conflict Detection: verifies all session slots against active classes
+  const scheduleConflict = useMemo<string | null>(() => {
+    return checkScheduleConflicts(sessionSlots, classes, newSchoolYear);
+  }, [sessionSlots, classes, newSchoolYear]);
+
+  const handleAddSessionSlot = () => {
+    const nextType: 'Lecture' | 'Laboratory' = sessionSlots.some(s => s.type === 'Lecture') ? 'Laboratory' : 'Lecture';
+    const nextRoom = nextType === 'Laboratory' ? 'Dental Clinic Lab 1' : 'Lecture Hall A';
+    const nextDays = nextType === 'Laboratory' ? ['Wed'] : ['Tue'];
+    const initialConfig = {
+      room: nextRoom,
+      days: nextDays,
+      startTime: '10:00 AM',
+      endTime: '01:00 PM',
+    };
+    setSessionSlots(prev => [
+      ...prev,
+      {
+        id: `session-${Date.now()}`,
+        type: nextType,
+        ...initialConfig,
+        ...(nextType === 'Lecture' ? { lectureData: initialConfig } : { labData: initialConfig }),
+      },
+    ]);
+  };
+
+  const handleRemoveSessionSlot = (id: string) => {
+    if (sessionSlots.length <= 1) return;
+    setSessionSlots(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleUpdateSlot = (id: string, updates: Partial<ClassSessionSlot>) => {
+    setSessionSlots(prev =>
+      prev.map(s => {
+        if (s.id !== id) return s;
+
+        // If toggling type between Lecture and Laboratory
+        if (updates.type && updates.type !== s.type) {
+          const nextType = updates.type;
+          const currentConfig = {
+            room: s.room,
+            days: s.days,
+            startTime: s.startTime,
+            endTime: s.endTime,
+          };
+          const oldCache = s.type === 'Lecture' ? { lectureData: currentConfig } : { labData: currentConfig };
+          const cachedForNext = nextType === 'Lecture' ? s.lectureData : s.labData;
+
+          if (cachedForNext) {
+            return {
+              ...s,
+              ...oldCache,
+              type: nextType,
+              room: cachedForNext.room,
+              days: cachedForNext.days,
+              startTime: cachedForNext.startTime,
+              endTime: cachedForNext.endTime,
+            };
+          } else {
+            // Keep user's inputted room, days, and times without wiping anything
+            return {
+              ...s,
+              ...oldCache,
+              type: nextType,
+            };
+          }
+        }
+
+        // Standard updates (room, days, times)
+        const updated = { ...s, ...updates };
+        const currentConfig = {
+          room: updated.room,
+          days: updated.days,
+          startTime: updated.startTime,
+          endTime: updated.endTime,
+        };
+        if (updated.type === 'Lecture') {
+          updated.lectureData = currentConfig;
+        } else {
+          updated.labData = currentConfig;
+        }
+        return updated;
+      })
+    );
+  };
+
+  const handleOpenCreateClassModal = () => {
+    if (!newSchoolYear) {
+      showFeedback('Current active school year is unavailable. Class creation is disabled.', 'error');
+      return;
+    }
+    // Switch filter to the current active school year so the faculty member can immediately see the new class
+    if (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear) {
+      setSelectedSchoolYear(newSchoolYear);
+    }
+    setNewCourseId(0);
+    setNewCourseCode('');
+    setNewCourseName('');
+    setNewYearLevel(4);
+    setNewBlock('');
+    const initialLec = {
+      room: '',
+      days: [],
+      startTime: '08:00 AM',
+      endTime: '09:00 AM',
+    };
+    setSessionSlots([
+      {
+        id: 'session-1',
+        type: 'Lecture',
+        ...initialLec,
+        lectureData: initialLec,
+      },
+    ]);
+    setIsCreateClassOpen(true);
+  };
+
+  // Handler: Create Class via authoritative API with strict conflict prevention
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (scheduleConflict) {
+      showFeedback(scheduleConflict, 'error');
+      return;
+    }
     if (!newSchoolYear) {
-      showFeedback('Current school year is unavailable. Reload before creating a class.', 'error');
+      showFeedback('Classes can only be created for the current active school year. Please reload.', 'error');
       return;
     }
 
-    if (!newCourseId || newCourseId <= 0) {
-      showFeedback('Please select a course from the catalog.', 'error');
+    let targetCourseId = newCourseId;
+    if (!targetCourseId || targetCourseId <= 0) {
+      const found = courses.find(c => c.courseCode.toLowerCase() === newCourseCode.trim().toLowerCase());
+      if (found) {
+        targetCourseId = found.id;
+      } else if (courses.length > 0) {
+        targetCourseId = courses[0].id;
+      }
+    }
+
+    if (!targetCourseId || targetCourseId <= 0) {
+      showFeedback('Please select or specify a valid Course Offering.', 'error');
       return;
     }
 
-    const csName = newCsName.trim() || `${newCourseCode}-${newBlock}`;
+    const csName = `${newCourseCode.trim()}-${newBlock.trim()}`;
     if (!csName) {
       showFeedback('Please provide a class section name.', 'error');
       return;
     }
 
+    const { lecRoom, labRoom } = formatSessionsForSubmission(sessionSlots);
+
     setIsSubmittingClass(true);
     try {
       const res = await createFacultyClassApi({
         csName,
-        courseId: newCourseId,
+        courseId: targetCourseId,
         semester: newSemester,
         schoolYear: newSchoolYear,
         yearLevel: newYearLevel,
         block: newBlock.trim(),
-        lecRoom: newLecRoom.trim() || undefined,
-        labRoom: newLabRoom.trim() || undefined,
+        lecRoom: lecRoom || undefined,
+        labRoom: labRoom || undefined,
       });
 
-      showFeedback(res.message || `Class section ${csName} created successfully!`, 'success');
+      showFeedback(res.message || `Class section ${csName} created successfully for current S.Y. ${newSchoolYear}!`, 'success');
       setIsCreateClassOpen(false);
+      if (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear) {
+        setSelectedSchoolYear(newSchoolYear);
+      }
       await fetchData();
     } catch (err: any) {
       showFeedback(err.message || 'Failed to create class section.', 'error');
@@ -706,9 +889,6 @@ export const ClassesAndRosters: React.FC = () => {
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
             Create classes, import iBU student rosters (PDF/CSV), manage students, and send email invitations.
           </p>
-          <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-2">
-            Authoritative records: class sections and enrollments are synced with the server. Development preview: registrar/iBU roster file imports remain browser-local / externally blocked awaiting official University layout specification (Batch X1).
-          </p>
           <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
             {newSchoolYear ? `Current school year: ${newSchoolYear}. Past school-year classes are view-only.` : 'Current school year is unavailable. Class creation is disabled.'}
           </p>
@@ -717,7 +897,7 @@ export const ClassesAndRosters: React.FC = () => {
         {/* Action Buttons */}
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full sm:w-auto">
           <button
-            onClick={() => setIsCreateClassOpen(true)}
+            onClick={handleOpenCreateClassModal}
             disabled={!newSchoolYear}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
           >
@@ -770,7 +950,7 @@ export const ClassesAndRosters: React.FC = () => {
             <BookMarked className="w-4 h-4 text-emerald-600" />
             Assigned Classes
             <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
-              {classes.length}
+              {filteredClasses.length}
             </span>
           </button>
 
@@ -785,7 +965,7 @@ export const ClassesAndRosters: React.FC = () => {
             <Users className="w-4 h-4 text-emerald-600" />
             Enrolled Student Roster
             <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
-              {studentsList.length}
+              {filteredStudents.length}
             </span>
           </button>
         </div>
@@ -804,7 +984,7 @@ export const ClassesAndRosters: React.FC = () => {
                   className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-full truncate pr-1"
                 >
                   <option value="all">All Class Sections</option>
-                  {classes.map(c => (
+                  {availableClassFilterOptions.map(c => (
                     <option key={c.id} value={c.id}>{c.courseCode} ({c.block})</option>
                   ))}
                 </select>
@@ -858,11 +1038,13 @@ export const ClassesAndRosters: React.FC = () => {
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
                 {searchQuery
                   ? 'No class sections match your search query.'
-                  : 'You do not have any class sections assigned for the selected criteria. Create a class section to get started.'}
+                  : (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear)
+                    ? `Viewing past school year (S.Y. ${selectedSchoolYear}). Past school-year records are view-only. Class creation is only permitted for the current school year (S.Y. ${newSchoolYear}).`
+                    : 'You do not have any class sections assigned for the selected criteria. Create a class section to get started.'}
               </p>
-              {!searchQuery && (
+              {!searchQuery && (selectedSchoolYear === 'all' || selectedSchoolYear === newSchoolYear) && (
                 <button
-                  onClick={() => setIsCreateClassOpen(true)}
+                  onClick={handleOpenCreateClassModal}
                   disabled={!newSchoolYear}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-md shadow-emerald-600/20"
                 >
@@ -894,21 +1076,28 @@ export const ClassesAndRosters: React.FC = () => {
                       {cls.courseName}
                     </h3>
 
-                    <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                        <span>{cls.semester || '1st Semester'} &bull; {cls.schoolYear || '2025-2026'}</span>
+                      <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
+                          <span>{cls.semester || '1st Semester'} &bull; {cls.schoolYear || '2025-2026'}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            {cls.lecRoom && (
+                              <div>
+                                <span className="font-bold text-slate-700 dark:text-slate-200">Lec:</span> {cls.lecRoom}
+                              </div>
+                            )}
+                            {cls.labRoom && (
+                              <div>
+                                <span className="font-bold text-slate-700 dark:text-slate-200">{cls.labRoom.includes('(') ? 'Lab:' : 'Sched:'}</span> {cls.labRoom}
+                              </div>
+                            )}
+                            {!cls.lecRoom && !cls.labRoom && <div>Venue / Schedule TBA</div>}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                        <span>
-                          {[
-                            cls.lecRoom ? `Lec: ${cls.lecRoom}` : null,
-                            cls.labRoom ? `Lab: ${cls.labRoom}` : null,
-                          ].filter(Boolean).join(' | ') || 'Venue TBA'}
-                        </span>
-                      </div>
-                    </div>
                   </div>
 
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
@@ -931,7 +1120,7 @@ export const ClassesAndRosters: React.FC = () => {
                       <button
                         onClick={() => handleOpenAddStudent(cls)}
                         disabled={historicalClass}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-600 hover:text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                         title={historicalClass ? 'Past school-year classes are view-only.' : 'Add student to class roster'}
                       >
                         <UserPlus className="w-3 h-3" />
@@ -973,10 +1162,19 @@ export const ClassesAndRosters: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleOpenAddStudent()}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-xs font-bold shadow-md shadow-accent-600/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span>+ Add Student</span>
+                <span>Add Student</span>
+              </button>
+
+              <button
+                onClick={() => setIsImportRosterOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                title="Import student roster from registrar CSV or PDF file"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Import Students</span>
               </button>
 
               <button
@@ -1148,6 +1346,17 @@ export const ClassesAndRosters: React.FC = () => {
                 }`}
               >
                 Register New Student
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddStudentOpen(false);
+                  setIsImportRosterOpen(true);
+                }}
+                className="py-2 px-4 font-bold border-b-2 border-transparent text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Import File (CSV / PDF)</span>
               </button>
             </div>
 
@@ -1376,139 +1585,287 @@ export const ClassesAndRosters: React.FC = () => {
       {isCreateClassOpen && (
         <Modal isOpen={isCreateClassOpen} onClose={() => setIsCreateClassOpen(false)} title="Create New Class Section">
           <form onSubmit={handleCreateClass} className="space-y-4 text-xs">
-            {/* Course Catalog Selection */}
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select Course Offering</label>
-              <select
-                value={newCourseId}
-                onChange={(e) => {
-                  const cId = Number(e.target.value);
-                  setNewCourseId(cId);
-                  const found = courses.find(c => c.id === cId);
-                  if (found) {
-                    setNewCourseCode(found.courseCode);
-                    setNewCourseName(found.name);
-                    setNewYearLevel(found.yearLevel);
-                    setNewCsName(`${found.courseCode}-${newBlock}`);
-                  }
-                }}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-              >
-                {courses.map(c => (
-                  <option key={c.id} value={c.id}>{c.courseCode} - {c.name} ({c.units} Units, Year {c.yearLevel})</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Class Section Name</label>
-              <input
-                type="text"
-                required
-                value={newCsName}
-                onChange={(e) => setNewCsName(e.target.value)}
-                placeholder="e.g. CLIN401-SecA"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block</label>
-                <input
-                  type="text"
-                  value={newBlock}
-                  onChange={(e) => {
-                    const blk = e.target.value;
-                    setNewBlock(blk);
-                    if (newCourseCode) setNewCsName(`${newCourseCode}-${blk}`);
-                  }}
-                  placeholder="Section 4-A"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-                />
+            {/* Academic School Year (Strictly current year only) */}
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="font-bold text-xs">
+                  Academic Year: <span className="font-extrabold underline decoration-emerald-500">S.Y. {newSchoolYear || 'Loading...'}</span> (Current Active Year)
+                </span>
               </div>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200/70 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 whitespace-nowrap">
+                Current Year Only
+              </span>
+            </div>
 
+            {/* Course Code & Title */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">School Year</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code *</label>
                 <input
                   type="text"
                   required
-                  value={newSchoolYear}
-                  readOnly
-                  placeholder="Current school year unavailable"
+                  list="course-catalog-codes"
+                  value={newCourseCode}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setNewCourseCode(code);
+                    const found = courses.find(c => c.courseCode.toLowerCase() === code.trim().toLowerCase());
+                    if (found) {
+                      setNewCourseId(found.id);
+                      setNewCourseName(found.name);
+                      setNewYearLevel(found.yearLevel);
+                    }
+                  }}
+                  placeholder="e.g. DENT 301"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
-                <p className="mt-1 text-[10px] text-slate-400">The server validates whether this is the current school year before saving.</p>
+                <datalist id="course-catalog-codes">
+                  {courses.map(c => (
+                    <option key={c.id} value={c.courseCode}>{c.name} ({c.units} Units, Year {c.yearLevel})</option>
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={newCourseName}
+                  onChange={(e) => setNewCourseName(e.target.value)}
+                  placeholder="e.g. Restorative Dentistry I"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            {/* Section / Block & Semester */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block *</label>
+                <input
+                  type="text"
+                  required
+                  value={newBlock}
+                  onChange={(e) => setNewBlock(e.target.value)}
+                  placeholder="e.g. Section 3-A"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester *</label>
                 <select
                   value={newSemester}
                   onChange={(e) => setNewSemester(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
                 >
                   <option value="1st Semester">1st Semester</option>
                   <option value="2nd Semester">2nd Semester</option>
                   <option value="Summer">Summer</option>
                 </select>
               </div>
+            </div>
 
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>
-                <select
-                  value={newYearLevel}
-                  onChange={(e) => setNewYearLevel(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+            {/* SESSION CONFIGURATION (CUSTOMIZABLE LECTURE / LAB & ROOM) */}
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-slate-800 dark:text-slate-100 text-xs">
+                  Class Sessions & Rooms ({sessionSlots.length})
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAddSessionSlot}
+                  className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
                 >
-                  <option value={1}>Year 1</option>
-                  <option value={2}>Year 2</option>
-                  <option value={3}>Year 3</option>
-                  <option value={4}>Year 4</option>
-                </select>
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Session
+                </button>
               </div>
+
+              {sessionSlots.map((slot, index) => (
+                <div
+                  key={slot.id}
+                  className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 space-y-3.5"
+                >
+                  {/* Slot Header: Type Selector & Remove Button */}
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-800 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+                        Session {index + 1}:
+                      </span>
+                      {/* Choose between Lecture or Laboratory */}
+                      <div className="flex items-center bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSlot(slot.id, { type: 'Lecture' })}
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                            slot.type === 'Lecture'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                          }`}
+                        >
+                          Lecture
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSlot(slot.id, { type: 'Laboratory' })}
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                            slot.type === 'Laboratory'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                          }`}
+                        >
+                          Laboratory
+                        </button>
+                      </div>
+                    </div>
+
+                    {sessionSlots.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSessionSlot(slot.id)}
+                        className="text-slate-400 hover:text-rose-500 p-1 rounded-lg transition-colors cursor-pointer"
+                        title="Remove this session"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Choose Room Venue with RoomSelector */}
+                  <RoomSelector
+                    key={`${slot.id}-${slot.type}-room`}
+                    id={`room-select-${slot.id}`}
+                    label={`${slot.type} Room Venue *`}
+                    value={slot.room}
+                    onChange={(r) => handleUpdateSlot(slot.id, { room: r })}
+                    placeholder={`Choose ${slot.type} Room`}
+                  />
+
+                  {/* Days Selection */}
+                  <div>
+                    <span className="font-semibold text-slate-600 dark:text-slate-400 block mb-1.5 text-[11px]">
+                      {slot.type} Day(s) *
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SCHEDULE_DAYS.map(day => {
+                        const isDaySelected = slot.days.includes(day);
+                        return (
+                          <button
+                            key={`${slot.id}-${day}`}
+                            type="button"
+                            onClick={() => {
+                              const nextDays = isDaySelected
+                                ? slot.days.filter(d => d !== day)
+                                : [...slot.days, day];
+                              handleUpdateSlot(slot.id, { days: nextDays });
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              isDaySelected
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5 text-[10px]">
+                      <span className="text-slate-400 font-semibold">Presets:</span>
+                      {SCHEDULE_PRESETS.map(preset => (
+                        <button
+                          key={`${slot.id}-preset-${preset.label}`}
+                          type="button"
+                          onClick={() => handleUpdateSlot(slot.id, { days: preset.days })}
+                          className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Time Range */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
+                      <select
+                        value={slot.startTime}
+                        onChange={(e) => handleUpdateSlot(slot.id, { startTime: e.target.value })}
+                        className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
+                      >
+                        {SCHEDULE_TIME_SLOTS.map(t => (
+                          <option key={`${slot.id}-start-${t}`} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">End Time</span>
+                      <select
+                        value={slot.endTime}
+                        onChange={(e) => handleUpdateSlot(slot.id, { endTime: e.target.value })}
+                        className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
+                      >
+                        {SCHEDULE_TIME_SLOTS.map(t => (
+                          <option key={`${slot.id}-end-${t}`} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Lecture Room</label>
-                <input
-                  type="text"
-                  list="room-suggestions"
-                  value={newLecRoom}
-                  onChange={(e) => setNewLecRoom(e.target.value)}
-                  placeholder="Lecture Hall A"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Laboratory Room</label>
-                <input
-                  type="text"
-                  list="room-suggestions"
-                  value={newLabRoom}
-                  onChange={(e) => setNewLabRoom(e.target.value)}
-                  placeholder="Dental Clinic Lab 1"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-                />
-              </div>
+            {/* Generated Schedule Preview */}
+            <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Class Schedule Preview</span>
+              {sessionSlots.map((slot) => (
+                <div key={`prev-${slot.id}`} className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                    slot.type === 'Lecture'
+                      ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                      : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                  }`}>
+                    {slot.type}
+                  </span>
+                  <span>
+                    {slot.room || 'Venue TBA'} &bull; {slot.days.length > 0 ? `${slot.days.join('/')} ${slot.startTime} - ${slot.endTime}` : 'No days selected'}
+                  </span>
+                </div>
+              ))}
             </div>
 
+            {/* Conflict Error Banner */}
+            {scheduleConflict && (
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <span>{scheduleConflict}</span>
+              </div>
+            )}
+
+            {/* Modal Actions */}
             <div className="pt-2 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setIsCreateClassOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold cursor-pointer hover:bg-slate-200"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={isSubmittingClass}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+                disabled={
+                  isSubmittingClass ||
+                  !newSchoolYear ||
+                  !!scheduleConflict ||
+                  !newCourseCode.trim() ||
+                  !newCourseName.trim() ||
+                  !newBlock.trim() ||
+                  sessionSlots.some(s => !s.room.trim() || s.days.length === 0)
+                }
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
               >
                 {isSubmittingClass ? 'Saving...' : 'Save Class Section'}
               </button>
@@ -1517,12 +1874,7 @@ export const ClassesAndRosters: React.FC = () => {
         </Modal>
       )}
 
-      {/* Room Suggestion Datalist */}
-      <datalist id="room-suggestions">
-        {ROOM_OPTIONS.map(room => (
-          <option key={room} value={room} />
-        ))}
-      </datalist>
+
 
       {/* Modal: Edit Student roster profile */}
       {editingStudent && (
@@ -1717,36 +2069,29 @@ export const ClassesAndRosters: React.FC = () => {
               </div>
             </div>
 
+            {/* Room Venues */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Lecture Room Venue</label>
-                <input
-                  type="text"
-                  list="room-suggestions"
-                  value={editLecRoom}
-                  onChange={(e) => {
-                    setEditLecRoom(e.target.value);
-                    setEditError(null);
-                  }}
-                  placeholder="Lecture Hall A"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-                />
-              </div>
+              <RoomSelector
+                id="edit-lec-room"
+                label="Lecture Room Venue"
+                value={editLecRoom}
+                onChange={(r) => {
+                  setEditLecRoom(r);
+                  setEditError(null);
+                }}
+                placeholder="Choose Lecture Room"
+              />
 
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Laboratory Room Venue</label>
-                <input
-                  type="text"
-                  list="room-suggestions"
-                  value={editLabRoom}
-                  onChange={(e) => {
-                    setEditLabRoom(e.target.value);
-                    setEditError(null);
-                  }}
-                  placeholder="Dental Clinic Lab 1"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-                />
-              </div>
+              <RoomSelector
+                id="edit-lab-room"
+                label="Laboratory Room Venue"
+                value={editLabRoom}
+                onChange={(r) => {
+                  setEditLabRoom(r);
+                  setEditError(null);
+                }}
+                placeholder="Choose Laboratory Room"
+              />
             </div>
 
             {editError && (
@@ -1831,6 +2176,18 @@ export const ClassesAndRosters: React.FC = () => {
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* Modal: Import Student Roster from Registrar (CSV or PDF) */}
+      {isImportRosterOpen && (
+        <RosterImportModal
+          isOpen={isImportRosterOpen}
+          onClose={() => setIsImportRosterOpen(false)}
+          classes={classes}
+          defaultClassId={selectedClassFilterId !== 'all' ? Number(selectedClassFilterId) : (classes.find(c => !isHistoricalClass(c))?.csId || 0)}
+          existingStudentIds={new Set(studentsList.map(s => s.studentId))}
+          onSuccess={fetchData}
+        />
       )}
 
     </div>

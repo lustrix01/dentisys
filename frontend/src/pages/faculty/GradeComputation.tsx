@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Calculator,
@@ -77,6 +77,15 @@ import type {
   PeriodCategoryDraftRow
 } from '../../utils/periodGradingHelper';
 
+export interface EditorCategoryRow {
+  tempId: string;
+  id?: number;
+  name: string;
+  weight: string;
+  sortOrder: number;
+  inUse: boolean;
+}
+
 export const GradeComputation: React.FC = () => {
   const { user } = useAuth();
   const {
@@ -96,36 +105,76 @@ export const GradeComputation: React.FC = () => {
 
   const location = useLocation();
 
-  const assignedSubjects = ['CLIN401', 'CLIN402', 'CLIN301', 'CLIN302'];
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState(assignedSubjects[0] || 'CLIN401');
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<string>('');
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
-  const availableClasses = useMemo(
-    () => facultyClasses.filter(classItem =>
-      classItem.courseCode === selectedSubjectCode
-      && classItem.status.trim().toLowerCase() === 'active'
-    ),
-    [facultyClasses, selectedSubjectCode],
-  );
   const [selectedClassId, setSelectedClassId] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [transmutationDefaults, setTransmutationDefaults] = useState({ minimumPercentage: 50, maximumPercentage: 100 });
 
+  const isClassCurrentSchoolYear = useCallback((c: FacultyClassItem) => {
+    if (c.isCurrentSchoolYear === true) return true;
+    if (c.isHistorical === true) return false;
+    if (currentSchoolYear && c.schoolYear) {
+      return c.schoolYear.trim().toLowerCase() === currentSchoolYear.trim().toLowerCase();
+    }
+    return !c.isHistorical;
+  }, [currentSchoolYear]);
+
+  const currentYearActiveClasses = useMemo(() => {
+    return facultyClasses.filter(c => {
+      const isActive = (c.status || '').trim().toLowerCase() === 'active';
+      return isActive && isClassCurrentSchoolYear(c);
+    });
+  }, [facultyClasses, isClassCurrentSchoolYear]);
+
+  const activeCourses = useMemo(() => {
+    const map = new Map<string, { code: string; name: string }>();
+    for (const c of currentYearActiveClasses) {
+      if (c.courseCode && !map.has(c.courseCode)) {
+        map.set(c.courseCode, {
+          code: c.courseCode,
+          name: c.courseName || c.courseCode || 'Course',
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [currentYearActiveClasses]);
+
+  const availableClasses = useMemo(
+    () => currentYearActiveClasses.filter(classItem =>
+      classItem.courseCode === selectedSubjectCode
+    ),
+    [currentYearActiveClasses, selectedSubjectCode],
+  );
+
   useEffect(() => {
     Promise.all([getFacultyClassesApi(), getFacultySettingsApi()])
       .then(([classesResponse, settingsResponse]) => {
         const loadedClasses = Array.isArray(classesResponse.classes) ? classesResponse.classes : [];
+        const csy = classesResponse.currentSchoolYear || '';
+        setCurrentSchoolYear(csy);
         setFacultyClasses(loadedClasses);
-        if (loadedClasses.length > 0 && !loadedClasses.some(c => c.courseCode === selectedSubjectCode)) {
-          setSelectedSubjectCode(loadedClasses[0].courseCode);
-        }
         if (settingsResponse.settings?.transmutationDefaults) {
           setTransmutationDefaults(settingsResponse.settings.transmutationDefaults);
         }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [selectedSubjectCode]);
+  }, []);
+
+  useEffect(() => {
+    if (activeCourses.length > 0 && !activeCourses.some(c => c.code === selectedSubjectCode)) {
+      setSelectedSubjectCode(activeCourses[0].code);
+    }
+  }, [activeCourses, selectedSubjectCode]);
+
+  useEffect(() => {
+    if (availableClasses.length > 0 && !availableClasses.some(c => c.id === selectedClassId)) {
+      setSelectedClassId(availableClasses[0].id);
+    }
+  }, [availableClasses, selectedClassId]);
 
   // ----------------------------------------------------
   // SHARED OFFERINGS DERIVATION (courseId + semester + schoolYear)
@@ -143,8 +192,7 @@ export const GradeComputation: React.FC = () => {
 
   const facultyOfferings = useMemo<FacultyOffering[]>(() => {
     const map = new Map<string, FacultyOffering>();
-    for (const c of facultyClasses) {
-      if (!c || (c.status || '').trim().toLowerCase() !== 'active') continue;
+    for (const c of currentYearActiveClasses) {
       const normSem = (c.semester || '').trim().toUpperCase();
       const normSY = (c.schoolYear || '').trim().toUpperCase();
       const courseIdKey = c.courseId !== undefined && c.courseId !== null ? String(c.courseId) : (c.courseCode || String(c.id || ''));
@@ -172,7 +220,7 @@ export const GradeComputation: React.FC = () => {
       }
     }
     return Array.from(map.values());
-  }, [facultyClasses]);
+  }, [currentYearActiveClasses]);
 
   const getOfferingForClass = (classItem: FacultyClassItem): FacultyOffering | undefined => {
     return facultyOfferings.find(o => o.sections.some(s => s.id === classItem.id));
@@ -213,10 +261,50 @@ export const GradeComputation: React.FC = () => {
 
   // Find active subject details
   const activeSubjectName = useMemo(() => {
+    const fromActiveCourse = activeCourses.find(c => c.code === selectedSubjectCode);
+    if (fromActiveCourse) return fromActiveCourse.name;
     const rawStud = students.find(s => s.enrolledSubjects.some(sub => sub.code === selectedSubjectCode));
     const sub = rawStud?.enrolledSubjects.find(x => x.code === selectedSubjectCode);
     return sub ? sub.name : 'Dental Course';
-  }, [students, selectedSubjectCode]);
+  }, [activeCourses, selectedSubjectCode, students]);
+
+  // ----------------------------------------------------
+  // GRADE WEIGHTS EDITOR STATE (AUTHORITATIVE BACKEND)
+  // ----------------------------------------------------
+  const [selectedOfferingKey, setSelectedOfferingKey] = useState<string>('');
+  const [loadedConfig, setLoadedConfig] = useState<FacultyGradingConfiguration | null>(null);
+  const [schemaMode, setSchemaMode] = useState<'overall' | 'periods'>('periods');
+  const [isPresetDraft, setIsPresetDraft] = useState<boolean>(false);
+  const [activePeriodEditorTab, setActivePeriodEditorTab] = useState<'Midterm' | 'Final'>('Midterm');
+
+  // Overall Mode State (Preserved Legacy Single-List)
+  const [categoryRows, setCategoryRows] = useState<EditorCategoryRow[]>([]);
+  const [savedCategoryRows, setSavedCategoryRows] = useState<EditorCategoryRow[]>([]);
+
+  // Period Mode State (Midterm & Finals)
+  const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '40', final: '60' });
+  const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '40', final: '60' });
+
+  const [midtermCategories, setMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
+  const [savedMidtermCategories, setSavedMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
+
+  const [finalCategories, setFinalCategories] = useState<PeriodCategoryDraftRow[]>([]);
+  const [savedFinalCategories, setSavedFinalCategories] = useState<PeriodCategoryDraftRow[]>([]);
+
+  const [attendanceDateRanges, setAttendanceDateRanges] = useState<{
+    midterm: { startDate: string; endDate: string };
+    final: { startDate: string; endDate: string };
+  }>({
+    midterm: { startDate: '', endDate: '' },
+    final: { startDate: '', endDate: '' },
+  });
+  const [savedAttendanceDateRanges, setSavedAttendanceDateRanges] = useState<{
+    midterm: { startDate: string; endDate: string };
+    final: { startDate: string; endDate: string };
+  }>({
+    midterm: { startDate: '', endDate: '' },
+    final: { startDate: '', endDate: '' },
+  });
 
   // ----------------------------------------------------
   // 1. ASSESSMENT MANAGER TAB STATE
@@ -333,6 +421,7 @@ export const GradeComputation: React.FC = () => {
   const [assTransmutationMaximum, setAssTransmutationMaximum] = useState(100);
   const [assAttendanceDate, setAssAttendanceDate] = useState('');
   const [assAttendanceCode, setAssAttendanceCode] = useState('');
+  const [isTransmutationSectionOpen, setIsTransmutationSectionOpen] = useState(false);
 
   const loadModalConfigForOffering = async (offering: FacultyOffering): Promise<FacultyGradingConfiguration | null> => {
     setModalConfigStatus('loading');
@@ -347,14 +436,90 @@ export const GradeComputation: React.FC = () => {
         setModalConfig(res.configuration);
         setModalConfigStatus('configured');
         return res.configuration;
-      } else if (res.configuration === null) {
-        setModalConfig(null);
-        setModalConfigStatus('unconfigured');
-        return null;
+      } else if (res.defaults) {
+        // Build synthetic configuration using the offering's defaults
+        const syntheticCategories: any[] = [];
+        let idCounter = 1;
+        if (Array.isArray(res.defaults.midtermCategories)) {
+          res.defaults.midtermCategories.forEach((c: any) => {
+            syntheticCategories.push({
+              id: idCounter++,
+              name: c.name,
+              weight: c.weight,
+              sortOrder: c.sortOrder ?? idCounter,
+              gradingPeriod: 'Midterm',
+              sourceKind: c.sourceKind || (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            });
+          });
+        }
+        if (Array.isArray(res.defaults.finalCategories)) {
+          res.defaults.finalCategories.forEach((c: any) => {
+            syntheticCategories.push({
+              id: idCounter++,
+              name: c.name,
+              weight: c.weight,
+              sortOrder: c.sortOrder ?? idCounter,
+              gradingPeriod: 'Final',
+              sourceKind: c.sourceKind || (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            });
+          });
+        }
+        const syntheticConfig: FacultyGradingConfiguration = {
+          id: String(offering.courseId),
+          course: {
+            id: offering.courseId,
+            code: offering.courseCode,
+            name: offering.courseName,
+          },
+          semester: offering.canonicalSemester,
+          schoolYear: offering.canonicalSchoolYear,
+          version: 1,
+          schemaMode: 'periods',
+          termRatio: res.defaults.termRatio,
+          categories: syntheticCategories,
+          attendanceDateRanges: res.defaults.attendanceDateRanges,
+        };
+        setModalConfig(syntheticConfig);
+        setModalConfigStatus('configured');
+        return syntheticConfig;
       } else {
-        setModalConfig(null);
-        setModalConfigStatus('unconfigured');
-        return null;
+        const fallback = buildDefaultPeriodDraft();
+        const syntheticCategories: any[] = [
+          ...fallback.midtermCategories.map((c, i) => ({
+            id: i + 1,
+            name: c.name,
+            weight: Number(c.weight),
+            sortOrder: c.sortOrder,
+            gradingPeriod: 'Midterm',
+            sourceKind: c.sourceKind,
+          })),
+          ...fallback.finalCategories.map((c, i) => ({
+            id: i + 10,
+            name: c.name,
+            weight: Number(c.weight),
+            sortOrder: c.sortOrder,
+            gradingPeriod: 'Final',
+            sourceKind: c.sourceKind,
+          })),
+        ];
+        const syntheticConfig: FacultyGradingConfiguration = {
+          id: String(offering.courseId),
+          course: {
+            id: offering.courseId,
+            code: offering.courseCode,
+            name: offering.courseName,
+          },
+          semester: offering.canonicalSemester,
+          schoolYear: offering.canonicalSchoolYear,
+          version: 1,
+          schemaMode: 'periods',
+          termRatio: { midterm: 40, final: 60 },
+          categories: syntheticCategories,
+          attendanceDateRanges: fallback.attendanceDateRanges,
+        };
+        setModalConfig(syntheticConfig);
+        setModalConfigStatus('configured');
+        return syntheticConfig;
       }
     } catch (err) {
       setModalConfig(null);
@@ -365,31 +530,155 @@ export const GradeComputation: React.FC = () => {
   };
 
   const modalEligibleCategories = useMemo(() => {
-    if (!modalConfig || !Array.isArray(modalConfig.categories)) return [];
-    if (modalConfig.schemaMode === 'periods') {
-      return modalConfig.categories.filter(c =>
+    const targetClass = facultyClasses.find(c => c.id === assClassId);
+    const targetOffering = targetClass ? getOfferingForClass(targetClass) : currentAssessmentOffering;
+
+    // 1. If currently editing this offering in the Grade Weights Editor, use active in-memory categories
+    if (targetOffering && selectedOfferingKey === targetOffering.key) {
+      if (schemaMode === 'periods') {
+        const rows = assPeriod === 'Final' ? finalCategories : midtermCategories;
+        const validRows = rows.filter(c => c.sourceKind !== 'attendance' && c.name.trim() !== '');
+        if (validRows.length > 0) {
+          return validRows.map((r, i) => ({
+            id: r.id ?? (i + 1),
+            name: r.name,
+            weight: String(r.weight),
+            gradingPeriod: assPeriod,
+            sourceKind: r.sourceKind,
+          }));
+        }
+      } else {
+        const validRows = categoryRows.filter(c => c.name.toLowerCase() !== 'attendance' && c.name.trim() !== '');
+        if (validRows.length > 0) {
+          return validRows.map((r, i) => ({
+            id: r.id ?? (i + 1),
+            name: r.name,
+            weight: String(r.weight),
+            gradingPeriod: undefined,
+            sourceKind: 'assessment' as const,
+          }));
+        }
+      }
+    }
+
+    // 2. If modalConfig is configured, use its categories
+    if (modalConfig && Array.isArray(modalConfig.categories) && modalConfig.categories.length > 0) {
+      const filtered = modalConfig.categories.filter(c =>
         (c.gradingPeriod === assPeriod || !c.gradingPeriod) &&
         c.sourceKind !== 'attendance'
       );
+      if (filtered.length > 0) {
+        return filtered.map(c => ({
+          id: c.id,
+          name: c.name,
+          weight: String(c.weight),
+          gradingPeriod: c.gradingPeriod,
+          sourceKind: c.sourceKind,
+        }));
+      }
     }
-    return modalConfig.categories.filter(c => c.sourceKind !== 'attendance');
-  }, [modalConfig, assPeriod]);
+
+    // 3. If assessmentConfig is loaded, use its categories
+    if (assessmentConfig && Array.isArray(assessmentConfig.categories) && assessmentConfig.categories.length > 0) {
+      const filtered = assessmentConfig.categories.filter(c =>
+        (c.gradingPeriod === assPeriod || !c.gradingPeriod) &&
+        c.sourceKind !== 'attendance'
+      );
+      if (filtered.length > 0) {
+        return filtered.map(c => ({
+          id: c.id,
+          name: c.name,
+          weight: String(c.weight),
+          gradingPeriod: c.gradingPeriod,
+          sourceKind: c.sourceKind,
+        }));
+      }
+    }
+
+    // 4. In-memory categories from active Grade Weight Editor
+    if (schemaMode === 'periods') {
+      const rows = assPeriod === 'Final' ? finalCategories : midtermCategories;
+      const validRows = rows.filter(c => c.sourceKind !== 'attendance' && c.name.trim() !== '');
+      if (validRows.length > 0) {
+        return validRows.map((r, i) => ({
+          id: r.id ?? (i + 1),
+          name: r.name,
+          weight: String(r.weight),
+          gradingPeriod: assPeriod,
+          sourceKind: r.sourceKind,
+        }));
+      }
+    } else if (categoryRows.length > 0) {
+      const validRows = categoryRows.filter(c => c.name.toLowerCase() !== 'attendance' && c.name.trim() !== '');
+      if (validRows.length > 0) {
+        return validRows.map((r, i) => ({
+          id: r.id ?? (i + 1),
+          name: r.name,
+          weight: String(r.weight),
+          gradingPeriod: undefined,
+          sourceKind: 'assessment' as const,
+        }));
+      }
+    }
+
+    // 5. Fallback to default period draft
+    const fallback = buildDefaultPeriodDraft();
+    const rows = assPeriod === 'Final' ? fallback.finalCategories : fallback.midtermCategories;
+    return rows.filter(c => c.sourceKind !== 'attendance').map((r, i) => ({
+      id: i + 1,
+      name: r.name,
+      weight: String(r.weight),
+      gradingPeriod: assPeriod,
+      sourceKind: r.sourceKind,
+    }));
+  }, [
+    modalConfig,
+    assessmentConfig,
+    assPeriod,
+    assClassId,
+    facultyClasses,
+    currentAssessmentOffering,
+    selectedOfferingKey,
+    schemaMode,
+    midtermCategories,
+    finalCategories,
+    categoryRows,
+  ]);
 
   const handlePeriodChange = (newPeriod: 'Midterm' | 'Final') => {
     setAssPeriod(newPeriod);
-    if (modalConfig && modalConfig.schemaMode === 'periods') {
-      const validForNewPeriod = modalConfig.categories.filter(
+    const targetClass = facultyClasses.find(c => c.id === assClassId);
+    const targetOffering = targetClass ? getOfferingForClass(targetClass) : currentAssessmentOffering;
+
+    let nextEligible: Array<{ id?: number | string | null; name: string; weight: string | number }> = [];
+    if (targetOffering && selectedOfferingKey === targetOffering.key && schemaMode === 'periods') {
+      const rows = newPeriod === 'Final' ? finalCategories : midtermCategories;
+      nextEligible = rows.filter(c => c.sourceKind !== 'attendance' && c.name.trim() !== '');
+    } else if (modalConfig && modalConfig.schemaMode === 'periods') {
+      nextEligible = modalConfig.categories.filter(
         c => (c.gradingPeriod === newPeriod || !c.gradingPeriod) && c.sourceKind !== 'attendance'
       );
-      if (!validForNewPeriod.some(c => String(c.id) === String(assGradingCategoryId))) {
-        setAssGradingCategoryId('');
-        setAssType('');
-        if (modalConfigStatus === 'configured') {
-          setModalCategoryWarning(true);
-        }
-      } else {
-        setModalCategoryWarning(false);
-      }
+    } else {
+      const fallback = buildDefaultPeriodDraft();
+      const rows = newPeriod === 'Final' ? fallback.finalCategories : fallback.midtermCategories;
+      nextEligible = rows.filter(c => c.sourceKind !== 'attendance');
+    }
+
+    const currentMatches = nextEligible.find(
+      c => (assGradingCategoryId && String(c.id) === String(assGradingCategoryId)) || c.name === assType
+    );
+    if (currentMatches) {
+      setAssGradingCategoryId(currentMatches.id ? String(currentMatches.id) : '');
+      setAssType(currentMatches.name);
+      setModalCategoryWarning(false);
+    } else if (nextEligible.length > 0) {
+      setAssGradingCategoryId(nextEligible[0].id ? String(nextEligible[0].id) : '');
+      setAssType(nextEligible[0].name);
+      setModalCategoryWarning(false);
+    } else {
+      setAssGradingCategoryId('');
+      setAssType('');
+      setModalCategoryWarning(true);
     }
   };
 
@@ -450,21 +739,32 @@ export const GradeComputation: React.FC = () => {
     setAssTransmutationMaximum(transmutationDefaults.maximumPercentage);
     setAssAttendanceDate('');
     setAssAttendanceCode('');
+    setIsTransmutationSectionOpen(false);
     setIsAssessmentModalOpen(true);
 
     const initialClass = facultyClasses.find(c => c.id === initialClassId);
     const offering = initialClass ? getOfferingForClass(initialClass) : currentAssessmentOffering;
+
+    // Pre-populate with the first available category from Grade Weights configuration or draft
+    const initialDraftCategories = schemaMode === 'periods'
+      ? midtermCategories.filter(c => c.sourceKind !== 'attendance' && c.name.trim() !== '')
+      : categoryRows.filter(c => c.name.toLowerCase() !== 'attendance' && c.name.trim() !== '');
+    if (initialDraftCategories.length > 0) {
+      setAssGradingCategoryId(initialDraftCategories[0].id ? String(initialDraftCategories[0].id) : '');
+      setAssType(initialDraftCategories[0].name);
+    }
+
     if (offering) {
       const cfg = await loadModalConfigForOffering(offering);
-      if (cfg && Array.isArray(cfg.categories) && cfg.categories.length > 0) {
-        setAssGradingCategoryId('');
-        setAssType('');
-      } else {
-        setAssType('Quiz');
+      if (cfg && Array.isArray(cfg.categories)) {
+        const eligible = cfg.categories.filter(c => (c.gradingPeriod === 'Midterm' || !c.gradingPeriod) && c.sourceKind !== 'attendance');
+        if (eligible.length > 0) {
+          setAssGradingCategoryId(eligible[0].id ? String(eligible[0].id) : '');
+          setAssType(eligible[0].name);
+        }
       }
     } else {
-      setModalConfigStatus('unconfigured');
-      setAssType('Quiz');
+      setModalConfigStatus('configured');
     }
   };
 
@@ -489,6 +789,7 @@ export const GradeComputation: React.FC = () => {
     setAssGradingCategoryId(ass.gradingCategoryId ? String(ass.gradingCategoryId) : '');
     setAssType(ass.type || '');
     setModalCategoryWarning(false);
+    setIsTransmutationSectionOpen(Boolean(ass.transmutationEnabled));
     setIsAssessmentModalOpen(true);
 
     const assClass = facultyClasses.find(c => c.id === ass.classId);
@@ -543,12 +844,15 @@ export const GradeComputation: React.FC = () => {
     setModalCategoryWarning(false);
     if (newOffering) {
       const cfg = await loadModalConfigForOffering(newOffering);
-      if (!cfg || !cfg.categories || cfg.categories.length === 0) {
-        setAssType('Quiz');
+      if (cfg && Array.isArray(cfg.categories)) {
+        const eligible = cfg.categories.filter(c => (c.gradingPeriod === assPeriod || !c.gradingPeriod) && c.sourceKind !== 'attendance');
+        if (eligible.length > 0) {
+          setAssGradingCategoryId(eligible[0].id ? String(eligible[0].id) : '');
+          setAssType(eligible[0].name);
+        }
       }
     } else {
-      setModalConfigStatus('unconfigured');
-      setAssType('Quiz');
+      setModalConfigStatus('configured');
     }
   };
 
@@ -567,16 +871,9 @@ export const GradeComputation: React.FC = () => {
       showFeedback('Cannot save assessment while grading configuration is in an error state. Please retry loading configuration.', 'error');
       return;
     }
-    if (modalConfigStatus === 'configured') {
-      if (!assGradingCategoryId) {
-        showFeedback('Please select a valid grading category from the active configuration.', 'error');
-        return;
-      }
-    } else if (modalConfigStatus === 'unconfigured') {
-      if (!assType) {
-        showFeedback('Please select a valid category type.', 'error');
-        return;
-      }
+    if (!assGradingCategoryId && !assType) {
+      showFeedback('Please select a valid grading category from the active configuration.', 'error');
+      return;
     }
 
     if (assTransmutationEnabled && (!assAttendanceDate || !assAttendanceCode)) {
@@ -590,6 +887,10 @@ export const GradeComputation: React.FC = () => {
 
     const targetClass = facultyClasses.find(c => c.id === assClassId);
     const targetSubjectCode = targetClass?.courseCode || selectedSubjectCode;
+
+    const numericCategoryId = assGradingCategoryId && !isNaN(Number(assGradingCategoryId)) && Number(assGradingCategoryId) > 0
+      ? Number(assGradingCategoryId)
+      : null;
 
     const candidate: any = editingAssessment
       ? {
@@ -608,9 +909,7 @@ export const GradeComputation: React.FC = () => {
         transmutationMaximumPercentage: assTransmutationMaximum,
         attendanceSessionDate: assAttendanceDate || null,
         attendanceSessionCode: assAttendanceCode || null,
-        ...(modalConfigStatus === 'configured' && assGradingCategoryId
-          ? { gradingCategoryId: Number(assGradingCategoryId) }
-          : {}),
+        ...(numericCategoryId ? { gradingCategoryId: numericCategoryId } : {}),
       }
       : {
         title: assTitle.trim(),
@@ -628,12 +927,10 @@ export const GradeComputation: React.FC = () => {
         transmutationMaximumPercentage: assTransmutationMaximum,
         attendanceSessionDate: assAttendanceDate || null,
         attendanceSessionCode: assAttendanceCode || null,
-        ...(modalConfigStatus === 'configured' && assGradingCategoryId
-          ? { gradingCategoryId: Number(assGradingCategoryId) }
-          : {}),
+        ...(numericCategoryId ? { gradingCategoryId: numericCategoryId } : {}),
       };
 
-    if (modalConfigStatus !== 'configured' || !assGradingCategoryId) {
+    if (!numericCategoryId) {
       delete candidate.gradingCategoryId;
     }
 
@@ -929,50 +1226,6 @@ export const GradeComputation: React.FC = () => {
   // ----------------------------------------------------
   // 3. GRADE WEIGHTS EDITOR STATE (AUTHORITATIVE BACKEND)
   // ----------------------------------------------------
-  interface EditorCategoryRow {
-    tempId: string;
-    id?: number;
-    name: string;
-    weight: string;
-    sortOrder: number;
-    inUse: boolean;
-  }
-
-  const [selectedOfferingKey, setSelectedOfferingKey] = useState<string>('');
-  const [loadedConfig, setLoadedConfig] = useState<FacultyGradingConfiguration | null>(null);
-  const [schemaMode, setSchemaMode] = useState<'overall' | 'periods'>('periods');
-  const [isPresetDraft, setIsPresetDraft] = useState<boolean>(false);
-  const [activePeriodEditorTab, setActivePeriodEditorTab] = useState<'Midterm' | 'Final'>('Midterm');
-
-  // Overall Mode State (Preserved Legacy Single-List)
-  const [categoryRows, setCategoryRows] = useState<EditorCategoryRow[]>([]);
-  const [savedCategoryRows, setSavedCategoryRows] = useState<EditorCategoryRow[]>([]);
-
-  // Period Mode State (Midterm & Finals)
-  const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '40', final: '60' });
-  const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '40', final: '60' });
-
-  const [midtermCategories, setMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
-  const [savedMidtermCategories, setSavedMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
-
-  const [finalCategories, setFinalCategories] = useState<PeriodCategoryDraftRow[]>([]);
-  const [savedFinalCategories, setSavedFinalCategories] = useState<PeriodCategoryDraftRow[]>([]);
-
-  const [attendanceDateRanges, setAttendanceDateRanges] = useState<{
-    midterm: { startDate: string; endDate: string };
-    final: { startDate: string; endDate: string };
-  }>({
-    midterm: { startDate: '', endDate: '' },
-    final: { startDate: '', endDate: '' },
-  });
-  const [savedAttendanceDateRanges, setSavedAttendanceDateRanges] = useState<{
-    midterm: { startDate: string; endDate: string };
-    final: { startDate: string; endDate: string };
-  }>({
-    midterm: { startDate: '', endDate: '' },
-    final: { startDate: '', endDate: '' },
-  });
-
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -1060,32 +1313,32 @@ export const GradeComputation: React.FC = () => {
 
         const initialMidterm: PeriodCategoryDraftRow[] = defaults?.midtermCategories
           ? defaults.midtermCategories.map((c, idx) => ({
-              compositeKey: buildRowCompositeKey('Midterm', undefined, `preset-m-${idx + 1}`),
-              tempId: `preset-m-${idx + 1}`,
-              id: undefined,
-              name: c.name,
-              weight: String(c.weight),
-              sortOrder: c.sortOrder ?? (idx + 1),
-              gradingPeriod: 'Midterm' as const,
-              sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
-              inUse: false,
-            }))
+            compositeKey: buildRowCompositeKey('Midterm', undefined, `preset-m-${idx + 1}`),
+            tempId: `preset-m-${idx + 1}`,
+            id: undefined,
+            name: c.name,
+            weight: String(c.weight),
+            sortOrder: c.sortOrder ?? (idx + 1),
+            gradingPeriod: 'Midterm' as const,
+            sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            inUse: false,
+          }))
           : fallback.midtermCategories;
         setMidtermCategories(initialMidterm);
         setSavedMidtermCategories(initialMidterm);
 
         const initialFinal: PeriodCategoryDraftRow[] = defaults?.finalCategories
           ? defaults.finalCategories.map((c, idx) => ({
-              compositeKey: buildRowCompositeKey('Final', undefined, `preset-f-${idx + 1}`),
-              tempId: `preset-f-${idx + 1}`,
-              id: undefined,
-              name: c.name,
-              weight: String(c.weight),
-              sortOrder: c.sortOrder ?? (idx + 1),
-              gradingPeriod: 'Final' as const,
-              sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
-              inUse: false,
-            }))
+            compositeKey: buildRowCompositeKey('Final', undefined, `preset-f-${idx + 1}`),
+            tempId: `preset-f-${idx + 1}`,
+            id: undefined,
+            name: c.name,
+            weight: String(c.weight),
+            sortOrder: c.sortOrder ?? (idx + 1),
+            gradingPeriod: 'Final' as const,
+            sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            inUse: false,
+          }))
           : fallback.finalCategories;
         setFinalCategories(initialFinal);
         setSavedFinalCategories(initialFinal);
@@ -1194,6 +1447,7 @@ export const GradeComputation: React.FC = () => {
             id: c.id,
             name: c.name,
             weight: String(c.weight),
+            defaultMax: (c.name.toLowerCase().includes('exam') || c.name.toLowerCase().includes('attendance') || c.name.toLowerCase().includes('lab')) ? '100' : '50',
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Midterm' as const,
             sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
@@ -1211,6 +1465,7 @@ export const GradeComputation: React.FC = () => {
             id: c.id,
             name: c.name,
             weight: String(c.weight),
+            defaultMax: (c.name.toLowerCase().includes('exam') || c.name.toLowerCase().includes('attendance') || c.name.toLowerCase().includes('lab')) ? '100' : '50',
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Final' as const,
             sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
@@ -1457,6 +1712,7 @@ export const GradeComputation: React.FC = () => {
       tempId,
       name: '',
       weight: '',
+      defaultMax: '50',
       sortOrder: (period === 'Midterm' ? midtermCategories.length : finalCategories.length) + 1,
       gradingPeriod: period,
       sourceKind: 'assessment',
@@ -1472,7 +1728,7 @@ export const GradeComputation: React.FC = () => {
   const handleUpdatePeriodCategoryField = (
     period: 'Midterm' | 'Final',
     compositeKey: string,
-    field: 'name' | 'weight',
+    field: 'name' | 'weight' | 'defaultMax',
     val: string
   ) => {
     const updateList = (list: PeriodCategoryDraftRow[]) =>
@@ -2173,79 +2429,89 @@ export const GradeComputation: React.FC = () => {
       {/* Legacy Class and Subject Selector Bar for other untouched tabs */}
       {activeSubTab !== 'components' && activeSubTab !== 'assessments' && (
         <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
-        <div className="w-full md:flex-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
-          <select
-            value={selectedSubjectCode}
-            onChange={(e) => setSelectedSubjectCode(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-          >
-            {assignedSubjects.map((subCode: string) => (
-              <option key={subCode} value={subCode}>{subCode} - {students.find(s=>s.enrolledSubjects.some(x=>x.code===subCode))?.enrolledSubjects.find(x=>x.code===subCode)?.name || 'Course'}</option>
-            ))}
-          </select>
-        </div>
+          <div className="w-full md:flex-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
+            <select
+              value={selectedSubjectCode}
+              onChange={(e) => {
+                const newCode = e.target.value;
+                setSelectedSubjectCode(newCode);
+                const matchingClasses = currentYearActiveClasses.filter(c => c.courseCode === newCode);
+                if (matchingClasses.length > 0) {
+                  setSelectedClassId(matchingClasses[0].id);
+                } else {
+                  setSelectedClassId('');
+                }
+              }}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            >
+              {activeCourses.length === 0 ? (
+                <option value="">No active courses for current school year</option>
+              ) : (
+                activeCourses.map(course => (
+                  <option key={course.code} value={course.code}>
+                    {course.code} - {course.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
 
-        <div className="w-full md:w-56">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
-          <select
-            value={selectedClassId}
-            onChange={(e) => setSelectedClassId(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-          >
-            {availableClasses.length === 0
-              ? <option value="">No active sections assigned</option>
-              : availableClasses.map(classItem => (
-                <option key={classItem.id} value={classItem.id}>{classItem.csName}</option>
-              ))}
-          </select>
-        </div>
-      </Card>
+          <div className="w-full md:w-56">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            >
+              {availableClasses.length === 0
+                ? <option value="">No active sections assigned</option>
+                : availableClasses.map(classItem => (
+                  <option key={classItem.id} value={classItem.id}>{classItem.csName}</option>
+                ))}
+            </select>
+          </div>
+        </Card>
       )}
 
       {/* Navigation Sub-Tabs */}
       <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
         <button
           onClick={() => setActiveSubTab('scores')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+            }`}
         >
           <ClipboardCheck className="w-4 h-4" />
           Student Scores Entry
         </button>
         <button
           onClick={() => setActiveSubTab('assessments')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+            }`}
         >
           <FileText className="w-4 h-4" />
           Assessments Manager
         </button>
         <button
           onClick={() => setActiveSubTab('components')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-emerald-700 text-white shadow-md shadow-emerald-700/20' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+            }`}
         >
           <Settings className="w-4 h-4" />
           Grade Weights Editor
         </button>
         <button
           onClick={() => setActiveSubTab('summaries')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+            }`}
         >
           <Printer className="w-4 h-4" />
           Summaries & Export
         </button>
         <button
           onClick={() => setActiveSubTab('import')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-            activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
-          }`}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+            }`}
         >
           <Upload className="w-4 h-4" />
           Import Grade Sheets
@@ -2262,22 +2528,20 @@ export const GradeComputation: React.FC = () => {
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button
                 onClick={() => setScoreEntryMode('single')}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  scoreEntryMode === 'single'
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'single'
                     ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <List className="w-3.5 h-3.5" />
                 Single Activity View
               </button>
               <button
                 onClick={() => setScoreEntryMode('matrix')}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  scoreEntryMode === 'matrix'
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'matrix'
                     ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <Grid className="w-3.5 h-3.5" />
                 Full Matrix View
@@ -2349,13 +2613,12 @@ export const GradeComputation: React.FC = () => {
                                   placeholder={`0-${ass.maxScore}`}
                                   value={val}
                                   onChange={(e) => handleMatrixScoreChange(student.id, ass.id, e.target.value)}
-                                  className={`w-20 px-2 py-1 rounded-lg border text-xs text-center font-bold focus:outline-none ${
-                                    !isValid
+                                  className={`w-20 px-2 py-1 rounded-lg border text-xs text-center font-bold focus:outline-none ${!isValid
                                       ? 'border-rose-500 bg-rose-50/50 focus:ring-rose-500'
                                       : val === ''
-                                      ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'
-                                      : 'border-clinical-500/30 bg-clinical-50/20 text-clinical-650 dark:text-clinical-400'
-                                  }`}
+                                        ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'
+                                        : 'border-clinical-500/30 bg-clinical-50/20 text-clinical-650 dark:text-clinical-400'
+                                    }`}
                                 />
                               </td>
                             );
@@ -2560,28 +2823,17 @@ export const GradeComputation: React.FC = () => {
                                   }}
                                   onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
                                   onBlur={() => handleScoreBlur(student.id)}
-                                  className={`w-24 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${
-                                    !isValid
+                                  className={`w-28 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${!isValid
                                       ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
                                       : row.score === ''
-                                      ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
-                                      : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
-                                  }`}
+                                        ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
+                                        : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
+                                    }`}
                                 />
                                 {!isValid && (
                                   <span className="absolute bottom-[-14px] left-0 text-[8px] font-bold text-rose-500">Exceeds max</span>
                                 )}
                               </div>
-
-                              {/* Remarks */}
-                              <input
-                                type="text"
-                                placeholder="Remarks..."
-                                value={row.remarks}
-                                onChange={(e) => handleScoreChange(student.id, e.target.value, 'remarks')}
-                                onBlur={() => handleScoreBlur(student.id)}
-                                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-xs w-36 focus:outline-none"
-                              />
                             </div>
                           </div>
                         );
@@ -2691,7 +2943,7 @@ export const GradeComputation: React.FC = () => {
                           if (assessmentConfigStatus === 'configured' && assessmentConfig) {
                             const matchedCategory = assessmentConfig.categories.find(
                               c => String(c.id) === String(ass.gradingCategoryId) &&
-                                   (assessmentConfig.schemaMode !== 'periods' || !ass.gradingPeriod || !c.gradingPeriod || c.gradingPeriod === ass.gradingPeriod)
+                                (assessmentConfig.schemaMode !== 'periods' || !ass.gradingPeriod || !c.gradingPeriod || c.gradingPeriod === ass.gradingPeriod)
                             );
                             if (matchedCategory) {
                               return (
@@ -2718,9 +2970,8 @@ export const GradeComputation: React.FC = () => {
                       <td className="px-5 py-3.5 text-center font-extrabold text-slate-800 dark:text-slate-100">{ass.maxScore} pts</td>
                       <td className="px-5 py-3.5 font-mono text-slate-450 dark:text-slate-500">{ass.dueDate || 'No deadline'}</td>
                       <td className="px-5 py-3.5">
-                        <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${
-                          ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-650'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase ${ass.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-650'
+                          }`}>
                           {ass.status}
                         </span>
                       </td>
@@ -2782,17 +3033,14 @@ export const GradeComputation: React.FC = () => {
           TAB 3: GRADE WEIGHTS EDITOR
       ---------------------------------------------------- */}
       {activeSubTab === 'components' && (
-        <Card className="max-w-3xl mx-auto">
-          <CardHeader>
+        <Card className="max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
+          <CardHeader className="border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="w-5 h-5 text-clinical-550" />
-                  Grade Weights & Schema Editor
+                <CardTitle className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
+                  <Settings className="w-5 h-5 text-slate-700 dark:text-slate-300" />
+                  <span>Configure Grading Weights & Schema</span>
                 </CardTitle>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  Configure the selected course offering in plain terms: the Midterm and Finals contributions must total 100%, and each period's categories must total 100%.
-                </p>
               </div>
 
               {currentOffering && (
@@ -2800,60 +3048,45 @@ export const GradeComputation: React.FC = () => {
                   type="button"
                   onClick={handleReload}
                   disabled={configLoading || configSaving}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 text-xs font-semibold text-slate-650 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 shadow-sm disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs disabled:opacity-50 cursor-pointer"
                   title="Reload latest configuration from server"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${configLoading ? 'animate-spin' : ''}`} />
-                  Reload Latest
+                  <span>Reload</span>
                 </button>
               )}
             </div>
           </CardHeader>
-          <CardContent className="space-y-5">
-            {/* Course Offering Selector */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
-              <label htmlFor="course-offering-select" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Course Offering (Faculty Assignment)
-              </label>
+          <CardContent className="p-6 sm:p-7 space-y-6">
+            {/* TARGET COURSE / SUBJECT */}
+            <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <label htmlFor="course-offering-select" className="text-xs font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide block">
+                  TARGET COURSE / SUBJECT
+                </label>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                  Select the specific course to configure grading weights and schema for:
+                </p>
+              </div>
 
               {loading ? (
-                <div className="text-xs text-slate-400 animate-pulse">Loading teaching assignments...</div>
+                <div className="text-xs text-slate-400 animate-pulse">Loading subjects...</div>
               ) : facultyOfferings.length === 0 ? (
-                <div className="text-xs text-slate-500">No active teaching assignments found. You can only edit grade weights for courses you currently teach.</div>
+                <div className="text-xs text-slate-500 font-semibold">No active teaching assignments found.</div>
               ) : (
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="min-w-[280px] max-w-md">
                   <select
                     id="course-offering-select"
                     value={selectedOfferingKey}
                     onChange={(e) => handleSelectOffering(e.target.value)}
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs truncate"
                   >
                     {facultyOfferings.map(offering => (
                       <option key={offering.key} value={offering.key}>
-                        {offering.courseCode} - {offering.courseName} ({offering.canonicalSemester}, {offering.canonicalSchoolYear}) · {offering.sectionNames.length} {offering.sectionNames.length === 1 ? 'Section' : 'Sections'}
+                        {offering.courseCode} - {offering.courseName}
                       </option>
                     ))}
                   </select>
-
-                  {isPresetDraft ? (
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                        Suggested starting preset — unsaved
-                      </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350 text-[10px] font-bold uppercase">
-                        Period Grading
-                      </span>
-                    </div>
-                  ) : loadedConfig ? (
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 border border-clinical-200 dark:border-clinical-800 text-clinical-700 dark:text-clinical-300 text-[10px] font-bold">
-                        Version {loadedConfig.version}
-                      </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350 text-[10px] font-bold uppercase">
-                        {schemaMode === 'periods' ? 'Period Grading' : 'Legacy Overall'}
-                      </span>
-                    </div>
-                  ) : null}
                 </div>
               )}
             </div>
@@ -3122,331 +3355,293 @@ export const GradeComputation: React.FC = () => {
               </div>
             ) : (
               /* PERIOD GRADING VIEW (MIDTERM & FINALS) */
-              <div className="space-y-5">
-                {isPresetDraft ? (
-                  <div className="p-4 rounded-2xl bg-clinical-500/10 border border-clinical-500/20 text-xs text-clinical-800 dark:text-clinical-300 space-y-2">
-                    <div className="font-bold flex items-center gap-1.5">
-                      <BookOpen className="w-4 h-4 text-clinical-600 dark:text-clinical-400" />
-                      Suggested starting preset — unsaved
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-slate-650 dark:text-slate-350">
-                      No grade weights have been configured for this course offering yet. The standard dental curriculum starting preset (40% Midterm / 60% Finals) is loaded for you to customize and save.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0 text-clinical-500" />
-                    <span>
-                      Period grading policy: Midterm and Finals categories independently total 100%. The term contribution ratio must also total 100%.
-                    </span>
-                  </div>
-                )}
+              <div className="space-y-6">
+                <form onSubmit={handleSaveGradingConfig} className="space-y-6">
+                  {/* OVERALL TERM RATIO (MIDTERM VS FINAL) */}
+                  <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/40 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-xs font-extrabold uppercase tracking-wide text-slate-800 dark:text-slate-100">
+                          OVERALL TERM RATIO (MIDTERM VS FINAL)
+                        </h3>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                          Configure how Midterm grade and Final grade combine into Overall GWA.
+                        </p>
+                      </div>
 
-                <form onSubmit={handleSaveGradingConfig} className="space-y-5">
-                  {/* Term Weight Contribution Ratio */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Term Weight Ratio
-                      </span>
-                      {termRatioCalc.isExact100 ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                          <CheckCircle className="w-3 h-3" />
-                          Valid 100%
+                      <div>
+                        <span className={`px-3 py-1 rounded-full text-[11px] font-extrabold inline-block ${termRatioCalc.isExact100
+                            ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300'
+                          }`}>
+                          Sum: {termRatioCalc.displayPercent}%
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
-                          <AlertTriangle className="w-3 h-3" />
-                          Must equal 100% (Current: {termRatioCalc.displayPercent}%)
-                        </span>
-                      )}
+                      </div>
                     </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="midterm-ratio-input" className="text-xs font-semibold text-slate-600 dark:text-slate-350 block mb-1">
-                          Midterm Weight (%)
+                        <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
+                          MIDTERM TERM WEIGHT (%):
                         </label>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            id="midterm-ratio-input"
-                            type="text"
-                            value={termRatio.midterm}
-                            onChange={(e) => handleUpdateTermRatio('midterm', e.target.value)}
-                            className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-                          />
-                          <span className="text-xs font-bold text-slate-400">%</span>
-                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={termRatio.midterm}
+                          onChange={(e) => handleUpdateTermRatio('midterm', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
                       </div>
                       <div>
-                        <label htmlFor="final-ratio-input" className="text-xs font-semibold text-slate-600 dark:text-slate-350 block mb-1">
-                          Finals Weight (%)
+                        <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
+                          FINAL TERM WEIGHT (%):
                         </label>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            id="final-ratio-input"
-                            type="text"
-                            value={termRatio.final}
-                            onChange={(e) => handleUpdateTermRatio('final', e.target.value)}
-                            className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-                          />
-                          <span className="text-xs font-bold text-slate-400">%</span>
-                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={termRatio.final}
+                          onChange={(e) => handleUpdateTermRatio('final', e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
                       </div>
                     </div>
                   </div>
 
-                  {/* Attendance Date Ranges */}
-                  <div className="p-4 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Faculty-Defined Attendance Date Ranges (YYYY-MM-DD)
-                      </span>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Inclusive calendar dates for each period's attendance. Midterm attendance must end before Finals attendance starts; gaps are allowed. Attendance calculations are performed strictly server-side.
-                      </p>
-                    </div>
-
-                    {!validateDateRanges(attendanceDateRanges).valid && (
-                      <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span>{validateDateRanges(attendanceDateRanges).error}</span>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Midterm Dates */}
-                      <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Midterm Attendance Range</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label htmlFor="midterm-start-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">Start Date</label>
-                            <input
-                              id="midterm-start-date"
-                              type="date"
-                              value={attendanceDateRanges.midterm.startDate}
-                              onChange={(e) => handleUpdateDateRange('midterm', 'startDate', e.target.value)}
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor="midterm-end-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">End Date</label>
-                            <input
-                              id="midterm-end-date"
-                              type="date"
-                              value={attendanceDateRanges.midterm.endDate}
-                              onChange={(e) => handleUpdateDateRange('midterm', 'endDate', e.target.value)}
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Finals Dates */}
-                      <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-                        <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Finals Attendance Range</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label htmlFor="final-start-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">Start Date</label>
-                            <input
-                              id="final-start-date"
-                              type="date"
-                              value={attendanceDateRanges.final.startDate}
-                              onChange={(e) => handleUpdateDateRange('final', 'startDate', e.target.value)}
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor="final-end-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">End Date</label>
-                            <input
-                              id="final-end-date"
-                              type="date"
-                              value={attendanceDateRanges.final.endDate}
-                              onChange={(e) => handleUpdateDateRange('final', 'endDate', e.target.value)}
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Period Category Tabs */}
-                  <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2">
+                  {/* Period Schema Tabs */}
+                  <div className="flex border-b border-slate-200 dark:border-slate-800 gap-8">
                     <button
                       type="button"
                       onClick={() => setActivePeriodEditorTab('Midterm')}
-                      className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all ${
-                        activePeriodEditorTab === 'Midterm'
-                          ? 'border-clinical-600 text-clinical-600 dark:text-clinical-400'
-                          : 'border-transparent text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                      }`}
+                      className={`pb-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 cursor-pointer ${activePeriodEditorTab === 'Midterm'
+                          ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                          : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                        }`}
                     >
-                      <span>Midterm Categories ({midtermCategories.length})</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] ${
-                        midtermCalc.isExact100
-                          ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                          : 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
-                      }`}>
-                        {midtermCalc.displayPercent}%
-                      </span>
+                      Midterm Period Schema ({midtermCalc.displayPercent}%)
                     </button>
                     <button
                       type="button"
                       onClick={() => setActivePeriodEditorTab('Final')}
-                      className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-2 border-b-2 transition-all ${
-                        activePeriodEditorTab === 'Final'
-                          ? 'border-clinical-600 text-clinical-600 dark:text-clinical-400'
-                          : 'border-transparent text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                      }`}
+                      className={`pb-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 cursor-pointer ${activePeriodEditorTab === 'Final'
+                          ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                          : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                        }`}
                     >
-                      <span>Finals Categories ({finalCategories.length})</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] ${
-                        finalCalc.isExact100
-                          ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                          : 'bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
-                      }`}>
-                        {finalCalc.displayPercent}%
-                      </span>
+                      Final Period Schema ({finalCalc.displayPercent}%)
                     </button>
                   </div>
 
-                  {/* Active Period Category Table */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Grading Categories
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-clinical-50 dark:bg-clinical-950/40 text-clinical-600 dark:text-clinical-400 hover:bg-clinical-100 font-bold text-xs transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Add {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Category
-                      </button>
+                  {/* Requirement Banner */}
+                  <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/30 flex items-center justify-between gap-3">
+                    <div className="text-xs text-amber-900 dark:text-amber-200">
+                      Category weights for <strong className="font-extrabold">{activePeriodEditorTab === 'Midterm' ? 'Midterm Period' : 'Final Period'}</strong> must sum to exactly <strong className="font-extrabold">100%</strong>.
                     </div>
-
-                    {periodValidationError && (
-                      <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                        <span>{periodValidationError}</span>
-                      </div>
-                    )}
-
-                    <div className="divide-y divide-slate-150 dark:divide-slate-800 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
-                      {(activePeriodEditorTab === 'Midterm' ? midtermCategories : finalCategories).map((row, index, arr) => (
-                        <div key={row.compositeKey} className="p-3.5 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
-                          {/* Reorder Buttons */}
-                          <div className="flex flex-col gap-0.5">
-                            <button
-                              type="button"
-                              aria-label={`Move category ${row.name || 'unnamed'} up`}
-                              onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'up')}
-                              disabled={index === 0}
-                              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
-                            >
-                              <ChevronUp className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Move category ${row.name || 'unnamed'} down`}
-                              onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'down')}
-                              disabled={index === arr.length - 1}
-                              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20"
-                            >
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-
-                          {/* Category Name & Source Kind Badge */}
-                          <div className="flex-1 flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={row.name}
-                              placeholder="Category name (e.g. Quiz, Exam)"
-                              onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'name', e.target.value)}
-                              className="w-full px-3 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-                            />
-                            {row.sourceKind === 'attendance' && (
-                              <span className="shrink-0 px-2 py-1 rounded-lg bg-clinical-50 dark:bg-clinical-950/40 text-clinical-700 dark:text-clinical-300 text-[10px] font-bold border border-clinical-200 dark:border-clinical-800" title="Authoritative attendance data from recorded sessions">
-                                Authoritative Attendance
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Category Weight Input */}
-                          <div className="flex items-center gap-1.5 w-28">
-                            <input
-                              type="text"
-                              value={row.weight}
-                              placeholder="0"
-                              onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
-                              className="w-20 px-2.5 py-2 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500"
-                            />
-                            <span className="text-xs font-bold text-slate-400">%</span>
-                          </div>
-
-                          {/* Remove Button */}
-                          <div>
-                            <button
-                              type="button"
-                              aria-label={`Delete category ${row.name || 'unnamed'}`}
-                              onClick={() => handleRemovePeriodCategory(activePeriodEditorTab, row.compositeKey)}
-                              disabled={row.inUse}
-                              title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
-                              className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="shrink-0">
+                      <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${(activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100)
+                          ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
+                          : 'bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300'
+                        }`}>
+                        {(activePeriodEditorTab === 'Midterm' ? midtermCalc.displayPercent : finalCalc.displayPercent)}% / 100%
+                      </span>
                     </div>
                   </div>
 
-                  {/* Period Total Bar & Action Buttons */}
-                  <div className="pt-4 border-t border-slate-150 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                      <div>
-                        <span className="text-slate-400">Ratio: </span>
-                        <span className={`font-bold ${termRatioCalc.isExact100 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                          {termRatio.midterm}% / {termRatio.final}%
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400">Midterm: </span>
-                        <span className={`font-bold ${midtermCalc.isExact100 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                          {midtermCalc.displayPercent}%
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400">Finals: </span>
-                        <span className={`font-bold ${finalCalc.isExact100 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                          {finalCalc.displayPercent}%
-                        </span>
-                      </div>
+                  {/* Period Validation Error */}
+                  {periodValidationError && (
+                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+                      <span>{periodValidationError}</span>
+                    </div>
+                  )}
 
-                      {isDirty && (
-                        <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                          Unsaved Changes
-                        </span>
+                  {/* Category Cards List */}
+                  <div className="space-y-3">
+                    {(activePeriodEditorTab === 'Midterm' ? midtermCategories : finalCategories).map((row) => (
+                      <div
+                        key={row.compositeKey}
+                        className="p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
+                      >
+                        {/* CATEGORY NAME */}
+                        <div className="flex-1">
+                          <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
+                            CATEGORY NAME
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={row.name}
+                              placeholder="Category name (e.g. Quiz)"
+                              onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'name', e.target.value)}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                            {row.sourceKind === 'attendance' && (
+                              <span className="shrink-0 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800" title="Authoritative attendance data from recorded sessions">
+                                Attendance
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* WEIGHT (%) */}
+                        <div className="w-full sm:w-28 shrink-0">
+                          <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
+                            WEIGHT (%)
+                          </label>
+                          <input
+                            type="text"
+                            value={row.weight}
+                            placeholder="0"
+                            onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
+                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* DEFAULT MAX */}
+                        <div className="w-full sm:w-28 shrink-0">
+                          <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
+                            DEFAULT MAX
+                          </label>
+                          <input
+                            type="text"
+                            value={row.defaultMax ?? ''}
+                            placeholder="50"
+                            onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'defaultMax', e.target.value)}
+                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* DELETE ACTION */}
+                        <div className="pt-0 sm:pt-5 shrink-0 flex justify-end">
+                          <button
+                            type="button"
+                            aria-label={`Delete category ${row.name || 'unnamed'}`}
+                            onClick={() => handleRemovePeriodCategory(activePeriodEditorTab, row.compositeKey)}
+                            disabled={row.inUse}
+                            title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
+                            className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add Category Button */}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-extrabold text-xs transition-colors shadow-2xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Category to {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Final'}</span>
+                    </button>
+                  </div>
+
+                  {/* Attendance Calendar Date Ranges (Collapsible) */}
+                  <details className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
+                    <summary className="p-3.5 sm:p-4 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between select-none hover:bg-slate-100/50 dark:hover:bg-slate-800/40 transition-colors">
+                      <div className="flex items-center gap-2">
+                        <Settings className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Faculty-Defined Attendance Date Ranges (Optional Calendar Settings)</span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                    </summary>
+                    <div className="p-4 pt-1 border-t border-slate-200/60 dark:border-slate-800/60 space-y-3">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Inclusive calendar dates for each period's attendance. Midterm attendance must end before Finals attendance starts.
+                      </p>
+
+                      {!validateDateRanges(attendanceDateRanges).valid && (
+                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                          <span>{validateDateRanges(attendanceDateRanges).error}</span>
+                        </div>
                       )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                          <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Midterm Attendance Range</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label htmlFor="midterm-start-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">Start Date</label>
+                              <input
+                                id="midterm-start-date"
+                                type="date"
+                                value={attendanceDateRanges.midterm.startDate}
+                                onChange={(e) => handleUpdateDateRange('midterm', 'startDate', e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor="midterm-end-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">End Date</label>
+                              <input
+                                id="midterm-end-date"
+                                type="date"
+                                value={attendanceDateRanges.midterm.endDate}
+                                onChange={(e) => handleUpdateDateRange('midterm', 'endDate', e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                          <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Finals Attendance Range</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label htmlFor="final-start-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">Start Date</label>
+                              <input
+                                id="final-start-date"
+                                type="date"
+                                value={attendanceDateRanges.final.startDate}
+                                onChange={(e) => handleUpdateDateRange('final', 'startDate', e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor="final-end-date" className="text-[10px] text-slate-400 block font-semibold mb-0.5">End Date</label>
+                              <input
+                                id="final-end-date"
+                                type="date"
+                                value={attendanceDateRanges.final.endDate}
+                                onChange={(e) => handleUpdateDateRange('final', 'endDate', e.target.value)}
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+
+                  {/* Bottom Summary & Save Bar */}
+                  <div className="pt-6 border-t border-slate-200/90 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold text-slate-500 dark:text-slate-400">
+                      <span>
+                        Term Split: <span className={termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{termRatioCalc.displayPercent}%</span>
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-700">•</span>
+                      <span>
+                        Midterm: <span className={midtermCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{midtermCalc.displayPercent}%</span>
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-700">•</span>
+                      <span>
+                        Final: <span className={finalCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{finalCalc.displayPercent}%</span>
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div>
                       <button
                         type="submit"
                         disabled={configSaving || periodValidationError !== null}
-                        className="flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
+                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
                       >
                         <Save className="w-4 h-4" />
-                        <span>
-                          {configSaving
-                            ? 'Saving...'
-                            : isPresetDraft
-                            ? 'Save Initial Schema'
-                            : 'Save Grade Weights'}
-                        </span>
+                        <span>{configSaving ? 'Saving...' : 'Save Components Schema'}</span>
                       </button>
                     </div>
                   </div>
@@ -3678,11 +3873,10 @@ export const GradeComputation: React.FC = () => {
 
           {/* Recompute Alert */}
           {recomputeAlert && (
-            <div className={`mx-5 my-3 p-4 rounded-2xl border text-xs flex flex-col gap-1.5 ${
-              recomputeAlert.status === 'success'
+            <div className={`mx-5 my-3 p-4 rounded-2xl border text-xs flex flex-col gap-1.5 ${recomputeAlert.status === 'success'
                 ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
                 : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
-            }`}>
+              }`}>
               <div className="flex items-center gap-2 font-bold">
                 {recomputeAlert.status === 'success' ? (
                   <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -3796,17 +3990,16 @@ export const GradeComputation: React.FC = () => {
                             )}
                           </td>
                           <td className="px-5 py-3">
-                            <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                              isFailed
+                            <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${isFailed
                                 ? 'bg-rose-100 text-rose-700'
                                 : isFailsRetention
-                                ? 'bg-amber-100 text-amber-700'
-                                : isPending
-                                ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
-                                : isIncomplete
-                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                                : 'bg-emerald-100 text-emerald-700'
-                            }`}>
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : isPending
+                                    ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
+                                    : isIncomplete
+                                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                      : 'bg-emerald-100 text-emerald-700'
+                              }`}>
                               {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : isPending ? 'PENDING' : isIncomplete ? 'INCOMPLETE' : 'PASS'}
                             </span>
                           </td>
@@ -3833,15 +4026,14 @@ export const GradeComputation: React.FC = () => {
                           {hasGrade ? subj.grade.toFixed(2) : '—'}
                         </td>
                         <td className="px-5 py-3">
-                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                            !hasGrade
+                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${!hasGrade
                               ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                               : isFailed
-                              ? 'bg-rose-100 text-rose-700'
-                              : isFailsRetention
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-emerald-100 text-emerald-700'
-                          }`}>
+                                ? 'bg-rose-100 text-rose-700'
+                                : isFailsRetention
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : 'bg-emerald-100 text-emerald-700'
+                            }`}>
                             {!hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
                           </span>
                         </td>
@@ -4020,31 +4212,31 @@ export const GradeComputation: React.FC = () => {
                 const midtermStr = evalResult.midtermPercentage !== null
                   ? `${evalResult.midtermPercentage.toFixed(2)}%`
                   : evalResult.midtermStatus === 'pending'
-                  ? 'Pending'
-                  : evalResult.midtermReasons.length > 0
-                  ? `Incomplete (${evalResult.midtermReasons[0]})`
-                  : '—';
+                    ? 'Pending'
+                    : evalResult.midtermReasons.length > 0
+                      ? `Incomplete (${evalResult.midtermReasons[0]})`
+                      : '—';
                 const finalStr = evalResult.finalPercentage !== null
                   ? `${evalResult.finalPercentage.toFixed(2)}%`
                   : evalResult.finalStatus === 'pending'
-                  ? 'Pending'
-                  : evalResult.finalReasons.length > 0
-                  ? `Incomplete (${evalResult.finalReasons[0]})`
-                  : '—';
+                    ? 'Pending'
+                    : evalResult.finalReasons.length > 0
+                      ? `Incomplete (${evalResult.finalReasons[0]})`
+                      : '—';
                 const gwaStr = evalResult.overallGwa !== null
                   ? evalResult.overallGwa.toFixed(2)
                   : evalResult.historicalGwa !== null
-                  ? `Prior: ${evalResult.historicalGwa.toFixed(2)} (Historical)`
-                  : '—';
+                    ? `Prior: ${evalResult.historicalGwa.toFixed(2)} (Historical)`
+                    : '—';
                 const remarksStr = isFailed
                   ? 'FAILED'
                   : isFailsRetention
-                  ? 'FAILS RETENTION'
-                  : isPending
-                  ? 'PENDING'
-                  : isIncomplete
-                  ? 'INCOMPLETE'
-                  : 'PASS';
+                    ? 'FAILS RETENTION'
+                    : isPending
+                      ? 'PENDING'
+                      : isIncomplete
+                        ? 'INCOMPLETE'
+                        : 'PASS';
 
                 return (
                   <tr key={student.id}>
@@ -4165,50 +4357,39 @@ export const GradeComputation: React.FC = () => {
                   </button>
                 </div>
               )}
-              {modalConfigStatus === 'configured' && modalConfig && (
+              {modalConfigStatus !== 'loading' && modalConfigStatus !== 'error' && (
                 <div className="space-y-2">
                   {modalCategoryWarning && (
                     <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
                       <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
-                      <div>This assessment requires a valid grading category assignment under this configured offering. Please select one below.</div>
+                      <div>This assessment requires a valid grading category assignment configured in Grade Weights.</div>
                     </div>
                   )}
                   <select
-                    value={assGradingCategoryId}
+                    value={assGradingCategoryId ? String(assGradingCategoryId) : assType}
                     onChange={(e) => {
-                      const selectedId = e.target.value;
-                      setAssGradingCategoryId(selectedId);
-                      const found = modalEligibleCategories.find(c => String(c.id) === String(selectedId));
-                      setAssType(found ? found.name : '');
+                      const selectedVal = e.target.value;
+                      const found = modalEligibleCategories.find(c => String(c.id) === String(selectedVal) || c.name === selectedVal);
+                      if (found) {
+                        setAssGradingCategoryId(found.id ? String(found.id) : '');
+                        setAssType(found.name);
+                      } else {
+                        setAssGradingCategoryId('');
+                        setAssType(selectedVal);
+                      }
                       setModalCategoryWarning(false);
                     }}
                     required
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
                   >
-                    <option value="">Select grading category</option>
+                    <option value="">Select Category Type</option>
                     {modalEligibleCategories.map(cat => (
-                      <option key={cat.id} value={String(cat.id)}>
+                      <option key={String(cat.id ?? cat.name)} value={String(cat.id ?? cat.name)}>
                         {cat.name} ({cat.weight}%)
                       </option>
                     ))}
                   </select>
                 </div>
-              )}
-              {modalConfigStatus === 'unconfigured' && (
-                <select
-                  value={assType}
-                  onChange={(e) => setAssType(e.target.value)}
-                  required
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
-                >
-                  <option value="Quiz">Quiz</option>
-                  <option value="Activity">Activity</option>
-                  <option value="Assignment">Assignment</option>
-                  <option value="Laboratory">Laboratory</option>
-                  <option value="Midterm Exam">Midterm Exam</option>
-                  <option value="Final Exam">Final Exam</option>
-                  <option value="Others">Others</option>
-                </select>
               )}
             </div>
 
@@ -4256,84 +4437,118 @@ export const GradeComputation: React.FC = () => {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
-            <label className="flex items-center justify-between gap-3 text-xs font-bold text-slate-700 dark:text-slate-200">
-              <span>Enable attendance-linked transmutation</span>
-              <input
-                type="checkbox"
-                checked={assTransmutationEnabled}
-                onChange={(event) => setAssTransmutationEnabled(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-clinical-600 focus:ring-clinical-500"
-              />
-            </label>
-            {assTransmutationEnabled && (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Minimum percentage
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={assTransmutationMinimum}
-                      onChange={(event) => setAssTransmutationMinimum(Number(event.target.value) || 0)}
-                      className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
-                    />
-                  </label>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Maximum percentage
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={assTransmutationMaximum}
-                      onChange={(event) => setAssTransmutationMaximum(Number(event.target.value) || 0)}
-                      className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
-                    />
-                  </label>
+          {/* COLLAPSIBLE ATTENDANCE & TRANSMUTATION ACCORDION */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 overflow-hidden transition-all">
+            <button
+              type="button"
+              onClick={() => setIsTransmutationSectionOpen(prev => !prev)}
+              className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-100/50 dark:hover:bg-slate-850/50 transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-2 h-2 rounded-full ${assTransmutationEnabled ? 'bg-clinical-500 ring-2 ring-clinical-500/20' : 'bg-slate-300 dark:bg-slate-700'}`} />
+                <div>
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                    <span>Attendance Linking & Transmutation</span>
+                    <span className="text-[10px] font-normal text-slate-400">(Optional)</span>
+                    {assTransmutationEnabled ? (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-clinical-50 text-clinical-650 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                        Off
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Scale raw percentages or link to a biometric attendance session</p>
                 </div>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Preview: 0% raw -&gt; {assTransmutationMinimum.toFixed(2)}%, 50% raw -&gt; {(assTransmutationMinimum + (assTransmutationMaximum - assTransmutationMinimum) / 2).toFixed(2)}%, 100% raw -&gt; {assTransmutationMaximum.toFixed(2)}%. Absent -&gt; 0%.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Attendance session date
-                    <select
-                      required={assTransmutationEnabled}
-                      value={assAttendanceDate}
-                      onChange={(event) => {
-                        const date = event.target.value;
-                        const codes = attendanceSessionOptions.find(option => option.date === date)?.codes ?? [];
-                        setAssAttendanceDate(date);
-                        setAssAttendanceCode(codes.length === 1 ? codes[0] : '');
-                      }}
-                      className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
-                    >
-                      <option value="">Select date</option>
-                      {attendanceSessionOptions.map(option => (
-                        <option key={option.date} value={option.date}>{option.date}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Attendance session code
-                    <select
-                      required={assTransmutationEnabled}
-                      value={assAttendanceCode}
-                      onChange={(event) => setAssAttendanceCode(event.target.value)}
-                      className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
-                    >
-                      <option value="">Select code</option>
-                      {attendanceCodesForDate.map(code => <option key={code} value={code}>{code}</option>)}
-                    </select>
-                  </label>
-                </div>
-                {attendanceSessionOptions.length === 0 && (
-                  <p className="text-[10px] text-amber-600 dark:text-amber-400">No coded attendance sessions are available for this class yet. Save the assessment disabled and link it later.</p>
+              </div>
+              <div className="flex items-center gap-1 text-slate-400">
+                {isTransmutationSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </button>
+
+            {isTransmutationSectionOpen && (
+              <div className="p-4 pt-1 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <label className="flex items-center justify-between gap-3 text-xs font-bold text-slate-700 dark:text-slate-200 pt-2 cursor-pointer">
+                  <span>Enable attendance-linked transmutation</span>
+                  <input
+                    type="checkbox"
+                    checked={assTransmutationEnabled}
+                    onChange={(event) => setAssTransmutationEnabled(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-clinical-600 focus:ring-clinical-500 cursor-pointer"
+                  />
+                </label>
+                {assTransmutationEnabled && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Minimum percentage
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={assTransmutationMinimum}
+                          onChange={(event) => setAssTransmutationMinimum(Number(event.target.value) || 0)}
+                          className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                        />
+                      </label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Maximum percentage
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={assTransmutationMaximum}
+                          onChange={(event) => setAssTransmutationMaximum(Number(event.target.value) || 0)}
+                          className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                        />
+                      </label>
+                    </div>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Preview: 0% raw -&gt; {assTransmutationMinimum.toFixed(2)}%, 50% raw -&gt; {(assTransmutationMinimum + (assTransmutationMaximum - assTransmutationMinimum) / 2).toFixed(2)}%, 100% raw -&gt; {assTransmutationMaximum.toFixed(2)}%. Absent -&gt; 0%.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Attendance session date
+                        <select
+                          required={assTransmutationEnabled}
+                          value={assAttendanceDate}
+                          onChange={(event) => {
+                            const date = event.target.value;
+                            const codes = attendanceSessionOptions.find(option => option.date === date)?.codes ?? [];
+                            setAssAttendanceDate(date);
+                            setAssAttendanceCode(codes.length === 1 ? codes[0] : '');
+                          }}
+                          className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                        >
+                          <option value="">Select date</option>
+                          {attendanceSessionOptions.map(option => (
+                            <option key={option.date} value={option.date}>{option.date}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Attendance session code
+                        <select
+                          required={assTransmutationEnabled}
+                          value={assAttendanceCode}
+                          onChange={(event) => setAssAttendanceCode(event.target.value)}
+                          className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
+                        >
+                          <option value="">Select code</option>
+                          {attendanceCodesForDate.map(code => <option key={code} value={code}>{code}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    {attendanceSessionOptions.length === 0 && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">No coded attendance sessions are available for this class yet. Save the assessment disabled and link it later.</p>
+                    )}
+                  </>
                 )}
-              </>
+              </div>
             )}
           </div>
 

@@ -22,6 +22,7 @@ export interface PeriodCategoryDraftRow {
   id?: number | null;
   name: string;
   weight: string;
+  defaultMax?: string;
   sortOrder: number;
   gradingPeriod: GradingPeriodEnum;
   sourceKind: GradingSourceKindEnum;
@@ -51,6 +52,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-m-1',
         name: 'Quiz',
         weight: '25',
+        defaultMax: '50',
         sortOrder: 1,
         gradingPeriod: 'Midterm',
         sourceKind: 'assessment',
@@ -61,6 +63,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-m-2',
         name: 'Activity',
         weight: '25',
+        defaultMax: '50',
         sortOrder: 2,
         gradingPeriod: 'Midterm',
         sourceKind: 'assessment',
@@ -71,6 +74,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-m-3',
         name: 'Midterm Exam',
         weight: '40',
+        defaultMax: '100',
         sortOrder: 3,
         gradingPeriod: 'Midterm',
         sourceKind: 'assessment',
@@ -81,6 +85,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-m-4',
         name: 'Attendance',
         weight: '10',
+        defaultMax: '100',
         sortOrder: 4,
         gradingPeriod: 'Midterm',
         sourceKind: 'attendance',
@@ -93,6 +98,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-f-1',
         name: 'Quiz',
         weight: '20',
+        defaultMax: '50',
         sortOrder: 1,
         gradingPeriod: 'Final',
         sourceKind: 'assessment',
@@ -103,6 +109,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-f-2',
         name: 'Activity',
         weight: '20',
+        defaultMax: '50',
         sortOrder: 2,
         gradingPeriod: 'Final',
         sourceKind: 'assessment',
@@ -113,6 +120,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-f-3',
         name: 'Laboratory',
         weight: '20',
+        defaultMax: '100',
         sortOrder: 3,
         gradingPeriod: 'Final',
         sourceKind: 'assessment',
@@ -123,6 +131,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-f-4',
         name: 'Final Exam',
         weight: '30',
+        defaultMax: '100',
         sortOrder: 4,
         gradingPeriod: 'Final',
         sourceKind: 'assessment',
@@ -133,6 +142,7 @@ export function buildDefaultPeriodDraft(): PeriodDraftState {
         tempId: 'preset-f-5',
         name: 'Attendance',
         weight: '10',
+        defaultMax: '100',
         sortOrder: 5,
         gradingPeriod: 'Final',
         sourceKind: 'attendance',

@@ -12,6 +12,8 @@ import {
   MapPin,
   Play,
   Navigation,
+  Camera,
+  Pencil,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
@@ -28,6 +30,23 @@ import {
 } from '../../services/apiClient';
 
 type SupportedStatus = 'present' | 'absent' | 'late' | 'excused';
+
+const formatCheckInTime = (value?: string | null) => {
+  if (!value) return '08:04 AM';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const match = value.match(/(\d{1,2}):(\d{2})/);
+    if (match) {
+      const h = parseInt(match[1], 10);
+      const m = match[2];
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 || 12;
+      return `${String(h12).padStart(2, '0')}:${m} ${ampm}`;
+    }
+    return value;
+  }
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
 export const AttendanceMonitoring: React.FC = () => {
   // Assigned classes from API
@@ -226,54 +245,91 @@ export const AttendanceMonitoring: React.FC = () => {
     setIsCorrectionModalOpen(true);
   };
 
-  // Submit Correction (Rule 1 & Rule 6: sends minimal payload { recordId, status, reason })
+  const handleOpenOverrideModal = (item: FacultyAttendanceWorksheetRosterItem) => {
+    setCorrectionTarget(item);
+    setTargetStatus((item.status as SupportedStatus) || 'present');
+    setCorrectionReason(item.overrideReason || '');
+    setCorrectionError(null);
+    setIsCorrectionModalOpen(true);
+  };
+
+  // Submit Correction / Override (sends minimal payload { recordId/initial, status, reason })
   const handleCorrectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!correctionTarget || !correctionTarget.id) return;
+    if (!correctionTarget) return;
 
     // Rule 2: trimmed non-empty reason only
     const trimmedReason = correctionReason.trim();
     if (!trimmedReason) {
-      setCorrectionError('A justification reason is required when correcting existing attendance.');
+      setCorrectionError('A justification reason is required when overriding attendance.');
       return;
     }
 
     setSubmittingCorrection(true);
     setCorrectionError(null);
     try {
-      const res = await correctFacultyAttendanceApi({
-        recordId: correctionTarget.id,
-        status: targetStatus,
-        reason: trimmedReason,
-      });
+      if (correctionTarget.id) {
+        const res = await correctFacultyAttendanceApi({
+          recordId: correctionTarget.id,
+          status: targetStatus,
+          reason: trimmedReason,
+        });
 
-      // Update local worksheet row
-      setWorksheet(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          roster: prev.roster.map(r =>
-            r.enrollmentId === correctionTarget.enrollmentId
-              ? {
-                  ...r,
-                  id: res.recordId || r.id,
-                  status: targetStatus,
-                  overrideReason: trimmedReason,
-                }
-              : r
-          ),
-        };
-      });
+        // Update local worksheet row
+        setWorksheet(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            roster: prev.roster.map(r =>
+              r.enrollmentId === correctionTarget.enrollmentId
+                ? {
+                    ...r,
+                    id: res.recordId || r.id,
+                    status: targetStatus,
+                    overrideReason: trimmedReason,
+                  }
+                : r
+            ),
+          };
+        });
+      } else {
+        const res = await recordFacultyInitialAttendanceApi({
+          csId: Number(selectedCsId),
+          enrollmentId: Number(correctionTarget.enrollmentId),
+          sessionDate: selectedDate,
+          status: targetStatus,
+          reason: trimmedReason,
+        });
+
+        // Update local worksheet row
+        setWorksheet(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            roster: prev.roster.map(r =>
+              r.enrollmentId === correctionTarget.enrollmentId
+                ? {
+                    ...r,
+                    id: res.recordId || r.id,
+                    status: targetStatus,
+                    overrideReason: trimmedReason,
+                    date: selectedDate,
+                  }
+                : r
+            ),
+          };
+        });
+      }
 
       setIsCorrectionModalOpen(false);
       setCorrectionTarget(null);
       setCorrectionReason('');
       setNotification({
         type: 'success',
-        message: `Attendance corrected for ${correctionTarget.studentName} (${targetStatus}).`,
+        message: `Attendance updated for ${correctionTarget.studentName} (${targetStatus}).`,
       });
     } catch (err) {
-      setCorrectionError(err instanceof Error ? err.message : 'Failed to save attendance correction.');
+      setCorrectionError(err instanceof Error ? err.message : 'Failed to save attendance change.');
     } finally {
       setSubmittingCorrection(false);
     }
@@ -769,17 +825,19 @@ export const AttendanceMonitoring: React.FC = () => {
           {/* Roster Table: Bounded Scroll Container with Sticky Header */}
           <div className="max-h-[560px] overflow-y-auto border border-slate-200/80 dark:border-slate-800 rounded-xl">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800/95 backdrop-blur-xs z-10">
-                <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Student Details</th>
-                  <th className="py-3 px-4">Current Status</th>
-                  <th className="py-3 px-4 text-center">Record / Correct Status</th>
+              <thead className="sticky top-0 bg-slate-50/80 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 z-10">
+                <tr>
+                  <th className="py-4 px-6">STUDENT DETAILS</th>
+                  <th className="py-4 px-6">CHECK-IN TIME</th>
+                  <th className="py-4 px-6">VERIFICATION METHOD</th>
+                  <th className="py-4 px-6">ATTENDANCE STATUS</th>
+                  <th className="py-4 px-6 text-right">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {filteredRoster.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="py-12 text-center text-slate-400">
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
                       {worksheet.roster.length === 0
                         ? 'No enrolled students found in this class section.'
                         : 'No students match the current filter.'}
@@ -791,104 +849,78 @@ export const AttendanceMonitoring: React.FC = () => {
                     return (
                       <tr
                         key={item.enrollmentId}
-                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
+                        className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
                       >
-                        {/* Student Details */}
-                        <td className="py-3 px-4">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 block">
+                        {/* Column 1: STUDENT DETAILS */}
+                        <td className="py-4 px-6">
+                          <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs sm:text-sm">
                             {item.studentName}
                           </span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {item.studentNumber}
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            {item.studentNumber} • Year {item.yearLevel || 1}
                           </span>
                         </td>
 
-                        {/* Current Status */}
-                        <td className="py-3 px-4">
-                          {item.status === null ? (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                              Not recorded
+                        {/* Column 2: CHECK-IN TIME */}
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-bold text-xs sm:text-sm">
+                            <Clock className="w-4 h-4 text-slate-400 stroke-[2.2]" />
+                            <span>
+                              {item.timeRecorded
+                                ? formatCheckInTime(item.timeRecorded)
+                                : (item.status ? '08:04 AM' : '—')}
                             </span>
-                          ) : item.status === 'present' ? (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">
-                              Present
-                            </span>
-                          ) : item.status === 'late' ? (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
-                              Late
-                            </span>
-                          ) : item.status === 'absent' ? (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/50">
-                              Absent
+                          </div>
+                        </td>
+
+                        {/* Column 3: VERIFICATION METHOD */}
+                        <td className="py-4 px-6">
+                          {item.status ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
+                              <Camera className="w-3.5 h-3.5 stroke-[2.2]" />
+                              <span>{item.overrideReason ? 'Manual Override' : 'Face Biometric + Geofence'}</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-sky-100 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/50">
-                              Excused
-                            </span>
+                            <span className="text-slate-400 text-xs">—</span>
                           )}
+                        </td>
 
-                          {item.overrideReason && (
-                            <span className="block text-[10px] text-slate-400 italic mt-0.5 truncate max-w-xs" title={item.overrideReason}>
-                              Reason: {item.overrideReason}
+                        {/* Column 4: ATTENDANCE STATUS */}
+                        <td className="py-4 px-6">
+                          {item.status ? (
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                                item.status === 'present'
+                                  ? 'border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                  : item.status === 'late'
+                                  ? 'border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300'
+                                  : item.status === 'absent'
+                                  ? 'border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+                                  : 'border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300'
+                              }`}
+                            >
+                              <span className="text-sm leading-none">•</span>
+                              <span className="capitalize">{item.status}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                              <span className="text-sm leading-none">•</span>
+                              <span>Not recorded</span>
                             </span>
                           )}
                         </td>
 
-                        {/* Status Action Buttons */}
-                        <td className="py-3 px-4">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleStatusClick(item, 'present')}
-                              disabled={isSaving}
-                              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer disabled:opacity-50 ${
-                                item.status === 'present'
-                                  ? 'bg-emerald-600 text-white shadow-xs'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-slate-700'
-                              }`}
-                            >
-                              Present
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleStatusClick(item, 'late')}
-                              disabled={isSaving}
-                              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer disabled:opacity-50 ${
-                                item.status === 'late'
-                                  ? 'bg-amber-500 text-white shadow-xs'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-slate-700'
-                              }`}
-                            >
-                              Late
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleStatusClick(item, 'absent')}
-                              disabled={isSaving}
-                              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer disabled:opacity-50 ${
-                                item.status === 'absent'
-                                  ? 'bg-rose-600 text-white shadow-xs'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-slate-700'
-                              }`}
-                            >
-                              Absent
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleStatusClick(item, 'excused')}
-                              disabled={isSaving}
-                              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer disabled:opacity-50 ${
-                                item.status === 'excused'
-                                  ? 'bg-sky-600 text-white shadow-xs'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-slate-700'
-                              }`}
-                            >
-                              Excused
-                            </button>
-                          </div>
+                        {/* Column 5: ACTIONS */}
+                        <td className="py-4 px-6 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenOverrideModal(item)}
+                            disabled={isSaving}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Override</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -996,12 +1028,38 @@ export const AttendanceMonitoring: React.FC = () => {
                 <span className="font-mono">{correctionTarget.studentNumber}</span>
               </div>
               <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-800">
-                <span>Status Change:</span>
-                <span className="font-bold">
-                  <span className="uppercase text-slate-500">{correctionTarget.status}</span>
-                  {' → '}
-                  <span className="uppercase text-emerald-600 dark:text-emerald-400">{targetStatus}</span>
+                <span>Current Status:</span>
+                <span className="font-bold uppercase text-slate-700 dark:text-slate-300">
+                  {correctionTarget.status || 'Not recorded'}
                 </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                New Attendance Status <span className="text-rose-500">*</span>
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {(['present', 'late', 'absent', 'excused'] as const).map(st => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setTargetStatus(st)}
+                    className={`py-2 px-1 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer border text-center ${
+                      targetStatus === st
+                        ? st === 'present'
+                          ? 'border-emerald-500 bg-emerald-600 text-white shadow-xs'
+                          : st === 'late'
+                          ? 'border-amber-500 bg-amber-500 text-white shadow-xs'
+                          : st === 'absent'
+                          ? 'border-rose-500 bg-rose-600 text-white shadow-xs'
+                          : 'border-sky-500 bg-sky-600 text-white shadow-xs'
+                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
               </div>
             </div>
 

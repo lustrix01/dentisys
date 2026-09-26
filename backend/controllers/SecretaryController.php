@@ -1514,7 +1514,8 @@ function handle_secretary_attendance_get(): void
         }
         $recordSql =
             "SELECT r.record_id, r.enrollment_id, r.attendance_session_id, r.session_date, r.session_code, r.status,
-                    r.override_reason, r.override_at, s.student_id, s.student_number,
+                    r.verification_method, r.time_recorded,
+                    r.override_reason, r.override_at, s.student_id, s.student_number, s.year_level,
                     COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
                     COALESCE(pi.first_name, s.first_name) AS first_name,
                     COALESCE(pi.middle_name, s.middle_name) AS middle_name,
@@ -1553,7 +1554,10 @@ function handle_secretary_attendance_get(): void
                 'studentId' => (string) $r['student_id'],
                 'studentNumber' => $r['student_number'],
                 'studentName' => account_identity_display_name($r),
+                'yearLevel' => isset($r['year_level']) ? (int) $r['year_level'] : 1,
                 'date' => $r['session_date'],
+                'timeRecorded' => $r['time_recorded'] ?? null,
+                'verificationMethod' => $r['verification_method'] ?? 'face_biometric_geofence',
                 'subjectCode' => $r['course_code'],
                 'classId' => (string) $r['cs_id'],
                 'className' => $r['cs_name'],

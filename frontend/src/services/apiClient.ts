@@ -962,6 +962,7 @@ export interface FacultyAttendanceWorksheetRosterItem {
   timeRecorded: string | null;
   overrideReason: string | null;
   overrideAt: string | null;
+  yearLevel?: number | null;
 }
 
 export interface FacultyAttendanceWorksheet {
@@ -1215,6 +1216,9 @@ export function getSecretaryAttendanceApi(params?: {
     status: string;
     overrideReason?: string | null;
     overrideAt?: string | null;
+    yearLevel?: number | null;
+    verificationMethod?: string | null;
+    timeRecorded?: string | null;
   }>;
 }> {
   const query = new URLSearchParams();

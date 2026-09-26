@@ -98,6 +98,7 @@ export const ClassManagement: React.FC = () => {
       if (Array.isArray(classRes.classes)) {
         setClasses(classRes.classes);
       }
+      const currentSy = classRes.currentSchoolYear || '';
       if (Array.isArray(courseRes.courses)) {
         setCourses(courseRes.courses);
         if (courseRes.courses.length > 0 && formData.courseId === 0) {
@@ -106,7 +107,10 @@ export const ClassManagement: React.FC = () => {
             courseId: courseRes.courses[0].id,
             csName: `${courseRes.courses[0].courseCode}-A`,
             yearLevel: courseRes.courses[0].yearLevel,
+            ...(currentSy ? { schoolYear: currentSy } : {}),
           }));
+        } else if (currentSy) {
+          setFormData(prev => ({ ...prev, schoolYear: currentSy }));
         }
       }
     } catch (err: any) {
@@ -636,12 +640,14 @@ export const ClassManagement: React.FC = () => {
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-900 dark:text-white mb-1">Academic Year</label>
+                  <label className="block font-bold text-slate-900 dark:text-white mb-1">
+                    Academic Year <span className="text-[10px] text-emerald-600 font-semibold">(Current Only)</span>
+                  </label>
                   <input
                     type="text"
+                    readOnly
                     value={formData.schoolYear}
-                    onChange={e => setFormData({ ...formData, schoolYear: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-emerald-500"
+                    className="w-full bg-slate-100 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-slate-600 dark:text-slate-300 font-bold cursor-not-allowed"
                   />
                 </div>
 
