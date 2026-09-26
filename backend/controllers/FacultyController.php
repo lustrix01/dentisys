@@ -4737,7 +4737,7 @@ function handle_faculty_retention_remedial_save(): void
             "SELECT e.enrollment_id, e.student_id, e.cs_id, e.status AS enrollment_status,
                     e.remedial_state_json,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
-                    cs.instructor_user_id, cs.status AS class_status,
+                    cs.instructor_user_id, cs.status AS class_status, cs.school_year,
                     s.status AS student_status, s.student_account_user_id,
                     c.course_code
                FROM enrollments e
@@ -4771,6 +4771,15 @@ function handle_faculty_retention_remedial_save(): void
             $pdo->rollBack();
             remedial_attempts_error_response(remedial_attempts_error(
                 'Remedial progression is unavailable for this archived or inactive enrollment.',
+                'REMEDIAL_ENROLLMENT_READ_ONLY',
+                409
+            ));
+            return;
+        }
+        if (!academic_school_year_is_current($pdo, (string) $target['school_year'])) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'Historical class sections are view-only and cannot record remedial progression.',
                 'REMEDIAL_ENROLLMENT_READ_ONLY',
                 409
             ));

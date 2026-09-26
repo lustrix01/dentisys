@@ -53,6 +53,20 @@ async function login(page: Page, email: string, password: string) {
   return payload as { access_token: string };
 }
 
+function currentAssignedClass(classesPayload: {
+  currentSchoolYear?: string;
+  classes?: Array<Record<string, unknown>>;
+}) {
+  const currentSchoolYear = String(classesPayload.currentSchoolYear ?? '').trim();
+  const currentClass = (classesPayload.classes ?? []).find(candidate =>
+    String(candidate.schoolYear ?? '').trim().toLowerCase() === currentSchoolYear.toLowerCase()
+    && String(candidate.status ?? '').trim().toLowerCase() === 'active'
+  );
+  expect(currentSchoolYear).not.toBe('');
+  expect(currentClass, `No active assigned class found for ${currentSchoolYear}`).toBeTruthy();
+  return currentClass as Record<string, unknown>;
+}
+
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
   page.on('console', (message) => {
@@ -182,7 +196,8 @@ test('faculty can create a student and enrollment with returned identifiers', as
   });
   const classesPayload = await jsonResponse(classesResponse);
   expect(classesPayload.classes.length).toBeGreaterThan(0);
-  const classId = String(classesPayload.classes[0].id ?? classesPayload.classes[0].csId);
+  const targetClass = currentAssignedClass(classesPayload);
+  const classId = String(targetClass.id ?? targetClass.csId);
 
   const suffix = Date.now().toString(36);
   const create = await page.request.post('/api/faculty/students', {
@@ -248,7 +263,8 @@ test('Faculty-issued Student invitation, Mailpit acceptance, password login, and
     headers: { Authorization: `Bearer ${facultyCredentials.access_token}` },
   });
   const classesPayload = await jsonResponse(classesResponse);
-  const classId = String(classesPayload.classes[0].id ?? classesPayload.classes[0].csId);
+  const targetClass = currentAssignedClass(classesPayload);
+  const classId = String(targetClass.id ?? targetClass.csId);
   const suffix = Date.now().toString(36);
   const email = `p03.student.${suffix}@bicol-u.edu.ph`;
 
@@ -427,7 +443,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   });
   const classesPayload = await jsonResponse(classesRes);
   expect(classesPayload.classes.length).toBeGreaterThan(0);
-  const targetClass = classesPayload.classes[0];
+  const targetClass = currentAssignedClass(classesPayload);
   const targetCourseId = String(targetClass.courseId);
   const targetCsId = String(targetClass.id ?? targetClass.csId);
 

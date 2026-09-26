@@ -2067,6 +2067,95 @@ $remedialPost = static function (int $enrollmentId, array $data, string $token):
 };
 $remedialErrorCode = static fn(array $body): ?string => isset($body['code']) ? (string) $body['code'] : null;
 
+$historicalRemedialFacultyId = (int) $pdo->query(
+    "SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph'"
+)->fetchColumn();
+$historicalRemedialCourseId = (int) $pdo->query(
+    'SELECT course_id FROM class_sections WHERE cs_id = ' . (int) $studentClassId
+)->fetchColumn();
+$historicalRemedialClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections
+        (cs_name, course_id, instructor_user_id, semester, school_year, block, status)
+     VALUES (?, ?, ?, '1ST', '2025-2026', ?, 'Active')
+     RETURNING cs_id"
+);
+$historicalRemedialClassStmt->execute([
+    'Historical remedial class ' . strtoupper(bin2hex(random_bytes(3))),
+    $historicalRemedialCourseId,
+    $historicalRemedialFacultyId,
+    'H' . strtoupper(bin2hex(random_bytes(2))),
+]);
+$historicalRemedialClassId = (int) $historicalRemedialClassStmt->fetchColumn();
+$historicalRemedialEnrollmentStmt = $pdo->prepare(
+    "INSERT INTO enrollments
+        (student_id, cs_id, status, final_percentage, final_gwa, retention_state)
+     VALUES (?, ?, 'Active', 66.00, 2.66, 'remedial')
+     RETURNING enrollment_id"
+);
+$historicalRemedialEnrollmentStmt->execute([$invitedStudentId, $historicalRemedialClassId]);
+$historicalRemedialEnrollmentId = (int) $historicalRemedialEnrollmentStmt->fetchColumn();
+$historicalRemedialFixtureStmt = $pdo->prepare(
+    'SELECT cs.status AS class_status, cs.school_year, e.status AS enrollment_status
+       FROM class_sections cs
+       JOIN enrollments e ON e.cs_id = cs.cs_id
+      WHERE e.enrollment_id = ?'
+);
+$historicalRemedialFixtureStmt->execute([$historicalRemedialEnrollmentId]);
+$historicalRemedialFixture = $historicalRemedialFixtureStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('Active', $historicalRemedialFixture['class_status'] ?? null, 'Historical remedial fixture keeps the class Active');
+expect_same('Active', $historicalRemedialFixture['enrollment_status'] ?? null, 'Historical remedial fixture keeps the enrollment Active');
+expect_same('2025-2026', $historicalRemedialFixture['school_year'] ?? null, 'Historical remedial fixture uses a prior school year');
+$historicalRemedialGradeStmt = $pdo->prepare(
+    'SELECT final_percentage, final_gwa, grade_components_json::text AS grade_components_json
+       FROM enrollments WHERE enrollment_id = ?'
+);
+$historicalRemedialGradeStmt->execute([$historicalRemedialEnrollmentId]);
+$historicalRemedialGradeBefore = $historicalRemedialGradeStmt->fetch(PDO::FETCH_ASSOC);
+$historicalRemedialAttemptCountStmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM enrollment_remedial_attempts WHERE enrollment_id = ?'
+);
+$historicalRemedialAttemptCountStmt->execute([$historicalRemedialEnrollmentId]);
+$historicalRemedialAttemptsBefore = (int) $historicalRemedialAttemptCountStmt->fetchColumn();
+$historicalRemedialRecipientStmt = $pdo->prepare(
+    'SELECT student_account_user_id FROM students WHERE student_id = ?'
+);
+$historicalRemedialRecipientStmt->execute([$invitedStudentId]);
+$historicalRemedialRecipientUserId = (int) $historicalRemedialRecipientStmt->fetchColumn();
+$historicalRemedialRecipientUserId = $historicalRemedialRecipientUserId > 0
+    ? $historicalRemedialRecipientUserId
+    : (int) $studentNotificationTarget['student_account_user_id'];
+$historicalRemedialNotificationCountStmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ?'
+);
+$historicalRemedialNotificationCountStmt->execute([$historicalRemedialRecipientUserId]);
+$historicalRemedialNotificationsBefore = (int) $historicalRemedialNotificationCountStmt->fetchColumn();
+[$historicalRemedialStatus, $historicalRemedialBody] = $remedialPost(
+    $historicalRemedialEnrollmentId,
+    ['attemptNumber' => 1, 'scheduledDate' => '2027-01-20'],
+    $seedFacultyAccessToken
+);
+expect_same(409, $historicalRemedialStatus, 'Assigned Faculty cannot schedule remedial work for a historical class');
+expect_same('REMEDIAL_ENROLLMENT_READ_ONLY', $remedialErrorCode($historicalRemedialBody), 'Historical remedial write returns the read-only error');
+$historicalRemedialAttemptCountStmt->execute([$historicalRemedialEnrollmentId]);
+expect_same($historicalRemedialAttemptsBefore, (int) $historicalRemedialAttemptCountStmt->fetchColumn(), 'Historical remedial rejection leaves attempts unchanged');
+$historicalRemedialGradeStmt->execute([$historicalRemedialEnrollmentId]);
+expect_same($historicalRemedialGradeBefore, $historicalRemedialGradeStmt->fetch(PDO::FETCH_ASSOC), 'Historical remedial rejection leaves grades unchanged');
+$historicalRemedialNotificationCountStmt->execute([$historicalRemedialRecipientUserId]);
+expect_same($historicalRemedialNotificationsBefore, (int) $historicalRemedialNotificationCountStmt->fetchColumn(), 'Historical remedial rejection leaves notifications unchanged');
+[$historicalRemedialGradeStatus, $historicalRemedialGradeBody] = $remedialPost(
+    $historicalRemedialEnrollmentId,
+    ['attemptNumber' => 1, 'percentage' => 50.00],
+    $seedFacultyAccessToken
+);
+expect_same(409, $historicalRemedialGradeStatus, 'Assigned Faculty cannot grade a remedial attempt for a historical class');
+expect_same('REMEDIAL_ENROLLMENT_READ_ONLY', $remedialErrorCode($historicalRemedialGradeBody), 'Historical remedial grading returns the read-only error');
+$historicalRemedialAttemptCountStmt->execute([$historicalRemedialEnrollmentId]);
+expect_same($historicalRemedialAttemptsBefore, (int) $historicalRemedialAttemptCountStmt->fetchColumn(), 'Historical remedial grading leaves attempts unchanged');
+$historicalRemedialGradeStmt->execute([$historicalRemedialEnrollmentId]);
+expect_same($historicalRemedialGradeBefore, $historicalRemedialGradeStmt->fetch(PDO::FETCH_ASSOC), 'Historical remedial grading leaves grades unchanged');
+$historicalRemedialNotificationCountStmt->execute([$historicalRemedialRecipientUserId]);
+expect_same($historicalRemedialNotificationsBefore, (int) $historicalRemedialNotificationCountStmt->fetchColumn(), 'Historical remedial grading leaves notifications unchanged');
+
 foreach ([
     ['', 'REMEDIAL_SCORE_REQUIRED'],
     [-0.01, 'REMEDIAL_SCORE_RANGE'],

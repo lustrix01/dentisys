@@ -284,8 +284,10 @@ remedial_contract_assert(
 remedial_contract_assert(
     str_contains($faculty, 'FOR UPDATE')
         && str_contains($faculty, 'instructor_user_id')
+        && str_contains($faculty, 'cs.school_year')
+        && str_contains($faculty, 'academic_school_year_is_current')
         && str_contains($faculty, "LOWER(e.status) = 'active'"),
-    'Faculty writes lock the enrollment and enforce assigned active-class ownership'
+    'Faculty writes lock the enrollment and enforce assigned active current-year class ownership'
 );
 remedial_contract_assert(
     preg_match('/is_finite|isFinite/', $faculty) === 1
