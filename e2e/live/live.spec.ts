@@ -125,7 +125,9 @@ test('administrator login, auth/me, reload refresh, settings, and logout invalid
     headers: { Authorization: `Bearer ${credentials.access_token}` },
   });
   const auditPayload = await jsonResponse(audit);
-  expect(auditPayload.some((event: { action?: string }) => event.action === 'refresh_rotation')).toBeTruthy();
+  // Owner decision 2026-09-27 (D5): token-rotation events are stored but hidden from the audit trail.
+  expect(Array.isArray(auditPayload)).toBeTruthy();
+  expect(auditPayload.some((event: { action?: string }) => event.action === 'refresh_rotation')).toBeFalsy();
 
   const logout = await page.request.post('/api/auth/logout', {
     headers: { Authorization: `Bearer ${credentials.access_token}` },

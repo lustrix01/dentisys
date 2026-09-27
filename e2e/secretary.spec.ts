@@ -262,7 +262,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       });
     });
 
-    await page.route('**/api/secretary/dashboard/kpis', async (route) => {
+    await page.route('**/api/secretary/dashboard/kpis**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',

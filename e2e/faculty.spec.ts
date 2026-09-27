@@ -249,7 +249,7 @@ test.describe('Faculty Module E2E Tests', () => {
   });
 
   test('fresh faculty account defaults to 0 students and 0 active classes', async ({ page }) => {
-    await page.route('**/api/faculty/dashboard/kpis', async (route) => {
+    await page.route('**/api/faculty/dashboard/kpis**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
