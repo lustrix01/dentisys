@@ -126,8 +126,12 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
 
   const exportCsv = () => {
     const rows = [
-      ['Timestamp', 'User', 'Role', 'Action', 'Module', 'Description', 'Status', 'IP Address', 'Device'],
-      ...filtered.map(log => [log.timestamp, log.userName, log.userRole, log.action, log.module, log.description, log.status, log.ipAddress, log.device])
+      role === 'admin'
+        ? ['Timestamp', 'User', 'Role', 'Action', 'Module', 'Description', 'Status', 'IP Address', 'Device']
+        : ['Timestamp', 'User', 'Role', 'Action', 'Module', 'Description', 'Status'],
+      ...filtered.map(log => role === 'admin'
+        ? [log.timestamp, log.userName, log.userRole, log.action, log.module, log.description, log.status, log.ipAddress, log.device]
+        : [log.timestamp, log.userName, log.userRole, log.action, log.module, log.description, log.status])
     ];
     const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
     const link = document.createElement('a');
@@ -289,8 +293,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
             Action: selected.action,
             Module: selected.module,
             Status: selected.status,
-            'IP address': selected.ipAddress,
-            Device: selected.device,
+            ...(role === 'admin' ? { 'IP address': selected.ipAddress, Device: selected.device } : {}),
             Description: selected.description,
           }).map(([label, value]) => (
             <div key={label} className={label === 'Description' || label === 'Device' ? 'col-span-2' : ''}>

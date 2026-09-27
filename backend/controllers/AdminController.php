@@ -339,6 +339,11 @@ function handle_admin_audit_logs(): void
             return;
         }
 
+        if (($authCtx['role'] ?? '') !== 'admin') {
+            safe_error_response('Access denied. Administrator privileges required.', 403);
+            return;
+        }
+
         $query = $_GET['query'] ?? '';
         $role = $_GET['role'] ?? 'all';
         $module = $_GET['module'] ?? 'all';
@@ -346,7 +351,7 @@ function handle_admin_audit_logs(): void
         $date = $_GET['date'] ?? '';
 
         $sql = "SELECT event_id AS id, event_uuid, occurred_at AS timestamp, actor_username AS \"userName\", actor_role AS \"userRole\", action_code AS action, module_code AS module, description, event_status AS status, ip_address AS \"ipAddress\", user_agent AS device
-                FROM audit_events WHERE 1=1";
+                FROM audit_events WHERE action_code <> 'refresh_rotation'";
         $params = [];
 
         // Scoping for non-admin users (faculty/secretary)

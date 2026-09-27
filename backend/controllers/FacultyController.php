@@ -53,7 +53,8 @@ function faculty_activity_rows(PDO $pdo, int $userId, int $limit = 100): array
                 actor_role AS user_role, action_code AS action, module_code AS module,
                 description, event_status AS status, ip_address, user_agent
            FROM audit_events
-          WHERE actor_user_id = ?
+          WHERE action_code <> \'refresh_rotation\'
+            AND (actor_user_id = ?
              OR (
                 canonical_schema_version >= 2
                 AND scope_cs_id IS NOT NULL
@@ -63,7 +64,7 @@ function faculty_activity_rows(PDO $pdo, int $userId, int $limit = 100): array
                      WHERE cs.cs_id = audit_events.scope_cs_id
                        AND cs.instructor_user_id = ?
                 )
-             )
+             ))
           ORDER BY occurred_at DESC, event_id DESC
           LIMIT ' . $limit
     );

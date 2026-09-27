@@ -601,6 +601,7 @@ function secretary_activity_rows(PDO $pdo, int $userId, int $limit = 20): array
                 description, event_status AS status, ip_address, user_agent
            FROM audit_events
           WHERE actor_user_id = ?
+            AND action_code <> \'refresh_rotation\'
           ORDER BY occurred_at DESC, event_id DESC
           LIMIT ' . $limit
     );
