@@ -1,5 +1,21 @@
 # Current continuation: UI migration and normalization on lighthal5
 
+## QA fix rounds 1–2 — 2026-09-27 (branch lumbanglighthal)
+
+- Branch `lumbanglighthal` (not merged into `lumbang_final`), HEAD `bee8c53`.
+- Plans: `docs/FIX_PLAN_2026-09-27.md`, `docs/FIX_PLAN_2026-09-27_R2.md`.
+- Server JSON responses and PHP ini configuration fixed.
+- Profile saves fixed.
+- Login and Forgot password fixed.
+- Google Sign-In cache-key root cause fixed.
+- Trusted-proxy client IP resolution (`TRUSTED_PROXY_CIDRS`) fixed.
+- Dashboard school-year filter fixed.
+- Audit trail filtering and admin-only audit API fixed.
+- Biometric capture usable-sample gating, live alerts, direction handling, and uploads fixed.
+- Timestamps now include a UTC zone.
+- Known pre-existing test failures: mocked E2E 17 (same list on `lumbang_final`); live-browser 3 (names recorded by `check-postgres.ps1`).
+- Open items waiting for the Owner: demo-data refresh; admin access to Faculty/Secretary APIs; `StudentManagement.tsx` kept; physical-camera acceptance.
+
 Continue the existing `lighthal5` tree and preserve the accepted visual evidence. The current working batch adds ordered migrations 026-029, focused password-recovery and grading assertions, the narrow Owner-approved provisional course-grade trigger, and the approved two-attempt remedial progression. The two password-recovery page files remain Gemini-owned presentation work until handoff. Read [ui-migration-status.md](ui-migration-status.md) first; older implementation narratives below are historical. Do not rerun unchanged route/dialog comparisons or the earlier camera/Google investigation.
 
 Owner clarifications: overlapping activity deadlines are allowed; watchlist unlock covers the selected class; current school year is 2026-2027.
