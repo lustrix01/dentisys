@@ -365,11 +365,12 @@ export const FacultyInvitation: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
             <div className="space-y-1 sm:col-span-9">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              <label htmlFor="admin-faculty-create-email" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                 Institutional email *
               </label>
               <div className="flex">
                 <input
+                  id="admin-faculty-create-email"
                   required
                   type="text"
                   inputMode="email"

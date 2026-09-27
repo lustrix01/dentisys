@@ -279,11 +279,11 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Faculty|Dashboard/i);
   });
 
-  test('faculty class and roster surface identifies its current development status', async ({ page }) => {
+  test('faculty class and roster surface is server-backed, not a browser-local preview', async ({ page }) => {
     await page.click('a[href="/classes"]');
     await expect(page).toHaveURL('/classes');
     await expect(page.locator('body')).toContainText(/Classes & Student Rosters|Assigned Classes|Enrolled Student Roster/i);
-    await expect(page.locator('body')).toContainText(/Development preview|browser-local/i);
+    await expect(page.locator('body')).not.toContainText(/Development preview|browser-local/i);
   });
 });
 test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
