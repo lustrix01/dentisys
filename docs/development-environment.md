@@ -152,3 +152,13 @@ When an already-running test stack is configured through `E2E_BASE_URL`, the liv
 ```powershell
 npm run test:e2e:live
 ```
+
+## Sending real email in development
+
+By default every email (invitations, password resets, notifications) is caught by Mailpit at http://localhost:8025 and never leaves your computer. To deliver real email, set these in your own `.env` (never commit it): `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_ENCRYPTION=starttls` (or `tls`), `SMTP_VERIFY_PEER=true`, `SMTP_USER`, `SMTP_PASS` and `SMTP_FROM` — see the commented example in `.env.example`. Then run `docker compose up -d web` so the container picks up the change. Encrypted SMTP with certificate checking is required whenever `EMAIL_PROVIDER=smtp`.
+
+Warnings:
+- Real email goes to the recipient's real address. Demo accounts use `@bicol-u.edu.ph` addresses that may belong to real people, so do not send invitations or password resets to demo accounts while real email is on. Test with your own address instead.
+- Links inside emails use `APP_BASE_URL` (`http://localhost:5173` by default), so they only open on the computer that runs DentiSys.
+- `check-postgres.ps1` and the automated tests always use Mailpit, whatever `.env` says.
+- Switch back to Mailpit by setting `EMAIL_PROVIDER=mailpit` and `SMTP_HOST=mailpit`, `SMTP_PORT=1025`, `SMTP_ENCRYPTION=none`, `SMTP_VERIFY_PEER=false`, then `docker compose up -d web`.

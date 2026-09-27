@@ -1443,6 +1443,25 @@ $invitedStudentId = (int) $invitedStudentInsert->fetchColumn();
 $invitedEnrollmentInsert = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active') RETURNING enrollment_id");
 $invitedEnrollmentInsert->execute([$invitedStudentId, $studentClassId]);
 $invitedEnrollmentId = (int) $invitedEnrollmentInsert->fetchColumn();
+$facultyRosterAccountStatus = static function (string $accessToken, int $studentId): ?string {
+    [, $rosterBody] = integration_http_get_json('/api/faculty/students', $accessToken);
+    foreach (is_array($rosterBody) ? $rosterBody : [] as $rosterRow) {
+        if ((string) ($rosterRow['id'] ?? '') === (string) $studentId) {
+            return $rosterRow['accountStatus'] ?? null;
+        }
+    }
+    return null;
+};
+expect_same('none', $facultyRosterAccountStatus($facultyAccessToken, $invitedStudentId), 'Roster shows no account before the Student is invited');
+[$duplicateStudentStatus] = integration_http_json('/api/faculty/students', $facultyAccessToken, [
+    'studentNumber' => 'DUP-' . bin2hex(random_bytes(4)),
+    'firstName' => 'Duplicate',
+    'lastName' => 'Email',
+    'email' => $invitedStudentEmail,
+    'yearLevel' => 1,
+    'classId' => (string) $studentClassId,
+]);
+expect_same(409, $duplicateStudentStatus, 'Faculty cannot register a second Student with an existing email');
 [$emailOnlyStatus] = integration_http_json('/api/auth/student/signup', '', ['email' => $invitedStudentEmail]);
 expect_same(404, $emailOnlyStatus, 'Student email alone cannot begin onboarding');
 $uninvitedLinkStmt = $pdo->prepare('SELECT student_account_user_id FROM students WHERE student_id = ?');
@@ -1452,6 +1471,7 @@ expect_same(null, $uninvitedLinkStmt->fetchColumn(), 'Email-only attempt leaves 
 expect_same(403, $adminStudentInviteStatus, 'Admin cannot issue a Faculty-authorized Student invitation');
 [$studentInviteStatus, $studentInviteBody] = integration_http_json('/api/faculty/student-invitations', $facultyAccessToken, ['studentId' => (string) $invitedStudentId, 'classId' => (string) $studentClassId]);
 expect_same(201, $studentInviteStatus, 'Owning Faculty can invite the canonical active Student');
+expect_same('pending', $facultyRosterAccountStatus($facultyAccessToken, $invitedStudentId), 'Roster shows a pending invitation until the Student accepts');
 expect_same('Sent', $studentInviteBody['delivery_status'] ?? null, 'Student invitation reports successful email delivery separately from issuance');
 $studentEmailOutboxStmt = $pdo->prepare(
     "SELECT eo.status, eo.email_type, eo.recipient_email
@@ -1563,6 +1583,9 @@ $acceptedStudentStmt = $pdo->prepare(
 $acceptedStudentStmt->execute([$invitedStudentId]);
 $acceptedStudent = $acceptedStudentStmt->fetch(PDO::FETCH_ASSOC);
 expect_same('Active', $acceptedStudent['status'] ?? null, 'Eligible invited Student becomes Active');
+expect_same('active', $facultyRosterAccountStatus($facultyAccessToken, $invitedStudentId), 'Roster shows the Student as registered after acceptance');
+[$reinviteRegisteredStatus] = integration_http_json('/api/faculty/student-invitations', $facultyAccessToken, ['studentId' => (string) $invitedStudentId, 'classId' => (string) $studentClassId]);
+expect_same(409, $reinviteRegisteredStatus, 'A registered Student cannot be re-invited');
 expect_true(password_verify('StudentInvitePass123!', (string) ($acceptedStudent['password_hash'] ?? '')), 'Student acceptance stores the created DentiSys password');
 expect_same(null, $acceptedStudent['user_id'] ?? null, 'Student acceptance does not rewrite a Secretary link');
 expect_same((int) $pendingStudent['user_id'], (int) $acceptedStudent['student_account_user_id'], 'Student acceptance preserves its canonical account relationship');

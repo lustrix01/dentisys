@@ -95,6 +95,8 @@ export interface Student {
   remedialExams: RemedialExam[];
   faceEnrolled?: boolean; // For facial recognition attendance tracking
   consentStatus?: 'pending' | 'approved' | 'declined';
+  /** Login account state from the Faculty roster API. Missing = treat as 'none'. */
+  accountStatus?: 'none' | 'pending' | 'active' | 'secretary' | 'disabled';
   consentRespondedAt?: string;
   faceEnrollmentDetails?: { images: string[]; status: string; enrolledAt: string };
   retentionHistory?: RetentionLog[];

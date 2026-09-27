@@ -833,6 +833,7 @@ export const ClassesAndRosters: React.FC = () => {
     try {
       const response = await createStudentInvitation({ studentId: student.id, classId });
       setNotification({ type: response.delivery_status === 'Failed' ? 'info' : 'success', message: response.message });
+      await fetchData();
     } catch (error) {
       setNotification({ type: 'info', message: error instanceof Error ? error.message : `Unable to invite ${student.name}.` });
     } finally {
@@ -842,7 +843,12 @@ export const ClassesAndRosters: React.FC = () => {
 
   const handleSendAllStudentInvites = async () => {
     setIsSendingInvitations(true);
-    const results = await Promise.all(filteredStudents.map(async student => {
+    const invitable = filteredStudents.filter(student => {
+      const accountStatus = student.accountStatus ?? 'none';
+      return accountStatus === 'none' || accountStatus === 'pending';
+    });
+    const alreadyRegistered = filteredStudents.length - invitable.length;
+    const results = await Promise.all(invitable.map(async student => {
       const classId = invitationClassId(student);
       if (!classId) return { issued: false, deliveryFailed: false };
       try {
@@ -854,13 +860,15 @@ export const ClassesAndRosters: React.FC = () => {
     }));
     const invited = results.filter(result => result.issued).length;
     const deliveryFailed = results.filter(result => result.deliveryFailed).length;
+    const skippedNote = alreadyRegistered > 0 ? ` ${alreadyRegistered} already registered (skipped).` : '';
     setIsSendingInvitations(false);
     setNotification({
       type: invited === results.length && deliveryFailed === 0 ? 'success' : 'info',
       message: deliveryFailed > 0
-        ? `Issued ${invited} of ${results.length} Student invitations; ${deliveryFailed} email deliveries failed. Review the roster and retry any that failed.`
-        : `Issued ${invited} of ${results.length} Student invitations. Review the roster and retry any that failed.`,
+        ? `Issued ${invited} of ${results.length} Student invitations; ${deliveryFailed} email deliveries failed. Review the roster and retry any that failed.${skippedNote}`
+        : `Issued ${invited} of ${results.length} Student invitations. Review the roster and retry any that failed.${skippedNote}`,
     });
+    await fetchData();
   };
 
   // Filtered available students in the enroll modal
@@ -1277,15 +1285,38 @@ export const ClassesAndRosters: React.FC = () => {
                               <span>Edit</span>
                             </button>
 
-                            <button
-                              onClick={() => handleSendStudentEmailInvite(st)}
-                              disabled={isSendingInvitations}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-accent-600 hover:text-white dark:hover:bg-accent-600 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                              title="Send Email Invitation"
-                            >
-                              <Send className="w-3 h-3" />
-                              <span>Invite</span>
-                            </button>
+                            {(() => {
+                              const accountStatus = st.accountStatus ?? 'none';
+                              if (accountStatus === 'active' || accountStatus === 'secretary' || accountStatus === 'disabled') {
+                                const label = accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary' : 'Disabled';
+                                const title = accountStatus === 'active'
+                                  ? 'Invitation accepted: this student has an active account'
+                                  : accountStatus === 'secretary'
+                                    ? 'Linked to a Class Secretary account'
+                                    : 'This student account is disabled';
+                                return (
+                                  <span
+                                    title={title}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>{label}</span>
+                                  </span>
+                                );
+                              }
+                              const isReissue = accountStatus === 'pending';
+                              return (
+                                <button
+                                  onClick={() => handleSendStudentEmailInvite(st)}
+                                  disabled={isSendingInvitations}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-accent-600 hover:text-white dark:hover:bg-accent-600 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                                  title={isReissue ? 'Invitation sent but not accepted yet. Send a new link (the previous link stops working).' : 'Send Email Invitation'}
+                                >
+                                  <Send className="w-3 h-3" />
+                                  <span>{isReissue ? 'Reissue' : 'Invite'}</span>
+                                </button>
+                              );
+                            })()}
 
                             <button
                               onClick={() => handleDeleteStudent(st)}

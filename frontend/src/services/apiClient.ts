@@ -868,6 +868,7 @@ export function getFacultyStudentsApi(): Promise<Array<{
   status: string;
   faceEnrolled: boolean;
   consentStatus: string;
+  accountStatus?: 'none' | 'pending' | 'active' | 'secretary' | 'disabled';
   classSections: Array<{ classId: string; className: string; enrollmentId: string }>;
   overallGWA?: number;
   retentionThreshold?: number;

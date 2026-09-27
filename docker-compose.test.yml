@@ -8,6 +8,14 @@ services:
     environment:
       APP_ENV: test
       EMAIL_PROVIDER: mailpit
+      # Tests always use Mailpit, even when .env is set up for real email.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      SMTP_ENCRYPTION: none
+      SMTP_VERIFY_PEER: "false"
+      SMTP_CA_FILE: ""
       DEV_MOCK_IDENTITY_ENABLED: "false"
       DEV_MOCK_BIOMETRIC_ENABLED: "false"
       DEV_MOCK_LOCATION_ENABLED: "false"

@@ -218,6 +218,26 @@ function handle_faculty_dashboard_kpis(): void
     }
 }
 
+/**
+ * Account state shown on the Faculty roster: none (never invited or no login),
+ * pending (invitation sent, not accepted), active (registered), secretary
+ * (linked to a Class Secretary account) or disabled.
+ */
+function faculty_student_account_status(array $row): string
+{
+    if (($row['linked_secretary_user_id'] ?? null) !== null) {
+        return 'secretary';
+    }
+    if (($row['student_account_user_id'] ?? null) === null || ($row['account_status'] ?? null) === null) {
+        return 'none';
+    }
+    return match ((string) $row['account_status']) {
+        'Active' => 'active',
+        'Pending Activation' => 'pending',
+        default => 'disabled',
+    };
+}
+
 function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null): array
 {
     $byStudent = [];
@@ -250,6 +270,7 @@ function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null
                 'birthdate' => $row['birthdate'] ?? '',
                 'faceEnrolled' => (bool) ($row['face_enrolled'] ?? false),
                 'consentStatus' => strtolower($row['consent_status'] ?? 'pending'),
+                'accountStatus' => faculty_student_account_status($row),
                 'overallGWA' => null,
                 'clinicHoursCompleted' => 0,
                 'classSections' => [],
@@ -318,6 +339,8 @@ function handle_faculty_students(): void
                 COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
                 s.bu_email, s.contact, s.sex, s.year_level, s.status, s.admission_date, 
                 s.birthdate, b.consent_status, b.face_enrolled,
+                s.student_account_user_id, s.user_id AS linked_secretary_user_id,
+                ua.status AS account_status,
                 cs.cs_id, cs.cs_name, e.enrollment_id,
                 COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                 e.grade_components_json,
@@ -331,6 +354,7 @@ function handle_faculty_students(): void
             LEFT JOIN person_identities pi ON pi.person_id = s.person_id
             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
             LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
+            LEFT JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
              WHERE cs.instructor_user_id = :faculty_id
                AND LOWER(e.status) = 'active'
         ");
@@ -464,6 +488,21 @@ function handle_faculty_student_create(): void
             return;
         }
 
+        $duplicateNumber = $pdo->prepare('SELECT 1 FROM students WHERE lower(student_number) = lower(?) LIMIT 1');
+        $duplicateNumber->execute([$studentNumber]);
+        if ($duplicateNumber->fetchColumn() !== false) {
+            safe_error_response('A student with this student number already exists. Use Enroll Students to add the existing student to this class.', 409);
+            return;
+        }
+        if (!empty($email)) {
+            $duplicateEmail = $pdo->prepare('SELECT 1 FROM students WHERE lower(bu_email) = lower(?) LIMIT 1');
+            $duplicateEmail->execute([$email]);
+            if ($duplicateEmail->fetchColumn() !== false) {
+                safe_error_response('A student with this email already exists. Use Enroll Students to add the existing student to this class.', 409);
+                return;
+            }
+        }
+
         $pdo->beginTransaction();
         $stmt = $pdo->prepare("INSERT INTO students (student_number, name_prefix, first_name, middle_name, last_name, name_suffix, bu_email, contact, sex, year_level, status, admission_date, birthdate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(6)) RETURNING student_id");
         $stmt->execute([
@@ -520,7 +559,7 @@ function handle_faculty_student_create(): void
             validation_error_response($e->getErrors());
             return;
         }
-        if ($e instanceof PDOException && (string) $e->getCode() === '23000') {
+        if ($e instanceof PDOException && in_array((string) $e->getCode(), ['23000', '23505'], true)) {
             safe_error_response('Student number or email already exists.', 409);
             return;
         }

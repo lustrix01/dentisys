@@ -195,8 +195,14 @@ export const EmailManagement: React.FC = () => {
       let successCount = 0;
       let failedCount = 0;
       let deliveryFailedCount = 0;
+      let registeredCount = 0;
       for (const studentId of selected) {
         const student = safeStudents.find((candidate) => candidate.id === studentId);
+        const accountStatus = student?.accountStatus ?? 'none';
+        if (student && accountStatus !== 'none' && accountStatus !== 'pending') {
+          registeredCount++;
+          continue;
+        }
         const classId = student ? invitationClassId(student) : null;
         if (!student || !classId) {
           failedCount++;
@@ -216,9 +222,10 @@ export const EmailManagement: React.FC = () => {
       setIsSending(false);
       setNotice({
         type: failedCount === 0 && deliveryFailedCount === 0 ? 'success' : 'error',
-        message: deliveryFailedCount > 0
+        message: (deliveryFailedCount > 0
           ? `Student invitations: ${successCount} issued, ${deliveryFailedCount} email deliveries failed, ${failedCount} failed or skipped.`
-          : `Student invitations: ${successCount} issued, ${failedCount} failed or skipped.`,
+          : `Student invitations: ${successCount} issued, ${failedCount} failed or skipped.`)
+          + (registeredCount > 0 ? ` ${registeredCount} already registered (not re-invited).` : ''),
       });
     }
   };
@@ -457,11 +464,16 @@ export const EmailManagement: React.FC = () => {
                         <td className="py-3.5 px-4 text-center">
                           {(() => {
                             const invitation = studentInvitationStates[student.email.toLowerCase()];
+                            const accountStatus = student.accountStatus ?? 'none';
+                            if (accountStatus === 'active' || accountStatus === 'secretary' || accountStatus === 'disabled') {
+                              const registeredLabel = accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary Account' : 'Account Disabled';
+                              return <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200/60">{registeredLabel}</span>;
+                            }
                             const label = invitation
                               ? invitation.status === 'Sent' ? 'Invitation Sent'
                                 : invitation.status === 'Failed' ? 'Invitation Issued · Delivery Failed'
                                   : 'Invitation Pending'
-                              : 'Enrolled & Ready';
+                              : accountStatus === 'pending' ? 'Invitation Pending' : 'Enrolled & Ready';
                             const tone = invitation?.status === 'Failed'
                               ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-200/60'
                               : invitation
