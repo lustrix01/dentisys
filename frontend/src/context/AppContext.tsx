@@ -209,24 +209,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Keep the authoritative score hydration bounded.  The seeded Faculty view can
         // contain dozens of assessments; opening a route must not create one burst of
         // concurrent requests that starves the route-specific API calls.
-        const scoreCollections: AssessmentScore[][] = [];
-        for (const assessment of loadedAssessments) {
-          if (ignore) return;
-          try {
-            const response = await getFacultyAssessmentScoresApi(assessment.id);
-            scoreCollections.push(response.scores.map(score => ({
-              id: score.id,
-              assessmentId: assessment.id,
-              studentId: score.studentId,
-              score: Number(score.score),
-              remarks: score.remarks,
-              submittedAt: score.submittedAt,
-            })));
-          } catch (err) {
-            console.warn(`Backend score sync warning for assessment ${assessment.id}:`, err);
-            scoreCollections.push([]);
+        // Bounded concurrency: fast enough for dozens of assessments without
+        // flooding the API with one burst of parallel requests.
+        const SCORE_FETCH_CONCURRENCY = 4;
+        const scoreCollections: AssessmentScore[][] = loadedAssessments.map(() => []);
+        let nextAssessmentIndex = 0;
+        const loadScores = async (): Promise<void> => {
+          while (!ignore && nextAssessmentIndex < loadedAssessments.length) {
+            const index = nextAssessmentIndex;
+            nextAssessmentIndex += 1;
+            const assessment = loadedAssessments[index];
+            try {
+              const response = await getFacultyAssessmentScoresApi(assessment.id);
+              scoreCollections[index] = response.scores.map(score => ({
+                id: score.id,
+                assessmentId: assessment.id,
+                studentId: score.studentId,
+                score: Number(score.score),
+                remarks: score.remarks,
+                submittedAt: score.submittedAt,
+              }));
+            } catch (err) {
+              console.warn(`Backend score sync warning for assessment ${assessment.id}:`, err);
+            }
           }
-        }
+        };
+        await Promise.all(
+          Array.from({ length: Math.min(SCORE_FETCH_CONCURRENCY, loadedAssessments.length) }, () => loadScores()),
+        );
         if (ignore) return;
         setAssessmentScores(scoreCollections.flat());
       } catch (err) {
