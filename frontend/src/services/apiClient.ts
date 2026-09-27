@@ -623,7 +623,17 @@ export function confirmPasswordResetApi(token: string, password: string): Promis
 }
 
 // Dean Admin API Methods
-export function getAdminDashboardKpisApi(): Promise<{
+export interface SchoolYearScope {
+  currentSchoolYear?: string;
+  schoolYearFilter?: string;
+  availableSchoolYears?: string[];
+}
+
+function schoolYearQuery(schoolYear?: string): string {
+  return schoolYear ? `?schoolYear=${encodeURIComponent(schoolYear)}` : '';
+}
+
+export function getAdminDashboardKpisApi(schoolYear?: string): Promise<SchoolYearScope & {
   status: string;
   kpis: {
     totalStudents: number;
@@ -637,7 +647,7 @@ export function getAdminDashboardKpisApi(): Promise<{
   statusCounts: { active: number; warning: number; critical: number; remedial: number };
   classAttendance: Array<{ name: string; rate: number }>;
 }> {
-  return request('GET', '/admin/dashboard/kpis');
+  return request('GET', `/admin/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }
 
 export function getRetentionCriteriaApi(): Promise<Array<{
@@ -764,7 +774,7 @@ export function getFacultyReportsSummaryApi(): Promise<{
 }
 
 // Faculty Module API Methods
-export function getFacultyDashboardKpisApi(): Promise<{
+export function getFacultyDashboardKpisApi(schoolYear?: string): Promise<SchoolYearScope & {
   status: string;
   kpis: {
     assignedStudents: number;
@@ -783,7 +793,7 @@ export function getFacultyDashboardKpisApi(): Promise<{
     attendance: number | null;
   }>;
 }> {
-  return request('GET', '/faculty/dashboard/kpis');
+  return request('GET', `/faculty/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }
 
 export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial' | 'archived';
@@ -1170,7 +1180,7 @@ export function updateFacultySettingsApi(settings: { theme: 'light' | 'dark' }):
 }
 
 // Class Secretary Module API Methods
-export function getSecretaryDashboardKpisApi(): Promise<{
+export function getSecretaryDashboardKpisApi(schoolYear?: string): Promise<SchoolYearScope & {
   status: string;
   kpis: {
     assignedStudents: number;
@@ -1185,7 +1195,7 @@ export function getSecretaryDashboardKpisApi(): Promise<{
     classroomName: string;
   };
 }> {
-  return request('GET', '/secretary/dashboard/kpis');
+  return request('GET', `/secretary/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }
 
 export function getSecretaryAttendanceApi(params?: {
@@ -1905,8 +1915,8 @@ export function changePasswordApi(data: PasswordChangePayload): Promise<Password
 }
 
 // --- Authoritative Student Academic APIs ---
-export function getStudentAcademicDashboardApi(): Promise<StudentAcademicDashboardResponse> {
-  return request<StudentAcademicDashboardResponse>('GET', '/student/dashboard');
+export function getStudentAcademicDashboardApi(schoolYear?: string): Promise<StudentAcademicDashboardResponse & SchoolYearScope> {
+  return request<StudentAcademicDashboardResponse & SchoolYearScope>('GET', `/student/dashboard${schoolYearQuery(schoolYear)}`);
 }
 
 export function getStudentAcademicProfileApi(): Promise<StudentAcademicProfileResponse> {

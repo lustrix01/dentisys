@@ -43,3 +43,44 @@ function academic_require_current_school_year(PDO $pdo, string $schoolYear, stri
         ]);
     }
 }
+
+/**
+ * Resolve a dashboard school-year filter from the query string.
+ * Missing value => null (all school years; keeps older callers unchanged).
+ * "current" => the server-authoritative current school year.
+ * "all" => null. "YYYY-YYYY" => that school year.
+ */
+function academic_resolve_school_year_filter(PDO $pdo, mixed $raw): ?string
+{
+    $value = is_string($raw) ? trim($raw) : '';
+    if ($value === '' || strtolower($value) === 'all') {
+        return null;
+    }
+    if (strtolower($value) === 'current') {
+        return academic_current_school_year($pdo);
+    }
+    if (preg_match('/^\d{4}-\d{4}$/', $value) !== 1) {
+        throw new ValidationException([[
+            'field' => 'schoolYear',
+            'message' => 'School year must be "current", "all", or look like 2026-2027.',
+        ]]);
+    }
+    return $value;
+}
+
+/** Sorted (newest first) unique school years for a filter dropdown, always including the current one. */
+function academic_school_year_options(array $years, string $currentSchoolYear): array
+{
+    $clean = [];
+    foreach ($years as $year) {
+        $year = trim((string) $year);
+        if ($year !== '' && !in_array($year, $clean, true)) {
+            $clean[] = $year;
+        }
+    }
+    if (!in_array($currentSchoolYear, $clean, true)) {
+        $clean[] = $currentSchoolYear;
+    }
+    rsort($clean, SORT_STRING);
+    return $clean;
+}

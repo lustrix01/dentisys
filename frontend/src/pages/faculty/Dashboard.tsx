@@ -4,6 +4,7 @@ import { Search, ArrowRight, BookOpen } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/Card';
+import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
 import {
@@ -37,11 +38,13 @@ export const Dashboard: React.FC = () => {
 
   // Search input state
   const [searchQuery, setSearchQuery] = useState('');
+  const [schoolYear, setSchoolYear] = useState('current');
 
   const loadDashboard = useCallback(() => {
+    setSelectedClassId('');
     setLoading(true);
     setDashboardError('');
-    Promise.allSettled([getFacultyDashboardKpisApi(), getFacultyRetentionApi(), getNotificationsApi({ limit: 5 }), getFacultyActivityApi(5), getFacultyClassesApi()])
+    Promise.allSettled([getFacultyDashboardKpisApi(schoolYear), getFacultyRetentionApi(), getNotificationsApi({ limit: 5 }), getFacultyActivityApi(5), getFacultyClassesApi()])
       .then(([kpiResult, retentionResult, announcementsResult, activityResult, classesResult]) => {
         if (activityResult.status === 'fulfilled') {
           setRecentActivity(Array.isArray(activityResult.value.activity) ? activityResult.value.activity : []);
@@ -83,7 +86,7 @@ export const Dashboard: React.FC = () => {
         }
         setLoading(false);
       });
-  }, []);
+  }, [schoolYear]);
 
   useEffect(() => {
     loadDashboard();
@@ -161,6 +164,8 @@ export const Dashboard: React.FC = () => {
   const pendingRemedials = retentionRecords.flatMap(record => {
     const remedial = record.remedial;
     if (!remedial || remedial.status !== 'pending') return [];
+    // Only sections inside the selected school year (assignedClasses comes from the scoped KPI response).
+    if (!assignedClasses.includes(String(record.classId))) return [];
     return [{
       id: record.enrollmentId,
       studentName: record.studentName || 'Student name unavailable',
@@ -245,6 +250,12 @@ export const Dashboard: React.FC = () => {
             Access your assigned dental courses, grade computations, student attendance records, and retention evaluations in one place.
           </p>
         </div>
+        <SchoolYearFilter
+          value={schoolYear}
+          currentSchoolYear={dashboardKpis?.currentSchoolYear}
+          availableSchoolYears={dashboardKpis?.availableSchoolYears}
+          onChange={setSchoolYear}
+        />
 
         <button
           onClick={() => navigate('/classes')}
@@ -286,7 +297,9 @@ export const Dashboard: React.FC = () => {
             {/* Consolidated Faculty Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-left">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Classes</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  {schoolYear === 'current' ? 'Currently Assigned Classes' : schoolYear === 'all' ? 'Assigned Classes (All Years)' : `Assigned Classes (${schoolYear})`}
+                </span>
                 <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
                   {dashboardKpis?.kpis.activeClasses ?? 0}
                 </span>

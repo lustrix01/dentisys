@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ArrowRight } from 'lucide-react';
 import { Card } from '../../components/Card';
+import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { getAdminDashboardKpisApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
 
@@ -13,11 +14,12 @@ export const Dashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [apiData, setApiData] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [schoolYear, setSchoolYear] = useState('current');
 
   const loadKpis = () => {
     setLoading(true);
     setError('');
-    getAdminDashboardKpisApi()
+    getAdminDashboardKpisApi(schoolYear)
       .then((res) => {
         setApiData(res);
       })
@@ -29,7 +31,7 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     loadKpis();
-  }, []);
+  }, [schoolYear]);
 
   const totalStudents = apiData?.kpis?.totalStudents ?? 0;
   const totalFaculty = apiData?.kpis?.totalFaculty ?? 0;
@@ -73,6 +75,12 @@ export const Dashboard: React.FC = () => {
             Oversee university faculty email invitations, student attendance logs, system reports, and activity audit trails.
           </p>
         </div>
+        <SchoolYearFilter
+          value={schoolYear}
+          currentSchoolYear={apiData?.currentSchoolYear}
+          availableSchoolYears={apiData?.availableSchoolYears}
+          onChange={setSchoolYear}
+        />
       </div>
 
       {/* 2-Column Layout */}

@@ -45,9 +45,19 @@ function handle_admin_dashboard_kpis(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = admin_verify_auth($pdo, $config);
+        $currentSchoolYear = academic_current_school_year($pdo);
+        $schoolYear = academic_resolve_school_year_filter($pdo, $_GET['schoolYear'] ?? null);
+        $yearParams = $schoolYear === null ? [] : [':school_year' => $schoolYear];
+        $studentYearWhere = $schoolYear === null ? '' : 'WHERE UPPER(cs_scope.school_year) = UPPER(:school_year)';
+        $facultyYearJoin = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
+        $attendanceYearWhere = $schoolYear === null ? '' : 'WHERE UPPER(cs.school_year) = UPPER(:school_year)';
+        $availableSchoolYears = academic_school_year_options(
+            $pdo->query('SELECT DISTINCT school_year FROM class_sections WHERE school_year IS NOT NULL')->fetchAll(PDO::FETCH_COLUMN),
+            $currentSchoolYear
+        );
 
         // Fetch counts from database
-        $studentStmt = $pdo->query("
+        $studentStmt = $pdo->prepare("
             SELECT 
                 s.student_id, 
                 s.student_number, 
@@ -61,14 +71,17 @@ function handle_admin_dashboard_kpis(): void
                     WHEN 'warning' THEN 2 WHEN 'active' THEN 1 ELSE 0 END) AS risk_score
             FROM students s
             LEFT JOIN enrollments e ON s.student_id = e.student_id
+            LEFT JOIN class_sections cs_scope ON cs_scope.cs_id = e.cs_id
             LEFT JOIN person_identities pi ON pi.person_id = s.person_id
             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+            {$studentYearWhere}
             GROUP BY s.student_id, s.student_number, pi.first_name, s.first_name,
                      pi.last_name, s.last_name, s.year_level, s.status
         ");
-        $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $studentStmt->execute($yearParams);
+        $students = $studentStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $facultyStmt = $pdo->query(
+        $facultyStmt = $pdo->prepare(
             "SELECT u.user_id,
                     COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(pi.name_prefix, ''),
                         NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''),
@@ -79,16 +92,17 @@ function handle_admin_dashboard_kpis(): void
                     COUNT(DISTINCT e.student_id) AS student_count
              FROM user_accounts u
              LEFT JOIN person_identities pi ON pi.person_id = u.person_id
-             LEFT JOIN class_sections cs ON cs.instructor_user_id = u.user_id
+             LEFT JOIN class_sections cs ON cs.instructor_user_id = u.user_id {$facultyYearJoin}
              LEFT JOIN courses c ON c.course_id = cs.course_id
              LEFT JOIN enrollments e ON e.cs_id = cs.cs_id
              WHERE u.role = 'faculty'
              GROUP BY u.user_id, u.display_name, u.login_email, u.status,
                       pi.name_prefix, pi.first_name, pi.middle_name, pi.last_name, pi.name_suffix"
         );
-        $faculty = $facultyStmt ? $facultyStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $facultyStmt->execute($yearParams);
+        $faculty = $facultyStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $attStmt = $pdo->query("
+        $attStmt = $pdo->prepare("
             SELECT 
                 ar.record_id, 
                 ar.status, 
@@ -96,8 +110,10 @@ function handle_admin_dashboard_kpis(): void
             FROM attendance_records ar
             LEFT JOIN enrollments e ON ar.enrollment_id = e.enrollment_id
             LEFT JOIN class_sections cs ON e.cs_id = cs.cs_id
+            {$attendanceYearWhere}
         ");
-        $attendance = $attStmt ? $attStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $attStmt->execute($yearParams);
+        $attendance = $attStmt->fetchAll(PDO::FETCH_ASSOC);
 
         $totalStudents = count($students);
 
@@ -186,6 +202,9 @@ function handle_admin_dashboard_kpis(): void
 
         json_response([
             'status' => 'ok',
+            'currentSchoolYear' => $currentSchoolYear,
+            'schoolYearFilter' => $schoolYear ?? 'all',
+            'availableSchoolYears' => $availableSchoolYears,
             'kpis' => [
                 'totalStudents' => $totalStudents,
                 'totalFaculty' => $activeFacultyCount > 0 ? $activeFacultyCount : count($facultyList),
@@ -210,6 +229,8 @@ function handle_admin_dashboard_kpis(): void
             ],
             'classAttendance' => $classAttendance,
         ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Admin dashboard error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);

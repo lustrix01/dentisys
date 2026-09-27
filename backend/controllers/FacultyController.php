@@ -107,6 +107,15 @@ function handle_faculty_dashboard_kpis(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
+        $currentSchoolYear = academic_current_school_year($pdo);
+        $schoolYear = academic_resolve_school_year_filter($pdo, $_GET['schoolYear'] ?? null);
+        $yearFilter = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
+        $yearParams = $schoolYear === null ? [] : [':school_year' => $schoolYear];
+        $yearsStmt = $pdo->prepare(
+            'SELECT DISTINCT school_year FROM class_sections WHERE instructor_user_id = ? AND school_year IS NOT NULL'
+        );
+        $yearsStmt->execute([$authCtx['user_id']]);
+        $availableSchoolYears = academic_school_year_options($yearsStmt->fetchAll(PDO::FETCH_COLUMN), $currentSchoolYear);
 
         $studentStmt = $pdo->prepare("
             SELECT DISTINCT
@@ -118,8 +127,9 @@ function handle_faculty_dashboard_kpis(): void
             JOIN class_sections cs ON e.cs_id = cs.cs_id
             WHERE cs.instructor_user_id = :faculty_id
               AND LOWER(e.status) = 'active'
+              {$yearFilter}
         ");
-        $studentStmt->execute([':faculty_id' => $authCtx['user_id']]);
+        $studentStmt->execute([':faculty_id' => $authCtx['user_id']] + $yearParams);
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $classStmt = $pdo->prepare("
@@ -137,10 +147,11 @@ function handle_faculty_dashboard_kpis(): void
             LEFT JOIN attendance_records ar ON ar.enrollment_id = e.enrollment_id
             WHERE cs.instructor_user_id = :faculty_id
               AND (LOWER(cs.status) = 'active' OR cs.status IS NULL)
+              {$yearFilter}
             GROUP BY cs.cs_id, cs.cs_name, c.course_code, c.name
             ORDER BY cs.cs_id
         ");
-        $classStmt->execute([':faculty_id' => $authCtx['user_id']]);
+        $classStmt->execute([':faculty_id' => $authCtx['user_id']] + $yearParams);
         $classesList = $classStmt ? $classStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $activeClassesCount = count($classesList);
 
@@ -183,6 +194,9 @@ function handle_faculty_dashboard_kpis(): void
 
         json_response([
             'status' => 'ok',
+            'currentSchoolYear' => $currentSchoolYear,
+            'schoolYearFilter' => $schoolYear ?? 'all',
+            'availableSchoolYears' => $availableSchoolYears,
             'kpis' => [
                 'assignedStudents' => $totalStudents,
                 'activeClasses' => $activeClassesCount,
@@ -195,6 +209,8 @@ function handle_faculty_dashboard_kpis(): void
             ],
             'classes' => $mappedClasses,
         ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Faculty dashboard error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);

@@ -217,6 +217,15 @@ function handle_student_dashboard_get(): void
         $authCtx = student_academic_verify_auth($pdo, $config);
         $profile = student_academic_profile($pdo, (int) $authCtx['student_id']);
         $classes = student_academic_class_rows($pdo, (int) $authCtx['student_id']);
+        $currentSchoolYear = academic_current_school_year($pdo);
+        $schoolYear = academic_resolve_school_year_filter($pdo, $_GET['schoolYear'] ?? null);
+        $availableSchoolYears = academic_school_year_options(array_column($classes, 'schoolYear'), $currentSchoolYear);
+        if ($schoolYear !== null) {
+            $classes = array_values(array_filter(
+                $classes,
+                static fn(array $row): bool => strcasecmp(trim((string) $row['schoolYear']), $schoolYear) === 0
+            ));
+        }
         if ($profile === null) {
             safe_error_response('Student profile not found.', 404);
             return;
@@ -228,9 +237,11 @@ function handle_student_dashboard_get(): void
                     COUNT(*) AS total
                FROM attendance_records r
                JOIN enrollments e ON e.enrollment_id = r.enrollment_id
-              WHERE e.student_id = ? AND LOWER(e.status) = \'active\''
+               JOIN class_sections cs ON cs.cs_id = e.cs_id
+              WHERE e.student_id = ? AND LOWER(e.status) = \'active\'
+                AND (CAST(? AS TEXT) IS NULL OR UPPER(cs.school_year) = UPPER(CAST(? AS TEXT)))'
         );
-        $attendance->execute([(int) $authCtx['student_id']]);
+        $attendance->execute([(int) $authCtx['student_id'], $schoolYear, $schoolYear]);
         $attendanceRow = $attendance->fetch(PDO::FETCH_ASSOC) ?: ['attended' => 0, 'total' => 0];
         $totalAttendance = (int) $attendanceRow['total'];
         $attendanceRate = $totalAttendance > 0
@@ -239,6 +250,9 @@ function handle_student_dashboard_get(): void
         $clinicalHours = array_sum(array_map(static fn(array $row): int => $row['clinicHoursCompleted'], $classes));
         json_response([
             'status' => 'ok',
+            'currentSchoolYear' => $currentSchoolYear,
+            'schoolYearFilter' => $schoolYear ?? 'all',
+            'availableSchoolYears' => $availableSchoolYears,
             'student' => $profile,
             'summary' => [
                 'classCount' => count($classes),
@@ -252,6 +266,8 @@ function handle_student_dashboard_get(): void
             ],
             'classes' => $classes,
         ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (Throwable $e) {
         error_log('Student dashboard read error: ' . get_class($e));
         safe_error_response('Unable to read Student dashboard.', 500);

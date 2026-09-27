@@ -636,6 +636,43 @@ function handle_secretary_dashboard_kpis(): void
         );
         $csStmt->execute([$authCtx['user_id']]);
         $assignedClassRows = $csStmt->fetchAll(PDO::FETCH_ASSOC);
+        $currentSchoolYear = academic_current_school_year($pdo);
+        $schoolYear = academic_resolve_school_year_filter($pdo, $_GET['schoolYear'] ?? null);
+        $availableSchoolYears = academic_school_year_options(array_column($assignedClassRows, 'school_year'), $currentSchoolYear);
+        $schoolYearScope = [
+            'currentSchoolYear' => $currentSchoolYear,
+            'schoolYearFilter' => $schoolYear ?? 'all',
+            'availableSchoolYears' => $availableSchoolYears,
+        ];
+        if ($schoolYear !== null) {
+            $assignedClassRows = array_values(array_filter(
+                $assignedClassRows,
+                static fn(array $row): bool => strcasecmp(trim((string) $row['school_year']), $schoolYear) === 0
+            ));
+            if ($assignedClassRows === []) {
+                // No assigned section in this school year: report an empty dashboard,
+                // never fall back to sections from other years.
+                json_response($schoolYearScope + [
+                    'status' => 'ok',
+                    'kpis' => [
+                        'assignedStudents' => 0,
+                        'attendanceRate' => null,
+                        'todayRecords' => 0,
+                        'overriddenCount' => 0,
+                    ],
+                    'recentActivity' => secretary_activity_rows($pdo, (int) $authCtx['user_id']),
+                    'assignedClasses' => [],
+                    'assignedClass' => [
+                        'classId' => '',
+                        'className' => '',
+                        'classroomName' => '',
+                        'cctvCameraId' => null,
+                        'cctvStatus' => 'not_configured',
+                    ],
+                ], 200);
+                return;
+            }
+        }
         $requestedClassId = (int) ($_GET['csId'] ?? 0);
         $csRow = null;
         foreach ($assignedClassRows as $candidate) {
@@ -718,7 +755,7 @@ function handle_secretary_dashboard_kpis(): void
             'classroomName' => $row['lab_room'] ?: ($row['lec_room'] ?: null),
         ], $assignedClassRows);
 
-        json_response([
+        json_response($schoolYearScope + [
             'status' => 'ok',
             'kpis' => [
                 'assignedStudents' => $totalStudents,
@@ -736,6 +773,8 @@ function handle_secretary_dashboard_kpis(): void
                 'cctvStatus' => 'not_configured',
             ],
         ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Secretary dashboard error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);

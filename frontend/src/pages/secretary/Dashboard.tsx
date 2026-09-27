@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, ArrowRight, Play, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Card } from '../../components/Card';
+import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { getSecretaryDashboardKpisApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
 
@@ -14,12 +15,13 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [schoolYear, setSchoolYear] = useState('current');
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      setData(await getSecretaryDashboardKpisApi());
+      setData(await getSecretaryDashboardKpisApi(schoolYear));
     } catch (requestError) {
       setData(null);
       setError(requestError instanceof Error ? requestError.message : 'Unable to load dashboard data.');
@@ -30,7 +32,7 @@ export const Dashboard: React.FC = () => {
 
   useEffect(() => {
     load().catch(() => {});
-  }, []);
+  }, [schoolYear]);
 
   const assignedStudentsCount = data?.kpis.assignedStudents ?? 0;
   const attendanceRateVal = data?.kpis.attendanceRate;
@@ -58,6 +60,12 @@ export const Dashboard: React.FC = () => {
             Manage section attendance registers, start live class sessions, and submit manual overrides.
           </p>
         </div>
+        <SchoolYearFilter
+          value={schoolYear}
+          currentSchoolYear={data?.currentSchoolYear}
+          availableSchoolYears={data?.availableSchoolYears}
+          onChange={setSchoolYear}
+        />
 
         {/* Highlighted Primary CTA Button */}
         <button

@@ -17,12 +17,12 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card'
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { GoogleLinkCard } from '../../components/GoogleLinkCard';
+import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import {
   getStudentAcademicDashboardApi,
   getStudentAcademicProfileApi,
 } from '../../services/apiClient';
 import type {
-  StudentAcademicDashboardResponse,
   StudentAcademicProfile,
 } from '../../types';
 
@@ -95,15 +95,16 @@ export function StudentIdentityFields({ profile }: { profile?: StudentAcademicPr
 
 export const RealStudentDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [data, setData] = useState<StudentAcademicDashboardResponse | null>(null);
+  const [data, setData] = useState<Awaited<ReturnType<typeof getStudentAcademicDashboardApi>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [schoolYear, setSchoolYear] = useState('current');
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await getStudentAcademicDashboardApi();
+      const res = await getStudentAcademicDashboardApi(schoolYear);
       setData(res);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unable to load student dashboard.');
@@ -114,7 +115,7 @@ export const RealStudentDashboard: React.FC = () => {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [schoolYear]);
 
   if (loading) {
     return (
@@ -162,6 +163,12 @@ export const RealStudentDashboard: React.FC = () => {
             Monitor your clinical attendance, academic progress, and retention standing.
           </p>
         </div>
+        <SchoolYearFilter
+          value={schoolYear}
+          currentSchoolYear={data.currentSchoolYear}
+          availableSchoolYears={data.availableSchoolYears}
+          onChange={setSchoolYear}
+        />
 
         <div className="flex items-center gap-3">
           <div className="text-right hidden sm:block">
