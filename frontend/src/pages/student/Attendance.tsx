@@ -47,6 +47,7 @@ import {
 } from '../../utils/camera';
 import {
   runGuidedCapture,
+  type GuidanceIssue,
   type GuidedCapturePhase,
 } from '../../utils/guidedCapture';
 import { playGuidanceSuccessTone, primeGuidanceAudio } from '../../utils/guidanceAudio';
@@ -111,6 +112,12 @@ function formatAction(action: LivenessAction): { title: string; instruction: str
   }
 }
 
+const GUIDANCE_ISSUE_MESSAGES: Record<GuidanceIssue, string> = {
+  no_face: 'We can’t see your face. Center your face inside the guide.',
+  multiple_faces: 'More than one face is in view. Make sure only you are in the frame.',
+  low_quality: 'The image is blurry or too dark. Face a light source and hold still.',
+};
+
 export const Attendance: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -156,6 +163,7 @@ export const Attendance: React.FC = () => {
   const [capturedFrameCount, setCapturedFrameCount] = useState<number>(0);
   const [phaseInstruction, setPhaseInstruction] = useState<string>('');
   const [lastActionSuccess, setLastActionSuccess] = useState<string | null>(null);
+  const [captureIssue, setCaptureIssue] = useState<GuidanceIssue | null>(null);
   const [pendingAttendancePayload, setPendingAttendancePayload] = useState<{
     attendanceSessionId: number;
     challengeId: string;
@@ -526,9 +534,17 @@ export const Attendance: React.FC = () => {
     setLastActionSuccess(null);
     const isRunActive = (): boolean => captureRunRef.current === runId && !abortCaptureRef.current;
     try {
+      setCaptureIssue(null);
       const result = await runGuidedCapture({
         actions: livenessChallenge.actions,
         targetFrames: 30,
+        deadlineMs: livenessChallenge.expiresAt
+          ? new Date(livenessChallenge.expiresAt).getTime() - 5000
+          : undefined,
+        onIssue: (issue) => {
+          if (!isRunActive()) return;
+          setCaptureIssue(issue);
+        },
         captureFrame: captureSingleFrame,
         analyzeFrame: async (frame) => {
           const formData = new FormData();
@@ -556,8 +572,16 @@ export const Attendance: React.FC = () => {
       });
 
       if (!isRunActive()) return;
+      setCaptureIssue(null);
       if (result.status === 'cancelled') return;
       if (result.status === 'timeout') {
+        if (result.reason === 'challenge_expired') {
+          setFailureNotice('The time limit for this attempt was reached. A new attempt is ready — press Start when you are set.');
+          setCapturePhase('idle');
+          setPhaseInstruction('');
+          void startCameraAndChallenge();
+          return;
+        }
         setFailureNotice(result.reason === 'face_not_detected'
           ? 'Your face was not detected in the camera frames. Center your face in the guide and retry the guided check-in.'
           : result.reason === 'camera_frame_unavailable'
@@ -603,6 +627,7 @@ export const Attendance: React.FC = () => {
     setCapturePhase('idle');
     setCapturedFrameCount(0);
     setLastActionSuccess(null);
+    setCaptureIssue(null);
     setLivenessChallenge(null);
     setCheckInStage('idle');
     if (submissionInFlight) {
@@ -1195,6 +1220,11 @@ export const Attendance: React.FC = () => {
                         <p className="text-xs font-semibold text-blue-200">
                           {phaseInstruction}
                         </p>
+                        {captureIssue && (
+                          <p role="alert" className="mx-auto max-w-xs rounded-lg bg-amber-500/90 px-3 py-1.5 text-xs font-bold text-slate-950">
+                            {GUIDANCE_ISSUE_MESSAGES[captureIssue]}
+                          </p>
+                        )}
                         <div className="w-56 mx-auto bg-slate-800/80 h-2 rounded-full overflow-hidden border border-slate-700">
                           <div
                             className="bg-blue-500 h-full transition-all duration-150"

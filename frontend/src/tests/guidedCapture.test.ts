@@ -140,3 +140,70 @@ test('guided capture tolerates an isolated guidance failure', async () => {
   assert.equal(result.status, 'timeout');
   if (result.status === 'timeout') assert.equal(result.reason, 'action_not_observed');
 });
+
+test('guided capture does not advance on unusable frames and reports the live issue', async () => {
+  const phases: GuidedCapturePhase[] = [];
+  const issues: Array<string | null> = [];
+  const guidance: Array<{ detectedAction: LivenessAction | null; faceDetected: boolean; usable?: boolean; issue?: 'no_face' | 'multiple_faces' | 'low_quality' | null }> = [];
+  for (let i = 0; i < 5; i++) guidance.push({ detectedAction: null, faceDetected: true, usable: false, issue: 'low_quality' });
+  const result = await runGuidedCapture({
+    actions: ['blink', 'turn_left'],
+    targetFrames: 20,
+    maxAttempts: 8,
+    captureFrame: async () => frame(1),
+    analyzeFrame: async () => guidance.shift() ?? { detectedAction: null, faceDetected: true, usable: true, issue: null },
+    isCancelled: () => false,
+    onPhase: phase => phases.push(phase),
+    onFrameCount: () => undefined,
+    onIssue: issue => issues.push(issue),
+    wait: async () => undefined,
+  });
+  assert.deepEqual(issues, ['low_quality', null], 'issue is raised while it lasts and cleared when frames become usable');
+  assert.deepEqual(phases, ['phase1_neutral', 'phase2_action1'], 'the action prompt appears only after three usable frames');
+  assert.equal(result.status, 'timeout');
+  assert.equal(result.frames.length, 3, 'unusable frames are never uploaded');
+});
+
+test('guided capture does not report quality issues for turned-head frames during an action', async () => {
+  const issues: Array<string | null> = [];
+  const guidance = [
+    { detectedAction: null, faceDetected: true, usable: true, issue: null },
+    { detectedAction: null, faceDetected: true, usable: true, issue: null },
+    { detectedAction: null, faceDetected: true, usable: true, issue: null },
+    { detectedAction: null, faceDetected: true, usable: false, issue: 'low_quality' as const },
+    { detectedAction: null, faceDetected: true, usable: false, issue: 'low_quality' as const },
+    { detectedAction: null, faceDetected: true, usable: false, issue: 'low_quality' as const },
+    { detectedAction: null, faceDetected: true, usable: false, issue: 'low_quality' as const },
+  ];
+  await runGuidedCapture({
+    actions: ['turn_left', 'blink'],
+    targetFrames: 20,
+    maxAttempts: 7,
+    captureFrame: async () => frame(1),
+    analyzeFrame: async () => guidance.shift() ?? { detectedAction: null, faceDetected: true },
+    isCancelled: () => false,
+    onPhase: () => undefined,
+    onFrameCount: () => undefined,
+    onIssue: issue => issues.push(issue),
+    wait: async () => undefined,
+  });
+  assert.deepEqual(issues, []);
+});
+
+test('guided capture stops at the challenge deadline with a restartable reason', async () => {
+  let clock = 0;
+  const result = await runGuidedCapture({
+    actions: ['blink', 'turn_right'],
+    targetFrames: 20,
+    deadlineMs: 1000,
+    now: () => clock,
+    captureFrame: async () => frame(1),
+    analyzeFrame: async () => ({ detectedAction: null, faceDetected: true, usable: true, issue: null }),
+    isCancelled: () => false,
+    onPhase: () => undefined,
+    onFrameCount: () => undefined,
+    wait: async milliseconds => { clock += milliseconds; },
+  });
+  assert.equal(result.status, 'timeout');
+  if (result.status === 'timeout') assert.equal(result.reason, 'challenge_expired');
+});

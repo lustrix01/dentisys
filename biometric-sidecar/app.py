@@ -150,7 +150,19 @@ def decode_frame(data: bytes) -> np.ndarray:
     return image
 
 
-def face_crop(image: np.ndarray, config: Calibration) -> np.ndarray:
+FACE_ISSUE_MESSAGES = {
+    "no_face": "Capture must contain exactly one visible face.",
+    "multiple_faces": "Capture must contain exactly one visible face.",
+    "low_quality": "Capture quality is insufficient.",
+}
+
+
+def assess_face(image: np.ndarray, config: Calibration) -> tuple[np.ndarray | None, str | None]:
+    """Return (crop, None) for a usable frame, or (None, issue) explaining why not.
+
+    Uses only the approved calibration values (Haar parameters and the
+    Laplacian quality threshold); it introduces no new thresholds.
+    """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     faces = cascade.detectMultiScale(
@@ -159,13 +171,25 @@ def face_crop(image: np.ndarray, config: Calibration) -> np.ndarray:
         minNeighbors=config.haar_min_neighbors,
         minSize=(config.haar_min_face_px, config.haar_min_face_px),
     )
-    if len(faces) != 1:
-        raise BiometricError("Capture must contain exactly one visible face.", "quality_failed")
+    if len(faces) == 0:
+        return None, "no_face"
+    if len(faces) > 1:
+        return None, "multiple_faces"
     x, y, width, height = faces[0]
     crop = gray[y : y + height, x : x + width]
     if crop.size == 0 or float(cv2.Laplacian(crop, cv2.CV_64F).var()) < config.quality_laplacian_variance:
-        raise BiometricError("Capture quality is insufficient.", "quality_failed")
-    return cv2.resize(cv2.equalizeHist(crop), (200, 200), interpolation=cv2.INTER_AREA)
+        return None, "low_quality"
+    return cv2.resize(cv2.equalizeHist(crop), (200, 200), interpolation=cv2.INTER_AREA), None
+
+
+def face_crop(image: np.ndarray, config: Calibration) -> np.ndarray:
+    crop, issue = assess_face(image, config)
+    if issue is not None or crop is None:
+        raise BiometricError(
+            FACE_ISSUE_MESSAGES.get(issue or "low_quality", "Capture quality is insufficient."),
+            "quality_failed",
+        )
+    return crop
 
 
 @lru_cache(maxsize=1)
@@ -433,10 +457,13 @@ def guidance():
     config = calibration()
     image = guidance_image()
     detected_action, face_detected = guidance_action(image, config)
+    _, issue = assess_face(image, config)
     return jsonify({
         "ok": True,
         "detectedAction": detected_action,
         "faceDetected": face_detected,
+        "usable": issue is None,
+        "issue": issue,
     })
 
 

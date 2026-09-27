@@ -222,6 +222,8 @@ export interface LivenessChallengeResponse {
 export interface LivenessGuidanceResponse {
   detectedAction: LivenessAction | null;
   faceDetected: boolean;
+  usable?: boolean | null;
+  issue?: 'no_face' | 'multiple_faces' | 'low_quality' | null;
 }
 
 export interface BiometricEnrollmentResponse {

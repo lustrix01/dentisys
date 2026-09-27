@@ -748,9 +748,16 @@ function student_biometric_sidecar_guidance(array $config, array $frame): array
         && !in_array($detectedAction, ['blink', 'turn_left', 'turn_right'], true)) {
         throw new StudentBiometricException('Biometric guidance response is invalid.', 503, 'biometric_service_unavailable');
     }
+    $issue = $response['issue'] ?? null;
+    if ($issue !== null && !in_array($issue, ['no_face', 'multiple_faces', 'low_quality'], true)) {
+        $issue = null;
+    }
     return [
         'detectedAction' => $detectedAction,
         'faceDetected' => ($response['faceDetected'] ?? false) === true,
+        // null = sidecar did not report usability (older sidecar); the browser then treats the frame as usable.
+        'usable' => array_key_exists('usable', $response) ? $response['usable'] === true : null,
+        'issue' => $issue,
     ];
 }
 
