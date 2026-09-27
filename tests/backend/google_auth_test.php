@@ -160,4 +160,14 @@ foreach (glob($config['rate_limit']['storage_dir'] . '/*') ?: [] as $path) {
 }
 @rmdir($config['rate_limit']['storage_dir']);
 
+$googleAuthSource = (string) file_get_contents(__DIR__ . '/../../backend/app/google_auth.php');
+google_test_assert(
+    str_contains($googleAuthSource, "'cacheKey' => 'google_auth_certs_cache_federated_signon_certs_v3'"),
+    'Google certificate cache uses a PSR-6-valid key'
+);
+google_test_assert(
+    preg_match('/^[a-zA-Z0-9_\.\! ]+$/', 'google_auth_certs_cache_federated_signon_certs_v3') === 1,
+    'Google certificate cache key matches the cache pool pattern'
+);
+
 echo "ALL GOOGLE AUTH TESTS PASSED.\n";

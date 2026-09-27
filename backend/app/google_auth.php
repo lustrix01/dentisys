@@ -66,6 +66,9 @@ function google_verify_id_token(array $config, string $credential, ?callable $ve
             : (new AccessToken(null, google_auth_cache_pool()))->verify($credential, [
                 'audience' => $clientId,
                 'throwException' => true,
+                // google/auth's default key contains "|", which its own
+                // FileSystemCacheItemPool rejects (PSR-6 key rules).
+                'cacheKey' => 'google_auth_certs_cache_federated_signon_certs_v3',
             ]);
     } catch (GoogleIdentityException $e) {
         throw $e;
