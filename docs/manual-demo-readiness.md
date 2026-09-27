@@ -77,8 +77,8 @@ The `Last reviewed` value is the repository commit set used to review this check
 1. In pgAdmin, select the `dentisys` database and open **Tools → Query Tool**.
 2. Open the complete [development demo seed](../database/seeds/development-demo.sql), copy it into Query Tool, and execute it once.
 3. Confirm that the query completes without schema changes, `DROP`, or `TRUNCATE` operations.
-4. Confirm that the documented Admin, Faculty, Secretary, and Student demo accounts and their fixture records are present.
-5. If the seed is intentionally re-run, execute it a second time and confirm that it remains safe and does not create duplicate fixture rows.
+4. Confirm that the accounts in [demo-accounts.md](demo-accounts.md) and their fixture records are present.
+5. If the seed is intentionally re-run, execute it a second time and confirm that it reports that it was skipped and that no rows were added.
 6. Stop the stack with `docker compose down` when needed, preserving volumes. Do not use `docker compose down -v` for an ordinary demo reset; it deletes the persisted PostgreSQL volume and all local DentiSys data.
 
 **Expected observations:** Demo data appears only after this manual import; normal startup and migrations do not seed it. The seed is transaction-wrapped, non-destructive, safe to rerun, and preserves the normal development volume.

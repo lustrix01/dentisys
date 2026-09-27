@@ -60,16 +60,18 @@ The default `docker-compose.yml` intentionally falls back to `APP_ENV=developmen
 
 ### 6. Load demo data manually (optional)
 
-Demo users and academic/clinical records are intentionally separate from startup.
+Demo users and academic/clinical records are intentionally separate from startup. The seed loads only into a database that has **no students yet** (a new volume); on any other database it does nothing.
 
-1. Sign in to pgAdmin with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` from `.env`.
-2. Select the preconfigured **DentiSys PostgreSQL (development)** server and enter `DB_PASS` when prompted.
-3. Select the `dentisys` database, then open **Tools → Query Tool**.
-4. Copy all of [`database/seeds/development-demo.sql`](database/seeds/development-demo.sql) into Query Tool and execute it.
+Either paste all of [`database/seeds/development-demo.sql`](database/seeds/development-demo.sql) into pgAdmin's **Query Tool** for the `dentisys` database and execute it, or run:
 
-The seed is transaction-wrapped and non-destructive: it does not change schema, drop or truncate data, and skips rows already present.
+```powershell
+docker compose cp database/seeds/development-demo.sql db:/tmp/development-demo.sql
+docker compose exec -T db psql -U postgres -d dentisys -v ON_ERROR_STOP=1 -f /tmp/development-demo.sql
+```
 
-These are committed local development/demo credentials only. Do not reuse them outside development or testing. Normal DentiSys startup and migrations do not create these accounts; they exist only after [`database/seeds/development-demo.sql`](database/seeds/development-demo.sql) has been applied.
+The seed is transaction-wrapped and non-destructive: it makes no schema changes and never drops, truncates, updates, or deletes data. All people and records are fictional.
+
+These are committed local development/demo credentials only. Do not reuse them outside development or testing. Every account of a role shares that role's password.
 
 | Role | Email | Password |
 | --- | --- | --- |
@@ -78,7 +80,7 @@ These are committed local development/demo credentials only. Do not reuse them o
 | Secretary | `secretary@bicol-u.edu.ph` | `Secretary123!` |
 | Student | `student@bicol-u.edu.ph` | `Student123!` |
 
-The seed contains additional fixtures. See the [development environment guide](docs/development-environment.md) for detailed local testing guidance.
+The complete list (10 faculty, 8 class secretaries, 120 students, and students without an account for invitation testing) is in [docs/demo-accounts.md](docs/demo-accounts.md).
 
 ### 7. Daily development commands
 

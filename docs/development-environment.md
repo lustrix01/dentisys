@@ -63,10 +63,10 @@ docker compose logs -f db
 2. Sign in with `PGADMIN_DEFAULT_EMAIL` and `PGADMIN_DEFAULT_PASSWORD` from `.env`.
 3. The **DentiSys PostgreSQL (development)** server is already registered. Select it and enter `DB_PASS` from `.env` when prompted.
 4. Browse data at **Databases → dentisys → Schemas → public → Tables**.
-5. To load demo data, select `dentisys`, then choose **Tools → Query Tool**.
+5. To load demo data into a new, empty database, select `dentisys`, then choose **Tools → Query Tool**. (Or use the `psql` commands in the README, section 6.)
 6. Open [`database/seeds/development-demo.sql`](../database/seeds/development-demo.sql), copy its complete contents into Query Tool, and select **Execute**.
 
-The manual seed contains documented demo accounts, courses, classes, students, grades, and attendance records. It is safe to rerun: it is transaction-wrapped, makes no schema changes, never drops or truncates data, and skips rows already present. Normal startup and migrations do not load demo data. The seeded accounts remain available across ordinary container restarts and `docker compose down` while the PostgreSQL volume remains. `docker compose down -v` removes that volume, including the seeded demo accounts and all other local DentiSys database data; use it only when intentionally discarding local data.
+The manual seed contains documented demo accounts, courses, classes, students, grades, remedial progressions, and attendance history for school years 2024-2025, 2025-2026, and 2026-2027 (current). It loads only when the `students` table is empty; on a database that already has students it inserts nothing, so rerunning it is safe. It makes no schema changes and never drops, truncates, updates, or deletes data. Normal startup and migrations do not load demo data. The seeded accounts remain available across ordinary container restarts and `docker compose down` while the PostgreSQL volume remains. `docker compose down -v` removes that volume, including the seeded demo accounts and all other local DentiSys database data; use it only when intentionally discarding local data.
 
 ### Primary demo accounts
 
@@ -79,7 +79,7 @@ These committed credentials are for local development/testing only. They exist o
 | Secretary | `secretary@bicol-u.edu.ph` | `Secretary123!` | Active |
 | Student | `student@bicol-u.edu.ph` | `Student123!` | Active |
 
-Additional Faculty fixtures use `Faculty123!`: `dr.reyes@bicol-u.edu.ph`, `dr.cruz@bicol-u.edu.ph`, `dr.aquino@bicol-u.edu.ph`, and `dr.torres@bicol-u.edu.ph` are Active. Legacy `pending.faculty1@bicol-u.edu.ph` and `pending.faculty2@bicol-u.edu.ph` fixtures remain inactive and are not activated automatically; an Admin must explicitly issue a new invitation before either can establish access. See [`database/seeds/development-demo.sql`](../database/seeds/development-demo.sql) for the complete current fixture set.
+All other demo accounts (10 active faculty, 2 inactive applicant faculty, 8 class secretaries, and 120 students) are listed with their sections in [demo-accounts.md](demo-accounts.md). Every account of a role uses that role's password. The Admin account is limited to the Admin pages. No face (biometric) profiles are seeded; complete Face Registration before testing biometric attendance.
 
 ### Google Sign-In Phase 1 testing
 

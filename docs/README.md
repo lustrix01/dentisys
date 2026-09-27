@@ -5,6 +5,7 @@
 - [Architecture](architecture.md)
 - [Supported local development environment](development-environment.md)
 - [Manual demo readiness checklist](manual-demo-readiness.md)
+- [Demo accounts and passwords (development only)](demo-accounts.md)
 - [Unfinished same-host single-server deployment foundation](single-server.md)
 - [Implemented features and boundaries](features.md)
 - [Frontend overview](frontend.md)

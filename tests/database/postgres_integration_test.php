@@ -1964,6 +1964,15 @@ expect_same('26', (string) ($studentDashboardBody['student']['id'] ?? ''), 'Stud
 
 // Remedial notifications are committed with the enrollment mutation and are
 // recipient-scoped at both list and mark-read boundaries.
+$demoStudentEnrollmentStmt = $pdo->prepare(
+    "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled)
+     VALUES (26, ?, 'Active', CURRENT_DATE)
+     ON CONFLICT (student_id, cs_id) DO UPDATE SET status = 'Active'
+     RETURNING enrollment_id"
+);
+$demoStudentEnrollmentStmt->execute([$studentClassId]);
+$demoStudentEnrollmentId = (int) $demoStudentEnrollmentStmt->fetchColumn();
+expect_true($demoStudentEnrollmentId > 0, 'Demo Student is enrolled in the Faculty-owned test class');
 $studentNotificationTargetStmt = $pdo->prepare(
     "SELECT e.enrollment_id, s.student_account_user_id
        FROM enrollments e
@@ -2442,7 +2451,7 @@ expect_true(!str_contains((string) ($denialAudit['description'] ?? ''), $student
 expect_true($denialAuditBefore < (int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE action_code = 'student_auth_eligibility_denied'")->fetchColumn(), 'Eligibility denial audit event is appended');
 
 $pdo->beginTransaction();
-$pdo->prepare("UPDATE enrollments SET status = 'Archived' WHERE enrollment_id = 26")->execute();
+$pdo->prepare("UPDATE enrollments SET status = 'Archived' WHERE enrollment_id = ?")->execute([$demoStudentEnrollmentId]);
 $pdo->commit();
 try {
     $studentLoginWithoutEnrollment = auth_runtime_login($pdo, $config, [
@@ -2456,13 +2465,13 @@ try {
 
     $ownedEnrollmentRejected = false;
     try {
-        require_owned_enrollment($pdo, $config, $studentAuthContext, 26);
+        require_owned_enrollment($pdo, $config, $studentAuthContext, $demoStudentEnrollmentId);
     } catch (AuthException) {
         $ownedEnrollmentRejected = true;
     }
     expect_true($ownedEnrollmentRejected, 'Inactive Student enrollment is rejected by require_owned_enrollment');
 } finally {
-    $pdo->prepare("UPDATE enrollments SET status = 'Active' WHERE enrollment_id = 26")->execute();
+    $pdo->prepare("UPDATE enrollments SET status = 'Active' WHERE enrollment_id = ?")->execute([$demoStudentEnrollmentId]);
 }
 
 $pdo->beginTransaction();
