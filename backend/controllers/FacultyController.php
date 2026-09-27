@@ -29,8 +29,8 @@ function faculty_verify_auth(PDO $pdo, array $config): array
         exit;
     }
 
-    if (!in_array($authCtx['role'], ['faculty', 'admin'], true)) {
-        safe_error_response('Access denied. Faculty or administrator privileges required.', 403);
+    if ($authCtx['role'] !== 'faculty') {
+        safe_error_response('Access denied. Faculty privileges required.', 403);
         exit;
     }
 

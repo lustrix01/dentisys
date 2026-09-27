@@ -54,8 +54,8 @@ function handle_secretary_invite(): void
         $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
         $authCtx = auth_verify_access_token($pdo, $config, $token, $jwtKey);
 
-        if (!in_array($authCtx['role'], ['faculty', 'admin'], true)) {
-            safe_error_response('Access denied. Faculty or administrator privileges required.', 403);
+        if ($authCtx['role'] !== 'faculty') {
+            safe_error_response('Access denied. Faculty privileges required.', 403);
             return;
         }
         $actorIdentity = account_identity_fetch($pdo, (int) $authCtx['user_id']);
@@ -579,8 +579,8 @@ function secretary_verify_auth(PDO $pdo, array $config): array
         exit;
     }
 
-    if (!in_array($authCtx['role'], ['secretary', 'admin'], true)) {
-        safe_error_response('Access denied. Class Secretary or administrator privileges required.', 403);
+    if ($authCtx['role'] !== 'secretary') {
+        safe_error_response('Access denied. Class Secretary privileges required.', 403);
         exit;
     }
 

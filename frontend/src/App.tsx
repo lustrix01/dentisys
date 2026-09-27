@@ -220,7 +220,7 @@ function App() {
               <Route element={<AuthenticatedLayout />}>
                 <Route path="/dashboard" element={<RoleDashboard />} />
 
-                <Route element={<ProtectedRoute allowedRoles={['faculty', 'admin']} />}>
+                <Route element={<ProtectedRoute allowedRoles={['faculty']} />}>
                   <Route path="/retention" element={<RetentionMonitoring />} />
                   <Route path="/faculty/retention" element={<RetentionMonitoring />} />
                 </Route>

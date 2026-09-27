@@ -405,6 +405,14 @@ expect_same(200, $adminLoginStatus, 'Admin settings integration login returns HT
 $adminAccessToken = (string) ($adminLoginBody['access_token'] ?? '');
 expect_true($adminAccessToken !== '', 'Admin settings integration login returns an access token');
 
+// Owner decision 2026-09-27: Admin is restricted to its own pages and APIs.
+foreach (['/api/faculty/classes', '/api/faculty/dashboard/kpis', '/api/secretary/dashboard/kpis', '/api/secretary/profile'] as $adminForbiddenPath) {
+    [$adminForbiddenStatus] = integration_http_get_json($adminForbiddenPath, $adminAccessToken);
+    expect_same(403, $adminForbiddenStatus, "Admin is denied {$adminForbiddenPath}");
+}
+[$adminSecretaryInviteStatus] = integration_http_json('/api/secretary/invite', $adminAccessToken, []);
+expect_same(403, $adminSecretaryInviteStatus, 'Admin cannot issue a Secretary invitation');
+
 // Persistent Secretary attendance-session lifecycle coverage.
 [$secretaryLoginStatus, $secretaryLoginBody] = integration_http_json('/api/auth/login', '', [
     'email' => 'secretary@bicol-u.edu.ph',
