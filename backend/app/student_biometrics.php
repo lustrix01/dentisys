@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+/** A profile left in "enrolling" longer than this is a crashed request and may be recovered. */
+const STUDENT_BIOMETRIC_ENROLLING_STALE_SECONDS = 300;
+
 class StudentBiometricException extends RuntimeException
 {
     public readonly int $statusCode;

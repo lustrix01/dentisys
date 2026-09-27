@@ -324,11 +324,28 @@ function handle_student_biometric_enrollment(): void
                 throw new StudentBiometricException('Biometric consent is required before enrollment.', 409, 'consent_required');
             }
             if ($previous['enrollment_status'] === 'enrolling') {
-                throw new StudentBiometricException(
-                    'A biometric enrollment operation is already in progress. Retry after it finishes.',
-                    409,
-                    'biometric_enrollment_in_progress'
+                $enrollingSince = $previous['updated_at'] !== null
+                    ? new DateTimeImmutable((string) $previous['updated_at'], new DateTimeZone('UTC'))
+                    : null;
+                $staleBefore = attendance_session_now_utc()->modify('-' . STUDENT_BIOMETRIC_ENROLLING_STALE_SECONDS . ' seconds');
+                if ($enrollingSince !== null && $enrollingSince > $staleBefore) {
+                    throw new StudentBiometricException(
+                        'A biometric enrollment operation is already in progress. Retry after it finishes.',
+                        409,
+                        'biometric_enrollment_in_progress'
+                    );
+                }
+                // A previous request stopped mid-enrollment; restore the last stable state.
+                $recoveredStatus = $previous['protected_object_reference'] !== null ? 'active' : 'not_enrolled';
+                $recover = $pdo->prepare(
+                    'UPDATE biometric_profiles SET enrollment_status = ?, updated_at = ? WHERE profile_id = ?'
                 );
+                $recover->execute([
+                    $recoveredStatus,
+                    attendance_session_now_utc()->format('Y-m-d H:i:s.u'),
+                    (int) $previous['profile_id'],
+                ]);
+                $previous['enrollment_status'] = $recoveredStatus;
             }
             $challenge = student_biometric_consume_challenge(
                 $pdo,

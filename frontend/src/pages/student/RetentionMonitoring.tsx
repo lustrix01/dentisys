@@ -267,6 +267,8 @@ export const RetentionMonitoring: React.FC = () => {
   const isAtRisk = isAuthoritative
     ? (atRiskCount > 0 || deficientCount > 0)
     : (status === 'warning' || status === 'critical' || deficientCount > 0);
+  // No course has a grade yet: the standing cannot be evaluated.
+  const evaluationPending = isAuthoritative && !isAtRisk && authRecords.every(record => record.grade === null);
 
   return (
     <div className="space-y-6">
@@ -293,7 +295,11 @@ export const RetentionMonitoring: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              {getStatusBadge(status)}
+              {evaluationPending ? (
+                <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60">
+                  PENDING EVALUATION
+                </span>
+              ) : getStatusBadge(status)}
               <span className="text-xs text-slate-400 font-medium">Evaluation Period</span>
             </div>
             
@@ -304,7 +310,9 @@ export const RetentionMonitoring: React.FC = () => {
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
               {isAtRisk 
                 ? `You have ${deficientCount} subject(s) requiring Faculty retention review. Please review your authoritative subject records below.`
-                : 'Your authoritative retention records currently show good standing.'
+                : evaluationPending
+                  ? 'Your standing is pending evaluation until course grades are recorded.'
+                  : 'Your authoritative retention records currently show good standing.'
               }
             </p>
           </div>
