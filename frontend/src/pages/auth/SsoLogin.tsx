@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowLeft, MapPin, Phone } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
@@ -506,19 +506,14 @@ export function SsoLogin() {
                   </button>
                 </div>
 
-                {/* Forgot Password Contact ICTO Link */}
+                {/* Forgot Password → built-in reset flow */}
                 <div className="mt-4 text-center">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    Forgot password?{' '}
-                    <a
-                      href="https://icto.bicol-u.edu.ph/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all"
-                    >
-                      Contact ICTO
-                    </a>
-                  </p>
+                  <Link
+                    to="/forgot-password"
+                    className="text-xs text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all"
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
               </form>
 
