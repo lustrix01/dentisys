@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   FileSpreadsheet, 
   Printer, 
@@ -73,6 +73,10 @@ export const Reports: React.FC = () => {
   const [analyticsAttendanceLoading, setAnalyticsAttendanceLoading] = useState(false);
   const [analyticsAttendanceError, setAnalyticsAttendanceError] = useState<string | null>(null);
 
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('all');
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<string>('');
+  const syInitializedRef = useRef(false);
+
   const fetchFacultyReports = () => {
     setLoading(true);
     setError('');
@@ -81,7 +85,7 @@ export const Reports: React.FC = () => {
     setRetentionRecords([]);
     Promise.all([
       getFacultyReportsSummaryApi(),
-      getFacultyClassesApi().catch(() => ({ status: 'success', classes: [] })),
+      getFacultyClassesApi().catch(() => ({ status: 'success', currentSchoolYear: '', classes: [] })),
     ])
       .then(([repRes, clsRes]) => {
         if (repRes.reports?.students) {
@@ -92,10 +96,25 @@ export const Reports: React.FC = () => {
         if (clsRes?.classes) {
           setClasses(clsRes.classes);
         }
+        const curSy = clsRes?.currentSchoolYear || repRes.currentSchoolYear || repRes.reports?.currentSchoolYear || '';
+        if (curSy) {
+          setCurrentSchoolYear(curSy);
+          if (!syInitializedRef.current) {
+            setSelectedSchoolYear(curSy);
+            syInitializedRef.current = true;
+          }
+        } else if (!syInitializedRef.current && clsRes?.classes && clsRes.classes.length > 0) {
+          const syOptions = Array.from(new Set(clsRes.classes.map((c: any) => c.schoolYear).filter(Boolean))).sort().reverse();
+          if (syOptions.length > 0) {
+            setSelectedSchoolYear(syOptions[0] as string);
+            syInitializedRef.current = true;
+          }
+        }
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Unable to fetch report summary from server.');
         setDbStudents([]);
+        setClasses([]);
       })
       .finally(() => setLoading(false));
 
@@ -116,6 +135,7 @@ export const Reports: React.FC = () => {
     fetchFacultyReports();
   }, []);
 
+  // Strictly authoritative students assigned to this faculty member only
   const students = dbStudents;
 
   const retentionForStudentSubject = (student: any, subject: any, classId?: string) => {
@@ -124,6 +144,7 @@ export const Reports: React.FC = () => {
       String(record.studentId) === String(student.id)
       && record.subjectCode === subject.code
       && (!resolvedClassId || String(record.classId) === resolvedClassId)
+      && (selectedSchoolYear === 'all' || !record.schoolYear || record.schoolYear === selectedSchoolYear)
     );
     return matches[0] ?? null;
   };
@@ -133,22 +154,79 @@ export const Reports: React.FC = () => {
 
   const retentionUnavailable = retentionLoading || retentionLoadError;
 
-  // Selected class block state
+  // Available School Years derived from classes, students, and current active year
+  const availableSchoolYears = useMemo(() => {
+    const years = new Set<string>();
+    if (currentSchoolYear) years.add(currentSchoolYear);
+    classes.forEach(c => {
+      if (c.schoolYear) years.add(c.schoolYear);
+    });
+    students.forEach(s => {
+      if (s.schoolYear) years.add(s.schoolYear);
+      (s.enrolledSubjects || []).forEach((sub: any) => {
+        if (sub.schoolYear) years.add(sub.schoolYear);
+      });
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [classes, students, currentSchoolYear]);
+
+  // Classes filtered by selected school year (strictly assigned to logged-in faculty)
+  const classesForSchoolYear = useMemo(() => {
+    if (selectedSchoolYear === 'all') return classes;
+    return classes.filter(c => c.schoolYear === selectedSchoolYear);
+  }, [classes, selectedSchoolYear]);
+
+  // Active courses derived from classes for selected school year
+  const activeCourses = useMemo(() => {
+    const map = new Map<string, { code: string; name: string }>();
+    for (const c of classesForSchoolYear) {
+      if (c.courseCode && !map.has(c.courseCode)) {
+        map.set(c.courseCode, {
+          code: c.courseCode,
+          name: c.courseName || c.courseCode,
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [classesForSchoolYear]);
+
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
+
+  useEffect(() => {
+    if (activeCourses.length > 0 && !activeCourses.some(c => c.code === selectedSubjectCode)) {
+      setSelectedSubjectCode(activeCourses[0].code);
+    } else if (activeCourses.length === 0) {
+      setSelectedSubjectCode('');
+    }
+  }, [activeCourses, selectedSubjectCode]);
+
+  // Available classes for selected course within selected school year
+  const availableClasses = useMemo(() => {
+    return classesForSchoolYear.filter(c => c.courseCode === selectedSubjectCode);
+  }, [classesForSchoolYear, selectedSubjectCode]);
+
   const [selectedClassId, setSelectedClassId] = useState<string>('');
 
+  useEffect(() => {
+    if (availableClasses.length > 0 && !availableClasses.some(c => String(c.csId || c.id) === selectedClassId)) {
+      setSelectedClassId(String(availableClasses[0].csId || availableClasses[0].id));
+    } else if (availableClasses.length === 0) {
+      setSelectedClassId('');
+    }
+  }, [availableClasses, selectedClassId]);
+
+  const selectedClass = useMemo(
+    () => classesForSchoolYear.find(c => String(c.csId || c.id) === selectedClassId) ?? null,
+    [classesForSchoolYear, selectedClassId],
+  );
+
   const assignedClasses = useMemo(() => {
-    const list = Array.from(new Set(classes.map(c => c.csId).filter((id): id is number => Number.isFinite(Number(id)) && Number(id) > 0)))
-      .map(id => String(id));
-    return list;
-  }, [classes]);
+    return availableClasses.map(c => String(c.csId || c.id));
+  }, [availableClasses]);
 
   const assignedSubjects = useMemo(() => {
-    const list = Array.from(new Set(classes
-      .filter(c => !selectedClassId || String(c.csId) === selectedClassId)
-      .map(c => c.courseCode)
-      .filter(Boolean)));
-    return list;
-  }, [classes, selectedClassId]);
+    return activeCourses.map(c => c.code);
+  }, [activeCourses]);
 
   const analyticsAssessmentDates = useMemo(() => Array.from(new Set(
     assessments
@@ -159,18 +237,6 @@ export const Reports: React.FC = () => {
         && assessment.attendanceSessionDate)
       .map(assessment => String(assessment.attendanceSessionDate))
   )), [assessments, assignedSubjects, selectedClassId]);
-  useEffect(() => {
-    if (assignedClasses.length > 0 && (!selectedClassId || !assignedClasses.includes(selectedClassId))) {
-      setSelectedClassId(assignedClasses[0]);
-    } else if (assignedClasses.length === 0) {
-      setSelectedClassId('');
-    }
-  }, [assignedClasses, selectedClassId]);
-
-  const selectedClass = useMemo(
-    () => classes.find(c => String(c.csId) === selectedClassId) ?? null,
-    [classes, selectedClassId],
-  );
 
   // Report Category State: 'academic' | 'retention' | 'attendance' | 'analytics'
   const [reportTab, setReportTab] = useState<'academic' | 'retention' | 'attendance' | 'analytics'>('academic');
@@ -290,31 +356,34 @@ export const Reports: React.FC = () => {
     setCurrentPage(1);
   }, [selectedClassId, reportTab, search]);
 
-  // Filter students based on selected class and subjects (RBAC)
+  // Filter students based on selected school year, class, and search
   const facultyStudents = useMemo(() => {
-    return students.filter(s =>
-      (!selectedClassId || (s.enrolledSubjects || []).some((subject: any) => String(subject.classId ?? s.classId) === selectedClassId))
-      &&
-      (!search || s.name.toLowerCase().includes(search.toLowerCase()) || s.studentId.toLowerCase().includes(search.toLowerCase()))
-    );
-  }, [students, search, selectedClassId]);
+    return students.filter(s => {
+      const inSchoolYear = selectedSchoolYear === 'all'
+        || s.schoolYear === selectedSchoolYear
+        || (s.enrolledSubjects || []).some((sub: any) => !sub.schoolYear || sub.schoolYear === selectedSchoolYear);
+      const inClass = !selectedClassId
+        || String(s.classId) === selectedClassId
+        || (s.enrolledSubjects || []).some((sub: any) => String(sub.classId) === selectedClassId);
+      const matchesSearch = !search
+        || s.name.toLowerCase().includes(search.toLowerCase())
+        || (s.studentId && s.studentId.toLowerCase().includes(search.toLowerCase()));
+      return inSchoolYear && inClass && matchesSearch;
+    });
+  }, [students, search, selectedClassId, selectedSchoolYear]);
 
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
-  useEffect(() => {
-    if (assignedSubjects.length > 0 && (!selectedSubjectCode || !assignedSubjects.includes(selectedSubjectCode))) {
-      setSelectedSubjectCode(assignedSubjects[0]);
-    }
-  }, [assignedSubjects, selectedSubjectCode]);
-
-  // Filter roster by course tab selector
+  // Filter roster by course selector
   const studentsInSelectedSubject = useMemo(() => {
-    return facultyStudents.filter(s =>
-      (s.enrolledSubjects || []).some((sub: any) =>
+    return facultyStudents.filter(s => {
+      const hasSubject = (s.enrolledSubjects || []).some((sub: any) =>
         sub.code === selectedSubjectCode
         && (!selectedClassId || String(sub.classId ?? s.classId) === selectedClassId)
-      )
-    );
-  }, [facultyStudents, selectedSubjectCode, selectedClassId]);
+        && (selectedSchoolYear === 'all' || !sub.schoolYear || sub.schoolYear === selectedSchoolYear)
+      );
+      const enrolledInSelectedClass = selectedClass && (!selectedClassId || String(s.classId) === selectedClassId);
+      return hasSubject || enrolledInSelectedClass;
+    });
+  }, [facultyStudents, selectedSubjectCode, selectedClassId, selectedClass, selectedSchoolYear]);
 
   const paginatedStudentsInSubject = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -427,7 +496,8 @@ export const Reports: React.FC = () => {
     const rank: Record<string, number> = { active: 0, warning: 1, critical: 2, remedial: 3 };
     const studentStates = new Map<string, string>();
     retentionRecords
-      .filter(record => !selectedClassId || String(record.classId) === selectedClassId)
+      .filter(record => (!selectedClassId || String(record.classId) === selectedClassId)
+        && (selectedSchoolYear === 'all' || !record.schoolYear || record.schoolYear === selectedSchoolYear))
       .forEach(record => {
         const status = record.state === 'archived' ? 'active' : record.state;
         const current = studentStates.get(String(record.studentId));
@@ -480,38 +550,24 @@ export const Reports: React.FC = () => {
       {/* Page Header - Hidden during print */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 no-print border-b border-slate-205 dark:border-slate-800 pb-4">
         <div>
-          <h1 className="text-2xl font-bold font-heading text-slate-800 dark:text-slate-100">
-            Reports & Analytics
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <FileSpreadsheet className="w-6 h-6 text-clinical-550" />
+              Reports & Analytics
+            </h1>
+            {currentSchoolYear && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-clinical-50 dark:bg-clinical-950/60 border border-clinical-200 dark:border-clinical-800/60 text-clinical-800 dark:text-clinical-300">
+                <CalendarDays className="w-3.5 h-3.5 text-clinical-600 dark:text-clinical-400" />
+                S.Y. {currentSchoolYear} (Current)
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Generate GWA evaluation logs, print transcript records, and review analytics dashboards</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Class / Block Switcher */}
-          {assignedClasses.length > 1 && (
-            <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl gap-1">
-              {assignedClasses.map((clsId: string) => {
-                const section = classes.find(item => String(item.csId) === clsId);
-                const label = section?.block || section?.csName || section?.courseCode || clsId;
-                const isActive = selectedClassId === clsId;
-                return (
-                  <button
-                    key={clsId}
-                    onClick={() => setSelectedClassId(clsId)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      isActive
-                        ? 'bg-clinical-600 text-white shadow-md'
-                        : 'text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
           <button
             onClick={handlePrint}
-            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 text-slate-650 hover:bg-slate-50 dark:text-slate-350 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 font-bold text-xs"
+            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 text-slate-650 hover:bg-slate-50 dark:text-slate-350 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 font-bold text-xs shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Print Report Sheet</span>
@@ -519,70 +575,125 @@ export const Reports: React.FC = () => {
         </div>
       </div>
 
-      {/* Selector Controls Card - Hidden during print */}
+      {/* Unified Course, Class, and School Year Selector Bar */}
       <Card className="p-4 flex flex-col md:flex-row gap-4 items-center no-print">
-        <div className="w-full md:flex-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Report Template Category</label>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setReportTab('academic')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                reportTab === 'academic' 
-                  ? 'bg-clinical-500 text-white shadow-md shadow-clinical-500/10' 
-                  : 'bg-slate-100 dark:bg-slate-950 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              Academic GWAs Ledger
-            </button>
-            <button
-              onClick={() => setReportTab('retention')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                reportTab === 'retention' 
-                  ? 'bg-clinical-500 text-white shadow-md shadow-clinical-500/10' 
-                  : 'bg-slate-100 dark:bg-slate-950 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              Retention Watch Lists
-            </button>
-            <button
-              onClick={() => setReportTab('attendance')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                reportTab === 'attendance' 
-                  ? 'bg-clinical-500 text-white shadow-md shadow-clinical-500/10' 
-                  : 'bg-slate-100 dark:bg-slate-950 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              Attendance Registers
-            </button>
-            <button
-              onClick={() => setReportTab('analytics')}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 ${
-                reportTab === 'analytics' 
-                  ? 'bg-clinical-500 text-white shadow-md shadow-clinical-500/10' 
-                  : 'bg-slate-100 dark:bg-slate-950 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800'
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5" />
-              Interactive Analytics
-            </button>
-          </div>
+        {/* School Year Filter */}
+        <div className="w-full md:w-52">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+            <CalendarDays className="w-3 h-3 text-clinical-600" />
+            School Year
+          </label>
+          <select
+            value={selectedSchoolYear}
+            onChange={(e) => setSelectedSchoolYear(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
+          >
+            <option value="all">All School Years</option>
+            {availableSchoolYears.map(sy => (
+              <option key={sy} value={sy}>
+                S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {reportTab === 'academic' && (
-          <div className="w-full md:w-56 self-end md:self-auto">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Select Subject</label>
-            <select
-              value={selectedSubjectCode}
-              onChange={(e) => setSelectedSubjectCode(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-808 dark:text-slate-100 text-xs font-semibold focus:outline-none"
-            >
-              {assignedSubjects.map((subCode: string) => (
-                <option key={subCode} value={subCode}>{subCode}</option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* Active Course */}
+        <div className="w-full md:flex-1">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
+          <select
+            value={selectedSubjectCode}
+            onChange={(e) => {
+              const newCode = e.target.value;
+              setSelectedSubjectCode(newCode);
+              const matching = classesForSchoolYear.filter(c => c.courseCode === newCode);
+              if (matching.length > 0) {
+                setSelectedClassId(String(matching[0].csId || matching[0].id));
+              } else {
+                setSelectedClassId('');
+              }
+            }}
+            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
+          >
+            {activeCourses.length === 0 ? (
+              <option value="">No active courses for selected year</option>
+            ) : (
+              activeCourses.map(course => (
+                <option key={course.code} value={course.code}>
+                  {course.code} - {course.name}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+
+        {/* Active Section / Class */}
+        <div className="w-full md:w-56">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
+          <select
+            value={selectedClassId}
+            onChange={(e) => setSelectedClassId(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 cursor-pointer"
+          >
+            {availableClasses.length === 0 ? (
+              <option value="">No active sections assigned</option>
+            ) : (
+              availableClasses.map(classItem => (
+                <option key={String(classItem.csId || classItem.id)} value={String(classItem.csId || classItem.id)}>
+                  {classItem.csName || classItem.block || `Section ${classItem.id}`}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
       </Card>
+
+      {/* Navigation Sub-Tabs Bar - Consistent with other faculty portals */}
+      <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm no-print">
+        <button
+          onClick={() => setReportTab('academic')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            reportTab === 'academic' 
+              ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
+              : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          }`}
+        >
+          <GraduationCap className="w-4 h-4" />
+          Academic GWAs Ledger
+        </button>
+        <button
+          onClick={() => setReportTab('retention')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            reportTab === 'retention' 
+              ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
+              : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          }`}
+        >
+          <AlertTriangle className="w-4 h-4" />
+          Retention Watch Lists
+        </button>
+        <button
+          onClick={() => setReportTab('attendance')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            reportTab === 'attendance' 
+              ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
+              : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          }`}
+        >
+          <CalendarDays className="w-4 h-4" />
+          Attendance Registers
+        </button>
+        <button
+          onClick={() => setReportTab('analytics')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            reportTab === 'analytics' 
+              ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
+              : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          Interactive Analytics
+        </button>
+      </div>
 
       {/* ----------------------------------------------------
           TAB 1: ACADEMIC REPORTS LEDGER
@@ -590,7 +701,12 @@ export const Reports: React.FC = () => {
       {reportTab === 'academic' && (
         <Card className="p-0 overflow-hidden no-print">
           <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
-            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Class Course Grade Reports</h3>
+            <div>
+              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Class Course Grade Reports</h3>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {selectedClass ? `${selectedClass.courseCode} · ${selectedClass.csName}` : 'Overview of final academic standing'}
+              </p>
+            </div>
             <button
               onClick={() => handleExportCSV('academic')}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm transition-colors"
@@ -614,46 +730,58 @@ export const Reports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
-                {paginatedStudentsInSubject.map((student: any) => {
-                  const subj = student.enrolledSubjects
-                    ? student.enrolledSubjects.find((sub: any) =>
-                      sub.code === selectedSubjectCode
-                      && (!selectedClassId || String(sub.classId ?? student.classId) === selectedClassId)
-                    )
-                    : null;
-                  const isFailsRetention = Boolean(subj && retentionIsAtRisk(retentionForStudentSubject(student, subj, selectedClassId)));
-                  const retentionUnavailableForSubject = retentionUnavailable && Boolean(subj);
-                  const isFailed = subj && subj.grade === 5.0;
+                {paginatedStudentsInSubject.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center text-slate-400 font-semibold">
+                      No student records found for the selected course and class section.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedStudentsInSubject.map((student: any) => {
+                    const subj = student.enrolledSubjects
+                      ? student.enrolledSubjects.find((sub: any) =>
+                        sub.code === selectedSubjectCode
+                        && (!selectedClassId || String(sub.classId ?? student.classId) === selectedClassId)
+                      )
+                      : null;
+                    const isFailsRetention = Boolean(subj && retentionIsAtRisk(retentionForStudentSubject(student, subj, selectedClassId)));
+                    const retentionUnavailableForSubject = retentionUnavailable && Boolean(subj);
+                    const isFailed = subj && subj.grade === 5.0;
 
-                  return (
-                    <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
-                      <td className="px-5 py-3.5">
-                        <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
-                        <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.quizzes !== undefined && subj.components.quizzes !== null ? `${Number(subj.components.quizzes).toFixed(1)}%` : '—'}</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.practicum !== undefined && subj.components.practicum !== null ? `${Number(subj.components.practicum).toFixed(1)}%` : '—'}</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.exams !== undefined && subj.components.exams !== null ? `${Number(subj.components.exams).toFixed(1)}%` : '—'}</td>
-                      <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.attendance !== undefined && subj.components.attendance !== null ? `${Number(subj.components.attendance).toFixed(1)}%` : '—'}</td>
-                      <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                        {subj && subj.grade !== undefined && subj.grade !== null ? Number(subj.grade).toFixed(2) : '—'}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                          isFailed
-                            ? 'bg-rose-100 text-rose-700' 
-                            : retentionUnavailableForSubject
-                            ? 'bg-slate-100 text-slate-600'
-                            : isFailsRetention 
-                            ? 'bg-amber-100 text-amber-700' 
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}>
-                          {isFailed ? 'FAILED' : retentionUnavailableForSubject ? 'RETENTION UNAVAILABLE' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
+                        <td className="px-5 py-3.5">
+                          <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
+                          <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
+                        </td>
+                        <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.quizzes !== undefined && subj.components.quizzes !== null ? `${Number(subj.components.quizzes).toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.practicum !== undefined && subj.components.practicum !== null ? `${Number(subj.components.practicum).toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.exams !== undefined && subj.components.exams !== null ? `${Number(subj.components.exams).toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.attendance !== undefined && subj.components.attendance !== null ? `${Number(subj.components.attendance).toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
+                          {subj && subj.grade !== undefined && subj.grade !== null 
+                            ? Number(subj.grade).toFixed(2) 
+                            : (typeof student.overallGWA === 'number' 
+                              ? student.overallGWA.toFixed(2) 
+                              : '—')}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                            isFailed
+                              ? 'bg-rose-100 text-rose-700' 
+                              : retentionUnavailableForSubject
+                              ? 'bg-slate-100 text-slate-600'
+                              : isFailsRetention 
+                              ? 'bg-amber-100 text-amber-700' 
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}>
+                            {isFailed ? 'FAILED' : retentionUnavailableForSubject ? 'RETENTION UNAVAILABLE' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

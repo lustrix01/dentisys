@@ -2276,13 +2276,10 @@ function faculty_effective_assessment_percentage(
     if (!$enabled) {
         return $rawPercentage;
     }
-    if ($attendanceStatus === null) {
-        return null;
-    }
     if ($attendanceStatus === 'absent') {
         return 0.0;
     }
-    if (in_array($attendanceStatus, ['present', 'late', 'excused'], true)) {
+    if ($attendanceStatus === null || in_array($attendanceStatus, ['present', 'late', 'excused'], true)) {
         return $minimumPercentage + (($rawPercentage / 100) * ($maximumPercentage - $minimumPercentage));
     }
     throw new InvalidArgumentException('Attendance status is invalid for transmutation.');
@@ -2752,12 +2749,16 @@ function handle_faculty_assessments_save(): void
                     safe_error_response('The authoritative Attendance category cannot be used for an assessment.', 422);
                     return;
                 }
-            } elseif (!$categoryWasSupplied && $gradingCategoryId === null) {
+            } else {
+                $gradingCategoryId = null;
                 $allowedTypes = ['Quiz', 'Activity', 'Assignment', 'Laboratory', 'Midterm Exam', 'Final Exam', 'Others'];
                 if (!in_array($type, $allowedTypes, true)) {
-                    $pdo->rollBack();
-                    safe_error_response('Assessment type is invalid.', 422);
-                    return;
+                    // If custom category name was entered, allow it as type
+                    if (empty($type)) {
+                        $pdo->rollBack();
+                        safe_error_response('Assessment type is invalid.', 422);
+                        return;
+                    }
                 }
             }
             $transmutationEnabled = array_key_exists('transmutationEnabled', $item)
@@ -2794,11 +2795,6 @@ function handle_faculty_assessments_save(): void
             ) {
                 $pdo->rollBack();
                 safe_error_response('Transmutation bounds and attendance linkage are invalid.', 422);
-                return;
-            }
-            if ($transmutationEnabled && ($attendanceSessionDate === null || $attendanceSessionCode === null)) {
-                $pdo->rollBack();
-                safe_error_response('Enabled transmutation requires a linked attendance session.', 422);
                 return;
             }
             if ($attendanceSessionDate !== null && $attendanceSessionCode !== null) {
@@ -3144,8 +3140,15 @@ function handle_faculty_grades_compute(): void
                 LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = e.student_id
                 LEFT JOIN attendance_records linked_att
                        ON linked_att.enrollment_id = e.enrollment_id
-                      AND linked_att.session_date = a.attendance_session_date
-                      AND linked_att.session_code = a.attendance_session_code
+                      AND (
+                            (a.attendance_session_date IS NOT NULL AND a.attendance_session_code IS NOT NULL
+                             AND linked_att.session_date = a.attendance_session_date
+                             AND linked_att.session_code = a.attendance_session_code)
+                            OR
+                            (a.attendance_session_date IS NULL
+                             AND a.due_date IS NOT NULL
+                             AND linked_att.session_date = a.due_date)
+                          )
                 LEFT JOIN (
                     SELECT enrollment_id,
                            AVG(CASE
@@ -4559,7 +4562,14 @@ function faculty_watchlist_midterm(PDO $pdo, array $enrollment): array
            FROM assessments a
            LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = ?
            LEFT JOIN attendance_records ar ON ar.enrollment_id = ?
-             AND ar.session_date = a.attendance_session_date AND ar.session_code = a.attendance_session_code
+             AND (
+               (a.attendance_session_date IS NOT NULL AND a.attendance_session_code IS NOT NULL
+                AND ar.session_date = a.attendance_session_date AND ar.session_code = a.attendance_session_code)
+               OR
+               (a.attendance_session_date IS NULL
+                AND a.due_date IS NOT NULL
+                AND ar.session_date = a.due_date)
+             )
           WHERE a.cs_id = ? AND a.grading_period = 'Midterm' AND a.status <> 'Archived'"
     );
     $assessments->execute([$enrollment['student_id'], $enrollment['enrollment_id'], $enrollment['cs_id']]);
@@ -4637,8 +4647,10 @@ function handle_faculty_retention_get(): void
             'midtermPercentage' => $midterm['percentage'],
         ];
         }, $dbRows);
+        $currentSchoolYear = academic_current_school_year($pdo);
         json_response([
             'status' => 'ok',
+            'currentSchoolYear' => $currentSchoolYear,
             'retention' => $retention,
         ], 200);
     } catch (\Throwable $e) {
@@ -5406,6 +5418,7 @@ function handle_faculty_reports_summary(): void
                     COALESCE(egb.retention_state, e.retention_state) AS retention_state,
                     e.remedial_state_json,
                     e.grade_components_json, e.clinic_hours_completed, cs.cs_id, cs.cs_name,
+                    cs.school_year,
                     c.course_code, c.name AS course_name, c.units, c.is_clinical
              FROM students s
              JOIN enrollments e ON e.student_id = s.student_id
@@ -5437,6 +5450,7 @@ function handle_faculty_reports_summary(): void
                     'consentStatus' => $s['consent_status'] ?? 'pending',
                     'classId' => (string) $s['cs_id'],
                     'className' => $s['cs_name'],
+                    'schoolYear' => $s['school_year'],
                     'clinicHoursCompleted' => (int) $s['clinic_hours_completed'],
                     'enrolledSubjects' => [],
                     'remedialExams' => [],
@@ -5447,6 +5461,7 @@ function handle_faculty_reports_summary(): void
                 : null;
             $grouped[$id]['enrolledSubjects'][] = [
                 'classId' => (string) $s['cs_id'],
+                'schoolYear' => $s['school_year'],
                 'code' => $s['course_code'],
                 'name' => $s['course_name'],
                 'units' => (float) $s['units'],
@@ -5466,9 +5481,12 @@ function handle_faculty_reports_summary(): void
         $graded = array_values(array_filter(array_column($mappedStudents, 'overallGWA'), static fn($value) => $value !== null));
         $atRisk = count(array_filter($mappedStudents, static fn(array $student): bool => in_array($student['status'], ['warning', 'critical', 'remedial'], true)));
 
+        $currentSchoolYear = academic_current_school_year($pdo);
         json_response([
             'status' => 'ok',
+            'currentSchoolYear' => $currentSchoolYear,
             'reports' => [
+                'currentSchoolYear' => $currentSchoolYear,
                 'students' => $mappedStudents,
                 'summary' => [
                     'totalStudents' => count($mappedStudents),
@@ -5703,6 +5721,24 @@ function faculty_check_schedule_conflict(PDO $pdo, string $schoolYear, int $inst
     return null;
 }
 
+function normalize_course_semester(?string $sem): ?string
+{
+    if ($sem === null || trim($sem) === '') {
+        return null;
+    }
+    $s = strtoupper(trim($sem));
+    if (str_contains($s, '1ST') || str_contains($s, 'FIRST')) {
+        return '1ST';
+    }
+    if (str_contains($s, '2ND') || str_contains($s, 'SECOND')) {
+        return '2ND';
+    }
+    if (str_contains($s, 'SUMMER')) {
+        return 'Summer';
+    }
+    return null;
+}
+
 function handle_faculty_class_create(): void
 {
     $context = [
@@ -5727,6 +5763,8 @@ function handle_faculty_class_create(): void
         $data = $body['data'];
         $csName = validate_required_string($data, 'csName', 2, 255);
         $courseId = (int) ($data['courseId'] ?? 0);
+        $courseCode = isset($data['courseCode']) ? trim((string) $data['courseCode']) : '';
+        $courseName = isset($data['courseName']) ? trim((string) $data['courseName']) : '';
         $semester = validate_required_string($data, 'semester', 1, 20);
         $schoolYear = validate_required_string($data, 'schoolYear', 4, 20);
         academic_require_current_school_year($pdo, $schoolYear);
@@ -5735,8 +5773,30 @@ function handle_faculty_class_create(): void
         $labRoom = validate_optional_string($data, 'labRoom', 1, 100);
         $lecRoom = validate_optional_string($data, 'lecRoom', 1, 100);
 
+        if ($courseCode !== '') {
+            $cFind = $pdo->prepare('SELECT course_id FROM courses WHERE LOWER(course_code) = LOWER(?)');
+            $cFind->execute([$courseCode]);
+            $existingCId = $cFind->fetchColumn();
+            if ($existingCId) {
+                $courseId = (int) $existingCId;
+                if ($courseName !== '') {
+                    $pdo->prepare('UPDATE courses SET name = ? WHERE course_id = ?')->execute([$courseName, $courseId]);
+                }
+            } else {
+                $cTitle = $courseName !== '' ? $courseName : $courseCode;
+                $cSemester = normalize_course_semester($semester);
+                $cInsert = $pdo->prepare("
+                    INSERT INTO courses (course_code, name, units, year_level, semester, grading_config)
+                    VALUES (?, ?, 3.0, ?, ?, '[]'::jsonb)
+                    RETURNING course_id
+                ");
+                $cInsert->execute([$courseCode, $cTitle, $yearLevel, $cSemester]);
+                $courseId = (int) $cInsert->fetchColumn();
+            }
+        }
+
         if ($courseId <= 0) {
-            safe_error_response('Valid courseId is required.', 400);
+            safe_error_response('Valid courseId or courseCode is required.', 400);
             return;
         }
 
@@ -5842,10 +5902,6 @@ function handle_faculty_class_update(): void
         $errors = [];
         $protectedFields = [
             'courseId' => 'Course catalog identity is controlled and cannot be edited here.',
-            'courseCode' => 'Course catalog identity is controlled and cannot be edited here.',
-            'courseName' => 'Course catalog identity is controlled and cannot be edited here.',
-            'semester' => 'Protected term identity is controlled and cannot be edited here.',
-            'schoolYear' => 'Protected term identity is controlled and cannot be edited here.',
             'termCode' => 'Protected term identity is controlled and cannot be edited here.',
             'termStartDate' => 'Protected term identity is controlled and cannot be edited here.',
             'termEndDate' => 'Protected term identity is controlled and cannot be edited here.',
@@ -5860,7 +5916,7 @@ function handle_faculty_class_update(): void
             }
         }
 
-        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom'];
+        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear'];
         foreach (array_keys($data) as $field) {
             if (!in_array($field, $allowedFields, true) && !array_key_exists($field, $protectedFields)) {
                 $errors[$field] = 'This field is not editable through the class-section contract.';
@@ -5880,6 +5936,17 @@ function handle_faculty_class_update(): void
             $updates[] = 'block = ?';
             $params[] = validate_required_string($data, 'block', 1, 50);
         }
+        if (array_key_exists('semester', $data)) {
+            $updates[] = 'semester = ?';
+            $params[] = validate_required_string($data, 'semester', 1, 30);
+        }
+        if (array_key_exists('schoolYear', $data)) {
+            $updates[] = 'school_year = ?';
+            $updates[] = 'term_code = ?';
+            $sYear = validate_required_string($data, 'schoolYear', 4, 30);
+            $params[] = $sYear;
+            $params[] = "{$sYear}-" . ($data['semester'] ?? '1ST');
+        }
         if (array_key_exists('yearLevel', $data)) {
             $rawYearLevel = $data['yearLevel'];
             if (is_int($rawYearLevel)) {
@@ -5887,10 +5954,10 @@ function handle_faculty_class_update(): void
             } elseif (is_string($rawYearLevel) && ctype_digit(trim($rawYearLevel))) {
                 $yearLevel = (int) trim($rawYearLevel);
             } else {
-                throw new ValidationException(['yearLevel' => 'Year level must be an integer between 1 and 4.']);
+                throw new ValidationException(['yearLevel' => 'Year level must be an integer between 1 and 6.']);
             }
-            if ($yearLevel < 1 || $yearLevel > 4) {
-                throw new ValidationException(['yearLevel' => 'Year level must be an integer between 1 and 4.']);
+            if ($yearLevel < 1 || $yearLevel > 6) {
+                throw new ValidationException(['yearLevel' => 'Year level must be an integer between 1 and 6.']);
             }
             $updates[] = 'year_level = ?';
             $params[] = $yearLevel;
@@ -5903,7 +5970,8 @@ function handle_faculty_class_update(): void
             $updates[] = 'lab_room = ?';
             $params[] = validate_optional_string($data, 'labRoom', 1, 100);
         }
-        if ($updates === []) {
+        $hasCourseUpdates = array_key_exists('courseCode', $data) || array_key_exists('courseName', $data);
+        if ($updates === [] && !$hasCourseUpdates) {
             throw new ValidationException(['fields' => 'At least one editable class-section field is required.']);
         }
 
@@ -5930,6 +5998,37 @@ function handle_faculty_class_update(): void
                 return;
             }
 
+            if ($hasCourseUpdates) {
+                $newCode = isset($data['courseCode']) ? trim((string) $data['courseCode']) : '';
+                $newName = isset($data['courseName']) ? trim((string) $data['courseName']) : '';
+                if ($newCode !== '') {
+                    $cFind = $pdo->prepare('SELECT course_id FROM courses WHERE LOWER(course_code) = LOWER(?)');
+                    $cFind->execute([$newCode]);
+                    $existingCId = $cFind->fetchColumn();
+                    if ($existingCId) {
+                        $targetCourseId = (int) $existingCId;
+                        if ($newName !== '') {
+                            $pdo->prepare('UPDATE courses SET name = ? WHERE course_id = ?')->execute([$newName, $targetCourseId]);
+                        }
+                    } else {
+                        $cTitle = $newName !== '' ? $newName : $newCode;
+                        $cSemester = normalize_course_semester((string) ($data['semester'] ?? $before['semester'] ?? '1ST'));
+                        $cInsert = $pdo->prepare("
+                            INSERT INTO courses (course_code, name, units, year_level, semester, grading_config)
+                            VALUES (?, ?, 3.0, ?, ?, '[]'::jsonb)
+                            RETURNING course_id
+                        ");
+                        $cInsert->execute([$newCode, $cTitle, (int) ($data['yearLevel'] ?? $before['year_level'] ?? 1), $cSemester]);
+                        $targetCourseId = (int) $cInsert->fetchColumn();
+                    }
+                    if ($targetCourseId !== (int) $before['course_id']) {
+                        $pdo->prepare('UPDATE class_sections SET course_id = ? WHERE cs_id = ?')->execute([$targetCourseId, $csId]);
+                    }
+                } elseif ($newName !== '') {
+                    $pdo->prepare('UPDATE courses SET name = ? WHERE course_id = ?')->execute([$newName, (int) $before['course_id']]);
+                }
+            }
+
             $checkLec = array_key_exists('lecRoom', $data) ? $data['lecRoom'] : ($before['lec_room'] ?? null);
             $checkLab = array_key_exists('labRoom', $data) ? $data['labRoom'] : ($before['lab_room'] ?? null);
             $conflictErr = faculty_check_schedule_conflict($pdo, (string) $before['school_year'], (int) $authCtx['user_id'], $checkLec, $checkLab, $csId);
@@ -5939,10 +6038,12 @@ function handle_faculty_class_update(): void
                 return;
             }
 
-            $update = $pdo->prepare(
-                'UPDATE class_sections SET ' . implode(', ', $updates) . ' WHERE cs_id = ? AND instructor_user_id = ?'
-            );
-            $update->execute(array_merge($params, [$csId, $authCtx['user_id']]));
+            if ($updates !== []) {
+                $update = $pdo->prepare(
+                    'UPDATE class_sections SET ' . implode(', ', $updates) . ' WHERE cs_id = ? AND instructor_user_id = ?'
+                );
+                $update->execute(array_merge($params, [$csId, $authCtx['user_id']]));
+            }
 
             $select->execute([$csId, $authCtx['user_id']]);
             $after = $select->fetch(PDO::FETCH_ASSOC);

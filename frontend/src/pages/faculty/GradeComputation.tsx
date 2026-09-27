@@ -443,10 +443,10 @@ export const GradeComputation: React.FC = () => {
         if (Array.isArray(res.defaults.midtermCategories)) {
           res.defaults.midtermCategories.forEach((c: any) => {
             syntheticCategories.push({
-              id: idCounter++,
+              id: undefined,
               name: c.name,
               weight: c.weight,
-              sortOrder: c.sortOrder ?? idCounter,
+              sortOrder: c.sortOrder ?? idCounter++,
               gradingPeriod: 'Midterm',
               sourceKind: c.sourceKind || (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
             });
@@ -455,10 +455,10 @@ export const GradeComputation: React.FC = () => {
         if (Array.isArray(res.defaults.finalCategories)) {
           res.defaults.finalCategories.forEach((c: any) => {
             syntheticCategories.push({
-              id: idCounter++,
+              id: undefined,
               name: c.name,
               weight: c.weight,
-              sortOrder: c.sortOrder ?? idCounter,
+              sortOrder: c.sortOrder ?? idCounter++,
               gradingPeriod: 'Final',
               sourceKind: c.sourceKind || (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
             });
@@ -480,21 +480,21 @@ export const GradeComputation: React.FC = () => {
           attendanceDateRanges: res.defaults.attendanceDateRanges,
         };
         setModalConfig(syntheticConfig);
-        setModalConfigStatus('configured');
+        setModalConfigStatus('unconfigured');
         return syntheticConfig;
       } else {
         const fallback = buildDefaultPeriodDraft();
         const syntheticCategories: any[] = [
-          ...fallback.midtermCategories.map((c, i) => ({
-            id: i + 1,
+          ...fallback.midtermCategories.map((c) => ({
+            id: undefined,
             name: c.name,
             weight: Number(c.weight),
             sortOrder: c.sortOrder,
             gradingPeriod: 'Midterm',
             sourceKind: c.sourceKind,
           })),
-          ...fallback.finalCategories.map((c, i) => ({
-            id: i + 10,
+          ...fallback.finalCategories.map((c) => ({
+            id: undefined,
             name: c.name,
             weight: Number(c.weight),
             sortOrder: c.sortOrder,
@@ -518,7 +518,7 @@ export const GradeComputation: React.FC = () => {
           attendanceDateRanges: fallback.attendanceDateRanges,
         };
         setModalConfig(syntheticConfig);
-        setModalConfigStatus('configured');
+        setModalConfigStatus('unconfigured');
         return syntheticConfig;
       }
     } catch (err) {
@@ -539,8 +539,8 @@ export const GradeComputation: React.FC = () => {
         const rows = assPeriod === 'Final' ? finalCategories : midtermCategories;
         const validRows = rows.filter(c => c.sourceKind !== 'attendance' && c.name.trim() !== '');
         if (validRows.length > 0) {
-          return validRows.map((r, i) => ({
-            id: r.id ?? (i + 1),
+          return validRows.map((r) => ({
+            id: r.id ?? undefined,
             name: r.name,
             weight: String(r.weight),
             gradingPeriod: assPeriod,
@@ -550,8 +550,8 @@ export const GradeComputation: React.FC = () => {
       } else {
         const validRows = categoryRows.filter(c => c.name.toLowerCase() !== 'attendance' && c.name.trim() !== '');
         if (validRows.length > 0) {
-          return validRows.map((r, i) => ({
-            id: r.id ?? (i + 1),
+          return validRows.map((r) => ({
+            id: r.id ?? undefined,
             name: r.name,
             weight: String(r.weight),
             gradingPeriod: undefined,
@@ -600,8 +600,8 @@ export const GradeComputation: React.FC = () => {
       const rows = assPeriod === 'Final' ? finalCategories : midtermCategories;
       const validRows = rows.filter(c => c.sourceKind !== 'attendance' && c.name.trim() !== '');
       if (validRows.length > 0) {
-        return validRows.map((r, i) => ({
-          id: r.id ?? (i + 1),
+        return validRows.map((r) => ({
+          id: r.id ?? undefined,
           name: r.name,
           weight: String(r.weight),
           gradingPeriod: assPeriod,
@@ -611,8 +611,8 @@ export const GradeComputation: React.FC = () => {
     } else if (categoryRows.length > 0) {
       const validRows = categoryRows.filter(c => c.name.toLowerCase() !== 'attendance' && c.name.trim() !== '');
       if (validRows.length > 0) {
-        return validRows.map((r, i) => ({
-          id: r.id ?? (i + 1),
+        return validRows.map((r) => ({
+          id: r.id ?? undefined,
           name: r.name,
           weight: String(r.weight),
           gradingPeriod: undefined,
@@ -624,8 +624,8 @@ export const GradeComputation: React.FC = () => {
     // 5. Fallback to default period draft
     const fallback = buildDefaultPeriodDraft();
     const rows = assPeriod === 'Final' ? fallback.finalCategories : fallback.midtermCategories;
-    return rows.filter(c => c.sourceKind !== 'attendance').map((r, i) => ({
-      id: i + 1,
+    return rows.filter(c => c.sourceKind !== 'attendance').map((r) => ({
+      id: undefined,
       name: r.name,
       weight: String(r.weight),
       gradingPeriod: assPeriod,
@@ -876,8 +876,8 @@ export const GradeComputation: React.FC = () => {
       return;
     }
 
-    if (assTransmutationEnabled && (!assAttendanceDate || !assAttendanceCode)) {
-      showFeedback('Select a deterministic attendance date and session code before enabling transmutation.', 'error');
+    if (assTransmutationEnabled && ((assAttendanceDate && !assAttendanceCode) || (!assAttendanceDate && assAttendanceCode))) {
+      showFeedback('Please select both session date and session code, or leave both blank to link later / auto-match by date.', 'error');
       return;
     }
     if (assTransmutationMinimum < 0 || assTransmutationMaximum > 100 || assTransmutationMinimum > assTransmutationMaximum) {
@@ -888,7 +888,7 @@ export const GradeComputation: React.FC = () => {
     const targetClass = facultyClasses.find(c => c.id === assClassId);
     const targetSubjectCode = targetClass?.courseCode || selectedSubjectCode;
 
-    const numericCategoryId = assGradingCategoryId && !isNaN(Number(assGradingCategoryId)) && Number(assGradingCategoryId) > 0
+    const numericCategoryId = modalConfigStatus === 'configured' && assGradingCategoryId && !isNaN(Number(assGradingCategoryId)) && Number(assGradingCategoryId) > 0
       ? Number(assGradingCategoryId)
       : null;
 
@@ -1266,24 +1266,22 @@ export const GradeComputation: React.FC = () => {
     setIsConversionModalOpen(true);
   };
 
-  // Initialize selected offering key
+  // Keep selected offering key synchronized with the active course filter
   useEffect(() => {
     if (facultyOfferings.length === 0) return;
-    if (!selectedOfferingKey || !facultyOfferings.some(o => o.key === selectedOfferingKey)) {
-      const match = facultyOfferings.find(o => o.courseCode === selectedSubjectCode);
-      setSelectedOfferingKey(match ? match.key : facultyOfferings[0].key);
+    const match = facultyOfferings.find(o => o.courseCode === selectedSubjectCode);
+    if (match) {
+      if (selectedOfferingKey !== match.key) {
+        setSelectedOfferingKey(match.key);
+      }
+    } else if (!selectedOfferingKey || !facultyOfferings.some(o => o.key === selectedOfferingKey)) {
+      setSelectedOfferingKey(facultyOfferings[0].key);
     }
   }, [facultyOfferings, selectedSubjectCode, selectedOfferingKey]);
 
   const currentOffering = useMemo(() => {
     return facultyOfferings.find(o => o.key === selectedOfferingKey) || null;
   }, [facultyOfferings, selectedOfferingKey]);
-
-  useEffect(() => {
-    if (activeSubTab === 'components' && currentOffering && currentOffering.courseCode && currentOffering.courseCode !== selectedSubjectCode) {
-      setSelectedSubjectCode(currentOffering.courseCode);
-    }
-  }, [activeSubTab, currentOffering, selectedSubjectCode]);
 
   const loadGradingConfig = async (offering: FacultyOffering) => {
     setConfigLoading(true);
@@ -2386,93 +2384,68 @@ export const GradeComputation: React.FC = () => {
         </div>
       </div>
 
-      {/* Assessments Manager Course Offering and Section Selector Bar */}
-      {activeSubTab === 'assessments' && (
-        <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
-          <div className="w-full md:flex-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course Offering</label>
-            <select
-              value={selectedAssessmentOfferingKey}
-              onChange={(e) => handleAssessmentOfferingChange(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-            >
-              {facultyOfferings.length === 0 ? (
-                <option value="">No active course offerings</option>
-              ) : (
-                facultyOfferings.map(offering => (
-                  <option key={offering.key} value={offering.key}>
-                    {offering.courseCode} - {offering.courseName}
-                    {offering.canonicalSemester ? ` (${offering.canonicalSemester}, ${offering.canonicalSchoolYear})` : ''}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
+      {/* Unified Class and Course Selector Bar for All Tabs */}
+      <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
+        <div className="w-full md:flex-1">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
+          <select
+            value={selectedSubjectCode}
+            onChange={(e) => {
+              const newCode = e.target.value;
+              setSelectedSubjectCode(newCode);
+              const matchOffering = facultyOfferings.find(o => o.courseCode === newCode);
+              if (matchOffering) {
+                setSelectedOfferingKey(matchOffering.key);
+                setSelectedAssessmentOfferingKey(matchOffering.key);
+              }
+              const matchingClasses = currentYearActiveClasses.filter(c => c.courseCode === newCode);
+              if (matchingClasses.length > 0) {
+                setSelectedClassId(matchingClasses[0].id);
+              } else {
+                setSelectedClassId('');
+              }
+            }}
+            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+          >
+            {activeCourses.length === 0 ? (
+              <option value="">No active courses for current school year</option>
+            ) : (
+              activeCourses.map(course => (
+                <option key={course.code} value={course.code}>
+                  {course.code} - {course.name}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
 
-          <div className="w-full md:w-56">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
-            <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-            >
-              {(!currentAssessmentOffering || currentAssessmentOffering.sections.length === 0)
-                ? <option value="">No active sections assigned</option>
-                : currentAssessmentOffering.sections.map(classItem => (
-                  <option key={classItem.id} value={classItem.id}>{classItem.csName}</option>
-                ))}
-            </select>
-          </div>
-        </Card>
-      )}
-
-      {/* Legacy Class and Subject Selector Bar for other untouched tabs */}
-      {activeSubTab !== 'components' && activeSubTab !== 'assessments' && (
-        <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
-          <div className="w-full md:flex-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
-            <select
-              value={selectedSubjectCode}
-              onChange={(e) => {
-                const newCode = e.target.value;
-                setSelectedSubjectCode(newCode);
-                const matchingClasses = currentYearActiveClasses.filter(c => c.courseCode === newCode);
-                if (matchingClasses.length > 0) {
-                  setSelectedClassId(matchingClasses[0].id);
-                } else {
-                  setSelectedClassId('');
+        <div className="w-full md:w-56">
+          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
+          <select
+            value={selectedClassId}
+            onChange={(e) => {
+              const newClassId = e.target.value;
+              setSelectedClassId(newClassId);
+              const classItem = currentYearActiveClasses.find(c => c.id === newClassId);
+              if (classItem && classItem.courseCode && classItem.courseCode !== selectedSubjectCode) {
+                setSelectedSubjectCode(classItem.courseCode);
+                const matchOffering = facultyOfferings.find(o => o.courseCode === classItem.courseCode);
+                if (matchOffering) {
+                  setSelectedOfferingKey(matchOffering.key);
+                  setSelectedAssessmentOfferingKey(matchOffering.key);
                 }
-              }}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-            >
-              {activeCourses.length === 0 ? (
-                <option value="">No active courses for current school year</option>
-              ) : (
-                activeCourses.map(course => (
-                  <option key={course.code} value={course.code}>
-                    {course.code} - {course.name}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
-
-          <div className="w-full md:w-56">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
-            <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
-            >
-              {availableClasses.length === 0
-                ? <option value="">No active sections assigned</option>
-                : availableClasses.map(classItem => (
-                  <option key={classItem.id} value={classItem.id}>{classItem.csName}</option>
-                ))}
-            </select>
-          </div>
-        </Card>
-      )}
+              }
+            }}
+            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+          >
+            {availableClasses.length === 0
+              ? <option value="">No active sections assigned</option>
+              : availableClasses.map(classItem => (
+                <option key={classItem.id} value={classItem.id}>{classItem.csName}</option>
+              ))}
+          </select>
+        </div>
+      </Card>
 
       {/* Navigation Sub-Tabs */}
       <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
@@ -2494,7 +2467,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('components')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-emerald-700 text-white shadow-md shadow-emerald-700/20' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Settings className="w-4 h-4" />
@@ -2929,6 +2902,22 @@ export const GradeComputation: React.FC = () => {
                             </span>
                           )}
                         </div>
+                        {ass.transmutationEnabled && (
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-bold bg-clinical-50 text-clinical-650 dark:bg-clinical-950/40 dark:text-clinical-400 border border-clinical-200 dark:border-clinical-800">
+                              Transmuted ({ass.transmutationMinimumPercentage ?? 50}%–{ass.transmutationMaximumPercentage ?? 100}%)
+                            </span>
+                            {ass.attendanceSessionDate ? (
+                              <span className="text-[9px] text-slate-400 font-mono">
+                                Linked: {ass.attendanceSessionDate}
+                              </span>
+                            ) : (
+                              <span className="text-[9px] text-slate-400">
+                                (Exam-date auto match)
+                              </span>
+                            )}
+                          </div>
+                        )}
                         {ass.instructions && <span className="text-[10px] text-slate-400 line-clamp-1">{ass.instructions}</span>}
                       </td>
                       <td className="px-5 py-3.5">
@@ -3038,9 +3027,14 @@ export const GradeComputation: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
-                  <Settings className="w-5 h-5 text-slate-700 dark:text-slate-300" />
+                  <Settings className="w-5 h-5 text-clinical-600 dark:text-clinical-400" />
                   <span>Configure Grading Weights & Schema</span>
                 </CardTitle>
+                {currentOffering && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                    Editing schema for: <span className="font-bold text-clinical-600 dark:text-clinical-400">{currentOffering.courseCode} — {currentOffering.courseName}</span>
+                  </p>
+                )}
               </div>
 
               {currentOffering && (
@@ -3058,38 +3052,6 @@ export const GradeComputation: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent className="p-6 sm:p-7 space-y-6">
-            {/* TARGET COURSE / SUBJECT */}
-            <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <label htmlFor="course-offering-select" className="text-xs font-extrabold text-slate-800 dark:text-slate-100 uppercase tracking-wide block">
-                  TARGET COURSE / SUBJECT
-                </label>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                  Select the specific course to configure grading weights and schema for:
-                </p>
-              </div>
-
-              {loading ? (
-                <div className="text-xs text-slate-400 animate-pulse">Loading subjects...</div>
-              ) : facultyOfferings.length === 0 ? (
-                <div className="text-xs text-slate-500 font-semibold">No active teaching assignments found.</div>
-              ) : (
-                <div className="min-w-[280px] max-w-md">
-                  <select
-                    id="course-offering-select"
-                    value={selectedOfferingKey}
-                    onChange={(e) => handleSelectOffering(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs truncate"
-                  >
-                    {facultyOfferings.map(offering => (
-                      <option key={offering.key} value={offering.key}>
-                        {offering.courseCode} - {offering.courseName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
 
             {/* Conflict Alert (409) */}
             {conflictError && (
@@ -4512,9 +4474,8 @@ export const GradeComputation: React.FC = () => {
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Attendance session date
+                        Attendance session date (Optional)
                         <select
-                          required={assTransmutationEnabled}
                           value={assAttendanceDate}
                           onChange={(event) => {
                             const date = event.target.value;
@@ -4524,28 +4485,27 @@ export const GradeComputation: React.FC = () => {
                           }}
                           className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
                         >
-                          <option value="">Select date</option>
+                          <option value="">Auto-match exam date / Link later</option>
                           {attendanceSessionOptions.map(option => (
                             <option key={option.date} value={option.date}>{option.date}</option>
                           ))}
                         </select>
                       </label>
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Attendance session code
+                        Attendance session code (Optional)
                         <select
-                          required={assTransmutationEnabled}
                           value={assAttendanceCode}
                           onChange={(event) => setAssAttendanceCode(event.target.value)}
                           className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
                         >
-                          <option value="">Select code</option>
+                          <option value="">Auto-match exam date / Link later</option>
                           {attendanceCodesForDate.map(code => <option key={code} value={code}>{code}</option>)}
                         </select>
                       </label>
                     </div>
-                    {attendanceSessionOptions.length === 0 && (
-                      <p className="text-[10px] text-amber-600 dark:text-amber-400">No coded attendance sessions are available for this class yet. Save the assessment disabled and link it later.</p>
-                    )}
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      💡 Transmutation can be enabled now. If an attendance session hasn&apos;t taken place yet, it will automatically associate with the attendance session conducted on the exam date ({assDueDate || 'set due date'}), or you can select a session code anytime later.
+                    </p>
                   </>
                 )}
               </div>

@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronRight, Lock, Pencil, Plus, Search, Unlock } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarDays, CheckCircle2, ChevronRight, Lock, Pencil, Plus, Search, Unlock } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
@@ -254,6 +254,9 @@ export const RetentionMonitoring: React.FC = () => {
 
   const [selectedClassId, setSelectedClassId] = useState('all');
   const [selectedSubjectCode, setSelectedSubjectCode] = useState('all');
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState('all');
+  const [currentSchoolYear, setCurrentSchoolYear] = useState('');
+  const syInitializedRef = useRef(false);
   const [activeTab, setActiveTab] = useState<'watchlist' | 'midterm' | 'remedials' | 'risk-rules'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -278,7 +281,21 @@ export const RetentionMonitoring: React.FC = () => {
     setIsLoading(true);
     try {
       const response = await getFacultyRetentionApi();
-      setRetentionRecords(Array.isArray(response.retention) ? response.retention : []);
+      const records = Array.isArray(response.retention) ? response.retention : [];
+      setRetentionRecords(records);
+      const curSy = response.currentSchoolYear || '';
+      setCurrentSchoolYear(curSy);
+      if (!syInitializedRef.current) {
+        if (curSy) {
+          setSelectedSchoolYear(curSy);
+        } else if (records.length > 0) {
+          const syOptions = Array.from(new Set(records.map(r => r.schoolYear).filter(Boolean))).sort().reverse();
+          if (syOptions.length > 0) {
+            setSelectedSchoolYear(syOptions[0] as string);
+          }
+        }
+        syInitializedRef.current = true;
+      }
       setLoadError(null);
       return true;
     } catch (requestError) {
@@ -301,17 +318,31 @@ export const RetentionMonitoring: React.FC = () => {
 
   const unavailableRecordCount = retentionRecords.length - usableRecords.length;
 
+  const availableSchoolYears = useMemo(() => {
+    const years = new Set<string>();
+    if (currentSchoolYear) years.add(currentSchoolYear);
+    usableRecords.forEach(record => {
+      if (record.schoolYear) years.add(record.schoolYear);
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [usableRecords, currentSchoolYear]);
+
+  const recordsForSchoolYear = useMemo(() => {
+    if (selectedSchoolYear === 'all') return usableRecords;
+    return usableRecords.filter(record => record.schoolYear === selectedSchoolYear);
+  }, [usableRecords, selectedSchoolYear]);
+
   const subjectOptions = useMemo(() => (
     Array.from(new Set(
-      usableRecords
+      recordsForSchoolYear
         .map(record => record.subjectCode)
         .filter(isPersistedText),
     )).sort((left, right) => left.localeCompare(right))
-  ), [usableRecords]);
+  ), [recordsForSchoolYear]);
 
   const classOptions = useMemo(() => {
     const labels = new Map<string, string>();
-    usableRecords.forEach(record => {
+    recordsForSchoolYear.forEach(record => {
       if (!labels.has(record.classId)) {
         labels.set(
           record.classId,
@@ -322,11 +353,26 @@ export const RetentionMonitoring: React.FC = () => {
       }
     });
     return Array.from(labels.entries()).sort(([left], [right]) => left.localeCompare(right));
-  }, [usableRecords]);
+  }, [recordsForSchoolYear]);
+
+  useEffect(() => {
+    if (selectedClassId !== 'all') {
+      const exists = classOptions.some(([cid]) => cid === selectedClassId);
+      if (!exists) setSelectedClassId('all');
+    }
+  }, [classOptions, selectedClassId]);
+
+  useEffect(() => {
+    if (selectedSubjectCode !== 'all') {
+      const exists = subjectOptions.includes(selectedSubjectCode);
+      if (!exists) setSelectedSubjectCode('all');
+    }
+  }, [subjectOptions, selectedSubjectCode]);
 
   const filteredRecords = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return usableRecords.filter(record => {
+      if (selectedSchoolYear !== 'all' && record.schoolYear !== selectedSchoolYear) return false;
       if (selectedClassId !== 'all' && record.classId !== selectedClassId) return false;
       if (selectedSubjectCode !== 'all' && record.subjectCode !== selectedSubjectCode) return false;
       if (query.length === 0) return true;
@@ -339,7 +385,7 @@ export const RetentionMonitoring: React.FC = () => {
         record.enrollmentId,
       ].some(value => isPersistedText(value) && value.toLowerCase().includes(query));
     });
-  }, [searchQuery, selectedClassId, selectedSubjectCode, usableRecords]);
+  }, [searchQuery, selectedSchoolYear, selectedClassId, selectedSubjectCode, usableRecords]);
 
   const watchlistRecords = useMemo(
     () => filteredRecords.filter(record => record.state !== 'active'),
@@ -609,7 +655,15 @@ export const RetentionMonitoring: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">Retention & Remedial Monitoring</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">Retention & Remedial Monitoring</h1>
+            {currentSchoolYear && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
+                <CalendarDays className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                S.Y. {currentSchoolYear} (Current)
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">View persisted Faculty retention records and submit authorized remedial or status updates.</p>
         </div>
         <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all" title={scheduleCandidates.length === 0 ? 'Scheduling is unavailable without persisted enrollment identifiers.' : 'Schedule remedial exam'}>
@@ -645,6 +699,23 @@ export const RetentionMonitoring: React.FC = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+          {/* School Year Selector Filter Pill (Defaults to Current School Year) */}
+          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
+            <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <select
+              value={selectedSchoolYear}
+              onChange={(event) => setSelectedSchoolYear(event.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="all">All School Years</option>
+              {availableSchoolYears.map(sy => (
+                <option key={sy} value={sy}>
+                  S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs">
             <select value={selectedSubjectCode} onChange={(event) => setSelectedSubjectCode(event.target.value)} className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1">
               <option value="all">All Subjects</option>

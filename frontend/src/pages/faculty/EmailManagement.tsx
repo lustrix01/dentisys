@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   CheckCircle2,
   Clock3,
@@ -39,11 +39,14 @@ export const EmailManagement: React.FC = () => {
 
   const [dbStudents, setDbStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<string>('');
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('all');
+  const syInitializedRef = useRef(false);
 
   useEffect(() => {
     Promise.all([
       getFacultyStudentsApi().catch(() => []),
-      getFacultyClassesApi().catch(() => ({ status: 'success', classes: [] })),
+      getFacultyClassesApi().catch(() => ({ status: 'success', currentSchoolYear: '', classes: [] })),
     ]).then(([stRes, clsRes]) => {
       if (Array.isArray(stRes)) {
         setDbStudents(stRes as unknown as Student[]);
@@ -51,21 +54,65 @@ export const EmailManagement: React.FC = () => {
       if (clsRes?.classes && Array.isArray(clsRes.classes)) {
         setClasses(clsRes.classes);
       }
+      const curSy = clsRes?.currentSchoolYear || '';
+      if (curSy) {
+        setCurrentSchoolYear(curSy);
+        if (!syInitializedRef.current) {
+          setSelectedSchoolYear(curSy);
+          syInitializedRef.current = true;
+        }
+      } else if (!syInitializedRef.current && clsRes?.classes && clsRes.classes.length > 0) {
+        const syOptions = Array.from(new Set(clsRes.classes.map((c: any) => c.schoolYear).filter(Boolean))).sort().reverse();
+        if (syOptions.length > 0) {
+          setSelectedSchoolYear(syOptions[0] as string);
+          syInitializedRef.current = true;
+        }
+      }
     });
   }, []);
 
-  const assignedClasses = useMemo(() => {
-    const list = Array.from(new Set(classes.map(c => c.block || c.csName).filter(Boolean)));
-    return list.length > 0 ? list : ['Section 4-A', 'Section 4-B'];
+  const classSchoolYearMap = useMemo(() => {
+    const map = new Map<string, string>();
+    classes.forEach(c => {
+      if (c.schoolYear) {
+        map.set(String(c.id), c.schoolYear);
+        map.set(String(c.csId), c.schoolYear);
+        if (c.csName) map.set(c.csName, c.schoolYear);
+        if (c.block) map.set(c.block, c.schoolYear);
+      }
+    });
+    return map;
   }, [classes]);
+
+  const availableSchoolYears = useMemo(() => {
+    const years = new Set<string>();
+    if (currentSchoolYear) years.add(currentSchoolYear);
+    classes.forEach(c => {
+      if (c.schoolYear) years.add(c.schoolYear);
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [classes, currentSchoolYear]);
+
+  const assignedClasses = useMemo(() => {
+    const filtered = selectedSchoolYear === 'all'
+      ? classes
+      : classes.filter(c => c.schoolYear === selectedSchoolYear);
+    const list = Array.from(new Set(filtered.map(c => c.block || c.csName).filter(Boolean)));
+    return list;
+  }, [classes, selectedSchoolYear]);
 
   const [tab, setTab] = useState<Tab>('student_invites');
   const [selected, setSelected] = useState<string[]>([]);
   
   // Filter Dropdown States
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
-  const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('2025-2026');
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (selectedClassId !== 'all' && !assignedClasses.includes(selectedClassId)) {
+      setSelectedClassId('all');
+    }
+  }, [assignedClasses, selectedClassId]);
 
   const [preview, setPreview] = useState(false);
   const [previewType, setPreviewType] = useState<EmailPreviewType>('consent');
@@ -115,17 +162,21 @@ export const EmailManagement: React.FC = () => {
     void fetchEmailLogs();
   }, [dbStudents]);
 
-  // Filter students based on selected Class Section filter & search
+  // Filter students based on selected School Year, Class Section filter & search
   const filteredStudents = useMemo(() => {
     return safeStudents.filter((s) => {
+      const matchesSchoolYear = selectedSchoolYear === 'all' ||
+        (s.classSections && s.classSections.some(sec => classSchoolYearMap.get(String(sec.classId)) === selectedSchoolYear || classSchoolYearMap.get(sec.className || '') === selectedSchoolYear)) ||
+        (s.classId && classSchoolYearMap.get(String(s.classId)) === selectedSchoolYear);
+
       const matchesClass = selectedClassId === 'all' || 
-        s.classSections?.some(cs => cs.classId === selectedClassId || cs.className?.includes(selectedClassId));
+        s.classSections?.some(cs => cs.classId === selectedClassId || cs.className === selectedClassId || cs.className?.includes(selectedClassId));
       const matchesSearch = (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
                             (s.studentId || '').toLowerCase().includes(search.toLowerCase()) ||
                             (s.email || '').toLowerCase().includes(search.toLowerCase());
-      return matchesClass && matchesSearch;
+      return matchesSchoolYear && matchesClass && matchesSearch;
     });
-  }, [safeStudents, selectedClassId, search]);
+  }, [safeStudents, selectedClassId, selectedSchoolYear, search, classSchoolYearMap]);
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -253,9 +304,17 @@ export const EmailManagement: React.FC = () => {
       {/* 1. Clean Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            Email Management & Class Invitations
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
+              Email Management & Class Invitations
+            </h1>
+            {currentSchoolYear && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
+                <CalendarDays className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                S.Y. {currentSchoolYear} (Current)
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
             Dispatch official class roster invitations, manage Class Secretary appointments, and track email transmission logs.
           </p>
@@ -352,8 +411,12 @@ export const EmailManagement: React.FC = () => {
               onChange={(e) => setSelectedSchoolYear(e.target.value)}
               className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1"
             >
-              <option value="2025-2026">S.Y. 2025-2026 (Current)</option>
-              <option value="2024-2025">S.Y. 2024-2025</option>
+              <option value="all">All School Years</option>
+              {availableSchoolYears.map(sy => (
+                <option key={sy} value={sy}>
+                  S.Y. {sy}{sy === currentSchoolYear ? ' (Current)' : ''}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -390,7 +453,7 @@ export const EmailManagement: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  setPreviewType('consent');
+                  setPreviewType('class_invitation');
                   setPreviewStudentId(selected[0] || filteredStudents[0]?.id || '');
                   setPreview(true);
                 }}
@@ -487,7 +550,7 @@ export const EmailManagement: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => {
-                              setPreviewType('consent');
+                              setPreviewType('class_invitation');
                               setPreviewStudentId(student.id);
                               setPreview(true);
                             }}
@@ -642,14 +705,24 @@ export const EmailManagement: React.FC = () => {
       )}
 
       {/* Email Preview Modal */}
-      {preview && (
-        <EmailPreviewModal
-          isOpen={preview}
-          onClose={() => setPreview(false)}
-          type={previewType}
-          recipientName={safeStudents.find(s => s.id === previewStudentId)?.name || 'Student'}
-        />
-      )}
+      {preview && (() => {
+        const previewStudent = safeStudents.find(s => s.id === previewStudentId) || filteredStudents[0] || null;
+        const targetClass = previewStudent?.classSections?.[0]?.className || previewStudent?.className || (selectedClassId !== 'all' ? selectedClassId : 'Class Section');
+        const tokenSnippet = (previewStudent?.studentId || 'sample').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return (
+          <EmailPreviewModal
+            isOpen={preview}
+            onClose={() => setPreview(false)}
+            type={previewType}
+            recipientName={previewStudent?.name || 'Dental Student'}
+            recipientEmail={previewStudent?.email}
+            facultyName={user?.display_name || 'Dr. Roberto Santos, DMD'}
+            className={targetClass}
+            schoolYear={selectedSchoolYear !== 'all' ? selectedSchoolYear : currentSchoolYear || '2026-2027'}
+            invitationLink={`https://dentisys.bicol-u.edu.ph/activate-student?token=inv_${tokenSnippet}_act`}
+          />
+        );
+      })()}
 
     </div>
   );

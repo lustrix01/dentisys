@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Mail, Check, Copy, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Mail, CheckCircle2, RefreshCw } from 'lucide-react';
 import { requestPasswordReset } from '../../services/authService';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
@@ -16,17 +16,18 @@ export function ForgotPassword() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [devResetLink, setDevResetLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [useFallbackSvg, setUseFallbackSvg] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(60);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
 
-  const handleCopy = () => {
-    if (devResetLink) {
-      navigator.clipboard.writeText(devResetLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,10 +38,26 @@ export function ForgotPassword() {
     setLoading(false);
     if (res.success) {
       setEmail(completedEmail);
-      setDevResetLink(res.resetLink || null);
       setSubmitted(true);
+      setResendCooldown(60);
+      setResendMessage('');
     } else {
       setError(res.message);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendCooldown > 0 || resendLoading) return;
+    setResendLoading(true);
+    setResendMessage('');
+    const res = await requestPasswordReset(email);
+    setResendLoading(false);
+    if (res.success) {
+      setResendCooldown(60);
+      setResendMessage('A new reset link has been sent to your email.');
+      setTimeout(() => setResendMessage(''), 5000);
+    } else {
+      setError(res.message || 'Failed to resend reset link.');
     }
   };
 
@@ -164,10 +181,16 @@ export function ForgotPassword() {
               </>
             ) : (
               <div className="text-center py-2">
-                <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-accent-100 dark:bg-accent-900/30 text-accent-600 dark:text-accent-400 shadow-sm">
+                <div className="mx-auto flex items-center justify-center h-14 w-14 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shadow-sm mb-3">
                   <Mail className="h-6 w-6" aria-hidden="true" />
                 </div>
-                <h3 className="mt-3 text-xl font-extrabold font-heading text-slate-900 dark:text-slate-100">
+
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold mb-3">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  Email sent
+                </div>
+
+                <h3 className="text-xl font-extrabold font-heading text-slate-900 dark:text-slate-100">
                   Check your email
                 </h3>
                 <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-sm mx-auto">
@@ -175,40 +198,36 @@ export function ForgotPassword() {
                   <span className="font-semibold text-slate-900 dark:text-slate-100">{email}</span>.
                 </p>
 
-                {devResetLink && (
-                  <div className="mt-6 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl text-left space-y-2.5">
-                    <div className="flex items-center space-x-2 text-amber-800 dark:text-amber-300 font-semibold text-xs">
-                      <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                      <span>Development Mode Reset Link</span>
-                    </div>
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                      Since email delivery is in local development mode, use the link below to set your new password:
-                    </p>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        readOnly
-                        value={devResetLink}
-                        className="block w-full text-xs bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-800 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 font-mono truncate focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCopy}
-                        className="px-3 py-1.5 bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 text-xs font-semibold rounded-lg transition-colors flex items-center shrink-0 cursor-pointer"
-                      >
-                        {copied ? <Check className="h-3.5 w-3.5 mr-1" /> : <Copy className="h-3.5 w-3.5 mr-1" />}
-                        {copied ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
-                    <a
-                      href={devResetLink}
-                      className="w-full flex items-center justify-center py-2.5 px-4 border border-transparent rounded-xl shadow-xs text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 focus:outline-none transition-all"
-                    >
-                      <ExternalLink className="mr-1.5 h-4 w-4" />
-                      Reset Password Now
-                    </a>
+                {resendMessage && (
+                  <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-xs font-medium text-emerald-700 dark:text-emerald-400 flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>{resendMessage}</span>
                   </div>
                 )}
+
+                {error && (
+                  <div role="alert" className="mt-4 p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 rounded-xl text-xs font-medium text-rose-700 dark:text-rose-400 flex items-start gap-2.5 text-left">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 mt-1.5" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <div className="mt-6 p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-2.5">
+                    Didn't receive the email? Check your spam folder or request a new one:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resendCooldown > 0 || resendLoading}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-accent-700 dark:text-accent-300 bg-accent-100/70 dark:bg-accent-950/60 hover:bg-accent-200/70 dark:hover:bg-accent-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${resendLoading ? 'animate-spin' : ''}`} />
+                    {resendCooldown > 0
+                      ? `Resend email in ${resendCooldown}s`
+                      : 'Resend email'}
+                  </button>
+                </div>
 
                 <div className="mt-6">
                   <Link

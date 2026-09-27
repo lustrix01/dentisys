@@ -25,6 +25,7 @@ import {
   Trash2,
   Pencil,
   AlertCircle,
+  MoreVertical,
 } from 'lucide-react';
 import { Student } from '../../types';
 import { Card } from '../../components/Card';
@@ -60,6 +61,50 @@ import { RosterImportModal } from '../../components/RosterImportModal';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
 
+const parseRoomSchedule = (raw: string | undefined | null) => {
+  if (!raw || !raw.trim()) {
+    return { room: '', days: [] as string[], startTime: '08:00 AM', endTime: '09:00 AM' };
+  }
+  const parenMatch = raw.match(/^([^(]+)\s*\(([^)]+)\)$/);
+  if (parenMatch) {
+    const room = parenMatch[1].trim();
+    const inside = parenMatch[2].trim();
+    const timeMatch = inside.match(/(\d{1,2}:\d{2}\s*[APap][Mm])\s*-\s*(\d{1,2}:\d{2}\s*[APap][Mm])/);
+    const foundDays = SCHEDULE_DAYS.filter(d => new RegExp('\\b' + d + '\\b', 'i').test(inside));
+    return {
+      room,
+      days: foundDays,
+      startTime: timeMatch ? timeMatch[1].toUpperCase() : '08:00 AM',
+      endTime: timeMatch ? timeMatch[2].toUpperCase() : '09:00 AM',
+    };
+  }
+  const timeMatch = raw.match(/(\d{1,2}:\d{2}\s*[APap][Mm])\s*-\s*(\d{1,2}:\d{2}\s*[APap][Mm])/);
+  const foundDays = SCHEDULE_DAYS.filter(d => new RegExp('\\b' + d + '\\b', 'i').test(raw));
+  if (timeMatch || foundDays.length > 0) {
+    const roomClean = raw.replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/gi, '').replace(/\d{1,2}:\d{2}\s*[APap][Mm]\s*-\s*\d{1,2}:\d{2}\s*[APap][Mm]/gi, '').replace(/[()]/g, '').trim();
+    return {
+      room: roomClean || raw.trim(),
+      days: foundDays,
+      startTime: timeMatch ? timeMatch[1].toUpperCase() : '08:00 AM',
+      endTime: timeMatch ? timeMatch[2].toUpperCase() : '09:00 AM',
+    };
+  }
+  return {
+    room: raw.trim(),
+    days: [] as string[],
+    startTime: '08:00 AM',
+    endTime: '09:00 AM',
+  };
+};
+
+const formatRoomSchedule = (room: string, days: string[], startTime: string, endTime: string): string => {
+  const r = room.trim();
+  if (!r) return '';
+  if (days.length > 0) {
+    return `${r} (${days.join('/')} ${startTime} - ${endTime})`;
+  }
+  return r;
+};
 
 export const ClassesAndRosters: React.FC = () => {
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
@@ -87,6 +132,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [isImportRosterOpen, setIsImportRosterOpen] = useState(false);
   const [targetEnrollCsId, setTargetEnrollCsId] = useState<number>(0);
   const [enrollTab, setEnrollTab] = useState<'directory' | 'manual'>('directory');
+  const [openStudentMenuId, setOpenStudentMenuId] = useState<string | null>(null);
   const [availableStudents, setAvailableStudents] = useState<Array<{
     id: string;
     studentId: string;
@@ -129,7 +175,13 @@ export const ClassesAndRosters: React.FC = () => {
   const [editBlock, setEditBlock] = useState('');
   const [editYearLevel, setEditYearLevel] = useState(4);
   const [editLecRoom, setEditLecRoom] = useState('');
+  const [editLecDays, setEditLecDays] = useState<string[]>([]);
+  const [editLecStartTime, setEditLecStartTime] = useState('08:00 AM');
+  const [editLecEndTime, setEditLecEndTime] = useState('09:00 AM');
   const [editLabRoom, setEditLabRoom] = useState('');
+  const [editLabDays, setEditLabDays] = useState<string[]>([]);
+  const [editLabStartTime, setEditLabStartTime] = useState('10:00 AM');
+  const [editLabEndTime, setEditLabEndTime] = useState('01:00 PM');
   const [editSemester, setEditSemester] = useState('1st Semester');
   const [editSchoolYear, setEditSchoolYear] = useState('2025-2026');
   const [editError, setEditError] = useState<string | null>(null);
@@ -211,6 +263,14 @@ export const ClassesAndRosters: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = () => setOpenStudentMenuId(null);
+    if (openStudentMenuId) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [openStudentMenuId]);
 
   // Available School Years derived from classes
   const availableSchoolYears = useMemo(() => {
@@ -357,25 +417,23 @@ export const ClassesAndRosters: React.FC = () => {
     }
 
     setTargetEnrollCsId(targetId);
-    if (cls) {
-      setSelectedClass(cls);
-    } else if (targetId > 0) {
-      const found = classes.find(c => c.csId === targetId);
-      if (found) setSelectedClass(found);
+    let targetClassItem = cls;
+    if (!targetClassItem && targetId > 0) {
+      targetClassItem = classes.find(c => c.csId === targetId);
+    }
+    if (targetClassItem) {
+      setSelectedClass(targetClassItem);
     }
 
-    setEnrollTab('directory');
+    setEnrollTab('manual');
     setStudentIdInput('');
     setStudentFirstName('');
     setStudentMiddleName('');
     setStudentLastName('');
     setStudentEmailInput('');
-    setStudentYearInput(4);
+    const defaultYear = targetClassItem?.yearLevel ? Math.min(Math.max(Number(targetClassItem.yearLevel), 1), 4) : 4;
+    setStudentYearInput(defaultYear);
     setIsAddStudentOpen(true);
-
-    if (targetId > 0) {
-      await loadAvailableStudents(targetId);
-    }
   };
 
   // Handler: Open Edit Class Section Modal
@@ -389,8 +447,19 @@ export const ClassesAndRosters: React.FC = () => {
     setEditCourseName(cls.courseName || '');
     setEditBlock(cls.block || '');
     setEditYearLevel(cls.yearLevel || 4);
-    setEditLecRoom(cls.lecRoom || '');
-    setEditLabRoom(cls.labRoom || '');
+
+    const parsedLec = parseRoomSchedule(cls.lecRoom);
+    setEditLecRoom(parsedLec.room);
+    setEditLecDays(parsedLec.days);
+    setEditLecStartTime(parsedLec.startTime || '08:00 AM');
+    setEditLecEndTime(parsedLec.endTime || '09:00 AM');
+
+    const parsedLab = parseRoomSchedule(cls.labRoom);
+    setEditLabRoom(parsedLab.room);
+    setEditLabDays(parsedLab.days);
+    setEditLabStartTime(parsedLab.startTime || '10:00 AM');
+    setEditLabEndTime(parsedLab.endTime || '01:00 PM');
+
     setEditSemester(cls.semester || '1st Semester');
     setEditSchoolYear(cls.schoolYear || '2025-2026');
     setEditError(null);
@@ -478,15 +547,22 @@ export const ClassesAndRosters: React.FC = () => {
       return;
     }
 
+    const formattedLec = formatRoomSchedule(editLecRoom, editLecDays, editLecStartTime, editLecEndTime);
+    const formattedLab = formatRoomSchedule(editLabRoom, editLabDays, editLabStartTime, editLabEndTime);
+
     setIsUpdatingClass(true);
     try {
       const res = await updateFacultyClassApi({
         csId: parsedCsId,
+        courseCode: editCourseCode.trim() || undefined,
+        courseName: editCourseName.trim() || undefined,
         csName: `${editCourseCode.trim()}-${editBlock.trim()}`,
         block: editBlock.trim(),
         yearLevel: editYearLevel,
-        lecRoom: editLecRoom.trim() || undefined,
-        labRoom: editLabRoom.trim() || undefined,
+        semester: editSemester.trim() || undefined,
+        schoolYear: editSchoolYear.trim() || undefined,
+        lecRoom: formattedLec || undefined,
+        labRoom: formattedLab || undefined,
       });
 
       if (res && (res.status === 'ok' || res.status === 'success')) {
@@ -598,6 +674,7 @@ export const ClassesAndRosters: React.FC = () => {
     if (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear) {
       setSelectedSchoolYear(newSchoolYear);
     }
+    setSelectedClassFilterId('all');
     setNewCourseId(0);
     setNewCourseCode('');
     setNewCourseName('');
@@ -637,19 +714,12 @@ export const ClassesAndRosters: React.FC = () => {
       const found = courses.find(c => c.courseCode.toLowerCase() === newCourseCode.trim().toLowerCase());
       if (found) {
         targetCourseId = found.id;
-      } else if (courses.length > 0) {
-        targetCourseId = courses[0].id;
       }
     }
 
-    if (!targetCourseId || targetCourseId <= 0) {
-      showFeedback('Please select or specify a valid Course Offering.', 'error');
-      return;
-    }
-
     const csName = `${newCourseCode.trim()}-${newBlock.trim()}`;
-    if (!csName) {
-      showFeedback('Please provide a class section name.', 'error');
+    if (!csName || !newCourseCode.trim()) {
+      showFeedback('Please provide a course code and section block.', 'error');
       return;
     }
 
@@ -659,7 +729,9 @@ export const ClassesAndRosters: React.FC = () => {
     try {
       const res = await createFacultyClassApi({
         csName,
-        courseId: targetCourseId,
+        courseId: targetCourseId > 0 ? targetCourseId : undefined,
+        courseCode: newCourseCode.trim(),
+        courseName: newCourseName.trim(),
         semester: newSemester,
         schoolYear: newSchoolYear,
         yearLevel: newYearLevel,
@@ -670,6 +742,7 @@ export const ClassesAndRosters: React.FC = () => {
 
       showFeedback(res.message || `Class section ${csName} created successfully for current S.Y. ${newSchoolYear}!`, 'success');
       setIsCreateClassOpen(false);
+      setSelectedClassFilterId('all');
       if (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear) {
         setSelectedSchoolYear(newSchoolYear);
       }
@@ -1082,11 +1155,20 @@ export const ClassesAndRosters: React.FC = () => {
                       <span className="px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
                         {cls.courseCode} &bull; Year {cls.yearLevel}
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         {historicalClass && <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 text-[9px] font-extrabold uppercase tracking-wider">View only</span>}
-                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mr-1">
                           {cls.csName || cls.block}
                         </span>
+                        <button
+                          onClick={() => handleOpenEditClass(cls)}
+                          disabled={historicalClass}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                          title={historicalClass ? 'Past school-year classes are view-only.' : 'Edit Class Section Details'}
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
                       </div>
                     </div>
 
@@ -1124,30 +1206,21 @@ export const ClassesAndRosters: React.FC = () => {
                       <span>{cls.enrolledCount} Students</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <button
-                        onClick={() => handleOpenEditClass(cls)}
-                        disabled={historicalClass}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                        title={historicalClass ? 'Past school-year classes are view-only.' : 'Edit Class Section Details'}
-                      >
-                        <Pencil className="w-3 h-3" />
-                        <span>Edit</span>
-                      </button>
-
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleOpenAddStudent(cls)}
                         disabled={historicalClass}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                         title={historicalClass ? 'Past school-year classes are view-only.' : 'Add student to class roster'}
                       >
-                        <UserPlus className="w-3 h-3" />
+                        <UserPlus className="w-3.5 h-3.5" />
                         <span>Add Student</span>
                       </button>
 
                       <button
                         onClick={() => handleOpenClassRoster(cls)}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-accent-600 dark:text-accent-400 hover:underline cursor-pointer"
+                        className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/40 hover:bg-accent-100 dark:hover:bg-accent-900/50 transition-colors cursor-pointer"
+                        title="View Class Roster"
                       >
                         <span>View Roster</span>
                         <ChevronRight className="w-4 h-4" />
@@ -1206,7 +1279,7 @@ export const ClassesAndRosters: React.FC = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-h-[220px]">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
@@ -1274,57 +1347,87 @@ export const ClassesAndRosters: React.FC = () => {
                           Year {st.yearLevel}
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleOpenEditStudent(st)}
-                              disabled={!isStudentEditable(st)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-600 hover:text-white text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-50 disabled:hover:text-blue-700"
-                              title={isStudentEditable(st) ? 'Edit Student roster profile' : 'Past school-year records are view-only'}
-                            >
-                              <Pencil className="w-3 h-3" />
-                              <span>Edit</span>
-                            </button>
-
+                          <div className="relative inline-flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                             {(() => {
                               const accountStatus = st.accountStatus ?? 'none';
-                              if (accountStatus === 'active' || accountStatus === 'secretary' || accountStatus === 'disabled') {
-                                const label = accountStatus === 'active' ? 'Registered' : accountStatus === 'secretary' ? 'Secretary' : 'Disabled';
-                                const title = accountStatus === 'active'
-                                  ? 'Invitation accepted: this student has an active account'
-                                  : accountStatus === 'secretary'
-                                    ? 'Linked to a Class Secretary account'
-                                    : 'This student account is disabled';
+                              if (accountStatus === 'active' || accountStatus === 'secretary') {
                                 return (
-                                  <span
-                                    title={title}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold"
-                                  >
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
                                     <CheckCircle2 className="w-3 h-3" />
-                                    <span>{label}</span>
+                                    <span>Registered</span>
                                   </span>
                                 );
                               }
-                              const isReissue = accountStatus === 'pending';
-                              return (
-                                <button
-                                  onClick={() => handleSendStudentEmailInvite(st)}
-                                  disabled={isSendingInvitations}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-accent-600 hover:text-white dark:hover:bg-accent-600 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
-                                  title={isReissue ? 'Invitation sent but not accepted yet. Send a new link (the previous link stops working).' : 'Send Email Invitation'}
-                                >
-                                  <Send className="w-3 h-3" />
-                                  <span>{isReissue ? 'Reissue' : 'Invite'}</span>
-                                </button>
-                              );
+                              return null;
                             })()}
 
                             <button
-                              onClick={() => handleDeleteStudent(st)}
-                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-rose-600 hover:text-white transition-all cursor-pointer"
-                              title="Remove Student from Class"
+                              type="button"
+                              onClick={() => setOpenStudentMenuId(openStudentMenuId === st.id ? null : st.id)}
+                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                openStudentMenuId === st.id
+                                  ? 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white'
+                                  : 'bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                              }`}
+                              title="Actions"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <MoreVertical className="w-4 h-4" />
                             </button>
+
+                            {openStudentMenuId === st.id && (
+                              <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-900/10 py-1.5 z-40 text-xs text-left">
+                                {/* Edit */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenStudentMenuId(null);
+                                    handleOpenEditStudent(st);
+                                  }}
+                                  disabled={!isStudentEditable(st)}
+                                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-blue-500" />
+                                  <span>Edit Student</span>
+                                </button>
+
+                                {/* Invite */}
+                                {(() => {
+                                  const accountStatus = st.accountStatus ?? 'none';
+                                  const isReissue = accountStatus === 'pending';
+                                  const isRegistered = accountStatus === 'active' || accountStatus === 'secretary';
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenStudentMenuId(null);
+                                        handleSendStudentEmailInvite(st);
+                                      }}
+                                      disabled={isSendingInvitations || isRegistered}
+                                      className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                      title={isRegistered ? 'Student already has an active account' : undefined}
+                                    >
+                                      <Send className="w-3.5 h-3.5 text-emerald-500" />
+                                      <span>{isRegistered ? 'Already Registered' : isReissue ? 'Reissue Invite' : 'Send Invite'}</span>
+                                    </button>
+                                  );
+                                })()}
+
+                                <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
+
+                                {/* Delete */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenStudentMenuId(null);
+                                    handleDeleteStudent(st);
+                                  }}
+                                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                  <span>Remove from Class</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1337,25 +1440,42 @@ export const ClassesAndRosters: React.FC = () => {
         </Card>
       )}
 
-      {/* Modal: Add / Enroll Student */}
+      {/* Modal: Register Student */}
       {isAddStudentOpen && (
         <Modal
           isOpen={isAddStudentOpen}
           onClose={() => setIsAddStudentOpen(false)}
-          title={selectedClass ? `Add Students to ${selectedClass.courseCode} (${selectedClass.block})` : "Add Students to Class Roster"}
+          title={selectedClass ? `Register Student to ${selectedClass.courseCode} (${selectedClass.block})` : "Register Student to Class"}
         >
           <div className="space-y-4 text-xs">
-            {/* Target Class Selector */}
+            {/* Target Class Selector & Import File Action */}
             <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Target Class Section</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="font-bold text-slate-700 dark:text-slate-300 block">Target Class Section</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddStudentOpen(false);
+                    setIsImportRosterOpen(true);
+                  }}
+                  className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 flex items-center gap-1.5 cursor-pointer hover:underline"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Import File (CSV / PDF)</span>
+                </button>
+              </div>
               <select
                 value={targetEnrollCsId}
-                onChange={async (e) => {
+                onChange={(e) => {
                   const idNum = Number(e.target.value);
                   setTargetEnrollCsId(idNum);
                   const matched = classes.find(c => c.csId === idNum);
-                  if (matched) setSelectedClass(matched);
-                  if (idNum > 0) await loadAvailableStudents(idNum);
+                  if (matched) {
+                    setSelectedClass(matched);
+                    if (matched.yearLevel) {
+                      setStudentYearInput(Math.min(Math.max(Number(matched.yearLevel), 1), 4));
+                    }
+                  }
                 }}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
               >
@@ -1365,260 +1485,118 @@ export const ClassesAndRosters: React.FC = () => {
               </select>
             </div>
 
-            {/* Mode Tabs */}
-            <div className="flex border-b border-slate-200 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => setEnrollTab('directory')}
-                className={`py-2 px-4 font-bold border-b-2 transition-colors cursor-pointer ${
-                  enrollTab === 'directory'
-                    ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Enroll from University Directory ({availableStudents.length} Available)
-              </button>
-              <button
-                type="button"
-                onClick={() => setEnrollTab('manual')}
-                className={`py-2 px-4 font-bold border-b-2 transition-colors cursor-pointer ${
-                  enrollTab === 'manual'
-                    ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
-                    : 'border-transparent text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Register New Student
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddStudentOpen(false);
-                  setIsImportRosterOpen(true);
-                }}
-                className="py-2 px-4 font-bold border-b-2 border-transparent text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Import File (CSV / PDF)</span>
-              </button>
-            </div>
+            <form onSubmit={handleRegisterNewStudent} className="space-y-4">
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Student ID Number *</label>
+                <input
+                  type="text"
+                  required
+                  value={studentIdInput}
+                  onChange={(e) => setStudentIdInput(e.target.value)}
+                  placeholder="e.g. 2024-DENT-0012"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+              </div>
 
-            {enrollTab === 'directory' ? (
-              <form onSubmit={handleEnrollStudents} className="space-y-3">
-                {/* Search Bar */}
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search student number or name..."
-                    value={availSearchQuery}
-                    onChange={(e) => setAvailSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  />
-                </div>
-
-                {/* Available Students Table */}
-                <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-                  {loadingAvailable ? (
-                    <div className="py-10 text-center text-slate-400 font-semibold">
-                      <RefreshCw className="w-4 h-4 animate-spin mx-auto mb-2 text-emerald-600" />
-                      Loading available unenrolled students...
-                    </div>
-                  ) : filteredAvailableStudents.length === 0 ? (
-                    <div className="py-10 text-center text-slate-400 font-semibold">
-                      {availableStudents.length === 0
-                        ? 'All registered students are already enrolled in this class section.'
-                        : 'No available students match your search.'}
-                    </div>
-                  ) : (
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 font-bold uppercase text-[10px] sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
-                        <tr>
-                          <th className="p-2.5 w-8">
-                            <input
-                              type="checkbox"
-                              checked={selectedStudentIds.length === filteredAvailableStudents.length && filteredAvailableStudents.length > 0}
-                              onChange={toggleSelectAllAvailable}
-                              className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                            />
-                          </th>
-                          <th className="p-2.5">Student ID</th>
-                          <th className="p-2.5">Full Name</th>
-                          <th className="p-2.5">Year Level</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {filteredAvailableStudents.map(st => {
-                          const idNum = parseInt(st.id, 10);
-                          const isSelected = selectedStudentIds.includes(idNum);
-                          return (
-                            <tr
-                              key={st.id}
-                              onClick={() => toggleSelectStudent(idNum)}
-                              className={`hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 cursor-pointer transition-colors ${
-                                isSelected ? 'bg-emerald-50/70 dark:bg-emerald-950/50' : ''
-                              }`}
-                            >
-                              <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => toggleSelectStudent(idNum)}
-                                  className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                                />
-                              </td>
-                              <td className="p-2.5 font-mono font-bold text-slate-700 dark:text-slate-200">
-                                {st.studentId}
-                              </td>
-                              <td className="p-2.5 font-bold text-slate-800 dark:text-slate-100">
-                                {st.name}
-                              </td>
-                              <td className="p-2.5 text-slate-500">
-                                Year {st.yearLevel}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-
-                <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
-                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                    {selectedStudentIds.length} student(s) selected
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsAddStudentOpen(false)}
-                      className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingEnroll || selectedStudentIds.length === 0}
-                      className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      {isSubmittingEnroll ? 'Enrolling...' : `Enroll Selected (${selectedStudentIds.length})`}
-                    </button>
-                  </div>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleRegisterNewStudent} className="space-y-4">
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Student ID Number</label>
-                  <input
-                    type="text"
-                    required
-                    value={studentIdInput}
-                    onChange={(e) => setStudentIdInput(e.target.value)}
-                    placeholder="e.g. 2024-DENT-0012"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">
-                    Prefix
-                    <input value={studentPrefix} onChange={e => setStudentPrefix(e.target.value)} maxLength={50} placeholder="e.g. Ms."
-                      className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
-                  </label>
-                  <div>
-                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">First Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={studentFirstName}
-                      onChange={(e) => setStudentFirstName(e.target.value.replace(/[0-9]/g, ''))}
-                      placeholder="e.g. Juan"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
-                    <input
-                      type="text"
-                      value={studentMiddleName}
-                      onChange={(e) => setStudentMiddleName(e.target.value.replace(/[0-9]/g, ''))}
-                      placeholder="e.g. Santos"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={studentLastName}
-                      onChange={(e) => setStudentLastName(e.target.value.replace(/[0-9]/g, ''))}
-                      placeholder="e.g. Dela Cruz"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
-                    />
-                  </div>
-                </div>
-
-                <label className="block font-bold text-slate-700 dark:text-slate-300">
-                  Suffix
-                  <input value={studentSuffix} onChange={e => setStudentSuffix(e.target.value)} maxLength={50} placeholder="e.g. Jr., III"
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <label className="font-bold text-slate-700 dark:text-slate-300">
+                  Prefix
+                  <input value={studentPrefix} onChange={e => setStudentPrefix(e.target.value)} maxLength={50} placeholder="e.g. Ms."
                     className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
                 </label>
-                <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
-                  <span className="font-semibold text-slate-400">Composed Name Preview:</span>
-                  <span className="font-bold font-mono text-slate-800 dark:text-slate-100">
-                    {composedStudentName || '—'}
-                  </span>
-                </div>
-
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Bicol University Email</label>
-                  <div className="flex items-center gap-2">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">First Name *</label>
                   <input
                     type="text"
-                    inputMode="email"
                     required
-                    value={studentEmailInput}
-                    onChange={(e) => setStudentEmailInput(e.target.value)}
-                    placeholder="username"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                    value={studentFirstName}
+                    onChange={(e) => setStudentFirstName(e.target.value.replace(/[0-9]/g, ''))}
+                    placeholder="e.g. Juan"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
-                  {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
-                  </div>
                 </div>
-
                 <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>
-                  <select
-                    value={studentYearInput}
-                    onChange={(e) => setStudentYearInput(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
-                  >
-                    <option value={1}>Year 1</option>
-                    <option value={2}>Year 2</option>
-                    <option value={3}>Year 3</option>
-                    <option value={4}>Year 4</option>
-                  </select>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Middle Name</label>
+                  <input
+                    type="text"
+                    value={studentMiddleName}
+                    onChange={(e) => setStudentMiddleName(e.target.value.replace(/[0-9]/g, ''))}
+                    placeholder="e.g. Santos"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
+                  />
                 </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Last Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={studentLastName}
+                    onChange={(e) => setStudentLastName(e.target.value.replace(/[0-9]/g, ''))}
+                    placeholder="e.g. Dela Cruz"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
+                  />
+                </div>
+              </div>
 
-                <div className="pt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddStudentOpen(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingNewStudent}
-                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
-                  >
-                    {isSubmittingNewStudent ? 'Registering...' : 'Register & Enroll Student'}
-                  </button>
+              <label className="block font-bold text-slate-700 dark:text-slate-300">
+                Suffix
+                <input value={studentSuffix} onChange={e => setStudentSuffix(e.target.value)} maxLength={50} placeholder="e.g. Jr., III"
+                  className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
+              </label>
+              <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                <span className="font-semibold text-slate-400">Composed Name Preview:</span>
+                <span className="font-bold font-mono text-slate-800 dark:text-slate-100">
+                  {composedStudentName || '—'}
+                </span>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Official Bicol University Email</label>
+                <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="email"
+                  required
+                  value={studentEmailInput}
+                  onChange={(e) => setStudentEmailInput(e.target.value)}
+                  placeholder="username"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                />
+                {!studentEmailInput.includes('@') && <span className="text-xs font-bold text-accent-600 whitespace-nowrap">@bicol-u.edu.ph</span>}
                 </div>
-              </form>
-            )}
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>
+                <select
+                  value={studentYearInput}
+                  onChange={(e) => setStudentYearInput(Number(e.target.value))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                >
+                  <option value={1}>Year 1</option>
+                  <option value={2}>Year 2</option>
+                  <option value={3}>Year 3</option>
+                  <option value={4}>Year 4</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddStudentOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingNewStudent}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+                >
+                  {isSubmittingNewStudent ? 'Registering...' : 'Register & Enroll Student'}
+                </button>
+              </div>
+            </form>
           </div>
         </Modal>
       )}
@@ -1682,8 +1660,8 @@ export const ClassesAndRosters: React.FC = () => {
               </div>
             </div>
 
-            {/* Section / Block & Semester */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Section / Block, Year Level & Semester */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block *</label>
                 <input
@@ -1691,9 +1669,24 @@ export const ClassesAndRosters: React.FC = () => {
                   required
                   value={newBlock}
                   onChange={(e) => setNewBlock(e.target.value)}
-                  placeholder="e.g. Section 3-A"
+                  placeholder="e.g. 4B or Section 3-A"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+              </div>
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level *</label>
+                <select
+                  value={newYearLevel}
+                  onChange={(e) => setNewYearLevel(Number(e.target.value))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                >
+                  <option value={1}>Year 1</option>
+                  <option value={2}>Year 2</option>
+                  <option value={3}>Year 3</option>
+                  <option value={4}>Year 4</option>
+                  <option value={5}>Year 5</option>
+                  <option value={6}>Year 6</option>
+                </select>
               </div>
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester *</label>
@@ -2042,21 +2035,25 @@ export const ClassesAndRosters: React.FC = () => {
           <form onSubmit={handleUpdateClass} className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code *</label>
                 <input
                   type="text"
-                  readOnly
+                  required
                   value={editCourseCode}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium cursor-not-allowed"
+                  onChange={(e) => setEditCourseCode(e.target.value)}
+                  placeholder="e.g. 201"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </div>
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title *</label>
                 <input
                   type="text"
-                  readOnly
+                  required
                   value={editCourseName}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium cursor-not-allowed"
+                  onChange={(e) => setEditCourseName(e.target.value)}
+                  placeholder="e.g. Dental Subject 1"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </div>
             </div>
@@ -2092,27 +2089,44 @@ export const ClassesAndRosters: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester</label>
-                <input
-                  type="text"
-                  readOnly
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester *</label>
+                <select
                   value={editSemester}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium cursor-not-allowed"
-                />
+                  onChange={(e) => setEditSemester(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                >
+                  <option value="1st Semester">1st Semester</option>
+                  <option value="2nd Semester">2nd Semester</option>
+                  <option value="Summer">Summer</option>
+                </select>
               </div>
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">School Year</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">School Year *</label>
                 <input
                   type="text"
-                  readOnly
+                  required
                   value={editSchoolYear}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium cursor-not-allowed"
+                  onChange={(e) => setEditSchoolYear(e.target.value)}
+                  placeholder="e.g. 2026-2027"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </div>
             </div>
 
-            {/* Room Venues */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Lecture Venue & Schedule */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 text-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Lecture Venue & Schedule
+                </span>
+                {editLecDays.length > 0 && editLecRoom && (
+                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+                    {editLecDays.join('/')} {editLecStartTime} - {editLecEndTime}
+                  </span>
+                )}
+              </div>
+
               <RoomSelector
                 id="edit-lec-room"
                 label="Lecture Room Venue"
@@ -2124,6 +2138,99 @@ export const ClassesAndRosters: React.FC = () => {
                 placeholder="Choose Lecture Room"
               />
 
+              <div>
+                <span className="font-semibold text-slate-600 dark:text-slate-400 block mb-1 text-[11px]">
+                  Lecture Day(s)
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {SCHEDULE_DAYS.map(day => {
+                    const isSelected = editLecDays.includes(day);
+                    return (
+                      <button
+                        key={`edit-lec-${day}`}
+                        type="button"
+                        onClick={() => {
+                          setEditLecDays(prev =>
+                            isSelected ? prev.filter(d => d !== day) : [...prev, day]
+                          );
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 text-[10px]">
+                  <span className="text-slate-400 font-semibold">Presets:</span>
+                  {SCHEDULE_PRESETS.map(preset => (
+                    <button
+                      key={`edit-lec-preset-${preset.label}`}
+                      type="button"
+                      onClick={() => setEditLecDays(preset.days)}
+                      className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                  {editLecDays.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setEditLecDays([])}
+                      className="text-slate-400 hover:text-rose-500 font-semibold ml-auto cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
+                  <select
+                    value={editLecStartTime}
+                    onChange={(e) => setEditLecStartTime(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
+                  >
+                    {SCHEDULE_TIME_SLOTS.map(t => (
+                      <option key={`edit-lec-start-${t}`} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">End Time</span>
+                  <select
+                    value={editLecEndTime}
+                    onChange={(e) => setEditLecEndTime(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
+                  >
+                    {SCHEDULE_TIME_SLOTS.map(t => (
+                      <option key={`edit-lec-end-${t}`} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Laboratory Venue & Schedule */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 text-xs">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  Laboratory Venue & Schedule (Optional)
+                </span>
+                {editLabDays.length > 0 && editLabRoom && (
+                  <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md">
+                    {editLabDays.join('/')} {editLabStartTime} - {editLabEndTime}
+                  </span>
+                )}
+              </div>
+
               <RoomSelector
                 id="edit-lab-room"
                 label="Laboratory Room Venue"
@@ -2132,8 +2239,86 @@ export const ClassesAndRosters: React.FC = () => {
                   setEditLabRoom(r);
                   setEditError(null);
                 }}
-                placeholder="Choose Laboratory Room"
+                placeholder="Choose Laboratory Room (Optional)"
               />
+
+              <div>
+                <span className="font-semibold text-slate-600 dark:text-slate-400 block mb-1 text-[11px]">
+                  Laboratory Day(s)
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {SCHEDULE_DAYS.map(day => {
+                    const isSelected = editLabDays.includes(day);
+                    return (
+                      <button
+                        key={`edit-lab-${day}`}
+                        type="button"
+                        onClick={() => {
+                          setEditLabDays(prev =>
+                            isSelected ? prev.filter(d => d !== day) : [...prev, day]
+                          );
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 text-[10px]">
+                  <span className="text-slate-400 font-semibold">Presets:</span>
+                  {SCHEDULE_PRESETS.map(preset => (
+                    <button
+                      key={`edit-lab-preset-${preset.label}`}
+                      type="button"
+                      onClick={() => setEditLabDays(preset.days)}
+                      className="text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                  {editLabDays.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setEditLabDays([])}
+                      className="text-slate-400 hover:text-rose-500 font-semibold ml-auto cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
+                  <select
+                    value={editLabStartTime}
+                    onChange={(e) => setEditLabStartTime(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
+                  >
+                    {SCHEDULE_TIME_SLOTS.map(t => (
+                      <option key={`edit-lab-start-${t}`} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">End Time</span>
+                  <select
+                    value={editLabEndTime}
+                    onChange={(e) => setEditLabEndTime(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
+                  >
+                    {SCHEDULE_TIME_SLOTS.map(t => (
+                      <option key={`edit-lab-end-${t}`} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
 
             {editError && (

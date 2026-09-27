@@ -62,7 +62,7 @@ export const RoomSelector: React.FC<RoomSelectorProps> = ({
             ))}
           </optgroup>
         ))}
-        <option value="CUSTOM">✏️ Other / Custom Room...</option>
+        <option value="CUSTOM">Other / Custom Room...</option>
       </select>
 
       {(isCustom || (!isKnownRoom && value.trim() !== '')) && (

@@ -760,7 +760,9 @@ export function getAdminReportsSummaryApi(): Promise<{
 
 export function getFacultyReportsSummaryApi(): Promise<{
   status: string;
+  currentSchoolYear?: string;
   reports: {
+    currentSchoolYear?: string;
     students: any[];
     summary: {
       totalStudents: number;
@@ -845,6 +847,7 @@ export interface FacultyRetentionRecord {
 
 export function getFacultyRetentionApi(): Promise<{
   status: string;
+  currentSchoolYear?: string;
   retention: FacultyRetentionRecord[];
 }> {
   return request('GET', '/faculty/retention');
@@ -1464,7 +1467,9 @@ export function getFacultyCoursesApi(): Promise<{ status: string; courses: Cours
 
 export function createFacultyClassApi(data: {
   csName: string;
-  courseId: number;
+  courseId?: number;
+  courseCode?: string;
+  courseName?: string;
   semester: string;
   schoolYear: string;
   yearLevel: number;
@@ -1477,9 +1482,13 @@ export function createFacultyClassApi(data: {
 
 export function updateFacultyClassApi(data: {
   csId: number;
+  courseCode?: string;
+  courseName?: string;
   csName?: string;
   block?: string;
   yearLevel?: number;
+  semester?: string;
+  schoolYear?: string;
   lecRoom?: string;
   labRoom?: string;
 }): Promise<{ status: string; message: string }> {
