@@ -84,6 +84,34 @@ function handle_login(): void
     }
 }
 
+function handle_theme_update(): void
+{
+    $context = [];
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $context = [
+            'request_id' => request_id(),
+            'auth_header' => request_header('Authorization') ?? '',
+        ];
+        $body = request_body();
+        $data = is_array($body['data'] ?? null) ? $body['data'] : [];
+        $theme = auth_runtime_update_theme($pdo, $config, $context, $data);
+        auth_controller_emit(auth_build_no_store_json_response(['status' => 'ok', 'theme' => $theme], 200));
+    } catch (ChallengeException $e) {
+        auth_controller_emit(auth_build_no_store_message_response('Authentication required.', 401));
+    } catch (AuthException $e) {
+        auth_controller_emit(auth_build_no_store_message_response('Authentication required.', 401));
+    } catch (ValidationException $e) {
+        $response = build_validation_error_response($e->getErrors());
+        $response['headers'] = array_merge($response['headers'], build_no_store_headers());
+        auth_controller_emit($response);
+    } catch (\Throwable $e) {
+        error_log('Theme update error [' . ($context['request_id'] ?? '?') . ']: ' . sanitize_for_log($e));
+        auth_controller_emit(auth_build_no_store_message_response('Internal server error.', 500));
+    }
+}
+
 function handle_me(): void
 {
     try {

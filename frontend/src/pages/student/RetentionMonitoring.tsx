@@ -172,8 +172,20 @@ export const RetentionMonitoring: React.FC = () => {
     ? (user?.student?.student_number || '—')
     : (currentMockStudent?.studentId || '2024-DENT-0004');
 
+  // Standing comes from the course records (worst state first). The account's
+  // student status is always "active" for a signed-in Student, so it cannot
+  // describe retention standing.
+  const worstRetentionState = (): string => {
+    const rank: Record<string, number> = { critical: 4, remedial: 3, warning: 2, active: 1 };
+    let worst = 'active';
+    for (const record of authRecords) {
+      const state = (record.retentionState || '').toLowerCase();
+      if ((rank[state] ?? 0) > (rank[worst] ?? 0)) worst = state;
+    }
+    return worst;
+  };
   const status = isAuthoritative
-    ? (user?.student?.status || 'active')
+    ? worstRetentionState()
     : (currentMockStudent?.status || 'active');
 
   const requiresRetentionReview = (subject: { grade: number; isClinical?: boolean }) => (
@@ -280,7 +292,7 @@ export const RetentionMonitoring: React.FC = () => {
             Retention Risk Monitoring
           </h1>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Track your per-subject midterm grades, retention warning standing, and scheduled remedial exams.
+            Track your per-subject course grades, retention standing, and scheduled remedial exams.
           </p>
         </div>
 
@@ -387,7 +399,7 @@ export const RetentionMonitoring: React.FC = () => {
                         </td>
 
                         <td className="py-3.5 px-4 text-center font-mono font-bold">
-                          {cls.percentage !== null ? `${cls.percentage}%` : '—'}
+                          {cls.percentage !== null ? `${cls.percentage.toFixed(2)}%` : '—'}
                         </td>
 
                         <td className="py-3.5 px-4 text-center font-extrabold font-mono text-sm">

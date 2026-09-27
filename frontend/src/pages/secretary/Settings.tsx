@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Camera, CheckCircle2, ClipboardCheck, Moon, Save, ShieldCheck, Sun, AlertCircle } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { Camera, CheckCircle2, ClipboardCheck, Moon, ShieldCheck, Sun, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
-import { getSecretarySettingsApi, updateSecretarySettingsApi } from '../../services/apiClient';
+import { getSecretarySettingsApi } from '../../services/apiClient';
+import { useThemePreference, type ThemeMode } from '../../hooks/useThemePreference';
 
 export const Settings: React.FC = () => {
-  const { settings, updateSettings } = useApp();
-  const [theme, setTheme] = useState(settings.theme);
+  const { theme, changeTheme } = useThemePreference();
   const [assignedClassName, setAssignedClassName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -17,9 +16,6 @@ export const Settings: React.FC = () => {
     setLoading(true);
     getSecretarySettingsApi()
       .then(res => {
-        if (res.settings?.theme) {
-          setTheme(res.settings.theme);
-        }
         setAssignedClassName(res.settings?.assignedClassName || '');
       })
       .catch(err => {
@@ -28,17 +24,17 @@ export const Settings: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
+  // Selecting an appearance applies it immediately and saves it to the account.
+  const selectTheme = async (mode: ThemeMode) => {
     setSaving(true);
+    setSaved(false);
     setError('');
     try {
-      await updateSecretarySettingsApi({ theme });
-      updateSettings({ ...settings, theme });
+      await changeTheme(mode);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save preferences.');
+      setError(err instanceof Error ? `Appearance applied on this device but not saved to your account: ${err.message}` : 'Appearance could not be saved to your account.');
     } finally {
       setSaving(false);
     }
@@ -74,7 +70,7 @@ export const Settings: React.FC = () => {
           <p className="text-xs text-slate-400">Loading settings...</p>
         </div>
       ) : (
-        <form onSubmit={save} className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-7">
             <Card className="p-0 overflow-hidden">
               <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
@@ -89,7 +85,8 @@ export const Settings: React.FC = () => {
                     <button
                       type="button"
                       key={mode}
-                      onClick={() => setTheme(mode)}
+                      onClick={() => void selectTheme(mode)}
+                      aria-pressed={theme === mode}
                       className={`p-4 rounded-xl border text-left transition-all ${
                         theme === mode
                           ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/20 shadow-sm'
@@ -108,20 +105,9 @@ export const Settings: React.FC = () => {
                     </button>
                   ))}
                 </div>
-                <div className="flex justify-end pt-5 mt-5 border-t border-slate-100 dark:border-slate-800">
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/10 disabled:opacity-50"
-                  >
-                    {saving ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Save className="w-4 h-4" />
-                    )}
-                    {saving ? 'Saving...' : saved ? 'Preferences saved' : 'Save preferences'}
-                  </button>
-                </div>
+                <p role="status" className="pt-4 mt-5 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
+                  {saving ? 'Saving to your account…' : saved ? 'Appearance saved to your account.' : 'Your choice applies immediately and is saved to your account.'}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -165,7 +151,7 @@ export const Settings: React.FC = () => {
               </CardContent>
             </Card>
           </div>
-        </form>
+        </div>
       )}
     </div>
   );

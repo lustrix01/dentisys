@@ -27,7 +27,7 @@ const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
 const KNOWN_API_PATHS = new Set([
   '/api/health', '/api/runtime-config', '/api/auth/login', '/api/auth/google', '/api/auth/google/link', '/api/auth/google/link/profile', '/api/auth/google/link/status', '/api/auth/faculty/invitation', '/api/auth/faculty/activate', '/api/auth/mfa/enroll/start',
   '/api/auth/mfa/enroll/confirm', '/api/auth/mfa/verify', '/api/auth/mfa/recover', '/api/auth/mfa/settings',
-  '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh',
+  '/api/auth/mfa/settings/recovery-codes', '/api/auth/mfa/settings/revoke', '/api/auth/me', '/api/auth/refresh', '/api/auth/theme',
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
   '/api/auth/student/invitation', '/api/auth/student/activate', '/api/auth/development/mock-student-session',
   '/api/admin/faculty-invitations', '/api/admin/faculty-invitations/reissue', '/api/faculty/student-invitations', '/api/admin/dashboard/kpis', '/api/admin/retention/criteria',

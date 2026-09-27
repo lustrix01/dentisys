@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/app/remedial_attempts.php';
+
 if (!function_exists('sanitize_for_log')) {
     function sanitize_for_log(\Throwable $e): string
     {
@@ -149,7 +151,7 @@ function handle_admin_dashboard_kpis(): void
                     $gwa1_15++;
                 } elseif ($gwa <= 2.0) {
                     $gwa15_2++;
-                } elseif ($gwa <= 2.5) {
+                } elseif ($gwa < 2.5) {
                     $gwa2_25++;
                 } elseif ($gwa <= 3.0) {
                     $gwa25_3++;
@@ -159,7 +161,9 @@ function handle_admin_dashboard_kpis(): void
             }
         }
 
-        $atRisk = $warningCount + $criticalCount;
+        // Remedial is the state the grade computation assigns, so it must be
+        // part of the at-risk total (Total = Good Standing + At-Risk).
+        $atRisk = $warningCount + $criticalCount + $remedialCount;
 
         $attCount = count($attendance);
         $presentCount = 0;
@@ -671,7 +675,7 @@ function handle_admin_reports_summary(): void
                     ers.remedial_grade AS normalized_remedial_grade,
                     ers.exam_date AS normalized_exam_date,
                     ers.notes AS normalized_remedial_notes,
-                    e.grade_components_json,
+                    e.grade_components_json, e.clinic_hours_completed,
                     cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name, c.units, c.is_clinical
              FROM students s
              LEFT JOIN person_identities pi ON pi.person_id = s.person_id
@@ -699,6 +703,8 @@ function handle_admin_reports_summary(): void
         $attendanceLogs = $attStmt ? $attStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $grouped = [];
+        $gwaTotals = [];
+        $stateRank = ['critical' => 4, 'remedial' => 3, 'warning' => 2, 'active' => 1];
         foreach ($students as $s) {
             $id = (string) $s['student_id'];
             if (!isset($grouped[$id])) {
@@ -710,12 +716,26 @@ function handle_admin_reports_summary(): void
                     'overallGWA' => null, 'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
                     'consentStatus' => $s['consent_status'] ?? 'pending', 'classId' => null,
                     'className' => null, 'enrolledSubjects' => [], 'remedialExams' => [],
+                    'clinicHoursCompleted' => 0,
                 ];
+                $gwaTotals[$id] = ['weighted' => 0.0, 'units' => 0.0];
             }
             if ($s['cs_id'] !== null) {
                 $grouped[$id]['classId'] = (string) $s['cs_id'];
                 $grouped[$id]['className'] = $s['cs_name'];
-                $grouped[$id]['overallGWA'] = $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null;
+                // Standing is the most serious state across all enrollments.
+                $state = strtolower((string) ($s['retention_state'] ?? 'active'));
+                if (($stateRank[$state] ?? 0) > ($stateRank[strtolower((string) $grouped[$id]['status'])] ?? 0)) {
+                    $grouped[$id]['status'] = $state;
+                }
+                $grouped[$id]['clinicHoursCompleted'] += (int) ($s['clinic_hours_completed'] ?? 0);
+                // Overall GWA is the unit-weighted average of recorded course grades.
+                if ($s['final_gwa'] !== null) {
+                    $units = (float) ($s['units'] ?? 0) > 0 ? (float) $s['units'] : 1.0;
+                    $gwaTotals[$id]['weighted'] += (float) $s['final_gwa'] * $units;
+                    $gwaTotals[$id]['units'] += $units;
+                    $grouped[$id]['overallGWA'] = round($gwaTotals[$id]['weighted'] / $gwaTotals[$id]['units'], 2);
+                }
                 $grouped[$id]['enrolledSubjects'][] = [
                     'code' => $s['course_code'], 'name' => $s['course_name'],
                     'units' => (float) $s['units'], 'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null,
@@ -723,11 +743,11 @@ function handle_admin_reports_summary(): void
                     'hasRemedial' => $s['retention_state'] === 'remedial',
                     'components' => $s['grade_components_json'] ? json_decode($s['grade_components_json'], true) : null,
                 ];
-                if ($s['remedial_state_json'] || $s['normalized_remedial_status'] !== null) {
-                    $remedial = $s['remedial_state_json'] ? json_decode($s['remedial_state_json'], true) : [];
-                    if (!is_array($remedial)) {
-                        $remedial = [];
-                    }
+                $legacyRemedial = remedial_state_json_legacy_payload($s['remedial_state_json']);
+                // enrollment_remedial_states is a projection of the same JSON,
+                // so an override-only value (not a remedial record) is skipped.
+                if ($legacyRemedial !== null) {
+                    $remedial = $legacyRemedial;
                     if ($s['normalized_remedial_status'] !== null) {
                         $remedial['status'] = $s['normalized_remedial_status'];
                         $remedial['originalGrade'] = $s['normalized_original_grade'] !== null ? (float) $s['normalized_original_grade'] : null;

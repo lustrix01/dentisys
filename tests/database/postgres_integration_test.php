@@ -421,6 +421,19 @@ expect_same(403, $adminSecretaryInviteStatus, 'Admin cannot issue a Secretary in
 expect_same(200, $secretaryLoginStatus, 'Secretary session integration login returns HTTP 200');
 $secretaryAccessToken = (string) ($secretaryLoginBody['access_token'] ?? '');
 expect_true($secretaryAccessToken !== '', 'Secretary session integration login returns an access token');
+[$secretaryMeStatus, $secretaryMeBody] = integration_http_get_json('/api/auth/me', $secretaryAccessToken);
+expect_same(200, $secretaryMeStatus, 'Secretary /api/auth/me returns HTTP 200');
+expect_same(24, $secretaryMeBody['student']['student_id'] ?? null, 'Secretary /api/auth/me exposes the linked Student identity for Student View (BIO-010)');
+[$themeSaveStatus, $themeSaveBody] = integration_http_json('/api/auth/theme', $secretaryAccessToken, ['theme' => 'dark']);
+expect_same(200, $themeSaveStatus, 'Theme preference save returns HTTP 200');
+expect_same('dark', $themeSaveBody['theme'] ?? null, 'Theme preference save echoes the stored theme');
+[, $themeMeBody] = integration_http_get_json('/api/auth/me', $secretaryAccessToken);
+expect_same('dark', $themeMeBody['theme'] ?? null, 'Saved theme preference is returned by /api/auth/me');
+[$themeInvalidStatus] = integration_http_json('/api/auth/theme', $secretaryAccessToken, ['theme' => 'purple']);
+expect_same(422, $themeInvalidStatus, 'Invalid theme preference is rejected');
+[$themeAnonStatus] = integration_http_json('/api/auth/theme', '', ['theme' => 'light']);
+expect_same(401, $themeAnonStatus, 'Theme preference save requires authentication');
+integration_http_json('/api/auth/theme', $secretaryAccessToken, ['theme' => 'light']);
 
 $secretaryClassStmt = $pdo->prepare(
     "SELECT cs_id
@@ -2040,6 +2053,9 @@ expect_same(200, $studentNotificationReadStatus, 'Recipient can mark its notific
 $studentNotificationReadStmt = $pdo->prepare('SELECT read_at FROM notifications WHERE notification_id = ?');
 $studentNotificationReadStmt->execute([(int) $studentNotificationId]);
 expect_true($studentNotificationReadStmt->fetchColumn() !== null, 'Notification mark-read persists the recipient read state');
+$retentionOverrideJsonStmt = $pdo->prepare('SELECT remedial_state_json::text FROM enrollments WHERE enrollment_id = ?');
+$retentionOverrideJsonStmt->execute([(int) $studentNotificationTarget['enrollment_id']]);
+$retentionOverrideJsonBefore = $retentionOverrideJsonStmt->fetchColumn();
 $studentRetentionNotificationPayload = [
     'studentId' => '26',
     'classId' => (string) $studentClassId,
@@ -2057,6 +2073,15 @@ $studentRetentionNotificationCountStmt = $pdo->prepare(
 );
 $studentRetentionNotificationCountStmt->execute([(int) $studentNotificationTarget['student_account_user_id'], 'retention:' . $studentNotificationTarget['enrollment_id'] . ':critical']);
 expect_same(1, (int) $studentRetentionNotificationCountStmt->fetchColumn(), 'Retention status notification deduplication stores one row');
+$retentionOverrideJsonStmt->execute([(int) $studentNotificationTarget['enrollment_id']]);
+expect_same($retentionOverrideJsonBefore, $retentionOverrideJsonStmt->fetchColumn(), 'Retention status override does not write legacy remedial JSON (it would block remedial scheduling)');
+$retentionOverrideAuditStmt = $pdo->prepare(
+    "SELECT reason FROM audit_events
+      WHERE action_code = 'retention_status_override' AND target_id = ?
+      ORDER BY sequence_number DESC LIMIT 1"
+);
+$retentionOverrideAuditStmt->execute([(string) $studentNotificationTarget['enrollment_id']]);
+expect_same('Integration retention status update', $retentionOverrideAuditStmt->fetchColumn(), 'Retention status override reason is kept in the audit trail');
 [$studentRetentionNotificationListStatus, $studentRetentionNotificationListBody] = integration_http_get_json('/api/notifications?unreadOnly=true&limit=100', $studentCredentials['access_token']);
 expect_same(200, $studentRetentionNotificationListStatus, 'Student notification list includes retention status updates');
 $studentRetentionNotificationRow = array_values(array_filter(

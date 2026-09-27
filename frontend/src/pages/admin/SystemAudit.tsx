@@ -400,7 +400,7 @@ export const DeanReports: React.FC = () => {
                         <td className="py-2.5 px-3">{sub.components?.exams !== undefined ? `${sub.components.exams}%` : '—'}</td>
                         <td className="py-2.5 px-3">{sub.isClinical ? (sub.components?.practicum !== undefined ? `${sub.components.practicum}%` : '—') : '—'}</td>
                         <td className="py-2.5 px-3">{sub.components?.attendance !== undefined ? `${sub.components.attendance}%` : '—'}</td>
-                        <td className={`py-2.5 px-3 font-extrabold ${sub.isClinical && Number(sub.grade || 0) >= retentionThreshold ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        <td className={`py-2.5 px-3 font-extrabold ${sub.grade !== null && sub.grade !== undefined && Number(sub.grade) >= retentionThreshold ? 'text-rose-600' : 'text-emerald-600'}`}>
                           {sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? Number(sub.grade).toFixed(2) : '—'}
                         </td>
                         <td className="py-2.5 px-3">
@@ -458,7 +458,7 @@ export const DeanReports: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {filtered.map((s: any) => {
-                      const flagged = (s.enrolledSubjects || []).filter((sub: any) => sub.grade >= retentionThreshold && sub.isClinical).length;
+                      const flagged = (s.enrolledSubjects || []).filter((sub: any) => sub.grade !== null && sub.grade !== undefined && Number(sub.grade) >= retentionThreshold).length;
                       const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">

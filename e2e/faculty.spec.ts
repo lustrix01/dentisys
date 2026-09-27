@@ -218,21 +218,11 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Settings/i);
   });
 
-  test('faculty theme changes persist only after a successful API save', async ({ page }) => {
-    await page.route('**/api/faculty/settings', async route => {
-      if (route.request().method() === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ status: 'ok', settings: { theme: 'light' } }),
-        });
-        return;
-      }
-      await route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({ status: 'error', message: 'Unable to save theme.' }),
-      });
+  test('faculty theme applies on click and is saved to the account', async ({ page }) => {
+    const savedThemes: unknown[] = [];
+    await page.route('**/api/auth/theme', async route => {
+      savedThemes.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', theme: 'dark' }) });
     });
 
     await page.click('a[href="/faculty/settings"]');
@@ -241,11 +231,55 @@ test.describe('Faculty Module E2E Tests', () => {
     const dark = page.getByRole('button', { name: /Clinical dark mode/i });
     await expect(light).toHaveClass(/border-clinical-500/);
     await dark.click();
+    // Applied immediately, with no separate Save step.
+    await expect(page.locator('html')).toHaveClass(/dark/);
     await expect(dark).toHaveClass(/border-clinical-500/);
-    await page.getByRole('button', { name: /Save preferences/i }).click();
-    await expect(page.getByRole('alert')).toContainText(/server error|Unable to save theme/i);
-    await expect(light).toHaveClass(/border-clinical-500/);
-    await expect(dark).not.toHaveClass(/border-clinical-500/);
+    await expect(page.getByRole('status').filter({ hasText: /saved to your account/i })).toBeVisible();
+    expect(savedThemes).toEqual([{ theme: 'dark' }]);
+  });
+
+  test('faculty theme stays applied on this device when the account save fails', async ({ page }) => {
+    await page.route('**/api/auth/theme', route => route.fulfill({
+      status: 500,
+      contentType: 'application/json',
+      body: JSON.stringify({ status: 'error', message: 'Unable to save theme.' }),
+    }));
+
+    await page.click('a[href="/faculty/settings"]');
+    const dark = page.getByRole('button', { name: /Clinical dark mode/i });
+    await dark.click();
+    await expect(page.locator('html')).toHaveClass(/dark/);
+    await expect(page.getByRole('alert')).toContainText(/not saved to your account/i);
+  });
+
+  test('change password lists the required strength and blocks a weak password', async ({ page }) => {
+    const changeRequests: unknown[] = [];
+    await page.route('**/api/auth/password/change', async route => {
+      changeRequests.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sign_in_again: true, message: 'Password changed successfully. Please sign in again.' }) });
+    });
+    await page.click('a[href="/faculty/profile"]');
+    await expect(page).toHaveURL('/faculty/profile');
+    const requirements = page.locator('#new-password-requirements');
+    await expect(requirements).toContainText('At least 8 characters');
+    await expect(requirements).toContainText('An uppercase letter');
+    await expect(requirements).toContainText('A lowercase letter');
+    await expect(requirements).toContainText('A number');
+    await expect(requirements).toContainText('A special character');
+
+    await page.locator('#current-password').fill('OldPassword1!');
+    await page.locator('#new-password').fill('weakpass');
+    await page.locator('#confirm-password').fill('weakpass');
+    const submit = page.getByRole('button', { name: /Update Password/i });
+    await expect(submit).toBeDisabled();
+    await expect(requirements).toContainText('An uppercase letter (A-Z) (not met)');
+
+    await page.locator('#new-password').fill('NewPassword2@');
+    await page.locator('#confirm-password').fill('NewPassword2@');
+    await expect(submit).toBeEnabled();
+    await submit.click();
+    await expect(page.getByRole('status').filter({ hasText: /Password changed successfully/i })).toBeVisible();
+    expect(changeRequests).toEqual([{ current_password: 'OldPassword1!', new_password: 'NewPassword2@', confirm_password: 'NewPassword2@' }]);
   });
 
   test('fresh faculty account defaults to 0 students and 0 active classes', async ({ page }) => {

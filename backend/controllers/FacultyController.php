@@ -118,17 +118,24 @@ function handle_faculty_dashboard_kpis(): void
         $yearsStmt->execute([$authCtx['user_id']]);
         $availableSchoolYears = academic_school_year_options($yearsStmt->fetchAll(PDO::FETCH_COLUMN), $currentSchoolYear);
 
+        // One row per Student (their most serious state across this Faculty's
+        // classes) so a Student in two classes is not counted twice.
         $studentStmt = $pdo->prepare("
-            SELECT DISTINCT
-                s.student_id, 
-                s.status AS student_status,
-                e.retention_state
+            SELECT
+                s.student_id,
+                CASE MAX(CASE COALESCE(egb.retention_state, e.retention_state)
+                        WHEN 'critical' THEN 4 WHEN 'remedial' THEN 3
+                        WHEN 'warning' THEN 2 ELSE 1 END)
+                    WHEN 4 THEN 'critical' WHEN 3 THEN 'remedial'
+                    WHEN 2 THEN 'warning' ELSE 'active' END AS retention_state
             FROM students s
             JOIN enrollments e ON s.student_id = e.student_id
             JOIN class_sections cs ON e.cs_id = cs.cs_id
+            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
             WHERE cs.instructor_user_id = :faculty_id
               AND LOWER(e.status) = 'active'
               {$yearFilter}
+            GROUP BY s.student_id
         ");
         $studentStmt->execute([':faculty_id' => $authCtx['user_id']] + $yearParams);
         $students = $studentStmt ? $studentStmt->fetchAll(PDO::FETCH_ASSOC) : [];
@@ -162,7 +169,7 @@ function handle_faculty_dashboard_kpis(): void
         $remedial = 0;
 
         foreach ($students as $s) {
-            $st = strtolower($s['retention_state'] ?? $s['student_status'] ?? 'active');
+            $st = strtolower((string) ($s['retention_state'] ?? 'active'));
             if ($st === 'active' || $st === 'good standing') {
                 $goodStanding++;
             } elseif ($st === 'warning' || $st === 'critical') {
@@ -4611,7 +4618,9 @@ function handle_faculty_retention_get(): void
              LEFT JOIN class_watchlist_unlocks wu ON wu.cs_id = cs.cs_id
              WHERE cs.instructor_user_id = ?
                AND LOWER(e.status) = 'active'
-             ORDER BY COALESCE(egb.retention_state, e.retention_state) DESC,
+             ORDER BY CASE COALESCE(egb.retention_state, e.retention_state)
+                          WHEN 'critical' THEN 1 WHEN 'remedial' THEN 2
+                          WHEN 'warning' THEN 3 WHEN 'active' THEN 4 ELSE 5 END,
                       COALESCE(pi.last_name, s.last_name),
                       COALESCE(pi.first_name, s.first_name)"
         );
@@ -4620,13 +4629,23 @@ function handle_faculty_retention_get(): void
         $enrollmentIds = array_map(static fn(array $row): int => (int) $row['enrollment_id'], $dbRows);
         $legacyByEnrollment = [];
         foreach ($dbRows as $row) {
-            $legacyByEnrollment[(int) $row['enrollment_id']] = $row['remedial_state_json'] !== null;
+            $legacyByEnrollment[(int) $row['enrollment_id']] = remedial_state_json_is_legacy($row['remedial_state_json']);
         }
         $progressions = remedial_attempts_load($pdo, $enrollmentIds, $legacyByEnrollment);
+        $currentSchoolYear = academic_current_school_year($pdo);
+        $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
 
-        $retention = array_map(static function (array $row) use ($pdo, $progressions): array {
+        $retention = array_map(static function (array $row) use ($pdo, $progressions, $legacyByEnrollment, $currentSchoolYear, $retentionThreshold): array {
             $enrollmentId = (int) $row['enrollment_id'];
             $midterm = faculty_watchlist_midterm($pdo, $row);
+            $gwa = $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null;
+            $isCurrentYear = strtoupper(trim((string) $row['school_year'])) === strtoupper(trim((string) $currentSchoolYear));
+            // Same gates the remedial save endpoint enforces, so the page only
+            // offers students the server will accept.
+            $remedialEligible = $gwa !== null
+                && $gwa >= $retentionThreshold
+                && $isCurrentYear
+                && !($legacyByEnrollment[$enrollmentId] ?? false);
             return [
             'enrollmentId' => (string) $enrollmentId,
             'studentId' => (string) $row['student_id'],
@@ -4638,19 +4657,20 @@ function handle_faculty_retention_get(): void
             'percentage' => $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null,
             'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
             'state' => $row['retention_state'],
-            'remedial' => $row['remedial_state_json'] ? json_decode($row['remedial_state_json'], true) : null,
+            'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
             'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'watchlistUnlocked' => $row['unlocked_at'] !== null,
             'unlockedAt' => $row['unlocked_at'],
             'schoolYear' => $row['school_year'],
             'midtermComplete' => $midterm['complete'],
             'midtermPercentage' => $midterm['percentage'],
+            'remedialEligible' => $remedialEligible,
         ];
         }, $dbRows);
-        $currentSchoolYear = academic_current_school_year($pdo);
         json_response([
             'status' => 'ok',
             'currentSchoolYear' => $currentSchoolYear,
+            'retentionThreshold' => $retentionThreshold,
             'retention' => $retention,
         ], 200);
     } catch (\Throwable $e) {
@@ -4861,7 +4881,7 @@ function handle_faculty_retention_remedial_save(): void
         // the actionable error even when the historical grade is incomplete.
         $progression = remedial_attempts_progression_from_rows(
             $attemptRows,
-            $target['remedial_state_json'] !== null
+            remedial_state_json_is_legacy($target['remedial_state_json'])
         );
         if ($progression['legacyUnclassified']) {
             $pdo->rollBack();
@@ -5042,24 +5062,58 @@ function handle_faculty_retention_status_update(): void
             return;
         }
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare(
-            "UPDATE enrollments e
-             SET retention_state = ?,
-                 remedial_state_json = jsonb_set(
-                     jsonb_set(COALESCE(e.remedial_state_json, '{}'::jsonb), '{overrideReason}', to_jsonb(?::text), true),
-                     '{overriddenAt}', to_jsonb(?::text), true
-                 )
-             FROM class_sections cs
-             WHERE cs.cs_id = e.cs_id
-               AND e.student_id = ? AND e.cs_id = ? AND cs.instructor_user_id = ?"
+        $targetStmt = $pdo->prepare(
+            "SELECT e.enrollment_id, e.retention_state, e.status AS enrollment_status, cs.school_year
+               FROM enrollments e
+               JOIN class_sections cs ON cs.cs_id = e.cs_id
+              WHERE e.student_id = ? AND e.cs_id = ? AND cs.instructor_user_id = ?
+              FOR UPDATE OF e"
         );
-        $now = gmdate('Y-m-d\TH:i:s\Z');
-        $stmt->execute([$state, $reason, $now, $studentId, $classId, $authCtx['user_id']]);
-        if ($stmt->rowCount() === 0) {
+        $targetStmt->execute([$studentId, $classId, $authCtx['user_id']]);
+        $overrideTarget = $targetStmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($overrideTarget)) {
             $pdo->rollBack();
             safe_error_response('Enrollment not found in an assigned class.', 404);
             return;
         }
+        if (strtolower((string) $overrideTarget['enrollment_status']) !== 'active') {
+            $pdo->rollBack();
+            safe_error_response('Retention status can only be changed for an active enrollment.', 409);
+            return;
+        }
+        if (!academic_school_year_is_current($pdo, (string) $overrideTarget['school_year'])) {
+            $pdo->rollBack();
+            safe_error_response('Historical class sections are view-only and cannot be edited.', 409);
+            return;
+        }
+        // The override reason is kept in the audit trail. It must not be written
+        // into remedial_state_json: that column is legacy remedial evidence, and
+        // any value there blocks canonical remedial scheduling.
+        $stmt = $pdo->prepare('UPDATE enrollments SET retention_state = ? WHERE enrollment_id = ?');
+        $stmt->execute([$state, (int) $overrideTarget['enrollment_id']]);
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        $auditCtx = audit_begin_operation($pdo);
+        audit_finish_operation($pdo, $auditCtx, [
+            'module_code' => 'faculty_retention',
+            'action_code' => 'retention_status_override',
+            'event_status' => 'Success',
+            'actor_user_id' => $authCtx['user_id'],
+            'actor_username' => $authCtx['login_email'],
+            'actor_role' => $authCtx['role'],
+            'actor_display_name' => $authCtx['display_name'],
+            'session_id' => $authCtx['session_id'],
+            'scope_cs_id' => $classId,
+            'target_type' => 'enrollment',
+            'target_id' => (string) $overrideTarget['enrollment_id'],
+            'description' => 'Faculty overrode a retention status.',
+            'reason' => $reason,
+            'http_method' => request_method(),
+            'endpoint' => request_path(),
+            'request_id' => request_id(),
+            'ip_address' => request_ip(),
+            'user_agent' => request_user_agent(),
+        ], $macKey, ['retention_state' => $overrideTarget['retention_state']], ['retention_state' => $state]);
         $recipient = $pdo->prepare(
             "SELECT e.enrollment_id, s.student_account_user_id, c.course_code
                FROM enrollments e
@@ -5473,8 +5527,9 @@ function handle_faculty_reports_summary(): void
             if ($s['final_gwa'] !== null) {
                 $grouped[$id]['overallGWA'] = (float) $s['final_gwa'];
             }
-            if ($s['remedial_state_json']) {
-                $grouped[$id]['remedialExams'][] = json_decode($s['remedial_state_json'], true);
+            $legacyRemedial = remedial_state_json_legacy_payload($s['remedial_state_json']);
+            if ($legacyRemedial !== null) {
+                $grouped[$id]['remedialExams'][] = $legacyRemedial;
             }
         }
         $mappedStudents = array_values($grouped);

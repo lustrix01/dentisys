@@ -77,7 +77,7 @@ export const FacultyInvitation: React.FC = () => {
     setError('');
     try {
       const response = await getFacultyInvitations();
-      setInvitations(response.invitations);
+      setInvitations(Array.isArray(response?.invitations) ? response.invitations : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load Faculty invitations.');
     } finally {

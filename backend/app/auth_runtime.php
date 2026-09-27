@@ -171,6 +171,37 @@ function auth_issue_two_factor_challenge(array $config, array $user, string $aut
     ];
 }
 
+function auth_runtime_theme(PDO $pdo, int $userId): string
+{
+    $stmt = $pdo->prepare('SELECT theme FROM user_accounts WHERE user_id = ?');
+    $stmt->execute([$userId]);
+    $theme = $stmt->fetchColumn();
+    return in_array($theme, ['light', 'dark'], true) ? $theme : 'light';
+}
+
+/**
+ * Save the signed-in user's own appearance preference (any role).
+ * Returns the stored theme.
+ */
+function auth_runtime_update_theme(PDO $pdo, array $config, array $context, array $data): string
+{
+    $authHeader = $context['auth_header'] ?? '';
+    if ($authHeader === '') {
+        throw new ChallengeException('Authorization header required.');
+    }
+    $token = auth_extract_bearer_token($authHeader);
+    $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
+    $authContext = auth_verify_access_token($pdo, $config, $token, $jwtKey);
+
+    $theme = $data['theme'] ?? null;
+    if (!is_string($theme) || !in_array($theme, ['light', 'dark'], true)) {
+        throw new ValidationException([['field' => 'theme', 'message' => 'Theme must be light or dark.']]);
+    }
+    $stmt = $pdo->prepare('UPDATE user_accounts SET theme = ? WHERE user_id = ?');
+    $stmt->execute([$theme, (int) $authContext['user_id']]);
+    return $theme;
+}
+
 function auth_runtime_me(PDO $pdo, array $config, array $context): array
 {
     $authHeader = $context['auth_header'] ?? '';
@@ -190,10 +221,27 @@ function auth_runtime_me(PDO $pdo, array $config, array $context): array
         'display_name' => $authContext['display_name'],
         'session_uuid' => $authContext['session_uuid'],
         'authentication_source' => $authContext['authentication_source'] ?? 'password',
+        'theme' => auth_runtime_theme($pdo, (int) $authContext['user_id']),
     ];
 
     if (($authContext['role'] ?? null) === 'student' && isset($authContext['student'])) {
         $response['student'] = $authContext['student'];
+    }
+
+    // BIO-010: a Secretary who is also a Student keeps access to their own
+    // Student self-service. Expose the linked identity (same checks as the
+    // Student biometric endpoints) so the frontend can offer Student View.
+    if (($authContext['role'] ?? null) === 'secretary') {
+        try {
+            $linked = student_biometric_identity($pdo, $config, $authContext);
+            $response['student'] = [
+                'student_id' => $linked['student_id'],
+                'student_number' => $linked['student_number'],
+                'status' => 'active',
+            ];
+        } catch (StudentBiometricException $e) {
+            // No usable linked Student identity: Student View stays unavailable.
+        }
     }
 
     return $response;

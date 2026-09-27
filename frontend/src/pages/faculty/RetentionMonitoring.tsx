@@ -180,6 +180,8 @@ const pendingAttemptNumber = (progression: RemedialProgressionView): AllowedAtte
 const canScheduleRecord = (record: FacultyRetentionRecord): boolean => (
   hasPersistedIdentifiers(record)
   && record.state !== 'archived'
+  // Older servers omit the flag; only an explicit false hides the student.
+  && record.remedialEligible !== false
   && isPersistedText(record.subjectCode)
   && allowedAttemptNumbers(readRemedialProgression(record)).length > 0
 );

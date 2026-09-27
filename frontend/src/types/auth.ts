@@ -14,6 +14,8 @@ export interface SafeUser {
   display_name: string;
   session_uuid: string;
   authentication_source: 'password' | 'google' | 'development_mock';
+  /** Saved appearance preference for this account. */
+  theme?: 'light' | 'dark';
   student?: {
     student_id: number;
     student_number: string;

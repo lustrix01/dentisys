@@ -162,7 +162,7 @@ test.describe('Auth Module E2E Tests', () => {
     await page.getByLabel('Last name *').fill('Faculty');
     await page.getByLabel('Institutional email').fill('test.faculty@bicol-u.edu.ph');
     await page.getByRole('button', { name: 'Send invite' }).click();
-    await expect(page.getByText('test.faculty@bicol-u.edu.ph')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'test.faculty@bicol-u.edu.ph' })).toBeVisible();
     await expect(page.getByText('Pending')).toBeVisible();
     await page.getByRole('button', { name: 'Reissue' }).click();
     await expect(page.getByText(/Invitation sent to test.faculty@bicol-u.edu.ph/)).toBeVisible();

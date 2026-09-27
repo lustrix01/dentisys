@@ -32,6 +32,8 @@ interface AppContextProps {
   updateRemedialExam: (remedialId: string, score: number, notes?: string) => void;
   deleteRemedialExam: (remedialId: string) => void;
   updateSettings: (settings: SystemSettings) => void;
+  /** Apply a theme immediately without recording a settings audit entry. */
+  applyTheme: (theme: 'light' | 'dark') => void;
   
   // Assessment Actions
   addAssessment: (assessment: Omit<Assessment, 'createdAt'>) => void;
@@ -800,6 +802,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const applyTheme = (theme: 'light' | 'dark') => {
+    setSettings(prev => (prev.theme === theme ? prev : { ...prev, theme }));
+  };
+
   const updateSettings = (newSettings: SystemSettings) => {
     setSettings(newSettings);
     recordAudit({ action: 'Updated settings', module: 'Settings', description: 'Updated permitted system or workspace settings.', status: 'Success' });
@@ -945,6 +951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateRemedialExam,
         deleteRemedialExam,
         updateSettings,
+        applyTheme,
         addAssessment,
         updateAssessment,
         deleteAssessment,

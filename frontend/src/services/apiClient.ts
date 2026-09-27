@@ -843,11 +843,14 @@ export interface FacultyRetentionRecord {
   state: FacultyRetentionState;
   remedial: Record<string, unknown> | null;
   remedialProgression?: FacultyRemedialProgression;
+  /** Server-computed: grade at/above the trigger, current school year, not legacy. */
+  remedialEligible?: boolean;
 }
 
 export function getFacultyRetentionApi(): Promise<{
   status: string;
   currentSchoolYear?: string;
+  retentionThreshold?: number;
   retention: FacultyRetentionRecord[];
 }> {
   return request('GET', '/faculty/retention');
@@ -1914,6 +1917,11 @@ export async function getStudentAttendanceLogs(params?: {
     }
   }
   return { records: [], total: 0 };
+}
+
+/** Save the signed-in user's own appearance preference (any role). */
+export function updateThemePreferenceApi(theme: 'light' | 'dark'): Promise<{ status: string; theme: 'light' | 'dark' }> {
+  return request('POST', '/auth/theme', { theme });
 }
 
 export function changePasswordApi(data: PasswordChangePayload): Promise<PasswordChangeResponse> {

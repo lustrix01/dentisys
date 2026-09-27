@@ -140,6 +140,12 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/auth/theme',
+        'handler' => 'handle_theme_update',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/auth/refresh',
         'handler' => 'handle_refresh',
         'has_params' => false,

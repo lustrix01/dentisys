@@ -111,7 +111,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
     $enrollmentIds = array_map(static fn(array $row): int => (int) $row['enrollment_id'], $dbRows);
     $legacyByEnrollment = [];
     foreach ($dbRows as $row) {
-        $legacyByEnrollment[(int) $row['enrollment_id']] = $row['remedial_state_json'] !== null;
+        $legacyByEnrollment[(int) $row['enrollment_id']] = remedial_state_json_is_legacy($row['remedial_state_json']);
     }
     // remedial_attempts_load performs one bounded read from
     // enrollment_remedial_attempts ordered by attempt_number and derives the
@@ -140,9 +140,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
                 ? json_decode((string) $row['grade_components_json'], true)
                 : null,
             'retentionState' => (string) $row['retention_state'],
-            'remedial' => $row['remedial_state_json'] !== null
-                ? json_decode((string) $row['remedial_state_json'], true)
-                : null,
+            'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
             'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'clinicHoursCompleted' => (int) $row['clinic_hours_completed'],
         ];

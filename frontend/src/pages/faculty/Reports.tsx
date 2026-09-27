@@ -512,7 +512,7 @@ export const Reports: React.FC = () => {
       { name: 'Critical Watch', value: counts.critical || 0, color: '#EF4444' },
       { name: 'Remedial Programs', value: counts.remedial || 0, color: '#8B5CF6' },
     ].filter(item => item.value > 0);
-  }, [retentionRecords, selectedClassId]);
+  }, [retentionRecords, selectedClassId, selectedSchoolYear]);
 
   // Recharts Stats: Assessment Success Rates
   const assessmentStatsData = useMemo(() => {

@@ -34,8 +34,9 @@ import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { useRuntimeConfig } from '../context/RuntimeConfigContext';
 import { isDevelopmentMockStudent, isStudentPrototypeAllowed, canAccessAuthoritativeStudentBiometrics } from '../pages/student/studentGates';
-import { getNotificationsApi, markNotificationReadApi, markAllNotificationsReadApi } from '../services/apiClient';
+import { getNotificationsApi, markNotificationReadApi, markAllNotificationsReadApi, getFacultyDashboardKpisApi } from '../services/apiClient';
 import type { NotificationItem } from '../types';
+import { useApplySavedTheme, useThemePreference } from '../hooks/useThemePreference';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -142,19 +143,38 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   };
   const colors = getRoleColors(currentUser.role);
 
-  const { settings, updateSettings, students } = useApp();
+  const { settings } = useApp();
   const config = useRuntimeConfig();
   const studentPrototypeEnabled = isStudentPrototypeAllowed(user, config, 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  // Faculty sidebar badge: server-computed at-risk and remedial counts for the
+  // current school year (not the browser's local demo data).
+  const [retentionBadgeCount, setRetentionBadgeCount] = useState<number | undefined>(undefined);
+  const isFacultyUser = user?.role === 'faculty';
+  const refreshRetentionBadge = location.pathname === '/' || location.pathname === '/retention';
+  useEffect(() => {
+    if (!isFacultyUser || !refreshRetentionBadge) return;
+    let cancelled = false;
+    getFacultyDashboardKpisApi()
+      .then(res => {
+        if (cancelled) return;
+        const count = (res.kpis?.retentionAlerts ?? 0) + (res.kpis?.remedialCount ?? 0);
+        setRetentionBadgeCount(count > 0 ? count : undefined);
+      })
+      .catch(() => { /* keep the last known badge */ });
+    return () => { cancelled = true; };
+  }, [isFacultyUser, refreshRetentionBadge]);
   const navigate = useNavigate();
 
+  const { changeTheme } = useThemePreference();
+  useApplySavedTheme();
   const toggleTheme = () => {
-    updateSettings({
-      ...settings,
-      theme: settings.theme === 'light' ? 'dark' : 'light',
+    // Applies instantly; saving to the account happens in the background.
+    changeTheme(settings.theme === 'light' ? 'dark' : 'light').catch(() => {
+      // Keep the local choice even if the account copy could not be saved.
     });
   };
 
@@ -391,8 +411,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
   const getBadgeValue = (type: string) => {
     if (type === 'retention') {
-      const warningCount = students.filter(s => s.status === 'warning' || s.status === 'critical').length;
-      return warningCount > 0 ? warningCount : undefined;
+      return retentionBadgeCount;
     }
     return undefined;
   };
@@ -510,6 +529,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           <button
             onClick={toggleTheme}
             className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+            title={settings.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            aria-label={settings.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
           >
             {settings.theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
           </button>
@@ -783,7 +804,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             <button
               onClick={toggleTheme}
               className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 transition-colors"
-              title="Toggle theme"
+              title={settings.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              aria-label={settings.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
             >
               {settings.theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </button>
@@ -864,7 +886,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
                     {currentUser.role === 'secretary' && user?.student && (
                       <Link
-                        to="/student/dashboard"
+                        to="/student/attendance"
                         onClick={() => setIsProfileOpen(false)}
                         className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-semibold transition-all"
                       >

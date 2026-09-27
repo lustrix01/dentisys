@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "../../components/Card";
 import { Modal } from "../../components/Modal";
+import { useThemePreference } from "../../hooks/useThemePreference";
 import {
   getAdminSettingsApi,
   updateAdminSettingsApi,
@@ -24,7 +25,10 @@ import {
 
 export const Settings: React.FC = () => {
   const { settings, updateSettings } = useApp();
-  const [theme, setTheme] = useState(settings.theme);
+  // Appearance applies immediately and saves to the account on its own;
+  // the Save button below is for the institution-wide policy only.
+  const { theme, changeTheme } = useThemePreference();
+  const [themeError, setThemeError] = useState("");
   const [threshold, setThreshold] = useState(settings.retentionThreshold);
   const [weights, setWeights] = useState(settings.weights);
   const [transmutationDefaults, setTransmutationDefaults] = useState(
@@ -38,7 +42,6 @@ export const Settings: React.FC = () => {
     getAdminSettingsApi()
       .then((res) => {
         if (res.settings) {
-          if (res.settings.theme) setTheme(res.settings.theme);
           if (res.settings.retentionThreshold)
             setThreshold(res.settings.retentionThreshold);
           if (res.settings.weights) setWeights(res.settings.weights);
@@ -123,7 +126,17 @@ export const Settings: React.FC = () => {
               {(["light", "dark"] as const).map((mode) => (
                 <button
                   type="button"
-                  onClick={() => setTheme(mode)}
+                  onClick={() => {
+                    setThemeError("");
+                    changeTheme(mode).catch((err) =>
+                      setThemeError(
+                        err instanceof Error
+                          ? `Appearance applied on this device but not saved to your account: ${err.message}`
+                          : "Appearance could not be saved to your account.",
+                      ),
+                    );
+                  }}
+                  aria-pressed={theme === mode}
                   key={mode}
                   className={`rounded-xl p-3 text-center border text-[10px] font-bold transition-all ${theme === mode ? "border-accent-500 bg-accent-50 dark:bg-accent-950/30 text-accent-700 dark:text-accent-400" : "border-slate-200 dark:border-slate-800 text-slate-400"}`}
                 >
@@ -135,6 +148,9 @@ export const Settings: React.FC = () => {
                   {mode === "light" ? "Light mode" : "Dark mode"}
                 </button>
               ))}
+              <p role="status" className="col-span-2 text-[10px] text-slate-400">
+                {themeError || "Applies immediately and is saved to your account."}
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -146,20 +162,25 @@ export const Settings: React.FC = () => {
             </CardHeader>
             <CardContent>
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Clinical passing limit
+                Retention trigger grade
                 <select
                   value={threshold}
                   onChange={(event) => setThreshold(Number(event.target.value))}
                   className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-700 dark:text-slate-200"
                 >
+                  {![2, 2.5, 3].includes(Number(threshold)) && (
+                    <option value={threshold}>{Number(threshold).toFixed(2)} — Current saved value</option>
+                  )}
                   <option value="2">2.0 — Outstanding</option>
                   <option value="2.5">2.5 — Standard dental passing</option>
                   <option value="3">3.0 — General passing</option>
                 </select>
               </label>
               <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
-                Clinical grades above this limit are included in retention
-                monitoring.
+                A final course grade at or above this value (1.0 is highest,
+                5.0 is failing) places the Student under retention monitoring
+                and makes the course eligible for a remedial attempt. It applies
+                to every course, not only clinical ones.
               </p>
             </CardContent>
           </Card>

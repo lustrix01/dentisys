@@ -11,6 +11,32 @@ declare(strict_types=1);
  * cannot start a new canonical sequence without reconciliation.
  */
 
+/**
+ * Decode enrollment.remedial_state_json as legacy remedial evidence.
+ *
+ * Earlier builds of the Faculty retention status override wrote only
+ * {overrideReason, overriddenAt} into this column. That is not a remedial
+ * record, so it must not mark the enrollment as legacy/unclassified (which
+ * blocked remedial scheduling). Returns null when there is no legacy record.
+ */
+function remedial_state_json_legacy_payload(mixed $raw): ?array
+{
+    if ($raw === null || $raw === '' || $raw === false) {
+        return null;
+    }
+    $decoded = json_decode((string) $raw, true);
+    if (!is_array($decoded)) {
+        return null;
+    }
+    $remedialKeys = array_diff(array_keys($decoded), ['overrideReason', 'overriddenAt']);
+    return $remedialKeys === [] ? null : $decoded;
+}
+
+function remedial_state_json_is_legacy(mixed $raw): bool
+{
+    return remedial_state_json_legacy_payload($raw) !== null;
+}
+
 final class RemedialAttemptException extends RuntimeException
 {
     public function __construct(
