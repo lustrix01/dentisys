@@ -1504,9 +1504,9 @@ function handle_secretary_attendance_get(): void
             'sessionCode' => $row['session_code'],
             'room' => $row['room'],
             'status' => $row['status'],
-            'startedAt' => $row['started_at'],
-            'endedAt' => $row['ended_at'],
-            'revokedAt' => $row['revoked_at'],
+            'startedAt' => attendance_session_timestamp($row['started_at']),
+            'endedAt' => attendance_session_timestamp($row['ended_at']),
+            'revokedAt' => attendance_session_timestamp($row['revoked_at']),
         ], $sessionStmt->fetchAll(PDO::FETCH_ASSOC));
         if ($sessionId > 0 && $sessions === []) {
             safe_error_response('Attendance session was not found in an assigned class.', 404);
@@ -1563,7 +1563,7 @@ function handle_secretary_attendance_get(): void
                 'className' => $r['cs_name'],
                 'status' => strtolower($r['status']),
                 'overrideReason' => $r['override_reason'] ?? null,
-                'overrideAt' => $r['override_at'] ?? null,
+                'overrideAt' => attendance_session_timestamp($r['override_at'] ?? null),
             ];
         }, $records);
 
@@ -1692,7 +1692,7 @@ function handle_secretary_attendance_override(): void
                 'id' => (string) $targetRecordId,
                 'status' => $status,
                 'overrideReason' => $reason,
-                'overrideAt' => $nowSql,
+                'overrideAt' => attendance_session_timestamp($nowSql),
             ],
         ], 200);
     } catch (ValidationException $e) {
@@ -1763,7 +1763,7 @@ function handle_secretary_profile_update(): void
             $identityStmt = $pdo->prepare(
                 'SELECT ua.person_id AS account_person_id, s.person_id AS student_person_id
                    FROM user_accounts ua
-                   JOIN students s ON s.user_id = ua.user_id
+                   LEFT JOIN students s ON s.user_id = ua.user_id
                   WHERE ua.user_id = ?
                   FOR UPDATE OF ua'
             );

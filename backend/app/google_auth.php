@@ -29,10 +29,6 @@ function google_auth_cache_pool(): FileSystemCacheItemPool
 }
 
 /**
- * Verify a Google ID token and apply DentiSys identity policy.
- * The callable seam is used by deterministic tests and must return claims.
- */
-/**
  * Seconds of clock difference tolerated when the Google library checks the
  * token's iat/nbf/exp. Docker Desktop VM clocks can lag after host sleep.
  */
@@ -44,6 +40,10 @@ function google_identity_reject(string $logReason, string $message = 'Invalid Go
     throw new GoogleIdentityException($message, $reason);
 }
 
+/**
+ * Verify a Google ID token and apply DentiSys identity policy.
+ * The callable seam is used by deterministic tests and must return claims.
+ */
 function google_verify_id_token(array $config, string $credential, ?callable $verifier = null): array
 {
     $clientId = trim((string) ($config['providers']['identity']['google']['client_id'] ?? ''));

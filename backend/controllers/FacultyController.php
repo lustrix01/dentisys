@@ -3509,8 +3509,8 @@ function faculty_attendance_session_payload(?array $session): ?array
         'sessionCode' => $session['session_code'],
         'room' => $session['room'],
         'status' => $session['status'],
-        'startedAt' => $session['started_at'],
-        'endedAt' => $session['ended_at'],
+        'startedAt' => attendance_session_timestamp($session['started_at']),
+        'endedAt' => attendance_session_timestamp($session['ended_at']),
         'geofenceEnabled' => (bool) $session['geofence_enabled'],
         'geofenceRadiusMeters' => $session['geofence_radius_meters'] !== null ? (float) $session['geofence_radius_meters'] : null,
         'biometricRequired' => (bool) $session['biometric_required'],
@@ -3518,7 +3518,7 @@ function faculty_attendance_session_payload(?array $session): ?array
         'presentCutoff' => $session['present_cutoff_time'] !== null ? substr((string) $session['present_cutoff_time'], 0, 5) : null,
         'lateCutoff' => $session['late_cutoff_time'] !== null ? substr((string) $session['late_cutoff_time'], 0, 5) : null,
         'timingConfigured' => $session['opening_time'] !== null && $session['present_cutoff_time'] !== null && $session['late_cutoff_time'] !== null,
-        'revokedAt' => $session['revoked_at'] ?? null,
+        'revokedAt' => attendance_session_timestamp($session['revoked_at'] ?? null),
         'revocationReason' => $session['revocation_reason'] ?? null,
     ];
 }
@@ -3543,7 +3543,7 @@ function faculty_attendance_record_payload(array $row): array
         'verificationMethod' => $row['verification_method'],
         'timeRecorded' => attendance_session_timestamp($row['time_recorded']),
         'overrideReason' => $row['override_reason'],
-        'overrideAt' => $row['override_at'],
+        'overrideAt' => attendance_session_timestamp($row['override_at']),
     ];
 }
 
@@ -3585,7 +3585,7 @@ function handle_faculty_attendance_get(): void
                 'status' => $row['status'],
                 'verificationMethod' => $row['verification_method'],
                 'overrideReason' => $row['override_reason'],
-                'overrideAt' => $row['override_at'],
+                'overrideAt' => attendance_session_timestamp($row['override_at']),
             ], $stmt->fetchAll(PDO::FETCH_ASSOC));
             json_response([
                 'status' => 'ok',
