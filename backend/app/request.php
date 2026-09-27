@@ -93,9 +93,90 @@ function request_header(string $name): ?string
     return null;
 }
 
+/**
+ * Parse a comma-separated list of IPv4/IPv6 CIDR blocks or single addresses.
+ * Invalid entries are ignored.
+ */
+function request_parse_trusted_proxies(string $raw): array
+{
+    $result = [];
+    foreach (explode(',', $raw) as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+        [$address, $bits] = array_pad(explode('/', $entry, 2), 2, null);
+        $packed = @inet_pton((string) $address);
+        if ($packed === false) {
+            continue;
+        }
+        $maxBits = strlen($packed) * 8;
+        $prefix = $bits === null ? $maxBits : (ctype_digit((string) $bits) ? (int) $bits : -1);
+        if ($prefix < 0 || $prefix > $maxBits) {
+            continue;
+        }
+        $result[] = ['network' => $packed, 'prefix' => $prefix];
+    }
+    return $result;
+}
+
+function request_ip_in_ranges(string $ip, array $ranges): bool
+{
+    $packed = @inet_pton($ip);
+    if ($packed === false) {
+        return false;
+    }
+    foreach ($ranges as $range) {
+        if (strlen($range['network']) !== strlen($packed)) {
+            continue;
+        }
+        $fullBytes = intdiv($range['prefix'], 8);
+        $remainingBits = $range['prefix'] % 8;
+        if (substr($packed, 0, $fullBytes) !== substr($range['network'], 0, $fullBytes)) {
+            continue;
+        }
+        if ($remainingBits === 0) {
+            return true;
+        }
+        $mask = (0xFF << (8 - $remainingBits)) & 0xFF;
+        if ((ord($packed[$fullBytes]) & $mask) === (ord($range['network'][$fullBytes]) & $mask)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Resolve the client IP. X-Forwarded-For is honoured only when the direct
+ * peer (REMOTE_ADDR) is a trusted proxy, and then only its right-most entry
+ * is used: that entry is always written by our own single proxy hop (nginx or
+ * the Vite dev proxy), so values a client puts in the header are ignored.
+ */
+function request_client_ip(array $server, array $trustedRanges): string
+{
+    $remote = trim((string) ($server['REMOTE_ADDR'] ?? ''));
+    if ($remote === '' || @inet_pton($remote) === false) {
+        return '127.0.0.1';
+    }
+    if ($trustedRanges === [] || !request_ip_in_ranges($remote, $trustedRanges)) {
+        return $remote;
+    }
+    $forwarded = (string) ($server['HTTP_X_FORWARDED_FOR'] ?? '');
+    if (trim($forwarded) === '') {
+        return $remote;
+    }
+    $parts = explode(',', $forwarded);
+    $candidate = trim((string) end($parts));
+    if (str_starts_with($candidate, '::ffff:') && filter_var(substr($candidate, 7), FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        $candidate = substr($candidate, 7);
+    }
+    return filter_var($candidate, FILTER_VALIDATE_IP) !== false ? $candidate : $remote;
+}
+
 function request_ip(): string
 {
-    return $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    $raw = getenv('TRUSTED_PROXY_CIDRS');
+    return request_client_ip($_SERVER, request_parse_trusted_proxies($raw === false ? '' : $raw));
 }
 
 function request_user_agent(): string

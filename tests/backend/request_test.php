@@ -102,6 +102,18 @@ echo "\n--- request_ip ---\n";
 $ips = request_ip();
 assert_same(true, is_string($ips) && $ips !== '', 'request_ip returns non-empty string');
 
+$trusted = request_parse_trusted_proxies('172.16.0.0/12, 10.0.0.0/8,bogus,192.168.0.0/33,::1');
+assert_same(3, count($trusted), 'trusted proxy parser ignores invalid entries');
+assert_same('192.168.1.50', request_client_ip(['REMOTE_ADDR' => '172.19.0.6', 'HTTP_X_FORWARDED_FOR' => '192.168.1.50'], $trusted), 'trusted proxy peer uses X-Forwarded-For');
+assert_same('192.168.1.50', request_client_ip(['REMOTE_ADDR' => '172.19.0.6', 'HTTP_X_FORWARDED_FOR' => '6.6.6.6, 192.168.1.50'], $trusted), 'client-supplied left entries are ignored');
+assert_same('203.0.113.9', request_client_ip(['REMOTE_ADDR' => '203.0.113.9', 'HTTP_X_FORWARDED_FOR' => '6.6.6.6'], $trusted), 'untrusted peer ignores X-Forwarded-For');
+assert_same('172.19.0.6', request_client_ip(['REMOTE_ADDR' => '172.19.0.6'], $trusted), 'missing header falls back to peer');
+assert_same('172.19.0.6', request_client_ip(['REMOTE_ADDR' => '172.19.0.6', 'HTTP_X_FORWARDED_FOR' => 'garbage'], $trusted), 'invalid header falls back to peer');
+assert_same('192.168.1.7', request_client_ip(['REMOTE_ADDR' => '172.19.0.6', 'HTTP_X_FORWARDED_FOR' => '::ffff:192.168.1.7'], $trusted), 'IPv4-mapped IPv6 is normalized');
+assert_same('172.32.0.1', request_client_ip(['REMOTE_ADDR' => '172.32.0.1', 'HTTP_X_FORWARDED_FOR' => '1.1.1.1'], $trusted), 'address outside the /12 is not trusted');
+assert_same('172.19.0.6', request_client_ip(['REMOTE_ADDR' => '172.19.0.6', 'HTTP_X_FORWARDED_FOR' => '1.1.1.1'], []), 'empty trust list keeps REMOTE_ADDR');
+assert_same('127.0.0.1', request_client_ip([], $trusted), 'missing REMOTE_ADDR falls back to loopback');
+
 echo "\n--- request_user_agent ---\n";
 
 $ua = request_user_agent();
