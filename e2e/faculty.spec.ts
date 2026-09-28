@@ -193,6 +193,28 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByText('Laboratory Schedule', { exact: true })).toBeVisible();
   });
 
+  test('Edit Class offers the same lecture/lab component choices and sends changed units', async ({ page }) => {
+    const editableClass = { id: '91', csId: 91, csName: 'NEW601-A', courseId: 9, courseCode: 'NEW601', courseName: 'Advanced Clinic', units: 3, lectureUnits: 2, labUnits: 1, courseUnitsEditable: true, hasGrades: false, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1ST', yearLevel: 6, block: 'A', schedule: null, lecRoom: 'Lecture Hall A (Mon 08:00 AM - 09:00 AM)', labRoom: 'Simulation Lab (Wed 10:00 AM - 01:00 PM)', enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' };
+    const updates: Array<Record<string, unknown>> = [];
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [editableClass] }) }));
+    await page.route('**/api/faculty/classes/update', async route => {
+      updates.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Class section updated successfully.', csId: 91 }) });
+    });
+    await page.route('**/api/faculty/courses', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', courses: [{ id: 9, courseCode: 'NEW601', name: 'Advanced Clinic', units: 3, lectureUnits: 2, labUnits: 1, yearLevel: 6, semester: '1ST', isClinical: false }] }) }));
+    await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
+
+    await page.click('a[href="/classes"]');
+    await page.getByTitle('Edit Class Section Details').first().click();
+    await expect(page.getByRole('radio', { name: 'Lecture & Lab' })).toHaveAttribute('aria-checked', 'true');
+    await page.getByRole('radio', { name: 'Lab only' }).click();
+    await expect(page.getByText('Lecture Venue & Schedule')).toHaveCount(0);
+    await page.getByLabel('Laboratory Units *').fill('3');
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(() => updates.length).toBe(1);
+    expect(updates[0]).toMatchObject({ csId: 91, lectureUnits: null, labUnits: 3, lecRoom: '' });
+  });
+
   test('Classes and Rosters surfaces the backend eligibility conflict for an active Student', async ({ page }) => {
     await page.route('**/api/faculty/classes', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({

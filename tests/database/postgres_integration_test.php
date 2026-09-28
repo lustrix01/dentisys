@@ -246,6 +246,7 @@ $expectedMigrations = [
     '030_relax_assessment_transmutation_link.sql',
     '031_course_components_and_class_titles.sql',
     '032_remedial_cost_recovery.sql',
+    '033_canonical_class_semester.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2741,7 +2742,17 @@ expect_same($classTitleCatalogBefore, $classTitleReadRow['catalogCourseName'] ??
 ]);
 expect_same(200, $classSemesterStatus, 'Semester can change before any score or grade is recorded');
 $classEditRowStmt->execute([$classEditOwnedId]);
-expect_same('2nd Semester', $classEditRowStmt->fetch(PDO::FETCH_ASSOC)['semester'] ?? null, 'The changed semester persists');
+expect_same('2ND', $classEditRowStmt->fetch(PDO::FETCH_ASSOC)['semester'] ?? null, 'The changed semester persists as the canonical semester code');
+[$classUnitsStatus] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'lectureUnits' => 2,
+    'labUnits' => 1.5,
+]);
+expect_same(200, $classUnitsStatus, 'Lecture and laboratory units can be set from Edit Class when the course has none recorded');
+$classUnitsCourseStmt = $pdo->prepare('SELECT units, lecture_units, lab_units FROM courses WHERE course_id = ?');
+$classUnitsCourseStmt->execute([$classEditCourseId]);
+$classUnitsCourse = $classUnitsCourseStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(['3.5', '2.0', '1.5'], [(string) ($classUnitsCourse['units'] ?? ''), (string) ($classUnitsCourse['lecture_units'] ?? ''), (string) ($classUnitsCourse['lab_units'] ?? '')], 'Edit Class stores the lecture/laboratory split and total units');
 [$classSemesterBadStatus] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
     'csId' => (string) $classEditOwnedId,
     'semester' => 'Third Term',

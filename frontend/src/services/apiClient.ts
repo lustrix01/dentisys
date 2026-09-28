@@ -1460,6 +1460,8 @@ export interface FacultyClassItem {
   labUnits?: number | null;
   /** Scores or grades exist: course and term can no longer change. */
   hasGrades?: boolean;
+  /** This Faculty member may change the shared course's lecture/lab units. */
+  courseUnitsEditable?: boolean;
   schoolYear: string;
   semester: string;
   yearLevel: number;

@@ -88,6 +88,17 @@ const defaultSlotFor = (type: 'Lecture' | 'Laboratory'): ClassSessionSlot => {
   };
 };
 
+// Class sections store canonical semester codes; show readable labels.
+const canonicalSemester = (value: string | null | undefined): '1ST' | '2ND' | 'SUMMER' => {
+  const upper = (value || '').toUpperCase();
+  if (upper.includes('2ND') || upper.includes('SECOND')) return '2ND';
+  if (upper.includes('SUMMER')) return 'SUMMER';
+  return '1ST';
+};
+const semesterLabel = (value: string | null | undefined): string => (
+  { '1ST': '1st Semester', '2ND': '2nd Semester', SUMMER: 'Summer' }[canonicalSemester(value)]
+);
+
 const parseUnitsInput = (value: string): number | null => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 10) / 10 : null;
@@ -189,7 +200,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [newCourseName, setNewCourseName] = useState('');
   const [newBlock, setNewBlock] = useState('');
   const [newSchoolYear, setNewSchoolYear] = useState('');
-  const [newSemester, setNewSemester] = useState('1st Semester');
+  const [newSemester, setNewSemester] = useState('1ST');
   const [newYearLevel, setNewYearLevel] = useState(4);
   // Course components: lecture and/or laboratory, each with its own units
   // and its own schedule.
@@ -224,7 +235,7 @@ export const ClassesAndRosters: React.FC = () => {
   const [editLabDays, setEditLabDays] = useState<string[]>([]);
   const [editLabStartTime, setEditLabStartTime] = useState('10:00 AM');
   const [editLabEndTime, setEditLabEndTime] = useState('01:00 PM');
-  const [editSemester, setEditSemester] = useState('1st Semester');
+  const [editSemester, setEditSemester] = useState('1ST');
   const [editComponents, setEditComponents] = useState<CourseComponents>('lecture');
   const [editLectureUnits, setEditLectureUnits] = useState('3');
   const [editLabUnits, setEditLabUnits] = useState('1');
@@ -545,8 +556,10 @@ export const ClassesAndRosters: React.FC = () => {
     setEditLabStartTime(parsedLab.startTime || '10:00 AM');
     setEditLabEndTime(parsedLab.endTime || '01:00 PM');
 
-    setEditSemester(cls.semester || '1st Semester');
-    setEditComponents(componentsFromUnits(cls.lectureUnits, cls.labUnits) ?? 'lecture');
+    setEditSemester(canonicalSemester(cls.semester));
+    // Older courses without a recorded split: infer from the rooms in use.
+    setEditComponents(componentsFromUnits(cls.lectureUnits, cls.labUnits)
+      ?? (cls.lecRoom && cls.labRoom ? 'both' : cls.labRoom && !cls.lecRoom ? 'lab' : 'lecture'));
     setEditLectureUnits(String(cls.lectureUnits || 3));
     setEditLabUnits(String(cls.labUnits || 1));
     setEditSchoolYear(cls.schoolYear || '2025-2026');
@@ -620,14 +633,14 @@ export const ClassesAndRosters: React.FC = () => {
     [courses, editCourseCode]
   );
   const editTermLocked = Boolean(editingClass?.hasGrades);
-  // Which schedules the class needs: from the chosen new course, else the
-  // catalog split; older courses without a split keep both (lab optional).
-  const editVisibleComponents: CourseComponents = editCodeIsNew
-    ? editComponents
-    : (componentsFromUnits(
-      courses.find(c => c.courseCode.toLowerCase() === editCourseCode.trim().toLowerCase())?.lectureUnits ?? editingClass?.lectureUnits,
-      courses.find(c => c.courseCode.toLowerCase() === editCourseCode.trim().toLowerCase())?.labUnits ?? editingClass?.labUnits,
-    ) ?? 'both');
+  const editCodeChanged = editCourseCode.trim().toLowerCase() !== (editingClass?.courseCode || '').trim().toLowerCase();
+  // Components/units: free for a brand-new code; otherwise only the course's
+  // creator (or anyone, if never recorded) may change them, and only before
+  // the class has scores or grades.
+  const editUnitsLocked = !(editCodeIsNew && editCodeChanged)
+    && (editCodeChanged || editTermLocked || !editingClass?.courseUnitsEditable);
+  // The schedules shown follow the selected components.
+  const editVisibleComponents: CourseComponents = editComponents;
 
   // Handler: Update Class Section
   const handleUpdateClass = async (e: React.FormEvent) => {
@@ -652,14 +665,20 @@ export const ClassesAndRosters: React.FC = () => {
     const formattedLec = formatRoomSchedule(editLecRoom, editLecDays, editLecStartTime, editLecEndTime);
     const formattedLab = formatRoomSchedule(editLabRoom, editLabDays, editLabStartTime, editLabEndTime);
     const codeChanged = editCourseCode.trim().toLowerCase() !== (editingClass.courseCode || '').trim().toLowerCase();
-    const semesterChanged = editSemester !== editingClass.semester;
+    const semesterChanged = editSemester !== canonicalSemester(editingClass.semester);
     const newCatalogCode = codeChanged && editCodeIsNew;
     const includesLecture = editComponents !== 'lab';
     const includesLab = editComponents !== 'lecture';
-    if (newCatalogCode && ((includesLecture && parseUnitsInput(editLectureUnits) === null) || (includesLab && parseUnitsInput(editLabUnits) === null))) {
-      setEditError('A new course code needs its lecture and/or laboratory units.');
+    const lectureUnits = includesLecture ? parseUnitsInput(editLectureUnits) : null;
+    const labUnits = includesLab ? parseUnitsInput(editLabUnits) : null;
+    if (!editUnitsLocked && ((includesLecture && lectureUnits === null) || (includesLab && labUnits === null))) {
+      setEditError('Enter the units for each selected component (lecture and/or laboratory).');
       return;
     }
+    const unitsChanged = !editUnitsLocked && (
+      lectureUnits !== ((editingClass.lectureUnits ?? 0) > 0 ? editingClass.lectureUnits : null)
+      || labUnits !== ((editingClass.labUnits ?? 0) > 0 ? editingClass.labUnits : null)
+    );
 
     setIsUpdatingClass(true);
     try {
@@ -673,12 +692,10 @@ export const ClassesAndRosters: React.FC = () => {
         block: editBlock.trim(),
         yearLevel: editYearLevel,
         semester: semesterChanged ? editSemester : undefined,
-        lecRoom: formattedLec || undefined,
-        labRoom: formattedLab || undefined,
-        ...(newCatalogCode ? {
-          lectureUnits: includesLecture ? parseUnitsInput(editLectureUnits) : null,
-          labUnits: includesLab ? parseUnitsInput(editLabUnits) : null,
-        } : {}),
+        // A component the class no longer has loses its schedule.
+        lecRoom: includesLecture ? (formattedLec || undefined) : '',
+        labRoom: includesLab ? (formattedLab || undefined) : '',
+        ...(newCatalogCode || unitsChanged ? { lectureUnits, labUnits } : {}),
       });
 
       if (res && (res.status === 'ok' || res.status === 'success')) {
@@ -1315,7 +1332,7 @@ export const ClassesAndRosters: React.FC = () => {
                       <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                         <div className="flex items-center gap-2">
                           <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                          <span>{cls.semester || '1st Semester'} &bull; {cls.schoolYear || '2025-2026'}</span>
+                          <span>{semesterLabel(cls.semester)} &bull; {cls.schoolYear || '2025-2026'}</span>
                         </div>
                         <div className="flex items-start gap-2">
                           <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0 mt-0.5" />
@@ -1936,9 +1953,9 @@ export const ClassesAndRosters: React.FC = () => {
                   onChange={(e) => setNewSemester(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
                 >
-                  <option value="1st Semester">1st Semester</option>
-                  <option value="2nd Semester">2nd Semester</option>
-                  <option value="Summer">Summer</option>
+                  <option value="1ST">1st Semester</option>
+                  <option value="2ND">2nd Semester</option>
+                  <option value="SUMMER">Summer</option>
                 </select>
               </div>
             </div>
@@ -2237,7 +2254,17 @@ export const ClassesAndRosters: React.FC = () => {
                   list="course-catalog-codes-edit"
                   readOnly={editTermLocked}
                   value={editCourseCode}
-                  onChange={(e) => setEditCourseCode(e.target.value)}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setEditCourseCode(code);
+                    const found = courses.find(c => c.courseCode.toLowerCase() === code.trim().toLowerCase());
+                    const foundComponents = found ? componentsFromUnits(found.lectureUnits, found.labUnits) : null;
+                    if (found && foundComponents) {
+                      setEditComponents(foundComponents);
+                      setEditLectureUnits(String(found.lectureUnits ?? 0));
+                      setEditLabUnits(String(found.labUnits ?? 0));
+                    }
+                  }}
                   placeholder="e.g. 201"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium read-only:opacity-60"
                 />
@@ -2298,9 +2325,9 @@ export const ClassesAndRosters: React.FC = () => {
                   onChange={(e) => setEditSemester(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
                 >
-                  <option value="1st Semester">1st Semester</option>
-                  <option value="2nd Semester">2nd Semester</option>
-                  <option value="Summer">Summer</option>
+                  <option value="1ST">1st Semester</option>
+                  <option value="2ND">2nd Semester</option>
+                  <option value="SUMMER">Summer</option>
                 </select>
               </div>
               <div>
@@ -2320,45 +2347,54 @@ export const ClassesAndRosters: React.FC = () => {
                 : 'Course and semester can change until the first score or grade is recorded. The course title you enter shows only for your class.'}
             </p>
 
-            {editCodeIsNew && editCourseCode.trim().toLowerCase() !== (editingClass.courseCode || '').trim().toLowerCase() && (
-              <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30 space-y-2.5">
-                <p className="font-bold text-amber-800 dark:text-amber-200">New course code: set its components and units for the shared catalog.</p>
-                <div role="radiogroup" aria-label="Course components" className="grid grid-cols-3 gap-2">
-                  {([
-                    ['both', 'Lecture & Lab'],
-                    ['lecture', 'Lecture only'],
-                    ['lab', 'Lab only'],
-                  ] as const).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={editComponents === value}
-                      onClick={() => setEditComponents(value)}
-                      className={`px-2.5 py-2 rounded-xl border text-xs font-bold ${editComponents === value ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {editComponents !== 'lab' && (
-                    <label className="font-bold text-slate-700 dark:text-slate-300 block">
-                      Lecture Units *
-                      <input type="number" min={0.5} max={20} step={0.5} value={editLectureUnits} onChange={(e) => setEditLectureUnits(e.target.value)}
-                        className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium" />
-                    </label>
-                  )}
-                  {editComponents !== 'lecture' && (
-                    <label className="font-bold text-slate-700 dark:text-slate-300 block">
-                      Laboratory Units *
-                      <input type="number" min={0.5} max={20} step={0.5} value={editLabUnits} onChange={(e) => setEditLabUnits(e.target.value)}
-                        className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium" />
-                    </label>
-                  )}
-                </div>
+            {/* Course components and units: same choices as Create Class */}
+            <div className={`p-3.5 rounded-2xl border space-y-2.5 ${editCodeIsNew && editCodeChanged ? 'border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50'}`}>
+              <span className="font-bold text-slate-700 dark:text-slate-300 block">Course Components *</span>
+              <div role="radiogroup" aria-label="Course components" className="grid grid-cols-3 gap-2">
+                {([
+                  ['both', 'Lecture & Lab'],
+                  ['lecture', 'Lecture only'],
+                  ['lab', 'Lab only'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={editComponents === value}
+                    disabled={editUnitsLocked}
+                    onClick={() => setEditComponents(value)}
+                    className={`px-2.5 py-2 rounded-xl border text-xs font-bold disabled:cursor-not-allowed ${editComponents === value ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 disabled:opacity-50'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            )}
+              <div className="grid grid-cols-2 gap-3">
+                {editComponents !== 'lab' && (
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                    Lecture Units *
+                    <input type="number" min={0.5} max={20} step={0.5} readOnly={editUnitsLocked} value={editLectureUnits} onChange={(e) => setEditLectureUnits(e.target.value)}
+                      className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium read-only:opacity-60" />
+                  </label>
+                )}
+                {editComponents !== 'lecture' && (
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                    Laboratory Units *
+                    <input type="number" min={0.5} max={20} step={0.5} readOnly={editUnitsLocked} value={editLabUnits} onChange={(e) => setEditLabUnits(e.target.value)}
+                      className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium read-only:opacity-60" />
+                  </label>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400">
+                {editCodeIsNew && editCodeChanged
+                  ? 'New course code: these components and units are saved to the shared course catalog.'
+                  : editUnitsLocked
+                    ? (editTermLocked
+                      ? 'Scores or grades are recorded for this class, so its components and units can no longer change.'
+                      : 'Components and units belong to the shared course and can be changed only by the Faculty member who created it.')
+                    : 'Changing components or units updates the shared course for every class that uses this code.'}
+              </p>
+            </div>
 
             {editVisibleComponents !== 'lab' && (
             <>

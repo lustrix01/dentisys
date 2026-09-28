@@ -4828,11 +4828,12 @@ function handle_faculty_retention_cost_recovery_save(): void
             ));
             return;
         }
-        if (strtolower((string) $target['enrollment_status']) !== 'active'
-            || !academic_school_year_is_current($pdo, (string) $target['school_year'])) {
+        // Cost recovery often happens in a later school year, so (unlike
+        // remedial attempts) a past-year enrollment may record its result.
+        if (strtolower((string) $target['enrollment_status']) !== 'active') {
             $pdo->rollBack();
             remedial_attempts_error_response(remedial_attempts_error(
-                'Historical or inactive enrollments are view-only and cannot record cost recovery.',
+                'Inactive enrollments cannot record cost recovery.',
                 'REMEDIAL_ENROLLMENT_READ_ONLY',
                 409
             ));
@@ -5746,6 +5747,7 @@ function handle_faculty_classes_get(): void
                 c.units,
                 c.lecture_units,
                 c.lab_units,
+                c.created_by_user_id AS course_created_by,
                 u.display_name AS instructor_name,
                 (SELECT COUNT(*) FROM enrollments e WHERE e.cs_id = cs.cs_id) AS enrolled_count,
                 (EXISTS (SELECT 1 FROM assessment_scores sc JOIN assessments a ON a.assessment_id = sc.assessment_id WHERE a.cs_id = cs.cs_id)
@@ -5759,7 +5761,7 @@ function handle_faculty_classes_get(): void
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $mapped = array_map(function ($cls) use ($currentSchoolYear) {
+        $mapped = array_map(function ($cls) use ($currentSchoolYear, $authCtx) {
             return [
                 'id' => (string) $cls['cs_id'],
                 'csId' => (int) $cls['cs_id'],
@@ -5773,6 +5775,10 @@ function handle_faculty_classes_get(): void
                 'lectureUnits' => $cls['lecture_units'] !== null ? (float) $cls['lecture_units'] : null,
                 'labUnits' => $cls['lab_units'] !== null ? (float) $cls['lab_units'] : null,
                 'hasGrades' => filter_var($cls['has_grades'], FILTER_VALIDATE_BOOLEAN),
+                // Units of a shared course may be changed by the Faculty member
+                // who created it, or set once when never recorded.
+                'courseUnitsEditable' => ($cls['lecture_units'] === null && $cls['lab_units'] === null)
+                    || (int) ($cls['course_created_by'] ?? 0) === (int) $authCtx['user_id'],
                 'schoolYear' => $cls['school_year'],
                 'isCurrentSchoolYear' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) === 0,
                 'isHistorical' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
@@ -6046,13 +6052,17 @@ function faculty_class_has_grades(PDO $pdo, int $csId): bool
     return (bool) $stmt->fetchColumn();
 }
 
-/** Canonical semester label for a class section, or a validation error. */
+/**
+ * Canonical semester code stored on a class section ('1ST', '2ND', 'SUMMER'),
+ * the same form the seeded classes and grading configurations use, so one
+ * course offering never splits into two because of spelling.
+ */
 function faculty_class_semester_label(string $semester): string
 {
     return match (normalize_course_semester($semester)) {
-        '1ST' => '1st Semester',
-        '2ND' => '2nd Semester',
-        'Summer' => 'Summer',
+        '1ST' => '1ST',
+        '2ND' => '2ND',
+        'Summer' => 'SUMMER',
         default => throw new ValidationException(['semester' => 'Semester must be 1st Semester, 2nd Semester, or Summer.']),
     };
 }
@@ -6156,7 +6166,7 @@ function handle_faculty_class_create(): void
             $stmt = $pdo->prepare("
                 INSERT INTO class_sections (
                     cs_name, course_id, course_title, instructor_user_id, semester, school_year, year_level, lab_room, lec_room, block, status, term_code, term_start_date, term_end_date, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, '2024-08-15', '2024-12-20', CURRENT_TIMESTAMP(6)) RETURNING cs_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, NULL, NULL, CURRENT_TIMESTAMP(6)) RETURNING cs_id
             ");
             $stmt->execute([
                 $csName, $courseId, $courseTitle, $authCtx['user_id'], $semester, $schoolYear, $yearLevel, $labRoom, $lecRoom, $block, $termCode
@@ -6316,7 +6326,8 @@ function handle_faculty_class_update(): void
             $params[] = validate_optional_string($data, 'labRoom', 1, 100);
         }
         $hasCourseUpdates = array_key_exists('courseCode', $data) || array_key_exists('courseName', $data);
-        if ($updates === [] && !$hasCourseUpdates && $termFieldsRequested === []) {
+        $hasUnitUpdates = array_key_exists('lectureUnits', $data) || array_key_exists('labUnits', $data);
+        if ($updates === [] && !$hasCourseUpdates && $termFieldsRequested === [] && !$hasUnitUpdates) {
             throw new ValidationException(['fields' => 'At least one editable class-section field is required.']);
         }
 
@@ -6366,6 +6377,33 @@ function handle_faculty_class_update(): void
                 $params[] = $nextYear;
                 $updates[] = 'term_code = ?';
                 $params[] = "{$nextYear}-{$nextSemester}";
+            }
+
+            $unitsRequested = array_key_exists('lectureUnits', $data) || array_key_exists('labUnits', $data);
+            if ($unitsRequested && !$codeChanges) {
+                $unitsCourseStmt = $pdo->prepare('SELECT course_id, lecture_units, lab_units, created_by_user_id FROM courses WHERE course_id = ? FOR UPDATE');
+                $unitsCourseStmt->execute([(int) $before['course_id']]);
+                $unitsCourse = $unitsCourseStmt->fetch(PDO::FETCH_ASSOC);
+                $splitRecorded = is_array($unitsCourse) && ($unitsCourse['lecture_units'] !== null || $unitsCourse['lab_units'] !== null);
+                if ($splitRecorded && (int) ($unitsCourse['created_by_user_id'] ?? 0) !== (int) $authCtx['user_id']) {
+                    $pdo->rollBack();
+                    safe_error_response('Only the Faculty member who created this course can change its lecture and laboratory units.', 409);
+                    return;
+                }
+                if (faculty_class_has_grades($pdo, $csId)) {
+                    $pdo->rollBack();
+                    safe_error_response('Lecture and laboratory units cannot change after scores or grades have been recorded for this class.', 409);
+                    return;
+                }
+                if ($editLectureUnits === null && $editLabUnits === null) {
+                    throw new ValidationException(['lectureUnits' => 'Choose lecture units, laboratory units, or both.']);
+                }
+                $pdo->prepare('UPDATE courses SET lecture_units = ?, lab_units = ?, units = ? WHERE course_id = ?')->execute([
+                    $editLectureUnits ?? 0,
+                    $editLabUnits ?? 0,
+                    ($editLectureUnits ?? 0) + ($editLabUnits ?? 0),
+                    (int) $before['course_id'],
+                ]);
             }
 
             if ($hasCourseUpdates) {
