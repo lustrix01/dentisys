@@ -50,6 +50,7 @@ import {
   type GuidanceIssue,
   type GuidedCapturePhase,
 } from '../../utils/guidedCapture';
+import { GuidedCaptureStatus } from '../../components/GuidedCaptureStatus';
 import { playGuidanceSuccessTone, primeGuidanceAudio } from '../../utils/guidanceAudio';
 
 // Mock Geofence center for simulation only
@@ -111,12 +112,6 @@ function formatAction(action: LivenessAction): { title: string; instruction: str
       return { title: 'Look Directly', instruction: 'Look directly into the camera frame.' };
   }
 }
-
-const GUIDANCE_ISSUE_MESSAGES: Record<GuidanceIssue, string> = {
-  no_face: 'We can’t see your face. Center your face inside the guide.',
-  multiple_faces: 'More than one face is in view. Make sure only you are in the frame.',
-  low_quality: 'The image is blurry or too dark. Face a light source and hold still.',
-};
 
 export const Attendance: React.FC = () => {
   const navigate = useNavigate();
@@ -586,7 +581,9 @@ export const Attendance: React.FC = () => {
           ? 'Your face was not detected in the camera frames. Center your face in the guide and retry the guided check-in.'
           : result.reason === 'camera_frame_unavailable'
             ? 'The camera did not provide usable frames. Check camera access and retry the guided check-in.'
-            : `No ${formatAction(result.expectedAction).title.toLowerCase()} was observed. Follow the prompt and retry the guided check-in.`);
+            : result.reason === 'frames_not_usable'
+              ? 'The camera image was too blurry or dark to use. Face a light source and retry the guided check-in.'
+              : `No ${formatAction(result.expectedAction).title.toLowerCase()} was observed. Follow the prompt and retry the guided check-in.`);
         setCapturePhase('idle');
         setPhaseInstruction('');
         return;
@@ -1201,42 +1198,19 @@ export const Attendance: React.FC = () => {
                         : 'border-white/60 border-dashed'
                         }`} />
                     </div>
-
-                    {/* Active Guided Capture Phase Overlay */}
-                    {capturePhase !== 'idle' && (
-                      <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-slate-950/90 via-slate-950/75 to-transparent p-4 text-center text-white space-y-2 z-10 animate-fade-in">
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600/90 text-white font-extrabold text-[11px] shadow-sm uppercase tracking-wider">
-                          {capturePhase === 'phase1_neutral' && 'Phase 1 of 3: Frontal / Neutral Face'}
-                          {capturePhase === 'phase2_action1' && `Phase 2 of 3: Action 1 (${livenessChallenge ? formatAction(livenessChallenge.actions[0]).title : ''})`}
-                          {capturePhase === 'phase3_action2' && `Phase 3 of 3: Action 2 (${livenessChallenge ? formatAction(livenessChallenge.actions[1]).title : ''})`}
-                          {capturePhase === 'complete' && 'Liveness actions complete'}
-                          {capturePhase === 'uploading' && 'Transmitting Verification'}
-                        </div>
-                        {lastActionSuccess && capturePhase !== 'uploading' && (
-                          <p className="text-xs font-extrabold text-emerald-300" role="status">
-                            ✓ {lastActionSuccess} detected. Good.
-                          </p>
-                        )}
-                        <p className="text-xs font-semibold text-blue-200">
-                          {phaseInstruction}
-                        </p>
-                        {captureIssue && (
-                          <p role="alert" className="mx-auto max-w-xs rounded-lg bg-amber-500/90 px-3 py-1.5 text-xs font-bold text-slate-950">
-                            {GUIDANCE_ISSUE_MESSAGES[captureIssue]}
-                          </p>
-                        )}
-                        <div className="w-56 mx-auto bg-slate-800/80 h-2 rounded-full overflow-hidden border border-slate-700">
-                          <div
-                            className="bg-blue-500 h-full transition-all duration-150"
-                            style={{ width: `${Math.min(100, Math.round((capturedFrameCount / 30) * 100))}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-slate-300 font-mono block">
-                          {capturedFrameCount} / 30 verification frames captured
-                        </span>
-                      </div>
-                    )}
                   </div>
+
+                  {/* Capture progress and warnings sit below the preview so the face stays visible. */}
+                  <GuidedCaptureStatus
+                    phase={capturePhase}
+                    actions={livenessChallenge?.actions ?? null}
+                    instruction={phaseInstruction}
+                    lastActionSuccess={lastActionSuccess}
+                    issue={captureIssue}
+                    capturedCount={capturedFrameCount}
+                    totalCount={30}
+                    uploadingLabel="Sending verification"
+                  />
 
                   {cameraError && (
                     <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">

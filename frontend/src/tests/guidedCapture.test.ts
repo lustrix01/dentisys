@@ -7,19 +7,18 @@ function frame(value: number): Blob {
   return new Blob([String(value)], { type: 'image/jpeg' });
 }
 
-test('guided capture advances only after measured baseline and actions in server order', async () => {
+const neutral = { detectedAction: null, faceDetected: true };
+
+test('guided capture moves step by step: neutral, action 1, neutral, action 2, neutral', async () => {
   const phases: GuidedCapturePhase[] = [];
+  // targetFrames 20 -> 18 neutral samples split 6 / 6 / 6.
   const guidance: Array<{ detectedAction: LivenessAction | null; faceDetected: boolean }> = [
-    { detectedAction: null, faceDetected: true },
-    { detectedAction: null, faceDetected: true },
-    { detectedAction: null, faceDetected: true },
+    ...Array(6).fill(neutral),
     { detectedAction: 'turn_right', faceDetected: true },
     { detectedAction: 'turn_left', faceDetected: true },
-    { detectedAction: 'turn_left', faceDetected: true },
-    { detectedAction: null, faceDetected: true },
-    { detectedAction: null, faceDetected: true },
-    { detectedAction: null, faceDetected: true },
+    ...Array(6).fill(neutral),
     { detectedAction: 'blink', faceDetected: true },
+    ...Array(6).fill(neutral),
   ];
   const successes: LivenessAction[] = [];
   const waits: number[] = [];
@@ -29,7 +28,7 @@ test('guided capture advances only after measured baseline and actions in server
     actions: ['turn_left', 'blink'],
     targetFrames: 20,
     captureFrame: async () => frame(captureCount++),
-    analyzeFrame: async () => guidance.shift() ?? { detectedAction: null, faceDetected: true },
+    analyzeFrame: async () => guidance.shift() ?? neutral,
     isCancelled: () => false,
     onPhase: phase => phases.push(phase),
     onFrameCount: () => undefined,
@@ -39,8 +38,9 @@ test('guided capture advances only after measured baseline and actions in server
 
   assert.equal(result.status, 'complete');
   assert.equal(result.frames.length, 20);
+  assert.equal(guidance.length, 0, 'capture stops as soon as the last neutral step is full');
   assert.deepEqual(successes, ['turn_left', 'blink']);
-  assert.deepEqual(phases.slice(0, 5), [
+  assert.deepEqual(phases, [
     'phase1_neutral',
     'phase2_action1',
     'phase1_neutral',
@@ -48,6 +48,36 @@ test('guided capture advances only after measured baseline and actions in server
     'complete',
   ]);
   assert.equal(waits.filter(milliseconds => milliseconds === 1000).length, 2);
+});
+
+test('guided capture waits at every action step and never counts frames until the action is done', async () => {
+  const counts: number[] = [];
+  const phases: GuidedCapturePhase[] = [];
+  const guidance: Array<{ detectedAction: LivenessAction | null; faceDetected: boolean }> = [
+    ...Array(6).fill(neutral),
+    // Student keeps looking forward or does the wrong action: nothing is captured.
+    ...Array(25).fill(neutral),
+    ...Array(5).fill({ detectedAction: 'turn_right', faceDetected: true }),
+  ];
+  const result = await runGuidedCapture({
+    actions: ['blink', 'turn_left'],
+    targetFrames: 20,
+    maxAttempts: guidance.length,
+    captureFrame: async () => frame(1),
+    analyzeFrame: async () => guidance.shift() ?? neutral,
+    isCancelled: () => false,
+    onPhase: phase => phases.push(phase),
+    onFrameCount: count => counts.push(count),
+    wait: async () => undefined,
+  });
+  assert.equal(result.status, 'timeout');
+  if (result.status === 'timeout') {
+    assert.equal(result.reason, 'action_not_observed');
+    assert.equal(result.expectedAction, 'blink');
+  }
+  assert.deepEqual(phases, ['phase1_neutral', 'phase2_action1']);
+  assert.equal(Math.max(...counts), 6, 'the counter stops at the first neutral step');
+  assert.equal(result.frames.length, 6);
 });
 
 test('guided capture times out with a retryable reason when an action is never observed', async () => {
@@ -89,10 +119,10 @@ test('guided capture cancellation does not advance or return a submission', asyn
 
 test('guided capture waits for a slow student instead of timing out when the frame budget fills', async () => {
   const guidance: Array<{ detectedAction: LivenessAction | null; faceDetected: boolean }> = [];
-  for (let i = 0; i < 3; i++) guidance.push({ detectedAction: null, faceDetected: true });
+  for (let i = 0; i < 10; i++) guidance.push({ detectedAction: null, faceDetected: true });
   for (let i = 0; i < 40; i++) guidance.push({ detectedAction: null, faceDetected: true });
   guidance.push({ detectedAction: 'blink', faceDetected: true });
-  for (let i = 0; i < 3; i++) guidance.push({ detectedAction: null, faceDetected: true });
+  for (let i = 0; i < 9; i++) guidance.push({ detectedAction: null, faceDetected: true });
   for (let i = 0; i < 40; i++) guidance.push({ detectedAction: null, faceDetected: false });
   guidance.push({ detectedAction: 'turn_left', faceDetected: true });
   let count = 0;
@@ -159,17 +189,16 @@ test('guided capture does not advance on unusable frames and reports the live is
     wait: async () => undefined,
   });
   assert.deepEqual(issues, ['low_quality', null], 'issue is raised while it lasts and cleared when frames become usable');
-  assert.deepEqual(phases, ['phase1_neutral', 'phase2_action1'], 'the action prompt appears only after three usable frames');
+  assert.deepEqual(phases, ['phase1_neutral'], 'the action prompt waits until the neutral step is full of usable frames');
   assert.equal(result.status, 'timeout');
+  if (result.status === 'timeout') assert.equal(result.reason, 'frames_not_usable');
   assert.equal(result.frames.length, 3, 'unusable frames are never uploaded');
 });
 
 test('guided capture does not report quality issues for turned-head frames during an action', async () => {
   const issues: Array<string | null> = [];
   const guidance = [
-    { detectedAction: null, faceDetected: true, usable: true, issue: null },
-    { detectedAction: null, faceDetected: true, usable: true, issue: null },
-    { detectedAction: null, faceDetected: true, usable: true, issue: null },
+    ...Array(6).fill({ detectedAction: null, faceDetected: true, usable: true, issue: null }),
     { detectedAction: null, faceDetected: true, usable: false, issue: 'low_quality' as const },
     { detectedAction: null, faceDetected: true, usable: false, issue: 'low_quality' as const },
     { detectedAction: null, faceDetected: true, usable: false, issue: 'low_quality' as const },
@@ -178,7 +207,7 @@ test('guided capture does not report quality issues for turned-head frames durin
   await runGuidedCapture({
     actions: ['turn_left', 'blink'],
     targetFrames: 20,
-    maxAttempts: 7,
+    maxAttempts: 10,
     captureFrame: async () => frame(1),
     analyzeFrame: async () => guidance.shift() ?? { detectedAction: null, faceDetected: true },
     isCancelled: () => false,

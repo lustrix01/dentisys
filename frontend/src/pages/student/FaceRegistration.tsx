@@ -45,6 +45,7 @@ import {
   type GuidanceIssue,
   type GuidedCapturePhase,
 } from '../../utils/guidedCapture';
+import { GuidedCaptureStatus } from '../../components/GuidedCaptureStatus';
 import { playGuidanceSuccessTone, primeGuidanceAudio } from '../../utils/guidanceAudio';
 
 function formatAction(action: LivenessAction): { title: string; instruction: string } {
@@ -66,12 +67,6 @@ interface PendingEnrollmentPayload {
   idempotencyKey: string;
   frames: Blob[];
 }
-
-const GUIDANCE_ISSUE_MESSAGES: Record<GuidanceIssue, string> = {
-  no_face: 'We can’t see your face. Center your face inside the guide.',
-  multiple_faces: 'More than one face is in view. Make sure only you are in the frame.',
-  low_quality: 'The image is blurry or too dark. Face a light source and hold still.',
-};
 
 export const FaceRegistration: React.FC = () => {
   const navigate = useNavigate();
@@ -137,7 +132,7 @@ export const FaceRegistration: React.FC = () => {
   // --- SIMULATION (MOCK) STATE ---
   const storageKey = `dentisys_face_registered_${currentStudent?.id || '1'}`;
   const timestampKey = `dentisys_face_registered_at_${currentStudent?.id || '1'}`;
-  const [mockIsRegistered, setMockIsRegistered] = useState<boolean>(() => {
+  const [, setMockIsRegistered] = useState<boolean>(() => {
     return localStorage.getItem(storageKey) === 'true';
   });
   const [mockRegisteredAt, setMockRegisteredAt] = useState<string>(() => {
@@ -490,7 +485,9 @@ export const FaceRegistration: React.FC = () => {
           ? 'Your face was not detected in the camera frames. Center your face in the guide and retry the guided capture.'
           : result.reason === 'camera_frame_unavailable'
             ? 'The camera did not provide usable frames. Check camera access and retry the guided capture.'
-            : `No ${formatAction(result.expectedAction).title.toLowerCase()} was observed. Follow the prompt and retry the guided capture.`);
+            : result.reason === 'frames_not_usable'
+              ? 'The camera image was too blurry or dark to use. Face a light source and retry the guided capture.'
+              : `No ${formatAction(result.expectedAction).title.toLowerCase()} was observed. Follow the prompt and retry the guided capture.`);
         setCapturePhase('idle');
         setPhaseInstruction('');
         return;
@@ -624,12 +621,6 @@ export const FaceRegistration: React.FC = () => {
     }
   };
 
-  const handleStartReEnrollment = () => {
-    setAuthStep(1);
-    setHasAgreed(false);
-    setAuthError(null);
-  };
-
   // --- MOCK PROTOTYPE HANDLERS ---
   const handleMockProceedToScan = () => {
     if (!simulationEnabled || !hasAgreed) return;
@@ -716,37 +707,6 @@ export const FaceRegistration: React.FC = () => {
             <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
             <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentIdNum}</span>
           </div>
-
-          {isAuthoritative ? (
-            isAuthoritativeActiveEnrolled(profile?.enrollmentStatus) && currentStep === 3 && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleStartReEnrollment}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-all cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  <span>Re-Enroll</span>
-                </button>
-                <button
-                  onClick={() => setShowRevokeModal(true)}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs transition-all cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Revoke</span>
-                </button>
-              </div>
-            )
-          ) : (
-            mockIsRegistered && currentStep === 3 && (
-              <button
-                onClick={handleMockReRegister}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
-              >
-                <RefreshCw className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span>Re-Register Face</span>
-              </button>
-            )
-          )}
         </div>
       </div>
 
@@ -774,7 +734,8 @@ export const FaceRegistration: React.FC = () => {
         </div>
       )}
 
-      {/* 3-Step Visual Progress Bar */}
+      {/* 3-Step Visual Progress Bar (hidden once registered) */}
+      {currentStep !== 3 && (
       <div className="grid grid-cols-3 gap-3">
         <div className={`p-3 rounded-2xl border text-center transition-all ${currentStep === 1
           ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
@@ -796,14 +757,12 @@ export const FaceRegistration: React.FC = () => {
           <span className="text-xs font-extrabold block mt-0.5">Liveness & Capture</span>
         </div>
 
-        <div className={`p-3 rounded-2xl border text-center transition-all ${currentStep === 3
-          ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
-          : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800'
-          }`}>
+        <div className="p-3 rounded-2xl border text-center transition-all bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-800">
           <span className="text-[10px] font-bold uppercase tracking-wider block">Step 3</span>
           <span className="text-xs font-extrabold block mt-0.5">Registration Status</span>
         </div>
       </div>
+      )}
 
       {/* STEP 1: PRIVACY & DATA CONSENT AGREEMENT */}
       {currentStep === 1 && (
@@ -1002,41 +961,6 @@ export const FaceRegistration: React.FC = () => {
                     }`} />
                 </div>
 
-                {/* Active Guided Capture Phase Overlay */}
-                {isAuthoritative && capturePhase !== 'idle' && (
-                  <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-slate-950/90 via-slate-950/75 to-transparent p-4 text-center text-white space-y-2 z-10 animate-fade-in">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-600/90 text-white font-extrabold text-[11px] shadow-sm uppercase tracking-wider">
-                      {capturePhase === 'phase1_neutral' && 'Phase 1 of 3: Frontal / Neutral Face'}
-                      {capturePhase === 'phase2_action1' && `Phase 2 of 3: Action 1 (${livenessChallenge ? formatAction(livenessChallenge.actions[0]).title : ''})`}
-                      {capturePhase === 'phase3_action2' && `Phase 3 of 3: Action 2 (${livenessChallenge ? formatAction(livenessChallenge.actions[1]).title : ''})`}
-                      {capturePhase === 'complete' && 'Liveness actions complete'}
-                      {capturePhase === 'uploading' && 'Submitting Candidate Frames'}
-                    </div>
-                    {lastActionSuccess && capturePhase !== 'uploading' && (
-                      <p className="text-xs font-extrabold text-emerald-300" role="status">
-                        ✓ {lastActionSuccess} detected. Good.
-                      </p>
-                    )}
-                    <p className="text-xs font-semibold text-blue-200">
-                      {phaseInstruction}
-                    </p>
-                    {captureIssue && (
-                      <p role="alert" className="mx-auto max-w-xs rounded-lg bg-amber-500/90 px-3 py-1.5 text-xs font-bold text-slate-950">
-                        {GUIDANCE_ISSUE_MESSAGES[captureIssue]}
-                      </p>
-                    )}
-                    <div className="w-56 mx-auto bg-slate-800/80 h-2 rounded-full overflow-hidden border border-slate-700">
-                      <div
-                        className="bg-blue-500 h-full transition-all duration-150"
-                        style={{ width: `${Math.min(100, Math.round((capturedFrameCount / 30) * 100))}%` }}
-                      />
-                    </div>
-                    <span className="text-[10px] text-slate-300 font-mono block">
-                      {capturedFrameCount} / 30 candidate frames captured
-                    </span>
-                  </div>
-                )}
-
                 {/* Mock Scanning Overlay */}
                 {!isAuthoritative && mockScanning && (
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 to-transparent p-4 text-center text-white space-y-1.5">
@@ -1053,6 +977,20 @@ export const FaceRegistration: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* Capture progress and warnings sit below the preview so the face stays visible. */}
+              {isAuthoritative && (
+                <GuidedCaptureStatus
+                  phase={capturePhase}
+                  actions={livenessChallenge?.actions ?? null}
+                  instruction={phaseInstruction}
+                  lastActionSuccess={lastActionSuccess}
+                  issue={captureIssue}
+                  capturedCount={capturedFrameCount}
+                  totalCount={30}
+                  uploadingLabel="Submitting samples for verification"
+                />
+              )}
 
               {/* Server Usable Sample Progress Notice */}
               {isAuthoritative && serverUsableCount > 0 && (
@@ -1183,11 +1121,14 @@ export const FaceRegistration: React.FC = () => {
             </div>
             <div>
               <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest block">
-                Biometric Registration Active
+                Registered
               </span>
               <h2 className="text-xl font-extrabold text-slate-800 dark:text-slate-100">
-                Facial Biometric Reference Enrolled & Active
+                Your face is registered for attendance
               </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                No further action is needed. To register again, revoke this registration first.
+              </p>
             </div>
           </div>
 
@@ -1233,10 +1174,11 @@ export const FaceRegistration: React.FC = () => {
               {isAuthoritative ? (
                 <>
                   <button
-                    onClick={handleStartReEnrollment}
-                    className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
+                    onClick={() => setShowRevokeModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
                   >
-                    Re-Enroll
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Revoke Registration
                   </button>
                   <button
                     onClick={() => navigate('/student/attendance')}
@@ -1250,9 +1192,10 @@ export const FaceRegistration: React.FC = () => {
                 <>
                   <button
                     onClick={handleMockReRegister}
-                    className="px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-700 dark:text-rose-300 font-bold text-xs transition-all cursor-pointer flex-shrink-0"
                   >
-                    Re-Register Face
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Revoke Registration
                   </button>
                   <button
                     onClick={() => navigate('/student/attendance')}
@@ -1277,7 +1220,7 @@ export const FaceRegistration: React.FC = () => {
                 <Trash2 className="w-5 h-5" />
               </div>
               <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
-                Revoke Biometric Enrollment?
+                Revoke Face Registration?
               </h3>
             </div>
 
@@ -1286,7 +1229,7 @@ export const FaceRegistration: React.FC = () => {
             </p>
 
             <p className="text-xs text-slate-500 leading-relaxed">
-              Past verified attendance records will remain preserved. You will need to re-enroll or use Secretary/Faculty manual attendance for future sessions.
+              Past verified attendance records will remain preserved. After revoking you can register again from this page, or use Secretary/Faculty manual attendance for future sessions.
             </p>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -1308,7 +1251,7 @@ export const FaceRegistration: React.FC = () => {
                     <span>Revoking…</span>
                   </>
                 ) : (
-                  <span>Yes, Revoke Enrollment</span>
+                  <span>Yes, Revoke Registration</span>
                 )}
               </button>
             </div>

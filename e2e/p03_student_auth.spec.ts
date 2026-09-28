@@ -248,6 +248,60 @@ test.describe('P03 Student identity and authentication', () => {
     }
   });
 
+  test('an enrolled Student sees a Registered screen that only offers revoking', async ({ page }) => {
+    const student = {
+      user_id: 27,
+      login_email: 'enrolled.student@bicol-u.edu.ph',
+      display_name: 'Enrolled Student',
+      role: 'student',
+      session_uuid: 'enrolled-student-session',
+      authentication_source: 'password',
+      student: { student_id: 27, student_number: 'P03-ENROLLED', status: 'active' },
+    };
+    let revoked = false;
+    await page.route('**/api/runtime-config', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        ...ENABLED_RUNTIME_CONFIG,
+        providers: { ...ENABLED_RUNTIME_CONFIG.providers, biometrics: { active: 'sidecar' } },
+      }) });
+    });
+    await page.route('**/api/auth/refresh', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'enrolled-student-token', user: { user_id: 27 } }) });
+    });
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(student) });
+    });
+    await page.route('**/api/student/biometric/profile', async route => {
+      if (route.request().method() === 'DELETE') {
+        revoked = true;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', enrollmentStatus: 'revoked' }) });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok',
+        consentGranted: true,
+        enrollmentStatus: 'active',
+        enrolledAt: '2026-09-27T08:00:00+08:00',
+        expiresAt: '2026-12-20',
+        usableSampleCount: 28,
+        requiredUsableSamples: 20,
+        manualFallbackAvailable: true,
+      }) });
+    });
+
+    await page.goto('/student/face-registration');
+    const main = page.getByRole('main');
+    await expect(main.getByText('Your face is registered for attendance')).toBeVisible();
+    await expect(main.getByText('Privacy Agreement')).toHaveCount(0);
+    await expect(main.getByRole('button', { name: /Re-Enroll|Re-Register|Continue to Camera Scan/i })).toHaveCount(0);
+
+    await main.getByRole('button', { name: 'Revoke Registration' }).click();
+    await page.getByRole('button', { name: 'Yes, Revoke Registration' }).click();
+    await expect.poll(() => revoked).toBe(true);
+    await expect(main.getByText('Data Privacy & Facial Biometrics Consent')).toBeVisible();
+    await expect(main.getByText('Your face is registered for attendance')).toHaveCount(0);
+  });
+
   test('development-mock Student retains the gated prototype subtree and actions', async ({ page }) => {
     await page.route('**/api/runtime-config', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
