@@ -850,6 +850,8 @@ export interface FacultyRetentionRecord {
   remedialProgression?: FacultyRemedialProgression;
   /** Server-computed: grade at/above the trigger, current school year, not legacy. */
   remedialEligible?: boolean;
+  /** Status was set by Faculty and is kept until the course grade changes. */
+  manualOverride?: boolean;
 }
 
 export function getFacultyRetentionApi(): Promise<{

@@ -3061,6 +3061,42 @@ function handle_faculty_scores_save(): void
     }
 }
 
+/**
+ * Persist a computed course grade. A Faculty retention override is kept
+ * while the recomputed grade equals the grade at override time; any grade
+ * change (better or worse) clears it and the computed state applies.
+ * (Right-hand sides of an UPDATE read the old row.)
+ */
+function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, string $retention, array $breakdown, int $enrollmentId): void
+{
+    $stmt = $pdo->prepare(
+        "UPDATE enrollments
+         SET final_percentage = :percentage, final_gwa = :gwa,
+             retention_state = CASE
+                 WHEN retention_override_state IS NOT NULL
+                  AND retention_override_gwa IS NOT DISTINCT FROM ROUND(CAST(:gwa_keep AS NUMERIC), 2)
+                 THEN retention_override_state ELSE :retention END,
+             retention_override_state = CASE
+                 WHEN retention_override_gwa IS NOT DISTINCT FROM ROUND(CAST(:gwa_keep2 AS NUMERIC), 2)
+                 THEN retention_override_state ELSE NULL END,
+             retention_override_gwa = CASE
+                 WHEN retention_override_gwa IS NOT DISTINCT FROM ROUND(CAST(:gwa_keep3 AS NUMERIC), 2)
+                 THEN retention_override_gwa ELSE NULL END,
+             grade_components_json = :components
+         WHERE enrollment_id = :enrollment_id"
+    );
+    $stmt->execute([
+        ':percentage' => $percentage,
+        ':gwa' => $gwa,
+        ':gwa_keep' => $gwa,
+        ':gwa_keep2' => $gwa,
+        ':gwa_keep3' => $gwa,
+        ':retention' => $retention,
+        ':components' => json_encode($breakdown, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ':enrollment_id' => $enrollmentId,
+    ]);
+}
+
 function handle_faculty_grades_compute(): void
 {
     $pdo = null;
@@ -3243,11 +3279,9 @@ function handle_faculty_grades_compute(): void
         // The legacy JSON remains the response-compatible write surface;
         // migration 020's trigger refreshes the normalized scalar/category
         // projection atomically.
-        $updateWithBreakdown = $pdo->prepare(
-            "UPDATE enrollments
-             SET final_percentage = ?, final_gwa = ?, retention_state = ?, grade_components_json = ?
-             WHERE enrollment_id = ?"
-        );
+        $saveComputedGrade = static function (float $percentage, float $gwa, string $retention, array $breakdown, int|string $enrollmentId) use ($pdo): void {
+            faculty_save_computed_grade($pdo, $percentage, $gwa, $retention, $breakdown, (int) $enrollmentId);
+        };
         foreach ($grouped as $group) {
             if ($group['configId'] !== null && $group['schemaMode'] === 'periods') {
                 $midterm = faculty_compute_period_result($pdo, $group, 'Midterm');
@@ -3301,13 +3335,7 @@ function handle_faculty_grades_compute(): void
                 $periodBreakdown['percentage'] = $percentage;
                 $periodBreakdown['gwa'] = $gwa;
                 $periodBreakdown['retentionState'] = $retention;
-                $updateWithBreakdown->execute([
-                    $percentage,
-                    $gwa,
-                    $retention,
-                    json_encode($periodBreakdown, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                    $group['enrollmentId'],
-                ]);
+                $saveComputedGrade($percentage, $gwa, $retention, $periodBreakdown, $group['enrollmentId']);
                 $results[] = [
                     'status' => 'computed',
                     'enrollmentId' => $group['enrollmentId'],
@@ -3404,13 +3432,7 @@ function handle_faculty_grades_compute(): void
                     'categories' => $categoryBreakdown,
                     'retentionThreshold' => $retentionThreshold,
                 ];
-                $updateWithBreakdown->execute([
-                    $percentage,
-                    $gwa,
-                    $retention,
-                    json_encode($breakdown, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                    $group['enrollmentId'],
-                ]);
+                $saveComputedGrade($percentage, $gwa, $retention, $breakdown, $group['enrollmentId']);
                 $results[] = [
                     'status' => 'computed',
                     'enrollmentId' => $group['enrollmentId'],
@@ -3486,13 +3508,7 @@ function handle_faculty_grades_compute(): void
                 'attendanceWeight' => $effectiveAttendanceWeight,
                 'retentionThreshold' => $retentionThreshold,
             ];
-            $updateWithBreakdown->execute([
-                $percentage,
-                $gwa,
-                $retention,
-                json_encode($breakdown, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                $group['enrollmentId'],
-            ]);
+            $saveComputedGrade($percentage, $gwa, $retention, $breakdown, $group['enrollmentId']);
             $results[] = [
                 'status' => 'computed',
                 'enrollmentId' => $group['enrollmentId'],
@@ -4616,7 +4632,7 @@ function handle_faculty_retention_get(): void
                     COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                     COALESCE(egb.retention_state, e.retention_state) AS retention_state,
-                    e.remedial_state_json, s.student_number,
+                    e.remedial_state_json, s.student_number, e.retention_override_state,
                     COALESCE(pi.first_name, s.first_name) AS first_name,
                     COALESCE(pi.middle_name, s.middle_name) AS middle_name,
                     COALESCE(pi.last_name, s.last_name) AS last_name,
@@ -4673,6 +4689,8 @@ function handle_faculty_retention_get(): void
             'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
             'state' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
             'storedState' => $row['retention_state'],
+            // A Faculty override stays until the course grade changes.
+            'manualOverride' => $row['retention_override_state'] !== null,
             'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
             'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'watchlistUnlocked' => $row['unlocked_at'] !== null,
@@ -5247,8 +5265,14 @@ function handle_faculty_retention_status_update(): void
         // The override reason is kept in the audit trail. It must not be written
         // into remedial_state_json: that column is legacy remedial evidence, and
         // any value there blocks canonical remedial scheduling.
-        $stmt = $pdo->prepare('UPDATE enrollments SET retention_state = ? WHERE enrollment_id = ?');
-        $stmt->execute([$state, (int) $overrideTarget['enrollment_id']]);
+        // Kept across recomputation until the course grade changes.
+        $stmt = $pdo->prepare(
+            'UPDATE enrollments
+                SET retention_state = ?, retention_override_state = ?,
+                    retention_override_gwa = final_gwa, retention_override_at = CURRENT_TIMESTAMP(6)
+              WHERE enrollment_id = ?'
+        );
+        $stmt->execute([$state, $state, (int) $overrideTarget['enrollment_id']]);
         $now = gmdate('Y-m-d\TH:i:s\Z');
         $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
         $auditCtx = audit_begin_operation($pdo);

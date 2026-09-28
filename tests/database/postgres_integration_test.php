@@ -30,6 +30,7 @@ require_once $root . '/backend/controllers/GoogleAuthController.php';
 require_once $root . '/backend/controllers/FacultyInvitationController.php';
 require_once $root . '/backend/controllers/StudentAuthController.php';
 require_once $root . '/backend/controllers/HealthController.php';
+require_once $root . '/backend/controllers/FacultyController.php';
 
 function expect_true(bool $condition, string $label): void
 {
@@ -247,6 +248,7 @@ $expectedMigrations = [
     '031_course_components_and_class_titles.sql',
     '032_remedial_cost_recovery.sql',
     '033_canonical_class_semester.sql',
+    '034_retention_status_override.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2097,6 +2099,40 @@ $studentRetentionNotificationRow = array_values(array_filter(
         && ($row['type'] ?? null) === 'retention_status'
 ))[0] ?? null;
 expect_true(is_array($studentRetentionNotificationRow), 'Student notification list returns the retention status notification');
+
+// A Faculty override survives grade recomputation while the course grade is
+// unchanged, and yields to the computed state once the grade changes.
+$overrideEnrollmentId = (int) $studentNotificationTarget['enrollment_id'];
+$overrideStateStmt = $pdo->prepare(
+    'SELECT retention_state, retention_override_state, retention_override_gwa::text AS override_gwa,
+            final_percentage, final_gwa, grade_components_json::text AS grade_components_json
+       FROM enrollments WHERE enrollment_id = ?'
+);
+$overrideStateStmt->execute([$overrideEnrollmentId]);
+$overrideOriginal = $overrideStateStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('critical', $overrideOriginal['retention_override_state'] ?? null, 'Retention override is recorded as a manual override');
+// Recompute with the same grade as at override time: the override is kept.
+$pdo->prepare('UPDATE enrollments SET retention_override_gwa = 2.10 WHERE enrollment_id = ?')->execute([$overrideEnrollmentId]);
+faculty_save_computed_grade($pdo, 80.0, 2.1, 'active', ['calculationMode' => 'integration'], $overrideEnrollmentId);
+$overrideStateStmt->execute([$overrideEnrollmentId]);
+$overrideAfterSame = $overrideStateStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('critical', $overrideAfterSame['retention_state'] ?? null, 'Recompute with an unchanged grade keeps the Faculty override');
+expect_same('critical', $overrideAfterSame['retention_override_state'] ?? null, 'The override stays recorded while the grade is unchanged');
+// The grade changes (better or worse): the computed state replaces the override.
+faculty_save_computed_grade($pdo, 90.0, 1.5, 'active', ['calculationMode' => 'integration'], $overrideEnrollmentId);
+$overrideStateStmt->execute([$overrideEnrollmentId]);
+$overrideAfterChange = $overrideStateStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('active', $overrideAfterChange['retention_state'] ?? null, 'After the grade changes, the computed retention state applies');
+expect_true(is_array($overrideAfterChange) && $overrideAfterChange['retention_override_state'] === null, 'A changed course grade clears the Faculty override');
+// Restore the demo enrollment for later checks.
+$pdo->prepare(
+    'UPDATE enrollments SET final_percentage = ?, final_gwa = ?, retention_state = ?, grade_components_json = ?::jsonb,
+            retention_override_state = NULL, retention_override_gwa = NULL, retention_override_at = NULL
+      WHERE enrollment_id = ?'
+)->execute([
+    $overrideOriginal['final_percentage'], $overrideOriginal['final_gwa'], $overrideOriginal['retention_state'],
+    $overrideOriginal['grade_components_json'], $overrideEnrollmentId,
+]);
 
 // Approved two-attempt remedial progression is exercised through the real
 // Faculty route. These disposable invitation fixtures have no legacy attempt

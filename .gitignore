@@ -44,3 +44,4 @@ playwright-report/
 *.sw?
 .dentisys-local
 .agent-worktrees/
+frontend/certs/

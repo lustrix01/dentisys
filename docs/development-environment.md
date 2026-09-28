@@ -162,3 +162,16 @@ Warnings:
 - Links inside emails use `APP_BASE_URL` (`http://localhost:5173` by default), so they only open on the computer that runs DentiSys.
 - `check-postgres.ps1` and the automated tests always use Mailpit, whatever `.env` says.
 - Switch back to Mailpit by setting `EMAIL_PROVIDER=mailpit` and `SMTP_HOST=mailpit`, `SMTP_PORT=1025`, `SMTP_ENCRYPTION=none`, `SMTP_VERIFY_PEER=false`, then `docker compose up -d web`.
+
+## Testing on a phone (same Wi-Fi)
+
+Phone browsers allow the camera (face registration and biometric attendance) only on HTTPS or `localhost`, so the phone needs an HTTPS address for your PC. For development only:
+
+1. Run `.\scripts\dev-lan-https.ps1`. It creates a self-signed certificate for your PC's LAN address in `frontend/certs/` (git-ignored, valid 30 days), sets `FRONTEND_BIND_ADDRESS=0.0.0.0` and `VITE_DEV_HTTPS=true` in `.env`, and restarts the frontend container.
+2. On the phone, open the `https://<your-PC-IP>:5173` address the script prints and accept the certificate warning (Advanced > Proceed).
+3. If the phone cannot connect, allow the port once from an administrator PowerShell: `New-NetFirewallRule -DisplayName "DentiSys dev 5173" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow -Profile Private`.
+
+Notes:
+- While this is on, your PC uses `https://localhost:5173` too.
+- Google sign-in does not work from a LAN address or from `https://localhost` unless that origin is added to the Google OAuth client; sign in with a password when testing on the phone.
+- Anyone on the same network can reach the dev site while this is on. Turn it off with `.\scripts\dev-lan-https.ps1 -Disable`.

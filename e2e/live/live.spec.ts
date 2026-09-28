@@ -129,14 +129,14 @@ test('administrator login, auth/me, reload refresh, settings, and logout invalid
   expect(Array.isArray(auditPayload)).toBeTruthy();
   expect(auditPayload.some((event: { action?: string }) => event.action === 'refresh_rotation')).toBeFalsy();
 
+  // Stop the mounted application before logging out; otherwise a background
+  // UI request (notifications, session refresh) racing the logout reports
+  // the expected post-logout 401 as a browser console error.
+  await page.goto('about:blank');
   const logout = await page.request.post('/api/auth/logout', {
     headers: { Authorization: `Bearer ${credentials.access_token}` },
   });
   expect(logout.status()).toBeLessThan(500);
-  // Stop the mounted application before proving the refresh credential was
-  // invalidated; otherwise an in-flight UI request can report the expected
-  // post-logout 401 as a browser console error.
-  await page.goto('about:blank');
   const invalidated = await page.request.post('/api/auth/refresh');
   expect(invalidated.status()).toBe(401);
 });

@@ -123,7 +123,9 @@ test.describe('Faculty Module E2E Tests', () => {
         window.history.pushState({}, '', '/email-management');
         window.dispatchEvent(new PopStateEvent('popstate'));
       });
-      await expect(appPage.getByText('Canonical Student')).toBeVisible();
+      // The roster loads after the in-app navigation; allow for a busy test
+      // machine (parallel workers) instead of the default 5 s.
+      await expect(appPage.getByText('Canonical Student')).toBeVisible({ timeout: 20000 });
       await expect(appPage.getByText('Unscoped Student')).toBeVisible();
       await appPage.locator('tbody input[type="checkbox"]').nth(0).check();
       await appPage.locator('tbody input[type="checkbox"]').nth(1).check();
