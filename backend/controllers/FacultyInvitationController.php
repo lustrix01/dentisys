@@ -283,10 +283,8 @@ function handle_admin_faculty_invitation_create(): void
         }
 
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
-        $safeName = htmlspecialchars($name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $safeLink = htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $subject = 'DentiSys Faculty Invitation';
-        $message = "<p>Hello {$safeName},</p><p>An administrator has invited you to DentiSys. This invitation is your approval to establish a Faculty account.</p><p><a href=\"{$safeLink}\">Accept your Faculty invitation</a></p><p>Create your DentiSys password within seven days. Google verification is optional.</p>";
+        $message = email_faculty_invitation_html($name, $email, $link);
         $sent = send_email($email, $subject, $message, $config, true);
         $showDevLink = !empty($config['show_dev_invitation_link']);
         json_response([
@@ -441,7 +439,7 @@ function handle_admin_faculty_invitation_update(): void
         $sent = send_email(
             $email,
             'DentiSys Faculty Invitation Updated',
-            '<p>Your pending DentiSys Faculty invitation was updated.</p><p><a href="' . htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">Accept your Faculty invitation</a></p>',
+            email_faculty_invitation_html($name, $email, $link, true),
             $config,
             true
         );
@@ -670,10 +668,8 @@ function handle_admin_faculty_invitation_reissue(): void
         $name = account_identity_display_name($account);
         $email = (string) $account['login_email'];
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
-        $safeName = htmlspecialchars($name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        $safeLink = htmlspecialchars($link, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $subject = 'DentiSys Faculty Invitation';
-        $message = "<p>Hello {$safeName},</p><p>An administrator has invited you to DentiSys. This invitation is your approval to establish a Faculty account.</p><p><a href=\"{$safeLink}\">Accept your Faculty invitation</a></p><p>Create your DentiSys password within seven days. Google verification is optional.</p>";
+        $message = email_faculty_invitation_html($name, $email, $link);
         $sent = send_email($email, $subject, $message, $config, true);
         $showDevLink = !empty($config['show_dev_invitation_link']);
         json_response([

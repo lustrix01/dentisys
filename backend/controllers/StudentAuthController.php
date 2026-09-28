@@ -110,7 +110,7 @@ function handle_student_invitation_create(): void
                         COALESCE(pi.name_suffix, s.name_suffix) AS canonical_name_suffix,
                         s.name_prefix, s.first_name, s.middle_name, s.last_name, s.name_suffix,
                         s.bu_email, s.status,
-                        s.student_account_user_id, s.user_id, cs.cs_id, cs.cs_name, cs.school_year
+                        s.student_account_user_id, s.user_id, cs.cs_id, cs.cs_name, cs.school_year, cs.course_title
                    FROM students s
                    JOIN person_identities pi ON pi.person_id = s.person_id
                    JOIN enrollments e ON e.student_id = s.student_id
@@ -268,7 +268,7 @@ function handle_student_invitation_create(): void
 
             $invitationLink = app_url($config, '/activate-student', ['token' => $rawToken]);
             $subject = 'DentiSys Student Invitation';
-            $messageBody = student_auth_activation_email($student, $invitationLink);
+            $messageBody = student_auth_activation_email($student, $invitationLink, (string) ($authCtx['display_name'] ?? ''));
             $outbox = $pdo->prepare(
                 "INSERT INTO email_outbox
                  (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)

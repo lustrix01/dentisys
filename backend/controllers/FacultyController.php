@@ -5530,8 +5530,7 @@ function handle_faculty_email_send(): void
             safe_error_response('One or more students are not enrolled in your classes.', 403);
             return;
         }
-        $safeMessage = nl2br(htmlspecialchars($messageText, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
-        $messageBody = "<p>{$safeMessage}</p>";
+        $facultySignature = (string) ($authCtx['display_name'] ?? '');
         $insert = $pdo->prepare(
             "INSERT INTO email_outbox
              (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)
@@ -5557,6 +5556,7 @@ function handle_faculty_email_send(): void
                 continue;
             }
             $operationUuid = uuid_v4_string();
+            $messageBody = email_faculty_message_html($recipientName, $facultySignature, $messageText);
             $insert->execute([
                 $authCtx['user_id'], $recipientEmail, $recipientName,
                 $subject, $emailType, $messageBody, $operationUuid,

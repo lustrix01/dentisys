@@ -60,6 +60,8 @@ function smtp_transport(string $to, string $subject, string $body, array $config
         'Subject' => $subject,
         'MIME-Version' => '1.0',
         'Content-Type' => 'text/html; charset=UTF-8',
+        // Base64 keeps long HTML lines within the SMTP 998-character limit.
+        'Content-Transfer-Encoding' => 'base64',
         'Date' => date('r'),
     ];
 
@@ -148,7 +150,7 @@ function smtp_transport(string $to, string $subject, string $body, array $config
         foreach ($headers as $name => $value) {
             $payload .= "{$name}: {$value}\r\n";
         }
-        $safeBody = preg_replace('/(?m)^\./', '..', $body) ?? $body;
+        $safeBody = rtrim(chunk_split(base64_encode($body), 76, "\r\n"), "\r\n");
         $expect($send($payload . "\r\n" . $safeBody . "\r\n."), ['250'], 'message delivery');
         $send('QUIT');
         fclose($socket);

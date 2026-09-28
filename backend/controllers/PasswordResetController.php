@@ -112,10 +112,7 @@ function handle_password_reset_request(): void
 
         if ($user !== false && $resetLink !== null) {
             $subject = 'DentiSys Password Reset Request';
-            $body = "<p>Hello " . htmlspecialchars((string) $user['display_name']) . ",</p>" .
-                    "<p>You requested a password reset for your DentiSys account. Click the link below to set a new password:</p>" .
-                    "<p><a href=\"" . htmlspecialchars($resetLink) . "\">" . htmlspecialchars($resetLink) . "</a></p>" .
-                    "<p>This link will expire in 24 hours. If you did not request this, please ignore this email.</p>";
+            $body = email_password_reset_html((string) $user['display_name'], $email, $resetLink);
 
             send_email($email, $subject, $body, $config);
         } else {

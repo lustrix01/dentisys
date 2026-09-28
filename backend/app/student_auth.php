@@ -195,14 +195,20 @@ function student_auth_student_display_name(array $student): string
     ], static fn(mixed $part): bool => $part !== null && trim((string) $part) !== ''))));
 }
 
-function student_auth_activation_email(array $student, string $link): string
+function student_auth_activation_email(array $student, string $link, string $facultyName = ''): string
 {
-    $name = htmlspecialchars(student_auth_student_display_name($student), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    $safeLink = htmlspecialchars($link);
-    return "<p>Hello {$name},</p>"
-        . '<p>A Faculty member has invited you to activate your DentiSys Student account.</p>'
-        . "<p><a href=\"{$safeLink}\">Activate your Student account</a></p>"
-        . '<p>This invitation expires in 24 hours. If it was unexpected, please contact your Faculty member.</p>';
+    $className = trim((string) ($student['cs_name'] ?? ''));
+    $courseTitle = trim((string) ($student['course_title'] ?? ''));
+    if ($courseTitle !== '' && strcasecmp($courseTitle, $className) !== 0) {
+        $className = $className !== '' ? "{$className} — {$courseTitle}" : $courseTitle;
+    }
+    return email_student_invitation_html(
+        student_auth_student_display_name($student),
+        trim($facultyName),
+        $className !== '' ? $className : 'your class',
+        trim((string) ($student['school_year'] ?? '')),
+        $link
+    );
 }
 
 function student_auth_activation_context(PDO $pdo, string $tokenDigest): ?array

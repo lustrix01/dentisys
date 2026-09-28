@@ -83,7 +83,7 @@ function handle_secretary_invite(): void
                                 NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''),
                                 NULLIF(pi.last_name, ''), NULLIF(pi.name_suffix, '')), ''),
                                 CONCAT_WS(' ', s.first_name, NULLIF(s.middle_name, ''), s.last_name)) AS persisted_name,
-                            cs.cs_id, cs.cs_name
+                            cs.cs_id, cs.cs_name, cs.school_year
                      FROM students s
                      JOIN person_identities pi ON pi.person_id = s.person_id
                      JOIN enrollments e ON e.student_id = s.student_id
@@ -184,16 +184,13 @@ function handle_secretary_invite(): void
 
         $invitationLink = app_url($config, '/activate-secretary', ['token' => $invToken]);
         $subject = 'DentiSys Class Secretary Invitation';
-        $facultyName = htmlspecialchars((string) $actorDisplayName);
-        $safeStudentName = htmlspecialchars((string) $studentName);
-        $safeClassName = htmlspecialchars((string) $className);
-        $safeLink = htmlspecialchars($invitationLink);
-
-        $body = "<p>Hello {$safeStudentName},</p>" .
-                "<p>You have been invited by <strong>{$facultyName}</strong> to register as the Class Secretary for <strong>{$safeClassName}</strong> on DentiSys.</p>" .
-                "<p>Please click the link below to set up your password and activate your Class Secretary account:</p>" .
-                "<p><a href=\"{$safeLink}\">{$safeLink}</a></p>" .
-                "<p>This invitation link will expire in 7 days. If you were not expecting this invitation, please ignore this email.</p>";
+        $body = email_secretary_invitation_html(
+            (string) $studentName,
+            (string) $actorDisplayName,
+            (string) $className,
+            (string) ($assignment['school_year'] ?? ''),
+            $invitationLink
+        );
 
         $operationUuid = uuid_v4_string();
         $outbox = $pdo->prepare(

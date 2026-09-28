@@ -57,7 +57,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
       case 'consent':
         return {
           title: 'Class Invitation & Student Account Activation',
-          subject: `Class Invitation: Join ${className || 'Dental Course'} (S.Y. ${schoolYear})`,
+          subject: 'DentiSys Student Invitation',
           sender: `${facultyName} via DentiSys Portal`,
           senderEmail: 'notifications@dentisys.bicol-u.edu.ph',
           icon: GraduationCap,
@@ -244,7 +244,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                 {/* Alternative Direct Link */}
                 <div className="space-y-1.5 pt-2">
                   <p className="text-[11px] text-slate-500">
-                    If the button above does not work, copy and paste this activation URL into your browser:
+                    If the button above does not work, copy and paste this link into your browser:
                   </p>
                   <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <span className="font-mono text-[11px] text-slate-600 dark:text-slate-400 truncate flex-1 select-all">
@@ -265,7 +265,7 @@ export const EmailPreviewModal: React.FC<EmailPreviewModalProps> = ({
                 <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs">
                   <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                   <p>
-                    <strong>Important:</strong> This class invitation link is unique to your institutional email address and will expire in <strong>24 hours</strong>. If you already have a registered DentiSys student account, accepting this invitation will link the new course section directly to your profile.
+                    <strong>Important:</strong> This invitation link is unique to your institutional email address and will expire in <strong>24 hours</strong>. If you were not expecting it, please contact your Faculty instructor.
                   </p>
                 </div>
               </>
