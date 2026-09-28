@@ -489,7 +489,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await expect(studentRow).toBeVisible();
 
   // Initial state: student status is 'Not recorded'
-  await expect(studentRow.locator('td').nth(1).getByText('Not recorded')).toBeVisible();
+  await expect(studentRow.getByTestId('attendance-status').getByText('Not recorded')).toBeVisible();
 
   // 6. Initial Entry: click Present
   const initialOverridePromise = page.waitForResponse(
@@ -506,7 +506,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
 
   // Toast appears and row status updates to Present
   await expect(page.getByText(new RegExp(`Recorded ${studentFullName} as present`, 'i'))).toBeVisible();
-  await expect(studentRow.locator('td').nth(1).getByText('Present', { exact: true })).toBeVisible();
+  await expect(studentRow.getByTestId('attendance-status').getByText('Present', { exact: true })).toBeVisible();
 
   // Verify localStorage does not store this student's attendance override
   const localData = await page.evaluate(() => localStorage.getItem('dentisys_attendance'));
@@ -525,7 +525,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   // Verify row still displays Present from PostgreSQL
   const studentRowAfterReload = page.locator('tbody tr').filter({ hasText: studentFullName });
   await expect(studentRowAfterReload).toBeVisible();
-  await expect(studentRowAfterReload.locator('td').nth(1).getByText('Present', { exact: true })).toBeVisible();
+  await expect(studentRowAfterReload.getByTestId('attendance-status').getByText('Present', { exact: true })).toBeVisible();
 
   // 8. Correction workflow: change status to Late
   await studentRowAfterReload.getByRole('button', { name: 'Late' }).click();
@@ -556,7 +556,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   // Modal closes, toast appears, row status updates to Late
   await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toHaveCount(0);
   await expect(page.getByText(new RegExp(`Attendance corrected for ${studentFullName}`, 'i'))).toBeVisible();
-  await expect(studentRowAfterReload.locator('td').nth(1).getByText('Late', { exact: true })).toBeVisible();
+  await expect(studentRowAfterReload.getByTestId('attendance-status').getByText('Late', { exact: true })).toBeVisible();
 
   // 9. Refresh browser again to confirm correction persists in PostgreSQL
   await page.evaluate(() => localStorage.clear());
@@ -565,7 +565,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await page.locator('select').nth(1).selectOption(targetCsId);
 
   const studentRowAfterCorrectionReload = page.locator('tbody tr').filter({ hasText: studentFullName });
-  await expect(studentRowAfterCorrectionReload.locator('td').nth(1).getByText('Late', { exact: true })).toBeVisible();
+  await expect(studentRowAfterCorrectionReload.getByTestId('attendance-status').getByText('Late', { exact: true })).toBeVisible();
 
   // 10. No-op verification: clicking Late again does NOT invoke override endpoint
   let overrideCalledAgain = false;
@@ -592,9 +592,15 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   });
   const classesData = await jsonResponse(classesRes);
   expect(classesData.status).toBe('ok');
-  const activeClasses = (classesData.classes || []).filter((c: any) => (c.status || '').toLowerCase() === 'active');
-  expect(activeClasses.length).toBeGreaterThan(0);
-  const activeClass = activeClasses[0];
+  // Grade Computation only lists current-school-year classes.
+  const activeClass = currentAssignedClass(classesData) as any;
+  const isOfferingConfigGet = (response: any) => response.url().includes('/api/faculty/grading-config?')
+    && response.url().includes(`courseId=${activeClass.courseId}&`)
+    && response.request().method() === 'GET';
+  const selectOfferingCourse = async () => {
+    await page.getByRole('main').locator('select').first().selectOption(String(activeClass.courseCode));
+    await expect(page.getByText('Editing schema for:')).toContainText(String(activeClass.courseCode));
+  };
 
   // For unconfigured offerings, ensure an active assessment with legacy type 'Laboratory' exists
   // in PostgreSQL to exercise live 422 GRADING_CATEGORY_ASSIGNMENT_REQUIRED before initial schema activation
@@ -619,11 +625,10 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   }
 
   // 3. Navigate to Grade Weights Editor
-  const initialConfigPromise = page.waitForResponse(
-    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
-  );
+  const initialConfigPromise = page.waitForResponse(isOfferingConfigGet, { timeout: 15000 });
   await page.goto('/grades?tab=components');
-  await expect(page.locator('#course-offering-select')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole('main').locator('select').first()).toBeVisible({ timeout: 15000 });
+  await selectOfferingCourse();
 
   // 4. Wait for configuration to load
   await initialConfigPromise;
@@ -731,12 +736,10 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
 
   // 6. Hard reload with cleared localStorage to verify PostgreSQL persistence
   await page.evaluate(() => localStorage.clear());
-  const persistenceConfigPromise = page.waitForResponse(
-    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
-  );
+  const persistenceConfigPromise = page.waitForResponse(isOfferingConfigGet);
   await page.reload();
 
-  await expect(page.locator('#course-offering-select')).toBeVisible();
+  await selectOfferingCourse();
   await persistenceConfigPromise;
 
   const reloadedFirstName = await page.locator('input[placeholder*="Category name"]').nth(0).inputValue();
@@ -771,12 +774,10 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
 
   // 8. Hard reload with cleared localStorage to verify PostgreSQL persistence of reordered sortOrder
   await page.evaluate(() => localStorage.clear());
-  const reloadGetPromise = page.waitForResponse(
-    response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'GET'
-  );
+  const reloadGetPromise = page.waitForResponse(isOfferingConfigGet);
   await page.reload();
 
-  await expect(page.locator('#course-offering-select')).toBeVisible();
+  await selectOfferingCourse();
   const reloadGetRes = await reloadGetPromise;
   const reloadGetData = await reloadGetRes.json();
   const reloadMidtermCats = reloadGetData.configuration.midtermCategories ?? reloadGetData.configuration.categories.filter((c: any) => c.gradingPeriod === 'Midterm');
@@ -810,10 +811,7 @@ test('authoritative faculty assessment manager: create and edit assessments with
   });
   const classesData = await jsonResponse(classesRes);
   expect(classesData.status).toBe('ok');
-  const activeClasses = (classesData.classes || []).filter((c: any) => (c.status || '').toLowerCase() === 'active');
-  expect(activeClasses.length).toBeGreaterThan(0);
-
-  const activeClass = activeClasses[0];
+  const activeClass = currentAssignedClass(classesData) as any;
 
   // 3. Ensure Grade Weights configuration exists for that offering
   const configRes = await page.request.get(
@@ -856,6 +854,8 @@ test('authoritative faculty assessment manager: create and edit assessments with
   // 4. Navigate to Assessments Tab
   await page.goto('/grades?tab=assessments');
   await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeVisible({ timeout: 15000 });
+  await page.getByRole('main').locator('select').first().selectOption(String(activeClass.courseCode));
+  await page.getByRole('main').locator('select').nth(1).selectOption(String(activeClass.id));
   await expect(page.getByRole('button', { name: 'Add Assessment' })).toBeEnabled();
 
   // 5. Open Create Assessment Modal
@@ -866,7 +866,7 @@ test('authoritative faculty assessment manager: create and edit assessments with
   await expect(page.getByRole('heading', { name: 'Create New Assessment activity' })).toBeVisible();
 
   // 6. Check category dropdown contains dynamic categories from PostgreSQL
-  const categorySelect = modalForm.locator('select').nth(1);
+  const categorySelect = modalForm.locator('select').filter({ has: page.locator(`option[value="${firstCategory.id}"]`) });
   await expect(categorySelect).toContainText(firstCategory.name);
   await expect(categorySelect).toContainText(secondCategory.name);
 
@@ -907,7 +907,7 @@ test('authoritative faculty assessment manager: create and edit assessments with
   // 8. Edit assessment to switch to secondCategory
   await row.getByRole('button', { name: 'Edit' }).click();
   const editModalForm = page.locator('form').last();
-  const editCategorySelect = editModalForm.locator('select').nth(1);
+  const editCategorySelect = editModalForm.locator('select').filter({ has: page.locator(`option[value="${firstCategory.id}"]`) });
   await expect(editCategorySelect).toHaveValue(String(firstCategory.id));
 
   await editCategorySelect.selectOption(String(secondCategory.id));

@@ -971,6 +971,56 @@ function faculty_grading_category_name_key(mixed $value): string
     return function_exists('mb_strtolower') ? mb_strtolower($name, 'UTF-8') : strtolower($name);
 }
 
+/**
+ * Looser key used only to link existing assessments to new categories by name:
+ * case, spacing and punctuation are ignored and simple plurals are folded, so
+ * an assessment of type "Quiz" matches a category named "Quizzes".
+ */
+function faculty_grading_category_match_key(mixed $value): string
+{
+    $key = preg_replace('/[^a-z0-9]+/', '', faculty_grading_category_name_key($value)) ?? '';
+    if (strlen($key) > 4 && str_ends_with($key, 'zzes')) {
+        return substr($key, 0, -3);
+    }
+    if (strlen($key) > 3 && str_ends_with($key, 'ies')) {
+        return substr($key, 0, -3) . 'y';
+    }
+    if (strlen($key) > 3 && preg_match('/(s|x|z|ch|sh)es$/', $key) === 1) {
+        return substr($key, 0, -2);
+    }
+    if (strlen($key) > 3 && str_ends_with($key, 's') && !str_ends_with($key, 'ss')) {
+        return substr($key, 0, -1);
+    }
+    return $key;
+}
+
+/** Faculty-chosen categories for existing assessments: [assessmentId => category name]. */
+function faculty_grading_assessment_assignments(mixed $raw): array
+{
+    if ($raw === null) {
+        return [];
+    }
+    if (!is_array($raw) || !array_is_list($raw) || count($raw) > 500) {
+        throw new FacultyGradingConfigurationException('assessmentAssignments must be a list.');
+    }
+    $assignments = [];
+    foreach ($raw as $item) {
+        if ($item instanceof stdClass) {
+            $item = (array) $item; // nested JSON objects arrive as stdClass
+        }
+        $assessmentId = is_array($item) ? ($item['assessmentId'] ?? null) : null;
+        if (is_string($assessmentId) && ctype_digit($assessmentId)) {
+            $assessmentId = (int) $assessmentId;
+        }
+        $categoryName = is_array($item) ? trim((string) ($item['categoryName'] ?? '')) : '';
+        if (!is_int($assessmentId) || $assessmentId <= 0 || $categoryName === '') {
+            throw new FacultyGradingConfigurationException('Each assessment assignment needs an assessmentId and a categoryName.');
+        }
+        $assignments[$assessmentId] = $categoryName;
+    }
+    return $assignments;
+}
+
 function faculty_grading_source_kind(mixed $value, mixed $categoryName = null): string
 {
     if ($value === null || $value === '') {
@@ -1417,13 +1467,17 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
     return $snapshot;
 }
 
-function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, array $categories): array
+function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, array $categories, array $assignments = []): array
 {
     $categoryIndexesByName = [];
+    $categoryIndexesByMatchKey = [];
     foreach ($categories as $index => $category) {
         $period = $category['gradingPeriod'] ?? null;
-        $key = ($period === null ? '*' : $period) . ':' . faculty_grading_category_name_key($category['name']);
-        $categoryIndexesByName[$key] = $index;
+        $prefix = ($period === null ? '*' : $period) . ':';
+        $categoryIndexesByName[$prefix . faculty_grading_category_name_key($category['name'])] = $index;
+        if (($category['sourceKind'] ?? 'assessment') !== 'attendance') {
+            $categoryIndexesByMatchKey[$prefix . faculty_grading_category_match_key($category['name'])] ??= $index;
+        }
     }
 
     // Lock the offering sections before inspecting assessments. New assessment
@@ -1471,16 +1525,36 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
     $mappings = [];
     $unmatched = [];
     foreach ($assessmentStmt->fetchAll(PDO::FETCH_ASSOC) as $assessment) {
+        $assessmentId = (int) $assessment['assessment_id'];
         $legacyType = (string) ($assessment['type'] ?? '');
         $legacyPeriod = (string) ($assessment['grading_period'] ?? '');
-        $categoryIndex = $categoryIndexesByName[$legacyPeriod . ':' . faculty_grading_category_name_key($legacyType)]
-            ?? $categoryIndexesByName['*:' . faculty_grading_category_name_key($legacyType)]
-            ?? null;
+        if (array_key_exists($assessmentId, $assignments)) {
+            // Faculty picked the category for this assessment by hand.
+            $chosen = faculty_grading_category_name_key($assignments[$assessmentId]);
+            $categoryIndex = $categoryIndexesByName[$legacyPeriod . ':' . $chosen]
+                ?? $categoryIndexesByName['*:' . $chosen]
+                ?? null;
+            if ($categoryIndex === null) {
+                throw new FacultyGradingConfigurationException(
+                    'The category chosen for an existing assessment is not in this configuration for its grading period.',
+                    422,
+                    'GRADING_ASSESSMENT_ASSIGNMENT_INVALID',
+                    ['assessmentId' => $assessmentId]
+                );
+            }
+        } else {
+            $categoryIndex = $categoryIndexesByName[$legacyPeriod . ':' . faculty_grading_category_name_key($legacyType)]
+                ?? $categoryIndexesByName['*:' . faculty_grading_category_name_key($legacyType)]
+                ?? $categoryIndexesByMatchKey[$legacyPeriod . ':' . faculty_grading_category_match_key($legacyType)]
+                ?? $categoryIndexesByMatchKey['*:' . faculty_grading_category_match_key($legacyType)]
+                ?? null;
+        }
         if ($categoryIndex === null) {
             $unmatched[] = [
-                'assessmentId' => (int) $assessment['assessment_id'],
+                'assessmentId' => $assessmentId,
                 'title' => (string) $assessment['title'],
                 'legacyType' => $assessment['type'],
+                'gradingPeriod' => $legacyPeriod !== '' ? $legacyPeriod : null,
             ];
             continue;
         }
@@ -1704,7 +1778,12 @@ function handle_faculty_grading_config_save(): void
         }
 
         $legacyAssessmentMappings = $existing === null
-            ? faculty_grading_legacy_assessment_mappings($pdo, $offering, $categories)
+            ? faculty_grading_legacy_assessment_mappings(
+                $pdo,
+                $offering,
+                $categories,
+                faculty_grading_assessment_assignments($data['assessmentAssignments'] ?? null)
+            )
             : [];
 
         if ($existing === null) {
@@ -3097,6 +3176,67 @@ function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, st
     ]);
 }
 
+/**
+ * Transmuted assessments without an explicit attendance session are matched to
+ * the session held on their exam (due) date. Report the ones where that match
+ * is impossible (no session that day) or ambiguous (more than one session).
+ */
+function faculty_transmutation_link_warnings(PDO $pdo, int $facultyUserId, int $csId): array
+{
+    $sql = "SELECT a.assessment_id, a.title, a.due_date, cs.cs_id, cs.cs_name,
+                   (SELECT COUNT(*) FROM (
+                        SELECT s.session_code
+                          FROM attendance_sessions s
+                         WHERE s.cs_id = a.cs_id AND s.session_date = a.due_date
+                        UNION
+                        SELECT COALESCE(ar.session_code, '')
+                          FROM attendance_records ar
+                          JOIN enrollments en ON en.enrollment_id = ar.enrollment_id
+                         WHERE en.cs_id = a.cs_id AND ar.session_date = a.due_date
+                   ) codes) AS session_count
+              FROM assessments a
+              JOIN class_sections cs ON cs.cs_id = a.cs_id
+             WHERE cs.instructor_user_id = ?
+               AND a.status <> 'Archived'
+               AND a.transmutation_enabled = TRUE
+               AND a.attendance_session_date IS NULL";
+    $params = [$facultyUserId];
+    if ($csId > 0) {
+        $sql .= ' AND a.cs_id = ?';
+        $params[] = $csId;
+    }
+    $sql .= ' ORDER BY a.assessment_id';
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    $warnings = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $count = (int) $row['session_count'];
+        $dueDate = $row['due_date'] !== null ? (string) $row['due_date'] : null;
+        if ($dueDate !== null && $count === 1) {
+            continue;
+        }
+        $reason = $dueDate === null ? 'no_exam_date' : ($count === 0 ? 'no_session' : 'multiple_sessions');
+        $title = (string) $row['title'];
+        $section = (string) $row['cs_name'];
+        $message = match ($reason) {
+            'no_exam_date' => "\"{$title}\" ({$section}) has no exam date, so no attendance session can be matched. Set a due date or link a session.",
+            'no_session' => "No attendance session was held on {$dueDate} for \"{$title}\" ({$section}). Link the correct session or change the exam date.",
+            default => "{$count} attendance sessions were held on {$dueDate} for \"{$title}\" ({$section}). Link the exam's session in the assessment so the right attendance is used.",
+        };
+        $warnings[] = [
+            'assessmentId' => (string) $row['assessment_id'],
+            'title' => $title,
+            'classId' => (string) $row['cs_id'],
+            'dueDate' => $dueDate,
+            'reason' => $reason,
+            'sessionCount' => $count,
+            'message' => $message,
+        ];
+    }
+    return $warnings;
+}
+
 function handle_faculty_grades_compute(): void
 {
     $pdo = null;
@@ -3203,7 +3343,14 @@ function handle_faculty_grades_compute(): void
                             OR
                             (a.attendance_session_date IS NULL
                              AND a.due_date IS NOT NULL
-                             AND linked_att.session_date = a.due_date)
+                             AND linked_att.session_date = a.due_date
+                             -- Auto-match only when the exam date has exactly one attendance
+                             -- record for the student; otherwise the link is ambiguous.
+                             AND NOT EXISTS (
+                                 SELECT 1 FROM attendance_records dup
+                                  WHERE dup.enrollment_id = linked_att.enrollment_id
+                                    AND dup.session_date = linked_att.session_date
+                                    AND dup.record_id <> linked_att.record_id))
                           )
                 LEFT JOIN (
                     SELECT enrollment_id,
@@ -3519,11 +3666,13 @@ function handle_faculty_grades_compute(): void
                 'breakdown' => $breakdown,
             ];
         }
+        $transmutationWarnings = faculty_transmutation_link_warnings($pdo, (int) $authCtx['user_id'], $csId);
         $pdo->commit();
         json_response([
             'status' => 'ok',
             'message' => 'Grades computed and persisted successfully.',
             'results' => $results,
+            'transmutationWarnings' => $transmutationWarnings,
         ], 200);
     } catch (FacultyGradingConfigurationException $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) {
@@ -4604,7 +4753,12 @@ function faculty_watchlist_midterm(PDO $pdo, array $enrollment): array
                OR
                (a.attendance_session_date IS NULL
                 AND a.due_date IS NOT NULL
-                AND ar.session_date = a.due_date)
+                AND ar.session_date = a.due_date
+                AND NOT EXISTS (
+                    SELECT 1 FROM attendance_records dup
+                     WHERE dup.enrollment_id = ar.enrollment_id
+                       AND dup.session_date = ar.session_date
+                       AND dup.record_id <> ar.record_id))
              )
           WHERE a.cs_id = ? AND a.grading_period = 'Midterm' AND a.status <> 'Archived'"
     );

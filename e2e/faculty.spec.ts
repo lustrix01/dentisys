@@ -770,6 +770,36 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     expect(overrideCalled).toBe(false);
   });
 
+  test('bulk: mark all unrecorded as Present asks first and only records students without a status', async ({ page }) => {
+    const payloads: Array<Record<string, unknown>> = [];
+    await page.route('**/api/faculty/attendance?*csId=1*', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: mockWorksheetSectionA }) });
+    });
+    await page.route('**/api/faculty/attendance/override', async (route) => {
+      payloads.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'created', recordId: '1000' }) });
+    });
+
+    await page.goto('/attendance');
+    await page.locator('select').first().selectOption('101');
+    await page.locator('select').nth(1).selectOption('1');
+    await expect(page.getByText('Alice Green')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
+    await expect(page.getByRole('heading', { name: 'Mark Unrecorded Students Present' })).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    expect(payloads).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
+    await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
+    await expect(page.getByText('Marked 1 student as present.')).toBeVisible();
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]?.enrollmentId).toBe(10);
+    expect(payloads[0]?.status).toBe('present');
+    await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByText('Present', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Mark all unrecorded as Present' })).toBeDisabled();
+  });
+
   test.describe('Faculty Grade Weights Editor', () => {
     const mockFacultyClasses = [
       {
@@ -846,12 +876,12 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=components');
 
-      // Offering dropdown should collapse CLIN401-A and CLIN401-B into 1 option with 2 sections
-      const offeringSelect = page.locator('#course-offering-select');
-      await expect(offeringSelect).toBeVisible();
-      await expect(offeringSelect.locator('option')).toHaveCount(2);
-      await expect(offeringSelect.locator('option').first()).toContainText('CLIN401 - Clinical Dentistry I (1st Semester, 2026-2027) · 2 Sections');
-      await expect(offeringSelect.locator('option').nth(1)).toContainText('CLIN402 - Clinical Dentistry II (2nd Semester, 2026-2027) · 1 Section');
+      // The shared course bar lists each course once; its two sections share one set of weights
+      const courseSelect = page.getByRole('main').locator('select').first();
+      await expect(courseSelect.locator('option')).toHaveCount(2);
+      await expect(courseSelect.locator('option').first()).toContainText('CLIN401 - Clinical Dentistry I');
+      await expect(courseSelect.locator('option').nth(1)).toContainText('CLIN402 - Clinical Dentistry II');
+      await expect(page.getByTestId('weights-sections-note')).toContainText('2 sections of this course (CLIN401-A, CLIN401-B)');
 
       // Suggested starting preset indicator
       await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
@@ -903,14 +933,17 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // Add a dynamic category to Midterm
       await page.getByRole('button', { name: /Add Midterm Category/i }).click();
       await nameInputs.nth(4).fill('Extra Assessment');
-      await weightInputs.nth(4).fill('0');
+      await weightInputs.nth(4).fill('5');
 
-      // Test decimal precision (e.g. 33.3333 + 33.3333 + 33.3334)
-      await weightInputs.nth(0).fill('33.3333');
-      await weightInputs.nth(1).fill('33.3333');
-      await weightInputs.nth(2).fill('33.3334');
-      await weightInputs.nth(3).fill('0');
+      // Test decimal precision (e.g. 30.3333 + 30.3333 + 29.3334 + 5 + 5). Weights must be positive.
+      await weightInputs.nth(0).fill('30.3333');
+      await weightInputs.nth(1).fill('30.3333');
+      await weightInputs.nth(2).fill('29.3334');
+      await weightInputs.nth(3).fill('5');
       await expect(page.getByText(/Valid 100%/i).first()).toBeVisible();
+      await weightInputs.nth(3).fill('0');
+      await expect(page.getByText(/Must equal 100%/i).first()).toBeVisible();
+      await weightInputs.nth(3).fill('5');
 
       // Test reordering: move category 0 (Quiz) down
       await page.locator('button[aria-label^="Move category"]').nth(1).click();
@@ -1230,6 +1263,40 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(weightInputs.nth(0)).toHaveValue('25');
     });
 
+    test('422 unmatched assessments can be assigned to a category by hand and are sent on the next save', async ({ page }) => {
+      const putPayloads: any[] = [];
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: null }) });
+      });
+      await page.route('**/api/faculty/grading-config', async (route) => {
+        if (route.request().method() !== 'PUT') return route.fallback();
+        putPayloads.push(route.request().postDataJSON());
+        await route.fulfill({
+          status: 422,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'error',
+            code: 'GRADING_CATEGORY_ASSIGNMENT_REQUIRED',
+            message: 'Existing assessments require matching grading categories before this configuration can be activated.',
+            assessments: [{ assessmentId: 42, title: 'Practical Exam 1', legacyType: 'Practical', gradingPeriod: 'Midterm' }],
+          }),
+        });
+      });
+
+      await page.goto('/grades?tab=components');
+      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      const picker = page.getByRole('combobox', { name: 'Category for Practical Exam 1' });
+      await expect(picker).toBeVisible();
+      const options = await picker.locator('option').allTextContents();
+      expect(options).toEqual(['Choose category…', 'Quiz', 'Activity', 'Midterm Exam']);
+      expect(putPayloads[0].assessmentAssignments).toBeUndefined();
+
+      await picker.selectOption('Activity');
+      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await expect.poll(() => putPayloads.length).toBe(2);
+      expect(putPayloads[1].assessmentAssignments).toEqual([{ assessmentId: 42, categoryName: 'Activity' }]);
+    });
+
     test('confirms before discarding unsaved changes when switching course offerings', async ({ page }) => {
       let loadedCourseId = '';
 
@@ -1244,14 +1311,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await expect(page.locator('#course-offering-select')).toBeVisible();
+      const offeringSelect = page.getByRole('main').locator('select').first();
+      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
 
       // Edit a category name to make it dirty
       const nameInputs = page.locator('input[placeholder*="Category name"]');
       await nameInputs.nth(0).fill('Dirty Category');
 
-      // Attempt to switch offering to CLIN402
-      const offeringSelect = page.locator('#course-offering-select');
+      // Attempt to switch the shared course bar to CLIN402
       await offeringSelect.selectOption({ index: 1 });
 
       // Confirmation modal should appear
@@ -1262,7 +1329,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Cancel' }).click();
 
       // Selection must remain CLIN401 and dirty edits preserved
-      await expect(offeringSelect).toHaveValue(/101:/);
+      await expect(offeringSelect).toHaveValue('CLIN401');
       await expect(nameInputs.nth(0)).toHaveValue('Dirty Category');
 
       // Attempt switch again and Confirm
@@ -1271,8 +1338,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Confirm' }).click();
 
       // Now switched to CLIN402
-      await expect(offeringSelect).toHaveValue(/102:/);
-      expect(loadedCourseId).toBe('102');
+      await expect(offeringSelect).toHaveValue('CLIN402');
+      await expect.poll(() => loadedCourseId).toBe('102');
     });
 
     test('maintains strict localStorage isolation without reading or writing dentisys_grading_components', async ({ page }) => {
@@ -1755,6 +1822,38 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.locator('.no-print').getByText(/Historical/i)).toHaveCount(0);
     });
 
+    test('recompute shows a warning when a transmuted assessment has no or several sessions on its exam date', async ({ page }) => {
+      await page.route('**/api/faculty/grading-config?*', async (route) => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: null }) });
+      });
+      await page.route('**/api/faculty/grades/compute', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            results: [],
+            transmutationWarnings: [
+              { assessmentId: '9', title: 'Crown Prep Practical', classId: '1', dueDate: '2026-10-05', reason: 'multiple_sessions', sessionCount: 2,
+                message: '2 attendance sessions were held on 2026-10-05 for "Crown Prep Practical" (CLIN401-A). Link the exam\'s session in the assessment so the right attendance is used.' },
+              { assessmentId: '10', title: 'Radiology Quiz', classId: '1', dueDate: '2026-10-07', reason: 'no_session', sessionCount: 0,
+                message: 'No attendance session was held on 2026-10-07 for "Radiology Quiz" (CLIN401-A). Link the correct session or change the exam date.' },
+            ],
+          }),
+        });
+      });
+
+      await page.goto('/grades?tab=summary');
+      await page.getByRole('button', { name: /Recompute Grades/i }).click();
+      await page.getByRole('button', { name: /Confirm Recomputation/i }).click();
+
+      const warning = page.getByTestId('transmutation-warnings');
+      await expect(warning).toBeVisible();
+      await expect(warning).toContainText('Attendance session could not be matched for transmutation');
+      await expect(warning).toContainText('2 attendance sessions were held on 2026-10-05');
+      await expect(warning).toContainText('No attendance session was held on 2026-10-07');
+    });
+
     test('409 GRADING_CATEGORY_IN_USE displays error alert and does NOT trigger reload flow', async ({ page }) => {
       await page.route('**/api/faculty/grading-config?*', async (route) => {
         await route.fulfill({
@@ -2226,56 +2325,28 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(categorySelect).toHaveValue('13');
     });
 
-    test('unconfigured offering displays legacy category selector and omits gradingCategoryId', async ({ page }) => {
-      let postedAssessmentPayload: Record<string, any> | null = null;
-
+    test('unconfigured offering asks for grade weights first and never creates an unlinked assessment', async ({ page }) => {
+      let postCount = 0;
       await page.route('**/api/faculty/grading-config?*', async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ status: 'ok', configuration: null }),
-        });
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: null }) });
       });
-
       await page.route('**/api/faculty/assessments', async (route) => {
-        if (route.request().method() === 'POST') {
-          const [payload] = route.request().postDataJSON() as Record<string, any>[];
-          postedAssessmentPayload = payload;
-          await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-              status: 'ok',
-              message: 'Assessment persisted successfully.',
-              assessments: [{ id: 'legacy-ass', classId: payload.classId, title: payload.title }],
-            }),
-          });
-          return;
-        }
+        if (route.request().method() === 'POST') postCount += 1;
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
       });
 
       await page.goto('/grades?tab=assessments');
       await page.getByRole('button', { name: 'Add Assessment' }).click();
 
-      const modalForm = page.locator('form').last();
-      const categorySelect = modalForm.locator('select').nth(0);
+      await expect(page.getByRole('heading', { name: 'Set up grade weights first' })).toBeVisible();
+      await expect(page.getByText(/has no saved grade weights yet/i)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Confirm Assessment' })).toHaveCount(0);
 
-      // Verify legacy options are shown
-      const options = await categorySelect.evaluate((sel: HTMLSelectElement) =>
-        Array.from(sel.options).map(opt => opt.value)
-      );
-      expect(options).toEqual(['Quiz', 'Activity', 'Assignment', 'Laboratory', 'Midterm Exam', 'Final Exam', 'Others']);
-
-      await modalForm.locator('input[type="text"]').first().fill('Legacy Lab Activity');
-      await categorySelect.selectOption('Laboratory');
-
-      await modalForm.getByRole('button', { name: 'Confirm Assessment' }).click();
-      await expect(page.getByText('Assessment persisted successfully.')).toBeVisible();
-
-      expect(postedAssessmentPayload).not.toBeNull();
-      expect('gradingCategoryId' in (postedAssessmentPayload ?? {})).toBe(false);
-      expect(postedAssessmentPayload?.type).toBe('Laboratory');
+      await page.getByRole('button', { name: 'Go to Grade Weights' }).click();
+      await expect(page.getByRole('heading', { name: 'Set up grade weights first' })).toHaveCount(0);
+      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
+      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeVisible();
+      expect(postCount).toBe(0);
     });
 
     test('configured offering with missing or invalid category ID displays warning badge and blocks save until resolved', async ({ page }) => {

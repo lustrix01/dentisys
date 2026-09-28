@@ -223,8 +223,34 @@ test.describe('Assessment transmutation UI coverage', () => {
     expect(postedSettings?.transmutationDefaults).toEqual({ minimumPercentage: 45, maximumPercentage: 95 });
   });
 
-  test('faculty assessment modal uses defaults and rejects missing deterministic linkage', async ({ page }) => {
+  test('faculty assessment modal uses defaults and auto-matches the exam-date session when no session is linked', async ({ page }) => {
     await login(page, 'faculty');
+
+    // Assessments need saved grade weights; both courses are configured.
+    await page.route('**/api/faculty/grading-config?*', async (route) => {
+      const courseId = Number(new URL(route.request().url()).searchParams.get('courseId'));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          configuration: {
+            id: `cfg-${courseId}`,
+            course: { id: courseId, code: courseId === 7 ? 'CLIN401' : 'CLIN402', name: 'Clinic' },
+            semester: '',
+            schoolYear: '',
+            version: 1,
+            schemaMode: 'periods',
+            termRatio: { midterm: 40, final: 60 },
+            categories: [
+              { id: courseId * 10 + 1, name: 'Quiz', weight: '90', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+              { id: courseId * 10 + 2, name: 'Attendance', weight: '10', sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'attendance' },
+              { id: courseId * 10 + 3, name: 'Final Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment' },
+            ],
+          },
+        }),
+      });
+    });
 
     let postedAssessment: Record<string, any> | null = null;
     let persistedAssessments: Record<string, any>[] = [];
@@ -289,11 +315,13 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByRole('button', { name: 'Assessments Manager' }).click();
     await expect(page.locator('select').nth(1)).toHaveValue('7');
     await page.getByRole('button', { name: 'Add Assessment' }).click();
-    await page.getByPlaceholder('e.g. Molar Crown Prep quiz').fill('Disabled assessment survives refresh');
-    const targetClasses = await page.locator('select').nth(2).evaluate(select =>
-      Array.from((select as HTMLSelectElement).options).map(option => ({ value: option.value, label: option.textContent?.trim() })),
-    );
-    expect(targetClasses).toEqual([{ value: '7', label: 'CLINIC-4A' }]);
+    await page.getByPlaceholder('e.g. Molar Crown Prep quiz').fill('Auto-matched assessment survives refresh');
+    // A course with a single section shows it as text instead of a picker.
+    const createForm = page.locator('form').last();
+    await expect(createForm.getByText('Target Class / Section')).toBeVisible();
+    await expect(createForm.getByText('CLINIC-4A', { exact: true })).toBeVisible();
+    await createForm.locator('select').first().selectOption({ label: 'Quiz (90%)' });
+    await page.getByRole('button', { name: /Attendance Linking & Transmutation/i }).click();
     const toggle = page.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i });
     await expect(toggle).toBeVisible();
     await toggle.check();
@@ -301,51 +329,50 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page.locator('label').filter({ hasText: 'Maximum percentage' }).locator('input')).toHaveValue('88');
     await expect(page.getByLabel('Attendance session date')).toBeVisible();
     await expect(page.getByLabel('Attendance session code')).toBeVisible();
-    await page.getByRole('button', { name: 'Confirm Assessment' }).click();
-    await expect(page.getByRole('heading', { name: 'Create New Assessment activity' })).toBeVisible();
-    expect(postedAssessment).toBeNull();
-
-    await toggle.uncheck();
+    // Leaving the session blank is allowed: grades use the session held on the exam (due) date.
     await page.getByRole('button', { name: 'Confirm Assessment' }).click();
     await expect(page.getByText('Assessment persisted successfully.')).toBeVisible();
     await expect.poll(() => postedAssessment).not.toBeNull();
     expect(postedAssessment).toMatchObject({
-      title: 'Disabled assessment survives refresh',
+      title: 'Auto-matched assessment survives refresh',
       classId: '7',
-      transmutationEnabled: false,
+      gradingCategoryId: expect.any(Number),
+      transmutationEnabled: true,
+      transmutationMinimumPercentage: 42,
+      transmutationMaximumPercentage: 88,
       attendanceSessionDate: null,
       attendanceSessionCode: null,
     });
-    await expect(page.getByRole('row').filter({ hasText: 'Disabled assessment survives refresh' })).toBeVisible();
+    const createdRow = page.getByRole('row').filter({ hasText: 'Auto-matched assessment survives refresh' });
+    await expect(createdRow).toBeVisible();
+    await expect(createdRow.getByText('(Exam-date auto match)')).toBeVisible();
 
     await page.reload();
     await login(page, 'faculty');
     await page.getByRole('link', { name: 'Grade Computation' }).click();
     await page.getByRole('button', { name: 'Assessments Manager' }).click();
     await expect(page.locator('select').nth(1)).toHaveValue('7');
-    const persistedRow = page.getByRole('row').filter({ hasText: 'Disabled assessment survives refresh' });
+    const persistedRow = page.getByRole('row').filter({ hasText: 'Auto-matched assessment survives refresh' });
     await expect(persistedRow).toBeVisible();
     await persistedRow.getByRole('button', { name: 'Edit' }).click();
     const assessmentForm = page.locator('form').last();
     await expect(page.getByRole('heading', { name: 'Edit Assessment Spec' })).toBeVisible();
-    await expect(page.getByPlaceholder('e.g. Molar Crown Prep quiz')).toHaveValue('Disabled assessment survives refresh');
+    await expect(page.getByPlaceholder('e.g. Molar Crown Prep quiz')).toHaveValue('Auto-matched assessment survives refresh');
     await expect(assessmentForm.locator('input[type="number"]').first()).toHaveValue('50');
     await expect(assessmentForm.locator('input[type="date"]')).toHaveValue(String(postedAssessment?.dueDate));
-    await expect(assessmentForm.locator('select').nth(1)).toHaveValue('Quiz');
-    await expect(assessmentForm.locator('select').nth(2)).toHaveValue('Midterm');
-    await expect(assessmentForm.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i })).not.toBeChecked();
+    await expect(assessmentForm.locator('select').nth(0)).toHaveValue(String(postedAssessment?.gradingCategoryId));
+    await expect(assessmentForm.locator('select').nth(1)).toHaveValue('Midterm');
+    await expect(assessmentForm.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i })).toBeChecked();
     await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('button', { name: 'Student Scores Entry' }).click();
-    await expect(page.locator('select').last().locator('option[value="ui-assessment-7"]')).toHaveText(/Disabled assessment survives refresh/);
+    await expect(page.locator('select').last().locator('option[value="ui-assessment-7"]')).toHaveText(/Auto-matched assessment survives refresh/);
 
     await page.locator('select').first().selectOption('CLIN402');
     await expect(page.locator('select').nth(1)).toHaveValue('8');
     await page.getByRole('button', { name: 'Assessments Manager' }).click();
     await page.getByRole('button', { name: 'Add Assessment' }).click();
-    const classEightTargets = await page.locator('select').nth(2).evaluate(select =>
-      Array.from((select as HTMLSelectElement).options).map(option => ({ value: option.value, label: option.textContent?.trim() })),
-    );
-    expect(classEightTargets).toEqual([{ value: '8', label: 'CLINIC-4B' }]);
+    await expect(page.locator('form').last().getByText('CLINIC-4B', { exact: true })).toBeVisible();
+    await expect(page.locator('form').last().getByText('CLINIC-4A', { exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Cancel' }).click();
   });
 });

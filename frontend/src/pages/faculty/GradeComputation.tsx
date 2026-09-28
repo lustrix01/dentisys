@@ -150,18 +150,20 @@ export const GradeComputation: React.FC = () => {
   );
 
   useEffect(() => {
-    Promise.all([getFacultyClassesApi(), getFacultySettingsApi()])
-      .then(([classesResponse, settingsResponse]) => {
-        const loadedClasses = Array.isArray(classesResponse.classes) ? classesResponse.classes : [];
-        const csy = classesResponse.currentSchoolYear || '';
-        setCurrentSchoolYear(csy);
-        setFacultyClasses(loadedClasses);
-        if (settingsResponse.settings?.transmutationDefaults) {
-          setTransmutationDefaults(settingsResponse.settings.transmutationDefaults);
+    // Settings only provide transmutation defaults; a settings failure must not hide the classes.
+    Promise.allSettled([getFacultyClassesApi(), getFacultySettingsApi()])
+      .then(([classesResult, settingsResult]) => {
+        if (classesResult.status === 'fulfilled') {
+          const classesResponse = classesResult.value;
+          const loadedClasses = Array.isArray(classesResponse.classes) ? classesResponse.classes : [];
+          setCurrentSchoolYear(classesResponse.currentSchoolYear || '');
+          setFacultyClasses(loadedClasses);
+        }
+        if (settingsResult.status === 'fulfilled' && settingsResult.value.settings?.transmutationDefaults) {
+          setTransmutationDefaults(settingsResult.value.settings.transmutationDefaults);
         }
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      });
   }, []);
 
   useEffect(() => {
@@ -389,6 +391,8 @@ export const GradeComputation: React.FC = () => {
   const [modalConfigError, setModalConfigError] = useState<string | null>(null);
   const [assGradingCategoryId, setAssGradingCategoryId] = useState<string>('');
   const [modalCategoryWarning, setModalCategoryWarning] = useState<boolean>(false);
+  // Set when Faculty try to add an assessment to a course that has no saved grade weights yet.
+  const [weightsRequiredOffering, setWeightsRequiredOffering] = useState<{ key: string; courseCode: string; courseName: string } | null>(null);
 
   // Assessment Form State
   const [assTitle, setAssTitle] = useState('');
@@ -517,6 +521,19 @@ export const GradeComputation: React.FC = () => {
     const targetClass = facultyClasses.find(c => c.id === assClassId);
     const targetOffering = targetClass ? getOfferingForClass(targetClass) : currentAssessmentOffering;
 
+    // 0. A saved configuration is authoritative: only its (saved, stable-ID) categories can be chosen.
+    if (modalConfigStatus === 'configured' && modalConfig && Array.isArray(modalConfig.categories)) {
+      return modalConfig.categories
+        .filter(c => (c.gradingPeriod === assPeriod || !c.gradingPeriod) && c.sourceKind !== 'attendance')
+        .map(c => ({
+          id: c.id,
+          name: c.name,
+          weight: String(c.weight),
+          gradingPeriod: c.gradingPeriod,
+          sourceKind: c.sourceKind,
+        }));
+    }
+
     // 1. If currently editing this offering in the Grade Weights Editor, use active in-memory categories
     if (targetOffering && selectedOfferingKey === targetOffering.key) {
       if (schemaMode === 'periods') {
@@ -617,6 +634,7 @@ export const GradeComputation: React.FC = () => {
     }));
   }, [
     modalConfig,
+    modalConfigStatus,
     assessmentConfig,
     assPeriod,
     assClassId,
@@ -701,13 +719,36 @@ export const GradeComputation: React.FC = () => {
   }, [assessments, activeSubTab, currentAssessmentOffering, selectedSubjectCode, selectedClassId]);
 
   const openNewAssessmentModal = async () => {
-    setEditingAssessment(null);
     const modalAvailableSections = availableClasses.length > 0
       ? availableClasses
       : (currentAssessmentOffering?.sections ?? []);
     const initialClassId = modalAvailableSections.some(classItem => classItem.id === selectedClassId)
       ? selectedClassId
       : (modalAvailableSections[0]?.id ?? '');
+
+    // New assessments must link to a saved grading category, so the course needs saved weights first.
+    const precheckClass = facultyClasses.find(c => c.id === initialClassId);
+    const precheckOffering = precheckClass ? getOfferingForClass(precheckClass) : currentAssessmentOffering;
+    if (precheckOffering) {
+      let hasSavedWeights = false;
+      let lookupFailed = false;
+      try {
+        const res = await getFacultyGradingConfigApi({
+          courseId: precheckOffering.courseId,
+          semester: precheckOffering.canonicalSemester,
+          schoolYear: precheckOffering.canonicalSchoolYear,
+        });
+        hasSavedWeights = Boolean(res.configuration && Array.isArray(res.configuration.categories) && res.configuration.categories.length > 0);
+      } catch {
+        lookupFailed = true; // the form shows its own retry state below
+      }
+      if (!hasSavedWeights && !lookupFailed) {
+        setWeightsRequiredOffering(precheckOffering);
+        return;
+      }
+    }
+
+    setEditingAssessment(null);
     setAssClassId(initialClassId);
     setAssGradingCategoryId('');
     setAssType('');
@@ -729,24 +770,9 @@ export const GradeComputation: React.FC = () => {
     const initialClass = facultyClasses.find(c => c.id === initialClassId);
     const offering = initialClass ? getOfferingForClass(initialClass) : currentAssessmentOffering;
 
-    // Pre-populate with the first available category from Grade Weights configuration or draft
-    const initialDraftCategories = schemaMode === 'periods'
-      ? midtermCategories.filter(c => c.sourceKind !== 'attendance' && c.name.trim() !== '')
-      : categoryRows.filter(c => c.name.toLowerCase() !== 'attendance' && c.name.trim() !== '');
-    if (initialDraftCategories.length > 0) {
-      setAssGradingCategoryId(initialDraftCategories[0].id ? String(initialDraftCategories[0].id) : '');
-      setAssType(initialDraftCategories[0].name);
-    }
-
+    // Faculty must pick the grading category explicitly; nothing is preselected.
     if (offering) {
-      const cfg = await loadModalConfigForOffering(offering);
-      if (cfg && Array.isArray(cfg.categories)) {
-        const eligible = cfg.categories.filter(c => (c.gradingPeriod === 'Midterm' || !c.gradingPeriod) && c.sourceKind !== 'attendance');
-        if (eligible.length > 0) {
-          setAssGradingCategoryId(eligible[0].id ? String(eligible[0].id) : '');
-          setAssType(eligible[0].name);
-        }
-      }
+      await loadModalConfigForOffering(offering);
     } else {
       setModalConfigStatus('configured');
     }
@@ -825,6 +851,10 @@ export const GradeComputation: React.FC = () => {
     }
     if (!assGradingCategoryId && !assType) {
       showFeedback('Please select a valid grading category from the active configuration.', 'error');
+      return;
+    }
+    if (!editingAssessment && modalConfigStatus === 'unconfigured') {
+      showFeedback('Set up and save grade weights for this course before adding assessments.', 'error');
       return;
     }
 
@@ -968,7 +998,10 @@ export const GradeComputation: React.FC = () => {
   const refreshPersistedGrades = async (classId: string): Promise<void> => {
     try {
       const response = await computeFacultyGradesApi(classId);
-      if (response.results.some(result => result.status === 'incomplete_attendance')) {
+      setTransmutationWarnings((response.transmutationWarnings ?? []).map(w => w.message));
+      if ((response.transmutationWarnings ?? []).length > 0) {
+        showFeedback('Scores saved. Some transmuted assessments could not be matched to one attendance session — see the warning on the Summaries tab.', 'info');
+      } else if (response.results.some(result => result.status === 'incomplete_attendance')) {
         showFeedback('Scores saved. Some grades remain incomplete until linked attendance is available.', 'info');
       }
     } catch {
@@ -1187,6 +1220,8 @@ export const GradeComputation: React.FC = () => {
   const [configError, setConfigError] = useState<string | null>(null);
   const [conflictError, setConflictError] = useState(false);
   const [firstSaveAssignmentError, setFirstSaveAssignmentError] = useState<FacultyGradingCategoryAssignmentRequiredItem[] | null>(null);
+  // Categories Faculty pick by hand for existing assessments that could not be linked by name.
+  const [assessmentAssignments, setAssessmentAssignments] = useState<Record<number, string>>({});
   const [conversionMappingError, setConversionMappingError] = useState<FacultyGradingCategoryPeriodMappingRequiredItem[] | null>(null);
   const [isConversionModalOpen, setIsConversionModalOpen] = useState(false);
   const [isRecomputeConfirmOpen, setIsRecomputeConfirmOpen] = useState(false);
@@ -1493,14 +1528,14 @@ export const GradeComputation: React.FC = () => {
 
   const isDirty = schemaMode === 'overall' ? isOverallDirty : isPeriodDirty;
 
-  const handleSelectOffering = async (newKey: string) => {
-    if (newKey === selectedOfferingKey) return;
+  const handleSelectOffering = async (newKey: string): Promise<boolean> => {
+    if (newKey === selectedOfferingKey) return true;
     if (isDirty) {
       const confirmed = await requestConfirmation(
         'You have unsaved changes to grade weights. Switching courses will discard them. Continue?',
         'Discard unsaved changes?'
       );
-      if (!confirmed) return;
+      if (!confirmed) return false;
     }
     // Clear all period state before loading new offering so one offering's preset cannot leak into another
     setLoadedConfig(null);
@@ -1516,6 +1551,7 @@ export const GradeComputation: React.FC = () => {
     setConversionMappingError(null);
     setConflictError(false);
     setSelectedOfferingKey(newKey);
+    return true;
   };
 
   const handleReload = async () => {
@@ -1623,7 +1659,7 @@ export const GradeComputation: React.FC = () => {
       }
     }
     if (!weightCalculation.isExact100) {
-      return `Total weights must equal exactly 100%. Current total: ${weightCalculation.displayPercent}%.`;
+      return `Total weights must equal exactly 100%. Current total: ${weightCalculation.displayPercent}.`;
     }
     return null;
   }, [categoryRows, weightCalculation]);
@@ -1784,7 +1820,7 @@ export const GradeComputation: React.FC = () => {
 
   const periodValidationError = useMemo(() => {
     if (!termRatioCalc.isExact100) {
-      return `Term ratio weights must equal 100% (Current: ${termRatioCalc.displayPercent}%).`;
+      return `Term ratio weights must equal 100% (Current: ${termRatioCalc.displayPercent}).`;
     }
 
     if (midtermCategories.length === 0) {
@@ -1809,7 +1845,7 @@ export const GradeComputation: React.FC = () => {
       }
     }
     if (!midtermCalc.isExact100) {
-      return `Midterm category weights must equal 100% (Current: ${midtermCalc.displayPercent}%).`;
+      return `Midterm category weights must equal 100% (Current: ${midtermCalc.displayPercent}).`;
     }
 
     if (finalCategories.length === 0) {
@@ -1834,7 +1870,7 @@ export const GradeComputation: React.FC = () => {
       }
     }
     if (!finalCalc.isExact100) {
-      return `Finals category weights must equal 100% (Current: ${finalCalc.displayPercent}%).`;
+      return `Finals category weights must equal 100% (Current: ${finalCalc.displayPercent}).`;
     }
 
     const dateVal = validateDateRanges(attendanceDateRanges);
@@ -1865,6 +1901,9 @@ export const GradeComputation: React.FC = () => {
     setConfigSaving(true);
     setConfigError(null);
     setConflictError(false);
+    const pendingAssignments = (firstSaveAssignmentError ?? [])
+      .filter(item => (assessmentAssignments[item.assessmentId] ?? '') !== '')
+      .map(item => ({ assessmentId: item.assessmentId, categoryName: assessmentAssignments[item.assessmentId] }));
     setFirstSaveAssignmentError(null);
     setConversionMappingError(null);
 
@@ -1920,6 +1959,9 @@ export const GradeComputation: React.FC = () => {
       if (options?.convertFromOverall) {
         payload.convertFromOverall = true;
       }
+    }
+    if (!loadedConfig && pendingAssignments.length > 0) {
+      payload.assessmentAssignments = pendingAssignments;
     }
 
     try {
@@ -1998,6 +2040,7 @@ export const GradeComputation: React.FC = () => {
           setIsConversionModalOpen(false);
         }
       }
+      setAssessmentAssignments({});
       showFeedback('Grade weights saved successfully.', 'success');
     } catch (err) {
       if (err instanceof ApiError) {
@@ -2053,6 +2096,7 @@ export const GradeComputation: React.FC = () => {
   // Recomputation State
   const [computeResultsByEnrollment, setComputeResultsByEnrollment] = useState<Map<string, FacultyGradeComputeResult>>(new Map());
   const [isRecomputing, setIsRecomputing] = useState(false);
+  const [transmutationWarnings, setTransmutationWarnings] = useState<string[]>([]);
   const [recomputeAlert, setRecomputeAlert] = useState<{
     status: 'success' | 'incomplete';
     message: string;
@@ -2112,6 +2156,7 @@ export const GradeComputation: React.FC = () => {
     setRecomputeAlert(null);
     try {
       const response = await computeFacultyGradesApi(selectedClassId);
+      setTransmutationWarnings((response.transmutationWarnings ?? []).map(w => w.message));
       const newMap = new Map<string, FacultyGradeComputeResult>();
       let computedCount = 0;
       let incompleteCount = 0;
@@ -2346,10 +2391,15 @@ export const GradeComputation: React.FC = () => {
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
             value={selectedSubjectCode}
-            onChange={(e) => {
+            onChange={async (e) => {
               const newCode = e.target.value;
-              setSelectedSubjectCode(newCode);
               const matchOffering = facultyOfferings.find(o => o.courseCode === newCode);
+              if (matchOffering && matchOffering.key !== selectedOfferingKey) {
+                // Asks before discarding unsaved grade weights and clears the previous course's draft.
+                const switched = await handleSelectOffering(matchOffering.key);
+                if (!switched) return;
+              }
+              setSelectedSubjectCode(newCode);
               if (matchOffering) {
                 setSelectedOfferingKey(matchOffering.key);
                 setSelectedAssessmentOfferingKey(matchOffering.key);
@@ -2991,6 +3041,32 @@ export const GradeComputation: React.FC = () => {
                     Editing schema for: <span className="font-bold text-clinical-600 dark:text-clinical-400">{currentOffering.courseCode} — {currentOffering.courseName}</span>
                   </p>
                 )}
+                {currentOffering && (
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5" data-testid="weights-sections-note">
+                    These weights apply to all {currentOffering.sections.length === 1 ? 'sections' : `${currentOffering.sections.length} sections`} of this course ({currentOffering.sectionNames.join(', ')}). The section selector above does not change them.
+                  </p>
+                )}
+                {currentOffering && !configLoading && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      {schemaMode === 'overall' ? 'Overall Grading (legacy)' : 'Period Grading'}
+                    </span>
+                    {loadedConfig ? (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
+                        Version {loadedConfig.version}
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">
+                        Suggested starting preset — unsaved
+                      </span>
+                    )}
+                    {isDirty && loadedConfig && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">
+                        Unsaved Changes
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {currentOffering && (
@@ -3040,7 +3116,7 @@ export const GradeComputation: React.FC = () => {
                   <div>
                     <div className="font-bold">Existing Assessments Require Matching Categories</div>
                     <div className="text-[11px] mt-0.5">
-                      This unconfigured course offering contains active assessments that require matching category names before this configuration can be activated. Please create categories matching each legacy assessment below:
+                      Existing assessments were linked to your new categories by name where possible. The ones below had no matching category: choose a category for each (or rename a category to match), then save again.
                     </div>
                   </div>
                 </div>
@@ -3051,6 +3127,7 @@ export const GradeComputation: React.FC = () => {
                         <th className="px-3 py-2">Assessment ID</th>
                         <th className="px-3 py-2">Title</th>
                         <th className="px-3 py-2">Required Legacy Type</th>
+                        <th className="px-3 py-2">Assign To Category</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-amber-500/20">
@@ -3062,6 +3139,25 @@ export const GradeComputation: React.FC = () => {
                             <span className="px-2 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-bold text-[10px]">
                               {item.legacyType}
                             </span>
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <select
+                              aria-label={`Category for ${item.title}`}
+                              value={assessmentAssignments[item.assessmentId] ?? ''}
+                              onChange={(e) => setAssessmentAssignments(prev => ({ ...prev, [item.assessmentId]: e.target.value }))}
+                              className="px-2 py-1 rounded-lg border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 text-xs font-semibold"
+                            >
+                              <option value="">Choose category…</option>
+                              {(schemaMode === 'overall'
+                                ? categoryRows.map(r => r.name)
+                                : (item.gradingPeriod === 'Final' ? finalCategories : midtermCategories)
+                                  .filter(r => r.sourceKind !== 'attendance')
+                                  .map(r => r.name))
+                                .filter(name => name.trim() !== '')
+                                .map(name => (
+                                  <option key={name} value={name.trim()}>{name.trim()}</option>
+                                ))}
+                            </select>
                           </td>
                         </tr>
                       ))}
@@ -3292,7 +3388,7 @@ export const GradeComputation: React.FC = () => {
                             ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
                             : 'bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300'
                           }`}>
-                          Sum: {termRatioCalc.displayPercent}%
+                          Sum: {termRatioCalc.displayPercent}
                         </span>
                       </div>
                     </div>
@@ -3303,6 +3399,7 @@ export const GradeComputation: React.FC = () => {
                           MIDTERM TERM WEIGHT (%):
                         </label>
                         <input
+                          id="midterm-ratio-input"
                           type="number"
                           min="0"
                           max="100"
@@ -3316,6 +3413,7 @@ export const GradeComputation: React.FC = () => {
                           FINAL TERM WEIGHT (%):
                         </label>
                         <input
+                          id="final-ratio-input"
                           type="number"
                           min="0"
                           max="100"
@@ -3337,7 +3435,7 @@ export const GradeComputation: React.FC = () => {
                           : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
                         }`}
                     >
-                      Midterm Period Schema ({midtermCalc.displayPercent}%)
+                      Midterm Categories ({midtermCalc.displayPercent})
                     </button>
                     <button
                       type="button"
@@ -3347,7 +3445,7 @@ export const GradeComputation: React.FC = () => {
                           : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
                         }`}
                     >
-                      Final Period Schema ({finalCalc.displayPercent}%)
+                      Finals Categories ({finalCalc.displayPercent})
                     </button>
                   </div>
 
@@ -3356,13 +3454,24 @@ export const GradeComputation: React.FC = () => {
                     <div className="text-xs text-amber-900 dark:text-amber-200">
                       Category weights for <strong className="font-extrabold">{activePeriodEditorTab === 'Midterm' ? 'Midterm Period' : 'Final Period'}</strong> must sum to exactly <strong className="font-extrabold">100%</strong>.
                     </div>
-                    <div className="shrink-0">
+                    <div className="shrink-0 flex items-center gap-2">
                       <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${(activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100)
                           ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
                           : 'bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300'
                         }`}>
-                        {(activePeriodEditorTab === 'Midterm' ? midtermCalc.displayPercent : finalCalc.displayPercent)}% / 100%
+                        {(activePeriodEditorTab === 'Midterm' ? midtermCalc.displayPercent : finalCalc.displayPercent)} / 100%
                       </span>
+                      {(activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100) ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
+                          <CheckCircle className="w-3 h-3" />
+                          Valid 100%
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
+                          <AlertTriangle className="w-3 h-3" />
+                          Must equal 100%
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -3376,11 +3485,32 @@ export const GradeComputation: React.FC = () => {
 
                   {/* Category Cards List */}
                   <div className="space-y-3">
-                    {(activePeriodEditorTab === 'Midterm' ? midtermCategories : finalCategories).map((row) => (
+                    {(activePeriodEditorTab === 'Midterm' ? midtermCategories : finalCategories).map((row, index, list) => (
                       <div
                         key={row.compositeKey}
                         className="p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
                       >
+                        {/* REORDER */}
+                        <div className="flex sm:flex-col gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            aria-label={`Move category ${row.name || 'unnamed'} up`}
+                            onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'up')}
+                            disabled={index === 0}
+                            className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Move category ${row.name || 'unnamed'} down`}
+                            onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'down')}
+                            disabled={index === list.length - 1}
+                            className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                         {/* CATEGORY NAME */}
                         <div className="flex-1">
                           <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
@@ -3455,12 +3585,12 @@ export const GradeComputation: React.FC = () => {
                       className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-extrabold text-xs transition-colors shadow-2xs cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Add Category to {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Final'}</span>
+                      <span>{activePeriodEditorTab === 'Midterm' ? 'Add Midterm Category' : 'Add Finals Category'}</span>
                     </button>
                   </div>
 
                   {/* Attendance Calendar Date Ranges (Collapsible) */}
-                  <details className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
+                  <details open className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
                     <summary className="p-3.5 sm:p-4 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between select-none hover:bg-slate-100/50 dark:hover:bg-slate-800/40 transition-colors">
                       <div className="flex items-center gap-2">
                         <Settings className="w-3.5 h-3.5 text-slate-400" />
@@ -3473,7 +3603,7 @@ export const GradeComputation: React.FC = () => {
                         Inclusive calendar dates for each period's attendance. Midterm attendance must end before Finals attendance starts.
                       </p>
 
-                      {!validateDateRanges(attendanceDateRanges).valid && (
+                      {!validateDateRanges(attendanceDateRanges).valid && periodValidationError !== validateDateRanges(attendanceDateRanges).error && (
                         <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
                           <AlertTriangle className="w-4 h-4 shrink-0" />
                           <span>{validateDateRanges(attendanceDateRanges).error}</span>
@@ -3540,15 +3670,15 @@ export const GradeComputation: React.FC = () => {
                   <div className="pt-6 border-t border-slate-200/90 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold text-slate-500 dark:text-slate-400">
                       <span>
-                        Term Split: <span className={termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{termRatioCalc.displayPercent}%</span>
+                        Term Split: <span className={termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{termRatioCalc.displayPercent}</span>
                       </span>
                       <span className="text-slate-300 dark:text-slate-700">•</span>
                       <span>
-                        Midterm: <span className={midtermCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{midtermCalc.displayPercent}%</span>
+                        Midterm: <span className={midtermCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{midtermCalc.displayPercent}</span>
                       </span>
                       <span className="text-slate-300 dark:text-slate-700">•</span>
                       <span>
-                        Final: <span className={finalCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{finalCalc.displayPercent}%</span>
+                        Final: <span className={finalCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{finalCalc.displayPercent}</span>
                       </span>
                     </div>
 
@@ -3559,7 +3689,7 @@ export const GradeComputation: React.FC = () => {
                         className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
                       >
                         <Save className="w-4 h-4" />
-                        <span>{configSaving ? 'Saving...' : 'Save Components Schema'}</span>
+                        <span>{configSaving ? 'Saving...' : loadedConfig ? 'Save Grade Weights' : 'Save Initial Schema'}</span>
                       </button>
                     </div>
                   </div>
@@ -3568,6 +3698,45 @@ export const GradeComputation: React.FC = () => {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Grade weights must be saved before assessments can be added */}
+      {weightsRequiredOffering && (
+        <Modal
+          isOpen={Boolean(weightsRequiredOffering)}
+          onClose={() => setWeightsRequiredOffering(null)}
+          title="Set up grade weights first"
+        >
+          <div className="space-y-4 text-xs">
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              <strong>{weightsRequiredOffering.courseCode} — {weightsRequiredOffering.courseName}</strong> has no saved grade weights yet.
+              Every assessment must belong to one of the course's grading categories, so set up and save the grade weights for this course before adding assessments.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setWeightsRequiredOffering(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const target = weightsRequiredOffering;
+                  setWeightsRequiredOffering(null);
+                  const switched = await handleSelectOffering(target.key);
+                  if (!switched) return;
+                  setSelectedSubjectCode(target.courseCode);
+                  setActiveSubTab('components');
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+              >
+                Go to Grade Weights
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ----------------------------------------------------
@@ -3790,6 +3959,18 @@ export const GradeComputation: React.FC = () => {
           </div>
 
           {/* Recompute Alert */}
+          {transmutationWarnings.length > 0 && (
+            <div role="alert" data-testid="transmutation-warnings" className="mx-5 my-3 p-4 rounded-2xl border text-xs bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-1.5">
+              <div className="font-bold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                Attendance session could not be matched for transmutation
+              </div>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {transmutationWarnings.map(message => <li key={message}>{message}</li>)}
+              </ul>
+              <p className="text-[11px] opacity-80">Affected students stay incomplete for these assessments until a single session is linked.</p>
+            </div>
+          )}
           {recomputeAlert && (
             <div className={`mx-5 my-3 p-4 rounded-2xl border text-xs flex flex-col gap-1.5 ${recomputeAlert.status === 'success'
                 ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
@@ -4296,7 +4477,7 @@ export const GradeComputation: React.FC = () => {
                     required
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
                   >
-                    <option value="">Select Category Type</option>
+                    <option value="">Select grading category</option>
                     {modalEligibleCategories.map(cat => (
                       <option key={String(cat.id ?? cat.name)} value={String(cat.id ?? cat.name)}>
                         {cat.name} ({cat.weight}%)

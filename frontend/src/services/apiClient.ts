@@ -1646,6 +1646,7 @@ export interface FacultyGradingCategoryAssignmentRequiredItem {
   assessmentId: number;
   title: string;
   legacyType: string;
+  gradingPeriod?: 'Midterm' | 'Final' | null;
 }
 
 export interface FacultyGradingPeriodMappingRequiredItem {
@@ -1663,6 +1664,8 @@ export interface FacultyGradingConfigSavePayload {
   version?: number;
   schemaMode?: 'overall' | 'periods';
   convertFromOverall?: boolean;
+  /** First save only: categories Faculty picked for existing assessments that could not be linked by name. */
+  assessmentAssignments?: Array<{ assessmentId: number; categoryName: string }>;
   termRatio?: { midterm: number | string; final: number | string };
   attendanceDateRanges?: {
     midterm?: { startDate?: string | null; endDate?: string | null };
@@ -1833,10 +1836,22 @@ export type FacultyGradeComputeResult =
   | FacultyLegacyComputedResult
   | FacultyLegacyIncompleteAttendanceResult;
 
+export interface FacultyTransmutationLinkWarning {
+  assessmentId: string;
+  title: string;
+  classId: string;
+  dueDate: string | null;
+  reason: 'no_exam_date' | 'no_session' | 'multiple_sessions';
+  sessionCount: number;
+  message: string;
+}
+
 export interface FacultyComputeGradesResponse {
   status: string;
   message: string;
   results: FacultyGradeComputeResult[];
+  /** Transmuted assessments whose exam-date attendance match is missing or ambiguous. */
+  transmutationWarnings?: FacultyTransmutationLinkWarning[];
 }
 
 export function isPeriodComputeResult(

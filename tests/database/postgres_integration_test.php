@@ -3565,6 +3565,52 @@ expect_same(200, $overrideStatus, 'Attendance correction returns HTTP 200');
 expect_same(200, $computeStatus, 'Corrected attendance recomputation returns HTTP 200');
 $correctedGrades = $readFixtureGrades($pdo);
 expect_same('75.00', $correctedGrades[1]['final_percentage'], 'Attendance correction changes the subsequent persisted effective grade');
+
+// Exam-date auto-match: with no linked session the attendance record on the
+// assessment's due date is used, but only when it is unambiguous, and the
+// compute response warns when no session or several sessions exist that day.
+$findEnrollmentResult = static function (array $body, int $enrollmentId): ?array {
+    foreach (($body['results'] ?? []) as $result) {
+        if ((string) ($result['enrollmentId'] ?? '') === (string) $enrollmentId) {
+            return $result;
+        }
+    }
+    return null;
+};
+$pdo->prepare('UPDATE assessments SET attendance_session_date = NULL, attendance_session_code = NULL, due_date = ? WHERE assessment_id = ?')
+    ->execute([$gradeSessionDate, $gradeAssessmentId]);
+[$autoMatchStatus, $autoMatchBody] = $computeFixtureGrades();
+expect_same(200, $autoMatchStatus, 'Exam-date auto-match computation returns HTTP 200');
+expect_same([], $autoMatchBody['transmutationWarnings'] ?? null, 'A single session on the exam date produces no transmutation warning');
+expect_same('computed', $findEnrollmentResult($autoMatchBody, $gradeEnrollmentA)['status'] ?? null, 'The exam-date session satisfies transmutation for enrollment A');
+$autoMatchGrades = $readFixtureGrades($pdo);
+expect_same('75.00', $autoMatchGrades[0]['final_percentage'], 'Exam-date auto-match applies the same transmutation as an explicit link');
+
+$extraSessionStmt = $pdo->prepare(
+    "INSERT INTO attendance_records (enrollment_id, session_date, session_code, status, verification_method)
+     VALUES (?, ?, ?, 'absent', 'integration_fixture') RETURNING record_id"
+);
+$extraSessionStmt->execute([$gradeEnrollmentA, $gradeSessionDate, $gradeSessionCode . '-PM']);
+$extraSessionRecordId = (int) $extraSessionStmt->fetchColumn();
+[$ambiguousStatus, $ambiguousBody] = $computeFixtureGrades();
+expect_same(200, $ambiguousStatus, 'Ambiguous exam-date computation returns HTTP 200');
+expect_same('incomplete_attendance', $findEnrollmentResult($ambiguousBody, $gradeEnrollmentA)['status'] ?? null, 'Two sessions on the exam date are not guessed or double counted');
+expect_same('multiple_sessions', $ambiguousBody['transmutationWarnings'][0]['reason'] ?? null, 'Two sessions on the exam date produce a multiple-sessions warning');
+expect_same(2, $ambiguousBody['transmutationWarnings'][0]['sessionCount'] ?? null, 'The warning reports how many sessions were found');
+expect_same((string) $gradeAssessmentId, (string) ($ambiguousBody['transmutationWarnings'][0]['assessmentId'] ?? ''), 'The warning names the affected assessment');
+$pdo->prepare('DELETE FROM attendance_records WHERE record_id = ?')->execute([$extraSessionRecordId]);
+
+$pdo->prepare("UPDATE assessments SET due_date = '2026-01-16' WHERE assessment_id = ?")->execute([$gradeAssessmentId]);
+[$noSessionStatus, $noSessionBody] = $computeFixtureGrades();
+expect_same(200, $noSessionStatus, 'No-session exam-date computation returns HTTP 200');
+expect_same('no_session', $noSessionBody['transmutationWarnings'][0]['reason'] ?? null, 'No session on the exam date produces a no-session warning');
+expect_true(str_contains((string) ($noSessionBody['transmutationWarnings'][0]['message'] ?? ''), '2026-01-16'), 'The no-session warning names the exam date');
+
+$pdo->prepare('UPDATE assessments SET attendance_session_date = ?, attendance_session_code = ?, due_date = NULL WHERE assessment_id = ?')
+    ->execute([$gradeSessionDate, $gradeSessionCode, $gradeAssessmentId]);
+[$restoredLinkStatus, $restoredLinkBody] = $computeFixtureGrades();
+expect_same(200, $restoredLinkStatus, 'Restoring the explicit session link recomputes successfully');
+expect_same([], $restoredLinkBody['transmutationWarnings'] ?? null, 'Explicitly linked assessments never produce auto-match warnings');
 $rawScoreAfterCorrection = (float) $pdo->query(
     "SELECT score FROM assessment_scores WHERE assessment_id = {$gradeAssessmentId} AND student_id = {$gradeStudentB}"
 )->fetchColumn();
@@ -3954,6 +4000,49 @@ $failedTransitionLinkStmt->execute([$failedTransitionAssessmentId]);
 expect_same(null, $failedTransitionLinkStmt->fetchColumn(), 'Failed transition leaves assessment linkage unchanged');
 $transitionAuditCountStmt->execute();
 expect_same($failedTransitionAuditCountBefore, (int) $transitionAuditCountStmt->fetchColumn(), 'Failed transition creates no successful configuration audit event');
+expect_same('Midterm', $failedTransitionBody['assessments'][0]['gradingPeriod'] ?? null, 'Assignment-required error reports the assessment grading period for the category picker');
+
+// Name linking is tolerant of plurals/case ("Quiz" -> "Quizzes"); anything
+// still unmatched can be assigned by hand with assessmentAssignments.
+$failedTransitionAssessmentStmt->execute([$failedTransitionClassId, 'Tolerant Quiz ' . $transitionFixtureSuffix]);
+$tolerantQuizAssessmentId = (int) $failedTransitionAssessmentStmt->fetchColumn();
+$pdo->prepare("UPDATE assessments SET type = 'quiz' WHERE assessment_id = ?")->execute([$tolerantQuizAssessmentId]);
+$tolerantCategories = [
+    ['name' => 'Laboratory', 'weight' => 50, 'sortOrder' => 1],
+    ['name' => 'Quizzes', 'weight' => 50, 'sortOrder' => 2],
+];
+[$badAssignmentStatus, $badAssignmentBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $failedTransitionCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2028-2029',
+    'categories' => $tolerantCategories,
+    'assessmentAssignments' => [['assessmentId' => $failedTransitionAssessmentId, 'categoryName' => 'Not A Category']],
+]);
+expect_same(422, $badAssignmentStatus, 'A manual assignment to a category that is not in the configuration is rejected');
+expect_same('GRADING_ASSESSMENT_ASSIGNMENT_INVALID', $badAssignmentBody['code'] ?? null, 'Invalid manual assignment uses its own error code: ' . json_encode($badAssignmentBody));
+[$unassignedStatus, $unassignedBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $failedTransitionCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2028-2029',
+    'categories' => $tolerantCategories,
+]);
+expect_same(422, $unassignedStatus, 'Without a manual choice the unmatched Practical still blocks the first save');
+expect_same(1, count($unassignedBody['assessments'] ?? []), 'Only the Practical is unmatched; "quiz" links to "Quizzes" by name');
+[$assignedStatus, $assignedBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $failedTransitionCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2028-2029',
+    'categories' => $tolerantCategories,
+    'assessmentAssignments' => [['assessmentId' => $failedTransitionAssessmentId, 'categoryName' => 'laboratory']],
+]);
+expect_same(201, $assignedStatus, 'First save succeeds (201 Created) once the unmatched assessment is assigned by hand: ' . json_encode($assignedBody));
+$assignedCategoryNameStmt = $pdo->prepare(
+    'SELECT gc.name FROM assessments a JOIN grading_categories gc ON gc.category_id = a.grading_category_id WHERE a.assessment_id = ?'
+);
+$assignedCategoryNameStmt->execute([$failedTransitionAssessmentId]);
+expect_same('Laboratory', $assignedCategoryNameStmt->fetchColumn(), 'The hand-assigned assessment is linked to the chosen category');
+$assignedCategoryNameStmt->execute([$tolerantQuizAssessmentId]);
+expect_same('Quizzes', $assignedCategoryNameStmt->fetchColumn(), 'The "quiz" assessment is linked to "Quizzes" by tolerant name matching');
 
 $pdo->beginTransaction();
 $transitionAllAssessmentIds = $transitionAssessmentIds;
@@ -3962,7 +4051,8 @@ $pdo->prepare("DELETE FROM assessment_scores WHERE assessment_id IN ({$transitio
     ->execute($transitionAllAssessmentIds);
 $pdo->prepare("DELETE FROM assessments WHERE assessment_id IN ({$transitionAssessmentPlaceholders})")
     ->execute($transitionAllAssessmentIds);
-$pdo->prepare('DELETE FROM assessments WHERE assessment_id = ?')->execute([$failedTransitionAssessmentId]);
+$pdo->prepare('DELETE FROM assessments WHERE assessment_id IN (?, ?)')->execute([$failedTransitionAssessmentId, $tolerantQuizAssessmentId]);
+$pdo->prepare('DELETE FROM grading_configs WHERE course_id = ?')->execute([$failedTransitionCourseId]);
 $pdo->prepare('DELETE FROM enrollments WHERE enrollment_id = ?')->execute([$transitionEnrollmentId]);
 $pdo->prepare('DELETE FROM students WHERE student_id = ?')->execute([$transitionStudentId]);
 $pdo->prepare('DELETE FROM grading_configs WHERE config_id = ?')->execute([$transitionConfigId]);

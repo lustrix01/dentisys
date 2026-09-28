@@ -13,7 +13,6 @@ import {
   Play,
   Navigation,
   Camera,
-  Pencil,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
@@ -30,6 +29,20 @@ import {
 } from '../../services/apiClient';
 
 type SupportedStatus = 'present' | 'absent' | 'late' | 'excused';
+
+const STATUS_ORDER: SupportedStatus[] = ['present', 'late', 'absent', 'excused'];
+const STATUS_LABELS: Record<SupportedStatus, string> = {
+  present: 'Present',
+  late: 'Late',
+  absent: 'Absent',
+  excused: 'Excused',
+};
+const STATUS_BUTTON_ACTIVE: Record<SupportedStatus, string> = {
+  present: 'border-emerald-500 bg-emerald-600 text-white',
+  late: 'border-amber-500 bg-amber-500 text-white',
+  absent: 'border-rose-500 bg-rose-600 text-white',
+  excused: 'border-sky-500 bg-sky-600 text-white',
+};
 
 const formatCheckInTime = (value?: string | null) => {
   if (!value) return '—';
@@ -102,6 +115,10 @@ export const AttendanceMonitoring: React.FC = () => {
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionError, setCorrectionError] = useState<string | null>(null);
   const [submittingCorrection, setSubmittingCorrection] = useState(false);
+
+  // Bulk "mark all unrecorded as Present"
+  const [isBulkConfirmOpen, setIsBulkConfirmOpen] = useState(false);
+  const [bulkMarking, setBulkMarking] = useState(false);
 
   // Session Revocation Modal State
   const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
@@ -263,12 +280,38 @@ export const AttendanceMonitoring: React.FC = () => {
     setIsCorrectionModalOpen(true);
   };
 
-  const handleOpenOverrideModal = (item: FacultyAttendanceWorksheetRosterItem) => {
-    setCorrectionTarget(item);
-    setTargetStatus((item.status as SupportedStatus) || 'present');
-    setCorrectionReason(item.overrideReason || '');
-    setCorrectionError(null);
-    setIsCorrectionModalOpen(true);
+  // Record every student with no attendance yet as Present (existing records are never touched).
+  const handleBulkMarkPresent = async () => {
+    if (!worksheet) return;
+    const targets = worksheet.roster.filter(r => r.status === null);
+    setIsBulkConfirmOpen(false);
+    if (targets.length === 0) return;
+    setBulkMarking(true);
+    let saved = 0;
+    const failed: string[] = [];
+    for (const item of targets) {
+      try {
+        const res = await recordFacultyInitialAttendanceApi({
+          csId: parseInt(selectedCsId, 10),
+          enrollmentId: parseInt(item.enrollmentId, 10),
+          sessionDate: selectedDate,
+          status: 'present',
+        });
+        saved += 1;
+        setWorksheet(prev => prev ? {
+          ...prev,
+          roster: prev.roster.map(r => r.enrollmentId === item.enrollmentId
+            ? { ...r, id: res.recordId || r.id, status: 'present', date: selectedDate }
+            : r),
+        } : prev);
+      } catch {
+        failed.push(item.studentName);
+      }
+    }
+    setBulkMarking(false);
+    setNotification(failed.length === 0
+      ? { type: 'success', message: `Marked ${saved} student${saved === 1 ? '' : 's'} as present.` }
+      : { type: 'error', message: `Marked ${saved} as present; could not record ${failed.join(', ')}.` });
   };
 
   // Submit Correction / Override (sends minimal payload { recordId/initial, status, reason })
@@ -344,7 +387,9 @@ export const AttendanceMonitoring: React.FC = () => {
       setCorrectionReason('');
       setNotification({
         type: 'success',
-        message: `Attendance updated for ${correctionTarget.studentName} (${targetStatus}).`,
+        message: correctionTarget.status
+          ? `Attendance corrected for ${correctionTarget.studentName} (${targetStatus}).`
+          : `Attendance updated for ${correctionTarget.studentName} (${targetStatus}).`,
       });
     } catch (err) {
       setCorrectionError(err instanceof Error ? err.message : 'Failed to save attendance change.');
@@ -837,6 +882,15 @@ export const AttendanceMonitoring: React.FC = () => {
                 <option value="absent">Absent ({stats.absent})</option>
                 <option value="excused">Excused ({stats.excused})</option>
               </select>
+              <button
+                type="button"
+                onClick={() => setIsBulkConfirmOpen(true)}
+                disabled={bulkMarking || worksheet.roster.every(r => r.status !== null)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold whitespace-nowrap transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bulkMarking ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                <span>{bulkMarking ? 'Marking…' : 'Mark all unrecorded as Present'}</span>
+              </button>
             </div>
           </div>
 
@@ -904,7 +958,7 @@ export const AttendanceMonitoring: React.FC = () => {
                         </td>
 
                         {/* Column 4: ATTENDANCE STATUS */}
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-6" data-testid="attendance-status">
                           {item.status ? (
                             <span
                               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
@@ -918,7 +972,7 @@ export const AttendanceMonitoring: React.FC = () => {
                               }`}
                             >
                               <span className="text-sm leading-none">•</span>
-                              <span className="capitalize">{item.status}</span>
+                              <span>{STATUS_LABELS[item.status as SupportedStatus] ?? item.status}</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
@@ -928,17 +982,30 @@ export const AttendanceMonitoring: React.FC = () => {
                           )}
                         </td>
 
-                        {/* Column 5: ACTIONS */}
+                        {/* Column 5: ACTIONS — one click records a first entry; changing a saved status asks for a reason. */}
                         <td className="py-4 px-6 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenOverrideModal(item)}
-                            disabled={isSaving}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-slate-500" />
-                            <span>Override</span>
-                          </button>
+                          <div className="inline-flex flex-wrap justify-end gap-1" role="group" aria-label={`Attendance status for ${item.studentName}`}>
+                            {STATUS_ORDER.map(status => {
+                              const isCurrent = item.status === status;
+                              return (
+                                <button
+                                  key={status}
+                                  type="button"
+                                  onClick={() => { void handleStatusClick(item, status); }}
+                                  disabled={isSaving || bulkMarking}
+                                  aria-pressed={isCurrent}
+                                  title={item.status && !isCurrent ? `Change to ${STATUS_LABELS[status]} (reason required)` : `Mark ${STATUS_LABELS[status]}`}
+                                  className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                                    isCurrent
+                                      ? STATUS_BUTTON_ACTIVE[status]
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60'
+                                  }`}
+                                >
+                                  {STATUS_LABELS[status]}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1017,6 +1084,38 @@ export const AttendanceMonitoring: React.FC = () => {
         </Modal>
       )}
 
+      {/* Bulk mark confirmation */}
+      {isBulkConfirmOpen && worksheet && (
+        <Modal
+          isOpen={isBulkConfirmOpen}
+          onClose={() => setIsBulkConfirmOpen(false)}
+          title="Mark Unrecorded Students Present"
+        >
+          <div className="space-y-4 text-xs">
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              Record <strong>{worksheet.roster.filter(r => r.status === null).length}</strong> student(s) with no attendance for {selectedDate} as <strong>Present</strong>?
+              Students who already have a status are not changed.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsBulkConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { void handleBulkMarkPresent(); }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+              >
+                Mark Present
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* 5. Attendance Correction Modal */}
       {isCorrectionModalOpen && correctionTarget && (
         <Modal
@@ -1051,6 +1150,14 @@ export const AttendanceMonitoring: React.FC = () => {
                   {correctionTarget.status || 'Not recorded'}
                 </span>
               </div>
+              {correctionTarget.status && correctionTarget.status !== targetStatus && (
+                <div className="flex justify-between items-center">
+                  <span>Change:</span>
+                  <span className="font-bold font-mono text-amber-700 dark:text-amber-300">
+                    {correctionTarget.status.toUpperCase()} → {targetStatus.toUpperCase()}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div>
