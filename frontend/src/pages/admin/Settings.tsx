@@ -29,8 +29,6 @@ export const Settings: React.FC = () => {
   // the Save button below is for the institution-wide policy only.
   const { theme, changeTheme } = useThemePreference();
   const [themeError, setThemeError] = useState("");
-  const [threshold, setThreshold] = useState(settings.retentionThreshold);
-  const [weights, setWeights] = useState(settings.weights);
   const [transmutationDefaults, setTransmutationDefaults] = useState(
     settings.transmutationDefaults ?? { minimumPercentage: 50, maximumPercentage: 100 },
   );
@@ -42,34 +40,24 @@ export const Settings: React.FC = () => {
     getAdminSettingsApi()
       .then((res) => {
         if (res.settings) {
-          if (res.settings.retentionThreshold)
-            setThreshold(res.settings.retentionThreshold);
-          if (res.settings.weights) setWeights(res.settings.weights);
           if (res.settings.transmutationDefaults) setTransmutationDefaults(res.settings.transmutationDefaults);
         }
       })
       .catch(() => {});
   }, []);
 
-  const total =
-    weights.quizzes + weights.exams + weights.practicum + weights.attendance;
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
-    if (total !== 100) {
-      setError(`Weights must total 100%. Current total: ${total}%.`);
-      return;
-    }
     if (transmutationDefaults.minimumPercentage < 0
       || transmutationDefaults.maximumPercentage > 100
       || transmutationDefaults.minimumPercentage > transmutationDefaults.maximumPercentage) {
       setError('Transmutation bounds must be between 0% and 100%, with minimum not exceeding maximum.');
       return;
     }
-    const newSettings = { theme, retentionThreshold: threshold, weights, transmutationDefaults };
     try {
-      await updateAdminSettingsApi(newSettings);
-      updateSettings(newSettings);
+      await updateAdminSettingsApi({ theme, transmutationDefaults });
+      updateSettings({ ...settings, theme, transmutationDefaults });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -86,8 +74,6 @@ export const Settings: React.FC = () => {
     setShowResetConfirmation(false);
     window.location.reload();
   };
-  const setWeight = (key: keyof typeof weights, value: number) =>
-    setWeights({ ...weights, [key]: value });
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
@@ -96,8 +82,7 @@ export const Settings: React.FC = () => {
             My Settings
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Maintain institution-wide academic policy, grading configuration,
-            and local cache controls.
+            Appearance, assessment transmutation defaults, and local cache controls.
           </p>
         </div>
         <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-accent-700 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/30 px-3 py-2 rounded-xl">
@@ -157,31 +142,23 @@ export const Settings: React.FC = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm">
                 <ShieldAlert className="w-4.5 h-4.5 text-rose-500" />
-                Retention standard
+                Grading policy
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Retention trigger grade
-                <select
-                  value={threshold}
-                  onChange={(event) => setThreshold(Number(event.target.value))}
-                  className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-700 dark:text-slate-200"
-                >
-                  {![2, 2.5, 3].includes(Number(threshold)) && (
-                    <option value={threshold}>{Number(threshold).toFixed(2)} — Current saved value</option>
-                  )}
-                  <option value="2">2.0 — Outstanding</option>
-                  <option value="2.5">2.5 — Standard dental passing</option>
-                  <option value="3">3.0 — General passing</option>
-                </select>
-              </label>
-              <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
-                A final course grade at or above this value (1.0 is highest,
-                5.0 is failing) places the Student under retention monitoring
-                and makes the course eligible for a remedial attempt. It applies
-                to every course, not only clinical ones.
+            <CardContent className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              <div data-testid="grading-policy-card" className="space-y-3">
+              <p>
+                <strong className="text-slate-700 dark:text-slate-200">Retention trigger: GWA 2.5.</strong>{" "}
+                A final course grade of 2.5 or worse (1.0 is highest, 5.0 is failing) places the
+                Student under retention monitoring and makes the course eligible for a remedial
+                attempt. This is fixed college policy and applies to every course.
               </p>
+              <p>
+                <strong className="text-slate-700 dark:text-slate-200">Grade weights</strong> are set
+                for each course by its Faculty in Grade Computation. A class cannot be graded until
+                its course has saved grade weights.
+              </p>
+              </div>
             </CardContent>
           </Card>
           <Card>
@@ -208,57 +185,14 @@ export const Settings: React.FC = () => {
         </div>
         <Card className="lg:col-span-8 p-0 overflow-hidden">
           <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
-            <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <span className="flex items-center gap-2">
-                <Percent className="w-4.5 h-4.5 text-accent-500" />
-                Course component ratios
-              </span>
-              <span
-                className={`px-2.5 py-1 rounded-lg text-[10px] ${total === 100 ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400" : "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400"}`}
-              >
-                Total: {total}% {total === 100 ? "valid" : "must equal 100%"}
-              </span>
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Percent className="w-4.5 h-4.5 text-accent-500" />
+              Assessment transmutation defaults
             </CardTitle>
           </CardHeader>
           <CardContent className="p-5">
-            <p className="text-xs text-slate-400 mb-5">
-              These ratios are used by grade computation throughout the portal.
-            </p>
-            <div className="grid sm:grid-cols-2 gap-4">
-              {(
-                [
-                  ["practicum", "Clinical practicum and laboratory"],
-                  ["exams", "Written examinations"],
-                  ["quizzes", "Quizzes and assignments"],
-                  ["attendance", "Class attendance"],
-                ] as const
-              ).map(([key, label]) => (
-                <label
-                  key={key}
-                  className="text-[10px] font-bold text-slate-400 uppercase tracking-wider"
-                >
-                  {label}
-                  <div className="relative mt-1.5">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={weights[key]}
-                      onChange={(event) =>
-                        setWeight(key, Number(event.target.value) || 0)
-                      }
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-sm text-slate-800 dark:text-slate-100"
-                    />
-                    <span className="absolute right-3.5 top-2.5 text-xs text-slate-400">
-                      %
-                    </span>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Assessment transmutation defaults</h3>
-              <p className="text-[10px] text-slate-400 mt-1 mb-4">New assessments start with these bounded transformation values.</p>
+            <div>
+              <p className="text-[10px] text-slate-400 mb-4">New assessments start with these bounded transformation values.</p>
               <div className="grid sm:grid-cols-2 gap-4">
                 {([
                   ['minimumPercentage', 'Minimum percentage'],
@@ -284,7 +218,6 @@ export const Settings: React.FC = () => {
             </div>
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button
-                disabled={total !== 100}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-xs font-bold shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />

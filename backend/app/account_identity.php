@@ -226,3 +226,67 @@ function update_account_identity(PDO $pdo, int $userId, string $displayName, str
         throw $e;
     }
 }
+
+/** Human label for an account role in role-conflict messages. */
+function account_identity_role_label(string $role): string
+{
+    return match ($role) {
+        'admin' => 'Dean (Administrator)',
+        'faculty' => 'Faculty',
+        'secretary' => 'Class Secretary',
+        'student' => 'Student',
+        default => ucfirst($role),
+    };
+}
+
+/**
+ * One person keeps one kind of DentiSys identity: a Student (who may also be
+ * appointed Class Secretary) or a staff member (Faculty or the Dean). Returns
+ * a message when $email already belongs to an identity that cannot take the
+ * $intendedRole, or null when it is allowed.
+ *
+ *  - 'student'   : the email must not belong to a Faculty or Dean account.
+ *  - 'secretary' : same as student (a Class Secretary is an appointed Student).
+ *  - 'faculty'   : the email must not belong to a Student record, a Student or
+ *                  Class Secretary account, or the Dean.
+ */
+function account_identity_email_role_conflict(PDO $pdo, string $email, string $intendedRole, ?int $ignoreUserId = null): ?string
+{
+    $email = trim($email);
+    if ($email === '') {
+        return null;
+    }
+    $accountStmt = $pdo->prepare(
+        'SELECT user_id, role FROM user_accounts WHERE lower(login_email) = lower(?) ORDER BY user_id'
+    );
+    $accountStmt->execute([$email]);
+    $staffRoles = ['admin', 'faculty'];
+    foreach ($accountStmt->fetchAll(PDO::FETCH_ASSOC) as $account) {
+        if ($ignoreUserId !== null && (int) $account['user_id'] === $ignoreUserId) {
+            continue;
+        }
+        $role = (string) $account['role'];
+        if (in_array($intendedRole, ['student', 'secretary'], true) && in_array($role, $staffRoles, true)) {
+            return sprintf(
+                '%s belongs to a %s account and cannot be used for a Student or Class Secretary.',
+                $email,
+                account_identity_role_label($role)
+            );
+        }
+        if ($intendedRole === 'faculty' && $role !== 'faculty') {
+            return sprintf(
+                '%s belongs to a %s account and cannot be invited as Faculty.',
+                $email,
+                account_identity_role_label($role)
+            );
+        }
+    }
+    if ($intendedRole === 'faculty') {
+        $studentStmt = $pdo->prepare('SELECT 1 FROM students WHERE lower(bu_email) = lower(?) LIMIT 1');
+        $studentStmt->execute([$email]);
+        if ($studentStmt->fetchColumn() !== false) {
+            return sprintf('%s belongs to a Student and cannot be invited as Faculty.', $email);
+        }
+    }
+    return null;
+}

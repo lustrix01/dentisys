@@ -518,23 +518,17 @@ function handle_admin_settings_get(): void
 
         $stmt = $pdo->query(
             "SELECT setting_key, setting_value FROM system_settings
-             WHERE setting_key IN ('retention_policy', 'grading_defaults')"
+             WHERE setting_key = 'grading_defaults'"
         );
         $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_KEY_PAIR) : [];
-        // retention_policy.retention_threshold is the canonical course-grade
-        // trigger. grading_defaults.retention_gwa_threshold is compatibility
-        // metadata kept synchronized for existing consumers.
-        $retention = isset($rows['retention_policy']) ? json_decode($rows['retention_policy'], true) : [];
         $grading = isset($rows['grading_defaults']) ? json_decode($rows['grading_defaults'], true) : [];
         $transmutation = $grading['transmutation_defaults'] ?? [];
         $themeStmt = $pdo->prepare("SELECT theme FROM user_accounts WHERE user_id = ?");
         $themeStmt->execute([$authCtx['user_id']]);
         $settings = [
             'theme' => $themeStmt->fetchColumn() ?: 'light',
-            'retentionThreshold' => (float) ($retention['retention_threshold'] ?? 2.5),
-            'weights' => $grading['default_weights'] ?? [
-                'practicum' => 40, 'exams' => 30, 'quizzes' => 20, 'attendance' => 10,
-            ],
+            // Fixed college policy (read-only): GWA 2.5 or worse triggers remedial.
+            'retentionThreshold' => remedial_attempts_course_grade_threshold(),
             'transmutationDefaults' => [
                 'minimumPercentage' => (float) ($transmutation['minimum_percentage'] ?? 50),
                 'maximumPercentage' => (float) ($transmutation['maximum_percentage'] ?? 100),
@@ -563,11 +557,8 @@ function handle_admin_settings_update(): void
 
         $settings = $body['data'];
         $theme = (string) ($settings['theme'] ?? 'light');
-        $threshold = (float) ($settings['retentionThreshold'] ?? 2.5);
-        $weights = $settings['weights'] ?? [];
-        if ($weights instanceof \stdClass) {
-            $weights = get_object_vars($weights);
-        }
+        // The retention trigger (fixed at 2.5) and course grading weights (set
+        // per course by Faculty) are not Admin settings; those keys are ignored.
         $existingGradingStmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults' LIMIT 1");
         $existingGrading = json_decode((string) ($existingGradingStmt->fetchColumn() ?: '{}'), true);
         $existingTransmutation = $existingGrading['transmutation_defaults'] ?? [];
@@ -592,46 +583,18 @@ function handle_admin_settings_update(): void
             'maximumPercentage' => $maximumTransmutation,
         ];
         if (!in_array($theme, ['light', 'dark'], true)
-            || $threshold < 1.0 || $threshold > 5.0
-            || !is_array($weights)
-            || abs(array_sum(array_map('floatval', $weights)) - 100.0) > 0.001
             || !$transmutationIsArray || !$transmutationNumbersAreValid
             || !is_finite($minimumTransmutation) || !is_finite($maximumTransmutation)
             || $minimumTransmutation < 0 || $minimumTransmutation > 100
             || $maximumTransmutation < 0 || $maximumTransmutation > 100
             || $minimumTransmutation > $maximumTransmutation
         ) {
-            safe_error_response('Theme, retention threshold, grading weights totaling 100, and valid transmutation bounds are required.', 422);
+            safe_error_response('A theme and valid transmutation bounds are required.', 422);
             return;
         }
         $pdo->beginTransaction();
         $themeStmt = $pdo->prepare("UPDATE user_accounts SET theme = ? WHERE user_id = ?");
         $themeStmt->execute([$theme, $authCtx['user_id']]);
-        $retentionStmt = $pdo->prepare(
-            // Keep the canonical retention-policy field and its compatibility
-            // mirror synchronized in the same settings transaction below.
-            "UPDATE system_settings
-             SET setting_value = setting_value || jsonb_build_object(
-                    'retention_threshold', ?::numeric,
-                    'initial_trigger_grade', ?::numeric
-                 ),
-                 updated_at = CURRENT_TIMESTAMP(6), updated_by_user_id = ?
-             WHERE setting_key = 'retention_policy'"
-        );
-        $retentionStmt->execute([$threshold, $threshold, $authCtx['user_id']]);
-        $gradingStmt = $pdo->prepare(
-            "UPDATE system_settings
-             SET setting_value = jsonb_set(setting_value, '{default_weights}',
-                    jsonb_build_object('quizzes', ?::numeric, 'exams', ?::numeric, 'practicum', ?::numeric, 'attendance', ?::numeric), true)
-                    || jsonb_build_object('retention_gwa_threshold', ?::numeric),
-                 updated_at = CURRENT_TIMESTAMP(6), updated_by_user_id = ?
-             WHERE setting_key = 'grading_defaults'"
-        );
-        $gradingStmt->execute([
-            (float) ($weights['quizzes'] ?? 0), (float) ($weights['exams'] ?? 0),
-            (float) ($weights['practicum'] ?? 0), (float) ($weights['attendance'] ?? 0),
-            $threshold, $authCtx['user_id'],
-        ]);
         $transmutationStmt = $pdo->prepare(
             "UPDATE system_settings
              SET setting_value = jsonb_set(setting_value, '{transmutation_defaults}',
@@ -644,6 +607,8 @@ function handle_admin_settings_update(): void
         ]);
         $pdo->commit();
 
+        $settings['retentionThreshold'] = remedial_attempts_course_grade_threshold();
+        unset($settings['weights']);
         json_response(['status' => 'ok', 'message' => 'System settings persisted successfully.', 'settings' => $settings], 200);
     } catch (\Throwable $e) {
         error_log('Admin settings update error: ' . sanitize_for_log($e));

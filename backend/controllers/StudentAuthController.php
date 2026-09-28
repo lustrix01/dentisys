@@ -131,6 +131,10 @@ function handle_student_invitation_create(): void
                 throw new DomainException('This canonical Student record is linked to a Secretary account and cannot be invited as a Student.');
             }
             $email = validate_institutional_email((string) ($student['bu_email'] ?? ''));
+            $roleConflict = account_identity_email_role_conflict($pdo, $email, 'student');
+            if ($roleConflict !== null) {
+                throw new DomainException($roleConflict);
+            }
             $account = null;
             if ($student['student_account_user_id'] !== null) {
                 $accountStmt = $pdo->prepare(

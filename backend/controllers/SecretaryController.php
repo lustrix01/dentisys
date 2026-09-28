@@ -111,6 +111,11 @@ function handle_secretary_invite(): void
             safe_error_response('Invitation name must match the selected student record.', 422);
             return;
         }
+        $roleConflict = account_identity_email_role_conflict($pdo, $persistedEmail, 'secretary');
+        if ($roleConflict !== null) {
+            safe_error_response($roleConflict, 409);
+            return;
+        }
         $accountCheck = $pdo->prepare("SELECT user_id FROM user_accounts WHERE lower(login_email) = lower(?) LIMIT 1");
         $accountCheck->execute([$persistedEmail]);
         if ($accountCheck->fetchColumn() !== false

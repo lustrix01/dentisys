@@ -191,6 +191,10 @@ function handle_admin_faculty_invitation_create(): void
 
         $pdo->beginTransaction();
         try {
+            $roleConflict = account_identity_email_role_conflict($pdo, $email, 'faculty');
+            if ($roleConflict !== null) {
+                throw new DomainException($roleConflict);
+            }
             $emailCheck = $pdo->prepare(
                 'SELECT user_id, login_email, role, status FROM user_accounts WHERE lower(login_email) = lower(?) FOR UPDATE'
             );
@@ -372,6 +376,11 @@ function handle_admin_faculty_invitation_update(): void
             throw new DomainException('Only a pending Faculty invitation can be edited.');
         }
 
+        $roleConflict = account_identity_email_role_conflict($pdo, $email, 'faculty', $userId);
+        if ($roleConflict !== null) {
+            $pdo->rollBack();
+            throw new DomainException($roleConflict);
+        }
         $emailConflict = $pdo->prepare(
             'SELECT user_id FROM user_accounts
               WHERE lower(login_email) = lower(?) AND user_id <> ?

@@ -249,6 +249,7 @@ $expectedMigrations = [
     '032_remedial_cost_recovery.sql',
     '033_canonical_class_semester.sql',
     '034_retention_status_override.sql',
+    '035_fixed_retention_trigger.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -795,13 +796,14 @@ $validAdminSettings['retentionThreshold'] = 2.75;
 $validAdminSettings['transmutationDefaults'] = ['minimumPercentage' => 55, 'maximumPercentage' => 100];
 [$adminSettingsSaveStatus, $adminSettingsSaveBody] = integration_http_json('/api/admin/settings', $adminAccessToken, $validAdminSettings);
 expect_same(200, $adminSettingsSaveStatus, 'Valid Admin transmutation-default update returns HTTP 200');
-expect_same(2.75, $adminSettingsSaveBody['settings']['retentionThreshold'] ?? null, 'Admin settings save reports the updated canonical retention threshold');
+expect_same(2.5, $adminSettingsSaveBody['settings']['retentionThreshold'] ?? null, 'Admin settings cannot change the fixed 2.5 retention trigger');
+expect_true(!array_key_exists('weights', $adminSettingsSaveBody['settings'] ?? []), 'Admin settings no longer expose course component ratios');
 expect_same(55, $adminSettingsSaveBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Admin settings save response reports minimum 55');
 expect_same(100, $adminSettingsSaveBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Admin settings save response reports maximum 100');
 
 [$adminSettingsReloadStatus, $adminSettingsReloadBody] = integration_http_get_json('/api/admin/settings', $adminAccessToken);
 expect_same(200, $adminSettingsReloadStatus, 'Admin settings reload returns HTTP 200 after valid save');
-expect_same(2.75, $adminSettingsReloadBody['settings']['retentionThreshold'] ?? null, 'Admin settings reload preserves the updated canonical retention threshold');
+expect_same(2.5, $adminSettingsReloadBody['settings']['retentionThreshold'] ?? null, 'Admin settings reload still reports the fixed 2.5 retention trigger');
 expect_same(55, $adminSettingsReloadBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Admin settings reload persists minimum 55');
 expect_same(100, $adminSettingsReloadBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Admin settings reload persists maximum 100');
 
@@ -815,7 +817,7 @@ expect_true(str_contains((string) ($invalidAdminSettingsBody['message'] ?? ''), 
 expect_same(200, $adminSettingsAfterInvalidStatus, 'Admin settings remain readable after rejected invalid bounds');
 expect_same(55, $adminSettingsAfterInvalidBody['settings']['transmutationDefaults']['minimumPercentage'] ?? null, 'Rejected Admin settings update does not persist invalid minimum');
 expect_same(100, $adminSettingsAfterInvalidBody['settings']['transmutationDefaults']['maximumPercentage'] ?? null, 'Rejected Admin settings update does not persist invalid maximum');
-expect_same(2.75, $adminSettingsAfterInvalidBody['settings']['retentionThreshold'] ?? null, 'Rejected Admin settings update does not change the canonical retention threshold');
+expect_same(2.5, $adminSettingsAfterInvalidBody['settings']['retentionThreshold'] ?? null, 'Rejected Admin settings update leaves the fixed retention trigger');
 
 $updatedAdminGradingDefaults = json_decode((string) $pdo->query(
     "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"
@@ -823,9 +825,9 @@ $updatedAdminGradingDefaults = json_decode((string) $pdo->query(
 $updatedAdminRetentionPolicy = json_decode((string) $pdo->query(
     "SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy'"
 )->fetchColumn(), true, 512, JSON_THROW_ON_ERROR);
-expect_same(2.75, (float) ($updatedAdminRetentionPolicy['retention_threshold'] ?? 0), 'Admin settings writes the canonical retention threshold');
-expect_same(2.75, (float) ($updatedAdminRetentionPolicy['initial_trigger_grade'] ?? 0), 'Admin settings keeps the initial-trigger compatibility mirror synchronized');
-expect_same(2.75, (float) ($updatedAdminGradingDefaults['retention_gwa_threshold'] ?? 0), 'Admin settings keeps the grading-default compatibility mirror synchronized');
+expect_same(2.5, (float) ($updatedAdminRetentionPolicy['retention_threshold'] ?? 0), 'Admin settings saves never change the stored retention trigger');
+expect_same(2.5, (float) ($updatedAdminRetentionPolicy['initial_trigger_grade'] ?? 0), 'Admin settings saves never change the initial-trigger mirror');
+expect_same(2.5, (float) ($updatedAdminGradingDefaults['retention_gwa_threshold'] ?? 0), 'Admin settings saves never change the grading-default mirror');
 expect_same($unrelatedSettingsValue, $updatedAdminGradingDefaults[$unrelatedSettingsKey] ?? null, 'Admin settings save preserves unrelated grading-default JSONB keys');
 $expectedUnrelatedAdminSettings = array_diff_key(
     $gradingDefaultsWithSentinel,
@@ -1482,6 +1484,62 @@ expect_same('none', $facultyRosterAccountStatus($facultyAccessToken, $invitedStu
     'classId' => (string) $studentClassId,
 ]);
 expect_same(409, $duplicateStudentStatus, 'Faculty cannot register a second Student with an existing email');
+// One person, one kind of identity: staff (Faculty / Dean) emails cannot be
+// used for Students or Class Secretaries, and Student emails cannot be
+// invited as Faculty.
+$roleConflictStudent = static function (string $email) use ($facultyAccessToken, $studentClassId): array {
+    return integration_http_json('/api/faculty/students', $facultyAccessToken, [
+        'studentNumber' => 'ROLE-' . bin2hex(random_bytes(4)),
+        'firstName' => 'Role',
+        'lastName' => 'Conflict',
+        'email' => $email,
+        'yearLevel' => 1,
+        'classId' => (string) $studentClassId,
+    ]);
+};
+[$deanAsStudentStatus, $deanAsStudentBody] = $roleConflictStudent('admin@bicol-u.edu.ph');
+expect_same(409, $deanAsStudentStatus, 'Faculty cannot register the Dean as a Student');
+expect_true(str_contains((string) ($deanAsStudentBody['message'] ?? ''), 'Dean (Administrator)'), 'The Dean-as-Student rejection names the Dean account');
+[$facultyAsStudentStatus, $facultyAsStudentBody] = $roleConflictStudent('faculty@bicol-u.edu.ph');
+expect_same(409, $facultyAsStudentStatus, 'Faculty cannot register a Faculty member as a Student');
+expect_true(str_contains((string) ($facultyAsStudentBody['message'] ?? ''), 'Faculty account'), 'The Faculty-as-Student rejection names the Faculty account');
+$roleConflictStudentCountStmt = $pdo->prepare("SELECT COUNT(*) FROM students WHERE lower(bu_email) IN ('admin@bicol-u.edu.ph', 'faculty@bicol-u.edu.ph')");
+$roleConflictStudentCountStmt->execute();
+expect_same(0, (int) $roleConflictStudentCountStmt->fetchColumn(), 'Rejected staff emails create no Student records');
+
+[$studentAsFacultyStatus, $studentAsFacultyBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
+    'prefix' => 'Dr.',
+    'firstName' => 'Student',
+    'lastName' => 'Crossover',
+    'email' => $invitedStudentEmail,
+]);
+expect_same(409, $studentAsFacultyStatus, 'The Dean cannot invite a Student as Faculty');
+expect_true(str_contains((string) ($studentAsFacultyBody['message'] ?? ''), 'belongs to a Student'), 'The Student-as-Faculty rejection explains why');
+[$deanAsFacultyStatus] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
+    'prefix' => 'Dr.',
+    'firstName' => 'Dean',
+    'lastName' => 'Crossover',
+    'email' => 'admin@bicol-u.edu.ph',
+]);
+expect_same(409, $deanAsFacultyStatus, 'The Dean cannot invite the Dean account as Faculty');
+
+// A Student record that already carries a staff email (older data) cannot be invited.
+$staffEmailStudentStmt = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, 'Legacy', 'Staffmail', 'faculty@bicol-u.edu.ph', 'active') RETURNING student_id"
+);
+$staffEmailStudentStmt->execute(['STAFF-' . bin2hex(random_bytes(4))]);
+$staffEmailStudentId = (int) $staffEmailStudentStmt->fetchColumn();
+$pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status, date_enrolled) VALUES (?, ?, 'Active', CURRENT_DATE)")
+    ->execute([$staffEmailStudentId, $studentClassId]);
+[$staffEmailInviteStatus, $staffEmailInviteBody] = integration_http_json('/api/faculty/student-invitations', $facultyAccessToken, [
+    'studentId' => (string) $staffEmailStudentId,
+    'classId' => (string) $studentClassId,
+]);
+expect_same(409, $staffEmailInviteStatus, 'A Student record carrying a Faculty email cannot be invited as a Student');
+expect_true(str_contains((string) ($staffEmailInviteBody['message'] ?? ''), 'Faculty account'), 'The staff-email invitation rejection names the Faculty account');
+$pdo->prepare('DELETE FROM enrollments WHERE student_id = ?')->execute([$staffEmailStudentId]);
+$pdo->prepare('DELETE FROM students WHERE student_id = ?')->execute([$staffEmailStudentId]);
 [$emailOnlyStatus] = integration_http_json('/api/auth/student/signup', '', ['email' => $invitedStudentEmail]);
 expect_same(404, $emailOnlyStatus, 'Student email alone cannot begin onboarding');
 $uninvitedLinkStmt = $pdo->prepare('SELECT student_account_user_id FROM students WHERE student_id = ?');
@@ -3409,6 +3467,15 @@ $facultyAccessToken = auth_issue_access_token(
     $session,
     config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY')
 )['token'];
+// Every class needs grade weights; a single Quiz category keeps the fixture
+// arithmetic identical to a plain transmuted score.
+[$gradeWeightsStatus, $gradeWeightsBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
+    'courseId' => $gradeCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2026-2027',
+    'categories' => [['name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1]],
+]);
+expect_same(201, $gradeWeightsStatus, 'Transmutation fixture course gets grade weights before grading: ' . json_encode($gradeWeightsBody));
 $saveAssessmentScores = static function (int $assessmentId, array $scoreRows) use ($facultyAccessToken): array {
     return integration_http_json('/api/faculty/scores', $facultyAccessToken, [
         'assessmentId' => (string) $assessmentId,
@@ -3624,6 +3691,12 @@ $rawAssessmentStmt = $pdo->prepare(
 );
 $rawAssessmentStmt->execute([$gradeClassId]);
 $rawAssessmentId = (int) $rawAssessmentStmt->fetchColumn();
+$gradeQuizCategoryStmt = $pdo->prepare(
+    'SELECT gc.category_id FROM grading_categories gc JOIN grading_configs g ON g.config_id = gc.config_id WHERE g.course_id = ? ORDER BY gc.sort_order LIMIT 1'
+);
+$gradeQuizCategoryStmt->execute([$gradeCourseId]);
+$gradeQuizCategoryId = (int) $gradeQuizCategoryStmt->fetchColumn();
+$pdo->prepare('UPDATE assessments SET grading_category_id = ? WHERE assessment_id = ?')->execute([$gradeQuizCategoryId, $rawAssessmentId]);
 [$rawScoreSaveStatus, $rawScoreSaveBody] = $saveAssessmentScores($rawAssessmentId, [
     ['studentId' => (string) $gradeStudentA, 'score' => 25, 'remarks' => 'Non-transmuted raw score A'],
     ['studentId' => (string) $gradeStudentB, 'score' => 25, 'remarks' => 'Non-transmuted raw score B'],
@@ -3644,6 +3717,7 @@ $disabledAssessmentPayload = [[
     'type' => 'Quiz',
     'subjectCode' => $gradeCourseCode,
     'classId' => (string) $gradeClassId,
+    'gradingCategoryId' => $gradeQuizCategoryId,
     'gradingPeriod' => 'Midterm',
     'maxScore' => 25,
     'weight' => 20,
@@ -3706,6 +3780,7 @@ $enabledAssessmentPayload = [[
     'type' => 'Assignment',
     'subjectCode' => $gradeCourseCode,
     'classId' => (string) $gradeClassId,
+    'gradingCategoryId' => $gradeQuizCategoryId,
     'gradingPeriod' => 'Final',
     'maxScore' => 40,
     'weight' => 15,
@@ -5382,5 +5457,28 @@ expect_same(null, $passwordChangeAudit['before_state_json'] ?? null, 'Password a
 expect_same(null, $passwordChangeAudit['after_state_json'] ?? null, 'Password audit does not store an after password state');
 expect_true(!str_contains((string) json_encode($passwordChangeAudit), $passwordChangeOld)
     && !str_contains((string) json_encode($passwordChangeAudit), $passwordChangeNew), 'Password audit contains no password values');
+
+// Every active class must have grade weights. bin/bootstrap-grade-weights.php
+// gives the offerings that have none (for example freshly seeded demo data) a
+// starting configuration and links their existing assessments.
+$bootstrapCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../../backend/bin/bootstrap-grade-weights.php');
+exec($bootstrapCommand . ' 2>&1', $bootstrapOutput, $bootstrapExit);
+expect_same(0, $bootstrapExit, 'Grade-weight bootstrap succeeds: ' . implode(' | ', array_slice($bootstrapOutput, -5)));
+$offeringsWithoutWeights = (int) $pdo->query(
+    "SELECT COUNT(*) FROM class_sections cs
+      WHERE cs.status = 'Active'
+        AND NOT EXISTS (SELECT 1 FROM grading_configs gc
+                         WHERE gc.faculty_user_id = cs.instructor_user_id AND gc.course_id = cs.course_id
+                           AND gc.semester = UPPER(cs.semester) AND gc.school_year = UPPER(cs.school_year))"
+)->fetchColumn();
+expect_same(0, $offeringsWithoutWeights, 'After the bootstrap every active class has grade weights');
+$unlinkedAfterBootstrap = (int) $pdo->query(
+    "SELECT COUNT(*) FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id
+      WHERE cs.status = 'Active' AND a.status <> 'Archived' AND a.grading_category_id IS NULL"
+)->fetchColumn();
+expect_same(0, $unlinkedAfterBootstrap, 'After the bootstrap every active assessment belongs to a grading category');
+exec($bootstrapCommand . ' 2>&1', $secondBootstrapOutput, $secondBootstrapExit);
+expect_same(0, $secondBootstrapExit, 'Running the bootstrap again is harmless');
+expect_true(in_array('Every active class offering already has grade weights.', $secondBootstrapOutput, true), 'A second bootstrap run has nothing left to create');
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

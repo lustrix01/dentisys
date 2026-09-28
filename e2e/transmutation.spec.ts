@@ -221,6 +221,12 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByRole('button', { name: /Save system settings/i }).click();
     await expect.poll(() => postedSettings).not.toBeNull();
     expect(postedSettings?.transmutationDefaults).toEqual({ minimumPercentage: 45, maximumPercentage: 95 });
+    // Retention trigger and course component ratios are no longer Admin settings.
+    expect(postedSettings).not.toHaveProperty('retentionThreshold');
+    expect(postedSettings).not.toHaveProperty('weights');
+    await expect(page.getByText('Course component ratios')).toHaveCount(0);
+    await expect(page.getByText('Retention trigger grade')).toHaveCount(0);
+    await expect(page.getByTestId('grading-policy-card')).toContainText('Retention trigger: GWA 2.5.');
   });
 
   test('faculty assessment modal uses defaults and auto-matches the exam-date session when no session is linked', async ({ page }) => {

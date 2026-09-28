@@ -368,16 +368,7 @@ function handle_faculty_students(): void
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
-        $retentionPolicyValue = $pdo->query(
-            "SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy' LIMIT 1"
-        )->fetchColumn();
-        $retentionPolicy = is_string($retentionPolicyValue)
-            ? json_decode($retentionPolicyValue, true, 512, JSON_THROW_ON_ERROR)
-            : [];
-        $retentionThreshold = (float) ($retentionPolicy['retention_threshold'] ?? 2.5);
-        if ($retentionThreshold < 1.0 || $retentionThreshold > 5.0) {
-            throw new RuntimeException('Persisted retention threshold is invalid.');
-        }
+        $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
         $mapped = faculty_map_student_rows($students, $retentionThreshold);
 
         json_response($mapped, 200);
@@ -506,6 +497,11 @@ function handle_faculty_student_create(): void
             $duplicateEmail->execute([$email]);
             if ($duplicateEmail->fetchColumn() !== false) {
                 safe_error_response('A student with this email already exists. Enter their student ID number in Add Student to enroll the existing student in this class.', 409);
+                return;
+            }
+            $roleConflict = account_identity_email_role_conflict($pdo, $email, 'student');
+            if ($roleConflict !== null) {
+                safe_error_response($roleConflict, 409);
                 return;
             }
         }
@@ -682,8 +678,15 @@ function handle_faculty_student_update(array $params = []): void
                 && strtolower(trim((string) $before['bu_email'])) !== strtolower($email)) {
                 throw new DomainException('Email for an activated Student is controlled by the canonical account identity.');
             }
+            $newEmail = $email === '' ? null : validate_institutional_email($email);
+            if ($newEmail !== null) {
+                $roleConflict = account_identity_email_role_conflict($pdo, $newEmail, 'student');
+                if ($roleConflict !== null) {
+                    throw new DomainException($roleConflict);
+                }
+            }
             $updates[] = 'bu_email = ?';
-            $values[] = $email === '' ? null : validate_institutional_email($email);
+            $values[] = $newEmail;
         }
         if (array_key_exists('contact', $data)) {
             $updates[] = 'contact = ?';
@@ -1510,7 +1513,7 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
             AND UPPER(cs.semester) = ?
             AND UPPER(cs.school_year) = ?
             AND cs.status = 'Active'
-            AND a.status = 'Active'
+            AND a.status <> 'Archived'
             AND a.grading_category_id IS NULL
           ORDER BY a.assessment_id
           FOR UPDATE OF a"
@@ -1667,26 +1670,16 @@ function handle_faculty_grading_config_get(): void
     }
 }
 
-function handle_faculty_grading_config_save(): void
+/**
+ * Validate and persist one Faculty grade-weight configuration (create or
+ * versioned update), link existing assessments on first save and write the
+ * audit event. Runs its own transaction; throws FacultyGradingConfigurationException
+ * for request problems. Shared by the API handler and bin/bootstrap-grade-weights.php.
+ *
+ * @return array{created: bool, configuration: array}
+ */
+function faculty_grading_save_configuration(PDO $pdo, array $config, array $authCtx, array $data, array $context): array
 {
-    $context = [
-        'request_id' => request_id(),
-        'ip_address' => request_ip(),
-        'user_agent' => request_user_agent(),
-        'http_method' => request_method(),
-        'endpoint' => request_path(),
-    ];
-    $pdo = null;
-
-    try {
-        $config = app_config();
-        $pdo = create_pdo($config);
-        $authCtx = faculty_verify_auth($pdo, $config);
-        $body = request_body();
-        if (!$body['has_body']) {
-            throw new FacultyGradingConfigurationException('Request body required.', 400, 'BAD_REQUEST');
-        }
-        $data = $body['data'];
         $offering = faculty_grading_require_offering(
             $pdo,
             (int) $authCtx['user_id'],
@@ -2285,10 +2278,34 @@ function handle_faculty_grading_config_save(): void
         ], $macKey, $auditBeforeState, $auditAfterState);
         $pdo->commit();
 
+        return ['created' => $isCreate, 'configuration' => $afterState];
+}
+
+function handle_faculty_grading_config_save(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+    $pdo = null;
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $body = request_body();
+        if (!$body['has_body']) {
+            throw new FacultyGradingConfigurationException('Request body required.', 400, 'BAD_REQUEST');
+        }
+        $saved = faculty_grading_save_configuration($pdo, $config, $authCtx, $body['data'], $context);
+
         json_response([
             'status' => 'ok',
-            'configuration' => $afterState,
-        ], $isCreate ? 201 : 200);
+            'configuration' => $saved['configuration'],
+        ], $saved['created'] ? 201 : 200);
     } catch (FacultyGradingConfigurationException $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) {
             $pdo->rollBack();
@@ -3253,17 +3270,7 @@ function handle_faculty_grades_compute(): void
             return;
         }
 
-        $settingsStmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults' LIMIT 1");
-        $gradingSettings = json_decode((string) ($settingsStmt->fetchColumn() ?: '{}'), true);
-        $attendanceWeight = max(0.0, min(100.0, (float) ($gradingSettings['default_weights']['attendance'] ?? 0)));
-        $retentionStmt = $pdo->query("SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy' LIMIT 1");
-        $retentionSettings = json_decode((string) ($retentionStmt->fetchColumn() ?: '{}'), true);
-        // retention_policy.retention_threshold is the canonical course-grade
-        // trigger; the grading-default and initial-trigger keys are mirrors.
-        $retentionThreshold = (float) ($retentionSettings['retention_threshold'] ?? 2.5);
-        if ($retentionThreshold < 1.0 || $retentionThreshold > 5.0) {
-            throw new RuntimeException('Persisted retention threshold is invalid.');
-        }
+        $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
 
         $pdo->beginTransaction();
         $lockEnrollmentsSql =
@@ -3592,78 +3599,13 @@ function handle_faculty_grades_compute(): void
                 continue;
             }
 
-            $weightedPoints = 0.0;
-            $completedWeight = 0.0;
-            $missingAssessments = [];
-            foreach ($group['assessments'] as $assessment) {
-                if (!($assessment['_has_score'] ?? false)) {
-                    continue;
-                }
-                $enabled = filter_var($assessment['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN);
-                $effectivePercentage = faculty_effective_assessment_percentage(
-                    (float) $assessment['score'],
-                    (float) $assessment['max_score'],
-                    $enabled,
-                    (float) $assessment['transmutation_minimum_percentage'],
-                    (float) $assessment['transmutation_maximum_percentage'],
-                    $assessment['linked_attendance_status'] !== null
-                        ? (string) $assessment['linked_attendance_status'] : null
-                );
-                if ($effectivePercentage === null) {
-                    $missingAssessments[] = [
-                        'assessmentId' => (string) $assessment['assessment_id'],
-                        'attendanceSessionDate' => $assessment['attendance_session_date'],
-                        'attendanceSessionCode' => $assessment['attendance_session_code'],
-                    ];
-                    continue;
-                }
-                $weight = (float) ($assessment['weight'] ?? 0);
-                $weightedPoints += ($effectivePercentage / 100) * $weight;
-                $completedWeight += $weight;
-            }
-            if ($missingAssessments !== []) {
-                $results[] = [
-                    'status' => 'incomplete_attendance',
-                    'enrollmentId' => $group['enrollmentId'],
-                    'studentId' => $group['studentId'],
-                    'missingAssessments' => $missingAssessments,
-                ];
-                continue;
-            }
-            if ($completedWeight <= 0) {
-                continue;
-            }
-            $assessmentPercentage = ($weightedPoints / $completedWeight) * 100;
-            $hasAttendance = $group['attendancePercentage'] !== null;
-            $effectiveAttendanceWeight = $hasAttendance ? $attendanceWeight : 0.0;
-            $assessmentWeight = 100.0 - $effectiveAttendanceWeight;
-            $attendancePercentage = $hasAttendance ? (float) $group['attendancePercentage'] : null;
-            $percentage = round(
-                ($assessmentPercentage * $assessmentWeight / 100)
-                + (($attendancePercentage ?? 0) * $effectiveAttendanceWeight / 100),
-                2
-            );
-            $gwa = faculty_percentage_to_gwa($percentage);
-            $retention = faculty_course_grade_retention_state($gwa, $retentionThreshold);
-            if ($retention === null) {
-                throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
-            }
-            $breakdown = [
-                'assessmentPercentage' => round($assessmentPercentage, 2),
-                'assessmentWeight' => $assessmentWeight,
-                'attendancePercentage' => $attendancePercentage !== null ? round($attendancePercentage, 2) : null,
-                'attendanceWeight' => $effectiveAttendanceWeight,
-                'retentionThreshold' => $retentionThreshold,
-            ];
-            $saveComputedGrade($percentage, $gwa, $retention, $breakdown, $group['enrollmentId']);
+            // Every class needs saved grade weights; there is no fallback
+            // computation. Existing persisted grades are left unchanged.
             $results[] = [
-                'status' => 'computed',
+                'status' => 'weights_required',
                 'enrollmentId' => $group['enrollmentId'],
                 'studentId' => $group['studentId'],
-                'percentage' => $percentage,
-                'gwa' => $gwa,
-                'retentionState' => $retention,
-                'breakdown' => $breakdown,
+                'message' => 'Grade weights have not been set up for this course. Set them up in the Grade Weights editor, then recompute.',
             ];
         }
         $transmutationWarnings = faculty_transmutation_link_warnings($pdo, (int) $authCtx['user_id'], $csId);

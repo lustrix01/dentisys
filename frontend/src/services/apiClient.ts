@@ -1830,11 +1830,21 @@ export interface FacultyLegacyIncompleteAttendanceResult {
   }>;
 }
 
+/** The course has no saved grade weights, so the class cannot be graded yet. */
+export interface FacultyWeightsRequiredResult {
+  status: 'weights_required';
+  enrollmentId: string | number;
+  studentId?: string | number;
+  message: string;
+  periods?: undefined;
+}
+
 export type FacultyGradeComputeResult =
   | FacultyPeriodModeComputedResult
   | FacultyPeriodModeIncompleteResult
   | FacultyLegacyComputedResult
-  | FacultyLegacyIncompleteAttendanceResult;
+  | FacultyLegacyIncompleteAttendanceResult
+  | FacultyWeightsRequiredResult;
 
 export interface FacultyTransmutationLinkWarning {
   assessmentId: string;

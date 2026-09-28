@@ -388,17 +388,16 @@ function remedial_attempts_parse_request(array $data): array
     ];
 }
 
-function remedial_attempts_course_grade_threshold(PDO $pdo): float
+/**
+ * College policy: a course GWA of 2.5 or worse (2.5 to 5.0) triggers remedial;
+ * 1.0 up to (but not including) 2.5 is passing. The trigger is fixed and is no
+ * longer an Admin setting.
+ */
+const RETENTION_GWA_TRIGGER = 2.5;
+
+function remedial_attempts_course_grade_threshold(?PDO $pdo = null): float
 {
-    $value = $pdo->query(
-        "SELECT setting_value FROM system_settings WHERE setting_key = 'retention_policy' LIMIT 1"
-    )->fetchColumn();
-    $policy = is_string($value) ? json_decode($value, true) : null;
-    $threshold = is_array($policy) ? ($policy['retention_threshold'] ?? null) : null;
-    if (is_numeric($threshold) && is_finite((float) $threshold) && (float) $threshold >= 1 && (float) $threshold <= 5) {
-        return (float) $threshold;
-    }
-    return 2.5;
+    return RETENTION_GWA_TRIGGER;
 }
 
 function remedial_attempts_error_response(RemedialAttemptException $exception): void

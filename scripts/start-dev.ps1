@@ -30,3 +30,8 @@ Write-Host 'API health: http://localhost:8080/api/health'
 Write-Host 'Mailpit: http://localhost:8025'
 Write-Host 'pgAdmin: http://127.0.0.1:5050'
 Write-Host 'Existing database data was preserved. To add demo data manually, paste database/seeds/development-demo.sql into pgAdmin Query Tool.'
+# Every class needs grade weights; give any class offering without them a starting configuration.
+& docker compose exec -T web php /var/www/html/backend/bin/bootstrap-grade-weights.php
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning 'Grade-weight bootstrap did not finish. Run: docker compose exec web php /var/www/html/backend/bin/bootstrap-grade-weights.php'
+}

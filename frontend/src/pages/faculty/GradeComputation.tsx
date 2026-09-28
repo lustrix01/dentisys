@@ -2181,6 +2181,8 @@ export const GradeComputation: React.FC = () => {
             }
           } else if (res.status === 'incomplete_attendance') {
             incompleteReasons.add('Attendance data missing or unresolved');
+          } else if (res.status === 'weights_required') {
+            incompleteReasons.add('Grade weights have not been set up for this course — set them up in the Grade Weights Editor, then recompute');
           }
         }
       });
