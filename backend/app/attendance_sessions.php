@@ -368,3 +368,12 @@ function attendance_session_record_audit(
         'user_agent' => $context['user_agent'] ?? null,
     ], $macKey, $beforeState, $afterState);
 }
+
+/**
+ * Human-readable attendance session code, e.g. CS12-20260928-A1B2C3.
+ * Shared by Faculty- and Secretary-started sessions.
+ */
+function attendance_session_code(int $csId, string $sessionDate): string
+{
+    return 'CS' . $csId . '-' . str_replace('-', '', $sessionDate) . '-' . strtoupper(bin2hex(random_bytes(3)));
+}
