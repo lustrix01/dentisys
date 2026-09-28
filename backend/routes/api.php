@@ -604,6 +604,12 @@ return [
     ],
     [
         'method' => 'POST',
+        'path' => '/api/faculty/retention/cost-recovery',
+        'handler' => 'handle_faculty_retention_cost_recovery_save',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
         'path' => '/api/faculty/retention/status',
         'handler' => 'handle_faculty_retention_status_update',
         'has_params' => false,

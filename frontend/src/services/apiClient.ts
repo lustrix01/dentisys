@@ -798,7 +798,7 @@ export function getFacultyDashboardKpisApi(schoolYear?: string): Promise<SchoolY
   return request('GET', `/faculty/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }
 
-export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial' | 'archived';
+export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial' | 'cleared' | 'archived';
 export type FacultyRemedialProgressionStage =
   | 'none'
   | 'attempt_1_pending'
@@ -806,6 +806,8 @@ export type FacultyRemedialProgressionStage =
   | 'attempt_2_pending'
   | 'passed'
   | 'cost_recovery_required'
+  | 'cost_recovery_passed'
+  | 'cost_recovery_failed'
   | 'legacy_unclassified';
 
 export interface FacultyRemedialAttempt {
@@ -823,6 +825,9 @@ export interface FacultyRemedialProgression {
   attempts: FacultyRemedialAttempt[];
   passedAttempt: 1 | 2 | null;
   legacyUnclassified: boolean;
+  costRecovery?: { finalGrade: number; outcome: 'passed' | 'failed'; recordedAt: string } | null;
+  /** Passed remedial attempt 1/2 or the cost recovery program. */
+  cleared?: boolean;
 }
 
 export interface FacultyRetentionRecord {
@@ -1115,6 +1120,16 @@ export function updateFacultyRetentionStatusApi(data: {
   reason: string;
 }): Promise<{ status: string; message: string; retention: Record<string, string> }> {
   return request('POST', '/faculty/retention/status', data);
+}
+
+/** Record the cost recovery program result after both remedial attempts failed. */
+export function saveFacultyCostRecoveryApi(data: { enrollmentId: string; finalGrade: number }): Promise<{
+  status: string;
+  enrollmentId: string;
+  outcome: 'passed' | 'failed';
+  remedialProgression: FacultyRemedialProgression;
+}> {
+  return request('POST', '/faculty/retention/cost-recovery', data);
 }
 
 export function saveFacultyRemedialApi(data: {
@@ -1437,7 +1452,14 @@ export interface FacultyClassItem {
   courseId: number;
   courseCode: string;
   courseName: string;
+  /** Shared catalog name for the course code (courseName may be this class's own title). */
+  catalogCourseName?: string | null;
+  courseTitle?: string | null;
   units: number;
+  lectureUnits?: number | null;
+  labUnits?: number | null;
+  /** Scores or grades exist: course and term can no longer change. */
+  hasGrades?: boolean;
   schoolYear: string;
   semester: string;
   yearLevel: number;
@@ -1455,6 +1477,8 @@ export interface CourseCatalogItem {
   courseCode: string;
   name: string;
   units: number;
+  lectureUnits?: number | null;
+  labUnits?: number | null;
   yearLevel: number;
   semester: string;
   isClinical: boolean;
@@ -1479,6 +1503,8 @@ export function createFacultyClassApi(data: {
   block?: string;
   lecRoom?: string;
   labRoom?: string;
+  lectureUnits?: number | null;
+  labUnits?: number | null;
 }): Promise<{ status: string; message: string; csId: number }> {
   return request('POST', '/faculty/classes', data);
 }
@@ -1494,6 +1520,8 @@ export function updateFacultyClassApi(data: {
   schoolYear?: string;
   lecRoom?: string;
   labRoom?: string;
+  lectureUnits?: number | null;
+  labUnits?: number | null;
 }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/classes/update', data);
 }

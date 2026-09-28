@@ -96,7 +96,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
                 COALESCE(egb.retention_state, e.retention_state) AS retention_state,
                 e.remedial_state_json, e.clinic_hours_completed,
                 cs.cs_name, cs.semester, cs.school_year, cs.year_level AS class_year_level,
-                c.course_id, c.course_code, c.name AS course_name, c.units, c.is_clinical
+                c.course_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_name, c.units, c.is_clinical
            FROM enrollments e
            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
            JOIN class_sections cs ON cs.cs_id = e.cs_id
@@ -139,7 +139,9 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'gradeComponents' => $row['grade_components_json'] !== null
                 ? json_decode((string) $row['grade_components_json'], true)
                 : null,
-            'retentionState' => (string) $row['retention_state'],
+            // A passed remedial attempt or cost recovery clears the Student for
+            // the course; the recorded grade itself is unchanged.
+            'retentionState' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
             'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
             'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'clinicHoursCompleted' => (int) $row['clinic_hours_completed'],

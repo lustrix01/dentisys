@@ -140,6 +140,59 @@ test.describe('Faculty Module E2E Tests', () => {
     }
   });
 
+  test('Add Student fills in an existing student by ID number and enrolls them instead of registering a duplicate', async ({ page }) => {
+    const currentClass = { id: '77', csId: 77, csName: 'CLIN401-A', courseId: 1, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', units: 3, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1st Semester', yearLevel: 5, block: 'A', schedule: null, lecRoom: '', labRoom: '', enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' };
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [currentClass] }) }));
+    await page.route('**/api/faculty/courses', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', courses: [] }) }));
+    let createCalled = false;
+    await page.route('**/api/faculty/students', async route => {
+      if (route.request().method() === 'POST') createCalled = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+    });
+    await page.route('**/api/faculty/classes/available-students?*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', students: [
+      { id: '501', studentId: '2021-DENT-0501', name: 'Returning Student', prefix: null, firstName: 'Returning', middleName: null, lastName: 'Student', suffix: null, email: 'returning.student@bicol-u.edu.ph', yearLevel: 6, status: 'active' },
+    ] }) }));
+    const enrollPayloads: unknown[] = [];
+    await page.route('**/api/faculty/classes/enroll', async route => {
+      enrollPayloads.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Successfully enrolled 1 student(s).', enrolledCount: 1 }) });
+    });
+
+    await page.click('a[href="/classes"]');
+    await page.getByRole('button', { name: 'Add Student' }).first().click();
+    await page.getByPlaceholder('e.g. 2024-DENT-0012').fill('2021-dent-0501');
+    await expect(page.getByText(/Existing student found: Returning Student/)).toBeVisible();
+    await expect(page.getByPlaceholder('e.g. Juan')).toHaveValue('Returning');
+    await expect(page.getByPlaceholder('e.g. Dela Cruz')).toHaveValue('Student');
+    await expect(page.getByPlaceholder('e.g. Juan')).toHaveAttribute('readonly', '');
+    await page.getByRole('button', { name: 'Enroll Existing Student' }).click();
+    await expect(page.getByText('Successfully enrolled 1 student(s).')).toBeVisible();
+    expect(enrollPayloads).toEqual([{ csId: 77, studentIds: [501] }]);
+    expect(createCalled).toBe(false);
+  });
+
+  test('Create Class records lecture and laboratory units with a separate schedule for each', async ({ page }) => {
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [] }) }));
+    await page.route('**/api/faculty/courses', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', courses: [] }) }));
+    await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
+
+    await page.click('a[href="/classes"]');
+    await page.getByRole('button', { name: 'Create Class' }).first().click();
+    await page.getByPlaceholder('e.g. DENT 301').fill('NEW601');
+    await page.getByPlaceholder('e.g. Restorative Dentistry I').fill('Advanced Clinic');
+    await page.getByPlaceholder('e.g. 4B or Section 3-A').fill('6A');
+    await page.getByRole('radio', { name: 'Lecture & Lab' }).click();
+    await page.getByLabel('Lecture Units *').fill('2');
+    await page.getByLabel('Laboratory Units *').fill('1.5');
+    await expect(page.getByText('Lecture Schedule', { exact: true })).toBeVisible();
+    await expect(page.getByText('Laboratory Schedule', { exact: true })).toBeVisible();
+    // Lab only: the lecture units and lecture schedule disappear.
+    await page.getByRole('radio', { name: 'Lab only' }).click();
+    await expect(page.getByLabel('Lecture Units *')).toHaveCount(0);
+    await expect(page.getByText('Lecture Schedule', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Laboratory Schedule', { exact: true })).toBeVisible();
+  });
+
   test('Classes and Rosters surfaces the backend eligibility conflict for an active Student', async ({ page }) => {
     await page.route('**/api/faculty/classes', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
@@ -163,7 +216,8 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByRole('button', { name: 'View Roster' })).toBeVisible();
     await page.getByRole('button', { name: 'View Roster' }).click();
     await expect(page.getByText('Active Student')).toBeVisible();
-    await page.getByRole('button', { name: 'Invite', exact: true }).click();
+    await page.getByRole('button', { name: 'Actions for Active Student' }).click();
+    await page.getByRole('button', { name: 'Send Invite', exact: true }).click();
     await expect(page.getByText('This Student identity is already linked to an active account.')).toBeVisible();
     await expect(page.getByText('An unexpected error occurred. Please try again.')).toHaveCount(0);
   });
@@ -1949,7 +2003,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByRole('heading', { name: 'Create New Assessment activity' })).toBeVisible();
 
       // Check category options in the modal
-      const categorySelect = modalForm.locator('select').nth(1);
+      const categorySelect = modalForm.locator('select').nth(0);
       const categoryOptions = await categorySelect.evaluate((sel: HTMLSelectElement) =>
         Array.from(sel.options).map(opt => ({ value: opt.value, text: opt.textContent?.trim() }))
       );
@@ -2049,7 +2103,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByRole('heading', { name: 'Edit Assessment Spec' })).toBeVisible();
 
       // Category select is preselected with stable ID 12
-      const categorySelect = modalForm.locator('select').nth(1);
+      const categorySelect = modalForm.locator('select').nth(0);
       await expect(categorySelect).toHaveValue('12');
 
       // Confirm without changing category: preserves stable ID
@@ -2111,7 +2165,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await row.getByRole('button', { name: 'Edit' }).click();
 
       const modalForm = page.locator('form').last();
-      const categorySelect = modalForm.locator('select').nth(1);
+      const categorySelect = modalForm.locator('select').nth(0);
       await expect(categorySelect).toHaveValue('11');
 
       // Change category to Clinical Work (13)
@@ -2123,7 +2177,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(postedAssessmentPayload?.type).toBe('Clinical Work');
     });
 
-    test('switching sections within same offering preserves category selection', async ({ page }) => {
+    test('assessment modal targets the section chosen in the page-level selector', async ({ page }) => {
       await page.route('**/api/faculty/grading-config?*', async (route) => {
         await route.fulfill({
           status: 200,
@@ -2137,20 +2191,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=assessments');
+      // The page has one class selector; the modal has none of its own.
+      await page.locator('select').nth(1).selectOption('2');
       await page.getByRole('button', { name: 'Add Assessment' }).click();
 
       const modalForm = page.locator('form').last();
-      const sectionSelect = modalForm.locator('select').nth(0);
-      const categorySelect = modalForm.locator('select').nth(1);
-
-      // Select category Clinical Work (13)
+      await expect(modalForm.getByTestId('assessment-target-class')).toContainText('CLIN401-B');
+      const categorySelect = modalForm.locator('select').nth(0);
       await categorySelect.selectOption('13');
-      await expect(categorySelect).toHaveValue('13');
-
-      // Switch from Section 1 (CLIN401-A) to Section 2 (CLIN401-B), both under CLIN401 1st Sem
-      await sectionSelect.selectOption('2');
-
-      // Category remains Clinical Work (13)
       await expect(categorySelect).toHaveValue('13');
     });
 
@@ -2187,7 +2235,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Add Assessment' }).click();
 
       const modalForm = page.locator('form').last();
-      const categorySelect = modalForm.locator('select').nth(1);
+      const categorySelect = modalForm.locator('select').nth(0);
 
       // Verify legacy options are shown
       const options = await categorySelect.evaluate((sel: HTMLSelectElement) =>
@@ -2264,7 +2312,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByText(/requires a valid grading category assignment/i)).toBeVisible();
 
       // Category select is empty and submit button is disabled
-      const categorySelect = modalForm.locator('select').nth(1);
+      const categorySelect = modalForm.locator('select').nth(0);
       await expect(categorySelect).toHaveValue('');
       const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
       await expect(submitBtn).toBeDisabled();
@@ -2324,7 +2372,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await retryBtn.click();
 
       // Recovers to show dynamic categories
-      const categorySelect = modalForm.locator('select').nth(1);
+      const categorySelect = modalForm.locator('select').nth(0);
       await expect(categorySelect).toBeVisible();
       await expect(categorySelect).toContainText('Quizzes (25%)');
     });
@@ -2415,7 +2463,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect.poll(() => getAssessmentsCount).toBeGreaterThan(beforeDeleteCount);
     });
 
-    test('switching sections to a different offering clears category, loads new config, and blocks submitting old category ID', async ({ page }) => {
+    test('assessment modal loads the grading categories of the offering chosen at the top of the page', async ({ page }) => {
       const classesWithTwoOfferings = [
         {
           id: '1',
@@ -2476,29 +2524,18 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=assessments');
+      // Choose Section 4 (2nd Sem, a different offering) with the page-level
+      // selector, then open the modal: it loads that offering's categories.
+      await page.locator('select').nth(1).selectOption('4');
       await page.getByRole('button', { name: 'Add Assessment' }).click();
 
       const modalForm = page.locator('form').last();
-      const sectionSelect = modalForm.locator('select').nth(0);
-      const categorySelect = modalForm.locator('select').nth(1);
+      await expect(modalForm.getByTestId('assessment-target-class')).toContainText('CLIN401-Sem2');
+      const categorySelect = modalForm.locator('select').nth(0);
 
-      // Initially on Section 1 (1st Sem): select Quizzes (11)
-      await categorySelect.selectOption('11');
-      await expect(categorySelect).toHaveValue('11');
-
-      // Now switch to Section 4 (2nd Sem - DIFFERENT offering)
-      await sectionSelect.selectOption('4');
-
-      // Category selection is cleared
-      await expect(categorySelect).toHaveValue('');
-
-      // New configuration categories are loaded (21: Case Presentations, 22: Practical Exam)
+      // Configuration categories of the chosen offering are shown (21: Case Presentations)
       await expect(categorySelect).toContainText('Case Presentations (50%)');
       await expect(categorySelect).not.toContainText('Quizzes');
-
-      // Confirm button is disabled because category was cleared and requires re-selection
-      const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
-      await expect(submitBtn).toBeDisabled();
     });
 
     test('category rename on server immediately updates table display without modifying assessment', async ({ page }) => {

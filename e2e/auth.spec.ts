@@ -192,7 +192,8 @@ test.describe('Auth Module E2E Tests', () => {
     });
     await page.goto('/classes');
     await page.getByRole('button', { name: /Enrolled Student Roster/i }).click();
-    await page.getByRole('button', { name: 'Invite', exact: true }).click();
+    await page.getByRole('button', { name: 'Actions for Test Student' }).click();
+    await page.getByRole('button', { name: 'Send Invite', exact: true }).click();
     await expect(page.getByText('Student invitation issued and sent.')).toBeVisible();
     expect(submittedPayload).toEqual({ studentId: '42', classId: '77' });
   });
@@ -207,7 +208,7 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Password/i);
   });
 
-  test('forgot password flow presents development reset link on submit', async ({ page }) => {
+  test('forgot password flow confirms the email step without exposing a reset link', async ({ page }) => {
     await page.route('**/api/auth/password/reset-request', async (route) => {
       await route.fulfill({
         status: 200,
@@ -226,11 +227,10 @@ test.describe('Auth Module E2E Tests', () => {
     await page.click('button[type="submit"]');
 
     await expect(page.locator('body')).toContainText(/Check your email/i);
-    await expect(page.locator('body')).toContainText(/Development Mode Reset Link/i);
-
-    const resetBtn = page.locator('a', { hasText: /Reset Password Now/i });
-    await expect(resetBtn).toBeVisible();
-    await expect(resetBtn).toHaveAttribute('href', /\/reset-password\?token=/);
+    // The reset link is delivered by email only, never shown on the page.
+    await expect(page.locator('body')).not.toContainText(/Development Mode Reset Link/i);
+    await expect(page.locator('a', { hasText: /Reset Password Now/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Resend email in \d+s/ })).toBeDisabled();
   });
 
   test('forgot password flow hides development reset link when reset_link is null', async ({ page }) => {
@@ -442,11 +442,9 @@ test('mocked Google direct login completes normal authentication', async ({ page
     await page.fill('input[inputmode="email"]', testEmail);
     await page.click('button[type="submit"]');
 
-    // Assert development reset link is displayed
-    await expect(page.locator('body')).toContainText(/Development Mode Reset Link/i);
-    const resetBtn = page.locator('a', { hasText: /Reset Password Now/i });
-    await expect(resetBtn).toBeVisible();
-    await expect(resetBtn).toHaveAttribute('href', resetUrl);
+    // The reset link arrives by email; the page only confirms the request.
+    await expect(page.locator('body')).toContainText(/Check your email/i);
+    expect(resetUrl).toContain(mockToken);
 
     // 3. Intercept Password Reset Confirm API
     await page.route('**/api/auth/password/reset-confirm', async (route) => {

@@ -68,9 +68,9 @@ function handle_admin_dashboard_kpis(): void
                 s.year_level, 
                 s.status AS student_status,
                 AVG(COALESCE(egb.final_gwa, e.final_gwa)) AS final_gwa,
-                MAX(CASE COALESCE(egb.retention_state, e.retention_state)
+                MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . "
                     WHEN 'critical' THEN 4 WHEN 'remedial' THEN 3
-                    WHEN 'warning' THEN 2 WHEN 'active' THEN 1 ELSE 0 END) AS risk_score
+                    WHEN 'warning' THEN 2 WHEN 'active' THEN 1 WHEN 'cleared' THEN 1 ELSE 0 END) AS risk_score
             FROM students s
             LEFT JOIN enrollments e ON s.student_id = e.student_id
             LEFT JOIN class_sections cs_scope ON cs_scope.cs_id = e.cs_id
@@ -668,7 +668,7 @@ function handle_admin_reports_summary(): void
                     COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
-                    COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                    " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,
                     e.remedial_state_json, ers.status AS normalized_remedial_status,
                     ers.original_grade AS normalized_original_grade,
                     ers.remedial_score AS normalized_remedial_score,
@@ -704,7 +704,7 @@ function handle_admin_reports_summary(): void
 
         $grouped = [];
         $gwaTotals = [];
-        $stateRank = ['critical' => 4, 'remedial' => 3, 'warning' => 2, 'active' => 1];
+        $stateRank = ['critical' => 5, 'remedial' => 4, 'warning' => 3, 'cleared' => 2, 'active' => 1];
         foreach ($students as $s) {
             $id = (string) $s['student_id'];
             if (!isset($grouped[$id])) {

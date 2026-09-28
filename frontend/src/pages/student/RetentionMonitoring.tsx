@@ -14,6 +14,8 @@ type RemedialStage =
   | 'attempt_2_pending'
   | 'passed'
   | 'cost_recovery_required'
+  | 'cost_recovery_passed'
+  | 'cost_recovery_failed'
   | 'legacy_unclassified';
 
 type RemedialAttemptStatus = 'pending' | 'passed' | 'failed';
@@ -49,6 +51,8 @@ const readProgressionStage = (value: unknown): RemedialStage | null => (
     || value === 'attempt_2_pending'
     || value === 'passed'
     || value === 'cost_recovery_required'
+    || value === 'cost_recovery_passed'
+    || value === 'cost_recovery_failed'
     || value === 'legacy_unclassified'
     ? value
     : null
@@ -98,7 +102,7 @@ const attemptStatus = (progression: RemedialProgressionView, attemptNumber: 1 | 
   if (progression.stage === 'attempt_2_available' && attemptNumber === 2) return 'available';
   if (progression.stage === 'attempt_2_pending') return attemptNumber === 1 ? 'failed' : 'pending';
   if (progression.stage === 'passed') return progression.passedAttempt === attemptNumber ? 'passed' : attemptNumber < (progression.passedAttempt ?? 2) ? 'failed' : 'not_started';
-  if (progression.stage === 'cost_recovery_required') return 'failed';
+  if (progression.stage === 'cost_recovery_required' || progression.stage === 'cost_recovery_passed' || progression.stage === 'cost_recovery_failed') return 'failed';
   return 'not_started';
 };
 
@@ -108,8 +112,10 @@ const stageLabel = (stage: RemedialStage): string => {
     case 'attempt_1_pending': return 'Attempt 1 pending';
     case 'attempt_2_available': return 'Attempt 2 available';
     case 'attempt_2_pending': return 'Attempt 2 pending';
-    case 'passed': return 'Passed';
+    case 'passed': return 'Cleared (passed remedial)';
     case 'cost_recovery_required': return 'Cost recovery required';
+    case 'cost_recovery_passed': return 'Cleared (passed cost recovery)';
+    case 'cost_recovery_failed': return 'Failed (did not pass cost recovery)';
     case 'legacy_unclassified': return 'Legacy / unclassified';
     default: return 'Progression unavailable';
   }
@@ -176,7 +182,7 @@ export const RetentionMonitoring: React.FC = () => {
   // student status is always "active" for a signed-in Student, so it cannot
   // describe retention standing.
   const worstRetentionState = (): string => {
-    const rank: Record<string, number> = { critical: 4, remedial: 3, warning: 2, active: 1 };
+    const rank: Record<string, number> = { critical: 5, remedial: 4, warning: 3, cleared: 2, active: 1 };
     let worst = 'active';
     for (const record of authRecords) {
       const state = (record.retentionState || '').toLowerCase();
@@ -199,6 +205,7 @@ export const RetentionMonitoring: React.FC = () => {
     const isWarn = norm === 'warning';
     const isCrit = norm === 'critical';
     const isRem = norm === 'remedial';
+    const isCleared = norm === 'cleared';
 
     if (isCrit) {
       return (
@@ -218,6 +225,13 @@ export const RetentionMonitoring: React.FC = () => {
       return (
         <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60">
           REMEDIAL EXAM ASSIGNED
+        </span>
+      );
+    }
+    if (isCleared) {
+      return (
+        <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 border border-teal-200/60">
+          CLEARED • REMEDIAL REQUIREMENT PASSED
         </span>
       );
     }
@@ -420,7 +434,7 @@ export const RetentionMonitoring: React.FC = () => {
 
                         <td className="py-3.5 px-4">
                           <div className="min-w-[190px] space-y-1.5">
-                            <span className={`inline-flex rounded-lg border px-2 py-1 text-[10px] font-extrabold ${progression.stage === 'passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : progression.stage === 'cost_recovery_required' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>
+                            <span className={`inline-flex rounded-lg border px-2 py-1 text-[10px] font-extrabold ${progression.stage === 'passed' || progression.stage === 'cost_recovery_passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : progression.stage === 'cost_recovery_required' || progression.stage === 'cost_recovery_failed' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>
                               {stageLabel(progression.stage)}
                             </span>
                             {progression.stage !== 'none' && progression.stage !== 'legacy_unclassified' && ([1, 2] as const).map(attemptNumber => {

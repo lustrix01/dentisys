@@ -70,7 +70,62 @@ function remedial_attempts_empty_progression(bool $legacyUnclassified = false): 
         'attempts' => [],
         'passedAttempt' => null,
         'legacyUnclassified' => $legacyUnclassified,
+        'costRecovery' => null,
+        'cleared' => false,
     ];
+}
+
+/**
+ * Apply a recorded cost recovery result to a progression that required it.
+ * Passing cost recovery clears the Student for the course; failing it is final.
+ */
+function remedial_attempts_apply_cost_recovery(array $progression, ?array $costRecoveryRow): array
+{
+    if ($costRecoveryRow === null || ($progression['stage'] ?? null) !== 'cost_recovery_required') {
+        return $progression;
+    }
+    $outcome = (string) $costRecoveryRow['outcome'];
+    $progression['stage'] = $outcome === 'passed' ? 'cost_recovery_passed' : 'cost_recovery_failed';
+    $progression['costRecovery'] = [
+        'finalGrade' => (float) $costRecoveryRow['final_grade'],
+        'outcome' => $outcome,
+        'recordedAt' => (string) ($costRecoveryRow['recorded_at'] ?? ''),
+    ];
+    $progression['cleared'] = $outcome === 'passed';
+    return $progression;
+}
+
+/**
+ * True when the Student has satisfied the retention policy for this course:
+ * passed remedial attempt 1 or 2, or passed the cost recovery program.
+ */
+function remedial_progression_is_cleared(array $progression): bool
+{
+    return in_array($progression['stage'] ?? null, ['passed', 'cost_recovery_passed'], true);
+}
+
+/** Retention state shown to users for one enrollment (see SQL helper below). */
+function retention_effective_state(string $storedState, array $progression): string
+{
+    return in_array($storedState, ['remedial', 'active'], true) && remedial_progression_is_cleared($progression)
+        ? 'cleared'
+        : $storedState;
+}
+
+/**
+ * SQL for an enrollment's retention state as shown to users: a stored
+ * 'remedial' (or plain 'active') state becomes 'cleared' once the policy is
+ * satisfied. The
+ * stored grade and state are unchanged (passing does not change grades).
+ */
+function retention_effective_state_sql(string $enrollmentAlias, string $stateExpression): string
+{
+    return "CASE WHEN {$stateExpression} IN ('remedial', 'active') AND (
+                EXISTS (SELECT 1 FROM enrollment_remedial_attempts ra_clear
+                         WHERE ra_clear.enrollment_id = {$enrollmentAlias}.enrollment_id AND ra_clear.outcome = 'passed')
+                OR EXISTS (SELECT 1 FROM enrollment_cost_recovery cr_clear
+                         WHERE cr_clear.enrollment_id = {$enrollmentAlias}.enrollment_id AND cr_clear.outcome = 'passed')
+             ) THEN 'cleared' ELSE {$stateExpression} END";
 }
 
 /**
@@ -114,10 +169,25 @@ function remedial_attempts_load(PDO $pdo, array $enrollmentIds, array $legacyByE
         }
     }
 
+    $costStmt = $pdo->prepare(
+        "SELECT enrollment_id, final_grade, outcome, recorded_at
+           FROM enrollment_cost_recovery
+          WHERE enrollment_id IN ({$placeholders})"
+    );
+    $costStmt->execute(array_keys($result));
+    $costByEnrollment = [];
+    foreach ($costStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $costByEnrollment[(int) $row['enrollment_id']] = $row;
+    }
+
     foreach ($result as $enrollmentId => $_) {
-        $result[$enrollmentId] = remedial_attempts_progression_from_rows(
+        $progression = remedial_attempts_progression_from_rows(
             $grouped[$enrollmentId] ?? [],
             (bool) ($legacyByEnrollment[$enrollmentId] ?? false)
+        );
+        $result[$enrollmentId] = remedial_attempts_apply_cost_recovery(
+            $progression,
+            $costByEnrollment[$enrollmentId] ?? null
         );
     }
 
@@ -229,6 +299,8 @@ function remedial_attempts_progression_from_rows(array $rows, bool $legacyUnclas
         'attempts' => $attempts,
         'passedAttempt' => $passedAttempt,
         'legacyUnclassified' => false,
+        'costRecovery' => null,
+        'cleared' => $stage === 'passed',
     ];
 }
 

@@ -675,6 +675,8 @@ export const ClassManagement: React.FC = () => {
                     <option value={2}>Year 2</option>
                     <option value={3}>Year 3</option>
                     <option value={4}>Year 4</option>
+                    <option value={5}>Year 5</option>
+                    <option value={6}>Year 6</option>
                   </select>
                 </div>
               </div>

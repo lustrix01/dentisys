@@ -492,8 +492,8 @@ export const Reports: React.FC = () => {
 
   // Recharts Stats: Retention Distribution
   const pieData = useMemo(() => {
-    const counts: Record<string, number> = { active: 0, warning: 0, critical: 0, remedial: 0 };
-    const rank: Record<string, number> = { active: 0, warning: 1, critical: 2, remedial: 3 };
+    const counts: Record<string, number> = { active: 0, cleared: 0, warning: 0, critical: 0, remedial: 0 };
+    const rank: Record<string, number> = { active: 0, cleared: 1, warning: 2, remedial: 3, critical: 4 };
     const studentStates = new Map<string, string>();
     retentionRecords
       .filter(record => (!selectedClassId || String(record.classId) === selectedClassId)
@@ -508,6 +508,7 @@ export const Reports: React.FC = () => {
     });
     return [
       { name: 'Active Standing', value: counts.active || 0, color: '#10B981' },
+      { name: 'Cleared (Remedial Passed)', value: counts.cleared || 0, color: '#14B8A6' },
       { name: 'Warning Status', value: counts.warning || 0, color: '#F59E0B' },
       { name: 'Critical Watch', value: counts.critical || 0, color: '#EF4444' },
       { name: 'Remedial Programs', value: counts.remedial || 0, color: '#8B5CF6' },

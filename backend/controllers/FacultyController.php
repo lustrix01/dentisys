@@ -123,7 +123,7 @@ function handle_faculty_dashboard_kpis(): void
         $studentStmt = $pdo->prepare("
             SELECT
                 s.student_id,
-                CASE MAX(CASE COALESCE(egb.retention_state, e.retention_state)
+                CASE MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . "
                         WHEN 'critical' THEN 4 WHEN 'remedial' THEN 3
                         WHEN 'warning' THEN 2 ELSE 1 END)
                     WHEN 4 THEN 'critical' WHEN 3 THEN 'remedial'
@@ -248,7 +248,7 @@ function faculty_student_account_status(array $row): string
 function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null): array
 {
     $byStudent = [];
-    $statusPriority = ['active' => 0, 'warning' => 1, 'remedial' => 2, 'critical' => 3];
+    $statusPriority = ['active' => 0, 'cleared' => 1, 'warning' => 2, 'remedial' => 3, 'critical' => 4];
     foreach ($rows as $row) {
         $id = (string) $row['student_id'];
         if (!isset($byStudent[$id])) {
@@ -351,7 +351,7 @@ function handle_faculty_students(): void
                 cs.cs_id, cs.cs_name, e.enrollment_id,
                 COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                 e.grade_components_json,
-                COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,
                 e.clinic_hours_completed, c.course_code,
                 c.name AS course_name, c.units, c.is_clinical
             FROM students s
@@ -458,8 +458,8 @@ function handle_faculty_student_create(): void
                 $errors['email'] = $e->getErrors()[0]['message'] ?? 'Email is not valid.';
             }
         }
-        if ($yearLevel !== null && ($yearLevel < 1 || $yearLevel > 4)) {
-            $errors['yearLevel'] = 'Year level must be between 1 and 4.';
+        if ($yearLevel !== null && ($yearLevel < 1 || $yearLevel > 6)) {
+            $errors['yearLevel'] = 'Year level must be between 1 and 6.';
         }
         if (!in_array(strtolower($status), ['active', 'disabled', 'archived'], true)) {
             $errors['status'] = 'Student status must be active, disabled, or archived.';
@@ -498,14 +498,14 @@ function handle_faculty_student_create(): void
         $duplicateNumber = $pdo->prepare('SELECT 1 FROM students WHERE lower(student_number) = lower(?) LIMIT 1');
         $duplicateNumber->execute([$studentNumber]);
         if ($duplicateNumber->fetchColumn() !== false) {
-            safe_error_response('A student with this student number already exists. Use Enroll Students to add the existing student to this class.', 409);
+            safe_error_response('A student with this student number already exists. Enter their student ID number in Add Student to enroll the existing student in this class.', 409);
             return;
         }
         if (!empty($email)) {
             $duplicateEmail = $pdo->prepare('SELECT 1 FROM students WHERE lower(bu_email) = lower(?) LIMIT 1');
             $duplicateEmail->execute([$email]);
             if ($duplicateEmail->fetchColumn() !== false) {
-                safe_error_response('A student with this email already exists. Use Enroll Students to add the existing student to this class.', 409);
+                safe_error_response('A student with this email already exists. Enter their student ID number in Add Student to enroll the existing student in this class.', 409);
                 return;
             }
         }
@@ -700,8 +700,8 @@ function handle_faculty_student_update(array $params = []): void
                 $values[] = null;
             } else {
                 $yearLevel = is_int($yearLevel) ? $yearLevel : (is_string($yearLevel) && ctype_digit(trim($yearLevel)) ? (int) trim($yearLevel) : 0);
-                if ($yearLevel < 1 || $yearLevel > 4) {
-                    throw new ValidationException([['field' => 'yearLevel', 'message' => 'Year level must be between 1 and 4.']]);
+                if ($yearLevel < 1 || $yearLevel > 6) {
+                    throw new ValidationException([['field' => 'yearLevel', 'message' => 'Year level must be between 1 and 6.']]);
                 }
                 $updates[] = 'year_level = ?';
                 $values[] = $yearLevel;
@@ -2286,7 +2286,12 @@ function faculty_effective_assessment_percentage(
     if ($attendanceStatus === 'absent') {
         return 0.0;
     }
-    if ($attendanceStatus === null || in_array($attendanceStatus, ['present', 'late', 'excused'], true)) {
+    // No matching attendance record (linked session, or same-day record by
+    // due date): the result stays unresolved until attendance is recorded.
+    if ($attendanceStatus === null) {
+        return null;
+    }
+    if (in_array($attendanceStatus, ['present', 'late', 'excused'], true)) {
         return $minimumPercentage + (($rawPercentage / 100) * ($maximumPercentage - $minimumPercentage));
     }
     throw new InvalidArgumentException('Attendance status is invalid for transmutation.');
@@ -2802,6 +2807,14 @@ function handle_faculty_assessments_save(): void
             ) {
                 $pdo->rollBack();
                 safe_error_response('Transmutation bounds and attendance linkage are invalid.', 422);
+                return;
+            }
+            $effectiveDueDate = trim((string) ($item['dueDate'] ?? ''));
+            if ($transmutationEnabled && $attendanceSessionDate === null && $effectiveDueDate === '') {
+                // Without a linked session, attendance is matched by the due
+                // date; with neither, the result could never be resolved.
+                $pdo->rollBack();
+                safe_error_response('Transmutation needs a linked attendance session or a due date to match attendance.', 422);
                 return;
             }
             if ($attendanceSessionDate !== null && $attendanceSessionCode !== null) {
@@ -4642,10 +4655,12 @@ function handle_faculty_retention_get(): void
             $isCurrentYear = strtoupper(trim((string) $row['school_year'])) === strtoupper(trim((string) $currentSchoolYear));
             // Same gates the remedial save endpoint enforces, so the page only
             // offers students the server will accept.
+            $stage = (string) (($progressions[$enrollmentId] ?? [])['stage'] ?? 'none');
             $remedialEligible = $gwa !== null
                 && $gwa >= $retentionThreshold
                 && $isCurrentYear
-                && !($legacyByEnrollment[$enrollmentId] ?? false);
+                && !($legacyByEnrollment[$enrollmentId] ?? false)
+                && in_array($stage, ['none', 'attempt_1_pending', 'attempt_2_available', 'attempt_2_pending'], true);
             return [
             'enrollmentId' => (string) $enrollmentId,
             'studentId' => (string) $row['student_id'],
@@ -4656,7 +4671,8 @@ function handle_faculty_retention_get(): void
             'subjectCode' => $row['course_code'],
             'percentage' => $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null,
             'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
-            'state' => $row['retention_state'],
+            'state' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
+            'storedState' => $row['retention_state'],
             'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
             'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'watchlistUnlocked' => $row['unlocked_at'] !== null,
@@ -4762,6 +4778,147 @@ function faculty_retention_save_legacy_remedial(PDO $pdo, array $authCtx, array 
             : ($enrollmentId > 0 ? (string) $enrollmentId : null),
         'notification' => $notification !== null ? ['created' => $notification['created']] : null,
     ], 200);
+}
+
+/**
+ * Record the cost recovery program result after both remedial attempts
+ * failed. Passing (final grade better than the retention trigger) clears the
+ * Student for the course; failing is final. The course grade is unchanged.
+ */
+function handle_faculty_retention_cost_recovery_save(): void
+{
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $body = request_body();
+        $data = is_array($body['data'] ?? null) ? $body['data'] : [];
+        $rawEnrollment = $data['enrollmentId'] ?? null;
+        $enrollmentId = is_int($rawEnrollment) ? $rawEnrollment
+            : ((is_string($rawEnrollment) && ctype_digit(trim($rawEnrollment))) ? (int) trim($rawEnrollment) : 0);
+        $rawGrade = $data['finalGrade'] ?? null;
+        if ($enrollmentId <= 0) {
+            throw remedial_attempts_error('A valid enrollmentId is required.', 'REMEDIAL_ENROLLMENT_REQUIRED');
+        }
+        if (is_bool($rawGrade) || !is_numeric($rawGrade) || !is_finite((float) $rawGrade)
+            || (float) $rawGrade < 1.0 || (float) $rawGrade > 5.0) {
+            throw remedial_attempts_error('Enter the cost recovery final grade from 1.00 to 5.00.', 'COST_RECOVERY_GRADE_INVALID');
+        }
+        $finalGrade = round((float) $rawGrade, 2);
+
+        $pdo->beginTransaction();
+        $targetStmt = $pdo->prepare(
+            "SELECT e.enrollment_id, e.status AS enrollment_status, e.remedial_state_json,
+                    cs.cs_id, cs.instructor_user_id, cs.status AS class_status, cs.school_year,
+                    s.student_account_user_id, c.course_code
+               FROM enrollments e
+               JOIN class_sections cs ON cs.cs_id = e.cs_id
+               JOIN students s ON s.student_id = e.student_id
+               JOIN courses c ON c.course_id = cs.course_id
+              WHERE e.enrollment_id = ?
+              FOR UPDATE OF e"
+        );
+        $targetStmt->execute([$enrollmentId]);
+        $target = $targetStmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($target) || (int) $target['instructor_user_id'] !== (int) $authCtx['user_id']) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'Enrollment not found in an assigned class.', 'REMEDIAL_ENROLLMENT_NOT_FOUND', 404
+            ));
+            return;
+        }
+        if (strtolower((string) $target['enrollment_status']) !== 'active'
+            || !academic_school_year_is_current($pdo, (string) $target['school_year'])) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'Historical or inactive enrollments are view-only and cannot record cost recovery.',
+                'REMEDIAL_ENROLLMENT_READ_ONLY',
+                409
+            ));
+            return;
+        }
+        $progression = remedial_attempts_progression_from_rows(
+            remedial_attempts_lock_rows($pdo, $enrollmentId),
+            remedial_state_json_is_legacy($target['remedial_state_json'])
+        );
+        $existingStmt = $pdo->prepare('SELECT 1 FROM enrollment_cost_recovery WHERE enrollment_id = ?');
+        $existingStmt->execute([$enrollmentId]);
+        if ($existingStmt->fetchColumn() !== false) {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'A cost recovery result has already been recorded and cannot be changed.',
+                'COST_RECOVERY_DUPLICATE',
+                409
+            ));
+            return;
+        }
+        if ($progression['stage'] !== 'cost_recovery_required') {
+            $pdo->rollBack();
+            remedial_attempts_error_response(remedial_attempts_error(
+                'Cost recovery is only recorded after both remedial attempts have failed.',
+                'COST_RECOVERY_NOT_REQUIRED',
+                409
+            ));
+            return;
+        }
+
+        $threshold = remedial_attempts_course_grade_threshold($pdo);
+        // Passing means a grade better (numerically lower) than the trigger.
+        $outcome = $finalGrade < $threshold ? 'passed' : 'failed';
+        $insert = $pdo->prepare(
+            'INSERT INTO enrollment_cost_recovery (enrollment_id, final_grade, outcome, actor_user_id)
+             VALUES (?, ?, ?, ?)'
+        );
+        $insert->execute([$enrollmentId, number_format($finalGrade, 2, '.', ''), $outcome, (int) $authCtx['user_id']]);
+
+        $audit = audit_begin_operation($pdo);
+        audit_finish_operation($pdo, $audit, [
+            'module_code' => 'faculty_retention', 'action_code' => 'cost_recovery_recorded',
+            'event_status' => 'Success', 'actor_user_id' => $authCtx['user_id'],
+            'actor_username' => $authCtx['login_email'], 'actor_role' => $authCtx['role'],
+            'actor_display_name' => $authCtx['display_name'], 'session_id' => $authCtx['session_id'],
+            'scope_cs_id' => (int) $target['cs_id'], 'target_type' => 'enrollment', 'target_id' => (string) $enrollmentId,
+            'description' => 'Recorded the cost recovery program result.',
+            'http_method' => request_method(), 'endpoint' => request_path(), 'request_id' => request_id(),
+            'ip_address' => request_ip(), 'user_agent' => request_user_agent(),
+        ], config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY'),
+            ['stage' => 'cost_recovery_required'],
+            ['stage' => $outcome === 'passed' ? 'cost_recovery_passed' : 'cost_recovery_failed', 'finalGrade' => number_format($finalGrade, 2, '.', '')]);
+
+        if ($target['student_account_user_id'] !== null) {
+            notification_create_idempotent(
+                $pdo,
+                (int) $target['student_account_user_id'],
+                'retention_status',
+                'Cost recovery result for ' . (string) $target['course_code'],
+                $outcome === 'passed'
+                    ? 'You passed the cost recovery program and are cleared for this course.'
+                    : 'The cost recovery program was not passed for this course.',
+                'enrollment',
+                (string) $enrollmentId,
+                'cost-recovery:' . $enrollmentId
+            );
+        }
+        $pdo->commit();
+
+        $progressions = remedial_attempts_load($pdo, [$enrollmentId], [
+            $enrollmentId => remedial_state_json_is_legacy($target['remedial_state_json']),
+        ]);
+        json_response([
+            'status' => 'ok',
+            'enrollmentId' => (string) $enrollmentId,
+            'outcome' => $outcome,
+            'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
+        ], 200);
+    } catch (RemedialAttemptException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        remedial_attempts_error_response($e);
+    } catch (\Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        error_log('Faculty cost recovery save error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
 }
 
 function handle_faculty_retention_remedial_save(): void
@@ -5469,7 +5626,7 @@ function handle_faculty_reports_summary(): void
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                     COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
-                    COALESCE(egb.retention_state, e.retention_state) AS retention_state,
+                    " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,
                     e.remedial_state_json,
                     e.grade_components_json, e.clinic_hours_completed, cs.cs_id, cs.cs_name,
                     cs.school_year,
@@ -5583,10 +5740,16 @@ function handle_faculty_classes_get(): void
                 cs.status,
                 cs.created_at,
                 c.course_code,
-                c.name AS course_name,
+                COALESCE(cs.course_title, c.name) AS course_name,
+                c.name AS catalog_course_name,
+                cs.course_title,
                 c.units,
+                c.lecture_units,
+                c.lab_units,
                 u.display_name AS instructor_name,
-                (SELECT COUNT(*) FROM enrollments e WHERE e.cs_id = cs.cs_id) AS enrolled_count
+                (SELECT COUNT(*) FROM enrollments e WHERE e.cs_id = cs.cs_id) AS enrolled_count,
+                (EXISTS (SELECT 1 FROM assessment_scores sc JOIN assessments a ON a.assessment_id = sc.assessment_id WHERE a.cs_id = cs.cs_id)
+                 OR EXISTS (SELECT 1 FROM enrollments eg WHERE eg.cs_id = cs.cs_id AND (eg.final_gwa IS NOT NULL OR eg.final_percentage IS NOT NULL))) AS has_grades
             FROM class_sections cs
             LEFT JOIN courses c ON cs.course_id = c.course_id
             LEFT JOIN user_accounts u ON cs.instructor_user_id = u.user_id
@@ -5604,7 +5767,12 @@ function handle_faculty_classes_get(): void
                 'courseId' => (int) $cls['course_id'],
                 'courseCode' => $cls['course_code'] ?? 'DENT',
                 'courseName' => $cls['course_name'] ?? $cls['cs_name'],
+                'catalogCourseName' => $cls['catalog_course_name'] ?? null,
+                'courseTitle' => $cls['course_title'],
                 'units' => (float) ($cls['units'] ?? 3.0),
+                'lectureUnits' => $cls['lecture_units'] !== null ? (float) $cls['lecture_units'] : null,
+                'labUnits' => $cls['lab_units'] !== null ? (float) $cls['lab_units'] : null,
+                'hasGrades' => filter_var($cls['has_grades'], FILTER_VALIDATE_BOOLEAN),
                 'schoolYear' => $cls['school_year'],
                 'isCurrentSchoolYear' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) === 0,
                 'isHistorical' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
@@ -5640,7 +5808,7 @@ function handle_faculty_courses_get(): void
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
 
-        $stmt = $pdo->query("SELECT course_id, course_code, name, units, year_level, semester, is_clinical FROM courses ORDER BY course_code ASC");
+        $stmt = $pdo->query("SELECT course_id, course_code, name, units, lecture_units, lab_units, year_level, semester, is_clinical FROM courses ORDER BY course_code ASC");
         $courses = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $mapped = array_map(function ($c) {
@@ -5649,6 +5817,8 @@ function handle_faculty_courses_get(): void
                 'courseCode' => $c['course_code'],
                 'name' => $c['name'],
                 'units' => (float) $c['units'],
+                'lectureUnits' => $c['lecture_units'] !== null ? (float) $c['lecture_units'] : null,
+                'labUnits' => $c['lab_units'] !== null ? (float) $c['lab_units'] : null,
                 'yearLevel' => (int) ($c['year_level'] ?? 1),
                 'semester' => $c['semester'] ?? '1ST',
                 'isClinical' => (bool) ($c['is_clinical'] ?? false),
@@ -5776,6 +5946,117 @@ function faculty_check_schedule_conflict(PDO $pdo, string $schoolYear, int $inst
     return null;
 }
 
+/**
+ * Parse optional lecture/laboratory units. Returns [lecture, lab] where each
+ * is null (component not offered / not given) or a positive number.
+ */
+function faculty_parse_component_units(array $data): array
+{
+    $parse = static function (string $field) use ($data): ?float {
+        if (!array_key_exists($field, $data) || $data[$field] === null || $data[$field] === '') {
+            return null;
+        }
+        $raw = $data[$field];
+        if (is_bool($raw) || !is_numeric($raw) || !is_finite((float) $raw)) {
+            throw new ValidationException([$field => 'Units must be a number.']);
+        }
+        $value = round((float) $raw, 1);
+        if ($value < 0 || $value > 20) {
+            throw new ValidationException([$field => 'Units must be between 0 and 20.']);
+        }
+        return $value > 0 ? $value : null;
+    };
+    return [$parse('lectureUnits'), $parse('labUnits')];
+}
+
+/**
+ * Find a catalog course by code, or create it when the code is new.
+ * The shared catalog name is never renamed here; a Faculty member's own title
+ * is stored per class section instead.
+ */
+function faculty_resolve_catalog_course(
+    PDO $pdo,
+    string $courseCode,
+    string $courseName,
+    ?float $lectureUnits,
+    ?float $labUnits,
+    int $yearLevel,
+    string $semester,
+    int $userId
+): array {
+    $find = $pdo->prepare('SELECT course_id, name, lecture_units, lab_units FROM courses WHERE LOWER(course_code) = LOWER(?)');
+    $find->execute([$courseCode]);
+    $existing = $find->fetch(PDO::FETCH_ASSOC);
+    if (is_array($existing)) {
+        // Record the lecture/lab split once for older courses that never had it.
+        if ($existing['lecture_units'] === null && $existing['lab_units'] === null
+            && ($lectureUnits !== null || $labUnits !== null)) {
+            $pdo->prepare('UPDATE courses SET lecture_units = ?, lab_units = ? WHERE course_id = ?')
+                ->execute([$lectureUnits ?? 0, $labUnits ?? 0, (int) $existing['course_id']]);
+        }
+        return ['courseId' => (int) $existing['course_id'], 'catalogName' => (string) $existing['name'], 'created' => false];
+    }
+    if ($lectureUnits === null && $labUnits === null) {
+        throw new ValidationException(['lectureUnits' => 'A new course needs lecture units, laboratory units, or both.']);
+    }
+    $total = ($lectureUnits ?? 0) + ($labUnits ?? 0);
+    if ($total > 99.9) {
+        throw new ValidationException(['lectureUnits' => 'Total units are too large.']);
+    }
+    $title = $courseName !== '' ? $courseName : $courseCode;
+    $insert = $pdo->prepare("
+        INSERT INTO courses (course_code, name, units, lecture_units, lab_units, year_level, semester, grading_config, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, '[]'::jsonb, ?)
+        RETURNING course_id
+    ");
+    $insert->execute([
+        $courseCode, $title, $total, $lectureUnits ?? 0, $labUnits ?? 0,
+        $yearLevel, normalize_course_semester($semester), $userId,
+    ]);
+    return ['courseId' => (int) $insert->fetchColumn(), 'catalogName' => $title, 'created' => true];
+}
+
+/** Per-class display title: NULL when it matches the shared catalog name. */
+function faculty_class_course_title(string $requestedTitle, string $catalogName): ?string
+{
+    $title = trim($requestedTitle);
+    if ($title === '' || $title === trim($catalogName)) {
+        return null;
+    }
+    if (mb_strlen($title) > 255) {
+        throw new ValidationException(['courseName' => 'Course title must be at most 255 characters.']);
+    }
+    return $title;
+}
+
+/** Any recorded score or computed course grade in the class section. */
+function faculty_class_has_grades(PDO $pdo, int $csId): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT EXISTS (
+                SELECT 1 FROM assessment_scores sc
+                  JOIN assessments a ON a.assessment_id = sc.assessment_id
+                 WHERE a.cs_id = ?
+            ) OR EXISTS (
+                SELECT 1 FROM enrollments e
+                 WHERE e.cs_id = ? AND (e.final_gwa IS NOT NULL OR e.final_percentage IS NOT NULL)
+            )"
+    );
+    $stmt->execute([$csId, $csId]);
+    return (bool) $stmt->fetchColumn();
+}
+
+/** Canonical semester label for a class section, or a validation error. */
+function faculty_class_semester_label(string $semester): string
+{
+    return match (normalize_course_semester($semester)) {
+        '1ST' => '1st Semester',
+        '2ND' => '2nd Semester',
+        'Summer' => 'Summer',
+        default => throw new ValidationException(['semester' => 'Semester must be 1st Semester, 2nd Semester, or Summer.']),
+    };
+}
+
 function normalize_course_semester(?string $sem): ?string
 {
     if ($sem === null || trim($sem) === '') {
@@ -5823,55 +6104,62 @@ function handle_faculty_class_create(): void
         $semester = validate_required_string($data, 'semester', 1, 20);
         $schoolYear = validate_required_string($data, 'schoolYear', 4, 20);
         academic_require_current_school_year($pdo, $schoolYear);
-        $yearLevel = (int) ($data['yearLevel'] ?? 1);
+        $semester = faculty_class_semester_label($semester);
+        $rawYearLevel = $data['yearLevel'] ?? 1;
+        $yearLevel = is_numeric($rawYearLevel) ? (int) $rawYearLevel : 0;
+        if ($yearLevel < 1 || $yearLevel > 6) {
+            throw new ValidationException(['yearLevel' => 'Year level must be an integer between 1 and 6.']);
+        }
         $block = validate_optional_string($data, 'block', 1, 50) ?? 'A';
         $labRoom = validate_optional_string($data, 'labRoom', 1, 100);
         $lecRoom = validate_optional_string($data, 'lecRoom', 1, 100);
+        [$lectureUnits, $labUnits] = faculty_parse_component_units($data);
+        if (mb_strlen($courseCode) > 50) {
+            throw new ValidationException(['courseCode' => 'Course code must be at most 50 characters.']);
+        }
 
+        $courseTitle = null;
+        $pdo->beginTransaction();
         if ($courseCode !== '') {
-            $cFind = $pdo->prepare('SELECT course_id FROM courses WHERE LOWER(course_code) = LOWER(?)');
-            $cFind->execute([$courseCode]);
-            $existingCId = $cFind->fetchColumn();
-            if ($existingCId) {
-                $courseId = (int) $existingCId;
-                if ($courseName !== '') {
-                    $pdo->prepare('UPDATE courses SET name = ? WHERE course_id = ?')->execute([$courseName, $courseId]);
-                }
+            $course = faculty_resolve_catalog_course(
+                $pdo, $courseCode, $courseName, $lectureUnits, $labUnits, $yearLevel, $semester, (int) $authCtx['user_id']
+            );
+            $courseId = $course['courseId'];
+            $courseTitle = faculty_class_course_title($courseName, $course['catalogName']);
+        } elseif ($courseId > 0) {
+            $catalogStmt = $pdo->prepare('SELECT name FROM courses WHERE course_id = ?');
+            $catalogStmt->execute([$courseId]);
+            $catalogName = $catalogStmt->fetchColumn();
+            if ($catalogName === false) {
+                $courseId = 0;
             } else {
-                $cTitle = $courseName !== '' ? $courseName : $courseCode;
-                $cSemester = normalize_course_semester($semester);
-                $cInsert = $pdo->prepare("
-                    INSERT INTO courses (course_code, name, units, year_level, semester, grading_config)
-                    VALUES (?, ?, 3.0, ?, ?, '[]'::jsonb)
-                    RETURNING course_id
-                ");
-                $cInsert->execute([$courseCode, $cTitle, $yearLevel, $cSemester]);
-                $courseId = (int) $cInsert->fetchColumn();
+                $courseTitle = faculty_class_course_title($courseName, (string) $catalogName);
             }
         }
 
         if ($courseId <= 0) {
+            $pdo->rollBack();
             safe_error_response('Valid courseId or courseCode is required.', 400);
             return;
         }
 
         $conflictErr = faculty_check_schedule_conflict($pdo, $schoolYear, (int) $authCtx['user_id'], $lecRoom, $labRoom);
         if ($conflictErr !== null) {
+            $pdo->rollBack();
             safe_error_response($conflictErr, 422);
             return;
         }
 
         $termCode = "{$schoolYear}-{$semester}";
 
-        $pdo->beginTransaction();
         try {
             $stmt = $pdo->prepare("
                 INSERT INTO class_sections (
-                    cs_name, course_id, instructor_user_id, semester, school_year, year_level, lab_room, lec_room, block, status, term_code, term_start_date, term_end_date, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, '2024-08-15', '2024-12-20', CURRENT_TIMESTAMP(6)) RETURNING cs_id
+                    cs_name, course_id, course_title, instructor_user_id, semester, school_year, year_level, lab_room, lec_room, block, status, term_code, term_start_date, term_end_date, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, '2024-08-15', '2024-12-20', CURRENT_TIMESTAMP(6)) RETURNING cs_id
             ");
             $stmt->execute([
-                $csName, $courseId, $authCtx['user_id'], $semester, $schoolYear, $yearLevel, $labRoom, $lecRoom, $block, $termCode
+                $csName, $courseId, $courseTitle, $authCtx['user_id'], $semester, $schoolYear, $yearLevel, $labRoom, $lecRoom, $block, $termCode
             ]);
             $newCsId = (int) $stmt->fetchColumn();
 
@@ -5910,6 +6198,7 @@ function handle_faculty_class_create(): void
             'csId' => $newCsId,
         ], 201);
     } catch (ValidationException $e) {
+        if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Faculty class create error: ' . sanitize_for_log($e));
@@ -5971,7 +6260,7 @@ function handle_faculty_class_update(): void
             }
         }
 
-        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear'];
+        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear', 'lectureUnits', 'labUnits'];
         foreach (array_keys($data) as $field) {
             if (!in_array($field, $allowedFields, true) && !array_key_exists($field, $protectedFields)) {
                 $errors[$field] = 'This field is not editable through the class-section contract.';
@@ -5991,17 +6280,18 @@ function handle_faculty_class_update(): void
             $updates[] = 'block = ?';
             $params[] = validate_required_string($data, 'block', 1, 50);
         }
+        // Course, semester and school year may change only for a current
+        // school-year class that has no scores or grades yet (checked below).
+        $termFieldsRequested = [];
         if (array_key_exists('semester', $data)) {
-            $updates[] = 'semester = ?';
-            $params[] = validate_required_string($data, 'semester', 1, 30);
+            $termFieldsRequested['semester'] = faculty_class_semester_label(validate_required_string($data, 'semester', 1, 30));
         }
         if (array_key_exists('schoolYear', $data)) {
-            $updates[] = 'school_year = ?';
-            $updates[] = 'term_code = ?';
             $sYear = validate_required_string($data, 'schoolYear', 4, 30);
-            $params[] = $sYear;
-            $params[] = "{$sYear}-" . ($data['semester'] ?? '1ST');
+            academic_require_current_school_year($pdo, $sYear);
+            $termFieldsRequested['schoolYear'] = $sYear;
         }
+        [$editLectureUnits, $editLabUnits] = faculty_parse_component_units($data);
         if (array_key_exists('yearLevel', $data)) {
             $rawYearLevel = $data['yearLevel'];
             if (is_int($rawYearLevel)) {
@@ -6026,14 +6316,14 @@ function handle_faculty_class_update(): void
             $params[] = validate_optional_string($data, 'labRoom', 1, 100);
         }
         $hasCourseUpdates = array_key_exists('courseCode', $data) || array_key_exists('courseName', $data);
-        if ($updates === [] && !$hasCourseUpdates) {
+        if ($updates === [] && !$hasCourseUpdates && $termFieldsRequested === []) {
             throw new ValidationException(['fields' => 'At least one editable class-section field is required.']);
         }
 
         $pdo->beginTransaction();
         try {
             $select = $pdo->prepare("
-                SELECT cs_id, cs_name, course_id, instructor_user_id, semester, school_year,
+                SELECT cs_id, cs_name, course_id, course_title, instructor_user_id, semester, school_year,
                        year_level, lab_room, lec_room, block, status, term_code,
                        term_start_date, term_end_date
                 FROM class_sections
@@ -6053,34 +6343,53 @@ function handle_faculty_class_update(): void
                 return;
             }
 
+            $currentCourseStmt = $pdo->prepare('SELECT course_code, name FROM courses WHERE course_id = ?');
+            $currentCourseStmt->execute([(int) $before['course_id']]);
+            $currentCourse = $currentCourseStmt->fetch(PDO::FETCH_ASSOC) ?: ['course_code' => '', 'name' => ''];
+            $newCode = isset($data['courseCode']) ? trim((string) $data['courseCode']) : '';
+            $codeChanges = $newCode !== '' && strcasecmp($newCode, (string) $currentCourse['course_code']) !== 0;
+            $semesterChanges = isset($termFieldsRequested['semester'])
+                && strcasecmp($termFieldsRequested['semester'], (string) $before['semester']) !== 0;
+            $yearChanges = isset($termFieldsRequested['schoolYear'])
+                && strcasecmp($termFieldsRequested['schoolYear'], (string) $before['school_year']) !== 0;
+            if (($codeChanges || $semesterChanges || $yearChanges) && faculty_class_has_grades($pdo, $csId)) {
+                $pdo->rollBack();
+                safe_error_response('Course, semester, and school year cannot be changed after scores or grades have been recorded for this class.', 409);
+                return;
+            }
+            if ($semesterChanges || $yearChanges) {
+                $nextSemester = $termFieldsRequested['semester'] ?? (string) $before['semester'];
+                $nextYear = $termFieldsRequested['schoolYear'] ?? (string) $before['school_year'];
+                $updates[] = 'semester = ?';
+                $params[] = $nextSemester;
+                $updates[] = 'school_year = ?';
+                $params[] = $nextYear;
+                $updates[] = 'term_code = ?';
+                $params[] = "{$nextYear}-{$nextSemester}";
+            }
+
             if ($hasCourseUpdates) {
-                $newCode = isset($data['courseCode']) ? trim((string) $data['courseCode']) : '';
-                $newName = isset($data['courseName']) ? trim((string) $data['courseName']) : '';
-                if ($newCode !== '') {
-                    $cFind = $pdo->prepare('SELECT course_id FROM courses WHERE LOWER(course_code) = LOWER(?)');
-                    $cFind->execute([$newCode]);
-                    $existingCId = $cFind->fetchColumn();
-                    if ($existingCId) {
-                        $targetCourseId = (int) $existingCId;
-                        if ($newName !== '') {
-                            $pdo->prepare('UPDATE courses SET name = ? WHERE course_id = ?')->execute([$newName, $targetCourseId]);
-                        }
-                    } else {
-                        $cTitle = $newName !== '' ? $newName : $newCode;
-                        $cSemester = normalize_course_semester((string) ($data['semester'] ?? $before['semester'] ?? '1ST'));
-                        $cInsert = $pdo->prepare("
-                            INSERT INTO courses (course_code, name, units, year_level, semester, grading_config)
-                            VALUES (?, ?, 3.0, ?, ?, '[]'::jsonb)
-                            RETURNING course_id
-                        ");
-                        $cInsert->execute([$newCode, $cTitle, (int) ($data['yearLevel'] ?? $before['year_level'] ?? 1), $cSemester]);
-                        $targetCourseId = (int) $cInsert->fetchColumn();
-                    }
-                    if ($targetCourseId !== (int) $before['course_id']) {
-                        $pdo->prepare('UPDATE class_sections SET course_id = ? WHERE cs_id = ?')->execute([$targetCourseId, $csId]);
-                    }
-                } elseif ($newName !== '') {
-                    $pdo->prepare('UPDATE courses SET name = ? WHERE course_id = ?')->execute([$newName, (int) $before['course_id']]);
+                $catalogName = (string) $currentCourse['name'];
+                if ($codeChanges) {
+                    $course = faculty_resolve_catalog_course(
+                        $pdo,
+                        $newCode,
+                        isset($data['courseName']) ? trim((string) $data['courseName']) : '',
+                        $editLectureUnits,
+                        $editLabUnits,
+                        (int) ($data['yearLevel'] ?? $before['year_level'] ?? 1),
+                        (string) ($termFieldsRequested['semester'] ?? $before['semester']),
+                        (int) $authCtx['user_id']
+                    );
+                    $catalogName = $course['catalogName'];
+                    $updates[] = 'course_id = ?';
+                    $params[] = $course['courseId'];
+                }
+                if (array_key_exists('courseName', $data) || $codeChanges) {
+                    // The title belongs to this class only; the shared catalog
+                    // course is never renamed for other Faculty.
+                    $updates[] = 'course_title = ?';
+                    $params[] = faculty_class_course_title((string) ($data['courseName'] ?? ''), $catalogName);
                 }
             }
 

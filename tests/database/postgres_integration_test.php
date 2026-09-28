@@ -20,6 +20,7 @@ require_once $root . '/backend/app/mfa.php';
 require_once $root . '/backend/app/mfa_runtime.php';
 require_once $root . '/backend/app/ratelimit.php';
 require_once $root . '/backend/app/validation.php';
+require_once $root . '/backend/app/academic_year.php';
 require_once $root . '/backend/app/security.php';
 require_once $root . '/backend/app/attendance_sessions.php';
 require_once $root . '/backend/app/student_auth.php';
@@ -242,6 +243,9 @@ $expectedMigrations = [
     '027_provisional_course_remedial_threshold.sql',
     '028_authoritative_course_grade_threshold.sql',
     '029_remedial_attempt_progression.sql',
+    '030_relax_assessment_transmutation_link.sql',
+    '031_course_components_and_class_titles.sql',
+    '032_remedial_cost_recovery.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2000,6 +2004,8 @@ expect_same('26', (string) ($studentDashboardBody['student']['id'] ?? ''), 'Stud
 
 // Remedial notifications are committed with the enrollment mutation and are
 // recipient-scoped at both list and mark-read boundaries.
+// The demo seed does not place the demo Student in this Faculty-owned test
+// class, so enroll it here (idempotent) and keep the enrollment id.
 $demoStudentEnrollmentStmt = $pdo->prepare(
     "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled)
      VALUES (26, ?, 'Active', CURRENT_DATE)
@@ -2317,6 +2323,8 @@ $remedialReloadRow = array_values(array_filter(
 ))[0] ?? null;
 expect_true(is_array($remedialReloadRow), 'Faculty retention reload includes the canonical remedial enrollment');
 expect_same('passed', $remedialReloadRow['remedialProgression']['stage'] ?? null, 'Faculty reload preserves the passed progression stage');
+expect_same('cleared', $remedialReloadRow['state'] ?? null, 'A passed remedial attempt shows the Student as cleared for the course');
+expect_same(false, $remedialReloadRow['remedialEligible'] ?? null, 'A cleared course is not offered for another remedial attempt');
 
 [$remedialStudentGetStatus, $remedialStudentGetBody] = integration_http_get_json('/api/student/retention', $acceptedStudentAccessToken);
 expect_same(200, $remedialStudentGetStatus, 'Student retention reload returns HTTP 200 after Faculty remedial writes');
@@ -2359,6 +2367,31 @@ expect_same(200, $costSecondScheduleStatus, 'Cost-recovery fixture schedules its
 [$costSecondStatus, $costSecondBody] = $remedialPost($remedialCostEnrollmentId, ['attemptNumber' => 2, 'percentage' => 49.99], $seedFacultyAccessToken);
 expect_same(200, $costSecondStatus, 'Cost-recovery fixture records a failed second attempt');
 expect_same('cost_recovery_required', $costSecondBody['progression']['stage'] ?? null, 'Two failed remedial attempts truthfully require cost recovery');
+[$costEarlyStatus, $costEarlyBody] = integration_http_json('/api/faculty/retention/cost-recovery', $seedFacultyAccessToken, [
+    'enrollmentId' => (string) $invitedEnrollmentId,
+    'finalGrade' => 2.0,
+]);
+expect_same(409, $costEarlyStatus, 'Cost recovery cannot be recorded unless both remedial attempts failed');
+expect_same('COST_RECOVERY_NOT_REQUIRED', $remedialErrorCode($costEarlyBody), 'Premature cost recovery returns the not-required error');
+[$costInvalidStatus] = integration_http_json('/api/faculty/retention/cost-recovery', $seedFacultyAccessToken, [
+    'enrollmentId' => (string) $remedialCostEnrollmentId,
+    'finalGrade' => 7,
+]);
+expect_same(422, $costInvalidStatus, 'Cost recovery grade outside 1.00-5.00 is rejected');
+[$costRecordStatus, $costRecordBody] = integration_http_json('/api/faculty/retention/cost-recovery', $seedFacultyAccessToken, [
+    'enrollmentId' => (string) $remedialCostEnrollmentId,
+    'finalGrade' => 2.25,
+]);
+expect_same(200, $costRecordStatus, 'Faculty records a cost recovery result');
+expect_same('passed', $costRecordBody['outcome'] ?? null, 'A cost recovery grade better than the trigger passes');
+expect_same('cost_recovery_passed', $costRecordBody['remedialProgression']['stage'] ?? null, 'Passing cost recovery advances the progression stage');
+expect_same(true, $costRecordBody['remedialProgression']['cleared'] ?? null, 'Passing cost recovery clears the Student for the course');
+[$costDuplicateStatus, $costDuplicateBody] = integration_http_json('/api/faculty/retention/cost-recovery', $seedFacultyAccessToken, [
+    'enrollmentId' => (string) $remedialCostEnrollmentId,
+    'finalGrade' => 3.0,
+]);
+expect_same(409, $costDuplicateStatus, 'A recorded cost recovery result cannot be changed');
+expect_same('COST_RECOVERY_DUPLICATE', $remedialErrorCode($costDuplicateBody), 'Duplicate cost recovery returns the duplicate error');
 [$thirdAttemptStatus, $thirdAttemptBody] = $remedialPost($remedialCostEnrollmentId, ['attemptNumber' => 3, 'percentage' => 100], $seedFacultyAccessToken);
 expect_same(422, $thirdAttemptStatus, 'A third remedial attempt is rejected');
 expect_same('REMEDIAL_ATTEMPT_UNSUPPORTED', $remedialErrorCode($thirdAttemptBody), 'Third remedial attempt returns the bounded unsupported error');
@@ -2677,6 +2710,110 @@ $classEditReadRow = array_values(array_filter(
 expect_same(null, $classEditReadRow['schedule'] ?? null, 'Class reads do not derive schedule from room values');
 expect_same('Updated Lecture ' . $classEditFixtureSuffix, $classEditReadRow['lecRoom'] ?? null, 'Class reads preserve the lecture-room field');
 expect_same('Updated Laboratory ' . $classEditFixtureSuffix, $classEditReadRow['labRoom'] ?? null, 'Class reads preserve the laboratory-room field');
+
+// A Faculty member's course title belongs to their class only; the shared
+// catalog course is never renamed for other Faculty.
+$classTitleCatalogStmt = $pdo->prepare('SELECT name FROM courses WHERE course_id = ?');
+$classTitleCatalogStmt->execute([$classEditCourseId]);
+$classTitleCatalogBefore = $classTitleCatalogStmt->fetchColumn();
+[$classTitleStatus] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'courseName' => 'Own Class Title ' . $classEditFixtureSuffix,
+]);
+expect_same(200, $classTitleStatus, 'Faculty can set their own course title for a class');
+$classTitleCatalogStmt->execute([$classEditCourseId]);
+expect_same($classTitleCatalogBefore, $classTitleCatalogStmt->fetchColumn(), 'Setting a class title does not rename the shared catalog course');
+$classTitleRowStmt = $pdo->prepare('SELECT course_title FROM class_sections WHERE cs_id = ?');
+$classTitleRowStmt->execute([$classEditOwnedId]);
+expect_same('Own Class Title ' . $classEditFixtureSuffix, $classTitleRowStmt->fetchColumn(), 'The class keeps its own course title');
+[, $classTitleReadBody] = integration_http_get_json('/api/faculty/classes', $generatedFacultyAccessToken);
+$classTitleReadRow = array_values(array_filter(
+    $classTitleReadBody['classes'] ?? [],
+    static fn(array $row): bool => (string) ($row['csId'] ?? '') === (string) $classEditOwnedId
+))[0] ?? null;
+expect_same('Own Class Title ' . $classEditFixtureSuffix, $classTitleReadRow['courseName'] ?? null, 'Class reads show the class title');
+expect_same($classTitleCatalogBefore, $classTitleReadRow['catalogCourseName'] ?? null, 'Class reads keep the shared catalog name');
+
+// Semester may change while the class has no scores or grades.
+[$classSemesterStatus] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'semester' => '2nd Semester',
+]);
+expect_same(200, $classSemesterStatus, 'Semester can change before any score or grade is recorded');
+$classEditRowStmt->execute([$classEditOwnedId]);
+expect_same('2nd Semester', $classEditRowStmt->fetch(PDO::FETCH_ASSOC)['semester'] ?? null, 'The changed semester persists');
+[$classSemesterBadStatus] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
+    'csId' => (string) $classEditOwnedId,
+    'semester' => 'Third Term',
+]);
+expect_same(422, $classSemesterBadStatus, 'An unknown semester is rejected');
+
+// Course and term are locked once the class has scores or grades.
+$gradedClassStmt = $pdo->prepare(
+    "SELECT cs.cs_id, cs.semester FROM class_sections cs
+      WHERE cs.instructor_user_id = (SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph')
+        AND UPPER(cs.school_year) = UPPER(?)
+        AND EXISTS (SELECT 1 FROM assessment_scores sc JOIN assessments a ON a.assessment_id = sc.assessment_id WHERE a.cs_id = cs.cs_id)
+      ORDER BY cs.cs_id LIMIT 1"
+);
+$gradedClassStmt->execute([academic_current_school_year($pdo)]);
+$gradedClass = $gradedClassStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($gradedClass), 'Seeded Faculty has a current-year class with recorded scores');
+[$gradedTermStatus] = integration_http_json('/api/faculty/classes/update', $seedFacultyAccessToken, [
+    'csId' => (string) ($gradedClass['cs_id'] ?? 0),
+    'semester' => stripos((string) ($gradedClass['semester'] ?? ''), '2') !== false ? '1st Semester' : '2nd Semester',
+]);
+expect_same(409, $gradedTermStatus, 'Semester cannot change after scores or grades are recorded');
+
+// Create Class records lecture/laboratory units for a new catalog course and
+// reuses the shared course (with a per-class title) for an existing code.
+$componentCode = 'ITC-' . $classEditFixtureSuffix;
+$componentYear = academic_current_school_year($pdo);
+[$componentCreateStatus, $componentCreateBody] = integration_http_json('/api/faculty/classes', $generatedFacultyAccessToken, [
+    'csName' => $componentCode . '-A',
+    'courseCode' => $componentCode,
+    'courseName' => 'Integration Components Course',
+    'semester' => '1st Semester',
+    'schoolYear' => $componentYear,
+    'yearLevel' => 6,
+    'block' => 'A',
+    'lectureUnits' => 2,
+    'labUnits' => 1,
+]);
+expect_same(201, $componentCreateStatus, 'Create Class accepts lecture and laboratory units and year level 6');
+$componentCourseStmt = $pdo->prepare('SELECT name, units, lecture_units, lab_units, created_by_user_id FROM courses WHERE course_code = ?');
+$componentCourseStmt->execute([$componentCode]);
+$componentCourse = $componentCourseStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(['3.0', '2.0', '1.0'], [(string) ($componentCourse['units'] ?? ''), (string) ($componentCourse['lecture_units'] ?? ''), (string) ($componentCourse['lab_units'] ?? '')], 'New catalog course stores total, lecture, and laboratory units');
+[$componentSecondStatus] = integration_http_json('/api/faculty/classes', $generatedFacultyAccessToken, [
+    'csName' => $componentCode . '-B',
+    'courseCode' => strtolower($componentCode),
+    'courseName' => 'My Own Section Title',
+    'semester' => '1st Semester',
+    'schoolYear' => $componentYear,
+    'yearLevel' => 6,
+    'block' => 'B',
+]);
+expect_same(201, $componentSecondStatus, 'A second class reuses the existing course code');
+$componentCourseStmt->execute([$componentCode]);
+expect_same('Integration Components Course', $componentCourseStmt->fetch(PDO::FETCH_ASSOC)['name'] ?? null, 'Reusing a course code never renames the shared course');
+[$componentNoUnitsStatus] = integration_http_json('/api/faculty/classes', $generatedFacultyAccessToken, [
+    'csName' => 'NOUNITS-' . $classEditFixtureSuffix,
+    'courseCode' => 'NOUNITS-' . $classEditFixtureSuffix,
+    'courseName' => 'No Units Course',
+    'semester' => '1st Semester',
+    'schoolYear' => $componentYear,
+    'yearLevel' => 1,
+]);
+expect_same(422, $componentNoUnitsStatus, 'A new course code requires lecture and/or laboratory units');
+[$componentYearStatus] = integration_http_json('/api/faculty/classes', $generatedFacultyAccessToken, [
+    'csName' => $componentCode . '-C',
+    'courseCode' => $componentCode,
+    'semester' => '1st Semester',
+    'schoolYear' => $componentYear,
+    'yearLevel' => 7,
+]);
+expect_same(422, $componentYearStatus, 'Year level above 6 is rejected');
 
 // Faculty roster lifecycle coverage proves that an archive/re-enroll cycle
 // preserves the same enrollment identity and its historical grade/attendance.

@@ -33,6 +33,9 @@ assert_faculty_class_contract(str_contains($handler, 'lec_room = ?') && str_cont
 assert_faculty_class_contract(str_contains($handler, 'Schedule is not a persisted class-section field'), 'Non-persisted schedule input is rejected');
 assert_faculty_class_contract(str_contains($handler, 'courses'), 'Class updates handle course records');
 assert_faculty_class_contract(str_contains($handler, 'semester = ?') && str_contains($handler, 'school_year = ?'), 'Class updates allow term updates');
+assert_faculty_class_contract(str_contains($handler, 'faculty_class_has_grades'), 'Course and term changes are blocked once scores or grades exist');
+assert_faculty_class_contract(str_contains($handler, 'academic_require_current_school_year'), 'A class can only move within the current school year');
+assert_faculty_class_contract(str_contains($handler, 'course_title = ?') && !str_contains($handler, 'UPDATE courses SET name'), 'Course titles are per class and never rename the shared catalog course');
 assert_faculty_class_contract(str_contains($controller, "'schedule' => null"), 'Class reads do not derive schedule from room values');
 
 echo "ALL FACULTY CLASS CONTRACT TESTS PASSED\n";

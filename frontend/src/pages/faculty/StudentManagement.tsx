@@ -161,8 +161,8 @@ export const StudentManagement: React.FC = () => {
     }
 
     const yearNum = parseInt(formYearLevel);
-    if (isNaN(yearNum) || yearNum < 1 || yearNum > 4) {
-      errors.yearLevel = 'Year level must be between 1 and 4.';
+    if (isNaN(yearNum) || yearNum < 1 || yearNum > 6) {
+      errors.yearLevel = 'Year level must be between 1 and 6.';
     }
 
     setFormErrors(errors);
@@ -425,6 +425,8 @@ export const StudentManagement: React.FC = () => {
                 <option value="2">2nd Year</option>
                 <option value="3">3rd Year</option>
                 <option value="4">4th Year (Clinician)</option>
+                <option value="5">5th Year (Clinician)</option>
+                <option value="6">6th Year (Clinician)</option>
               </select>
 
               <select
@@ -696,6 +698,8 @@ export const StudentManagement: React.FC = () => {
                     <option value="2">2nd Year (Pre-clinical)</option>
                     <option value="3">3rd Year (Clinician)</option>
                     <option value="4">4th Year (Clinician)</option>
+                    <option value="5">5th Year (Clinician)</option>
+                    <option value="6">6th Year (Clinician)</option>
                   </select>
                 </div>
 

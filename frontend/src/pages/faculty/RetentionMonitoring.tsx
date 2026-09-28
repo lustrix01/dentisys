@@ -6,6 +6,7 @@ import { showFeedback } from '../../components/FeedbackCenter';
 import {
   getFacultyRetentionApi,
   saveFacultyRemedialApi,
+  saveFacultyCostRecoveryApi,
   updateFacultyRetentionStatusApi,
   unlockFacultyWatchlistApi,
 } from '../../services/apiClient';
@@ -21,6 +22,8 @@ type RemedialStage =
   | 'attempt_2_pending'
   | 'passed'
   | 'cost_recovery_required'
+  | 'cost_recovery_passed'
+  | 'cost_recovery_failed'
   | 'legacy_unclassified';
 
 type RemedialAttemptStatus = 'pending' | 'passed' | 'failed';
@@ -37,6 +40,7 @@ interface RemedialProgressionView {
   attempts: RemedialAttemptView[];
   passedAttempt: 1 | 2 | null;
   legacyUnclassified: boolean;
+  costRecoveryGrade?: number | null;
 }
 
 interface RetentionRemedialRow {
@@ -101,6 +105,8 @@ const REMEDIAL_STAGES: RemedialStage[] = [
   'attempt_2_pending',
   'passed',
   'cost_recovery_required',
+  'cost_recovery_passed',
+  'cost_recovery_failed',
   'legacy_unclassified',
 ];
 
@@ -154,7 +160,9 @@ const readRemedialProgression = (record: FacultyRetentionRecord): RemedialProgre
       : [];
     const passedAttempt = readAttemptNumber(rawProgression.passedAttempt ?? rawProgression.passed_attempt);
     const legacyUnclassified = rawLegacyUnclassified || stage === 'legacy_unclassified';
-    return { stage, attempts, passedAttempt, legacyUnclassified };
+    const rawCost = rawProgression.costRecovery;
+    const costRecoveryGrade = isRecordValue(rawCost) && typeof rawCost.finalGrade === 'number' ? rawCost.finalGrade : null;
+    return { stage, attempts, passedAttempt, legacyUnclassified, costRecoveryGrade };
   }
 
   // A legacy current-state JSON blob is deliberately not interpreted as an attempt.
@@ -192,8 +200,10 @@ const stageLabel = (stage: RemedialStage): string => {
     case 'attempt_1_pending': return 'Attempt 1 pending';
     case 'attempt_2_available': return 'Attempt 2 available';
     case 'attempt_2_pending': return 'Attempt 2 pending';
-    case 'passed': return 'Passed';
+    case 'passed': return 'Cleared (passed remedial)';
     case 'cost_recovery_required': return 'Cost recovery required';
+    case 'cost_recovery_passed': return 'Cleared (passed cost recovery)';
+    case 'cost_recovery_failed': return 'Failed (did not pass cost recovery)';
     case 'legacy_unclassified': return 'Legacy / unclassified';
     default: return 'Progression unavailable';
   }
@@ -209,7 +219,7 @@ const attemptStatus = (
   if (progression.stage === 'attempt_2_available' && attemptNumber === 1) return 'failed';
   if (progression.stage === 'attempt_2_pending') return attemptNumber === 1 ? 'failed' : 'pending';
   if (progression.stage === 'passed') return progression.passedAttempt === attemptNumber ? 'passed' : attemptNumber < (progression.passedAttempt ?? 2) ? 'failed' : 'not_started';
-  if (progression.stage === 'cost_recovery_required') return 'failed';
+  if (progression.stage === 'cost_recovery_required' || progression.stage === 'cost_recovery_passed' || progression.stage === 'cost_recovery_failed') return 'failed';
   if (progression.stage === 'attempt_2_available' && attemptNumber === 2) return 'available';
   return 'not_started';
 };
@@ -231,6 +241,7 @@ const retentionStateLabel = (state: FacultyRetentionState): string => {
     case 'warning': return 'Warning';
     case 'critical': return 'Critical';
     case 'remedial': return 'Remedial';
+    case 'cleared': return 'Cleared';
     case 'archived': return 'Archived';
     default: return 'Unavailable';
   }
@@ -242,6 +253,7 @@ const statusBadgeClasses = (state: FacultyRetentionState): string => {
     case 'warning': return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60';
     case 'remedial': return 'bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60';
     case 'active': return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60';
+    case 'cleared': return 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 border border-teal-200/60';
     case 'archived': return 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
     default: return 'bg-slate-100 text-slate-500 border border-slate-200';
   }
@@ -390,7 +402,7 @@ export const RetentionMonitoring: React.FC = () => {
   }, [searchQuery, selectedSchoolYear, selectedClassId, selectedSubjectCode, usableRecords]);
 
   const watchlistRecords = useMemo(
-    () => filteredRecords.filter(record => record.state !== 'active'),
+    () => filteredRecords.filter(record => record.state !== 'active' && record.state !== 'cleared'),
     [filteredRecords],
   );
 
@@ -454,6 +466,35 @@ export const RetentionMonitoring: React.FC = () => {
     setIsScheduleOpen(true);
   };
 
+  const [costRecoveryRecord, setCostRecoveryRecord] = useState<FacultyRetentionRecord | null>(null);
+  const [costRecoveryGrade, setCostRecoveryGrade] = useState('');
+  const openCostRecovery = (row: RetentionRemedialRow) => {
+    setCostRecoveryRecord(row.record);
+    setCostRecoveryGrade('');
+  };
+  const handleCostRecoverySubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!costRecoveryRecord) return;
+    const grade = Number(costRecoveryGrade);
+    if (!Number.isFinite(grade) || grade < 1 || grade > 5) {
+      showFeedback('Enter the cost recovery final grade from 1.00 to 5.00.', 'error');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const result = await saveFacultyCostRecoveryApi({ enrollmentId: costRecoveryRecord.enrollmentId, finalGrade: grade });
+      setCostRecoveryRecord(null);
+      await refreshRetention();
+      showFeedback(result.outcome === 'passed'
+        ? 'Cost recovery passed: the student is now cleared for this course.'
+        : 'Cost recovery recorded as not passed.', result.outcome === 'passed' ? 'success' : 'info');
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : 'Unable to record the cost recovery result.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const openResolve = (row: RetentionRemedialRow) => {
     const attemptNumber = pendingAttemptNumber(row.progression);
     if (!attemptNumber) {
@@ -475,7 +516,7 @@ export const RetentionMonitoring: React.FC = () => {
       return;
     }
     setSelectedOverrideEnrollmentId(record.enrollmentId);
-    setOverrideStatus(record.state === 'archived' ? 'warning' : record.state);
+    setOverrideStatus(record.state === 'archived' ? 'warning' : record.state === 'cleared' ? 'active' : record.state);
     setOverrideRemarks('');
     setIsOverrideOpen(true);
   };
@@ -803,8 +844,8 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
                     <td className="py-3.5 px-4"><div className="space-y-1.5">{([1, 2] as AllowedAttempt[]).map(attemptNumber => { const attempt = row.progression.attempts.find(item => item.attemptNumber === attemptNumber); const status = attemptStatus(row.progression, attemptNumber); const statusClass = status === 'passed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : status === 'failed' ? 'bg-rose-50 text-rose-700 border-rose-200/60' : status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200/60' : status === 'available' ? 'bg-sky-50 text-sky-700 border-sky-200/60' : 'bg-slate-100 text-slate-600 border-slate-200'; return <div key={attemptNumber} className="flex flex-wrap items-center gap-1.5"><span className="font-bold text-slate-700 dark:text-slate-300">Attempt {attemptNumber}</span><span className={`rounded-lg border px-2 py-1 text-[10px] font-bold ${statusClass}`}>{attemptStatusLabel(status)}{isFiniteNumber(attempt?.percentage) ? ` · ${attempt.percentage.toFixed(2)}%` : ''}</span>{attempt?.scheduledDate && <span className="text-[10px] text-slate-400">{attempt.scheduledDate}</span>}</div>; })}</div></td>
-                    <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${row.progression.stage === 'passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : row.progression.stage === 'cost_recovery_required' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : row.progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>{stageLabel(row.progression.stage)}</span>{row.progression.legacyUnclassified && <span className="text-[10px] text-slate-500">{legacyEvidenceLabel((row.record as unknown as { remedial?: unknown }).remedial) ?? 'Outcome unavailable pending reconciliation.'}</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current remedial progression">Details <ChevronRight className="h-3 w-3" /></button></div></td>
-                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Attempt {pendingAttemptNumber(row.progression)}</button>}{row.progression.legacyUnclassified && <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">Legacy / unclassified</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
+                    <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : row.progression.stage === 'cost_recovery_required' || row.progression.stage === 'cost_recovery_failed' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : row.progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>{stageLabel(row.progression.stage)}</span>{row.progression.legacyUnclassified && <span className="text-[10px] text-slate-500">{legacyEvidenceLabel((row.record as unknown as { remedial?: unknown }).remedial) ?? 'Outcome unavailable pending reconciliation.'}</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current remedial progression">Details <ChevronRight className="h-3 w-3" /></button></div></td>
+                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Attempt {pendingAttemptNumber(row.progression)}</button>}{row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && <button type="button" onClick={() => openCostRecovery(row)} className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Record Cost Recovery</button>}{typeof row.progression.costRecoveryGrade === 'number' && <span className="text-[10px] text-slate-500">Cost recovery grade {row.progression.costRecoveryGrade.toFixed(2)}</span>}{row.progression.legacyUnclassified && <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">Legacy / unclassified</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -832,6 +873,24 @@ export const RetentionMonitoring: React.FC = () => {
             <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(selectedResolveRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(selectedResolveRecord.subjectCode, 'Subject code unavailable')}</p>
             <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Percentage Score (%)</label><input type="number" min="0" max="100" step="any" required value={remedialScore} onChange={(event) => setRemedialScore(event.target.value)} placeholder="Enter score" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm" /><span className="text-[11px] text-slate-400 block mt-1">The server determines Pass or Fail at 50% or higher. This form sends only the attempt number and percentage.</span></div>
             <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetResolveForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Save Exam Grade'}</button></div>
+          </form>
+        </Modal>
+      )}
+
+      {costRecoveryRecord && (
+        <Modal isOpen={Boolean(costRecoveryRecord)} onClose={() => setCostRecoveryRecord(null)} title="Record Cost Recovery Result">
+          <form onSubmit={handleCostRecoverySubmit} className="space-y-4 text-xs">
+            <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(costRecoveryRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(costRecoveryRecord.subjectCode, 'Subject code unavailable')}</p>
+            <p className="text-slate-500 dark:text-slate-400">Both remedial attempts were failed. Enter the final grade earned in the cost recovery program. A grade better than the retention trigger clears the student; otherwise the course is failed. The original course grade is not changed.</p>
+            <label className="font-bold text-slate-700 dark:text-slate-300 block">
+              Cost recovery final grade (1.00 – 5.00)
+              <input type="number" min="1" max="5" step="0.01" required value={costRecoveryGrade} onChange={(event) => setCostRecoveryGrade(event.target.value)} placeholder="e.g. 2.25"
+                className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" />
+            </label>
+            <div className="pt-2 flex justify-end gap-2">
+              <button type="button" onClick={() => setCostRecoveryRecord(null)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button>
+              <button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white font-bold">{isSubmitting ? 'Saving…' : 'Record Result'}</button>
+            </div>
           </form>
         </Modal>
       )}

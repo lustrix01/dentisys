@@ -61,6 +61,38 @@ import { RosterImportModal } from '../../components/RosterImportModal';
 
 const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
 
+type CourseComponents = 'both' | 'lecture' | 'lab';
+
+const componentsFromUnits = (lectureUnits?: number | null, labUnits?: number | null): CourseComponents | null => {
+  const lec = Number(lectureUnits ?? 0);
+  const lab = Number(labUnits ?? 0);
+  if (lec > 0 && lab > 0) return 'both';
+  if (lec > 0) return 'lecture';
+  if (lab > 0) return 'lab';
+  return null;
+};
+
+const slotTypesFor = (components: CourseComponents): Array<'Lecture' | 'Laboratory'> => (
+  components === 'both' ? ['Lecture', 'Laboratory'] : components === 'lecture' ? ['Lecture'] : ['Laboratory']
+);
+
+const defaultSlotFor = (type: 'Lecture' | 'Laboratory'): ClassSessionSlot => {
+  const config = type === 'Lecture'
+    ? { room: '', days: [] as string[], startTime: '08:00 AM', endTime: '09:00 AM' }
+    : { room: '', days: [] as string[], startTime: '10:00 AM', endTime: '01:00 PM' };
+  return {
+    id: `session-${type.toLowerCase()}`,
+    type,
+    ...config,
+    ...(type === 'Lecture' ? { lectureData: config } : { labData: config }),
+  };
+};
+
+const parseUnitsInput = (value: string): number | null => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 10) / 10 : null;
+};
+
 const parseRoomSchedule = (raw: string | undefined | null) => {
   if (!raw || !raw.trim()) {
     return { room: '', days: [] as string[], startTime: '08:00 AM', endTime: '09:00 AM' };
@@ -137,8 +169,13 @@ export const ClassesAndRosters: React.FC = () => {
     id: string;
     studentId: string;
     name: string;
+    prefix?: string | null;
+    firstName?: string | null;
+    middleName?: string | null;
+    lastName?: string | null;
+    suffix?: string | null;
     email: string;
-    yearLevel: number;
+    yearLevel: number | null;
     status: string;
   }>>([]);
   const [loadingAvailable, setLoadingAvailable] = useState(false);
@@ -154,6 +191,11 @@ export const ClassesAndRosters: React.FC = () => {
   const [newSchoolYear, setNewSchoolYear] = useState('');
   const [newSemester, setNewSemester] = useState('1st Semester');
   const [newYearLevel, setNewYearLevel] = useState(4);
+  // Course components: lecture and/or laboratory, each with its own units
+  // and its own schedule.
+  const [newComponents, setNewComponents] = useState<CourseComponents>('lecture');
+  const [newLectureUnits, setNewLectureUnits] = useState('3');
+  const [newLabUnits, setNewLabUnits] = useState('1');
 
   // Session Slots: User can customize sessions (Lecture/Lab, Room, Days, Time)
   const [sessionSlots, setSessionSlots] = useState<ClassSessionSlot[]>([
@@ -183,6 +225,9 @@ export const ClassesAndRosters: React.FC = () => {
   const [editLabStartTime, setEditLabStartTime] = useState('10:00 AM');
   const [editLabEndTime, setEditLabEndTime] = useState('01:00 PM');
   const [editSemester, setEditSemester] = useState('1st Semester');
+  const [editComponents, setEditComponents] = useState<CourseComponents>('lecture');
+  const [editLectureUnits, setEditLectureUnits] = useState('3');
+  const [editLabUnits, setEditLabUnits] = useState('1');
   const [editSchoolYear, setEditSchoolYear] = useState('2025-2026');
   const [editError, setEditError] = useState<string | null>(null);
   const [isUpdatingClass, setIsUpdatingClass] = useState(false);
@@ -210,6 +255,44 @@ export const ClassesAndRosters: React.FC = () => {
   const [studentEmailInput, setStudentEmailInput] = useState('');
   const [studentYearInput, setStudentYearInput] = useState(4);
   const [isSubmittingNewStudent, setIsSubmittingNewStudent] = useState(false);
+  // True while the name/email fields hold an existing Student's details.
+  const [studentAutofilled, setStudentAutofilled] = useState(false);
+
+  // An existing Student ID number (not yet in the target class) is enrolled
+  // as-is instead of registering a duplicate Student.
+  const existingStudentMatch = useMemo(() => {
+    const wanted = studentIdInput.trim().toLowerCase();
+    if (wanted === '') return null;
+    return availableStudents.find(st => (st.studentId || '').trim().toLowerCase() === wanted) ?? null;
+  }, [availableStudents, studentIdInput]);
+  const studentAlreadyInTargetClass = useMemo(() => {
+    const wanted = studentIdInput.trim().toLowerCase();
+    if (wanted === '' || existingStudentMatch) return false;
+    return studentsList.some(st => (st.studentId || '').trim().toLowerCase() === wanted
+      && (st.classSections || []).some(section => String(section.classId) === String(targetEnrollCsId)));
+  }, [studentsList, studentIdInput, existingStudentMatch, targetEnrollCsId]);
+
+  useEffect(() => {
+    if (existingStudentMatch) {
+      setStudentPrefix(existingStudentMatch.prefix || '');
+      setStudentFirstName(existingStudentMatch.firstName || '');
+      setStudentMiddleName(existingStudentMatch.middleName || '');
+      setStudentLastName(existingStudentMatch.lastName || '');
+      setStudentSuffix(existingStudentMatch.suffix || '');
+      setStudentEmailInput(existingStudentMatch.email || '');
+      if (existingStudentMatch.yearLevel) setStudentYearInput(Math.min(Math.max(Number(existingStudentMatch.yearLevel), 1), 6));
+      setStudentAutofilled(true);
+    } else if (studentAutofilled) {
+      setStudentPrefix('');
+      setStudentFirstName('');
+      setStudentMiddleName('');
+      setStudentLastName('');
+      setStudentSuffix('');
+      setStudentEmailInput('');
+      setStudentAutofilled(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingStudentMatch]);
 
   // Derived read-only composed name preview
   const composedStudentName = useMemo(() => {
@@ -426,12 +509,14 @@ export const ClassesAndRosters: React.FC = () => {
     }
 
     setEnrollTab('manual');
+    void loadAvailableStudents(targetId);
+    setStudentAutofilled(false);
     setStudentIdInput('');
     setStudentFirstName('');
     setStudentMiddleName('');
     setStudentLastName('');
     setStudentEmailInput('');
-    const defaultYear = targetClassItem?.yearLevel ? Math.min(Math.max(Number(targetClassItem.yearLevel), 1), 4) : 4;
+    const defaultYear = targetClassItem?.yearLevel ? Math.min(Math.max(Number(targetClassItem.yearLevel), 1), 6) : 4;
     setStudentYearInput(defaultYear);
     setIsAddStudentOpen(true);
   };
@@ -461,6 +546,9 @@ export const ClassesAndRosters: React.FC = () => {
     setEditLabEndTime(parsedLab.endTime || '01:00 PM');
 
     setEditSemester(cls.semester || '1st Semester');
+    setEditComponents(componentsFromUnits(cls.lectureUnits, cls.labUnits) ?? 'lecture');
+    setEditLectureUnits(String(cls.lectureUnits || 3));
+    setEditLabUnits(String(cls.labUnits || 1));
     setEditSchoolYear(cls.schoolYear || '2025-2026');
     setEditError(null);
   };
@@ -500,8 +588,8 @@ export const ClassesAndRosters: React.FC = () => {
       setEditStudentError('Institutional email is required for roster edits.');
       return;
     }
-    if (!Number.isInteger(editStudentYearLevel) || editStudentYearLevel < 1 || editStudentYearLevel > 4) {
-      setEditStudentError('Year level must be between 1 and 4.');
+    if (!Number.isInteger(editStudentYearLevel) || editStudentYearLevel < 1 || editStudentYearLevel > 6) {
+      setEditStudentError('Year level must be between 1 and 6.');
       return;
     }
 
@@ -527,6 +615,20 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
+  const editCodeIsNew = useMemo(
+    () => editCourseCode.trim() !== '' && !courses.some(c => c.courseCode.toLowerCase() === editCourseCode.trim().toLowerCase()),
+    [courses, editCourseCode]
+  );
+  const editTermLocked = Boolean(editingClass?.hasGrades);
+  // Which schedules the class needs: from the chosen new course, else the
+  // catalog split; older courses without a split keep both (lab optional).
+  const editVisibleComponents: CourseComponents = editCodeIsNew
+    ? editComponents
+    : (componentsFromUnits(
+      courses.find(c => c.courseCode.toLowerCase() === editCourseCode.trim().toLowerCase())?.lectureUnits ?? editingClass?.lectureUnits,
+      courses.find(c => c.courseCode.toLowerCase() === editCourseCode.trim().toLowerCase())?.labUnits ?? editingClass?.labUnits,
+    ) ?? 'both');
+
   // Handler: Update Class Section
   const handleUpdateClass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -549,20 +651,34 @@ export const ClassesAndRosters: React.FC = () => {
 
     const formattedLec = formatRoomSchedule(editLecRoom, editLecDays, editLecStartTime, editLecEndTime);
     const formattedLab = formatRoomSchedule(editLabRoom, editLabDays, editLabStartTime, editLabEndTime);
+    const codeChanged = editCourseCode.trim().toLowerCase() !== (editingClass.courseCode || '').trim().toLowerCase();
+    const semesterChanged = editSemester !== editingClass.semester;
+    const newCatalogCode = codeChanged && editCodeIsNew;
+    const includesLecture = editComponents !== 'lab';
+    const includesLab = editComponents !== 'lecture';
+    if (newCatalogCode && ((includesLecture && parseUnitsInput(editLectureUnits) === null) || (includesLab && parseUnitsInput(editLabUnits) === null))) {
+      setEditError('A new course code needs its lecture and/or laboratory units.');
+      return;
+    }
 
     setIsUpdatingClass(true);
     try {
       const res = await updateFacultyClassApi({
         csId: parsedCsId,
-        courseCode: editCourseCode.trim() || undefined,
+        // Course and semester are sent only when changed: they are locked
+        // once scores or grades exist.
+        courseCode: codeChanged ? editCourseCode.trim() : undefined,
         courseName: editCourseName.trim() || undefined,
         csName: `${editCourseCode.trim()}-${editBlock.trim()}`,
         block: editBlock.trim(),
         yearLevel: editYearLevel,
-        semester: editSemester.trim() || undefined,
-        schoolYear: editSchoolYear.trim() || undefined,
+        semester: semesterChanged ? editSemester : undefined,
         lecRoom: formattedLec || undefined,
         labRoom: formattedLab || undefined,
+        ...(newCatalogCode ? {
+          lectureUnits: includesLecture ? parseUnitsInput(editLectureUnits) : null,
+          labUnits: includesLab ? parseUnitsInput(editLabUnits) : null,
+        } : {}),
       });
 
       if (res && (res.status === 'ok' || res.status === 'success')) {
@@ -579,36 +695,24 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
+  // Catalog course matching the typed code (shared across Faculty).
+  const selectedCatalogCourse = useMemo(
+    () => courses.find(c => c.courseCode.toLowerCase() === newCourseCode.trim().toLowerCase()) ?? null,
+    [courses, newCourseCode]
+  );
+  // Units are part of the shared catalog: fixed once recorded for a course.
+  const catalogUnitsLocked = Boolean(selectedCatalogCourse
+    && componentsFromUnits(selectedCatalogCourse.lectureUnits, selectedCatalogCourse.labUnits));
+
+  // Keep exactly one schedule per selected component (lecture and/or lab).
+  useEffect(() => {
+    setSessionSlots(prev => slotTypesFor(newComponents).map(type => prev.find(slot => slot.type === type) ?? defaultSlotFor(type)));
+  }, [newComponents]);
+
   // Schedule Conflict Detection: verifies all session slots against active classes
   const scheduleConflict = useMemo<string | null>(() => {
     return checkScheduleConflicts(sessionSlots, classes, newSchoolYear);
   }, [sessionSlots, classes, newSchoolYear]);
-
-  const handleAddSessionSlot = () => {
-    const nextType: 'Lecture' | 'Laboratory' = sessionSlots.some(s => s.type === 'Lecture') ? 'Laboratory' : 'Lecture';
-    const nextRoom = nextType === 'Laboratory' ? 'Dental Clinic Lab 1' : 'Lecture Hall A';
-    const nextDays = nextType === 'Laboratory' ? ['Wed'] : ['Tue'];
-    const initialConfig = {
-      room: nextRoom,
-      days: nextDays,
-      startTime: '10:00 AM',
-      endTime: '01:00 PM',
-    };
-    setSessionSlots(prev => [
-      ...prev,
-      {
-        id: `session-${Date.now()}`,
-        type: nextType,
-        ...initialConfig,
-        ...(nextType === 'Lecture' ? { lectureData: initialConfig } : { labData: initialConfig }),
-      },
-    ]);
-  };
-
-  const handleRemoveSessionSlot = (id: string) => {
-    if (sessionSlots.length <= 1) return;
-    setSessionSlots(prev => prev.filter(s => s.id !== id));
-  };
 
   const handleUpdateSlot = (id: string, updates: Partial<ClassSessionSlot>) => {
     setSessionSlots(prev =>
@@ -680,20 +784,10 @@ export const ClassesAndRosters: React.FC = () => {
     setNewCourseName('');
     setNewYearLevel(4);
     setNewBlock('');
-    const initialLec = {
-      room: '',
-      days: [],
-      startTime: '08:00 AM',
-      endTime: '09:00 AM',
-    };
-    setSessionSlots([
-      {
-        id: 'session-1',
-        type: 'Lecture',
-        ...initialLec,
-        lectureData: initialLec,
-      },
-    ]);
+    setNewComponents('lecture');
+    setNewLectureUnits('3');
+    setNewLabUnits('1');
+    setSessionSlots([defaultSlotFor('Lecture')]);
     setIsCreateClassOpen(true);
   };
 
@@ -723,6 +817,20 @@ export const ClassesAndRosters: React.FC = () => {
       return;
     }
 
+    const includesLecture = newComponents !== 'lab';
+    const includesLab = newComponents !== 'lecture';
+    const lectureUnits = includesLecture ? parseUnitsInput(newLectureUnits) : null;
+    const labUnits = includesLab ? parseUnitsInput(newLabUnits) : null;
+    if ((includesLecture && lectureUnits === null) || (includesLab && labUnits === null)) {
+      showFeedback('Enter the units for each selected component (lecture and/or laboratory).', 'error');
+      return;
+    }
+    const missingSchedule = sessionSlots.find(slot => !slot.room || slot.days.length === 0);
+    if (missingSchedule) {
+      showFeedback(`Choose a room and at least one day for the ${missingSchedule.type.toLowerCase()} schedule.`, 'error');
+      return;
+    }
+
     const { lecRoom, labRoom } = formatSessionsForSubmission(sessionSlots);
 
     setIsSubmittingClass(true);
@@ -736,8 +844,10 @@ export const ClassesAndRosters: React.FC = () => {
         schoolYear: newSchoolYear,
         yearLevel: newYearLevel,
         block: newBlock.trim(),
-        lecRoom: lecRoom || undefined,
-        labRoom: labRoom || undefined,
+        lecRoom: includesLecture ? (lecRoom || undefined) : undefined,
+        labRoom: includesLab ? (labRoom || undefined) : undefined,
+        lectureUnits,
+        labUnits,
       });
 
       showFeedback(res.message || `Class section ${csName} created successfully for current S.Y. ${newSchoolYear}!`, 'success');
@@ -787,6 +897,32 @@ export const ClassesAndRosters: React.FC = () => {
   // Handler: Register New Student & Enroll via authoritative API (C4 Split Names)
   const handleRegisterNewStudent = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (existingStudentMatch) {
+      if (!targetEnrollCsId || targetEnrollCsId <= 0) {
+        showFeedback('Please select a target class section.', 'error');
+        return;
+      }
+      setIsSubmittingNewStudent(true);
+      try {
+        const res = await enrollStudentsInClassApi({
+          csId: targetEnrollCsId,
+          studentIds: [Number(existingStudentMatch.id)],
+        });
+        showFeedback(res.message || `${existingStudentMatch.name} enrolled successfully.`, 'success');
+        setIsAddStudentOpen(false);
+        setStudentIdInput('');
+        await fetchData();
+      } catch (err: any) {
+        showFeedback(err.message || 'Failed to enroll the existing student.', 'error');
+      } finally {
+        setIsSubmittingNewStudent(false);
+      }
+      return;
+    }
+    if (studentAlreadyInTargetClass) {
+      showFeedback('This student is already enrolled in the selected class.', 'info');
+      return;
+    }
     if (!studentIdInput.trim() || !studentFirstName.trim() || !studentLastName.trim() || !studentEmailInput.trim()) {
       showFeedback('Please fill in Student ID, First Name, Last Name, and Email.', 'error');
       return;
@@ -1370,6 +1506,9 @@ export const ClassesAndRosters: React.FC = () => {
                                   : 'bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                               }`}
                               title="Actions"
+                              aria-label={`Actions for ${st.name}`}
+                              aria-haspopup="menu"
+                              aria-expanded={openStudentMenuId === st.id}
                             >
                               <MoreVertical className="w-4 h-4" />
                             </button>
@@ -1473,9 +1612,10 @@ export const ClassesAndRosters: React.FC = () => {
                   if (matched) {
                     setSelectedClass(matched);
                     if (matched.yearLevel) {
-                      setStudentYearInput(Math.min(Math.max(Number(matched.yearLevel), 1), 4));
+                      setStudentYearInput(Math.min(Math.max(Number(matched.yearLevel), 1), 6));
                     }
                   }
+                  void loadAvailableStudents(idNum);
                 }}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
               >
@@ -1494,14 +1634,24 @@ export const ClassesAndRosters: React.FC = () => {
                   value={studentIdInput}
                   onChange={(e) => setStudentIdInput(e.target.value)}
                   placeholder="e.g. 2024-DENT-0012"
+                  aria-describedby="student-id-lookup-status"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                <p id="student-id-lookup-status" role="status" className="mt-1 text-[11px] font-semibold">
+                  {loadingAvailable
+                    ? <span className="text-slate-400">Checking existing students…</span>
+                    : existingStudentMatch
+                      ? <span className="text-emerald-600 dark:text-emerald-400">Existing student found: {existingStudentMatch.name}. Their details are filled in and they will be enrolled in this class.</span>
+                      : studentAlreadyInTargetClass
+                        ? <span className="text-amber-600 dark:text-amber-400">This student is already enrolled in the selected class.</span>
+                        : <span className="text-slate-400">Enter an existing student's ID number to fill in their details automatically.</span>}
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <label className="font-bold text-slate-700 dark:text-slate-300">
                   Prefix
-                  <input value={studentPrefix} onChange={e => setStudentPrefix(e.target.value)} maxLength={50} placeholder="e.g. Ms."
+                  <input value={studentPrefix} readOnly={studentAutofilled} onChange={e => setStudentPrefix(e.target.value)} maxLength={50} placeholder="e.g. Ms."
                     className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
                 </label>
                 <div>
@@ -1510,6 +1660,7 @@ export const ClassesAndRosters: React.FC = () => {
                     type="text"
                     required
                     value={studentFirstName}
+                    readOnly={studentAutofilled}
                     onChange={(e) => setStudentFirstName(e.target.value.replace(/[0-9]/g, ''))}
                     placeholder="e.g. Juan"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
@@ -1520,6 +1671,7 @@ export const ClassesAndRosters: React.FC = () => {
                   <input
                     type="text"
                     value={studentMiddleName}
+                    readOnly={studentAutofilled}
                     onChange={(e) => setStudentMiddleName(e.target.value.replace(/[0-9]/g, ''))}
                     placeholder="e.g. Santos"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
@@ -1531,6 +1683,7 @@ export const ClassesAndRosters: React.FC = () => {
                     type="text"
                     required
                     value={studentLastName}
+                    readOnly={studentAutofilled}
                     onChange={(e) => setStudentLastName(e.target.value.replace(/[0-9]/g, ''))}
                     placeholder="e.g. Dela Cruz"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
@@ -1540,7 +1693,7 @@ export const ClassesAndRosters: React.FC = () => {
 
               <label className="block font-bold text-slate-700 dark:text-slate-300">
                 Suffix
-                <input value={studentSuffix} onChange={e => setStudentSuffix(e.target.value)} maxLength={50} placeholder="e.g. Jr., III"
+                <input value={studentSuffix} readOnly={studentAutofilled} onChange={e => setStudentSuffix(e.target.value)} maxLength={50} placeholder="e.g. Jr., III"
                   className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
               </label>
               <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
@@ -1558,6 +1711,7 @@ export const ClassesAndRosters: React.FC = () => {
                   inputMode="email"
                   required
                   value={studentEmailInput}
+                    readOnly={studentAutofilled}
                   onChange={(e) => setStudentEmailInput(e.target.value)}
                   placeholder="username"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
@@ -1570,6 +1724,7 @@ export const ClassesAndRosters: React.FC = () => {
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level</label>
                 <select
                   value={studentYearInput}
+                  disabled={studentAutofilled}
                   onChange={(e) => setStudentYearInput(Number(e.target.value))}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
                 >
@@ -1577,6 +1732,8 @@ export const ClassesAndRosters: React.FC = () => {
                   <option value={2}>Year 2</option>
                   <option value={3}>Year 3</option>
                   <option value={4}>Year 4</option>
+                  <option value={5}>Year 5</option>
+                  <option value={6}>Year 6</option>
                 </select>
               </div>
 
@@ -1593,7 +1750,7 @@ export const ClassesAndRosters: React.FC = () => {
                   disabled={isSubmittingNewStudent}
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
                 >
-                  {isSubmittingNewStudent ? 'Registering...' : 'Register & Enroll Student'}
+                  {isSubmittingNewStudent ? (existingStudentMatch ? 'Enrolling...' : 'Registering...') : (existingStudentMatch ? 'Enroll Existing Student' : 'Register & Enroll Student')}
                 </button>
               </div>
             </form>
@@ -1634,7 +1791,15 @@ export const ClassesAndRosters: React.FC = () => {
                     if (found) {
                       setNewCourseId(found.id);
                       setNewCourseName(found.name);
-                      setNewYearLevel(found.yearLevel);
+                      setNewYearLevel(Math.min(Math.max(found.yearLevel || 1, 1), 6));
+                      const catalogComponents = componentsFromUnits(found.lectureUnits, found.labUnits);
+                      if (catalogComponents) {
+                        setNewComponents(catalogComponents);
+                        setNewLectureUnits(String(found.lectureUnits ?? 0));
+                        setNewLabUnits(String(found.labUnits ?? 0));
+                      }
+                    } else {
+                      setNewCourseId(0);
                     }
                   }}
                   placeholder="e.g. DENT 301"
@@ -1648,7 +1813,9 @@ export const ClassesAndRosters: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  {selectedCatalogCourse ? 'Course Title for Your Class *' : 'Course Title *'}
+                </label>
                 <input
                   type="text"
                   required
@@ -1657,7 +1824,81 @@ export const ClassesAndRosters: React.FC = () => {
                   placeholder="e.g. Restorative Dentistry I"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
+                <p className="mt-1 text-[10px] text-slate-400">
+                  {selectedCatalogCourse
+                    ? `Catalog name: ${selectedCatalogCourse.name}. A different title here shows only for your class.`
+                    : 'New course code: it will be added to the shared course catalog.'}
+                </p>
               </div>
+            </div>
+
+            {/* Course components and units */}
+            <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 space-y-3">
+              <div>
+                <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">Course Components *</span>
+                <div role="radiogroup" aria-label="Course components" className="grid grid-cols-3 gap-2">
+                  {([
+                    ['both', 'Lecture & Lab'],
+                    ['lecture', 'Lecture only'],
+                    ['lab', 'Lab only'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={newComponents === value}
+                      disabled={catalogUnitsLocked}
+                      onClick={() => setNewComponents(value)}
+                      className={`px-2.5 py-2 rounded-xl border text-xs font-bold transition-all disabled:cursor-not-allowed ${
+                        newComponents === value
+                          ? 'border-emerald-500 bg-emerald-600 text-white shadow-xs'
+                          : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {newComponents !== 'lab' && (
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                    Lecture Units *
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={20}
+                      step={0.5}
+                      required
+                      readOnly={catalogUnitsLocked}
+                      value={newLectureUnits}
+                      onChange={(e) => setNewLectureUnits(e.target.value)}
+                      className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+                    />
+                  </label>
+                )}
+                {newComponents !== 'lecture' && (
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                    Laboratory Units *
+                    <input
+                      type="number"
+                      min={0.5}
+                      max={20}
+                      step={0.5}
+                      required
+                      readOnly={catalogUnitsLocked}
+                      value={newLabUnits}
+                      onChange={(e) => setNewLabUnits(e.target.value)}
+                      className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+                    />
+                  </label>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400">
+                {catalogUnitsLocked
+                  ? 'Components and units come from the shared course catalog for this code.'
+                  : 'Lecture and laboratory each get their own schedule below.'}
+              </p>
             </div>
 
             {/* Section / Block, Year Level & Semester */}
@@ -1704,68 +1945,20 @@ export const ClassesAndRosters: React.FC = () => {
 
             {/* SESSION CONFIGURATION (CUSTOMIZABLE LECTURE / LAB & ROOM) */}
             <div className="space-y-3.5">
-              <div className="flex items-center justify-between">
-                <label className="font-bold text-slate-800 dark:text-slate-100 text-xs">
-                  Class Sessions & Rooms ({sessionSlots.length})
-                </label>
-                <button
-                  type="button"
-                  onClick={handleAddSessionSlot}
-                  className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Session
-                </button>
-              </div>
+              <label className="font-bold text-slate-800 dark:text-slate-100 text-xs block">
+                Schedules & Rooms
+              </label>
 
-              {sessionSlots.map((slot, index) => (
+              {sessionSlots.map((slot) => (
                 <div
                   key={slot.id}
                   className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/50 space-y-3.5"
                 >
-                  {/* Slot Header: Type Selector & Remove Button */}
-                  <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-800 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
-                        Session {index + 1}:
-                      </span>
-                      {/* Choose between Lecture or Laboratory */}
-                      <div className="flex items-center bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateSlot(slot.id, { type: 'Lecture' })}
-                          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                            slot.type === 'Lecture'
-                              ? 'bg-emerald-600 text-white shadow-xs'
-                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                          }`}
-                        >
-                          Lecture
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateSlot(slot.id, { type: 'Laboratory' })}
-                          className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                            slot.type === 'Laboratory'
-                              ? 'bg-emerald-600 text-white shadow-xs'
-                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                          }`}
-                        >
-                          Laboratory
-                        </button>
-                      </div>
-                    </div>
-
-                    {sessionSlots.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSessionSlot(slot.id)}
-                        className="text-slate-400 hover:text-rose-500 p-1 rounded-lg transition-colors cursor-pointer"
-                        title="Remove this session"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                  <div className="flex items-center gap-2 border-b border-slate-200/80 dark:border-slate-800 pb-2.5">
+                    <span className={`w-2 h-2 rounded-full ${slot.type === 'Lecture' ? 'bg-emerald-500' : 'bg-sky-500'}`}></span>
+                    <span className="text-[11px] font-extrabold text-slate-500 dark:text-slate-300 uppercase tracking-wider">
+                      {slot.type} Schedule
+                    </span>
                   </div>
 
                   {/* Choose Room Venue with RoomSelector */}
@@ -1988,6 +2181,8 @@ export const ClassesAndRosters: React.FC = () => {
                   <option value={2}>Year 2</option>
                   <option value={3}>Year 3</option>
                   <option value={4}>Year 4</option>
+                  <option value={5}>Year 5</option>
+                  <option value={6}>Year 6</option>
                 </select>
               </label>
             </div>
@@ -2039,14 +2234,21 @@ export const ClassesAndRosters: React.FC = () => {
                 <input
                   type="text"
                   required
+                  list="course-catalog-codes-edit"
+                  readOnly={editTermLocked}
                   value={editCourseCode}
                   onChange={(e) => setEditCourseCode(e.target.value)}
                   placeholder="e.g. 201"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium read-only:opacity-60"
                 />
+                <datalist id="course-catalog-codes-edit">
+                  {courses.map(c => (
+                    <option key={c.id} value={c.courseCode}>{c.name}</option>
+                  ))}
+                </datalist>
               </div>
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Title (this class only) *</label>
                 <input
                   type="text"
                   required
@@ -2092,6 +2294,7 @@ export const ClassesAndRosters: React.FC = () => {
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester *</label>
                 <select
                   value={editSemester}
+                  disabled={editTermLocked}
                   onChange={(e) => setEditSemester(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
                 >
@@ -2101,18 +2304,64 @@ export const ClassesAndRosters: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">School Year *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">School Year</label>
                 <input
                   type="text"
-                  required
+                  readOnly
                   value={editSchoolYear}
-                  onChange={(e) => setEditSchoolYear(e.target.value)}
-                  placeholder="e.g. 2026-2027"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                  title="Classes can only be edited in the current school year."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium"
                 />
               </div>
             </div>
+            <p className="text-[10px] text-slate-400 -mt-2">
+              {editTermLocked
+                ? 'Scores or grades are already recorded for this class, so its course and semester can no longer change.'
+                : 'Course and semester can change until the first score or grade is recorded. The course title you enter shows only for your class.'}
+            </p>
 
+            {editCodeIsNew && editCourseCode.trim().toLowerCase() !== (editingClass.courseCode || '').trim().toLowerCase() && (
+              <div className="p-3.5 rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30 space-y-2.5">
+                <p className="font-bold text-amber-800 dark:text-amber-200">New course code: set its components and units for the shared catalog.</p>
+                <div role="radiogroup" aria-label="Course components" className="grid grid-cols-3 gap-2">
+                  {([
+                    ['both', 'Lecture & Lab'],
+                    ['lecture', 'Lecture only'],
+                    ['lab', 'Lab only'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={editComponents === value}
+                      onClick={() => setEditComponents(value)}
+                      className={`px-2.5 py-2 rounded-xl border text-xs font-bold ${editComponents === value ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {editComponents !== 'lab' && (
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                      Lecture Units *
+                      <input type="number" min={0.5} max={20} step={0.5} value={editLectureUnits} onChange={(e) => setEditLectureUnits(e.target.value)}
+                        className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium" />
+                    </label>
+                  )}
+                  {editComponents !== 'lecture' && (
+                    <label className="font-bold text-slate-700 dark:text-slate-300 block">
+                      Laboratory Units *
+                      <input type="number" min={0.5} max={20} step={0.5} value={editLabUnits} onChange={(e) => setEditLabUnits(e.target.value)}
+                        className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium" />
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {editVisibleComponents !== 'lab' && (
+            <>
             {/* Lecture Venue & Schedule */}
             <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
@@ -2216,7 +2465,11 @@ export const ClassesAndRosters: React.FC = () => {
                 </div>
               </div>
             </div>
+            </>
+            )}
 
+            {editVisibleComponents !== 'lecture' && (
+            <>
             {/* Laboratory Venue & Schedule */}
             <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
@@ -2320,6 +2573,8 @@ export const ClassesAndRosters: React.FC = () => {
                 </div>
               </div>
             </div>
+            </>
+            )}
 
             {editError && (
               <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-xl text-red-700 dark:text-red-300 text-xs font-semibold flex items-start gap-2 animate-fade-in">

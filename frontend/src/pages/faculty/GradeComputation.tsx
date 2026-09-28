@@ -343,22 +343,6 @@ export const GradeComputation: React.FC = () => {
     }
   }, [activeSubTab, selectedClassId, facultyOfferings, selectedAssessmentOfferingKey]);
 
-  const handleAssessmentOfferingChange = (key: string) => {
-    setSelectedAssessmentOfferingKey(key);
-    const offering = facultyOfferings.find(o => o.key === key);
-    if (offering) {
-      setSelectedSubjectCode(offering.courseCode);
-      if (offering.sections.length > 0) {
-        const currentStillValid = offering.sections.some(s => s.id === selectedClassId);
-        if (!currentStillValid) {
-          setSelectedClassId(offering.sections[0].id);
-        }
-      } else {
-        setSelectedClassId('');
-      }
-    }
-  };
-
   // Assessment Manager Table Grading Config State
   const [assessmentConfigStatus, setAssessmentConfigStatus] = useState<OfferingConfigStatus>('loading');
   const [assessmentConfig, setAssessmentConfig] = useState<FacultyGradingConfiguration | null>(null);
@@ -824,38 +808,6 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
-  const handleModalClassChange = async (newClassId: string) => {
-    const prevClass = facultyClasses.find(c => c.id === assClassId);
-    const newClass = facultyClasses.find(c => c.id === newClassId);
-    setAssClassId(newClassId);
-
-    const prevOfferingKey = prevClass ? (getOfferingForClass(prevClass)?.key ?? '') : '';
-    const newOffering = newClass ? getOfferingForClass(newClass) : null;
-    const newOfferingKey = newOffering?.key ?? '';
-
-    if (prevOfferingKey && newOfferingKey && prevOfferingKey === newOfferingKey) {
-      // Same offering: preserve category selection
-      return;
-    }
-
-    // Different offering: clear category selection and load new offering's config
-    setAssGradingCategoryId('');
-    setAssType('');
-    setModalCategoryWarning(false);
-    if (newOffering) {
-      const cfg = await loadModalConfigForOffering(newOffering);
-      if (cfg && Array.isArray(cfg.categories)) {
-        const eligible = cfg.categories.filter(c => (c.gradingPeriod === assPeriod || !c.gradingPeriod) && c.sourceKind !== 'attendance');
-        if (eligible.length > 0) {
-          setAssGradingCategoryId(eligible[0].id ? String(eligible[0].id) : '');
-          setAssType(eligible[0].name);
-        }
-      }
-    } else {
-      setModalConfigStatus('configured');
-    }
-  };
-
   const handleAssessmentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!assTitle.trim()) return;
@@ -878,6 +830,10 @@ export const GradeComputation: React.FC = () => {
 
     if (assTransmutationEnabled && ((assAttendanceDate && !assAttendanceCode) || (!assAttendanceDate && assAttendanceCode))) {
       showFeedback('Please select both session date and session code, or leave both blank to link later / auto-match by date.', 'error');
+      return;
+    }
+    if (assTransmutationEnabled && !assAttendanceDate && !assDueDate) {
+      showFeedback('Transmutation needs a linked attendance session or a due date so attendance can be matched.', 'error');
       return;
     }
     if (assTransmutationMinimum < 0 || assTransmutationMaximum > 100 || assTransmutationMinimum > assTransmutationMaximum) {
@@ -4273,19 +4229,15 @@ export const GradeComputation: React.FC = () => {
             <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
               Target Class / Section
             </label>
-            <select
-              value={assClassId}
-              onChange={(e) => handleModalClassChange(e.target.value)}
-              required
-              disabled={availableClasses.length === 0 && (!currentAssessmentOffering || currentAssessmentOffering.sections.length === 0)}
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
+            {/* The class comes from the Active Section selector at the top of
+                the page, so the page has a single place to choose a class. */}
+            <div
+              data-testid="assessment-target-class"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-700 dark:text-slate-200 text-xs font-semibold"
             >
-              {(availableClasses.length > 0 ? availableClasses : (currentAssessmentOffering?.sections ?? [])).map(classItem => (
-                <option key={classItem.id} value={classItem.id}>
-                  {classItem.csName}
-                </option>
-              ))}
-            </select>
+              {[...availableClasses, ...(currentAssessmentOffering?.sections ?? [])].find(classItem => classItem.id === assClassId)?.csName
+                || 'Choose a class with the Active Section selector at the top of the page.'}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
