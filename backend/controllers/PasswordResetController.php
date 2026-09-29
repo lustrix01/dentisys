@@ -21,6 +21,9 @@ function handle_password_reset_request(): void
 
     try {
         $config = app_config();
+        if (!rate_limit_allow($config, 'ip:' . request_ip(), 'post_password_reset_request', 900, 10)) {
+            return;
+        }
         $pdo = create_pdo($config);
 
         $body = request_body();
@@ -30,6 +33,9 @@ function handle_password_reset_request(): void
         }
 
         $email = validate_email($body['data']['email'] ?? '');
+        if (!rate_limit_allow($config, 'email:' . strtolower($email), 'post_password_reset_request', 900, 5)) {
+            return;
+        }
 
         $stmt = $pdo->prepare("SELECT user_id, login_email, display_name, role FROM user_accounts WHERE login_email = ?");
         $stmt->execute([$email]);
@@ -55,6 +61,16 @@ function handle_password_reset_request(): void
 
             $pdo->beginTransaction();
             try {
+                // Only the newest reset link works: earlier live links are
+                // revoked. Token rows are locked first, as confirmation does.
+                $supersede = $pdo->prepare(
+                    "UPDATE security_tokens
+                        SET revoked_at = ?, revocation_reason = 'Superseded by a newer password reset request'
+                      WHERE purpose = 'password_reset' AND user_id = ?
+                        AND used_at IS NULL AND revoked_at IS NULL"
+                );
+                $supersede->execute([$nowSql, (int) $user['user_id']]);
+
                 // Lock the account before the shared audit-chain row. Reset
                 // confirmation takes the same account-before-audit path after
                 // it locks and revalidates its token.
@@ -152,6 +168,9 @@ function handle_password_reset_confirm(): void
 
     try {
         $config = app_config();
+        if (!rate_limit_allow($config, 'ip:' . request_ip(), 'post_password_reset_confirm', 900, 20)) {
+            return;
+        }
         $pdo = create_pdo($config);
 
         $body = request_body();

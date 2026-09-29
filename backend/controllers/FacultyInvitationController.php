@@ -714,6 +714,9 @@ function handle_auth_faculty_invitation_get(): void
 {
     try {
         $config = app_config();
+        if (!rate_limit_allow($config, 'ip:' . request_ip(), 'get_faculty_invitation', 900, 30)) {
+            return;
+        }
         $pdo = create_pdo($config);
         $token = is_string($_GET['token'] ?? null) ? $_GET['token'] : '';
         $row = faculty_invitation_token_row($pdo, $token);
@@ -758,6 +761,9 @@ function handle_auth_faculty_invitation_accept(): void
     ];
     try {
         $config = app_config();
+        if (!rate_limit_allow($config, 'ip:' . request_ip(), 'post_faculty_activate', 900, 20)) {
+            return;
+        }
         $body = request_body();
         if (!$body['has_body']) {
             auth_controller_emit(auth_build_no_store_message_response('Request body required.', 400));

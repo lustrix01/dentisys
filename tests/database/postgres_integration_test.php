@@ -1155,12 +1155,19 @@ $requestRaceSocketB = integration_http_async_json('/api/auth/password/reset-conf
 ]);
 [$requestRaceStatusA] = integration_http_async_read($requestRaceSocketA);
 [$requestRaceStatusB] = integration_http_async_read($requestRaceSocketB);
-$requestRaceStatuses = [$requestRaceStatusA, $requestRaceStatusB];
-sort($requestRaceStatuses, SORT_NUMERIC);
-expect_same([200, 200], $requestRaceStatuses, 'Concurrent reset request and confirmation avoid the shared audit lock deadlock');
-$requestRaceTokenStateStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
+// A new request supersedes the older link, so the confirmation succeeds only
+// if it ran first. Either way there is no deadlock and the token ends up
+// consumed or revoked, never both and never still live.
+expect_same(200, $requestRaceStatusA, 'Concurrent reset request succeeds without a lock deadlock');
+expect_true(in_array($requestRaceStatusB, [200, 400], true), 'Concurrent reset confirmation either succeeds or is rejected as superseded, never a server error');
+$requestRaceTokenStateStmt = $pdo->prepare('SELECT used_at, revoked_at FROM security_tokens WHERE token_id = ?');
 $requestRaceTokenStateStmt->execute([$requestRaceResetTokenId]);
-expect_true($requestRaceTokenStateStmt->fetchColumn() !== null, 'Concurrent reset confirmation still consumes its valid token');
+$requestRaceTokenState = $requestRaceTokenStateStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(
+    ($requestRaceStatusB === 200) === ($requestRaceTokenState['used_at'] !== null)
+        && ($requestRaceTokenState['used_at'] !== null) !== ($requestRaceTokenState['revoked_at'] !== null),
+    'Concurrent reset leaves the older token either consumed (confirmation won) or revoked (request won)'
+);
 
 $concurrentResetToken = bin2hex(random_bytes(16));
 $concurrentResetTokenId = $insertPasswordResetToken(
@@ -1186,6 +1193,25 @@ expect_same([200, 400], $concurrentStatuses, 'Concurrent password reset submissi
 $concurrentTokenStateStmt = $pdo->prepare('SELECT used_at FROM security_tokens WHERE token_id = ?');
 $concurrentTokenStateStmt->execute([$concurrentResetTokenId]);
 expect_true($concurrentTokenStateStmt->fetchColumn() !== null, 'Concurrent password reset consumption leaves one committed used timestamp');
+
+$supersededResetToken = bin2hex(random_bytes(16));
+$supersededResetTokenId = $insertPasswordResetToken(
+    $pdo,
+    $userId,
+    $supersededResetToken,
+    $resetNow->add(new DateInterval('P1D'))->format('Y-m-d H:i:s.u')
+);
+[$supersedingRequestStatus] = integration_http_json('/api/auth/password/reset-request', '', ['email' => $email]);
+expect_same(200, $supersedingRequestStatus, 'A new password reset request succeeds');
+$supersededStateStmt = $pdo->prepare('SELECT used_at, revoked_at, revocation_reason FROM security_tokens WHERE token_id = ?');
+$supersededStateStmt->execute([$supersededResetTokenId]);
+$supersededState = $supersededStateStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(($supersededState['revoked_at'] ?? null) !== null && ($supersededState['used_at'] ?? null) === null, 'A new reset request revokes the older live reset link');
+[$supersededConfirmStatus] = integration_http_json('/api/auth/password/reset-confirm', '', [
+    'token' => $supersededResetToken,
+    'password' => 'SupersededResetPass123!',
+]);
+expect_same(400, $supersededConfirmStatus, 'A superseded reset link can no longer change the password');
 
 $validResetToken = bin2hex(random_bytes(16));
 $validResetTokenId = $insertPasswordResetToken(

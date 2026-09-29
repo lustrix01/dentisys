@@ -350,6 +350,9 @@ function handle_secretary_get_invitation(): void
 {
     try {
         $config = app_config();
+        if (!rate_limit_allow($config, 'ip:' . request_ip(), 'get_secretary_invitation', 900, 30)) {
+            return;
+        }
         $pdo = create_pdo($config);
 
         $token = $_GET['token'] ?? '';
@@ -420,6 +423,9 @@ function handle_secretary_activate(): void
 
     try {
         $config = app_config();
+        if (!rate_limit_allow($config, 'ip:' . request_ip(), 'post_secretary_activate', 900, 20)) {
+            return;
+        }
         $pdo = create_pdo($config);
 
         $body = request_body();

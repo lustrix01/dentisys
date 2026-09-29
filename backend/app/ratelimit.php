@@ -330,3 +330,24 @@ function challenge_state_consume(array $storage, string $challengeJti, string $t
         }
     }
 }
+
+/**
+ * Rate-limit a public endpoint for one scope ("ip:<address>" or
+ * "email:<address>"). On the limit it sends 429 and returns false, so a
+ * handler can `if (!rate_limit_allow(...)) return;`.
+ */
+function rate_limit_allow(array $config, string $scopeKey, string $endpointCode, int $windowSeconds, int $maxRequests): bool
+{
+    if (($config['rate_limit']['enabled'] ?? true) === false) {
+        return true;
+    }
+    $storage = ['dir' => $config['rate_limit']['storage_dir']];
+    $scopeHex = bin2hex(hash('sha256', $scopeKey, true));
+    try {
+        rate_limit_check($storage, $scopeHex, $endpointCode, $windowSeconds, $maxRequests);
+    } catch (RateLimitException $e) {
+        safe_error_response('Too many attempts. Please wait a few minutes and try again.', 429);
+        return false;
+    }
+    return true;
+}

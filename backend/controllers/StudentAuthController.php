@@ -350,6 +350,9 @@ function handle_student_invitation_get(): void
 {
     try {
         $config = app_config();
+        if (!rate_limit_allow($config, 'ip:' . request_ip(), 'get_student_invitation', 900, 30)) {
+            return;
+        }
         if (!student_auth_is_enabled($config)) {
             student_auth_error_response('Student account activation is unavailable.', 503);
             return;
@@ -423,6 +426,9 @@ function handle_student_activate(): void
     $context = student_auth_context();
     try {
         $config = app_config();
+        if (!rate_limit_allow($config, 'ip:' . request_ip(), 'post_student_activate', 900, 20)) {
+            return;
+        }
         if (!student_auth_is_enabled($config)) {
             student_auth_unavailable_response();
             return;

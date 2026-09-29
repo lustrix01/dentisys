@@ -206,4 +206,23 @@ clean_storage($googleStorage);
 clean_storage($googleConsumeStorage);
 clean_storage($googleExpiredStorage);
 
+// rate_limit_allow: public endpoints (reset, activation, invitation lookups)
+// answer 429 once a scope reaches its limit.
+$rateLimitResponses = [];
+function safe_error_response(string $message, int $statusCode = 500): void
+{
+    global $rateLimitResponses;
+    $rateLimitResponses[] = $statusCode;
+}
+$allowStorage = make_storage('_allow');
+$allowConfig = ['rate_limit' => ['enabled' => true, 'storage_dir' => $allowStorage['dir']]];
+assert_same(true, rate_limit_allow($allowConfig, 'ip:203.0.113.5', 'post_test_allow', 900, 2), 'First request within the limit is allowed');
+assert_same(true, rate_limit_allow($allowConfig, 'ip:203.0.113.5', 'post_test_allow', 900, 2), 'Second request within the limit is allowed');
+assert_same(false, rate_limit_allow($allowConfig, 'ip:203.0.113.5', 'post_test_allow', 900, 2), 'Request over the limit is refused');
+assert_same([429], $rateLimitResponses, 'Refused request answers 429');
+assert_same(true, rate_limit_allow($allowConfig, 'ip:203.0.113.6', 'post_test_allow', 900, 2), 'Another scope has its own limit');
+$disabledConfig = ['rate_limit' => ['enabled' => false, 'storage_dir' => $allowStorage['dir']]];
+assert_same(true, rate_limit_allow($disabledConfig, 'ip:203.0.113.5', 'post_test_allow', 900, 2), 'RATE_LIMIT_ENABLED=false turns the limit off');
+clean_storage($allowStorage);
+
 echo "\n=== ALL RATE LIMITER AND CHALLENGE STATE TESTS PASSED ===\n";
