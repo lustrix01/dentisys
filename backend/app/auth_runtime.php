@@ -90,14 +90,17 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
 
     if ($user === false) {
         password_verify($password, auth_get_dummy_hash());
+        auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in failed for {$email}: no such account.");
         throw new InvalidCredentialsException('Invalid credentials.');
     }
 
     if (!password_verify($password, $user['password_hash'])) {
+        auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in failed for {$email}: wrong password.");
         throw new InvalidCredentialsException('Invalid credentials.');
     }
 
     if ($user['status'] !== 'Active') {
+        auth_audit_denial($pdo, $config, $context, 'login_failed', "Password sign-in refused for {$email}: account is {$user['status']}.");
         throw new InactiveAccountException($user['status']);
     }
 
@@ -122,6 +125,23 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         if (!$wasInTx) { $pdo->beginTransaction(); }
         try {
             $credentials = auth_issue_credentials($pdo, $user, $config, $context);
+            // With authenticator 2FA the sign-in is audited at MFA verification.
+            audit_record_action(
+                $pdo,
+                $config,
+                [
+                    'user_id' => (int) $user['user_id'],
+                    'login_email' => $user['login_email'],
+                    'role' => $user['role'],
+                    'display_name' => $user['display_name'],
+                ],
+                'auth',
+                'login_success',
+                'user_account',
+                (string) $user['user_id'],
+                'Signed in with password.',
+                ['context' => $context]
+            );
             if (!$wasInTx) { $pdo->commit(); }
             return [
                 'type' => 'direct_login',

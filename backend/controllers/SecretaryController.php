@@ -1929,6 +1929,10 @@ function handle_secretary_profile_update(): void
                 );
             }
             update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
+            audit_record_action(
+                $pdo, $config, $authCtx, 'account', 'profile_updated', 'user_account', (string) $authCtx['user_id'],
+                'Updated own profile name.', ['after' => ['name' => $name]]
+            );
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {

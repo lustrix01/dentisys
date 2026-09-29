@@ -187,6 +187,11 @@ function handle_mfa_settings_revoke(): void
             if ($revoke->rowCount() === 0) {
                 throw new MfaException('No active MFA credential was found.');
             }
+            audit_record_action(
+                $pdo, $config, $authCtx, 'mfa', 'mfa_revoked', 'user_account', (string) $authCtx['user_id'],
+                'Disabled authenticator 2FA and revoked unused recovery codes.',
+                ['reason' => 'Revoked by account owner']
+            );
             $pdo->commit();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {

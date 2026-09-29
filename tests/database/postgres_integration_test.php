@@ -32,6 +32,28 @@ require_once $root . '/backend/controllers/StudentAuthController.php';
 require_once $root . '/backend/controllers/HealthController.php';
 require_once $root . '/backend/controllers/FacultyController.php';
 
+/**
+ * Remove disposable fixture classes and courses. Audit events are immutable
+ * and may reference a class (scope_cs_id); such a class is archived, as the
+ * application would, and its course is kept.
+ */
+function integration_retire_fixture_classes(PDO $pdo, array $csIds, array $courseIds): void
+{
+    $audited = $pdo->prepare('SELECT 1 FROM audit_events WHERE scope_cs_id = ? LIMIT 1');
+    foreach ($csIds as $csId) {
+        $audited->execute([(int) $csId]);
+        if ($audited->fetchColumn() !== false) {
+            $pdo->prepare("UPDATE class_sections SET status = 'Archived' WHERE cs_id = ?")->execute([(int) $csId]);
+        } else {
+            $pdo->prepare('DELETE FROM class_sections WHERE cs_id = ?')->execute([(int) $csId]);
+        }
+    }
+    foreach ($courseIds as $courseId) {
+        $pdo->prepare('DELETE FROM courses WHERE course_id = ? AND NOT EXISTS (SELECT 1 FROM class_sections WHERE course_id = ?)')
+            ->execute([(int) $courseId, (int) $courseId]);
+    }
+}
+
 function expect_true(bool $condition, string $label): void
 {
     if (!$condition) {
@@ -4509,8 +4531,7 @@ $pdo->prepare('DELETE FROM grading_configs WHERE course_id = ?')->execute([$fail
 $pdo->prepare('DELETE FROM enrollments WHERE enrollment_id = ?')->execute([$transitionEnrollmentId]);
 $pdo->prepare('DELETE FROM students WHERE student_id = ?')->execute([$transitionStudentId]);
 $pdo->prepare('DELETE FROM grading_configs WHERE config_id = ?')->execute([$transitionConfigId]);
-$pdo->prepare('DELETE FROM class_sections WHERE cs_id IN (?, ?)')->execute([$transitionClassId, $failedTransitionClassId]);
-$pdo->prepare('DELETE FROM courses WHERE course_id IN (?, ?)')->execute([$transitionCourseId, $failedTransitionCourseId]);
+integration_retire_fixture_classes($pdo, [$transitionClassId, $failedTransitionClassId], [$transitionCourseId, $failedTransitionCourseId]);
 $pdo->commit();
 echo "PASS: Grade-weight legacy transition coverage completed.\n";
 
@@ -5645,8 +5666,7 @@ $pdo->prepare('DELETE FROM enrollments WHERE enrollment_id IN (?, ?)')->execute(
 $pdo->prepare('DELETE FROM students WHERE student_id IN (?, ?)')->execute([$periodStudentA, $periodStudentB]);
 $pdo->prepare('DELETE FROM attendance_sessions WHERE cs_id = ?')->execute([$periodClassId]);
 $pdo->prepare('DELETE FROM grading_configs WHERE config_id = ?')->execute([$periodConfigId]);
-$pdo->prepare('DELETE FROM class_sections WHERE cs_id = ?')->execute([$periodClassId]);
-$pdo->prepare('DELETE FROM courses WHERE course_id = ?')->execute([$periodCourseId]);
+integration_retire_fixture_classes($pdo, [$periodClassId], [$periodCourseId]);
 $pdo->commit();
 echo "PASS: GRD-002 period date-range and computation integration coverage completed.\n";
 
@@ -5692,8 +5712,7 @@ $pdo->prepare("DELETE FROM assessments WHERE assessment_id IN ({$weightAssessmen
 $pdo->prepare('DELETE FROM enrollments WHERE enrollment_id IN (?, ?)')->execute([$weightEnrollmentA, $weightEnrollmentB]);
 $pdo->prepare('DELETE FROM students WHERE student_id IN (?, ?)')->execute([$weightStudentA, $weightStudentB]);
 $pdo->prepare('DELETE FROM grading_configs WHERE course_id = ?')->execute([$weightCourseId]);
-$pdo->prepare('DELETE FROM class_sections WHERE cs_id IN (?, ?, ?)')->execute([$weightClassId, $weightSharedClassId, $weightForeignClassId]);
-$pdo->prepare('DELETE FROM courses WHERE course_id = ?')->execute([$weightCourseId]);
+integration_retire_fixture_classes($pdo, [$weightClassId, $weightSharedClassId, $weightForeignClassId], [$weightCourseId]);
 $pdo->commit();
 echo "PASS: Authoritative grade-weight integration coverage completed.\n";
 
@@ -5839,6 +5858,73 @@ expect_same(null, $passwordChangeAudit['before_state_json'] ?? null, 'Password a
 expect_same(null, $passwordChangeAudit['after_state_json'] ?? null, 'Password audit does not store an after password state');
 expect_true(!str_contains((string) json_encode($passwordChangeAudit), $passwordChangeOld)
     && !str_contains((string) json_encode($passwordChangeAudit), $passwordChangeNew), 'Password audit contains no password values');
+
+// Audit coverage: security and academic mutations append audit events.
+$auditCountStmt = $pdo->prepare('SELECT COUNT(*) FROM audit_events WHERE action_code = ?');
+$auditCount = static function (string $actionCode) use ($auditCountStmt): int {
+    $auditCountStmt->execute([$actionCode]);
+    return (int) $auditCountStmt->fetchColumn();
+};
+$loginFailedBefore = $auditCount('login_failed');
+[$wrongPasswordStatus] = integration_http_json('/api/auth/login', '', [
+    'email' => 'faculty@bicol-u.edu.ph',
+    'password' => 'Definitely-Wrong-Password-1!',
+]);
+expect_same(401, $wrongPasswordStatus, 'Wrong password sign-in is rejected');
+expect_same($loginFailedBefore + 1, $auditCount('login_failed'), 'Failed password sign-in is audited');
+$failedLoginAudit = $pdo->query(
+    "SELECT description, before_state_json, after_state_json FROM audit_events
+      WHERE action_code = 'login_failed' ORDER BY sequence_number DESC LIMIT 1"
+)->fetch(PDO::FETCH_ASSOC);
+expect_true(!str_contains((string) json_encode($failedLoginAudit), 'Definitely-Wrong-Password-1!'), 'Failed sign-in audit never stores the password');
+
+$revokeMfaFixture = $createMfaFixture($pdo, $config, 'mfa-revoke-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph');
+$pdo->beginTransaction();
+$revokeMfaLocked = auth_lock_user_for_session($pdo, (int) $revokeMfaFixture['user_id']);
+$revokeMfaSession = auth_create_session($pdo, $revokeMfaLocked, '127.0.0.1', 'PostgreSQL Integration Test', null, new DateTimeImmutable('+1 hour', new DateTimeZone('UTC')));
+$pdo->commit();
+$revokeMfaToken = auth_issue_access_token(
+    ['user_id' => $revokeMfaLocked['user_id'], 'role' => $revokeMfaLocked['role'], 'token_version' => $revokeMfaLocked['token_version']],
+    $revokeMfaSession,
+    config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY')
+)['token'];
+[$mfaRevokeStatus] = integration_http_json('/api/auth/mfa/settings/revoke', $revokeMfaToken, [
+    'code' => mfa_compute_totp($revokeMfaFixture['secret'], intdiv(time(), 30))['code'],
+]);
+expect_same(200, $mfaRevokeStatus, 'Account owner can disable authenticator 2FA with a current code');
+$mfaRevokeAuditStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code = 'mfa_revoked' AND target_id = ?");
+$mfaRevokeAuditStmt->execute([(string) $revokeMfaFixture['user_id']]);
+expect_same(1, (int) $mfaRevokeAuditStmt->fetchColumn(), 'Disabling authenticator 2FA is audited');
+
+$auditDeleteAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments (cs_id, title, type, grading_period, max_score, weight, status)
+     VALUES (?, 'Audit Delete Fixture', 'Quiz', 'Midterm', 10, 1, 'Active')
+     RETURNING assessment_id"
+);
+$auditDeleteAssessmentStmt->execute([$studentClassId]);
+$auditDeleteAssessmentId = (int) $auditDeleteAssessmentStmt->fetchColumn();
+[$auditDeleteStatus] = integration_http_json('/api/faculty/assessments/delete', $seedFacultyAccessToken, [
+    'assessmentId' => $auditDeleteAssessmentId,
+]);
+expect_same(200, $auditDeleteStatus, 'Faculty can delete an assessment in a current class');
+$auditDeleteEventStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code = 'assessment_deleted' AND target_id = ?");
+$auditDeleteEventStmt->execute([(string) $auditDeleteAssessmentId]);
+expect_same(1, (int) $auditDeleteEventStmt->fetchColumn(), 'Deleting the assessment appends one audit event');
+
+foreach ([
+    'login_success' => 'Password sign-in',
+    'assessment_created' => 'Assessment creation',
+    'assessment_deleted' => 'Assessment deletion',
+    'assessment_scores_saved' => 'Score saving',
+    'grades_recomputed' => 'Grade recomputation',
+    'retention_remedial_save' => 'Remedial attempt recording',
+    'student_created' => 'Faculty Student registration',
+    'profile_updated' => 'Own profile update',
+    'system_settings_updated' => 'System settings update',
+    'attendance_session_started' => 'Attendance session start',
+] as $expectedAuditAction => $expectedAuditLabel) {
+    expect_true($auditCount($expectedAuditAction) > 0, "{$expectedAuditLabel} is audited ({$expectedAuditAction})");
+}
 
 // Every active class must have grade weights. bin/bootstrap-grade-weights.php
 // gives the offerings that have none (for example freshly seeded demo data) a

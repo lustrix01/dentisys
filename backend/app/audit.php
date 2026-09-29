@@ -235,6 +235,55 @@ function audit_finish_operation(
     ];
 }
 
+/**
+ * Append one audit event for an authenticated user's action, taking the
+ * request details from the current request. Call inside the transaction that
+ * makes the change, so the event and the change commit together.
+ * $extra may hold: event_status, reason, scope_cs_id, before, after, and
+ * context (request details, for callers that already hold them).
+ */
+function audit_record_action(
+    PDO $pdo,
+    array $config,
+    array $authCtx,
+    string $moduleCode,
+    string $actionCode,
+    ?string $targetType,
+    ?string $targetId,
+    string $description,
+    array $extra = []
+): void {
+    $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+    $request = $extra['context'] ?? [
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+    ];
+    $auditCtx = audit_begin_operation($pdo);
+    audit_finish_operation($pdo, $auditCtx, [
+        'module_code' => $moduleCode,
+        'action_code' => $actionCode,
+        'event_status' => $extra['event_status'] ?? 'Success',
+        'actor_user_id' => $authCtx['user_id'] ?? null,
+        'actor_username' => $authCtx['login_email'] ?? null,
+        'actor_role' => $authCtx['role'] ?? null,
+        'actor_display_name' => $authCtx['display_name'] ?? null,
+        'session_id' => $authCtx['session_id'] ?? null,
+        'scope_cs_id' => $extra['scope_cs_id'] ?? null,
+        'target_type' => $targetType,
+        'target_id' => $targetId,
+        'description' => $description,
+        'reason' => $extra['reason'] ?? null,
+        'http_method' => $request['http_method'] ?? null,
+        'endpoint' => $request['endpoint'] ?? null,
+        'request_id' => $request['request_id'] ?? null,
+        'ip_address' => $request['ip_address'] ?? null,
+        'user_agent' => $request['user_agent'] ?? null,
+    ], $macKey, $extra['before'] ?? null, $extra['after'] ?? null);
+}
+
 function uuid_v4_string(): string
 {
     $data = random_bytes(16);

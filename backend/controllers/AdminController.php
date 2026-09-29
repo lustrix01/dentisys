@@ -481,7 +481,18 @@ function handle_admin_profile_update(): void
             ? validate_institutional_email($data['email'])
             : null;
 
-        update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
+        $pdo->beginTransaction();
+        try {
+            update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
+            audit_record_action(
+                $pdo, $config, $authCtx, 'account', 'profile_updated', 'user_account', (string) $authCtx['user_id'],
+                'Updated own profile name.', ['after' => ['name' => $name]]
+            );
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
 
         json_response(['status' => 'ok', 'message' => 'Profile details updated successfully.'], 200);
     } catch (ValidationException $e) {
@@ -607,6 +618,21 @@ function handle_admin_settings_update(): void
         $transmutationStmt->execute([
             $minimumTransmutation, $maximumTransmutation, $authCtx['user_id'],
         ]);
+        audit_record_action(
+            $pdo, $config, $authCtx, 'settings', 'system_settings_updated', 'system_settings', 'grading_defaults',
+            sprintf('Updated system settings: transmutation %.2f%%-%.2f%%, theme %s.', $minimumTransmutation, $maximumTransmutation, $theme),
+            // Audit state does not accept floats, so percentages are recorded as text.
+            [
+                'before' => ['transmutationDefaults' => [
+                    'minimumPercentage' => isset($existingTransmutation['minimum_percentage']) ? number_format((float) $existingTransmutation['minimum_percentage'], 2, '.', '') : null,
+                    'maximumPercentage' => isset($existingTransmutation['maximum_percentage']) ? number_format((float) $existingTransmutation['maximum_percentage'], 2, '.', '') : null,
+                ]],
+                'after' => ['transmutationDefaults' => [
+                    'minimumPercentage' => number_format($minimumTransmutation, 2, '.', ''),
+                    'maximumPercentage' => number_format($maximumTransmutation, 2, '.', ''),
+                ], 'theme' => $theme],
+            ]
+        );
         $pdo->commit();
 
         $settings['retentionThreshold'] = remedial_attempts_course_grade_threshold();

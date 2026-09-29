@@ -531,6 +531,11 @@ function handle_faculty_student_create(): void
         $classInfo = $pdo->prepare("SELECT cs_name FROM class_sections WHERE cs_id = ?");
         $classInfo->execute([$csId]);
         $className = (string) $classInfo->fetchColumn();
+        audit_record_action(
+            $pdo, $config, $authCtx, 'student', 'student_created', 'student', (string) $newId,
+            "Registered Student {$studentNumber} and enrolled them in {$className}.",
+            ['scope_cs_id' => $csId, 'after' => ['studentNumber' => $studentNumber, 'enrollmentId' => $enrollmentId]]
+        );
         $pdo->commit();
 
         $fullName = normalize_person_name(trim(implode(' ', array_filter(
@@ -3005,6 +3010,12 @@ function handle_faculty_assessments_save(): void
                 $assessmentId = (int) $stmt->fetchColumn();
             }
             $persisted[] = ['id' => (string) $assessmentId, 'classId' => (string) $csId, 'title' => $title];
+            audit_record_action(
+                $pdo, $config, $authCtx, 'grading', $existing !== null ? 'assessment_updated' : 'assessment_created',
+                'assessment', (string) $assessmentId,
+                ($existing !== null ? 'Updated' : 'Created') . " assessment \"{$title}\" ({$period}, max {$maxScore}).",
+                ['scope_cs_id' => $csId, 'after' => ['title' => $title, 'type' => $type, 'gradingPeriod' => $period, 'maxScore' => number_format($maxScore, 2, '.', ''), 'gradingCategoryId' => $gradingCategoryId]]
+            );
         }
         $pdo->commit();
 
@@ -3100,6 +3111,11 @@ function handle_faculty_assessment_delete(): void
         if ($assessment->rowCount() !== 1) {
             throw new RuntimeException('Assessment deletion did not affect exactly one row.');
         }
+        audit_record_action(
+            $pdo, $config, $authCtx, 'grading', 'assessment_deleted', 'assessment', (string) $assessmentId,
+            "Deleted assessment #{$assessmentId} and {$scores->rowCount()} score(s).",
+            ['scope_cs_id' => (int) $ownedAssessment['cs_id'], 'before' => ['assessmentId' => $assessmentId, 'scoreCount' => $scores->rowCount()]]
+        );
         $pdo->commit();
         json_response([
             'status' => 'ok',
@@ -3185,6 +3201,11 @@ function handle_faculty_scores_save(): void
             $upsert->execute([$assessmentId, $studentId, $score, $scoreRow['remarks'] ?? null]);
             $saved++;
         }
+        audit_record_action(
+            $pdo, $config, $authCtx, 'grading', 'assessment_scores_saved', 'assessment', (string) $assessmentId,
+            "Saved {$saved} score(s) for assessment #{$assessmentId}.",
+            ['scope_cs_id' => (int) $row['cs_id'], 'after' => ['assessmentId' => $assessmentId, 'savedCount' => $saved]]
+        );
         $pdo->commit();
         json_response(['status' => 'ok', 'message' => 'Student scores persisted successfully.', 'savedCount' => $saved], 200);
     } catch (\Throwable $e) {
@@ -3653,6 +3674,13 @@ function handle_faculty_grades_compute(): void
             ];
         }
         $transmutationWarnings = faculty_transmutation_link_warnings($pdo, (int) $authCtx['user_id'], $csId);
+        $computedCount = count(array_filter($results, static fn(array $result): bool => ($result['status'] ?? '') === 'computed'));
+        audit_record_action(
+            $pdo, $config, $authCtx, 'grading', 'grades_recomputed',
+            $csId > 0 ? 'class_section' : 'faculty_classes', $csId > 0 ? (string) $csId : (string) $authCtx['user_id'],
+            sprintf('Recomputed grades: %d computed, %d not computed.', $computedCount, count($results) - $computedCount),
+            ['scope_cs_id' => $csId > 0 ? $csId : null, 'after' => ['computed' => $computedCount, 'total' => count($results)]]
+        );
         $pdo->commit();
         json_response([
             'status' => 'ok',
@@ -4097,7 +4125,7 @@ function handle_faculty_attendance_session_create(): void
             ]);
             $sessionId = (int) $insert->fetchColumn();
             attendance_session_record_audit(
-                $pdo, $config, $authCtx, $context, 'attendance_session_created', $sessionId, $csId,
+                $pdo, $config, $authCtx, $context, 'attendance_session_started', $sessionId, $csId,
                 "Created attendance session '{$sessionCode}' for class section #{$csId}.", null, null,
                 ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => 'active', 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff]
             );
@@ -5386,6 +5414,11 @@ function handle_faculty_retention_remedial_save(): void
                 'attempt-progress:' . $enrollmentId . ':' . $attemptNumber . ':' . $outcome
             );
         }
+        audit_record_action(
+            $pdo, $config, $authCtx, 'retention', 'retention_remedial_save', 'enrollment', (string) $enrollmentId,
+            "Attempt {$attemptNumber} for enrollment #{$enrollmentId} recorded as {$outcome}.",
+            ['scope_cs_id' => (int) $target['cs_id'], 'after' => ['attemptNumber' => $attemptNumber, 'outcome' => $outcome]]
+        );
         $pdo->commit();
         json_response([
             'status' => 'ok',
@@ -5592,7 +5625,18 @@ function handle_faculty_profile_update(): void
             ? validate_institutional_email($data['email'])
             : null;
 
-        update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
+        $pdo->beginTransaction();
+        try {
+            update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
+            audit_record_action(
+                $pdo, $config, $authCtx, 'account', 'profile_updated', 'user_account', (string) $authCtx['user_id'],
+                'Updated own profile name.', ['after' => ['name' => $name]]
+            );
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
 
         json_response(['status' => 'ok', 'message' => 'Faculty profile updated successfully.'], 200);
     } catch (ValidationException $e) {
