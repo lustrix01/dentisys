@@ -5849,9 +5849,14 @@ function handle_faculty_reports_summary(): void
         $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
 
         $grouped = [];
+        // Standing across this Faculty member's courses: the most serious
+        // retention state, and a unit-weighted GWA (overall and per school year).
+        $stateRank = ['critical' => 5, 'remedial' => 4, 'warning' => 3, 'cleared' => 2, 'active' => 1];
+        $gwaTotals = [];
         foreach ($students as $s) {
             $id = (string) $s['student_id'];
             if (!isset($grouped[$id])) {
+                $gwaTotals[$id] = ['all' => ['weighted' => 0.0, 'units' => 0.0], 'years' => []];
                 $grouped[$id] = [
                     'id' => $id,
                     'studentId' => $s['student_number'],
@@ -5860,6 +5865,7 @@ function handle_faculty_reports_summary(): void
                     'yearLevel' => $s['year_level'] !== null ? (int) $s['year_level'] : null,
                     'status' => $s['retention_state'],
                     'overallGWA' => null,
+                    'gwaBySchoolYear' => [],
                     'faceEnrolled' => (bool) ($s['face_enrolled'] ?? false),
                     'consentStatus' => $s['consent_status'] ?? 'pending',
                     'classId' => (string) $s['cs_id'],
@@ -5873,6 +5879,10 @@ function handle_faculty_reports_summary(): void
             $components = $s['grade_components_json']
                 ? json_decode($s['grade_components_json'], true)
                 : null;
+            $state = strtolower((string) ($s['retention_state'] ?? 'active'));
+            if (($stateRank[$state] ?? 0) > ($stateRank[strtolower((string) $grouped[$id]['status'])] ?? 0)) {
+                $grouped[$id]['status'] = $state;
+            }
             $grouped[$id]['enrolledSubjects'][] = [
                 'classId' => (string) $s['cs_id'],
                 'schoolYear' => $s['school_year'],
@@ -5885,7 +5895,18 @@ function handle_faculty_reports_summary(): void
                 'components' => $components,
             ];
             if ($s['final_gwa'] !== null) {
-                $grouped[$id]['overallGWA'] = (float) $s['final_gwa'];
+                $units = (float) ($s['units'] ?? 0) > 0 ? (float) $s['units'] : 1.0;
+                $year = (string) $s['school_year'];
+                $gwaTotals[$id]['all']['weighted'] += (float) $s['final_gwa'] * $units;
+                $gwaTotals[$id]['all']['units'] += $units;
+                $gwaTotals[$id]['years'][$year] ??= ['weighted' => 0.0, 'units' => 0.0];
+                $gwaTotals[$id]['years'][$year]['weighted'] += (float) $s['final_gwa'] * $units;
+                $gwaTotals[$id]['years'][$year]['units'] += $units;
+                $grouped[$id]['overallGWA'] = round($gwaTotals[$id]['all']['weighted'] / $gwaTotals[$id]['all']['units'], 2);
+                $grouped[$id]['gwaBySchoolYear'][$year] = round(
+                    $gwaTotals[$id]['years'][$year]['weighted'] / $gwaTotals[$id]['years'][$year]['units'],
+                    2
+                );
             }
             $legacyRemedial = remedial_state_json_legacy_payload($s['remedial_state_json']);
             if ($legacyRemedial !== null) {

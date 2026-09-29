@@ -2484,6 +2484,33 @@ expect_same(0, (int) $historicalAttendanceCountStmt->fetchColumn(), 'Rejected pa
 ]);
 expect_same(409, $historicalSessionStatus, 'Attendance sessions cannot be started for a past school-year class');
 
+// Faculty Reports: standing is the most serious state across the Faculty
+// member's courses, and the GWA is unit-weighted overall and per school year.
+[$facultyReportStatus, $facultyReportBody] = integration_http_get_json('/api/faculty/reports/summary', $seedFacultyAccessToken);
+expect_same(200, $facultyReportStatus, 'Faculty report summary loads');
+$facultyReportStudent = null;
+foreach ($facultyReportBody['reports']['students'] ?? [] as $facultyReportRow) {
+    if ((string) ($facultyReportRow['id'] ?? '') === (string) $invitedStudentId) {
+        $facultyReportStudent = $facultyReportRow;
+    }
+}
+expect_true(is_array($facultyReportStudent), 'Faculty report lists a student with current and past-year enrollments');
+expect_true(in_array($facultyReportStudent['status'] ?? null, ['remedial', 'critical'], true), 'Faculty report standing uses the most serious retention state, not the first row');
+expect_same(2.66, (float) ($facultyReportStudent['gwaBySchoolYear']['2025-2026'] ?? 0), 'Faculty report gives the past school year its own GWA');
+$facultyReportGwaStmt = $pdo->prepare(
+    "SELECT ROUND(SUM(COALESCE(egb.final_gwa, e.final_gwa) * CASE WHEN c.units > 0 THEN c.units ELSE 1 END)
+              / SUM(CASE WHEN c.units > 0 THEN c.units ELSE 1 END), 2)
+       FROM enrollments e
+       JOIN class_sections cs ON cs.cs_id = e.cs_id
+       JOIN courses c ON c.course_id = cs.course_id
+       JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
+       LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+      WHERE e.student_id = ? AND ua.login_email = 'faculty@bicol-u.edu.ph'
+        AND LOWER(e.status) = 'active' AND COALESCE(egb.final_gwa, e.final_gwa) IS NOT NULL"
+);
+$facultyReportGwaStmt->execute([$invitedStudentId]);
+expect_same((float) $facultyReportGwaStmt->fetchColumn(), (float) ($facultyReportStudent['overallGWA'] ?? 0), 'Faculty report overall GWA is the unit-weighted average, not the last class grade');
+
 foreach ([
     ['', 'REMEDIAL_SCORE_REQUIRED'],
     [-0.01, 'REMEDIAL_SCORE_RANGE'],

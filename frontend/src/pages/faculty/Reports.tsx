@@ -37,6 +37,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { effectiveAssessmentPercentage, gwaToDescription } from '../../utils/gradeHelper';
+import { extractPeriodEvaluation } from '../../utils/periodGradingHelper';
 
 import {
   getFacultyReportsSummaryApi,
@@ -347,6 +348,49 @@ export const Reports: React.FC = () => {
     return () => { ignore = true; };
   }, [analyticsAssessmentDates, reportTab, selectedClass]);
 
+  // The selected course's enrollment for a student (course + section filter).
+  const subjectForSelection = (student: any) => (student.enrolledSubjects || []).find((sub: any) =>
+    sub.code === selectedSubjectCode
+    && (!selectedClassId || String(sub.classId ?? student.classId) === selectedClassId)
+  ) ?? null;
+
+  // Midterm %, Final % and the course grade come from the server breakdown.
+  // A course without a complete grade is Pending, never PASS.
+  const courseEvaluation = (subj: any) => extractPeriodEvaluation(subj ?? null, null, null);
+  const formatPercent = (value: number | null) => (value === null ? '—' : `${value.toFixed(1)}%`);
+  const courseRemark = (student: any, subj: any): string => {
+    const grade = subj ? courseEvaluation(subj).overallGwa : null;
+    if (grade === null) return 'PENDING';
+    if (grade === 5.0) return 'FAILED';
+    if (retentionUnavailable) return 'RETENTION UNAVAILABLE';
+    return retentionIsAtRisk(retentionForStudentSubject(student, subj, selectedClassId)) ? 'REVIEW RETENTION' : 'PASS';
+  };
+
+  // Multi-course standing GWA, scoped to the selected school year.
+  const standingGwa = (student: any): number | null => {
+    if (selectedSchoolYear !== 'all') {
+      const value = student.gwaBySchoolYear?.[selectedSchoolYear];
+      return typeof value === 'number' ? value : null;
+    }
+    return typeof student.overallGWA === 'number' ? student.overallGWA : null;
+  };
+
+  // Remedial status from the server's attempt progression (enrollment_remedial_attempts).
+  const remedialStatusFor = (student: any): string => {
+    if (retentionUnavailable) return 'Unavailable';
+    const stages = retentionRecords
+      .filter(record => String(record.studentId) === String(student.id)
+        && (!selectedClassId || String(record.classId) === selectedClassId)
+        && (selectedSchoolYear === 'all' || !record.schoolYear || record.schoolYear === selectedSchoolYear))
+      .map(record => record.remedialProgression?.stage ?? 'none');
+    if (stages.some(stage => stage === 'attempt_1_pending' || stage === 'attempt_2_pending')) return 'Remedial exam scheduled';
+    if (stages.includes('attempt_2_available')) return 'Second attempt available';
+    if (stages.includes('cost_recovery_required')) return 'Cost recovery required';
+    if (stages.includes('cost_recovery_failed')) return 'Cost recovery failed';
+    if (stages.some(stage => stage === 'passed' || stage === 'cost_recovery_passed')) return 'Cleared';
+    return 'No remedial';
+  };
+
   // Search & Pagination states
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -403,22 +447,14 @@ export const Reports: React.FC = () => {
     let fileName = '';
 
     if (type === 'academic') {
-      headers = 'Student ID,Name,Course Code,Quizzes %,Exams %,Practicum %,Attendance %,GWA,Remarks\n';
+      headers = 'Student ID,Name,Course Code,Midterm %,Final %,Grade,Remarks\n';
       rows = studentsInSelectedSubject.map((student: any) => {
-        const subj = (student.enrolledSubjects || []).find((sub: any) =>
-          sub.code === selectedSubjectCode
-          && (!selectedClassId || String(sub.classId ?? student.classId) === selectedClassId)
-        );
-        const q = subj && subj.components?.quizzes !== undefined && subj.components.quizzes !== null ? Number(subj.components.quizzes).toFixed(1) : 'N/A';
-        const e = subj && subj.components?.exams !== undefined && subj.components.exams !== null ? Number(subj.components.exams).toFixed(1) : 'N/A';
-        const p = subj && subj.components?.practicum !== undefined && subj.components.practicum !== null ? Number(subj.components.practicum).toFixed(1) : 'N/A';
-        const a = subj && subj.components?.attendance !== undefined && subj.components.attendance !== null ? Number(subj.components.attendance).toFixed(1) : 'N/A';
-        const g = subj && subj.grade !== undefined && subj.grade !== null ? Number(subj.grade).toFixed(2) : 'N/A';
-        const retention = subj ? retentionForStudentSubject(student, subj, selectedClassId) : null;
-        const rem = subj && typeof subj.grade === 'number'
-          ? (retentionUnavailable ? 'RETENTION STATE UNAVAILABLE' : retentionIsAtRisk(retention) ? 'REVIEW RETENTION STATE' : 'PASS')
-          : 'PENDING';
-        return [student.studentId, student.name, selectedSubjectCode, q, e, p, a, g, rem].map(csvCell).join(',');
+        const subj = subjectForSelection(student);
+        const evaluation = courseEvaluation(subj);
+        const midterm = evaluation.midtermPercentage !== null ? evaluation.midtermPercentage.toFixed(1) : 'N/A';
+        const final = evaluation.finalPercentage !== null ? evaluation.finalPercentage.toFixed(1) : 'N/A';
+        const grade = evaluation.overallGwa !== null ? evaluation.overallGwa.toFixed(2) : 'Pending';
+        return [student.studentId, student.name, selectedSubjectCode, midterm, final, grade, courseRemark(student, subj)].map(csvCell).join(',');
       }).join('\n');
       fileName = `${selectedSubjectCode || 'Course'}_Academic_Report.csv`;
     } else if (type === 'retention') {
@@ -429,10 +465,8 @@ export const Reports: React.FC = () => {
           && retentionIsAtRisk(retentionForStudentSubject(student, sub))
         ).length;
         const riskLevel = retentionUnavailable ? 'UNAVAILABLE' : warningCount && warningCount > 0 ? 'HIGH' : 'LOW';
-        const remedialCount = Array.isArray(student.remedialExams) ? student.remedialExams.filter((rem: any) => rem.status === 'pending').length : 0;
-        const remStatus = remedialCount > 0 ? 'PENDING EXAM' : 'STABLE';
-        const standingGwa = typeof student.overallGWA === 'number' ? student.overallGWA.toFixed(2) : (student.overallGWA ? String(student.overallGWA) : 'N/A');
-        return [student.studentId, student.name, standingGwa, warningCount ?? 'UNAVAILABLE', riskLevel, remStatus].map(csvCell).join(',');
+        const gwa = standingGwa(student);
+        return [student.studentId, student.name, gwa !== null ? gwa.toFixed(2) : 'N/A', warningCount ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)].map(csvCell).join(',');
       }).join('\n');
       fileName = `Retention_Report.csv`;
     } else {
@@ -459,36 +493,26 @@ export const Reports: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // Recharts Stats: GWA Distribution
-  const gwaHistogramData = useMemo(() => {
+  // Recharts Stats: course grade distribution for the selected course and
+  // section. A grade of 2.50 or worse triggers remedial (UI-003).
+  const gradeHistogramData = (() => {
     const buckets = [
-      { name: '1.0–1.5', count: 0 },
-      { name: '1.51–2.0', count: 0 },
-      { name: '2.01–3.0', count: 0 },
-      { name: '3.0+', count: 0 },
+      { name: '1.00–1.50', count: 0 },
+      { name: '1.75–2.25', count: 0 },
+      { name: '2.50–3.00', count: 0 },
+      { name: '5.00', count: 0 },
+      { name: 'Pending', count: 0 },
     ];
-    facultyStudents.forEach((s: any) => {
-      const selectedSubjects = (s.enrolledSubjects || []).filter((subject: any) =>
-        !selectedClassId || String(subject.classId ?? s.classId) === selectedClassId
-      );
-      const gradedSubjects = selectedSubjects.filter((subject: any) =>
-        subject.grade !== null
-        && subject.grade !== undefined
-        && subject.grade !== ''
-        && Number.isFinite(Number(subject.grade))
-      );
-      const totalUnits = gradedSubjects.reduce((sum: number, subject: any) => sum + (Number(subject.units) || 0), 0);
-      const gwa = totalUnits > 0
-        ? gradedSubjects.reduce((sum: number, subject: any) => sum + Number(subject.grade) * (Number(subject.units) || 0), 0) / totalUnits
-        : null;
-      if (gwa === null || isNaN(gwa)) return;
-      if (gwa <= 1.5) buckets[0].count++;
-      else if (gwa <= 2.0) buckets[1].count++;
-      else if (gwa <= 3.0) buckets[2].count++;
+    studentsInSelectedSubject.forEach((student: any) => {
+      const grade = courseEvaluation(subjectForSelection(student)).overallGwa;
+      if (grade === null) buckets[4].count++;
+      else if (grade <= 1.5) buckets[0].count++;
+      else if (grade < 2.5) buckets[1].count++;
+      else if (grade <= 3.0) buckets[2].count++;
       else buckets[3].count++;
     });
     return buckets;
-  }, [facultyStudents, selectedClassId]);
+  })();
 
   // Recharts Stats: Retention Distribution
   const pieData = useMemo(() => {
@@ -542,7 +566,7 @@ export const Reports: React.FC = () => {
         name: ass.title.length > 15 ? ass.title.substring(0, 15) + '...' : ass.title,
         average: avgPct
       }];
-    }).slice(0, 5);
+    });
   }, [analyticsAttendanceLoading, analyticsAttendanceRecords, assessments, assessmentScores, assignedSubjects, selectedClassId]);
 
   return (
@@ -563,7 +587,7 @@ export const Reports: React.FC = () => {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Generate GWA evaluation logs, print transcript records, and review analytics dashboards</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Generate course grade reports, print report sheets, and review analytics dashboards</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -659,8 +683,8 @@ export const Reports: React.FC = () => {
           }`}
         >
           <GraduationCap className="w-4 h-4" />
-          Academic GWAs Ledger
-        </button>
+          Academic Grades Ledger
+</button>
         <button
           onClick={() => setReportTab('retention')}
           className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
@@ -722,32 +746,24 @@ export const Reports: React.FC = () => {
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
-                  <th className="px-5 py-3 text-center">Quizzes</th>
-                  <th className="px-5 py-3 text-center">Practicum</th>
-                  <th className="px-5 py-3 text-center">Exams</th>
-                  <th className="px-5 py-3 text-center">Attendance</th>
-                  <th className="px-5 py-3 text-center">Computed GWA</th>
+                  <th className="px-5 py-3 text-center">Midterm</th>
+                  <th className="px-5 py-3 text-center">Final</th>
+                  <th className="px-5 py-3 text-center">Grade</th>
                   <th className="px-5 py-3">Remarks</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
                 {paginatedStudentsInSubject.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-slate-400 font-semibold">
+                    <td colSpan={5} className="px-5 py-12 text-center text-slate-400 font-semibold">
                       No student records found for the selected course and class section.
                     </td>
                   </tr>
                 ) : (
                   paginatedStudentsInSubject.map((student: any) => {
-                    const subj = student.enrolledSubjects
-                      ? student.enrolledSubjects.find((sub: any) =>
-                        sub.code === selectedSubjectCode
-                        && (!selectedClassId || String(sub.classId ?? student.classId) === selectedClassId)
-                      )
-                      : null;
-                    const isFailsRetention = Boolean(subj && retentionIsAtRisk(retentionForStudentSubject(student, subj, selectedClassId)));
-                    const retentionUnavailableForSubject = retentionUnavailable && Boolean(subj);
-                    const isFailed = subj && subj.grade === 5.0;
+                    const subj = subjectForSelection(student);
+                    const evaluation = courseEvaluation(subj);
+                    const remark = courseRemark(student, subj);
 
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
@@ -755,28 +771,22 @@ export const Reports: React.FC = () => {
                           <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
                           <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
                         </td>
-                        <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.quizzes !== undefined && subj.components.quizzes !== null ? `${Number(subj.components.quizzes).toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.practicum !== undefined && subj.components.practicum !== null ? `${Number(subj.components.practicum).toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.exams !== undefined && subj.components.exams !== null ? `${Number(subj.components.exams).toFixed(1)}%` : '—'}</td>
-                        <td className="px-5 py-3.5 text-center font-mono">{subj && subj.components?.attendance !== undefined && subj.components.attendance !== null ? `${Number(subj.components.attendance).toFixed(1)}%` : '—'}</td>
+                        <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.midtermPercentage)}</td>
+                        <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.finalPercentage)}</td>
                         <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                          {subj && subj.grade !== undefined && subj.grade !== null 
-                            ? Number(subj.grade).toFixed(2) 
-                            : (typeof student.overallGWA === 'number' 
-                              ? student.overallGWA.toFixed(2) 
-                              : '—')}
+                          {evaluation.overallGwa !== null ? evaluation.overallGwa.toFixed(2) : 'Pending'}
                         </td>
                         <td className="px-5 py-3.5">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                            isFailed
-                              ? 'bg-rose-100 text-rose-700' 
-                              : retentionUnavailableForSubject
+                            remark === 'FAILED'
+                              ? 'bg-rose-100 text-rose-700'
+                              : remark === 'PENDING' || remark === 'RETENTION UNAVAILABLE'
                               ? 'bg-slate-100 text-slate-600'
-                              : isFailsRetention 
-                              ? 'bg-amber-100 text-amber-700' 
+                              : remark === 'REVIEW RETENTION'
+                              ? 'bg-amber-100 text-amber-700'
                               : 'bg-emerald-100 text-emerald-700'
                           }`}>
-                            {isFailed ? 'FAILED' : retentionUnavailableForSubject ? 'RETENTION UNAVAILABLE' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
+                            {remark}
                           </span>
                         </td>
                       </tr>
@@ -851,7 +861,8 @@ export const Reports: React.FC = () => {
                     && retentionIsAtRisk(retentionForStudentSubject(student, sub))
                   );
                   const isAtRisk = !retentionUnavailable && warnings.length > 0;
-                  const remedialCount = Array.isArray(student.remedialExams) ? student.remedialExams.filter((rem: any) => rem.status === 'pending').length : 0;
+                  const gwa = standingGwa(student);
+                  const remedialStatus = remedialStatusFor(student);
 
                   return (
                     <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
@@ -860,7 +871,7 @@ export const Reports: React.FC = () => {
                         <span className="text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
                       </td>
                       <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
-                        {typeof student.overallGWA === 'number' ? student.overallGWA.toFixed(2) : (student.overallGWA ? String(student.overallGWA) : '—')}
+                        {gwa !== null ? gwa.toFixed(2) : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-center font-semibold text-rose-500">{retentionUnavailable ? 'Unavailable' : `${warnings.length} Warnings`}</td>
                       <td className="px-5 py-3.5 text-center">
@@ -871,12 +882,12 @@ export const Reports: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-slate-550 dark:text-slate-400">
-                        {remedialCount > 0 ? (
-                          <span className="font-semibold text-violet-555 flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" /> Pending {remedialCount} exam(s)
-                          </span>
+                        {remedialStatus === 'No remedial' || remedialStatus === 'Unavailable' ? (
+                          <span className="font-medium text-slate-400">{remedialStatus}</span>
                         ) : (
-                          <span className="font-medium text-slate-400">Stable standing</span>
+                          <span className="font-semibold text-violet-555 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> {remedialStatus}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -1034,13 +1045,13 @@ export const Reports: React.FC = () => {
             <div>
               <h4 className="text-xs font-bold text-slate-850 dark:text-slate-205 uppercase tracking-wider mb-2 flex items-center gap-1">
                 <FileCheck className="w-4 h-4 text-accent-505" />
-                GWA Distribution
+                Grade Distribution
               </h4>
-              <p className="text-[10px] text-slate-400 mb-4">Number of students within GWA academic thresholds</p>
+              <p className="text-[10px] text-slate-400 mb-4">Students per course grade band in the selected section; 2.50 or worse triggers remedial</p>
             </div>
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={gwaHistogramData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                <BarChart data={gradeHistogramData}margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" className="dark:stroke-slate-900" />
                   <XAxis dataKey="name" stroke="#94a3b8" fontSize={9} tickLine={false} />
                   <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} allowDecimals={false} />
@@ -1098,34 +1109,30 @@ export const Reports: React.FC = () => {
         {/* Dynamic content printing tables */}
         {reportTab === 'academic' && (
           <div className="space-y-4">
-            <h3 className="font-bold text-xs uppercase tracking-wider">Academic GWA Evaluation Ledger ({selectedSubjectCode})</h3>
+            <h3 className="font-bold text-xs uppercase tracking-wider">Academic Grade Ledger ({selectedSubjectCode})</h3>
             <table className="w-full border-collapse border border-slate-350 text-[11px]">
               <thead>
                 <tr className="bg-slate-100 text-left font-bold uppercase">
                   <th className="border border-slate-300 px-3 py-2">Student ID</th>
                   <th className="border border-slate-300 px-3 py-2">Student Name</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Quizzes</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Practicum</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Exams</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Attendance</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">GWA</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Midterm</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Final</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Grade</th>
+                  <th className="border border-slate-300 px-3 py-2">Remarks</th>
                 </tr>
               </thead>
               <tbody>
                 {studentsInSelectedSubject.map((student: any) => {
-                  const subj = (student.enrolledSubjects || []).find((sub: any) =>
-                    sub.code === selectedSubjectCode
-                    && (!selectedClassId || String(sub.classId ?? student.classId) === selectedClassId)
-                  );
+                  const subj = subjectForSelection(student);
+                  const evaluation = courseEvaluation(subj);
                   return (
                     <tr key={student.id}>
                       <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
                       <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.quizzes !== undefined && subj.components.quizzes !== null ? `${Number(subj.components.quizzes).toFixed(1)}%` : '—'}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.practicum !== undefined && subj.components.practicum !== null ? `${Number(subj.components.practicum).toFixed(1)}%` : '—'}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.exams !== undefined && subj.components.exams !== null ? `${Number(subj.components.exams).toFixed(1)}%` : '—'}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{subj && subj.components?.attendance !== undefined && subj.components.attendance !== null ? `${Number(subj.components.attendance).toFixed(1)}%` : '—'}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{subj && subj.grade !== undefined && subj.grade !== null ? Number(subj.grade).toFixed(2) : '—'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{formatPercent(evaluation.midtermPercentage)}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{formatPercent(evaluation.finalPercentage)}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{evaluation.overallGwa !== null ? evaluation.overallGwa.toFixed(2) : 'Pending'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5">{courseRemark(student, subj)}</td>
                     </tr>
                   );
                 })}
@@ -1142,26 +1149,22 @@ export const Reports: React.FC = () => {
                 <tr className="bg-slate-100 text-left font-bold uppercase">
                   <th className="border border-slate-300 px-3 py-2">Student ID</th>
                   <th className="border border-slate-300 px-3 py-2">Student Name</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">GWA</th>
+                  <th className="border border-slate-300 px-3 py-2 text-center">Standing GWA</th>
                   <th className="border border-slate-300 px-3 py-2 text-center">Standing Status</th>
                   <th className="border border-slate-300 px-3 py-2">Remedials Status</th>
                 </tr>
               </thead>
               <tbody>
                 {facultyStudents.map((student: any) => {
-                  const warnings = retentionUnavailable ? [] : (student.enrolledSubjects || []).filter((sub: any) =>
-                    assignedSubjects.includes(sub.code)
-                    && retentionIsAtRisk(retentionForStudentSubject(student, sub))
-                  );
-                  const remedialCount = Array.isArray(student.remedialExams) ? student.remedialExams.filter((rem: any) => rem.status === 'pending').length : 0;
+                  const gwa = standingGwa(student);
                   return (
                     <tr key={student.id}>
                       <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
                       <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{typeof student.overallGWA === 'number' ? student.overallGWA.toFixed(2) : (student.overallGWA ? String(student.overallGWA) : '—')}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center">{gwa !== null ? gwa.toFixed(2) : '—'}</td>
                       <td className="border border-slate-300 px-3 py-1.5 text-center capitalize">{retentionUnavailable ? 'Unavailable' : student.status}</td>
                       <td className="border border-slate-300 px-3 py-1.5 text-slate-500">
-                        {remedialCount > 0 ? `Pending ${remedialCount} exam(s)` : 'Stable standing'}
+                        {remedialStatusFor(student)}
                       </td>
                     </tr>
                   );
@@ -1201,17 +1204,12 @@ export const Reports: React.FC = () => {
           </div>
         )}
 
-        {/* seal signature */}
-        <div className="flex justify-between items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
-          <div className="text-center w-40">
-            <div className="h-0.5 w-full bg-slate-400 mb-1" />
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Registrar Seal</p>
-          </div>
-          
+        {/* Faculty signature */}
+        <div className="flex justify-end items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
           <div className="text-center w-48">
             <p className="font-bold">{user?.display_name}</p>
             <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Academic Faculty Dean</p>
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Faculty</p>
           </div>
         </div>
 
