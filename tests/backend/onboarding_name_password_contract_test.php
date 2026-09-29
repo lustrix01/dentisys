@@ -15,7 +15,7 @@ $root = dirname(__DIR__, 2);
 $faculty = file_get_contents($root . '/backend/controllers/FacultyController.php');
 $facultyInvitation = file_get_contents($root . '/backend/controllers/FacultyInvitationController.php');
 $migration = file_get_contents($root . '/database/migrations/017_faculty_structured_name.sql');
-$studentManagement = file_get_contents($root . '/frontend/src/pages/faculty/StudentManagement.tsx');
+$studentManagement = file_get_contents($root . '/frontend/src/pages/faculty/ClassesAndRosters.tsx');
 $apiClient = file_get_contents($root . '/frontend/src/services/apiClient.ts');
 $facultyActivation = file_get_contents($root . '/frontend/src/pages/auth/ActivateFaculty.tsx');
 $studentActivation = file_get_contents($root . '/frontend/src/pages/auth/ActivateStudent.tsx');
@@ -24,7 +24,7 @@ assert_onboarding_contract(is_string($faculty) && is_string($studentManagement),
 assert_onboarding_contract(str_contains($faculty, 'Whole-name input is not supported'), 'Student create rejects a whole-name compatibility payload');
 assert_onboarding_contract(!str_contains($faculty, 'if (empty($firstName) && !empty($name))'), 'Student create does not guess components by splitting a whole name');
 assert_onboarding_contract(str_contains($faculty, 'empty($firstName) || empty($lastName)'), 'Student create requires first and last names');
-assert_onboarding_contract(str_contains($studentManagement, 'firstName: normalizedFirstName') && !str_contains($studentManagement, 'name: fullName'), 'Student UI sends structured name fields without a whole-name field');
+assert_onboarding_contract(str_contains($studentManagement, 'firstName: studentFirstName.trim()') && !str_contains($studentManagement, 'name: fullName'), 'Student UI sends structured name fields without a whole-name field');
 
 assert_onboarding_contract(str_contains($migration, 'name_prefix') && str_contains($migration, 'first_name') && str_contains($migration, 'last_name') && str_contains($migration, 'ADD COLUMN IF NOT EXISTS'), 'Faculty structured name columns are additive and nullable');
 assert_onboarding_contract(

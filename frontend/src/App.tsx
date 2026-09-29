@@ -9,13 +9,11 @@ import { FeedbackCenter } from './components/FeedbackCenter';
 
 // Faculty Page Imports
 import { Dashboard as FacultyDashboard } from './pages/faculty/Dashboard';
-import { StudentManagement } from './pages/faculty/StudentManagement';
 import { GradeComputation } from './pages/faculty/GradeComputation';
 import { RetentionMonitoring } from './pages/faculty/RetentionMonitoring';
 import { AttendanceMonitoring } from './pages/faculty/AttendanceMonitoring';
 import { Reports } from './pages/faculty/Reports';
 import { EmailManagement } from './pages/faculty/EmailManagement';
-import { ClassManagement } from './pages/faculty/ClassManagement';
 import { ClassesAndRosters } from './pages/faculty/ClassesAndRosters';
 
 // Dean (Admin) Page Imports
@@ -133,22 +131,6 @@ function StudentRetentionRoute() {
   return isStudentPrototypeAllowed(user, runtimeConfig, 'academic')
     ? <StudentRetentionMonitoring />
     : <StudentUnavailable title="Retention Monitoring unavailable" />;
-}
-
-function StudentPrototypeRoute({
-  prototype,
-  title,
-  surface,
-}: {
-  prototype: React.ComponentType;
-  title: string;
-  surface: Parameters<typeof isStudentPrototypeAllowed>[2];
-}) {
-  const { user } = useAuth();
-  const runtimeConfig = useRuntimeConfig();
-  return isStudentPrototypeAllowed(user, runtimeConfig, surface)
-    ? React.createElement(prototype)
-    : <StudentUnavailable title={title} />;
 }
 
 function RoleAttendance() {
