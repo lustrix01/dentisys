@@ -32,6 +32,26 @@ function academic_school_year_is_current(PDO $pdo, string $schoolYear): bool
     return strcasecmp(trim($schoolYear), academic_current_school_year($pdo)) === 0;
 }
 
+/**
+ * School years use the fixed "YYYY-YYYY" format, so string order is year order.
+ */
+function academic_school_year_is_past(PDO $pdo, string $schoolYear): bool
+{
+    return strcmp(trim($schoolYear), academic_current_school_year($pdo)) < 0;
+}
+
+/**
+ * Past school-year class sections are view-only; mutations must check this.
+ */
+function academic_class_section_is_past(PDO $pdo, int $csId): bool
+{
+    $stmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
+    $stmt->execute([$csId]);
+    $schoolYear = $stmt->fetchColumn();
+
+    return is_string($schoolYear) && academic_school_year_is_past($pdo, $schoolYear);
+}
+
 function academic_require_current_school_year(PDO $pdo, string $schoolYear, string $field = 'schoolYear'): void
 {
     if (!academic_school_year_is_current($pdo, $schoolYear)) {

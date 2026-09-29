@@ -506,7 +506,18 @@ export const RetentionMonitoring: React.FC = () => {
     setRemedialScore('');
   };
 
+  // Past school-year classes are view-only; the server rejects these writes too.
+  const isPastYearRecord = (record: FacultyRetentionRecord): boolean => (
+    currentSchoolYear !== '' && Boolean(record.schoolYear) && record.schoolYear !== currentSchoolYear
+  );
+  const selectedClassIsPastYear = selectedClassId !== 'all'
+    && usableRecords.some(record => record.classId === selectedClassId && isPastYearRecord(record));
+
   const openOverride = (record: FacultyRetentionRecord) => {
+    if (isPastYearRecord(record)) {
+      showFeedback('Past school-year classes are view-only.', 'info');
+      return;
+    }
     if (!canOverrideRecord(record)) {
       if (record.state === 'archived') {
         showFeedback('Status override is unavailable for archived enrollments.', 'info');
@@ -633,6 +644,10 @@ export const RetentionMonitoring: React.FC = () => {
 
   const handleOverrideSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (selectedOverrideRecord && isPastYearRecord(selectedOverrideRecord)) {
+      showFeedback('Past school-year classes are view-only.', 'info');
+      return;
+    }
     if (!selectedOverrideRecord || !canOverrideRecord(selectedOverrideRecord)) {
       if (selectedOverrideRecord?.state === 'archived') {
         showFeedback('Status override is unavailable for archived enrollments.', 'info');
@@ -681,7 +696,7 @@ export const RetentionMonitoring: React.FC = () => {
   };
 
   const handleManualWatchlistUnlock = async () => {
-    if (selectedClassId === 'all' || isSubmitting) return;
+    if (selectedClassId === 'all' || isSubmitting || selectedClassIsPastYear) return;
     setIsSubmitting(true);
     try {
       await unlockFacultyWatchlistApi(selectedClassId);
@@ -782,7 +797,7 @@ export const RetentionMonitoring: React.FC = () => {
         <Card className="p-6 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Midterm Watchlist</h2><p className="mt-1 text-xs text-slate-500">Access opens as each student's midterm grades become complete. Manual unlock covers the selected class.</p></div>
-            <button type="button" disabled={selectedClassId === 'all' || isSubmitting || isLoading} onClick={() => void handleManualWatchlistUnlock()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"><Unlock className="h-4 w-4" />{isSubmitting ? 'Unlocking...' : 'Unlock selected class'}</button>
+            <button type="button" disabled={selectedClassId === 'all' || isSubmitting || isLoading || selectedClassIsPastYear} title={selectedClassIsPastYear ? 'Past school-year classes are view-only.' : undefined} onClick={() => void handleManualWatchlistUnlock()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"><Unlock className="h-4 w-4" />{isSubmitting ? 'Unlocking...' : 'Unlock selected class'}</button>
           </div>
           {selectedClassId === 'all' && <p className="text-xs text-amber-700 dark:text-amber-400">Choose one class above to unlock its watchlist.</p>}
           <div className="overflow-x-auto"><table className="w-full text-left text-xs">
@@ -820,7 +835,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
                     <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? record.gwa.toFixed(2) : 'GWA unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
                     <td className="py-3.5 px-4"><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button>{record.manualOverride && <span className="ml-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400" title="Set by Faculty. Kept until the student's course grade changes.">Manual</span>}</td>
-                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button><button type="button" onClick={() => openOverride(record)} disabled={!canOverrideRecord(record)} title={!canOverrideRecord(record) ? (record.state === 'archived' ? 'Status override unavailable for archived enrollments.' : 'Status override unavailable: persisted identifiers are missing.') : 'Override retention status'} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 text-[11px] font-bold"><Pencil className="w-3.5 h-3.5" /></button></div></td>
+                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button><button type="button" onClick={() => openOverride(record)} disabled={!canOverrideRecord(record) || isPastYearRecord(record)} title={isPastYearRecord(record) ? 'Past school-year classes are view-only.' : !canOverrideRecord(record) ? (record.state === 'archived' ? 'Status override unavailable for archived enrollments.' : 'Status override unavailable: persisted identifiers are missing.') : 'Override retention status'} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 text-[11px] font-bold"><Pencil className="w-3.5 h-3.5" /></button></div></td>
                   </tr>
                 ))}
               </tbody>

@@ -2408,6 +2408,70 @@ expect_same($historicalRemedialGradeBefore, $historicalRemedialGradeStmt->fetch(
 $historicalRemedialNotificationCountStmt->execute([$historicalRemedialRecipientUserId]);
 expect_same($historicalRemedialNotificationsBefore, (int) $historicalRemedialNotificationCountStmt->fetchColumn(), 'Historical remedial grading leaves notifications unchanged');
 
+// Past school-year classes are view-only for grading and attendance writes.
+[$historicalConfigStatus] = integration_http_put_json('/api/faculty/grading-config', $seedFacultyAccessToken, [
+    'courseId' => $historicalRemedialCourseId,
+    'semester' => '1st',
+    'schoolYear' => '2025-2026',
+    'categories' => [['name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1]],
+]);
+expect_same(409, $historicalConfigStatus, 'Grade weights cannot be saved for a past school year');
+[$historicalAssessmentSaveStatus] = integration_http_json('/api/faculty/assessments', $seedFacultyAccessToken, [[
+    'classId' => (string) $historicalRemedialClassId,
+    'title' => 'Historical Quiz',
+    'type' => 'Quiz',
+    'gradingPeriod' => 'Midterm',
+    'maxScore' => 10,
+]]);
+expect_same(409, $historicalAssessmentSaveStatus, 'Assessments cannot be created in a past school-year class');
+$historicalAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments (cs_id, title, type, grading_period, max_score, weight, status)
+     VALUES (?, 'Historical Fixture Quiz', 'Quiz', 'Midterm', 10, 100, 'Active')
+     RETURNING assessment_id"
+);
+$historicalAssessmentStmt->execute([$historicalRemedialClassId]);
+$historicalAssessmentId = (int) $historicalAssessmentStmt->fetchColumn();
+$pdo->prepare('INSERT INTO assessment_scores (assessment_id, student_id, score, submitted_at) VALUES (?, ?, 10, CURRENT_TIMESTAMP(6))')
+    ->execute([$historicalAssessmentId, $invitedStudentId]);
+[$historicalScoreStatus] = integration_http_json('/api/faculty/scores', $seedFacultyAccessToken, [
+    'assessmentId' => (string) $historicalAssessmentId,
+    'scores' => [['studentId' => (string) $invitedStudentId, 'score' => 2]],
+]);
+expect_same(409, $historicalScoreStatus, 'Scores cannot be saved in a past school-year class');
+$historicalScoreStmt = $pdo->prepare('SELECT score FROM assessment_scores WHERE assessment_id = ? AND student_id = ?');
+$historicalScoreStmt->execute([$historicalAssessmentId, $invitedStudentId]);
+expect_same(10.0, (float) $historicalScoreStmt->fetchColumn(), 'Rejected past-year score save leaves the raw score unchanged');
+[$historicalAssessmentDeleteStatus] = integration_http_json('/api/faculty/assessments/delete', $seedFacultyAccessToken, [
+    'assessmentId' => $historicalAssessmentId,
+]);
+expect_same(409, $historicalAssessmentDeleteStatus, 'Assessments cannot be deleted from a past school-year class');
+$historicalAssessmentExistsStmt = $pdo->prepare('SELECT COUNT(*) FROM assessments WHERE assessment_id = ?');
+$historicalAssessmentExistsStmt->execute([$historicalAssessmentId]);
+expect_same(1, (int) $historicalAssessmentExistsStmt->fetchColumn(), 'Rejected past-year delete keeps the assessment');
+[$historicalComputeStatus] = integration_http_json('/api/faculty/grades/compute', $seedFacultyAccessToken, [
+    'classId' => (string) $historicalRemedialClassId,
+]);
+expect_same(409, $historicalComputeStatus, 'Grades cannot be recomputed for a past school-year class');
+[$unscopedComputeStatus] = integration_http_json('/api/faculty/grades/compute', $seedFacultyAccessToken, []);
+expect_true($unscopedComputeStatus !== 500, 'Unscoped grade computation does not fail with a server error');
+$historicalRemedialGradeStmt->execute([$historicalRemedialEnrollmentId]);
+expect_same($historicalRemedialGradeBefore, $historicalRemedialGradeStmt->fetch(PDO::FETCH_ASSOC), 'Unscoped grade computation never recomputes a past school-year class');
+[$historicalAttendanceStatus, $historicalAttendanceBody] = integration_http_json('/api/faculty/attendance/override', $seedFacultyAccessToken, [
+    'csId' => (string) $historicalRemedialClassId,
+    'enrollmentId' => (string) $historicalRemedialEnrollmentId,
+    'sessionDate' => (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->modify('-1 day')->format('Y-m-d'),
+    'status' => 'present',
+]);
+expect_same(409, $historicalAttendanceStatus, 'Attendance cannot be marked in a past school-year class');
+expect_same('SCHOOL_YEAR_READ_ONLY', $historicalAttendanceBody['code'] ?? null, 'Past-year attendance rejection uses the read-only code');
+$historicalAttendanceCountStmt = $pdo->prepare('SELECT COUNT(*) FROM attendance_records WHERE enrollment_id = ?');
+$historicalAttendanceCountStmt->execute([$historicalRemedialEnrollmentId]);
+expect_same(0, (int) $historicalAttendanceCountStmt->fetchColumn(), 'Rejected past-year attendance mark creates no record');
+[$historicalSessionStatus] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, [
+    'csId' => $historicalRemedialClassId,
+]);
+expect_same(409, $historicalSessionStatus, 'Attendance sessions cannot be started for a past school-year class');
+
 foreach ([
     ['', 'REMEDIAL_SCORE_REQUIRED'],
     [-0.01, 'REMEDIAL_SCORE_RANGE'],

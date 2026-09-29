@@ -2300,6 +2300,16 @@ function handle_faculty_grading_config_save(): void
         if (!$body['has_body']) {
             throw new FacultyGradingConfigurationException('Request body required.', 400, 'BAD_REQUEST');
         }
+        // Checked here, not in the shared save path: the grade-weight bootstrap
+        // may still backfill weights for past offerings.
+        $requestedSchoolYear = faculty_grading_normalize_school_year($body['data']['schoolYear'] ?? null);
+        if (academic_school_year_is_past($pdo, $requestedSchoolYear)) {
+            throw new FacultyGradingConfigurationException(
+                'Past school-year classes are view-only.',
+                409,
+                'SCHOOL_YEAR_READ_ONLY'
+            );
+        }
         $saved = faculty_grading_save_configuration($pdo, $config, $authCtx, $body['data'], $context);
 
         json_response([
@@ -2769,6 +2779,11 @@ function handle_faculty_assessments_save(): void
                 safe_error_response('Assessment class is not assigned to this faculty member.', 403);
                 return;
             }
+            if (academic_class_section_is_past($pdo, $csId)) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are view-only.', 409);
+                return;
+            }
             $title = trim((string) ($item['title'] ?? ''));
             $type = (string) ($item['type'] ?? '');
             $period = (string) ($item['gradingPeriod'] ?? '');
@@ -3047,17 +3062,23 @@ function handle_faculty_assessment_delete(): void
             return;
         }
         $owner = $pdo->prepare(
-            "SELECT a.assessment_id
+            "SELECT a.assessment_id, a.cs_id
              FROM assessments a
              JOIN class_sections cs ON cs.cs_id = a.cs_id
              WHERE a.assessment_id = ? AND cs.instructor_user_id = ?
-             FOR UPDATE"
+             FOR UPDATE OF a"
         );
         $pdo->beginTransaction();
         $owner->execute([$assessmentId, $authCtx['user_id']]);
-        if (!$owner->fetchColumn()) {
+        $ownedAssessment = $owner->fetch(PDO::FETCH_ASSOC);
+        if (!$ownedAssessment) {
             $pdo->rollBack();
             safe_error_response('Assessment not found in an assigned class.', 404);
+            return;
+        }
+        if (academic_class_section_is_past($pdo, (int) $ownedAssessment['cs_id'])) {
+            $pdo->rollBack();
+            safe_error_response('Past school-year classes are view-only.', 409);
             return;
         }
         $scores = $pdo->prepare("DELETE FROM assessment_scores WHERE assessment_id = ?");
@@ -3104,6 +3125,10 @@ function handle_faculty_scores_save(): void
         $row = $assessment->fetch(PDO::FETCH_ASSOC);
         if (!$row) {
             safe_error_response('Assessment not found.', 404);
+            return;
+        }
+        if (academic_class_section_is_past($pdo, (int) $row['cs_id'])) {
+            safe_error_response('Past school-year classes are view-only.', 409);
             return;
         }
         if (!is_array($scores) || $scores === []) {
@@ -3269,6 +3294,12 @@ function handle_faculty_grades_compute(): void
             safe_error_response('Class is not assigned to this faculty member.', 403);
             return;
         }
+        if ($csId > 0 && academic_class_section_is_past($pdo, $csId)) {
+            safe_error_response('Past school-year classes are view-only.', 409);
+            return;
+        }
+        // Without a classId, past school-year classes are never recomputed.
+        $currentSchoolYear = academic_current_school_year($pdo);
 
         $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
 
@@ -3277,8 +3308,8 @@ function handle_faculty_grades_compute(): void
             "SELECT e.enrollment_id
                FROM enrollments e
                JOIN class_sections cs ON cs.cs_id = e.cs_id
-              WHERE cs.instructor_user_id = ?";
-        $lockEnrollmentParams = [(int) $authCtx['user_id']];
+              WHERE cs.instructor_user_id = ? AND cs.school_year >= ?";
+        $lockEnrollmentParams = [(int) $authCtx['user_id'], $currentSchoolYear];
         if ($csId > 0) {
             $lockEnrollmentsSql .= ' AND e.cs_id = ?';
             $lockEnrollmentParams[] = $csId;
@@ -3294,8 +3325,8 @@ function handle_faculty_grades_compute(): void
                 AND cs.course_id = gc.course_id
                 AND UPPER(cs.semester) = gc.semester
                 AND UPPER(cs.school_year) = gc.school_year
-              WHERE gc.faculty_user_id = ?";
-        $lockConfigParams = [(int) $authCtx['user_id']];
+              WHERE gc.faculty_user_id = ? AND cs.school_year >= ?";
+        $lockConfigParams = [(int) $authCtx['user_id'], $currentSchoolYear];
         if ($csId > 0) {
             $lockConfigsSql .= ' AND cs.cs_id = ?';
             $lockConfigParams[] = $csId;
@@ -3370,8 +3401,9 @@ function handle_faculty_grades_compute(): void
                     FROM attendance_records
                     GROUP BY enrollment_id
                 ) att ON att.enrollment_id = e.enrollment_id
-                WHERE cs.instructor_user_id = :faculty_id";
-        $params = [':faculty_id' => $authCtx['user_id']];
+                WHERE cs.instructor_user_id = :faculty_id
+                  AND cs.school_year >= :school_year";
+        $params = [':faculty_id' => $authCtx['user_id'], ':school_year' => $currentSchoolYear];
         if ($csId > 0) {
             $sql .= " AND e.cs_id = :cs_id";
             $params[':cs_id'] = $csId;
@@ -3979,6 +4011,10 @@ function handle_faculty_attendance_session_create(): void
             return;
         }
         $csId = (int) $class['cs_id'];
+        if (academic_class_section_is_past($pdo, $csId)) {
+            safe_error_response('Past school-year classes are view-only.', 409);
+            return;
+        }
         [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
         $room = array_key_exists('room', $data) && trim((string) $data['room']) !== ''
             ? validate_required_string($data, 'room', 1, 255)
@@ -4113,6 +4149,11 @@ function handle_faculty_attendance_session_revoke(): void
                 safe_error_response('Attendance session was not found in an assigned class.', 404);
                 return;
             }
+            if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are view-only.', 409);
+                return;
+            }
             if (strtolower((string) $session['status']) !== 'active') {
                 $pdo->rollBack();
                 safe_error_response('Attendance session is not active.', 409);
@@ -4182,6 +4223,11 @@ function handle_faculty_attendance_session_end(): void
             if ($session === null) {
                 $pdo->rollBack();
                 safe_error_response('Attendance session was not found in an assigned class.', 404);
+                return;
+            }
+            if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are view-only.', 409);
                 return;
             }
             if (strtolower((string) $session['status']) !== 'active') {
@@ -4438,6 +4484,12 @@ function handle_faculty_attendance_override(): void
                 $target = array_merge($target, $existing);
                 $recordId = (int) $existing['record_id'];
             }
+        }
+
+        if (academic_class_section_is_past($pdo, (int) $csId)) {
+            $pdo->rollBack();
+            faculty_attendance_error_response('Past school-year classes are view-only.', 409, 'SCHOOL_YEAR_READ_ONLY');
+            return;
         }
 
         if ($requestedSessionId !== null) {

@@ -1186,6 +1186,11 @@ function handle_secretary_attendance_session_start(): void
                 safe_error_response('Class section is not assigned to this Secretary.', 403);
                 return;
             }
+            if (academic_class_section_is_past($pdo, $csId)) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are view-only.', 409);
+                return;
+            }
 
             $activeStmt = $pdo->prepare(
                 "SELECT session_id
@@ -1388,6 +1393,11 @@ function handle_secretary_attendance_session_end(): void
                 safe_error_response('Attendance session was not found in an assigned class.', 404);
                 return;
             }
+            if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are view-only.', 409);
+                return;
+            }
             if (strtolower((string) $session['status']) !== 'active') {
                 $pdo->rollBack();
                 safe_error_response('Attendance session has already ended.', 409);
@@ -1503,6 +1513,11 @@ function handle_secretary_attendance_session_revoke(): void
             if ($session === null) {
                 $pdo->rollBack();
                 safe_error_response('Attendance session was not found in an assigned class.', 404);
+                return;
+            }
+            if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are view-only.', 409);
                 return;
             }
             if (strtolower((string) $session['status']) !== 'active') {
@@ -1755,6 +1770,11 @@ function handle_secretary_attendance_override(): void
             }
             if ($sessionId > 0 && (int) ($targetRecord['attendance_session_id'] ?? 0) !== $sessionId) {
                 throw new ValidationException([['field' => 'sessionId', 'message' => 'Attendance record does not belong to the selected session.']]);
+            }
+            if (academic_class_section_is_past($pdo, $targetCsId)) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are view-only.', 409);
+                return;
             }
 
             $update = $pdo->prepare(
