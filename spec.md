@@ -264,8 +264,6 @@ After binding:
 - email + password login remains supported;
 - a different Google `sub` MUST NOT silently replace the existing binding.
 
-During authorized invitation acceptance, the verified Google `sub` may be bound to the invited account only after the verified institutional email matches the invitation. Invitation authority is required before Google verification can be used, and password creation remains required.
-
 ---
 
 # 3. Registration and Account Lifecycle
@@ -276,7 +274,7 @@ During authorized invitation acceptance, the verified Google `sub` may be bound 
 
 There is no public Faculty or Student signup. A Faculty account may be established only through an Admin-authorized invitation. A Student account may be established only through a Faculty-authorized invitation tied to the canonical Student record and applicable eligibility checks.
 
-The invitation authorizes account establishment. Google verification may optionally verify the invited identity but MUST NOT create an invitation or independently begin account creation. Secretary invitation and activation remain governed by REG-006.
+The invitation authorizes account establishment. Google MUST NOT create an invitation or independently begin account creation; Google may be linked only after activation (REG-003). Secretary appointment remains governed by REG-006.
 
 ## REG-002 — Password-backed invitation acceptance
 
@@ -284,28 +282,13 @@ The invitation authorizes account establishment. Google verification may optiona
 
 Faculty and Student invitation acceptance MUST require creation of a DentiSys password. Existing institutional email validation and role-specific identity and eligibility requirements remain authoritative.
 
-## REG-003 — Optional Google verification during invitation acceptance
+## REG-003 — Google linking after activation
 
 **Status: APPROVED**
 
-Google-assisted invitation acceptance is **not passwordless**. Google is optional and MUST only verify the identity named by an already valid invitation. The verified email MUST match the invited institutional email; a conflicting Google subject MUST be rejected without linking or changing another account.
+Invitation acceptance is password-only. Faculty and Students create their DentiSys password to activate the account.
 
-Before acceptance is completed, the user MUST create a DentiSys password. A completed Google-linked account MUST subsequently support both:
-
-* Google Sign-In;
-* institutional email + DentiSys password.
-
-Conceptually:
-
-```text
-authorized invitation
-      ->
-optional matching Google verification
-      ->
-create DentiSys password
-      ->
-active invited account
-```
+Google Sign-In may be linked only after activation, from the user's profile. Linking follows the AUTH-010 ownership confirmation (password, plus MFA when enabled) and requires the verified Google email to match the account's institutional email. A completed Google-linked account MUST support both Google Sign-In and institutional email + DentiSys password.
 
 ## REG-004 — Google cannot bypass account controls
 
@@ -333,7 +316,7 @@ Only an Admin may invite a Faculty member. The Admin invitation itself is the Fa
 
 **Status: CURRENT**
 
-Secretary invitation and activation remain controlled by the existing DentiSys workflow.
+Owner decision (2026-09-29): A Class Secretary is a Student who has been appointed to one class section. Faculty appoint a Student of their own current-year section. Each section has at most one Secretary, counting active and pending appointments together. The appointment uses the Student's existing DentiSys account. If the Student has no account yet, one invitation both activates the Student account (the Student sets a password) and records the appointment. Faculty may remove the appointment; the account then returns to plain Student access. An appointment ends automatically when its section is archived or its school year ends.
 
 Google authentication MUST NOT bypass the invitation/activation requirement.
 
@@ -343,7 +326,25 @@ Google authentication MUST NOT bypass the invitation/activation requirement.
 
 Only an authorized Faculty member may invite a Student from an assigned class. The invitation MUST be tied to the canonical Student record. Student account access remains tied to that identity and existing active-status/enrollment eligibility checks at invitation and acceptance. A Student email alone MUST NOT authorize onboarding. After valid invitation acceptance, eligibility checks, and password creation, the Student account becomes Active.
 
-Optional Google verification during acceptance MUST match the invited Student institutional email and MUST NOT substitute for the Faculty invitation or Student eligibility.
+Google cannot substitute for the Faculty invitation or Student eligibility; it may be linked only after activation (REG-003).
+
+## REG-008 — One identity kind per person
+
+**Status: APPROVED**
+
+A person holds one kind of DentiSys identity: either a Student (who may also be appointed Class Secretary) or a staff member (Faculty, or the Dean/Admin). An email that belongs to a Faculty or Dean account cannot be used for a Student record, a Student invitation, or a Secretary appointment. An email that belongs to a Student record or a Student or Secretary account, or that belongs to the Dean, cannot be invited as Faculty.
+
+## REG-009 — Account email is permanent after activation
+
+**Status: APPROVED**
+
+A user cannot change their own login email. Before activation, a pending invitation's email may be corrected: by the Dean for Faculty invitations, and by Faculty for Student records that have no account. After activation, an account's email cannot be changed.
+
+## REG-010 — First Dean account
+
+**Status: APPROVED**
+
+On a database with no Dean/Admin account, the first Dean invitation is created from deployment configuration (the first-admin email and name). The invitee sets their password through the normal invitation flow. This mechanism does nothing once any Dean/Admin account exists.
 
 ---
 
@@ -399,7 +400,7 @@ New authentication paths SHOULD use the same security boundaries where applicabl
 
 Assessments may optionally enable grade transmutation. Admin may edit the institution-wide transmutation minimum and maximum percentages, initially 50% and 100%. New assessments snapshot the current institution-wide defaults; later default changes affect future assessments by default and do not silently modify existing assessments. Faculty may explicitly customize an assessment's stored minimum and maximum percentages.
 
-Raw assessment points remain authoritative historical scores and are never replaced by a transmuted result. An enabled assessment must be deterministically linked to an attendance event in its class using the attendance session date and a nonblank session code.
+Raw assessment points remain authoritative historical scores and are never replaced by a transmuted result. Linking an enabled assessment to an attendance session is optional. A link identifies one attendance session of the assessment's class by session date and a nonblank session code. Without a link, the bounded transformation applies to the raw percentage and attendance is not considered. With a link, attendance is considered as described below. If the linked session is revoked, the assessment is treated as unlinked.
 
 For an enabled assessment, present, late, and excused attendance apply the bounded transformation:
 
@@ -408,13 +409,13 @@ effectivePercentage = minimum
     + rawPercentage / 100 * (maximum - minimum)
 ```
 
-Absent attendance produces an effective percentage of 0%. Missing attendance is incomplete/unresolved and must not be treated as absent or use a raw-percentage fallback. Disabled assessments continue using the normal raw percentage. Attendance corrections affect subsequent effective-grade computation without modifying the stored raw score. Assessment-linked transmutation remains separate from the existing independent attendance grading component.
+Absent attendance produces an effective percentage of 0%. While the linked session has not yet ended, a student with no attendance record is incomplete. After the session ends, unresolved students are resolved to Absent (see ATT-003), so the result is 0%. Disabled assessments continue using the normal raw percentage. Attendance corrections affect subsequent effective-grade computation without modifying the stored raw score. Assessment-linked transmutation remains separate from the existing independent attendance grading component.
 
 ---
 
 ## GRD-002 - Period grading and editable presets
 
-**Status: APPROVED - Implementation in progress**
+**Status: CURRENT**
 
 Faculty grading configurations remain scoped to the Faculty member, course, semester, and school year.
 
@@ -432,6 +433,8 @@ Existing single-list configurations continue using their current calculation unt
 
 For period configurations, the overall percentage is the Midterm percentage multiplied by its contribution plus the Finals percentage multiplied by its contribution. A positively weighted period without sufficient results remains incomplete; it must not silently become zero or be omitted.
 
+Owner decision (2026-09-28): Every class offering must have a saved grade-weight configuration before assessments are created or grades are computed. There is no fallback formula. A class without saved weights is reported as "grade weights required", and its existing results are preserved. Category weights must be greater than 0. The Grade Weights editor is shared by all sections of an offering. On first save, existing unlinked assessments are linked to categories by name, ignoring case and simple plurals ("Quiz" matches "Quizzes"); assessments that cannot be matched are assigned to a category by the Faculty member before the save completes.
+
 Saving configuration does not automatically rewrite persisted grade results. An authorized recomputation applies the saved configuration while preserving raw scores and GRD-001 transmutation behavior.
 
 In period configurations, the preset Attendance category uses authoritative attendance data and replaces the additional independent attendance contribution, preventing double-counting. Assessment-linked transmutation remains governed separately by GRD-001.
@@ -439,6 +442,14 @@ In period configurations, the preset Attendance category uses authoritative atte
 Faculty defines one inclusive attendance date range for Midterm and one for Finals for each offering. Each start date must be on or before its end date; Midterm must end before Finals starts. Gaps are allowed. Attendance is assigned using its recorded session date, and records outside both ranges do not contribute to period attendance. Missing ranges or unresolved attendance keep the affected result incomplete. Saving changed dates does not rewrite recorded results; changes apply through explicit recomputation.
 
 Grade displays and exports must distinguish authoritative Midterm, Finals, and overall results. Unavailable period results must not be replaced with the overall grade.
+
+---
+
+## EML-001 - Faculty notices to students
+
+**Status: APPROVED**
+
+Faculty may send At-Risk and Privacy Consent notices to their students using the institutional email template. Outside production, email is sent only to addresses on a configured test allowlist. Other messages are recorded in history as "Suppressed (test mode)" and are not delivered.
 
 ---
 
@@ -546,13 +557,13 @@ Disposable generated artifacts, meaningless scaffolding, or exact redundant copi
 
 # 8. Approved Requirements and Deferred Implementation
 
-The biometric, attendance, and Secretary requirements in this section are approved product decisions. Their implementation remains deferred; these rules do not claim that the functionality is implemented or authorize implementation by themselves. Technical selections explicitly marked deferred remain unresolved until team research and later Owner approval. Existing CURRENT rules and unrelated approved behavior remain in force.
+The biometric, attendance, and Secretary requirements in this section are approved product decisions and are implemented as a research prototype (Owner decision 2026-09-29). Real Student deployment still requires the BIO-002 institutional privacy/consent review. Technical selections explicitly marked deferred remain unresolved until team research and later Owner approval. Existing CURRENT rules and unrelated approved behavior remain in force.
 
 ## BIO-001 — Attendance-only purpose and identity boundary
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 Facial biometrics is used only for attendance verification. It MUST NOT be used for DentiSys login, password replacement, account authentication replacement, Student identity discovery, civil or institutional identity proofing, classroom-wide recognition, or general-purpose face recognition.
 
@@ -566,7 +577,7 @@ Facial detection MUST use Haar Cascade Classification through OpenCV. Facial ver
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 Only the Student may enroll, revoke, or re-enroll their own facial biometric through their authenticated account. Faculty and Secretary MUST NOT enroll another Student. Admin may revoke a Student's enrollment and request or require re-enrollment, but MUST NOT perform replacement enrollment for the Student.
 
@@ -576,13 +587,13 @@ Students may refuse biometric processing or later revoke consent. Refusal or ina
 
 The consent disclosure MUST state the attendance-only purpose; the biometric material processed; that raw facial images are not retained; that a protected reference is retained and expires every semester; revocation and deletion behavior; who may access enrollment status; the manual attendance alternative; and that revocation does not erase historical attendance. This scope applies to adult university Students.
 
-Before real Student deployment, final privacy and consent wording MUST be reviewed and approved by the research team, adviser, relevant University authority, and University Data Protection Officer. This named review is the required institutional gate for real Student deployment; implementation remains deferred until that gate and the remaining technical approvals in BIO-007 are complete.
+Before real Student deployment, final privacy and consent wording MUST be reviewed and approved by the research team, adviser, relevant University authority, and University Data Protection Officer. This named review is the required institutional gate for real Student deployment; real deployment remains deferred until that gate and the remaining technical approvals in BIO-007 are complete.
 
 ## BIO-003 — Temporary captures, protected reference, and infrastructure boundary
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 Raw photographs, enrollment images, camera frames, verification images, and failed captures MUST NOT be retained after processing, including in development or debugging artifacts. Temporary facial images MAY exist only as necessary for capture-quality evaluation, liveness/PAD, template generation, and 1:1 verification, and MUST be discarded after processing. Normal enrollment MUST require 20 usable facial samples and MAY accept at most 30 usable samples during one enrollment operation. Failed quality or liveness samples MUST NOT count. Raw enrollment samples MUST be discarded after protected-reference generation or an aborted enrollment.
 
@@ -596,7 +607,7 @@ All biometric captures, temporary facial images, protected references, and tempo
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 Protected biometric references MUST be protected at rest and in transit, against unauthorized retrieval and modification, and through appropriately restricted access. The design MUST consider confidentiality, integrity, privacy, renewability, and revocability because a compromised biometric characteristic cannot simply be changed like a password.
 
@@ -606,7 +617,7 @@ The design rationale MUST explicitly reference ISO/IEC 24745:2022, Information s
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 An enrollment expires every semester. A Student MUST re-enroll to continue biometric attendance after expiration.
 
@@ -618,7 +629,7 @@ Biometric templates MUST NOT be included in normal DentiSys application backups.
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 Production biometric attendance MUST use randomized active challenge-response liveness or presentation-attack detection. Challenges MUST be server-generated, short-lived, and single-use. Each ordinary attempt MUST request two distinct randomized actions in randomized order from blink, turn head left, and turn head right. The browser MAY display the challenge but MUST NOT be authoritative for pass/fail. The DentiSys biometric component MUST verify the action sequence using temporary frames. MediaPipe Face Landmarker is approved only for landmark, transformation, and blendshape analysis used for liveness; it MUST NOT replace Haar detection or LBPH verification. Raw liveness frames MUST NOT be retained. Numeric liveness, blink, head-pose, and timing thresholds remain deferred.
 
@@ -656,7 +667,7 @@ The remaining deferred parameters require team research, technical validation, a
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 The target is desktop/laptop browsers, Android browsers/devices, and iOS browsers/devices. Students use their own devices. Where supported, they may select an available camera, including front or rear cameras. Verification requires connectivity to the deployed DentiSys service. There is no offline biometric queue or later local synchronization; if the service cannot be reached, manual attendance applies.
 
@@ -680,15 +691,15 @@ The study aims to reasonably resist obvious photo, display, video, and replay at
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
-A Secretary remains authorized under the Secretary role and enters the Secretary interface by default. That same account retains access to applicable Student self-service associated with the person’s own canonical Student identity, including their own biometric enrollment, revocation, re-enrollment, attendance capture, and other approved Student functions. No second account, second login, simultaneous-role redesign, role inheritance, or new account-linking mechanism is introduced. Secretary privileges MUST NOT permit enrollment for another Student. REG-006’s invitation and activation workflow remains unchanged.
+A Secretary remains authorized under the Secretary role and enters the Secretary interface by default. That same account keeps all of the person's own Student self-service, including dashboard, classes, grades and retention, attendance, biometric enrollment, revocation, re-enrollment, and profile. The Secretary/Student switch is a sidebar toggle. No second account, second login, simultaneous-role redesign, role inheritance, or new account-linking mechanism is introduced. Secretary privileges MUST NOT permit enrollment for another Student. REG-006’s invitation and activation workflow remains unchanged.
 
 ## ATT-001 — Attendance-session authority
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 Faculty may start and manage attendance sessions only for classes they are authorized to manage. Secretary may start and manage sessions only for classes available through the authorized Secretary attendance role. Secretary authority does not grant unrestricted access to every class. Authorization MUST be enforced server-side.
 
@@ -698,13 +709,17 @@ An authorized Faculty or Secretary may revoke an attendance session that they ar
 
 When a session is created, eligible Students have an attendance state that remains unresolved until attendance is recorded or the attendance-resolution lifecycle resolves it; this requirement does not select a database representation.
 
+Every session has a required class end time. It must be on the session day and at or after the Late cutoff.
+
+A revoked session is treated as if it never happened. Its attendance records do not count toward attendance rates, attendance categories, transmutation, or reports. No student is resolved to Absent for it. The records and the revocation stay in history and audit.
+
 ## ATT-002 — Geofencing and location privacy
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
-Geofencing is enabled by default for new biometric attendance sessions. Authorized Faculty or Secretary may disable it per session, select the session location through a map interface, and configure the permitted radius. The default radius is 100 meters and radius values are configured and stored in meters.
+Geofencing is enabled by default for new biometric attendance sessions. Authorized Faculty or Secretary may disable it per session, select the session location on an embedded OpenStreetMap map, which can also center on the creator's current location, and configure the permitted radius. The default radius is 100 meters and radius values are configured and stored in meters. Only map tiles are requested from the tile provider; no Student data is sent to it.
 
 Student coordinates MAY be used temporarily to evaluate whether the Student is inside the permitted radius. Exact Student GPS coordinates MUST NOT be permanently stored and no Student location history may be created. Geofence passed/failed, configured session location and radius, and an audit timestamp may be retained. If enabled geofencing is denied or unavailable, automated biometric attendance cannot complete and manual fallback applies.
 
@@ -712,13 +727,13 @@ Student coordinates MAY be used temporarily to evaluate whether the Student is i
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 A successful biometric attendance during the configured Present window produces Present. The Present window begins at the configured opening time and ends immediately before the configured Present cutoff.
 
 A successful biometric attendance during the configured Late window produces Late. The Late window begins at the Present cutoff and ends immediately before the configured Late cutoff. The configured times are interpreted in `Asia/Manila` using authoritative server time. For example, a session created at 06:00 may open at 08:00, accept Present attendance until 09:00, and accept Late attendance from 09:00 until 12:00. The creation timestamp does not determine the attendance windows.
 
-At the configured Late cutoff, biometric capture closes. Students cannot submit biometric attendance before the opening time or after capture closes, and the UI directs them to Secretary or Faculty. A Student with no resolved attendance remains unresolved; capture closure or session revocation MUST NOT itself automatically create Absent. Only after the entire applicable class/session for that day concludes does the attendance workflow explicitly resolve remaining eligible unresolved attendance to Absent. If the applicable class/session concludes at the Late cutoff, as in the 08:00–12:00 example, the unresolved eligible attendance is resolved to Absent at that point.
+At the configured Late cutoff, biometric capture closes. Students cannot submit biometric attendance before the opening time or after capture closes, and the UI directs them to Secretary or Faculty. A Student with no resolved attendance remains unresolved; capture closure or session revocation MUST NOT itself automatically create Absent. When the class end time passes, the session ends automatically. Every eligible student with no attendance record is then resolved to Absent. An authorized Faculty member or Secretary may also end the session earlier.
 
 A later authorized correction may change Absent to Excused or another authorized status. A Student may pursue that correction through the existing authorized Faculty/Secretary correction and Excused workflows; this amendment does not create a new Student-facing in-system dispute workflow. Biometric closure, session revocation, and final attendance resolution are separate events.
 
@@ -726,7 +741,7 @@ A later authorized correction may change Absent to Excused or another authorized
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 While attendance is unresolved, attendance-dependent grading and transmutation remain pending. GRD-001 MUST consume a resolved attendance status and MUST NOT infer Absent or zero merely because an attendance record is missing or unresolved.
 
@@ -736,7 +751,7 @@ Once attendance resolves, the existing approved GRD-001 behavior applies. Later 
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 Each Student has one authoritative attendance result per attendance session. A successful biometric verification is valid only for one active attendance session/request and MUST NOT be reused for another request or session. A later successful attempt in the same session returns an understandable already-recorded outcome and creates no duplicate authoritative attendance row. Repeated attempts may be audited.
 
@@ -746,11 +761,13 @@ Biometric verification and attendance are separate concepts. Attendance preserve
 
 **Status: APPROVED**
 
-**Implementation: DEFERRED**
+**Implementation: research prototype implemented**
 
 Successful automated biometric attendance requires no Faculty approval. Faculty may directly correct attendance through authorized attendance-management functionality.
 
 Secretary retains authorized ordinary manual attendance functionality. When a Student contacts the Secretary about an excuse, the Secretary may submit an Excused request in DentiSys; only Faculty may approve or reject that request. Secretary MUST NOT finalize Excused through a generic manual override. A rejection leaves the current attendance status unchanged. When a Student contacts Faculty directly, Faculty may apply an authorized correction directly.
+
+For attendance rates, Excused counts as attended.
 
 Students contact Secretary or Faculty outside DentiSys. Current scope has no Student-facing in-system excuse or dispute submission, no supporting-document upload requirement, and no specified dispute deadline. Manual correction audit MUST preserve the old status, new status, actor, timestamp, reason where applicable, and the original biometric outcome.
 
@@ -761,6 +778,8 @@ Students contact Secretary or Faculty outside DentiSys. Current scope has no Stu
 Image publishing and demonstration deployment remain future work.
 
 Do not add cloud infrastructure, TLS, deployment automation, registry configuration, CI/CD, or related infrastructure unless explicitly scoped and approved.
+
+A development-only, self-signed HTTPS mode for testing on phones over the local network is permitted. It is not deployment TLS and does not authorize deployment infrastructure.
 
 ---
 
@@ -825,9 +844,11 @@ The Midterm Watchlist stays locked while the applicable student's midterm grades
 
 Retention uses final grades, scores, and applicable approved BUCDM policy. Clickable Policy Status displays the student's current stage and progression through the BUCDM retention flow. Distinguish midterm warning from final retention decisions. Do not approve numeric thresholds or policy tracks solely from screenshot examples; unresolved policy-to-stage mapping must be clarified before authoritative wiring.
 
-Owner clarification (2026-09-26, provisional): For the professional-course final-grade trigger, 1.0 is best. Compare the authoritative final grade at its established precision; do not round to one decimal before comparison. A final grade numerically below 2.50 is allowed, including 2.40-2.49. A final grade numerically at or above 2.50 requires remediation. This course-grade trigger is distinct from the remedial-exam percentage passing threshold. The provisional threshold may change. Missing or incomplete grades remain unresolved, and this clarification does not create a separate warning band or authorize any other unanswered BUCDM policy decision.
+Owner decision (2026-09-28): For the professional-course final-grade trigger, 1.0 is best. The authoritative final grade is compared at its established precision, without rounding to one decimal first. A final grade below 2.50 passes, including 2.40-2.49. A final grade of 2.50 or worse requires remediation. This course-grade trigger is distinct from the remedial-exam percentage passing threshold. This trigger is fixed college policy. It is not an Admin setting and changes only by amending this specification. Missing or incomplete grades remain unresolved, and this clarification does not create a separate warning band or authorize any other unanswered BUCDM policy decision.
 
-Owner-approved amendment (2026-09-26): Each of the first two remedial exams passes at 50% or higher. Failure of the first permits the second; failure of the second requires cost recovery. Remedial outcomes do not replace the original course grade. DentiSys records the first and second attempts separately, derives Pass/Fail from the stored percentage, and does not offer a third remedial attempt. Cost-recovery scoring, completion, and final-failure rules remain outside this amendment.
+Owner-approved amendment (2026-09-26): Each of the first two remedial exams passes at 50% or higher. Failure of the first permits the second; failure of the second requires cost recovery. Remedial outcomes do not replace the original course grade. DentiSys records the first and second attempts separately, derives Pass/Fail from the stored percentage, and does not offer a third remedial attempt. Cost-recovery scoring, completion, and final-failure rules remain outside this amendment. The 50% remedial pass mark is the current policy and may change later by amendment.
+
+Owner decision (2026-09-29) — Risk levels (Faculty Retention Monitoring and Midterm Watchlist): Risk shows how close a student is to needing remediation. It is recalculated for the current grading period (Midterm, or the running overall grade after Midterm): (1) take the student's completed assessments in the period; (2) add assumed future assessments one at a time, each the size of the student's average completed assessment in that period and scored 75%, a below-passing score (below 82%); (3) count how many are needed before the period grade reaches 2.50 or worse. High = 1-2 assumed assessments, or the grade is already 2.50 or worse; At Risk = 3-4; Low = 5 or more. Risk is informational and never creates remediation. Warning and Critical remain separate, manually set retention states. The assumed score and the bands are current policy and may change by amendment.
 
 ## UI-004 - Email and invitations (PDF pages 5, 7-8)
 
@@ -882,7 +903,7 @@ Upon Owner approval of this specification:
 * Faculty and Student account establishment MUST require an authorized invitation and DentiSys password.
 * Google may verify an invited identity during acceptance, but MUST NOT provide invitation authority or enable public signup.
 * Google-linked users MUST retain email + password login capability.
-* The previous BIO-001 placeholder wording, insofar as it left biometric product requirements unresolved, is superseded by BIO-001–BIO-010 and ATT-001–ATT-006. Those product requirements and boundaries are approved, while biometric implementation and the remaining deferred technical selections listed in BIO-007 and §9 remain deferred. This supersession does not claim biometric functionality is implemented or authorize implementation.
+* The previous BIO-001 placeholder wording, insofar as it left biometric product requirements unresolved, is superseded by BIO-001–BIO-010 and ATT-001–ATT-006. Those product requirements and boundaries are approved and implemented as a research prototype; the numeric thresholds and other technical selections listed in BIO-007 and §9, and the BIO-002 institutional review, remain deferred.
 
 Affected roadmap/documentation should be aligned before or together with implementation of Google authentication.
 
