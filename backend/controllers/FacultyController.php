@@ -3313,6 +3313,18 @@ function handle_faculty_scores_save(): void
  */
 function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, string $retention, array $breakdown, int $enrollmentId): void
 {
+    $beforeStmt = $pdo->prepare(
+        "SELECT e.retention_state, c.course_code, cs.cs_name,
+                COALESCE(s.student_account_user_id, s.user_id) AS recipient_user_id
+           FROM enrollments e
+           JOIN class_sections cs ON cs.cs_id = e.cs_id
+           JOIN courses c ON c.course_id = cs.course_id
+           JOIN students s ON s.student_id = e.student_id
+          WHERE e.enrollment_id = ?
+          FOR UPDATE OF e"
+    );
+    $beforeStmt->execute([$enrollmentId]);
+    $before = $beforeStmt->fetch(PDO::FETCH_ASSOC) ?: null;
     $stmt = $pdo->prepare(
         "UPDATE enrollments
          SET final_percentage = :percentage, final_gwa = :gwa,
@@ -3327,7 +3339,8 @@ function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, st
                  WHEN retention_override_gwa IS NOT DISTINCT FROM ROUND(CAST(:gwa_keep3 AS NUMERIC), 2)
                  THEN retention_override_gwa ELSE NULL END,
              grade_components_json = :components
-         WHERE enrollment_id = :enrollment_id"
+         WHERE enrollment_id = :enrollment_id
+         RETURNING retention_state"
     );
     $stmt->execute([
         ':percentage' => $percentage,
@@ -3339,6 +3352,45 @@ function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, st
         ':components' => json_encode($breakdown, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ':enrollment_id' => $enrollmentId,
     ]);
+    $after = $stmt->fetchColumn();
+    if ($before !== null && is_string($after)) {
+        faculty_notify_grade_retention_change($pdo, $before, $after, $gwa, $enrollmentId);
+    }
+}
+
+/**
+ * Tell the Student when a computed grade moves the enrollment into remedial
+ * or clears it (Owner decision): once per change, deduplicated, committed
+ * with the grade. Recomputations that keep the same state send nothing.
+ */
+function faculty_notify_grade_retention_change(PDO $pdo, array $before, string $after, float $gwa, int $enrollmentId): void
+{
+    $previous = strtolower((string) ($before['retention_state'] ?? ''));
+    $current = strtolower($after);
+    $recipient = (int) ($before['recipient_user_id'] ?? 0);
+    if ($previous === $current || $recipient <= 0 || ($current !== 'remedial' && $previous !== 'remedial')) {
+        return;
+    }
+    $course = (string) $before['course_code'];
+    $section = (string) $before['cs_name'];
+    $grade = number_format($gwa, 2, '.', '');
+    if ($current === 'remedial') {
+        $title = "Remedial required in {$course}";
+        $body = "Your computed grade in {$course} ({$section}) is {$grade}, which requires a remedial exam. Your Faculty will schedule it; see Retention for details.";
+    } else {
+        $title = "Remedial no longer required in {$course}";
+        $body = "Your recomputed grade in {$course} ({$section}) is {$grade}. A remedial exam is no longer required for this course.";
+    }
+    notification_create_idempotent(
+        $pdo,
+        $recipient,
+        'remedial_assignment',
+        $title,
+        $body,
+        'enrollment',
+        (string) $enrollmentId,
+        sprintf('grade-retention:%d:%s:%s:%s', $enrollmentId, $previous, $current, $grade)
+    );
 }
 
 function handle_faculty_grades_compute(): void

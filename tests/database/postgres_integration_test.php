@@ -2420,6 +2420,30 @@ $demoStudentEnrollmentStmt = $pdo->prepare(
 $demoStudentEnrollmentStmt->execute([$studentClassId]);
 $demoStudentEnrollmentId = (int) $demoStudentEnrollmentStmt->fetchColumn();
 expect_true($demoStudentEnrollmentId > 0, 'Demo Student is enrolled in the Faculty-owned test class');
+
+// Owner decision: a computed grade that moves an enrollment into remedial, or
+// clears it, notifies the Student once per change. Rolled back afterwards.
+$pdo->beginTransaction();
+try {
+    $pdo->prepare("UPDATE enrollments SET retention_state = 'active', retention_override_state = NULL, retention_override_gwa = NULL WHERE enrollment_id = ?")
+        ->execute([$demoStudentEnrollmentId]);
+    $gradeNotificationCount = static function () use ($pdo, $demoStudentEnrollmentId): int {
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE entity_type = 'enrollment' AND entity_id = ? AND deduplication_key LIKE 'grade-retention:%'");
+        $stmt->execute([(string) $demoStudentEnrollmentId]);
+        return (int) $stmt->fetchColumn();
+    };
+    faculty_save_computed_grade($pdo, 70.0, 5.0, 'remedial', ['fixture' => 'remedial'], $demoStudentEnrollmentId);
+    expect_same(1, $gradeNotificationCount(), 'Entering remedial through a computed grade notifies the Student');
+    faculty_save_computed_grade($pdo, 70.0, 5.0, 'remedial', ['fixture' => 'remedial'], $demoStudentEnrollmentId);
+    expect_same(1, $gradeNotificationCount(), 'Recomputing without a state change sends no second notification');
+    faculty_save_computed_grade($pdo, 90.0, 1.75, 'active', ['fixture' => 'cleared'], $demoStudentEnrollmentId);
+    expect_same(2, $gradeNotificationCount(), 'Clearing remedial through a computed grade notifies the Student');
+    $clearedTitle = $pdo->prepare("SELECT title FROM notifications WHERE entity_type = 'enrollment' AND entity_id = ? AND deduplication_key LIKE 'grade-retention:%:remedial:active:%'");
+    $clearedTitle->execute([(string) $demoStudentEnrollmentId]);
+    expect_true(str_starts_with((string) $clearedTitle->fetchColumn(), 'Remedial no longer required'), 'The clearing notification says remedial is no longer required');
+} finally {
+    $pdo->rollBack();
+}
 $studentNotificationTargetStmt = $pdo->prepare(
     "SELECT e.enrollment_id, s.student_account_user_id
        FROM enrollments e
