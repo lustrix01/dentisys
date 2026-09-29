@@ -2125,7 +2125,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const modalForm = page.locator('form').last();
       await expect(page.getByRole('heading', { name: 'Create New Assessment activity' })).toBeVisible();
 
-      // Check category options in the modal
+      // Check category options in the modal. The category select renders once the
+      // grading configuration has loaded, so wait for it before reading options.
+      await expect(modalForm.locator('option', { hasText: 'Quizzes (25%)' })).toBeAttached();
       const categorySelect = modalForm.locator('select').nth(0);
       const categoryOptions = await categorySelect.evaluate((sel: HTMLSelectElement) =>
         Array.from(sel.options).map(opt => ({ value: opt.value, text: opt.textContent?.trim() }))
