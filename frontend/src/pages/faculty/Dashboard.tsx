@@ -35,6 +35,8 @@ export const Dashboard: React.FC = () => {
   const [recentActivity, setRecentActivity] = useState<FacultyActivityRecord[]>([]);
   const [activityError, setActivityError] = useState('');
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
+  // Selected class block state
+  const [selectedClassId, setSelectedClassId] = useState('');
 
   // Search input state
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,9 +103,6 @@ export const Dashboard: React.FC = () => {
     [dashboardKpis],
   );
 
-  // Selected class block state
-  const [selectedClassId, setSelectedClassId] = useState('');
-  
   // States for Recording Remedial Score
   const [selectedRemedialId, setSelectedRemedialId] = useState<string | null>(null);
   const [remedialScore, setRemedialScore] = useState<string>('');

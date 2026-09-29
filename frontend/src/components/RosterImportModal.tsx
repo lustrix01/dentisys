@@ -181,7 +181,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               });
               successCount++;
             } else {
-              throw new Error('Numeric student database ID required for enrollment');
+              failCount++;
+              errors.push(`${student.studentId}: Numeric student database ID required for enrollment`);
             }
           } catch (enrollErr: any) {
             failCount++;

@@ -92,7 +92,9 @@ export function SsoLogin() {
       setIsLoading(false);
     }
   };
-  googleCredentialHandlerRef.current = handleGoogleCredential;
+  useEffect(() => {
+    googleCredentialHandlerRef.current = handleGoogleCredential;
+  });
 
   useEffect(() => {
     const clientId = runtimeConfig.providers.identity.google.client_id;
