@@ -35,6 +35,11 @@ Write-Host 'Existing database data was preserved. To add demo data manually, pas
 if ($LASTEXITCODE -ne 0) {
     Write-Warning 'Grade-weight bootstrap did not finish. Run: docker compose exec web php /var/www/html/backend/bin/bootstrap-grade-weights.php'
 }
+# REG-010: with no Dean account yet, invite the first Dean named in .env (FIRST_DEAN_*).
+& docker compose exec -T web php /var/www/html/backend/bin/bootstrap-first-dean.php
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning 'First Dean invitation did not finish. Check FIRST_DEAN_* in .env, then run: docker compose exec web php /var/www/html/backend/bin/bootstrap-first-dean.php'
+}
 # BIO-005: delete biometric references whose semester ended or whose Student is no longer active.
 & docker compose exec -T web php /var/www/html/backend/bin/expire-biometrics.php
 if ($LASTEXITCODE -ne 0) {

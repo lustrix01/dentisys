@@ -42,7 +42,9 @@ function faculty_invitation_token_row(PDO $pdo, string $token): ?array
 
 function faculty_invitation_row_is_live(array $row): bool
 {
-    return $row['role'] === 'faculty'
+    // Faculty invitations, plus the first Dean invitation (REG-010), which
+    // uses the same token purpose and acceptance flow.
+    return in_array($row['role'], ['faculty', 'admin'], true)
         && $row['status'] === 'Pending Activation'
         && $row['used_at'] === null
         && $row['revoked_at'] === null
@@ -155,6 +157,122 @@ function handle_admin_faculty_invitations_list(): void
         error_log('Faculty invitation list error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
+}
+
+/**
+ * REG-010: on a database with no Dean/Admin account, invite the first Dean
+ * named in deployment configuration (FIRST_DEAN_* in .env). The Dean accepts
+ * through the normal invitation flow. Runs inside the caller's transaction;
+ * the caller sends the returned link after commit.
+ *
+ * Actions: not_configured, skipped (an active Dean exists, or a pending Dean
+ * account belongs to another email), pending (a live invitation exists), or
+ * invited (a new invitation token was issued).
+ *
+ * @param array{email?: ?string, prefix?: ?string, firstName?: ?string, middleName?: ?string, lastName?: ?string, suffix?: ?string} $settings
+ */
+function first_dean_invitation_issue(PDO $pdo, array $config, array $settings, array $context): array
+{
+    $email = trim((string) ($settings['email'] ?? ''));
+    if ($email === '') {
+        return ['action' => 'not_configured', 'message' => 'FIRST_DEAN_EMAIL is not set; no Dean invitation was created.'];
+    }
+    $pdo->query("SELECT pg_advisory_xact_lock(hashtext('dentisys_first_dean'))");
+    $admins = $pdo->query(
+        "SELECT user_id, login_email, status FROM user_accounts WHERE role = 'admin' ORDER BY user_id FOR UPDATE"
+    )->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($admins as $admin) {
+        if ($admin['status'] !== 'Pending Activation') {
+            return ['action' => 'skipped', 'message' => 'A Dean account already exists; FIRST_DEAN_* is ignored.'];
+        }
+    }
+
+    // Unset name parts are omitted: the validators reject present-but-null fields.
+    $nameParts = faculty_invitation_name_parts_from_payload(array_filter([
+        'prefix' => $settings['prefix'] ?? null,
+        'firstName' => $settings['firstName'] ?? null,
+        'middleName' => $settings['middleName'] ?? null,
+        'lastName' => $settings['lastName'] ?? null,
+        'suffix' => $settings['suffix'] ?? null,
+    ], static fn(?string $value): bool => $value !== null && trim($value) !== ''));
+    $name = $nameParts['displayName'];
+    $email = validate_institutional_email($email);
+    $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+    $nowSql = $now->format('Y-m-d H:i:s.u');
+
+    if ($admins !== []) {
+        // Only a pending first-Dean account exists (its invitation was not accepted).
+        $pending = null;
+        foreach ($admins as $admin) {
+            if (strcasecmp(trim((string) $admin['login_email']), $email) === 0) {
+                $pending = $admin;
+            }
+        }
+        if ($pending === null) {
+            return ['action' => 'skipped', 'message' => 'A pending Dean account exists for another email; FIRST_DEAN_* is ignored.'];
+        }
+        $userId = (int) $pending['user_id'];
+        $liveStmt = $pdo->prepare(
+            "SELECT 1 FROM security_tokens
+              WHERE purpose = 'faculty_invitation' AND user_id = ?
+                AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?"
+        );
+        $liveStmt->execute([$userId, $nowSql]);
+        if ($liveStmt->fetchColumn() !== false) {
+            return ['action' => 'pending', 'message' => "The first Dean invitation for {$email} is still pending."];
+        }
+    } else {
+        $accountStmt = $pdo->prepare('SELECT 1 FROM user_accounts WHERE lower(login_email) = lower(?)');
+        $accountStmt->execute([$email]);
+        $studentStmt = $pdo->prepare('SELECT 1 FROM students WHERE lower(bu_email) = lower(?)');
+        $studentStmt->execute([$email]);
+        if ($accountStmt->fetchColumn() !== false || $studentStmt->fetchColumn() !== false) {
+            // REG-008: one identity kind per person.
+            throw new DomainException("{$email} already belongs to another DentiSys identity and cannot be invited as the Dean.");
+        }
+        $insert = $pdo->prepare(
+            "INSERT INTO user_accounts
+                (login_email, password_hash, role, display_name, name_prefix, first_name, middle_name, last_name, name_suffix,
+                 title, status, created_at, updated_at, approved_at, rejected_at, google_subject)
+             VALUES (?, ?, 'admin', ?, ?, ?, ?, ?, ?, 'Dean', 'Pending Activation', ?, ?, ?, NULL, NULL)
+             RETURNING user_id"
+        );
+        $insert->execute([
+            $email, password_hash(faculty_invitation_token(), PASSWORD_DEFAULT), $name,
+            $nameParts['prefix'], $nameParts['firstName'], $nameParts['middleName'],
+            $nameParts['lastName'], $nameParts['suffix'], $nowSql, $nowSql, $nowSql,
+        ]);
+        $userId = (int) $insert->fetchColumn();
+    }
+
+    $revoke = $pdo->prepare(
+        "UPDATE security_tokens
+            SET revoked_at = ?, revocation_reason = 'Replaced by a new first Dean invitation'
+          WHERE purpose = 'faculty_invitation' AND user_id = ?
+            AND used_at IS NULL AND revoked_at IS NULL"
+    );
+    $revoke->execute([$nowSql, $userId]);
+    $token = faculty_invitation_token();
+    $insertToken = $pdo->prepare(
+        "INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)
+         VALUES ('faculty_invitation', ?, ?, ?, ?) RETURNING token_id"
+    );
+    $insertToken->bindValue(1, $userId, PDO::PARAM_INT);
+    pdo_bind_binary($insertToken, 2, hash('sha256', $token, true));
+    $insertToken->bindValue(3, $nowSql, PDO::PARAM_STR);
+    $insertToken->bindValue(4, $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u'), PDO::PARAM_STR);
+    $insertToken->execute();
+    $tokenId = (int) $insertToken->fetchColumn();
+
+    audit_record_action(
+        $pdo, $config,
+        ['user_id' => null, 'login_email' => null, 'role' => 'system', 'display_name' => 'First Dean bootstrap', 'session_id' => null],
+        'admin', 'first_dean_invited', 'security_token', (string) $tokenId,
+        "First Dean invitation issued from deployment configuration for {$name} ({$email}).",
+        ['context' => $context]
+    );
+    return ['action' => 'invited', 'message' => "First Dean invitation issued for {$email}.", 'userId' => $userId,
+            'email' => $email, 'name' => $name, 'token' => $token];
 }
 
 function handle_admin_faculty_invitation_create(): void
@@ -742,6 +860,7 @@ function handle_auth_faculty_invitation_get(): void
                 'suffix' => $row['canonical_name_suffix'],
                 'email' => (string) $row['login_email'],
                 'expiresAt' => (string) $row['expires_at'],
+                'role' => (string) $row['role'],
             ],
         ], 200));
     } catch (Throwable $e) {
@@ -805,7 +924,8 @@ function handle_auth_faculty_invitation_accept(): void
             $lockedToken = $tokenStmt->fetch(PDO::FETCH_ASSOC);
             $valid = $account !== false && $lockedToken !== false
                 && (int) $lockedToken['user_id'] === (int) $account['user_id']
-                && $account['role'] === 'faculty'
+                && in_array($account['role'], ['faculty', 'admin'], true)
+                && $account['role'] === $row['role']
                 && $account['status'] === 'Pending Activation'
                 && strtolower(trim((string) $account['login_email'])) === strtolower(trim((string) $row['login_email']))
                 && $lockedToken['used_at'] === null && $lockedToken['revoked_at'] === null
@@ -831,9 +951,9 @@ function handle_auth_faculty_invitation_accept(): void
             audit_finish_operation($pdo, $auditContext, [
                 'module_code' => 'auth', 'action_code' => 'faculty_invitation_accepted', 'event_status' => 'Success',
                 'actor_user_id' => (int) $account['user_id'], 'actor_username' => $account['login_email'],
-                'actor_role' => 'faculty', 'actor_display_name' => $account['display_name'], 'session_id' => null,
+                'actor_role' => $account['role'], 'actor_display_name' => $account['display_name'], 'session_id' => null,
                 'target_type' => 'user_account', 'target_id' => (string) $account['user_id'],
-                'description' => 'Faculty invitation accepted and account activated.', 'reason' => null,
+                'description' => ($account['role'] === 'admin' ? 'Dean' : 'Faculty') . ' invitation accepted and account activated.', 'reason' => null,
                 'http_method' => $context['http_method'], 'endpoint' => $context['endpoint'],
                 'request_id' => $context['request_id'], 'ip_address' => $context['ip_address'], 'user_agent' => $context['user_agent'],
             ], $macKey);

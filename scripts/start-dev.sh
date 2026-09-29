@@ -17,3 +17,9 @@ echo "Existing database data was preserved. To add demo data manually, paste dat
 # Every class needs grade weights; give any class offering without them a starting configuration.
 docker compose exec -T web php /var/www/html/backend/bin/bootstrap-grade-weights.php \
   || echo "Warning: grade-weight bootstrap did not finish. Run: docker compose exec web php /var/www/html/backend/bin/bootstrap-grade-weights.php" >&2
+# REG-010: with no Dean account yet, invite the first Dean named in .env (FIRST_DEAN_*).
+docker compose exec -T web php /var/www/html/backend/bin/bootstrap-first-dean.php \
+  || echo "Warning: first Dean invitation did not finish. Check FIRST_DEAN_* in .env, then run: docker compose exec web php /var/www/html/backend/bin/bootstrap-first-dean.php" >&2
+# BIO-005: delete biometric references whose semester ended or whose Student is no longer active.
+docker compose exec -T web php /var/www/html/backend/bin/expire-biometrics.php \
+  || echo "Warning: biometric expiry sweep did not finish. Run: docker compose exec web php /var/www/html/backend/bin/expire-biometrics.php" >&2

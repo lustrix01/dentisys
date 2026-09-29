@@ -71,15 +71,19 @@ docker compose exec -T db psql -U postgres -d dentisys -v ON_ERROR_STOP=1 -f /tm
 
 The seed is transaction-wrapped and non-destructive: it makes no schema changes and never drops, truncates, updates, or deletes data. All people and records are fictional.
 
-After seeding, run `.\scripts\start-dev.ps1` again (or the commands below). It runs two maintenance scripts inside the `web` container; both accept `--dry-run`:
+After seeding, run `.\scripts\start-dev.ps1` again (or the commands below). It runs three maintenance scripts inside the `web` container:
 
 - `backend/bin/bootstrap-grade-weights.php` gives every class offering without grade weights a starting configuration (the course's component ratios, a 40 / 60 Midterm / Final split, and attendance date ranges from the class term), so seeded classes can be graded.
+- `backend/bin/bootstrap-first-dean.php` (REG-010): on a database with no Dean account, it invites the Dean named by `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME` and `FIRST_DEAN_LAST_NAME` in `.env` (optional `FIRST_DEAN_PREFIX`, `FIRST_DEAN_MIDDLE_NAME`, `FIRST_DEAN_SUFFIX`). The invitation arrives by e-mail (Mailpit in development) and is accepted like a Faculty invitation. It does nothing once a Dean account is active.
 - `backend/bin/expire-biometrics.php` deletes biometric references whose validity has ended or whose Student is no longer active (BIO-005). Consent and attendance history are kept.
 
 ```powershell
 docker compose exec web php /var/www/html/backend/bin/bootstrap-grade-weights.php
+docker compose exec web php /var/www/html/backend/bin/bootstrap-first-dean.php
 docker compose exec web php /var/www/html/backend/bin/expire-biometrics.php
 ```
+
+`bootstrap-grade-weights.php` and `expire-biometrics.php` accept `--dry-run`.
 
 These are committed local development/demo credentials only. Do not reuse them outside development or testing. Every account of a role shares that role's password.
 

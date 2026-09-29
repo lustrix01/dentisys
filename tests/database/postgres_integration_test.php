@@ -1621,6 +1621,46 @@ expect_same('Revoked by administrator', $revokeFacultyState['revocation_reason']
 ]);
 expect_same(400, $revokeFacultyAcceptStatus, 'Revoked Faculty invitation token cannot be activated');
 
+// REG-010 first Dean from deployment configuration. Every step runs in one
+// transaction that is rolled back, so the shared integration data is unchanged.
+$firstDeanContext = ['request_id' => uuid_v4_string(), 'ip_address' => null, 'user_agent' => 'integration', 'http_method' => 'CLI', 'endpoint' => 'integration'];
+$firstDeanSettings = ['email' => 'first.dean.' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph', 'prefix' => 'Dr.', 'firstName' => 'Lourdes', 'lastName' => 'Villamor'];
+$pdo->beginTransaction();
+try {
+    expect_same('not_configured', first_dean_invitation_issue($pdo, $config, ['email' => ''], $firstDeanContext)['action'], 'First Dean bootstrap does nothing without FIRST_DEAN_EMAIL');
+    expect_same('skipped', first_dean_invitation_issue($pdo, $config, $firstDeanSettings, $firstDeanContext)['action'], 'First Dean bootstrap does nothing once a Dean account exists');
+    // Simulate a database with no Dean account.
+    $pdo->exec("UPDATE user_accounts SET status = 'Disabled', role = 'faculty' WHERE role = 'admin'");
+    $firstDean = first_dean_invitation_issue($pdo, $config, $firstDeanSettings, $firstDeanContext);
+    expect_same('invited', $firstDean['action'], 'First Dean bootstrap invites the configured Dean when no Dean exists');
+    $firstDeanRow = faculty_invitation_token_row($pdo, (string) ($firstDean['token'] ?? ''));
+    expect_same('admin', $firstDeanRow['role'] ?? null, 'First Dean invitation belongs to a Dean account');
+    expect_true($firstDeanRow !== null && faculty_invitation_row_is_live($firstDeanRow), 'First Dean invitation is accepted by the normal invitation flow');
+    expect_same('pending', first_dean_invitation_issue($pdo, $config, $firstDeanSettings, $firstDeanContext)['action'], 'First Dean bootstrap does not resend a live invitation');
+    $pdo->prepare("UPDATE security_tokens SET expires_at = expires_at - INTERVAL '8 days' WHERE purpose = 'faculty_invitation' AND user_id = ?")->execute([(int) $firstDean['userId']]);
+    $firstDeanRenewed = first_dean_invitation_issue($pdo, $config, $firstDeanSettings, $firstDeanContext);
+    expect_same('invited', $firstDeanRenewed['action'], 'An expired first Dean invitation is replaced');
+    expect_same($firstDean['userId'] ?? null, $firstDeanRenewed['userId'] ?? null, 'The replacement invitation reuses the pending Dean account');
+    $otherDean = first_dean_invitation_issue($pdo, $config, ['email' => 'other.dean@bicol-u.edu.ph'] + $firstDeanSettings, $firstDeanContext);
+    expect_same('skipped', $otherDean['action'], 'A pending Dean for another email is not replaced by a different FIRST_DEAN_EMAIL');
+} finally {
+    $pdo->rollBack();
+}
+$facultyEmailAsDean = (string) $pdo->query("SELECT login_email FROM user_accounts WHERE role = 'faculty' ORDER BY user_id LIMIT 1")->fetchColumn();
+$pdo->beginTransaction();
+try {
+    $pdo->exec("UPDATE user_accounts SET status = 'Disabled', role = 'faculty' WHERE role = 'admin'");
+    $conflict = null;
+    try {
+        first_dean_invitation_issue($pdo, $config, ['email' => $facultyEmailAsDean] + $firstDeanSettings, $firstDeanContext);
+    } catch (DomainException $e) {
+        $conflict = $e->getMessage();
+    }
+    expect_true($conflict !== null, 'A Faculty email cannot become the first Dean (REG-008)');
+} finally {
+    $pdo->rollBack();
+}
+
 $studentClassStmt = $pdo->prepare(
     "SELECT cs.cs_id FROM class_sections cs JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
       WHERE ua.login_email = 'faculty@bicol-u.edu.ph' AND lower(cs.status) = 'active' ORDER BY cs.cs_id LIMIT 1"

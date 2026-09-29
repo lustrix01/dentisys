@@ -115,6 +115,18 @@ test.describe('Auth Module E2E Tests', () => {
     expect(submittedPayload).toEqual({ token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', password: 'FacultyPass123!' });
   });
 
+  test('first Dean invitation uses the same acceptance page and is labelled as a Dean invitation', async ({ page }) => {
+    await page.route('**/api/auth/faculty/invitation**', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', invitation: { name: 'Dr. Lourdes Villamor', email: 'first.dean@bicol-u.edu.ph', expiresAt: '2026-10-07T00:00:00Z', role: 'admin' },
+      }) });
+    });
+    await page.goto('/activate-faculty?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    await expect(page.getByText('Dean invitation')).toBeVisible();
+    await expect(page.getByText('Faculty invitation')).toHaveCount(0);
+    await expect(page.getByText('first.dean@bicol-u.edu.ph')).toBeVisible();
+  });
+
   test('Admin Faculty invitation screen creates and reissues invitations using server state', async ({ page }) => {
     const invitations: Array<{ id: string; name: string; email: string; status: string; invitedAt: string; expiresAt: string }> = [];
     let reissuePayload: Record<string, unknown> | null = null;

@@ -565,6 +565,7 @@ export function getFacultyInvitation(token: string): Promise<{
     name: string;
     email: string;
     expiresAt: string;
+    role?: 'faculty' | 'admin';
     prefix?: string | null;
     firstName?: string | null;
     middleName?: string | null;

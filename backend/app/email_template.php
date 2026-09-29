@@ -230,8 +230,31 @@ function email_faculty_invitation_html(string $name, string $email, string $link
         ],
         'action_text' => 'To create your DentiSys password and activate your Faculty account, please click the button below:',
         'button' => ['label' => 'Accept Faculty Invitation', 'url' => $link],
-        'notice' => '<strong>Important:</strong> Create your DentiSys password within <strong>7 days</strong>. Google verification is optional. If you were not expecting this invitation, you can ignore this email.',
+        'notice' => '<strong>Important:</strong> Create your DentiSys password within <strong>7 days</strong>. You can link Google Sign-In from your profile after activation. If you were not expecting this invitation, you can ignore this email.',
         'signature' => ['name' => 'DentiSys Administration', 'lines' => ['Bicol University College of Dental Medicine']],
+    ]);
+}
+
+function email_dean_invitation_html(string $name, string $email, string $link): string
+{
+    return email_render([
+        'preheader' => "You're invited to administer DentiSys as Dean.",
+        'greeting' => $name !== '' ? "Dear {$name}," : 'Hello,',
+        'intro' => ['This DentiSys installation has no Dean account yet. You have been named as its first ' . email_strong('Dean') . ' in the deployment configuration.'],
+        'details' => [
+            'title' => 'Dean Account Invitation',
+            'badge' => 'Dean',
+            'rows' => [
+                ['Invited Name', $name !== '' ? $name : '—'],
+                ['Institutional Email', $email],
+                ['Account Role', 'Dean'],
+                ['Department / College', EMAIL_DEPARTMENT],
+            ],
+        ],
+        'action_text' => 'To create your DentiSys password and activate the Dean account, please click the button below:',
+        'button' => ['label' => 'Accept Dean Invitation', 'url' => $link],
+        'notice' => '<strong>Important:</strong> Create your DentiSys password within <strong>7 days</strong>. You can link Google Sign-In from your profile after activation. If you were not expecting this invitation, you can ignore this email.',
+        'signature' => ['name' => 'DentiSys', 'lines' => ['Bicol University College of Dental Medicine']],
     ]);
 }
 
