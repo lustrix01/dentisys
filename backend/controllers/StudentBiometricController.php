@@ -777,6 +777,7 @@ function handle_student_attendance_logs(): void
                JOIN courses c ON c.course_id = cs.course_id
                LEFT JOIN attendance_sessions s ON s.session_id = r.attendance_session_id
               WHERE e.student_id = ?
+                AND (s.session_id IS NULL OR s.status <> 'revoked')
               ORDER BY r.session_date DESC, r.record_id DESC"
         );
         $stmt->execute([$identity['student_id']]);

@@ -2337,6 +2337,32 @@ expect_true(is_array($studentClassesBody['classes'] ?? null), 'Student class rea
 [$studentDashboardStatus, $studentDashboardBody] = integration_http_get_json('/api/student/dashboard', $studentCredentials['access_token']);
 expect_same(200, $studentDashboardStatus, 'Student dashboard read returns HTTP 200');
 expect_same('26', (string) ($studentDashboardBody['student']['id'] ?? ''), 'Student dashboard resolves the authenticated Student identity');
+// ATT-001: a record of a revoked session is left out of every attendance
+// feed, rate and report; the record itself stays in the database.
+$revokedFeedClass = $pdo->query(
+    "SELECT e.enrollment_id, e.cs_id, cs.instructor_user_id
+       FROM enrollments e JOIN class_sections cs ON cs.cs_id = e.cs_id
+      WHERE e.student_id = 26 AND LOWER(e.status) = 'active'
+      ORDER BY cs.school_year DESC, e.enrollment_id LIMIT 1"
+)->fetch(PDO::FETCH_ASSOC);
+$revokedFeedSession = $pdo->prepare(
+    "INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, status, ended_at, revoked_at)
+     VALUES (?, ?, ?, DATE '2026-09-01', 'ATT001-REVOKED', 'revoked', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+     RETURNING session_id"
+);
+$revokedFeedSession->execute([(int) $revokedFeedClass['cs_id'], (int) $revokedFeedClass['instructor_user_id'], (int) $revokedFeedClass['instructor_user_id']]);
+$revokedFeedSessionId = (int) $revokedFeedSession->fetchColumn();
+$revokedFeedRecord = $pdo->prepare(
+    "INSERT INTO attendance_records (enrollment_id, attendance_session_id, session_date, session_code, status, verification_method)
+     VALUES (?, ?, DATE '2026-09-01', 'ATT001-REVOKED', 'absent', 'integration_fixture') RETURNING record_id"
+);
+$revokedFeedRecord->execute([(int) $revokedFeedClass['enrollment_id'], $revokedFeedSessionId]);
+$revokedFeedRecordId = (string) $revokedFeedRecord->fetchColumn();
+[$studentLogsStatus, $studentLogsBody] = integration_http_get_json('/api/student/attendance/logs', $studentCredentials['access_token']);
+expect_same(200, $studentLogsStatus, 'Student attendance log read returns HTTP 200');
+expect_same([], array_values(array_filter($studentLogsBody['logs'] ?? [], static fn(array $log): bool => ($log['recordId'] ?? '') === $revokedFeedRecordId)), 'Student attendance log leaves out records of revoked sessions');
+[$studentDashboardAfterRevokeStatus, $studentDashboardBody] = integration_http_get_json('/api/student/dashboard', $studentCredentials['access_token']);
+expect_same(200, $studentDashboardAfterRevokeStatus, 'Student dashboard read with a revoked-session record returns HTTP 200');
 // Excused counts as attended; records of revoked sessions are ignored.
 $studentRateRow = $pdo->query(
     "SELECT COUNT(*) FILTER (WHERE r.status <> 'absent') AS attended, COUNT(*) AS total
@@ -2350,6 +2376,9 @@ expect_same(
     isset($studentDashboardBody['summary']['attendanceRate']) ? (float) $studentDashboardBody['summary']['attendanceRate'] : null,
     'Student attendance rate counts Excused as attended and ignores revoked sessions'
 );
+expect_same('1', (string) $pdo->query("SELECT COUNT(*) FROM attendance_records WHERE record_id = {$revokedFeedRecordId}")->fetchColumn(), 'The revoked-session record stays in the database');
+$pdo->prepare('DELETE FROM attendance_records WHERE record_id = ?')->execute([(int) $revokedFeedRecordId]);
+$pdo->prepare('DELETE FROM attendance_sessions WHERE session_id = ?')->execute([$revokedFeedSessionId]);
 
 // Remedial notifications are committed with the enrollment mutation and are
 // recipient-scoped at both list and mark-read boundaries.

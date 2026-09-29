@@ -806,7 +806,8 @@ function handle_admin_reports_summary(): void
              JOIN students s ON s.student_id = e.student_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
-             {$yearWhere}
+             {$yearWhere} " . ($schoolYear === null ? 'WHERE' : 'AND') . "
+                 NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
              ORDER BY session_date DESC LIMIT 500"
         );
         $attStmt->execute($yearParams);

@@ -3434,7 +3434,8 @@ function handle_faculty_grades_compute(): void
                                WHEN status = 'absent' THEN 0
                                ELSE NULL
                            END) AS attendance_percentage
-                    FROM attendance_records
+                    FROM attendance_records r
+                    WHERE NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
                     GROUP BY enrollment_id
                 ) att ON att.enrollment_id = e.enrollment_id
                 WHERE cs.instructor_user_id = :faculty_id
@@ -3828,6 +3829,7 @@ function handle_faculty_attendance_get(): void
                  JOIN class_sections cs ON cs.cs_id = e.cs_id
                  JOIN courses c ON c.course_id = cs.course_id
                  WHERE cs.instructor_user_id = ?
+                   AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
                  ORDER BY r.session_date DESC, r.record_id DESC"
             );
             $stmt->execute([$authCtx['user_id']]);

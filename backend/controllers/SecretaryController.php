@@ -1658,7 +1658,8 @@ function handle_secretary_attendance_get(): void
              JOIN person_identities pi ON pi.person_id = s.person_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
-             WHERE cs.secretary_user_id = ?";
+             WHERE cs.secretary_user_id = ?
+               AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')";
         $recordParams = [$authCtx['user_id']];
         if ($date !== null) {
             $recordSql .= ' AND r.session_date = ?';
