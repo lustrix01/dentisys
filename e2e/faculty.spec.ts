@@ -302,6 +302,46 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Settings/i);
   });
 
+  test('remedial scheduling starts from a row with the enrollment fixed, a future date and notes', async ({ page }) => {
+    const remedialPosts: Record<string, unknown>[] = [];
+    await page.route('**/api/faculty/retention', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok', currentSchoolYear: '2026-2027', retentionThreshold: 2.5,
+          retention: [{
+            enrollmentId: '901', studentId: '42', studentNumber: '2023-0042', studentName: 'Remedial Candidate',
+            classId: '77', className: 'CLIN401-A', subjectCode: 'CLIN401', percentage: 70, gwa: 2.75,
+            state: 'remedial', remedial: null, schoolYear: '2026-2027', remedialEligible: true,
+            remedialProgression: { stage: 'none', attempts: [], passedAttempt: null, legacyUnclassified: false },
+          }],
+        }),
+      });
+    });
+    await page.route('**/api/faculty/retention/remedial', async (route) => {
+      remedialPosts.push(route.request().postDataJSON() as Record<string, unknown>);
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'ok', enrollmentId: '901' }) });
+    });
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/retention');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByText('Schedule Remedial Exam', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Midterm Evaluation Rules')).toHaveCount(0);
+    await page.getByRole('row').filter({ hasText: 'Remedial Candidate' }).getByTitle('Schedule remedial exam').click();
+    const dialog = page.locator('form').filter({ hasText: 'Confirm & Schedule Exam' });
+    await expect(dialog.getByText('Remedial Candidate')).toBeVisible();
+    await expect(dialog.getByText('CLIN401-A')).toBeVisible();
+    await expect(dialog.locator('select').filter({ hasText: 'Remedial Candidate' })).toHaveCount(0);
+    const dateInput = dialog.locator('input[type="date"]');
+    await expect(dateInput).toHaveAttribute('min', /^\d{4}-\d{2}-\d{2}$/);
+    await dialog.locator('textarea').fill('Bring the lab manual.');
+    await dialog.getByRole('button', { name: 'Confirm & Schedule Exam' }).click();
+    await expect.poll(() => remedialPosts.length).toBe(1);
+    expect(remedialPosts[0]).toMatchObject({ enrollmentId: '901', attemptNumber: 1, notes: 'Bring the lab manual.' });
+  });
+
   test('faculty profile email is read-only and is not sent on save', async ({ page }) => {
     let postedProfile: Record<string, unknown> | null = null;
     await page.route('**/api/faculty/profile', async (route) => {

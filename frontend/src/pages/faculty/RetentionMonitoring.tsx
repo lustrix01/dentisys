@@ -33,6 +33,8 @@ interface RemedialAttemptView {
   scheduledDate: string | null;
   percentage: number | null;
   status: RemedialAttemptStatus | null;
+  notes: string | null;
+  updatedAt: string | null;
 }
 
 interface RemedialProgressionView {
@@ -41,6 +43,8 @@ interface RemedialProgressionView {
   passedAttempt: 1 | 2 | null;
   legacyUnclassified: boolean;
   costRecoveryGrade?: number | null;
+  /** When the student was cleared: a passing attempt or a passing cost recovery. */
+  clearedAt?: string | null;
 }
 
 interface RetentionRemedialRow {
@@ -142,6 +146,8 @@ const readAttempt = (value: unknown): RemedialAttemptView | null => {
     scheduledDate: typeof rawDate === 'string' && rawDate.trim().length > 0 ? rawDate : null,
     percentage,
     status: readAttemptStatus(value.outcome ?? value.status),
+    notes: typeof value.notes === 'string' && value.notes.trim().length > 0 ? value.notes : null,
+    updatedAt: typeof value.updatedAt === 'string' && value.updatedAt.length > 0 ? value.updatedAt : null,
   };
 };
 
@@ -162,7 +168,10 @@ const readRemedialProgression = (record: FacultyRetentionRecord): RemedialProgre
     const legacyUnclassified = rawLegacyUnclassified || stage === 'legacy_unclassified';
     const rawCost = rawProgression.costRecovery;
     const costRecoveryGrade = isRecordValue(rawCost) && typeof rawCost.finalGrade === 'number' ? rawCost.finalGrade : null;
-    return { stage, attempts, passedAttempt, legacyUnclassified, costRecoveryGrade };
+    const clearedAt = stage === 'cost_recovery_passed' && isRecordValue(rawCost) && typeof rawCost.recordedAt === 'string'
+      ? rawCost.recordedAt
+      : stage === 'passed' ? (attempts.find(attempt => attempt.attemptNumber === passedAttempt)?.updatedAt ?? null) : null;
+    return { stage, attempts, passedAttempt, legacyUnclassified, costRecoveryGrade, clearedAt };
   }
 
   // A legacy current-state JSON blob is deliberately not interpreted as an attempt.
@@ -184,6 +193,9 @@ const pendingAttemptNumber = (progression: RemedialProgressionView): AllowedAtte
   if (progression.stage === 'attempt_2_pending') return 2;
   return null;
 };
+
+// Remedial exams are scheduled for today or later (Asia/Manila); the server re-checks.
+const manilaToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
 const canScheduleRecord = (record: FacultyRetentionRecord): boolean => (
   hasPersistedIdentifiers(record)
@@ -271,13 +283,15 @@ export const RetentionMonitoring: React.FC = () => {
   const [selectedSchoolYear, setSelectedSchoolYear] = useState('all');
   const [currentSchoolYear, setCurrentSchoolYear] = useState('');
   const syInitializedRef = useRef(false);
-  const [activeTab, setActiveTab] = useState<'watchlist' | 'midterm' | 'remedials' | 'risk-rules'>('watchlist');
+  const [activeTab, setActiveTab] = useState<'watchlist' | 'midterm' | 'remedials'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');
 
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [selectedScheduleEnrollmentId, setSelectedScheduleEnrollmentId] = useState('');
   const [scheduleAttempt, setScheduleAttempt] = useState<AllowedAttempt>(1);
   const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleNotes, setScheduleNotes] = useState('');
+  const [resolveNotes, setResolveNotes] = useState('');
 
   const [selectedResolveEnrollmentId, setSelectedResolveEnrollmentId] = useState<string | null>(null);
   const [resolveAttemptNumber, setResolveAttemptNumber] = useState<AllowedAttempt | null>(null);
@@ -415,11 +429,6 @@ export const RetentionMonitoring: React.FC = () => {
     return rows;
   }, [filteredRecords]);
 
-  const scheduleCandidates = useMemo(
-    () => filteredRecords.filter(canScheduleRecord),
-    [filteredRecords],
-  );
-
   const selectedScheduleRecord = useMemo(
     () => usableRecords.find(record => record.enrollmentId === selectedScheduleEnrollmentId) ?? null,
     [selectedScheduleEnrollmentId, usableRecords],
@@ -451,18 +460,28 @@ export const RetentionMonitoring: React.FC = () => {
     row.progression.stage === 'attempt_1_pending' || row.progression.stage === 'attempt_2_pending'
   )).length;
 
-  const openSchedule = (preferredRecord?: FacultyRetentionRecord) => {
-    const candidate = preferredRecord && canScheduleRecord(preferredRecord)
-      ? preferredRecord
-      : scheduleCandidates[0];
-    if (!candidate) {
-      showFeedback('Scheduling is unavailable because no persisted enrollment, student, class, and subject identifiers are available.', 'info');
+  // Past school-year classes are view-only; the server rejects these writes too.
+  const isPastYearRecord = (record: FacultyRetentionRecord): boolean => (
+    currentSchoolYear !== '' && Boolean(record.schoolYear) && record.schoolYear !== currentSchoolYear
+  );
+  const selectedClassIsPastYear = selectedClassId !== 'all'
+    && usableRecords.some(record => record.classId === selectedClassId && isPastYearRecord(record));
+
+  const openSchedule = (record: FacultyRetentionRecord) => {
+    if (isPastYearRecord(record)) {
+      showFeedback('Past school-year classes are view-only.', 'info');
       return;
     }
+    if (!canScheduleRecord(record)) {
+      showFeedback('Scheduling is unavailable for this enrollment.', 'info');
+      return;
+    }
+    const candidate = record;
     setSelectedScheduleEnrollmentId(candidate.enrollmentId);
     const allowedAttempts = allowedAttemptNumbers(readRemedialProgression(candidate));
     setScheduleAttempt(allowedAttempts[0] ?? 1);
     setScheduleDate('');
+    setScheduleNotes('');
     setIsScheduleOpen(true);
   };
 
@@ -504,14 +523,8 @@ export const RetentionMonitoring: React.FC = () => {
     setSelectedResolveEnrollmentId(row.record.enrollmentId);
     setResolveAttemptNumber(attemptNumber);
     setRemedialScore('');
+    setResolveNotes(row.progression.attempts.find(attempt => attempt.attemptNumber === attemptNumber)?.notes ?? '');
   };
-
-  // Past school-year classes are view-only; the server rejects these writes too.
-  const isPastYearRecord = (record: FacultyRetentionRecord): boolean => (
-    currentSchoolYear !== '' && Boolean(record.schoolYear) && record.schoolYear !== currentSchoolYear
-  );
-  const selectedClassIsPastYear = selectedClassId !== 'all'
-    && usableRecords.some(record => record.classId === selectedClassId && isPastYearRecord(record));
 
   const openOverride = (record: FacultyRetentionRecord) => {
     if (isPastYearRecord(record)) {
@@ -537,6 +550,7 @@ export const RetentionMonitoring: React.FC = () => {
     setSelectedScheduleEnrollmentId('');
     setScheduleAttempt(1);
     setScheduleDate('');
+    setScheduleNotes('');
   };
 
   const resetResolveForm = () => {
@@ -571,6 +585,7 @@ export const RetentionMonitoring: React.FC = () => {
         classId: selectedScheduleRecord.classId,
         attemptNumber: scheduleAttempt,
         scheduledDate: scheduleDate.trim().length > 0 ? scheduleDate.trim() : null,
+        notes: scheduleNotes.trim().length > 0 ? scheduleNotes.trim() : null,
       });
       const refreshed = await refreshRetention();
       resetScheduleForm();
@@ -626,6 +641,7 @@ export const RetentionMonitoring: React.FC = () => {
         classId: selectedResolveRecord.classId,
         attemptNumber: resolveAttemptNumber,
         percentage: score,
+        notes: resolveNotes.trim().length > 0 ? resolveNotes.trim() : null,
       });
       const refreshed = await refreshRetention();
       resetResolveForm();
@@ -724,10 +740,6 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">View persisted Faculty retention records and submit authorized remedial or status updates.</p>
         </div>
-        <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all" title={scheduleCandidates.length === 0 ? 'Scheduling is unavailable without persisted enrollment identifiers.' : 'Schedule remedial exam'}>
-          <Plus className="w-4 h-4" />
-          <span>Schedule Remedial</span>
-        </button>
       </div>
 
       {notification && (
@@ -753,7 +765,6 @@ export const RetentionMonitoring: React.FC = () => {
           <button type="button" onClick={() => setActiveTab('midterm')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap ${activeTab === 'midterm' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Midterm Watchlist</button>
           <button type="button" onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'watchlist' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Retention Watchlist ({watchlistRecords.length})</button>
           <button type="button" onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'remedials' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Remedial Exams ({pendingExams} Pending)</button>
-          <button type="button" onClick={() => { setActiveTab('risk-rules'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'risk-rules' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Midterm Evaluation Rules</button>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
@@ -821,7 +832,6 @@ export const RetentionMonitoring: React.FC = () => {
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-400">Final grades and saved retention decisions. Select a status to view policy progression.</p></div>
-            <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all"><Plus className="w-3.5 h-3.5" /><span>Schedule Remedial Exam</span></button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -848,19 +858,19 @@ export const RetentionMonitoring: React.FC = () => {
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Remedial Progression ({remedialRows.length})</h2><p className="text-xs text-slate-400">Attempt stages, scores and outcomes are read from the authoritative retention API. Removal is unavailable because no approved authoritative delete contract exists.</p></div>
-            <button type="button" onClick={() => openSchedule()} disabled={scheduleCandidates.length === 0 || isLoading} className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all"><Plus className="w-3.5 h-3.5" /><span>Schedule Remedial Exam</span></button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Subject / Class</th><th className="py-3 px-4">Original grade</th><th className="py-3 px-4">Attempts</th><th className="py-3 px-4">Current stage</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {remedialRows.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No persisted remedial records match the selected filters.'}</td></tr> : remedialRows.map(row => (
+                {remedialRows.length === 0 ? <tr><td colSpan={6} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative remedial records...' : 'No persisted remedial records match the selected filters.'}</td></tr> : remedialRows.map(row => (
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-4"><div className="space-y-1.5">{([1, 2] as AllowedAttempt[]).map(attemptNumber => { const attempt = row.progression.attempts.find(item => item.attemptNumber === attemptNumber); const status = attemptStatus(row.progression, attemptNumber); const statusClass = status === 'passed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : status === 'failed' ? 'bg-rose-50 text-rose-700 border-rose-200/60' : status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200/60' : status === 'available' ? 'bg-sky-50 text-sky-700 border-sky-200/60' : 'bg-slate-100 text-slate-600 border-slate-200'; return <div key={attemptNumber} className="flex flex-wrap items-center gap-1.5"><span className="font-bold text-slate-700 dark:text-slate-300">Attempt {attemptNumber}</span><span className={`rounded-lg border px-2 py-1 text-[10px] font-bold ${statusClass}`}>{attemptStatusLabel(status)}{isFiniteNumber(attempt?.percentage) ? ` · ${attempt.percentage.toFixed(2)}%` : ''}</span>{attempt?.scheduledDate && <span className="text-[10px] text-slate-400">{attempt.scheduledDate}</span>}</div>; })}</div></td>
-                    <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : row.progression.stage === 'cost_recovery_required' || row.progression.stage === 'cost_recovery_failed' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : row.progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>{stageLabel(row.progression.stage)}</span>{row.progression.legacyUnclassified && <span className="text-[10px] text-slate-500">{legacyEvidenceLabel((row.record as unknown as { remedial?: unknown }).remedial) ?? 'Outcome unavailable pending reconciliation.'}</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current remedial progression">Details <ChevronRight className="h-3 w-3" /></button></div></td>
-                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Attempt {pendingAttemptNumber(row.progression)}</button>}{row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && <button type="button" onClick={() => openCostRecovery(row)} className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Record Cost Recovery</button>}{typeof row.progression.costRecoveryGrade === 'number' && <span className="text-[10px] text-slate-500">Cost recovery grade {row.progression.costRecoveryGrade.toFixed(2)}</span>}{row.progression.legacyUnclassified && <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">Legacy / unclassified</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? row.record.gwa.toFixed(2) : <span className="text-[10px] font-medium text-slate-400">GWA unavailable</span>}</td>
+                    <td className="py-3.5 px-4"><div className="space-y-1.5">{([1, 2] as AllowedAttempt[]).map(attemptNumber => { const attempt = row.progression.attempts.find(item => item.attemptNumber === attemptNumber); const status = attemptStatus(row.progression, attemptNumber); const statusClass = status === 'passed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : status === 'failed' ? 'bg-rose-50 text-rose-700 border-rose-200/60' : status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200/60' : status === 'available' ? 'bg-sky-50 text-sky-700 border-sky-200/60' : 'bg-slate-100 text-slate-600 border-slate-200'; return <div key={attemptNumber} className="flex flex-wrap items-center gap-1.5"><span className="font-bold text-slate-700 dark:text-slate-300">Attempt {attemptNumber}</span><span className={`rounded-lg border px-2 py-1 text-[10px] font-bold ${statusClass}`}>{attemptStatusLabel(status)}{isFiniteNumber(attempt?.percentage) ? ` · ${attempt.percentage.toFixed(2)}%` : ''}</span>{attempt?.scheduledDate && <span className="text-[10px] text-slate-400">{attempt.scheduledDate}</span>}{attempt?.notes && <span className="basis-full text-[10px] italic text-slate-500 dark:text-slate-400">{attempt.notes}</span>}</div>; })}</div></td>
+                    <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : row.progression.stage === 'cost_recovery_required' || row.progression.stage === 'cost_recovery_failed' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : row.progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>{stageLabel(row.progression.stage)}</span>{row.progression.clearedAt && <span className="text-[10px] text-emerald-700 dark:text-emerald-400">Cleared {new Date(row.progression.clearedAt).toLocaleDateString()}</span>}{row.progression.legacyUnclassified && <span className="text-[10px] text-slate-500">{legacyEvidenceLabel((row.record as unknown as { remedial?: unknown }).remedial) ?? 'Outcome unavailable pending reconciliation.'}</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current remedial progression">Details <ChevronRight className="h-3 w-3" /></button></div></td>
+                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{canScheduleRecord(row.record) && !isPastYearRecord(row.record) && <button type="button" onClick={() => openSchedule(row.record)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Schedule Attempt {allowedAttemptNumbers(row.progression)[0]}</button>}{pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Attempt {pendingAttemptNumber(row.progression)}</button>}{row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && <button type="button" onClick={() => openCostRecovery(row)} className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Record Cost Recovery</button>}{typeof row.progression.costRecoveryGrade === 'number' && <span className="text-[10px] text-slate-500">Cost recovery grade {row.progression.costRecoveryGrade.toFixed(2)}</span>}{row.progression.legacyUnclassified && <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">Legacy / unclassified</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -869,14 +879,20 @@ export const RetentionMonitoring: React.FC = () => {
         </Card>
       )}
 
-      {activeTab === 'risk-rules' && <Card className="p-6"><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Midterm Academic Warning Evaluation Rules</h2><p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Unavailable: the authoritative retention endpoint does not expose the attendance components or rule-factor detail required for this view. No client-derived risk results are shown.</p></Card>}
 
       {isScheduleOpen && (
         <Modal isOpen={isScheduleOpen} onClose={resetScheduleForm} title="Schedule Remedial Exam">
           <form onSubmit={handleScheduleSubmit} className="space-y-4 text-xs">
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select persisted enrollment</label><select required value={selectedScheduleEnrollmentId} onChange={(event) => setSelectedScheduleEnrollmentId(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer">{scheduleCandidates.map(record => <option key={record.enrollmentId} value={record.enrollmentId}>{textOrUnavailable(record.studentName, 'Student name unavailable')} — {textOrUnavailable(record.studentNumber, 'Student number unavailable')} · {textOrUnavailable(record.subjectCode, 'Subject code unavailable')} · {textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</option>)}</select>{scheduleCandidates.length === 0 && <p className="text-[11px] text-amber-600 mt-1">Scheduling unavailable: no persisted enrollment with a subject code is available.</p>}</div>
+            {selectedScheduleRecord && (
+              <dl className="grid grid-cols-3 gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-900">
+                <div><dt className="text-[10px] font-bold uppercase text-slate-400">Student</dt><dd className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.studentName, 'Student name unavailable')}<span className="block font-mono text-[10px] font-normal text-slate-400">{textOrUnavailable(selectedScheduleRecord.studentNumber, 'Student number unavailable')}</span></dd></div>
+                <div><dt className="text-[10px] font-bold uppercase text-slate-400">Course</dt><dd className="font-mono font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.subjectCode, 'Subject code unavailable')}</dd></div>
+                <div><dt className="text-[10px] font-bold uppercase text-slate-400">Section</dt><dd className="font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(selectedScheduleRecord.className, `Class name unavailable (${selectedScheduleRecord.classId})`)}</dd></div>
+              </dl>
+            )}
             <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Attempt</label><select required value={scheduleAttempt} onChange={(event) => setScheduleAttempt(Number(event.target.value) as AllowedAttempt)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer" disabled={!selectedScheduleProgression || allowedAttemptNumbers(selectedScheduleProgression).length <= 1}>{selectedScheduleProgression && allowedAttemptNumbers(selectedScheduleProgression).map(attemptNumber => <option key={attemptNumber} value={attemptNumber}>Attempt {attemptNumber}</option>)}</select><p className="mt-1 text-[11px] text-slate-400">The server-authorized stage determines whether Attempt 1 or Attempt 2 can be scheduled.</p></div>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date <span className="font-normal text-slate-400">(optional)</span></label><input type="date" value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Remedial Exam Date <span className="font-normal text-slate-400">(optional)</span></label><input type="date" min={manilaToday()} value={scheduleDate} onChange={(event) => setScheduleDate(event.target.value)} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /><p className="mt-1 text-[11px] text-slate-400">Today or later.</p></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Notes <span className="font-normal text-slate-400">(optional)</span></label><textarea value={scheduleNotes} onChange={(event) => setScheduleNotes(event.target.value)} maxLength={500} rows={2} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100" /></div>
             <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetScheduleForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting || !selectedScheduleRecord || !canScheduleRecord(selectedScheduleRecord)} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Confirm & Schedule Exam'}</button></div>
           </form>
         </Modal>
@@ -887,6 +903,7 @@ export const RetentionMonitoring: React.FC = () => {
           <form onSubmit={handleResolveRemedial} className="space-y-4 text-xs">
             <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(selectedResolveRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(selectedResolveRecord.subjectCode, 'Subject code unavailable')}</p>
             <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Percentage Score (%)</label><input type="number" min="0" max="100" step="any" required value={remedialScore} onChange={(event) => setRemedialScore(event.target.value)} placeholder="Enter score" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm" /><span className="text-[11px] text-slate-400 block mt-1">The server determines Pass or Fail at 50% or higher. This form sends only the attempt number and percentage.</span></div>
+            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Notes <span className="font-normal text-slate-400">(optional)</span></label><textarea value={resolveNotes} onChange={(event) => setResolveNotes(event.target.value)} maxLength={500} rows={2} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100" /></div>
             <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetResolveForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Save Exam Grade'}</button></div>
           </form>
         </Modal>

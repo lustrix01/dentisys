@@ -65,8 +65,8 @@ test('Unsupported remedial deletion is explicitly unavailable', () => {
 });
 
 test('Subject-level risk rules do not fabricate client-derived decisions', () => {
-  assert.match(retentionPage, /authoritative retention endpoint does not expose the attendance components/i);
-  assert.match(retentionPage, /No client-derived risk results are shown/);
+  // The obsolete "Midterm Evaluation Rules" placeholder tab was removed (Owner decision 2026-09-29).
+  assert.doesNotMatch(retentionPage, /Midterm Evaluation Rules/);
   assert.doesNotMatch(retentionPage, /riskRuleResults/);
   assert.doesNotMatch(retentionPage, /computeSubjectGrade/);
 });

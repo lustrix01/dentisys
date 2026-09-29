@@ -821,6 +821,7 @@ export interface FacultyRemedialAttempt {
   actorUserId: string | null;
   createdAt: string;
   updatedAt: string;
+  notes?: string | null;
 }
 
 export interface FacultyRemedialProgression {
@@ -1144,6 +1145,7 @@ export function saveFacultyRemedialApi(data: {
   attemptNumber?: 1 | 2;
   scheduledDate?: string | null;
   percentage?: number;
+  notes?: string | null;
   remedial?: Record<string, unknown>;
 }): Promise<{
   status: string;

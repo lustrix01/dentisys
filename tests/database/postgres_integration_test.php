@@ -274,6 +274,7 @@ $expectedMigrations = [
     '035_fixed_retention_trigger.sql',
     '036_scrub_secretary_invitation_tokens.sql',
     '037_attendance_record_corrections.sql',
+    '038_remedial_attempt_notes.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2669,11 +2670,23 @@ expect_same('attempt_2_available', $remedialFirstFailBody['progression']['stage'
 [$remedialDuplicateStatus, $remedialDuplicateBody] = $remedialPost($invitedEnrollmentId, ['attemptNumber' => 1, 'percentage' => 50], $seedFacultyAccessToken);
 expect_same(409, $remedialDuplicateStatus, 'A completed first remedial attempt cannot be overwritten');
 expect_same('REMEDIAL_ATTEMPT_DUPLICATE', $remedialErrorCode($remedialDuplicateBody), 'Duplicate remedial submission returns the duplicate error');
+[$remedialPastDateStatus, $remedialPastDateBody] = $remedialPost($invitedEnrollmentId, [
+    'attemptNumber' => 2,
+    'scheduledDate' => '2020-01-01',
+], $seedFacultyAccessToken);
+expect_same(422, $remedialPastDateStatus, 'A remedial exam cannot be scheduled in the past');
+expect_same('REMEDIAL_SCHEDULED_DATE_PAST', $remedialErrorCode($remedialPastDateBody), 'Past remedial dates use their own error code');
 [$remedialSecondScheduleStatus, $remedialSecondScheduleBody] = $remedialPost($invitedEnrollmentId, [
     'attemptNumber' => 2,
     'scheduledDate' => '2027-01-17',
+    'notes' => 'Bring the lab manual.',
 ], $seedFacultyAccessToken);
 expect_same(200, $remedialSecondScheduleStatus, 'Faculty schedules the newly available second remedial attempt');
+$remedialSecondAttemptView = array_values(array_filter(
+    $remedialSecondScheduleBody['progression']['attempts'] ?? [],
+    static fn(array $attempt): bool => ($attempt['attemptNumber'] ?? null) === 2,
+));
+expect_same('Bring the lab manual.', $remedialSecondAttemptView[0]['notes'] ?? null, 'Remedial attempt notes are saved and returned');
 expect_same('attempt_2_pending', $remedialSecondScheduleBody['progression']['stage'] ?? null, 'Scheduled attempt 2 is pending');
 [$remedialSecondPassStatus, $remedialSecondPassBody] = $remedialPost($invitedEnrollmentId, [
     'attemptNumber' => 2,
@@ -2683,6 +2696,11 @@ expect_same('attempt_2_pending', $remedialSecondScheduleBody['progression']['sta
 expect_same(200, $remedialSecondPassStatus, 'Faculty records a 50.01 second-attempt result');
 expect_same('passed', $remedialSecondPassBody['progression']['stage'] ?? null, 'A second-attempt result at or above 50 passes');
 expect_same(2, $remedialSecondPassBody['progression']['passedAttempt'] ?? null, 'The server reports the passing attempt number');
+$remedialPassedAttemptView = array_values(array_filter(
+    $remedialSecondPassBody['progression']['attempts'] ?? [],
+    static fn(array $attempt): bool => ($attempt['attemptNumber'] ?? null) === 2,
+));
+expect_same('Bring the lab manual.', $remedialPassedAttemptView[0]['notes'] ?? null, 'Grading an attempt without notes keeps the scheduling notes');
 $remedialRowsStmt = $pdo->prepare(
     'SELECT attempt_number, scheduled_date, percentage, outcome FROM enrollment_remedial_attempts WHERE enrollment_id = ? ORDER BY attempt_number'
 );

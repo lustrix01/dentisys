@@ -5196,6 +5196,12 @@ function handle_faculty_retention_remedial_save(): void
         $request = remedial_attempts_parse_request($requestData);
         $enrollmentId = (int) $request['enrollmentId'];
         $attemptNumber = (int) $request['attemptNumber'];
+        // A newly scheduled exam date must be today or later (Asia/Manila).
+        if (!$request['hasPercentage'] && $request['scheduledDate'] !== null
+            && $request['scheduledDate'] < app_local_date($config, new DateTimeImmutable('now', new DateTimeZone('UTC')))
+        ) {
+            throw remedial_attempts_error('The exam date must be today or later.', 'REMEDIAL_SCHEDULED_DATE_PAST');
+        }
         if ($attemptNumber < 1 || $attemptNumber > 2) {
             throw remedial_attempts_error(
                 'Only remedial attempts 1 and 2 are supported.',
@@ -5360,8 +5366,8 @@ function handle_faculty_retention_remedial_save(): void
         if ($existing === null) {
             $insert = $pdo->prepare(
                 'INSERT INTO enrollment_remedial_attempts
-                    (enrollment_id, attempt_number, scheduled_date, percentage, outcome, actor_user_id)
-                 VALUES (?, ?, ?, ?, ?, ?)'
+                    (enrollment_id, attempt_number, scheduled_date, percentage, outcome, actor_user_id, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)'
             );
             $insert->execute([
                 $enrollmentId,
@@ -5370,15 +5376,17 @@ function handle_faculty_retention_remedial_save(): void
                 $request['percentage'],
                 $outcome,
                 (int) $authCtx['user_id'],
+                $request['notes'],
             ]);
         } else {
             $scheduledDate = $hasScheduledDate
                 ? $request['scheduledDate']
                 : $existing['scheduled_date'];
+            $attemptNotes = $request['hasNotes'] ? $request['notes'] : ($existing['notes'] ?? null);
             $update = $pdo->prepare(
                 'UPDATE enrollment_remedial_attempts
                     SET scheduled_date = ?, percentage = ?, outcome = ?,
-                        actor_user_id = ?, updated_at = CURRENT_TIMESTAMP(6)
+                        actor_user_id = ?, notes = ?, updated_at = CURRENT_TIMESTAMP(6)
                   WHERE remedial_attempt_id = ?'
             );
             $update->execute([
@@ -5386,6 +5394,7 @@ function handle_faculty_retention_remedial_save(): void
                 $request['percentage'],
                 $outcome,
                 (int) $authCtx['user_id'],
+                $attemptNotes,
                 (int) $existing['remedial_attempt_id'],
             ]);
         }
@@ -5417,7 +5426,7 @@ function handle_faculty_retention_remedial_save(): void
         audit_record_action(
             $pdo, $config, $authCtx, 'retention', 'retention_remedial_save', 'enrollment', (string) $enrollmentId,
             "Attempt {$attemptNumber} for enrollment #{$enrollmentId} recorded as {$outcome}.",
-            ['scope_cs_id' => (int) $target['cs_id'], 'after' => ['attemptNumber' => $attemptNumber, 'outcome' => $outcome]]
+            ['scope_cs_id' => (int) $target['cs_id'], 'after' => ['attemptNumber' => $attemptNumber, 'outcome' => $outcome, 'notes' => $request['notes']]]
         );
         $pdo->commit();
         json_response([

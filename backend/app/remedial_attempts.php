@@ -155,7 +155,7 @@ function remedial_attempts_load(PDO $pdo, array $enrollmentIds, array $legacyByE
     $placeholders = implode(',', array_fill(0, count($result), '?'));
     $stmt = $pdo->prepare(
         "SELECT remedial_attempt_id, enrollment_id, attempt_number, scheduled_date,
-                percentage, outcome, actor_user_id, created_at, updated_at
+                percentage, outcome, actor_user_id, created_at, updated_at, notes
            FROM enrollment_remedial_attempts
           WHERE enrollment_id IN ({$placeholders})
           ORDER BY enrollment_id, attempt_number"
@@ -203,7 +203,7 @@ function remedial_attempts_lock_rows(PDO $pdo, int $enrollmentId): array
 {
     $stmt = $pdo->prepare(
         'SELECT remedial_attempt_id, enrollment_id, attempt_number, scheduled_date,
-                percentage, outcome, actor_user_id, created_at, updated_at
+                percentage, outcome, actor_user_id, created_at, updated_at, notes
            FROM enrollment_remedial_attempts
           WHERE enrollment_id = ?
           ORDER BY attempt_number
@@ -247,6 +247,7 @@ function remedial_attempts_progression_from_rows(array $rows, bool $legacyUnclas
             // `outcome` is the canonical database-derived field.
             'status' => $outcome,
             'actorUserId' => $row['actor_user_id'] !== null ? (string) $row['actor_user_id'] : null,
+            'notes' => isset($row['notes']) && $row['notes'] !== '' ? (string) $row['notes'] : null,
             'createdAt' => (string) ($row['created_at'] ?? ''),
             'updatedAt' => (string) ($row['updated_at'] ?? ''),
         ];
@@ -379,12 +380,30 @@ function remedial_attempts_parse_request(array $data): array
         }
     }
 
+    // Optional Faculty notes; an omitted field keeps the stored notes.
+    $hasNotes = array_key_exists('notes', $data);
+    $notes = null;
+    if ($hasNotes && $data['notes'] !== null) {
+        if (!is_string($data['notes'])) {
+            throw remedial_attempts_error('Notes must be text.', 'REMEDIAL_NOTES_INVALID');
+        }
+        $notes = trim($data['notes']);
+        if (mb_strlen($notes) > 500) {
+            throw remedial_attempts_error('Notes must not exceed 500 characters.', 'REMEDIAL_NOTES_INVALID');
+        }
+        if ($notes === '') {
+            $notes = null;
+        }
+    }
+
     return [
         'enrollmentId' => $enrollmentId,
         'attemptNumber' => $attemptNumber,
         'scheduledDate' => $scheduledDate,
         'hasPercentage' => $hasPercentage,
         'percentage' => $percentage,
+        'hasNotes' => $hasNotes,
+        'notes' => $notes,
     ];
 }
 
