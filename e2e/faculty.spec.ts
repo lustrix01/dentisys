@@ -134,8 +134,14 @@ test.describe('Faculty Module E2E Tests', () => {
       await expect(appPage.getByText('Student invitations: 1 issued, 1 email deliveries failed, 1 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation Issued · Delivery Failed')).toBeVisible();
       await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
-      await expect(appPage.getByText('Student Invitation', { exact: true })).toBeVisible();
+      await expect(appPage.getByRole('cell', { name: 'Student Invitation', exact: true })).toBeVisible();
       await expect(appPage.getByText('Failed', { exact: true })).toBeVisible();
+      // The history type filter matches the stored email types.
+      const historyTypeFilter = appPage.locator('select', { has: appPage.locator('option', { hasText: 'All email categories' }) });
+      await historyTypeFilter.selectOption('Privacy Consent');
+      await expect(appPage.getByRole('cell', { name: 'Student Invitation', exact: true })).toHaveCount(0);
+      await historyTypeFilter.selectOption('Student Invitation');
+      await expect(appPage.getByRole('cell', { name: 'Student Invitation', exact: true })).toBeVisible();
       expect(invitationPayloads).toEqual([{ studentId: '42', classId: '77' }]);
     } finally {
       await appPage.close();
@@ -279,7 +285,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await expect(appPage.getByText('Student invitations: 1 issued, 0 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation Sent')).toBeVisible();
       await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
-      await expect(appPage.getByText('Student Invitation', { exact: true })).toBeVisible();
+      await expect(appPage.getByRole('table').getByText('Student Invitation', { exact: true })).toBeVisible();
       await expect(appPage.getByText('Sent', { exact: true })).toBeVisible();
     } finally {
       await appPage.close();

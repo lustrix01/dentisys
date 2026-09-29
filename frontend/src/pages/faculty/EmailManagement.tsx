@@ -106,6 +106,8 @@ export const EmailManagement: React.FC = () => {
   
   // Filter Dropdown States
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
+  // Email History has its own type filter; it is not the class selector.
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -712,7 +714,7 @@ export const EmailManagement: React.FC = () => {
             <p className="text-xs text-slate-400">Complete transmission audit ledger for student notifications & invitations.</p>
           </div>
 
-          <EmailHistoryTable logs={logs} search={search} onSearch={setSearch} filter={selectedClassId} onFilter={setSelectedClassId} />
+          <EmailHistoryTable logs={logs} search={search} onSearch={setSearch} filter={historyTypeFilter} onFilter={setHistoryTypeFilter} />
         </Card>
       )}
 

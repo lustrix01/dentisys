@@ -1,12 +1,13 @@
 import React from 'react';
 import { Search, Mail } from 'lucide-react';
 
+// The email_type values the server stores for a Faculty member's messages.
 export type EmailType =
   | 'Privacy Consent'
   | 'At-Risk Notification'
-  | 'Class Secretary Invitation'
-  | 'Faculty Registration Approved'
-  | 'Faculty Registration Rejected';
+  | 'Secretary Invitation'
+  | 'Student Invitation'
+  | 'Other';
 
 export type EmailLog = {
   id: string;
@@ -58,9 +59,9 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
           <option value="all">All email categories</option>
           <option value="Privacy Consent">Privacy Consent</option>
           <option value="At-Risk Notification">At-Risk Notification</option>
-          <option value="Class Secretary Invitation">Class Secretary Invitation</option>
-          <option value="Faculty Registration Approved">Faculty Approval Notification</option>
-          <option value="Faculty Registration Rejected">Faculty Rejection Notification</option>
+          <option value="Secretary Invitation">Class Secretary Invitation</option>
+          <option value="Student Invitation">Student Invitation</option>
+          <option value="Other">Other</option>
         </select>
       </div>
 
