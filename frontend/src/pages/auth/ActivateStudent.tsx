@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Eye, EyeOff, XCircle } from 'lucide-react';
 import { activateStudent, getStudentInvitation, StudentInvitation } from '../../services/apiClient';
@@ -13,16 +13,11 @@ export function ActivateStudent() {
   const [invitation, setInvitation] = useState<StudentInvitation | null>(null);
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
-  const [credential, setCredential] = useState('');
-  const [googleState, setGoogleState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const googleButtonRef = useRef<HTMLDivElement>(null);
-  const googleClientId = runtimeConfig.providers.identity.google.client_id;
-  const googleEnabled = runtimeConfig.providers.identity.google.enabled && Boolean(googleClientId);
   const passwordCriteria = validatePasswordRequirements(password);
 
   useEffect(() => {
@@ -55,36 +50,6 @@ export function ActivateStudent() {
     return () => { active = false; };
   }, [runtimeConfig.features.student_auth_enabled, runtimeConfig.loading, token]);
 
-  useEffect(() => {
-    if (!googleEnabled || !invitation || !googleClientId || !googleButtonRef.current) return;
-    let active = true;
-    const render = () => {
-      if (!active || !window.google || !googleButtonRef.current) {
-        if (active) setGoogleState('error');
-        return;
-      }
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        ux_mode: 'popup',
-        callback: response => { if (active) setCredential(response.credential); },
-      });
-      googleButtonRef.current.innerHTML = '';
-      window.google.accounts.id.renderButton(googleButtonRef.current, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with' });
-      setGoogleState('ready');
-    };
-    const existing = document.getElementById('google-gis-client');
-    const script = existing instanceof HTMLScriptElement ? existing : document.createElement('script');
-    script.id = 'google-gis-client';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = render;
-    script.onerror = () => { if (active) setGoogleState('error'); };
-    if (window.google) render();
-    else if (!existing) document.head.appendChild(script);
-    return () => { active = false; script.onload = null; script.onerror = null; };
-  }, [googleEnabled, googleClientId, invitation]);
-
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!passwordCriteria.isValid) {
@@ -98,10 +63,9 @@ export function ActivateStudent() {
     setSubmitting(true);
     setError('');
     try {
-      await activateStudent(token, password, credential || undefined);
+      await activateStudent(token, password);
       navigate('/login?activated=1', { replace: true });
     } catch (err) {
-      setCredential('');
       setError(err instanceof Error ? err.message : 'Unable to accept Student invitation.');
     } finally {
       setSubmitting(false);
@@ -144,12 +108,6 @@ export function ActivateStudent() {
               </div>
               {confirmation && password !== confirmation && <p role="alert" className="mt-1 text-xs font-medium text-rose-600">Passwords do not match.</p>}
             </label>
-            {googleEnabled && <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-700">
-              <p className="mb-3 text-center text-xs text-slate-500">Optional: verify this invited institutional email with Google</p>
-              <div ref={googleButtonRef} className={googleState === 'ready' ? 'flex justify-center' : 'hidden'} />
-              {googleState === 'error' && <p className="text-center text-xs text-rose-600">Google verification could not be loaded. You can continue with your password.</p>}
-              {credential && <p className="mt-2 text-center text-xs text-emerald-700">Google identity selected for verification.</p>}
-            </div>}
             <button type="submit" disabled={submitting || !invitation || !passwordCriteria.isValid || password !== confirmation} className="mt-6 w-full rounded-lg bg-accent-600 px-4 py-3 font-semibold text-white disabled:opacity-50">{submitting ? 'Activating…' : 'Accept invitation and activate'}</button>
           </>
         )}

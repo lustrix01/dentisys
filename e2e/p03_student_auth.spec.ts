@@ -94,7 +94,7 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(page.getByRole('alert')).toContainText('Student account activation is unavailable.');
   });
 
-  test('Google mismatch during Student invitation acceptance is reported without leaving the reusable invitation page', async ({ page }) => {
+  test('Student invitation acceptance is password-only even when Google Sign-In is enabled', async ({ page }) => {
     await installMockGoogleIdentityServices(page);
     await page.route('**/api/runtime-config', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(GOOGLE_ENABLED_RUNTIME_CONFIG) });
@@ -107,16 +107,17 @@ test.describe('P03 Student identity and authentication', () => {
     let submittedPayload: Record<string, unknown> | null = null;
     await page.route('**/api/auth/student/activate', async route => {
       submittedPayload = route.request().postDataJSON() as Record<string, unknown>;
-      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'Google identity does not match the invited Student email.' }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Student account activated.' }) });
     });
     await page.goto('/activate-student?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
-    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await expect(page.getByLabel(/^Password$/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
+    await expect(page.getByText(/verify this invited institutional email with Google/i)).toHaveCount(0);
     await page.getByLabel(/^Password$/i).fill('Student123!');
     await page.getByLabel(/Confirm password/i).fill('Student123!');
     await page.getByRole('button', { name: /Accept invitation and activate/i }).click();
-    await expect(page.getByRole('alert')).toContainText(/does not match the invited Student email/i);
-    await expect(page).toHaveURL('/activate-student');
-    expect(submittedPayload).toMatchObject({ credential: 'mock-student-google-credential', token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' });
+    await expect(page).toHaveURL(/\/login\?activated=1/);
+    expect(submittedPayload).toEqual({ token: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', password: 'Student123!' });
   });
 
   test('real password-authenticated Student uses authoritative surfaces without prototype data', async ({ page }) => {

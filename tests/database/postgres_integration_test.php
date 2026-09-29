@@ -1543,6 +1543,8 @@ $acceptFacultyTokenInsert->execute();
 [$facultyInspectStatus, $facultyInspectBody] = integration_http_get_json('/api/auth/faculty/invitation?token=' . rawurlencode($knownFacultyToken), '');
 expect_same(200, $facultyInspectStatus, 'Valid Faculty invitation is inspectable');
 expect_same($acceptFacultyEmail, $facultyInspectBody['invitation']['email'] ?? null, 'Inspection shows the invited Faculty identity');
+[$facultyGoogleAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $knownFacultyToken, 'password' => 'FacultyInvitePass123!', 'credential' => 'google-id-token']);
+expect_same(400, $facultyGoogleAcceptStatus, 'Faculty invitation acceptance rejects a Google credential (REG-003)');
 [$facultyAcceptStatus] = integration_http_json('/api/auth/faculty/activate', '', ['token' => $knownFacultyToken, 'password' => 'FacultyInvitePass123!']);
 expect_same(200, $facultyAcceptStatus, 'Faculty invitation acceptance activates with a required password');
 $acceptedFacultyStmt = $pdo->prepare('SELECT role, status, password_hash FROM user_accounts WHERE user_id = ?');
@@ -1882,6 +1884,8 @@ $knownStudentTokenInsert->execute();
 expect_same(200, $studentInspectStatus, 'Valid class-scoped Student invitation is inspectable');
 expect_same($invitedStudentEmail, $studentInspectBody['invitation']['email'] ?? null, 'Student inspection shows canonical institutional email');
 expect_same($invitedStudentNumber, $studentInspectBody['invitation']['studentNumber'] ?? null, 'Student inspection shows canonical Student number');
+[$studentGoogleAcceptStatus] = integration_http_json('/api/auth/student/activate', '', ['token' => $knownStudentToken, 'password' => 'StudentInvitePass123!', 'credential' => 'google-id-token']);
+expect_same(400, $studentGoogleAcceptStatus, 'Student invitation acceptance rejects a Google credential (REG-003)');
 [$studentAcceptStatus] = integration_http_json('/api/auth/student/activate', '', ['token' => $knownStudentToken, 'password' => 'StudentInvitePass123!']);
 expect_same(200, $studentAcceptStatus, 'Student accepts the Faculty invitation with a required password');
 $acceptedStudentStmt = $pdo->prepare(

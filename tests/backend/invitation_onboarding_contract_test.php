@@ -45,13 +45,10 @@ onboarding_contract_assert(str_contains((string) $faculty, "'P7D'"), 'Faculty in
 
 $facultyAcceptStart = strpos((string) $faculty, 'function handle_auth_faculty_invitation_accept');
 $facultyAccept = substr((string) $faculty, (int) $facultyAcceptStart);
-$facultyMismatch = strpos($facultyAccept, 'Google identity does not match the invited Faculty email.');
-$facultyHash = strpos($facultyAccept, '$passwordHash = password_hash');
-$facultyBegin = strpos($facultyAccept, '$pdo->beginTransaction()');
-onboarding_contract_assert($facultyMismatch !== false && $facultyHash !== false && $facultyBegin !== false && $facultyMismatch < $facultyHash && $facultyMismatch < $facultyBegin, 'Faculty Google mismatch is rejected before password or transaction changes');
+// REG-003: acceptance is password-only; Google is linked from the profile after activation.
+onboarding_contract_assert(str_contains($facultyAccept, "array_diff(array_keys(\$data), ['token', 'password'])"), 'Faculty acceptance allows only the token and password fields');
+onboarding_contract_assert(!str_contains($facultyAccept, 'google_verify_id_token') && str_contains($facultyAccept, 'google_subject = NULL'), 'Faculty acceptance never binds a Google identity');
 onboarding_contract_assert(str_contains($facultyAccept, "status = 'Active'") && str_contains($facultyAccept, "SET used_at = ?"), 'Faculty acceptance activates and consumes the invitation transactionally');
-onboarding_contract_assert(str_contains($facultyAccept, 'google_verify_id_token') && str_contains($facultyAccept, 'google_subject = ?'), 'Faculty acceptance can bind a matching optional Google identity while retaining password activation');
-onboarding_contract_assert(str_contains($facultyAccept, 'google_subject = ? AND user_id <> ?'), 'Faculty acceptance rejects a Google subject bound to another account');
 
 $studentInviteStart = strpos((string) $student, 'function handle_student_invitation_create');
 $studentInspectStart = strpos((string) $student, 'function handle_student_invitation_get');
@@ -63,13 +60,9 @@ onboarding_contract_assert(str_contains($studentInvite, 'validate_institutional_
 $studentAcceptStart = strpos((string) $student, 'function handle_student_activate');
 $studentMockStart = strpos((string) $student, 'function handle_development_mock_student_session');
 $studentAccept = substr((string) $student, (int) $studentAcceptStart, (int) $studentMockStart - (int) $studentAcceptStart);
-$studentMismatch = strpos($studentAccept, 'Google identity does not match the invited Student email.');
-$studentHash = strpos($studentAccept, '$passwordHash = password_hash');
-$studentBegin = strpos($studentAccept, '$pdo->beginTransaction()');
 onboarding_contract_assert(str_contains($studentAccept, "['related_cs_id'] === null"), 'Student activation rejects legacy tokens without class authority');
-onboarding_contract_assert($studentMismatch !== false && $studentHash !== false && $studentBegin !== false && $studentMismatch < $studentHash && $studentMismatch < $studentBegin, 'Student Google mismatch is rejected before password or transaction changes');
-onboarding_contract_assert(str_contains($studentAccept, 'google_verify_id_token') && str_contains($studentAccept, 'google_subject = ?'), 'Student acceptance can bind a matching optional Google identity while retaining password activation');
-onboarding_contract_assert(str_contains($studentAccept, 'google_subject = ? AND user_id <> ?'), 'Student acceptance rejects a Google subject bound to another account');
+onboarding_contract_assert(str_contains($studentAccept, "array_diff(array_keys(\$data), ['token', 'password'])"), 'Student acceptance allows only the token and password fields (REG-003)');
+onboarding_contract_assert(!str_contains($studentAccept, 'google_verify_id_token') && str_contains($studentAccept, 'google_subject = NULL'), 'Student acceptance never binds a Google identity');
 onboarding_contract_assert(str_contains($studentAccept, 'student_account_user_id') && str_contains($studentAccept, 'student_auth_active_class_enrollment'), 'Student acceptance rechecks canonical identity and active class enrollment');
 onboarding_contract_assert(str_contains($studentAccept, "status = 'Active'") && str_contains($studentAccept, 'SET used_at = ?'), 'Student acceptance activates and consumes its scoped invitation');
 

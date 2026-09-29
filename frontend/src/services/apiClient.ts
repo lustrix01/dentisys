@@ -380,8 +380,8 @@ export function createStudentInvitation(data: { studentId: string; classId: stri
   return request('POST', '/faculty/student-invitations', data);
 }
 
-export function activateStudent(token: string, password: string, credential?: string): Promise<{ status: string; message: string }> {
-  return request('POST', '/auth/student/activate', { token, password, ...(credential ? { credential } : {}) });
+export function activateStudent(token: string, password: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/student/activate', { token, password });
 }
 
 export function createDevelopmentMockStudentSession(): Promise<LoginResponse> {
@@ -575,12 +575,8 @@ export function getFacultyInvitation(token: string): Promise<{
   return request('GET', `/auth/faculty/invitation?token=${encodeURIComponent(token)}`);
 }
 
-export function activateFacultyInvitation(token: string, password: string, credential?: string): Promise<{ status: string; message: string }> {
-  return request('POST', '/auth/faculty/activate', {
-    token,
-    password,
-    ...(credential ? { credential } : {}),
-  });
+export function activateFacultyInvitation(token: string, password: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/auth/faculty/activate', { token, password });
 }
 
 export function inviteSecretaryApi(data: { student_name: string; student_number?: string; cs_id: number; email: string }): Promise<{ status: string; invitationId: string; token: string | null; invitation_link: string | null; delivery_status: string; message: string }> {

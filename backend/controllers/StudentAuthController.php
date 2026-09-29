@@ -440,10 +440,10 @@ function handle_student_activate(): void
             return;
         }
         $data = $body['data'];
-        if (array_diff(array_keys($data), ['token', 'password', 'credential']) !== []
+        // REG-003: acceptance is password-only; Google is linked from the profile after activation.
+        if (array_diff(array_keys($data), ['token', 'password']) !== []
             || !array_key_exists('token', $data)
-            || !array_key_exists('password', $data)
-            || (isset($data['credential']) && !is_string($data['credential']))) {
+            || !array_key_exists('password', $data)) {
             student_auth_error_response('Invalid request.', 400);
             return;
         }
@@ -498,16 +498,6 @@ function handle_student_activate(): void
             student_auth_error_response('Invalid or expired activation token.', 400);
             return;
         }
-        $googleSubject = null;
-        if (isset($data['credential'])) {
-            $claims = google_verify_id_token($config, $data['credential']);
-            if (strtolower(trim($claims['email'])) !== strtolower(trim($invitedEmail))) {
-                student_auth_error_response('Google identity does not match the invited Student email.', 409);
-                return;
-            }
-            $googleSubject = $claims['sub'];
-        }
-
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
         $pdo->beginTransaction();
         try {
@@ -582,19 +572,11 @@ function handle_student_activate(): void
                 return;
             }
 
-            if ($googleSubject !== null) {
-                $subjectStmt = $pdo->prepare('SELECT user_id FROM user_accounts WHERE google_subject = ? AND user_id <> ? FOR UPDATE');
-                $subjectStmt->execute([$googleSubject, (int) $account['user_id']]);
-                if ($subjectStmt->fetchColumn() !== false) {
-                    throw new DomainException('This Google identity is already linked to another account.');
-                }
-            }
-
             $nowSql = (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
             $update = $pdo->prepare(
-                "UPDATE user_accounts SET password_hash = ?, google_subject = ?, status = 'Active', updated_at = ? WHERE user_id = ?"
+                "UPDATE user_accounts SET password_hash = ?, google_subject = NULL, status = 'Active', updated_at = ? WHERE user_id = ?"
             );
-            $update->execute([$passwordHash, $googleSubject, $nowSql, $account['user_id']]);
+            $update->execute([$passwordHash, $nowSql, $account['user_id']]);
             $used = $pdo->prepare(
                 "UPDATE security_tokens SET used_at = ? WHERE token_id = ? AND used_at IS NULL AND revoked_at IS NULL"
             );

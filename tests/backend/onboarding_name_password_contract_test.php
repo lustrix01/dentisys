@@ -40,13 +40,15 @@ foreach ([$facultyActivation, $studentActivation] as $activation) {
     assert_onboarding_contract(str_contains($activation, 'validatePasswordRequirements') && str_contains($activation, 'PasswordRequirement'), 'Activation password requirements are visible and live');
     assert_onboarding_contract(str_contains($activation, "type={showPassword ? 'text' : 'password'}"), 'Activation password has an accessible reveal control');
 }
-assert_onboarding_contract(
-    str_contains($apiClient, "request('POST', '/auth/faculty/activate'")
-        && str_contains($apiClient, '...(credential ? { credential } : {})'),
-    'Faculty activation API preserves password and optional Google credential'
-);
-assert_onboarding_contract(!str_contains($facultyActivation, 'google.accounts'), 'Faculty activation does not load Google verification');
-assert_onboarding_contract(str_contains($studentActivation, 'google.accounts'), 'Student activation retains optional Google verification');
-assert_onboarding_contract(str_contains($apiClient, "request('POST', '/auth/student/activate', { token, password, ...(credential ? { credential } : {}) })"), 'Student activation retains optional Google credential');
+// REG-003: invitation acceptance is password-only; Google is linked from the profile afterwards.
+assert_onboarding_contract(str_contains($apiClient, "request('POST', '/auth/faculty/activate', { token, password })"), 'Faculty activation sends only the token and password');
+assert_onboarding_contract(str_contains($apiClient, "request('POST', '/auth/student/activate', { token, password })"), 'Student activation sends only the token and password');
+foreach (['Faculty' => $facultyActivation, 'Student' => $studentActivation] as $role => $activation) {
+    assert_onboarding_contract(!str_contains($activation, 'google.accounts') && !str_contains($activation, 'credential'), "{$role} activation does not offer Google");
+}
+foreach (['FacultyInvitationController.php', 'StudentAuthController.php'] as $controller) {
+    $source = (string) file_get_contents(__DIR__ . '/../../backend/controllers/' . $controller);
+    assert_onboarding_contract(!str_contains($source, "['token', 'password', 'credential']") && !str_contains($source, "\$data['credential']"), "{$controller} rejects a Google credential during acceptance");
+}
 
 echo "ALL ONBOARDING NAME AND PASSWORD CONTRACT TESTS PASSED.\n";
