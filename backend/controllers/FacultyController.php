@@ -4492,6 +4492,22 @@ function handle_faculty_attendance_override(): void
             return;
         }
 
+        // A new manual mark made while the class has a live session for that
+        // date belongs to that session, so a later check-in or End does not
+        // add a second record.
+        if ($target['record_id'] === null && $requestedSessionId === null) {
+            $liveSessionStmt = $pdo->prepare(
+                "SELECT session_id FROM attendance_sessions
+                  WHERE cs_id = ? AND session_date = ? AND status = 'active'
+                  ORDER BY session_id DESC LIMIT 1"
+            );
+            $liveSessionStmt->execute([(int) $csId, $requestedDate]);
+            $liveSessionId = $liveSessionStmt->fetchColumn();
+            if ($liveSessionId !== false) {
+                $requestedSessionId = (int) $liveSessionId;
+            }
+        }
+
         if ($requestedSessionId !== null) {
             $sessionStmt = $pdo->prepare(
                 "SELECT session_id, cs_id, session_date, session_code
@@ -4586,15 +4602,26 @@ function handle_faculty_attendance_override(): void
             $target['override_at'] = $nowSql;
             $created = true;
         } else {
+            // A correction keeps the original verification_method (for example
+            // 'biometric'); the change itself is kept in the correction history.
             $update = $pdo->prepare(
                 "UPDATE attendance_records
-                 SET status = ?, verification_method = 'manual_faculty', override_reason = ?,
-                     override_by_user_id = ?, override_at = ?
+                 SET status = ?, override_reason = ?, override_by_user_id = ?, override_at = ?
                  WHERE record_id = ?"
             );
             $update->execute([$status, $reason, (int) $authCtx['user_id'], $nowSql, (int) $target['record_id']]);
+            if ($hasPersistedStatus) {
+                attendance_record_correction_insert(
+                    $pdo,
+                    (int) $target['record_id'],
+                    (string) $target['status'],
+                    $status,
+                    $reason,
+                    (int) $authCtx['user_id'],
+                    'faculty'
+                );
+            }
             $target['status'] = $status;
-            $target['verification_method'] = 'manual_faculty';
             $target['override_reason'] = $reason;
             $target['override_at'] = $nowSql;
         }

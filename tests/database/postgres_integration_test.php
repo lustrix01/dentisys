@@ -251,6 +251,7 @@ $expectedMigrations = [
     '034_retention_status_override.sql',
     '035_fixed_retention_trigger.sql',
     '036_scrub_secretary_invitation_tokens.sql',
+    '037_attendance_record_corrections.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -776,6 +777,17 @@ $olderOverrideRowStmt = $pdo->prepare(
 );
 $olderOverrideRowStmt->execute([$sessionEnrollmentId, $attendanceSessionId]);
 expect_same('late', $olderOverrideRowStmt->fetchColumn(), 'Older Secretary session record receives the override');
+$secretaryCorrectionMethodStmt = $pdo->prepare('SELECT verification_method FROM attendance_records WHERE record_id = ?');
+$secretaryCorrectionMethodStmt->execute([$sessionAttendanceRecordId]);
+expect_same('integration_fixture', $secretaryCorrectionMethodStmt->fetchColumn(), 'Secretary correction keeps the original verification method');
+$secretaryCorrectionStmt = $pdo->prepare(
+    "SELECT previous_status, new_status, corrected_by_role FROM attendance_record_corrections
+      WHERE record_id = ? ORDER BY correction_id DESC LIMIT 1"
+);
+$secretaryCorrectionStmt->execute([$sessionAttendanceRecordId]);
+$secretaryCorrection = $secretaryCorrectionStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('late', $secretaryCorrection['new_status'] ?? null, 'Secretary correction is kept in the correction history');
+expect_same('secretary', $secretaryCorrection['corrected_by_role'] ?? null, 'Secretary correction history records the Secretary role');
 echo "PASS: Persistent Secretary attendance-session integration coverage completed.\n";
 
 $originalAdminGradingDefaultsJson = (string) $pdo->query(
@@ -3478,6 +3490,98 @@ foreach ($facultyAttendanceAuditRows as $facultyAttendanceAuditRow) {
 }
 expect_true($linkedAuditFound, 'Faculty attendance audit preserves before and after status state');
 
+// One attendance record per student per day: manual marks during a live
+// session link to it, corrections keep the original method, and End does not
+// add Absent for students who already have a record that day.
+$dupClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, block, status)
+     VALUES (?, ?, ?, '1ST', '2026-2027', 'DU', 'Active')
+     RETURNING cs_id"
+);
+$dupClassStmt->execute(['Attendance Duplicate Fixture ' . $attendanceFixtureSuffix, $attendanceCourseId, $userId]);
+$dupClassId = (int) $dupClassStmt->fetchColumn();
+$dupEnrollments = [];
+foreach (['A', 'B', 'C', 'D'] as $dupLetter) {
+    $attendanceStudentStmt->execute([
+        'DUP-' . $attendanceFixtureSuffix . '-' . $dupLetter,
+        'Duplicate',
+        'Student ' . $dupLetter,
+        'attendance-dup-' . strtolower($attendanceFixtureSuffix . $dupLetter) . '@bicol-u.edu.ph',
+    ]);
+    $attendanceEnrollmentStmt->execute([(int) $attendanceStudentStmt->fetchColumn(), $dupClassId]);
+    $dupEnrollments[$dupLetter] = (int) $attendanceEnrollmentStmt->fetchColumn();
+}
+$dupSessionCode = 'DUP-SESSION-' . $attendanceFixtureSuffix;
+$dupSessionStmt = $pdo->prepare(
+    "INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, status)
+     VALUES (?, ?, ?, ?, ?, 'active')
+     RETURNING session_id"
+);
+$dupSessionStmt->execute([$dupClassId, $userId, $userId, $attendanceToday, $dupSessionCode]);
+$dupSessionId = (int) $dupSessionStmt->fetchColumn();
+$dupRecordInsert = $pdo->prepare(
+    "INSERT INTO attendance_records (enrollment_id, attendance_session_id, session_date, session_code, status, verification_method, time_recorded)
+     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(6))
+     RETURNING record_id"
+);
+// B was marked before the session started (unlinked); C checked in by face.
+$dupRecordInsert->execute([$dupEnrollments['B'], null, $attendanceToday, null, 'late', 'manual_faculty']);
+$dupRecordInsert->execute([$dupEnrollments['C'], $dupSessionId, $attendanceToday, $dupSessionCode, 'present', 'biometric']);
+$dupBiometricRecordId = (int) $dupRecordInsert->fetchColumn();
+
+[$dupManualStatus, $dupManualBody] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'csId' => (string) $dupClassId,
+    'enrollmentId' => (string) $dupEnrollments['A'],
+    'sessionDate' => $attendanceToday,
+    'status' => 'present',
+]);
+expect_same(200, $dupManualStatus, 'Faculty can mark a student during a live session');
+expect_same((string) $dupSessionId, $dupManualBody['attendanceSessionId'] ?? null, 'A manual mark during a live session is linked to that session');
+$dupRecordRowStmt = $pdo->prepare('SELECT attendance_session_id, session_code, status, verification_method FROM attendance_records WHERE record_id = ?');
+$dupRecordRowStmt->execute([(int) ($dupManualBody['recordId'] ?? 0)]);
+$dupManualRow = $dupRecordRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_same($dupSessionCode, $dupManualRow['session_code'] ?? null, 'A linked manual mark carries the session code');
+
+[$dupCorrectionStatus] = integration_http_json('/api/faculty/attendance/override', $generatedFacultyAccessToken, [
+    'recordId' => (string) $dupBiometricRecordId,
+    'status' => 'absent',
+    'reason' => 'Left before the roll call ended',
+]);
+expect_same(200, $dupCorrectionStatus, 'Faculty can correct a face check-in record');
+$dupRecordRowStmt->execute([$dupBiometricRecordId]);
+$dupCorrectedRow = $dupRecordRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('absent', $dupCorrectedRow['status'] ?? null, 'Correction changes the attendance status');
+expect_same('biometric', $dupCorrectedRow['verification_method'] ?? null, 'Correction keeps the original verification method');
+$dupCorrectionHistoryStmt = $pdo->prepare(
+    'SELECT previous_status, new_status, reason, corrected_by_user_id, corrected_by_role
+       FROM attendance_record_corrections WHERE record_id = ? ORDER BY correction_id'
+);
+$dupCorrectionHistoryStmt->execute([$dupBiometricRecordId]);
+$dupCorrectionHistory = $dupCorrectionHistoryStmt->fetchAll(PDO::FETCH_ASSOC);
+expect_same(1, count($dupCorrectionHistory), 'Correction adds one correction-history row');
+expect_same('present', $dupCorrectionHistory[0]['previous_status'] ?? null, 'Correction history keeps the previous status');
+expect_same('absent', $dupCorrectionHistory[0]['new_status'] ?? null, 'Correction history keeps the new status');
+expect_same('Left before the roll call ended', $dupCorrectionHistory[0]['reason'] ?? null, 'Correction history keeps the reason');
+expect_same((string) $userId, (string) ($dupCorrectionHistory[0]['corrected_by_user_id'] ?? ''), 'Correction history keeps the actor');
+expect_same('faculty', $dupCorrectionHistory[0]['corrected_by_role'] ?? null, 'Correction history keeps the actor role');
+
+[$dupEndStatus] = integration_http_json('/api/faculty/attendance/session/end', $generatedFacultyAccessToken, [
+    'sessionId' => (string) $dupSessionId,
+]);
+expect_same(200, $dupEndStatus, 'Faculty can end the live session');
+$dupDayCountStmt = $pdo->prepare('SELECT COUNT(*) FROM attendance_records WHERE enrollment_id = ? AND session_date = ?');
+foreach (['A' => 1, 'B' => 1, 'C' => 1, 'D' => 1] as $dupLetter => $dupExpected) {
+    $dupDayCountStmt->execute([$dupEnrollments[$dupLetter], $attendanceToday]);
+    expect_same($dupExpected, (int) $dupDayCountStmt->fetchColumn(), "Student {$dupLetter} has exactly one attendance record for the day after End");
+}
+$dupStatusStmt = $pdo->prepare('SELECT status, verification_method FROM attendance_records WHERE enrollment_id = ? AND session_date = ?');
+$dupStatusStmt->execute([$dupEnrollments['B'], $attendanceToday]);
+expect_same('late', $dupStatusStmt->fetch(PDO::FETCH_ASSOC)['status'] ?? null, 'End keeps the earlier unlinked mark instead of adding Absent');
+$dupStatusStmt->execute([$dupEnrollments['D'], $attendanceToday]);
+$dupAbsentRow = $dupStatusStmt->fetch(PDO::FETCH_ASSOC);
+expect_same('absent', $dupAbsentRow['status'] ?? null, 'End marks a student with no record Absent');
+expect_same('system_resolution', $dupAbsentRow['verification_method'] ?? null, 'End-of-session Absent is recorded as a system resolution');
+
 $digestStmt = $pdo->prepare('SELECT token_digest FROM security_tokens WHERE token_id = ?');
 $digestStmt->execute([$refresh['token_id']]);
 $storedDigest = pdo_binary_value($digestStmt->fetchColumn());
@@ -5471,6 +5575,10 @@ echo "PASS: Authoritative grade-weight integration coverage completed.\n";
 
 $pdo->beginTransaction();
 $pdo->prepare('DELETE FROM assessment_scores WHERE assessment_id IN (?, ?)')->execute([$gradeAssessmentId, $rawAssessmentId]);
+$pdo->prepare(
+    'DELETE FROM attendance_record_corrections
+      WHERE record_id IN (SELECT record_id FROM attendance_records WHERE enrollment_id IN (?, ?, ?))'
+)->execute([$gradeEnrollmentA, $gradeEnrollmentB, $gradeEnrollmentC]);
 $pdo->prepare('DELETE FROM attendance_records WHERE enrollment_id IN (?, ?, ?)')->execute([$gradeEnrollmentA, $gradeEnrollmentB, $gradeEnrollmentC]);
 $pdo->prepare('DELETE FROM enrollments WHERE enrollment_id IN (?, ?, ?)')->execute([$gradeEnrollmentA, $gradeEnrollmentB, $gradeEnrollmentC]);
 $pdo->prepare('DELETE FROM students WHERE student_id IN (?, ?, ?)')->execute([$gradeStudentA, $gradeStudentB, $gradeStudentC]);

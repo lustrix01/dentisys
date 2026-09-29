@@ -316,15 +316,41 @@ function attendance_session_resolve_absences(PDO $pdo, int $sessionId, DateTimeI
            JOIN enrollments e ON e.cs_id = s.cs_id AND e.status = 'Active'
           WHERE s.session_id = ?
             AND s.status = 'ended'
+            -- Any record for this enrollment on the session date (a manual mark,
+            -- another session's record) counts; records of revoked sessions do not.
             AND NOT EXISTS (
                 SELECT 1 FROM attendance_records r
+                  LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                  WHERE r.enrollment_id = e.enrollment_id
-                   AND r.attendance_session_id = s.session_id
+                   AND (r.attendance_session_id = s.session_id
+                        OR (r.session_date = s.session_date
+                            AND (rs.session_id IS NULL OR rs.status <> 'revoked')))
             )
          ON CONFLICT DO NOTHING"
     );
     $stmt->execute([$nowSql, $nowSql, $sessionId]);
     return $stmt->rowCount();
+}
+
+/**
+ * Append one manual-correction history row. The caller's transaction holds the
+ * attendance record lock; the record keeps its original verification_method.
+ */
+function attendance_record_correction_insert(
+    PDO $pdo,
+    int $recordId,
+    string $previousStatus,
+    string $newStatus,
+    ?string $reason,
+    int $actorUserId,
+    string $actorRole
+): void {
+    $stmt = $pdo->prepare(
+        'INSERT INTO attendance_record_corrections
+            (record_id, previous_status, new_status, reason, corrected_by_user_id, corrected_by_role)
+         VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    $stmt->execute([$recordId, $previousStatus, $newStatus, $reason, $actorUserId, $actorRole]);
 }
 
 function attendance_session_record_audit(

@@ -1740,7 +1740,7 @@ function handle_secretary_attendance_override(): void
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
 
-            $lookupSql = "SELECT r.record_id, r.attendance_session_id, cs.cs_id
+            $lookupSql = "SELECT r.record_id, r.attendance_session_id, r.status, cs.cs_id
                           FROM attendance_records r
                           JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                           JOIN students s ON s.student_id = e.student_id
@@ -1777,13 +1777,25 @@ function handle_secretary_attendance_override(): void
                 return;
             }
 
+            // A correction keeps the original verification_method; the change
+            // itself is kept in the correction history.
             $update = $pdo->prepare(
                 "UPDATE attendance_records
-                 SET status = ?, verification_method = 'manual_secretary', override_reason = ?,
-                     override_by_user_id = ?, override_at = ?
+                 SET status = ?, override_reason = ?, override_by_user_id = ?, override_at = ?
                  WHERE record_id = ?"
             );
             $update->execute([$status, $reason, $authCtx['user_id'], $nowSql, $targetRecordId]);
+            if ((string) $targetRecord['status'] !== $status) {
+                attendance_record_correction_insert(
+                    $pdo,
+                    $targetRecordId,
+                    (string) $targetRecord['status'],
+                    $status,
+                    $reason,
+                    (int) $authCtx['user_id'],
+                    'secretary'
+                );
+            }
 
             audit_finish_operation($pdo, $auditCtx, [
                 'module_code' => 'secretary',

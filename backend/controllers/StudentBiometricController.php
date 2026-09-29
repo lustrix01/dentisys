@@ -614,13 +614,20 @@ function handle_student_attendance_biometric(): void
                 $pdo->rollBack();
                 throw new StudentBiometricException('Attendance session is not active for this Student.', 409, 'session_not_active');
             }
+            // A manual mark or another session's record for the same day also
+            // counts (records of revoked sessions do not), so no second row is added.
             $existingStmt = $pdo->prepare(
                 "SELECT r.record_id, r.status
                    FROM attendance_records r
-                  WHERE r.attendance_session_id = ? AND r.enrollment_id = ?
+                   LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
+                  WHERE r.enrollment_id = ?
+                    AND (r.attendance_session_id = ?
+                         OR (r.session_date = ? AND (rs.session_id IS NULL OR rs.status <> 'revoked')))
+                  ORDER BY CASE WHEN r.attendance_session_id = ? THEN 0 ELSE 1 END, r.record_id DESC
                   LIMIT 1"
             );
-            $existingStmt->execute([$sessionId, (int) $session['enrollment_id']]);
+            $existingParams = [(int) $session['enrollment_id'], $sessionId, $session['session_date'], $sessionId];
+            $existingStmt->execute($existingParams);
             $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
             if ($existing !== false) {
                 $pdo->rollBack();
@@ -709,7 +716,7 @@ function handle_student_attendance_biometric(): void
             ]);
             $recordId = $insert->fetchColumn();
             if ($recordId === false) {
-                $existingStmt->execute([$sessionId, (int) $session['enrollment_id']]);
+                $existingStmt->execute($existingParams);
                 $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
                 $pdo->rollBack();
                 $attendance = ['recordId' => (string) ($existing['record_id'] ?? ''), 'status' => $existing['status'] ?? null];
