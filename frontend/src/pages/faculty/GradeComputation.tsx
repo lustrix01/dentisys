@@ -855,11 +855,7 @@ export const GradeComputation: React.FC = () => {
     }
 
     if (assTransmutationEnabled && ((assAttendanceDate && !assAttendanceCode) || (!assAttendanceDate && assAttendanceCode))) {
-      showFeedback('Please select both session date and session code, or leave both blank to link later / auto-match by date.', 'error');
-      return;
-    }
-    if (assTransmutationEnabled && !assAttendanceDate && !assDueDate) {
-      showFeedback('Transmutation needs a linked attendance session or a due date so attendance can be matched.', 'error');
+      showFeedback('Please select both session date and session code, or leave both blank for no attendance link.', 'error');
       return;
     }
     if (assTransmutationMinimum < 0 || assTransmutationMaximum > 100 || assTransmutationMinimum > assTransmutationMaximum) {
@@ -994,10 +990,7 @@ export const GradeComputation: React.FC = () => {
   const refreshPersistedGrades = async (classId: string): Promise<void> => {
     try {
       const response = await computeFacultyGradesApi(classId);
-      setTransmutationWarnings((response.transmutationWarnings ?? []).map(w => w.message));
-      if ((response.transmutationWarnings ?? []).length > 0) {
-        showFeedback('Scores saved. Some transmuted assessments could not be matched to one attendance session — see the warning on the Summaries tab.', 'info');
-      } else if (response.results.some(result => result.status === 'incomplete_attendance')) {
+      if (response.results.some(result => result.status === 'incomplete_attendance')) {
         showFeedback('Scores saved. Some grades remain incomplete until linked attendance is available.', 'info');
       }
     } catch {
@@ -2127,7 +2120,6 @@ export const GradeComputation: React.FC = () => {
   // Recomputation State
   const [computeResultsByEnrollment, setComputeResultsByEnrollment] = useState<Map<string, FacultyGradeComputeResult>>(new Map());
   const [isRecomputing, setIsRecomputing] = useState(false);
-  const [transmutationWarnings, setTransmutationWarnings] = useState<string[]>([]);
   const [recomputeAlert, setRecomputeAlert] = useState<{
     status: 'success' | 'incomplete';
     message: string;
@@ -2187,7 +2179,6 @@ export const GradeComputation: React.FC = () => {
     setRecomputeAlert(null);
     try {
       const response = await computeFacultyGradesApi(selectedClassId);
-      setTransmutationWarnings((response.transmutationWarnings ?? []).map(w => w.message));
       const newMap = new Map<string, FacultyGradeComputeResult>();
       let computedCount = 0;
       let incompleteCount = 0;
@@ -2909,7 +2900,7 @@ export const GradeComputation: React.FC = () => {
                               </span>
                             ) : (
                               <span className="text-[9px] text-slate-400">
-                                (Exam-date auto match)
+                                (No attendance link)
                               </span>
                             )}
                           </div>
@@ -3949,18 +3940,6 @@ export const GradeComputation: React.FC = () => {
           </div>
 
           {/* Recompute Alert */}
-          {transmutationWarnings.length > 0 && (
-            <div role="alert" data-testid="transmutation-warnings" className="mx-5 my-3 p-4 rounded-2xl border text-xs bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 space-y-1.5">
-              <div className="font-bold flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                Attendance session could not be matched for transmutation
-              </div>
-              <ul className="list-disc pl-5 space-y-0.5">
-                {transmutationWarnings.map(message => <li key={message}>{message}</li>)}
-              </ul>
-              <p className="text-[11px] opacity-80">Affected students stay incomplete for these assessments until a single session is linked.</p>
-            </div>
-          )}
           {recomputeAlert && (
             <div className={`mx-5 my-3 p-4 rounded-2xl border text-xs flex flex-col gap-1.5 ${recomputeAlert.status === 'success'
                 ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
@@ -4608,7 +4587,7 @@ export const GradeComputation: React.FC = () => {
                           }}
                           className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
                         >
-                          <option value="">Auto-match exam date / Link later</option>
+                          <option value="">No link (attendance not considered)</option>
                           {attendanceSessionOptions.map(option => (
                             <option key={option.date} value={option.date}>{option.date}</option>
                           ))}
@@ -4621,13 +4600,13 @@ export const GradeComputation: React.FC = () => {
                           onChange={(event) => setAssAttendanceCode(event.target.value)}
                           className="mt-1.5 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs"
                         >
-                          <option value="">Auto-match exam date / Link later</option>
+                          <option value="">No link (attendance not considered)</option>
                           {attendanceCodesForDate.map(code => <option key={code} value={code}>{code}</option>)}
                         </select>
                       </label>
                     </div>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      💡 Transmutation can be enabled now. If an attendance session hasn&apos;t taken place yet, it will automatically associate with the attendance session conducted on the exam date ({assDueDate || 'set due date'}), or you can select a session code anytime later.
+                      💡 Without a linked session, the raw score is transmuted and attendance is not considered. With a linked session, a student is incomplete until the session ends; a student with no attendance record then counts as Absent (0%). You can link a session anytime later.
                     </p>
                   </>
                 )}

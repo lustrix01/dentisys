@@ -2405,6 +2405,33 @@ function faculty_transmutation_defaults(PDO $pdo): array
     ];
 }
 
+/**
+ * GRD-001 linked attendance for assessment alias `a` and the given enrollment
+ * id expression. NULL when the assessment has no session link or the linked
+ * session is revoked (attendance not considered); the student's attendance
+ * status for the linked session; 'absent' when the linked session has ended
+ * without a record for the student; otherwise 'unresolved' (incomplete).
+ * There is no exam-date matching.
+ */
+function faculty_linked_attendance_sql(string $enrollmentIdExpression): string
+{
+    $session = "SELECT 1 FROM attendance_sessions ls
+                 WHERE ls.cs_id = a.cs_id
+                   AND ls.session_date = a.attendance_session_date
+                   AND ls.session_code = a.attendance_session_code";
+    return "CASE
+        WHEN a.attendance_session_date IS NULL OR a.attendance_session_code IS NULL THEN NULL
+        WHEN EXISTS ({$session} AND ls.status = 'revoked') THEN NULL
+        ELSE COALESCE(
+            (SELECT lr.status FROM attendance_records lr
+              WHERE lr.enrollment_id = {$enrollmentIdExpression}
+                AND lr.session_date = a.attendance_session_date
+                AND lr.session_code = a.attendance_session_code
+              ORDER BY lr.record_id DESC LIMIT 1),
+            CASE WHEN EXISTS ({$session} AND ls.status = 'ended') THEN 'absent' ELSE 'unresolved' END)
+    END";
+}
+
 function faculty_effective_assessment_percentage(
     float $rawScore,
     float $maxScore,
@@ -2423,12 +2450,12 @@ function faculty_effective_assessment_percentage(
     if ($attendanceStatus === 'absent') {
         return 0.0;
     }
-    // No matching attendance record (linked session, or same-day record by
-    // due date): the result stays unresolved until attendance is recorded.
-    if ($attendanceStatus === null) {
+    // GRD-001: the linked session's attendance is still unresolved.
+    if ($attendanceStatus === 'unresolved') {
         return null;
     }
-    if (in_array($attendanceStatus, ['present', 'late', 'excused'], true)) {
+    // No link (or a revoked linked session): attendance is not considered.
+    if ($attendanceStatus === null || in_array($attendanceStatus, ['present', 'late', 'excused'], true)) {
         return $minimumPercentage + (($rawPercentage / 100) * ($maximumPercentage - $minimumPercentage));
     }
     throw new InvalidArgumentException('Attendance status is invalid for transmutation.');
@@ -2951,14 +2978,6 @@ function handle_faculty_assessments_save(): void
                 safe_error_response('Transmutation bounds and attendance linkage are invalid.', 422);
                 return;
             }
-            $effectiveDueDate = trim((string) ($item['dueDate'] ?? ''));
-            if ($transmutationEnabled && $attendanceSessionDate === null && $effectiveDueDate === '') {
-                // Without a linked session, attendance is matched by the due
-                // date; with neither, the result could never be resolved.
-                $pdo->rollBack();
-                safe_error_response('Transmutation needs a linked attendance session or a due date to match attendance.', 422);
-                return;
-            }
             if ($attendanceSessionDate !== null && $attendanceSessionCode !== null) {
                 $sessionStmt = $pdo->prepare(
                     "SELECT 1
@@ -3315,67 +3334,6 @@ function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, st
     ]);
 }
 
-/**
- * Transmuted assessments without an explicit attendance session are matched to
- * the session held on their exam (due) date. Report the ones where that match
- * is impossible (no session that day) or ambiguous (more than one session).
- */
-function faculty_transmutation_link_warnings(PDO $pdo, int $facultyUserId, int $csId): array
-{
-    $sql = "SELECT a.assessment_id, a.title, a.due_date, cs.cs_id, cs.cs_name,
-                   (SELECT COUNT(*) FROM (
-                        SELECT s.session_code
-                          FROM attendance_sessions s
-                         WHERE s.cs_id = a.cs_id AND s.session_date = a.due_date
-                        UNION
-                        SELECT COALESCE(ar.session_code, '')
-                          FROM attendance_records ar
-                          JOIN enrollments en ON en.enrollment_id = ar.enrollment_id
-                         WHERE en.cs_id = a.cs_id AND ar.session_date = a.due_date
-                   ) codes) AS session_count
-              FROM assessments a
-              JOIN class_sections cs ON cs.cs_id = a.cs_id
-             WHERE cs.instructor_user_id = ?
-               AND a.status <> 'Archived'
-               AND a.transmutation_enabled = TRUE
-               AND a.attendance_session_date IS NULL";
-    $params = [$facultyUserId];
-    if ($csId > 0) {
-        $sql .= ' AND a.cs_id = ?';
-        $params[] = $csId;
-    }
-    $sql .= ' ORDER BY a.assessment_id';
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-
-    $warnings = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $count = (int) $row['session_count'];
-        $dueDate = $row['due_date'] !== null ? (string) $row['due_date'] : null;
-        if ($dueDate !== null && $count === 1) {
-            continue;
-        }
-        $reason = $dueDate === null ? 'no_exam_date' : ($count === 0 ? 'no_session' : 'multiple_sessions');
-        $title = (string) $row['title'];
-        $section = (string) $row['cs_name'];
-        $message = match ($reason) {
-            'no_exam_date' => "\"{$title}\" ({$section}) has no exam date, so no attendance session can be matched. Set a due date or link a session.",
-            'no_session' => "No attendance session was held on {$dueDate} for \"{$title}\" ({$section}). Link the correct session or change the exam date.",
-            default => "{$count} attendance sessions were held on {$dueDate} for \"{$title}\" ({$section}). Link the exam's session in the assessment so the right attendance is used.",
-        };
-        $warnings[] = [
-            'assessmentId' => (string) $row['assessment_id'],
-            'title' => $title,
-            'classId' => (string) $row['cs_id'],
-            'dueDate' => $dueDate,
-            'reason' => $reason,
-            'sessionCount' => $count,
-            'message' => $message,
-        ];
-    }
-    return $warnings;
-}
-
 function handle_faculty_grades_compute(): void
 {
     $pdo = null;
@@ -3450,8 +3408,7 @@ function handle_faculty_grades_compute(): void
                        gcp.grading_period AS period_category_period,
                        gcp.source_kind AS period_category_source_kind,
                        sc.score_id, sc.score,
-                       linked_att.record_id AS linked_attendance_record_id,
-                       linked_att.status AS linked_attendance_status,
+                       " . faculty_linked_attendance_sql('e.enrollment_id') . " AS linked_attendance_status,
                        att.attendance_percentage
                 FROM enrollments e
                 JOIN class_sections cs ON cs.cs_id = e.cs_id
@@ -3469,24 +3426,6 @@ function handle_faculty_grades_compute(): void
                        ON gcp.category_id = a.grading_category_id
                       AND gcp.grading_period = a.grading_period
                 LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = e.student_id
-                LEFT JOIN attendance_records linked_att
-                       ON linked_att.enrollment_id = e.enrollment_id
-                      AND (
-                            (a.attendance_session_date IS NOT NULL AND a.attendance_session_code IS NOT NULL
-                             AND linked_att.session_date = a.attendance_session_date
-                             AND linked_att.session_code = a.attendance_session_code)
-                            OR
-                            (a.attendance_session_date IS NULL
-                             AND a.due_date IS NOT NULL
-                             AND linked_att.session_date = a.due_date
-                             -- Auto-match only when the exam date has exactly one attendance
-                             -- record for the student; otherwise the link is ambiguous.
-                             AND NOT EXISTS (
-                                 SELECT 1 FROM attendance_records dup
-                                  WHERE dup.enrollment_id = linked_att.enrollment_id
-                                    AND dup.session_date = linked_att.session_date
-                                    AND dup.record_id <> linked_att.record_id))
-                          )
                 LEFT JOIN (
                     SELECT enrollment_id,
                            AVG(CASE
@@ -3737,7 +3676,6 @@ function handle_faculty_grades_compute(): void
                 'message' => 'Grade weights have not been set up for this course. Set them up in the Grade Weights editor, then recompute.',
             ];
         }
-        $transmutationWarnings = faculty_transmutation_link_warnings($pdo, (int) $authCtx['user_id'], $csId);
         $computedCount = count(array_filter($results, static fn(array $result): bool => ($result['status'] ?? '') === 'computed'));
         audit_record_action(
             $pdo, $config, $authCtx, 'grading', 'grades_recomputed',
@@ -3750,7 +3688,6 @@ function handle_faculty_grades_compute(): void
             'status' => 'ok',
             'message' => 'Grades computed and persisted successfully.',
             'results' => $results,
-            'transmutationWarnings' => $transmutationWarnings,
         ], 200);
     } catch (FacultyGradingConfigurationException $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) {
@@ -4871,26 +4808,17 @@ function faculty_watchlist_midterm(PDO $pdo, array $enrollment): array
     $grading = $config->fetch(PDO::FETCH_ASSOC);
     if (!$grading) return ['complete' => false, 'percentage' => null];
     $assessments = $pdo->prepare(
-        "SELECT a.*, sc.score_id, sc.score, ar.status AS linked_attendance_status
+        "SELECT a.*, sc.score_id, sc.score,
+                " . faculty_linked_attendance_sql('CAST(:enrollment_id AS INTEGER)') . " AS linked_attendance_status
            FROM assessments a
-           LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = ?
-           LEFT JOIN attendance_records ar ON ar.enrollment_id = ?
-             AND (
-               (a.attendance_session_date IS NOT NULL AND a.attendance_session_code IS NOT NULL
-                AND ar.session_date = a.attendance_session_date AND ar.session_code = a.attendance_session_code)
-               OR
-               (a.attendance_session_date IS NULL
-                AND a.due_date IS NOT NULL
-                AND ar.session_date = a.due_date
-                AND NOT EXISTS (
-                    SELECT 1 FROM attendance_records dup
-                     WHERE dup.enrollment_id = ar.enrollment_id
-                       AND dup.session_date = ar.session_date
-                       AND dup.record_id <> ar.record_id))
-             )
-          WHERE a.cs_id = ? AND a.grading_period = 'Midterm' AND a.status <> 'Archived'"
+           LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = :student_id
+          WHERE a.cs_id = :cs_id AND a.grading_period = 'Midterm' AND a.status <> 'Archived'"
     );
-    $assessments->execute([$enrollment['student_id'], $enrollment['enrollment_id'], $enrollment['cs_id']]);
+    $assessments->execute([
+        ':student_id' => $enrollment['student_id'],
+        ':enrollment_id' => $enrollment['enrollment_id'],
+        ':cs_id' => $enrollment['cs_id'],
+    ]);
     $rows = $assessments->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$assessment) $assessment['_has_score'] = $assessment['score_id'] !== null;
     unset($assessment);

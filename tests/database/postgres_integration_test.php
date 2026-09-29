@@ -4144,9 +4144,10 @@ expect_same(200, $computeStatus, 'Corrected attendance recomputation returns HTT
 $correctedGrades = $readFixtureGrades($pdo);
 expect_same('75.00', $correctedGrades[1]['final_percentage'], 'Attendance correction changes the subsequent persisted effective grade');
 
-// Exam-date auto-match: with no linked session the attendance record on the
-// assessment's due date is used, but only when it is unambiguous, and the
-// compute response warns when no session or several sessions exist that day.
+// GRD-001: without a session link, transmutation ignores attendance (there
+// is no exam-date matching); with a link, a missing record is incomplete while
+// the session is open and Absent once it has ended; a revoked linked session
+// counts as unlinked.
 $findEnrollmentResult = static function (array $body, int $enrollmentId): ?array {
     foreach (($body['results'] ?? []) as $result) {
         if ((string) ($result['enrollmentId'] ?? '') === (string) $enrollmentId) {
@@ -4157,38 +4158,39 @@ $findEnrollmentResult = static function (array $body, int $enrollmentId): ?array
 };
 $pdo->prepare('UPDATE assessments SET attendance_session_date = NULL, attendance_session_code = NULL, due_date = ? WHERE assessment_id = ?')
     ->execute([$gradeSessionDate, $gradeAssessmentId]);
-[$autoMatchStatus, $autoMatchBody] = $computeFixtureGrades();
-expect_same(200, $autoMatchStatus, 'Exam-date auto-match computation returns HTTP 200');
-expect_same([], $autoMatchBody['transmutationWarnings'] ?? null, 'A single session on the exam date produces no transmutation warning');
-expect_same('computed', $findEnrollmentResult($autoMatchBody, $gradeEnrollmentA)['status'] ?? null, 'The exam-date session satisfies transmutation for enrollment A');
-$autoMatchGrades = $readFixtureGrades($pdo);
-expect_same('75.00', $autoMatchGrades[0]['final_percentage'], 'Exam-date auto-match applies the same transmutation as an explicit link');
-
-$extraSessionStmt = $pdo->prepare(
-    "INSERT INTO attendance_records (enrollment_id, session_date, session_code, status, verification_method)
-     VALUES (?, ?, ?, 'absent', 'integration_fixture') RETURNING record_id"
-);
-$extraSessionStmt->execute([$gradeEnrollmentA, $gradeSessionDate, $gradeSessionCode . '-PM']);
-$extraSessionRecordId = (int) $extraSessionStmt->fetchColumn();
-[$ambiguousStatus, $ambiguousBody] = $computeFixtureGrades();
-expect_same(200, $ambiguousStatus, 'Ambiguous exam-date computation returns HTTP 200');
-expect_same('incomplete_attendance', $findEnrollmentResult($ambiguousBody, $gradeEnrollmentA)['status'] ?? null, 'Two sessions on the exam date are not guessed or double counted');
-expect_same('multiple_sessions', $ambiguousBody['transmutationWarnings'][0]['reason'] ?? null, 'Two sessions on the exam date produce a multiple-sessions warning');
-expect_same(2, $ambiguousBody['transmutationWarnings'][0]['sessionCount'] ?? null, 'The warning reports how many sessions were found');
-expect_same((string) $gradeAssessmentId, (string) ($ambiguousBody['transmutationWarnings'][0]['assessmentId'] ?? ''), 'The warning names the affected assessment');
-$pdo->prepare('DELETE FROM attendance_records WHERE record_id = ?')->execute([$extraSessionRecordId]);
-
-$pdo->prepare("UPDATE assessments SET due_date = '2026-01-16' WHERE assessment_id = ?")->execute([$gradeAssessmentId]);
-[$noSessionStatus, $noSessionBody] = $computeFixtureGrades();
-expect_same(200, $noSessionStatus, 'No-session exam-date computation returns HTTP 200');
-expect_same('no_session', $noSessionBody['transmutationWarnings'][0]['reason'] ?? null, 'No session on the exam date produces a no-session warning');
-expect_true(str_contains((string) ($noSessionBody['transmutationWarnings'][0]['message'] ?? ''), '2026-01-16'), 'The no-session warning names the exam date');
+$pdo->prepare("UPDATE attendance_records SET status = 'absent' WHERE record_id = ?")->execute([$gradeAttendanceA]);
+[$unlinkedStatus, $unlinkedBody] = $computeFixtureGrades();
+expect_same(200, $unlinkedStatus, 'Unlinked transmutation computation returns HTTP 200');
+expect_true(!array_key_exists('transmutationWarnings', $unlinkedBody), 'Grade computation no longer reports exam-date matching warnings');
+expect_same('computed', $findEnrollmentResult($unlinkedBody, $gradeEnrollmentA)['status'] ?? null, 'An unlinked transmuted assessment computes without attendance');
+expect_same('75.00', $readFixtureGrades($pdo)[0]['final_percentage'], 'Unlinked transmutation ignores an Absent record on the exam date (no auto-match)');
 
 $pdo->prepare('UPDATE assessments SET attendance_session_date = ?, attendance_session_code = ?, due_date = NULL WHERE assessment_id = ?')
     ->execute([$gradeSessionDate, $gradeSessionCode, $gradeAssessmentId]);
-[$restoredLinkStatus, $restoredLinkBody] = $computeFixtureGrades();
-expect_same(200, $restoredLinkStatus, 'Restoring the explicit session link recomputes successfully');
-expect_same([], $restoredLinkBody['transmutationWarnings'] ?? null, 'Explicitly linked assessments never produce auto-match warnings');
+$linkedSessionStmt = $pdo->prepare(
+    "INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, status)
+     SELECT cs_id, instructor_user_id, instructor_user_id, ?, ?, 'active' FROM class_sections WHERE cs_id = ?
+     RETURNING session_id"
+);
+$linkedSessionStmt->execute([$gradeSessionDate, $gradeSessionCode, $gradeClassId]);
+$linkedSessionId = (int) $linkedSessionStmt->fetchColumn();
+$pdo->prepare('DELETE FROM attendance_records WHERE record_id = ?')->execute([$gradeAttendanceA]);
+[, $openSessionBody] = $computeFixtureGrades();
+expect_same('incomplete_attendance', $findEnrollmentResult($openSessionBody, $gradeEnrollmentA)['status'] ?? null, 'A linked open session without a record is incomplete');
+$pdo->prepare("UPDATE attendance_sessions SET status = 'ended', ended_at = CURRENT_TIMESTAMP WHERE session_id = ?")->execute([$linkedSessionId]);
+[, $endedSessionBody] = $computeFixtureGrades();
+expect_same('computed', $findEnrollmentResult($endedSessionBody, $gradeEnrollmentA)['status'] ?? null, 'A linked ended session without a record resolves');
+expect_same('0.00', $readFixtureGrades($pdo)[0]['final_percentage'], 'A linked ended session without a record counts as Absent (0%)');
+$pdo->prepare("UPDATE attendance_sessions SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP WHERE session_id = ?")->execute([$linkedSessionId]);
+[, $revokedSessionBody] = $computeFixtureGrades();
+expect_same('computed', $findEnrollmentResult($revokedSessionBody, $gradeEnrollmentA)['status'] ?? null, 'A revoked linked session counts as unlinked');
+expect_same('75.00', $readFixtureGrades($pdo)[0]['final_percentage'], 'A revoked linked session transmutes the raw score without attendance');
+$pdo->prepare('DELETE FROM attendance_sessions WHERE session_id = ?')->execute([$linkedSessionId]);
+$gradeAttendanceStmt->execute([$gradeEnrollmentA, $gradeSessionDate, $gradeSessionCode, 'late']);
+$gradeAttendanceA = (int) $gradeAttendanceStmt->fetchColumn();
+[$restoredLinkStatus] = $computeFixtureGrades();
+expect_same(200, $restoredLinkStatus, 'Restoring the linked attendance recomputes successfully');
+expect_same('75.00', $readFixtureGrades($pdo)[0]['final_percentage'], 'Restored linked attendance applies the transmutation again');
 $rawScoreAfterCorrection = (float) $pdo->query(
     "SELECT score FROM assessment_scores WHERE assessment_id = {$gradeAssessmentId} AND student_id = {$gradeStudentB}"
 )->fetchColumn();

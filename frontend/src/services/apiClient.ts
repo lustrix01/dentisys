@@ -1861,22 +1861,10 @@ export type FacultyGradeComputeResult =
   | FacultyLegacyIncompleteAttendanceResult
   | FacultyWeightsRequiredResult;
 
-export interface FacultyTransmutationLinkWarning {
-  assessmentId: string;
-  title: string;
-  classId: string;
-  dueDate: string | null;
-  reason: 'no_exam_date' | 'no_session' | 'multiple_sessions';
-  sessionCount: number;
-  message: string;
-}
-
 export interface FacultyComputeGradesResponse {
   status: string;
   message: string;
   results: FacultyGradeComputeResult[];
-  /** Transmuted assessments whose exam-date attendance match is missing or ambiguous. */
-  transmutationWarnings?: FacultyTransmutationLinkWarning[];
 }
 
 export function isPeriodComputeResult(

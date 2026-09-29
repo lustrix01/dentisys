@@ -28,7 +28,12 @@ assert_faculty_grading($assessment(100, 'present') === 100.0, 'Default present m
 assert_faculty_grading($assessment(50, 'late') === 75.0, 'Late uses the same approved transformation as present');
 assert_faculty_grading($assessment(50, 'excused') === 75.0, 'Excused uses the same approved transformation as present');
 assert_faculty_grading($assessment(100, 'absent') === 0.0, 'Absent always produces zero effective percentage');
-assert_faculty_grading(faculty_effective_assessment_percentage(50, 100, true, 50, 100, null) === null, 'Missing or unresolved attendance produces no effective result');
+assert_faculty_grading(faculty_effective_assessment_percentage(50, 100, true, 50, 100, 'unresolved') === null, 'Unresolved linked attendance produces no effective result');
+assert_faculty_grading(faculty_effective_assessment_percentage(50, 100, true, 50, 100, null) === 75.0, 'Without a session link the raw percentage is transmuted and attendance is ignored (GRD-001)');
+$linkedSql = faculty_linked_attendance_sql('e.enrollment_id');
+assert_faculty_grading(!str_contains($linkedSql, 'due_date'), 'Linked attendance never matches by exam date (GRD-001)');
+assert_faculty_grading(str_contains($linkedSql, "ls.status = 'revoked') THEN NULL"), 'A revoked linked session counts as unlinked (GRD-001)');
+assert_faculty_grading(str_contains($linkedSql, "ls.status = 'ended') THEN 'absent'"), 'An ended linked session without a record resolves to Absent (GRD-001)');
 assert_faculty_grading(
     faculty_effective_assessment_percentage(25, 50, true, 40, 90, 'present') === 65.0,
     'Custom transmutation bounds are applied correctly'

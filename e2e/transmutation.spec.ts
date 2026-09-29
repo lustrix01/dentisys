@@ -233,7 +233,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page.getByTestId('grading-policy-card')).toContainText('Retention trigger: GWA 2.5.');
   });
 
-  test('faculty assessment modal uses defaults and auto-matches the exam-date session when no session is linked', async ({ page }) => {
+  test('faculty assessment modal uses defaults and allows transmutation without an attendance link', async ({ page }) => {
     await login(page, 'faculty');
 
     // Assessments need saved grade weights; both courses are configured.
@@ -325,7 +325,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByRole('button', { name: 'Assessments Manager' }).click();
     await expect(page.locator('select').nth(1)).toHaveValue('7');
     await page.getByRole('button', { name: 'Add Assessment' }).click();
-    await page.getByPlaceholder('e.g. Molar Crown Prep quiz').fill('Auto-matched assessment survives refresh');
+    await page.getByPlaceholder('e.g. Molar Crown Prep quiz').fill('Unlinked assessment survives refresh');
     // A course with a single section shows it as text instead of a picker.
     const createForm = page.locator('form').last();
     await expect(createForm.getByText('Target Class / Section')).toBeVisible();
@@ -339,12 +339,13 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page.locator('label').filter({ hasText: 'Maximum percentage' }).locator('input')).toHaveValue('88');
     await expect(page.getByLabel('Attendance session date')).toBeVisible();
     await expect(page.getByLabel('Attendance session code')).toBeVisible();
-    // Leaving the session blank is allowed: grades use the session held on the exam (due) date.
+    await expect(page.getByLabel('Attendance session date').locator('option').first()).toHaveText('No link (attendance not considered)');
+    // Leaving the session blank is allowed: the raw score is transmuted and attendance is not considered (GRD-001).
     await page.getByRole('button', { name: 'Confirm Assessment' }).click();
     await expect(page.getByText('Assessment persisted successfully.')).toBeVisible();
     await expect.poll(() => postedAssessment).not.toBeNull();
     expect(postedAssessment).toMatchObject({
-      title: 'Auto-matched assessment survives refresh',
+      title: 'Unlinked assessment survives refresh',
       classId: '7',
       gradingCategoryId: expect.any(Number),
       transmutationEnabled: true,
@@ -353,21 +354,21 @@ test.describe('Assessment transmutation UI coverage', () => {
       attendanceSessionDate: null,
       attendanceSessionCode: null,
     });
-    const createdRow = page.getByRole('row').filter({ hasText: 'Auto-matched assessment survives refresh' });
+    const createdRow = page.getByRole('row').filter({ hasText: 'Unlinked assessment survives refresh' });
     await expect(createdRow).toBeVisible();
-    await expect(createdRow.getByText('(Exam-date auto match)')).toBeVisible();
+    await expect(createdRow.getByText('(No attendance link)')).toBeVisible();
 
     await page.reload();
     await login(page, 'faculty');
     await page.getByRole('link', { name: 'Grade Computation' }).click();
     await page.getByRole('button', { name: 'Assessments Manager' }).click();
     await expect(page.locator('select').nth(1)).toHaveValue('7');
-    const persistedRow = page.getByRole('row').filter({ hasText: 'Auto-matched assessment survives refresh' });
+    const persistedRow = page.getByRole('row').filter({ hasText: 'Unlinked assessment survives refresh' });
     await expect(persistedRow).toBeVisible();
     await persistedRow.getByRole('button', { name: 'Edit' }).click();
     const assessmentForm = page.locator('form').last();
     await expect(page.getByRole('heading', { name: 'Edit Assessment Spec' })).toBeVisible();
-    await expect(page.getByPlaceholder('e.g. Molar Crown Prep quiz')).toHaveValue('Auto-matched assessment survives refresh');
+    await expect(page.getByPlaceholder('e.g. Molar Crown Prep quiz')).toHaveValue('Unlinked assessment survives refresh');
     await expect(assessmentForm.locator('input[type="number"]').first()).toHaveValue('50');
     await expect(assessmentForm.locator('input[type="date"]')).toHaveValue(String(postedAssessment?.dueDate));
     await expect(assessmentForm.locator('select').nth(0)).toHaveValue(String(postedAssessment?.gradingCategoryId));
@@ -375,7 +376,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(assessmentForm.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i })).toBeChecked();
     await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('button', { name: 'Student Scores Entry' }).click();
-    await expect(page.locator('select').last().locator('option[value="ui-assessment-7"]')).toHaveText(/Auto-matched assessment survives refresh/);
+    await expect(page.locator('select').last().locator('option[value="ui-assessment-7"]')).toHaveText(/Unlinked assessment survives refresh/);
 
     await page.locator('select').first().selectOption('CLIN402');
     await expect(page.locator('select').nth(1)).toHaveValue('8');

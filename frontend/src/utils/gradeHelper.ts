@@ -4,7 +4,9 @@ export const effectiveAssessmentPercentage = (
   rawScore: number,
   maxScore: number,
   assessment: Pick<Assessment, 'transmutationEnabled' | 'transmutationMinimumPercentage' | 'transmutationMaximumPercentage'>,
-  attendanceStatus?: AttendanceStatus | null,
+  // 'unlinked': no session link, so attendance is not considered (GRD-001).
+  // null/undefined: the linked session's attendance is not resolved yet.
+  attendanceStatus?: AttendanceStatus | 'unlinked' | null,
 ): number | null => {
   if (maxScore <= 0) return null;
   const rawPercentage = (rawScore / maxScore) * 100;
@@ -13,7 +15,7 @@ export const effectiveAssessmentPercentage = (
   if (attendanceStatus === 'absent') return 0;
   const minimum = assessment.transmutationMinimumPercentage ?? 50;
   const maximum = assessment.transmutationMaximumPercentage ?? 100;
-  if (attendanceStatus === 'present' || attendanceStatus === 'late' || attendanceStatus === 'excused') {
+  if (attendanceStatus === 'unlinked' || attendanceStatus === 'present' || attendanceStatus === 'late' || attendanceStatus === 'excused') {
     return minimum + (rawPercentage / 100) * (maximum - minimum);
   }
   return null;

@@ -552,12 +552,13 @@ export const Reports: React.FC = () => {
       if (scores.length === 0) return [];
       const effectiveValues = scores
         .map(score => {
-          const attendance = ass.transmutationEnabled
+          const linked = Boolean(ass.attendanceSessionDate && ass.attendanceSessionCode);
+          const attendance = ass.transmutationEnabled && linked
             ? analyticsAttendanceRecords.find(record => record.studentId === score.studentId
               && record.date === ass.attendanceSessionDate
               && record.sessionCode === ass.attendanceSessionCode)
             : undefined;
-          return effectiveAssessmentPercentage(score.score, ass.maxScore, ass, attendance?.status);
+          return effectiveAssessmentPercentage(score.score, ass.maxScore, ass, linked ? attendance?.status : 'unlinked');
         })
         .filter((value): value is number => value !== null);
       if (effectiveValues.length === 0) return [];

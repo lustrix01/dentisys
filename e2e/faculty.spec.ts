@@ -1903,7 +1903,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.locator('.no-print').getByText(/Historical/i)).toHaveCount(0);
     });
 
-    test('recompute shows a warning when a transmuted assessment has no or several sessions on its exam date', async ({ page }) => {
+    test('recompute shows no exam-date matching warning (GRD-001 removed auto-match)', async ({ page }) => {
       await page.route('**/api/faculty/grading-config?*', async (route) => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: null }) });
       });
@@ -1928,11 +1928,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: /Recompute Grades/i }).click();
       await page.getByRole('button', { name: /Confirm Recomputation/i }).click();
 
-      const warning = page.getByTestId('transmutation-warnings');
-      await expect(warning).toBeVisible();
-      await expect(warning).toContainText('Attendance session could not be matched for transmutation');
-      await expect(warning).toContainText('2 attendance sessions were held on 2026-10-05');
-      await expect(warning).toContainText('No attendance session was held on 2026-10-07');
+      // Even a stale server field is ignored: there is no exam-date matching to warn about.
+      await expect(page.getByRole('button', { name: /Recompute Grades/i })).toBeVisible();
+      await expect(page.getByTestId('transmutation-warnings')).toHaveCount(0);
+      await expect(page.getByText('Attendance session could not be matched for transmutation')).toHaveCount(0);
     });
 
     test('409 GRADING_CATEGORY_IN_USE displays error alert and does NOT trigger reload flow', async ({ page }) => {
