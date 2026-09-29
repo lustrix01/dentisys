@@ -1291,6 +1291,32 @@ expect_true($facultyGeofenceClassId > 0, 'Seed Faculty owns an active class for 
 expect_same(422, $facultyGeofenceStatus, 'Faculty geofenced session requires geofenceLatitude/geofenceLongitude, not legacy latitude/longitude');
 expect_same('geofenceLatitude', $facultyGeofenceBody['errors'][0]['field'] ?? null, 'Faculty missing geofence location is reported on geofenceLatitude');
 
+// REG-009: a user cannot change their own login email.
+// The email check runs before anything is written, so valid name parts with
+// a different email are rejected without changing the account.
+$facultyEmailStmt = $pdo->prepare("SELECT login_email, display_name FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph'");
+$facultyEmailStmt->execute();
+$facultyAccountBefore = $facultyEmailStmt->fetch(PDO::FETCH_ASSOC);
+[$facultyEmailChangeStatus, $facultyEmailChangeBody] = integration_http_json('/api/faculty/profile', $facultyAccessToken, [
+    'prefix' => '',
+    'firstName' => 'Email',
+    'middleName' => '',
+    'lastName' => 'Change',
+    'suffix' => '',
+    'email' => 'changed-faculty-' . bin2hex(random_bytes(3)) . '@bicol-u.edu.ph',
+]);
+expect_same(422, $facultyEmailChangeStatus, 'Faculty cannot change their own login email');
+expect_same('email', $facultyEmailChangeBody['errors'][0]['field'] ?? null, 'Rejected email change is reported on the email field');
+$facultyEmailStmt->execute();
+expect_same($facultyAccountBefore, $facultyEmailStmt->fetch(PDO::FETCH_ASSOC), 'Rejected email change leaves the account unchanged');
+[, $facultyProfileBody] = integration_http_get_json('/api/faculty/profile', $facultyAccessToken);
+[$facultyNameOnlyStatus] = integration_http_json('/api/faculty/profile', $facultyAccessToken, [
+    'name' => (string) ($facultyProfileBody['profile']['name'] ?? ''),
+]);
+expect_same(200, $facultyNameOnlyStatus, 'Faculty profile saves without an email field');
+$facultyEmailStmt->execute();
+expect_same($facultyAccountBefore, $facultyEmailStmt->fetch(PDO::FETCH_ASSOC), 'Faculty login email is unchanged after profile updates');
+
 $facultyInvitationEmail = 'invite-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
 [$facultyInvitationStatus, $facultyInvitationBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
     'prefix' => 'Dr.',

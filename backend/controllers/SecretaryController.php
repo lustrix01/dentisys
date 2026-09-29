@@ -1895,7 +1895,10 @@ function handle_secretary_profile_update(): void
         }
 
         $data = $body['data'];
-        $email = validate_institutional_email($data['email'] ?? '');
+        // The login email is permanent (REG-009); if sent it must match the account.
+        $email = isset($data['email']) && trim((string) $data['email']) !== ''
+            ? validate_institutional_email($data['email'])
+            : null;
 
         $nameParts = account_identity_name_parts($data);
         if ($nameParts === null) {
@@ -1926,8 +1929,6 @@ function handle_secretary_profile_update(): void
                 );
             }
             update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
-            $updStudent = $pdo->prepare("UPDATE students SET bu_email = ? WHERE user_id = ? AND person_id = ?");
-            $updStudent->execute([$email, $authCtx['user_id'], (int) $identity['account_person_id']]);
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {

@@ -727,7 +727,7 @@ export function getAdminProfileApi(): Promise<{
   return request('GET', '/admin/profile');
 }
 
-export function updateAdminProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string; email: string; office?: string }): Promise<{ status: string; message: string }> {
+export function updateAdminProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string }): Promise<{ status: string; message: string }> {
   return request('POST', '/admin/profile', data);
 }
 
@@ -1188,7 +1188,7 @@ export function getFacultyProfileApi(): Promise<{
   return request('GET', '/faculty/profile');
 }
 
-export function updateFacultyProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string; email: string }): Promise<{ status: string; message: string }> {
+export function updateFacultyProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/profile', data);
 }
 
@@ -1316,7 +1316,7 @@ export function getSecretaryProfileApi(): Promise<{
   return request('GET', '/secretary/profile');
 }
 
-export function updateSecretaryProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string; email: string }): Promise<{ status: string; message: string }> {
+export function updateSecretaryProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string }): Promise<{ status: string; message: string }> {
   return request('POST', '/secretary/profile', data);
 }
 

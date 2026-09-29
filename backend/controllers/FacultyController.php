@@ -5575,7 +5575,10 @@ function handle_faculty_profile_update(): void
         $data = $body['data'];
         $nameParts = account_identity_name_parts($data);
         $name = $nameParts !== null ? account_identity_composed_name($nameParts) : validate_person_name($data, 'name', 2, 255);
-        $email = validate_institutional_email($data['email'] ?? '');
+        // The login email is permanent (REG-009); if sent it must match the account.
+        $email = isset($data['email']) && trim((string) $data['email']) !== ''
+            ? validate_institutional_email($data['email'])
+            : null;
 
         update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
 

@@ -174,7 +174,11 @@ function account_identity_sync_canonical_person(PDO $pdo, int $personId, array $
     ]);
 }
 
-function update_account_identity(PDO $pdo, int $userId, string $displayName, string $loginEmail, ?array $nameParts = null): bool
+/**
+ * Update a user's own name. The login email is permanent after activation
+ * (REG-009): pass null to keep it; a different email is rejected.
+ */
+function update_account_identity(PDO $pdo, int $userId, string $displayName, ?string $loginEmail, ?array $nameParts = null): bool
 {
     $ownsTransaction = !$pdo->inTransaction();
     if ($ownsTransaction) {
@@ -205,15 +209,22 @@ function update_account_identity(PDO $pdo, int $userId, string $displayName, str
             throw new ValidationException([['field' => 'firstName', 'message' => 'Use the separate name fields to change your name.']]);
         }
 
-        $emailChanged = !hash_equals(mb_strtolower((string) $currentEmail), mb_strtolower($loginEmail));
+        $loginEmail ??= (string) $currentEmail;
+        if (!hash_equals(mb_strtolower((string) $currentEmail), mb_strtolower($loginEmail))) {
+            throw new ValidationException([[
+                'field' => 'email',
+                'message' => 'Your login email cannot be changed. Contact the Dean if it is wrong.',
+            ]]);
+        }
+        $emailChanged = false;
         if ($nameParts !== null) {
             account_identity_sync_canonical_person($pdo, (int) ($current['person_id'] ?? 0), $nameParts);
             $displayName = account_identity_composed_name($nameParts);
         }
         $update = $pdo->prepare(
-            'UPDATE user_accounts SET display_name = ?, login_email = ? WHERE user_id = ?'
+            'UPDATE user_accounts SET display_name = ? WHERE user_id = ?'
         );
-        $update->execute([$displayName, $loginEmail, $userId]);
+        $update->execute([$displayName, $userId]);
 
         if ($ownsTransaction) {
             $pdo->commit();

@@ -1,22 +1,12 @@
 import { PersonNameFields, emptyNameParts, composePersonName } from '../../components/PersonNameFields';
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { getSecretaryProfileApi, updateSecretaryProfileApi } from '../../services/apiClient';
-import { validateBicolUEmail } from '../../services/authService';
 import { normalizePersonName } from '../../utils/nameNormalization';
-import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
-
-const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
-
-function completeInstitutionalEmail(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.includes('@')) return trimmed;
-  return `${trimmed}@${DEFAULT_EMAIL_DOMAIN}`;
-}
 
 export const Profile: React.FC = () => {
   const [nameParts, setNameParts] = useState(emptyNameParts);
@@ -42,14 +32,6 @@ export const Profile: React.FC = () => {
   });
 
   const [editName, setEditName] = useState(profile.name);
-  const [editEmail, setEditEmail] = useState(profile.email);
-
-  const runtimeConfig = useRuntimeConfig();
-  const allowedDomains = useMemo(() => {
-    return runtimeConfig.allowed_email_domains && runtimeConfig.allowed_email_domains.length > 0
-      ? runtimeConfig.allowed_email_domains
-      : ['bicol-u.edu.ph'];
-  }, [runtimeConfig.allowed_email_domains]);
 
   useEffect(() => {
     setLoading(true);
@@ -59,7 +41,6 @@ export const Profile: React.FC = () => {
           setNameParts({ prefix: res.profile.prefix || '', firstName: res.profile.firstName || '', middleName: res.profile.middleName || '', lastName: res.profile.lastName || '', suffix: res.profile.suffix || '' });
           setProfile(res.profile);
           setEditName(res.profile.name);
-          setEditEmail(res.profile.email);
         }
       })
       .catch(err => {
@@ -73,23 +54,16 @@ export const Profile: React.FC = () => {
     setMessage(null);
 
     const trimmedName = composePersonName(nameParts);
-    const trimmedEmail = completeInstitutionalEmail(editEmail);
 
     if (trimmedName.length < 2) {
       setMessage({ type: 'error', text: 'Name must be at least 2 characters long.' });
       return;
     }
 
-    const emailValidation = validateBicolUEmail(trimmedEmail, allowedDomains);
-    if (!emailValidation.isValid) {
-      setMessage({ type: 'error', text: emailValidation.message || 'Valid institutional email address required (e.g. @bicol-u.edu.ph or configured allowlist domain).' });
-      return;
-    }
-
     setSaving(true);
     try {
-      const res = await updateSecretaryProfileApi({ ...nameParts, name: trimmedName, email: trimmedEmail });
-      setProfile(prev => ({ ...prev, name: trimmedName, email: trimmedEmail }));
+      const res = await updateSecretaryProfileApi({ ...nameParts, name: trimmedName });
+      setProfile(prev => ({ ...prev, name: trimmedName }));
       setMessage({ type: 'success', text: res.message || 'Profile updated successfully.' });
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update profile.' });
@@ -217,27 +191,14 @@ export const Profile: React.FC = () => {
                     <div className="sm:col-span-2"><PersonNameFields value={nameParts} onChange={setNameParts} /></div>
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Institutional Email</label>
-                        <span className="flex">
-                          <input
-                            type="text"
-                            inputMode="email"
-                            placeholder={editEmail.includes('@') ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username'}
-                            value={editEmail}
-                            onChange={(e) => setEditEmail(e.target.value)}
-                            list="secretary-email-suggestions"
-                            required
-                            className={`min-w-0 flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-100 ${editEmail.includes('@') ? '' : 'rounded-r-none'}`}
-                          />
-                          {!editEmail.includes('@') && <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-blue-700 dark:border-slate-800 dark:bg-slate-900 dark:text-blue-300">@{DEFAULT_EMAIL_DOMAIN}</span>}
-                        </span>
-                      <datalist id="secretary-email-suggestions">
-                        {editEmail && !editEmail.includes('@') && allowedDomains.map(dom => (
-                          <option key={`prefix-${dom}`} value={`${editEmail.trim()}@${dom}`} />
-                        ))}
-                        {allowedDomains.map(dom => (
-                          <option key={`domain-${dom}`} value={`secretary@${dom}`} />
-                        ))}
-                      </datalist>
+                      <input
+                        type="text"
+                        value={profile.email}
+                        readOnly
+                        aria-readonly="true"
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-sm text-slate-600 dark:text-slate-300 cursor-not-allowed focus:outline-none"
+                      />
+                      <p className="text-[11px] text-slate-400">Your login email cannot be changed.</p>
                     </div>
                   </div>
 
@@ -298,7 +259,7 @@ export const Profile: React.FC = () => {
 
       <PasswordChangeCard />
 
-      <MfaSettingsCard userEmail={editEmail || profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
+      <MfaSettingsCard userEmail={profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
       <GoogleLinkCard />
     </div>
   );

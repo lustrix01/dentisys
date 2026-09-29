@@ -1,6 +1,6 @@
 import { PersonNameFields, emptyNameParts, composePersonName } from '../../components/PersonNameFields';
 import React, { useEffect, useState } from 'react';
-import { BookOpen, BriefcaseBusiness, CheckCircle2, Mail, Phone, Save, UserRound } from 'lucide-react';
+import { BookOpen, CheckCircle2, Mail, Save, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
 import { GoogleLinkCard } from '../../components/GoogleLinkCard';
@@ -8,28 +8,15 @@ import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { useAuth } from '../../context/AuthContext';
 import { recordAudit } from '../../services/auditService';
 import { getFacultyProfileApi, updateFacultyProfileApi, getFacultyClassesApi } from '../../services/apiClient';
-import { normalizePersonName } from '../../utils/nameNormalization';
-
-const DEFAULT_EMAIL_DOMAIN = 'bicol-u.edu.ph';
-
-function completeInstitutionalEmail(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.includes('@')) return trimmed;
-  return `${trimmed}@${DEFAULT_EMAIL_DOMAIN}`;
-}
-
-const inputClass = 'mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-clinical-500';
 
 export const Profile: React.FC = () => {
   const [nameParts, setNameParts] = useState(emptyNameParts);
   const { user } = useAuth();
   const [name, setName] = useState(user?.display_name || 'Faculty Member');
   const [email, setEmail] = useState(user?.login_email || '');
-  const [phone, setPhone] = useState('');
-  const [specialty, setSpecialty] = useState('Clinical Dentistry');
   const [saved, setSaved] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [subjects, setSubjects] = useState<string[]>(['CLIN401', 'CLIN402']);
+  const [subjects, setSubjects] = useState<string[]>([]);
 
   useEffect(() => {
     getFacultyProfileApi()
@@ -45,8 +32,7 @@ export const Profile: React.FC = () => {
     getFacultyClassesApi()
       .then((res) => {
         if (res?.classes && Array.isArray(res.classes)) {
-          const codes = Array.from(new Set(res.classes.map(c => c.courseCode).filter(Boolean)));
-          if (codes.length > 0) setSubjects(codes);
+          setSubjects(Array.from(new Set(res.classes.map(c => c.courseCode).filter(Boolean))));
         }
       })
       .catch(() => {});
@@ -58,10 +44,8 @@ export const Profile: React.FC = () => {
     setMessage(null);
     try {
       const normalizedName = composePersonName(nameParts);
-      const completedEmail = completeInstitutionalEmail(email);
-      await updateFacultyProfileApi({ ...nameParts, name: normalizedName, email: completedEmail });
+      await updateFacultyProfileApi({ ...nameParts, name: normalizedName });
       setName(normalizedName);
-      setEmail(completedEmail);
       recordAudit({ action: 'Updated profile', module: 'Profile', description: 'Updated faculty professional profile details.', status: 'Success' });
       setSaved(true);
       setMessage({ type: 'success', text: 'Profile saved successfully.' });
@@ -80,13 +64,13 @@ export const Profile: React.FC = () => {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 space-y-5">
-          <Card className="p-0 overflow-hidden"><div className="h-20 bg-gradient-to-r from-clinical-600 to-accent-500" /><CardContent className="relative pt-0 pb-5"><div className="-mt-10 w-20 h-20 rounded-2xl bg-white dark:bg-slate-900 p-1 shadow-lg"><div className="w-full h-full rounded-xl bg-gradient-to-tr from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900 flex items-center justify-center text-xl font-extrabold text-clinical-700 dark:text-clinical-300">{initials}</div></div><h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2><p className="text-xs text-clinical-600 dark:text-clinical-400 font-semibold mt-0.5">{'Faculty Clinician'}</p><p className="text-xs text-slate-400 mt-3">{specialty}</p></CardContent></Card>
-          <Card><CardHeader><CardTitle className="flex items-center gap-2 text-sm"><BookOpen className="w-4.5 h-4.5 text-accent-500" />Assigned subjects</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-2">{subjects.map((subject: string) => <span key={subject} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-[10px] font-extrabold text-slate-600 dark:text-slate-400">{subject}</span>)}</CardContent></Card>
+          <Card className="p-0 overflow-hidden"><div className="h-20 bg-gradient-to-r from-clinical-600 to-accent-500" /><CardContent className="relative pt-0 pb-5"><div className="-mt-10 w-20 h-20 rounded-2xl bg-white dark:bg-slate-900 p-1 shadow-lg"><div className="w-full h-full rounded-xl bg-gradient-to-tr from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900 flex items-center justify-center text-xl font-extrabold text-clinical-700 dark:text-clinical-300">{initials}</div></div><h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2><p className="text-xs text-clinical-600 dark:text-clinical-400 font-semibold mt-0.5">{'Faculty Clinician'}</p></CardContent></Card>
+          <Card><CardHeader><CardTitle className="flex items-center gap-2 text-sm"><BookOpen className="w-4.5 h-4.5 text-accent-500" />Assigned subjects</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-2">{subjects.length === 0 ? <span className="text-xs text-slate-400">No assigned subjects.</span> : subjects.map((subject: string) => <span key={subject} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-[10px] font-extrabold text-slate-600 dark:text-slate-400">{subject}</span>)}</CardContent></Card>
         </div>
         <div className="lg:col-span-8 space-y-5">
           <Card className="p-0 overflow-hidden">
             <CardHeader className="border-b border-slate-100 dark:border-slate-800/80"><CardTitle className="flex items-center gap-2 text-sm"><UserRound className="w-4.5 h-4.5 text-clinical-550" />Professional information</CardTitle></CardHeader>
-            <CardContent className="p-5"><form onSubmit={save} className="space-y-5">{message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}<div className="grid sm:grid-cols-2 gap-4"><div className="sm:col-span-2"><PersonNameFields value={nameParts} onChange={setNameParts} /></div><Field label="Email address" value={email} setValue={setEmail} type="email" icon={<Mail className="w-4 h-4" />} /><Field label="Contact number" value={phone} setValue={setPhone} icon={<Phone className="w-4 h-4" />} /><Field label="Clinical specialty" value={specialty} setValue={setSpecialty} icon={<BriefcaseBusiness className="w-4 h-4" />} /></div><div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800"><button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/10 transition-all"><Save className="w-4 h-4" />{saved ? 'Profile saved' : 'Save profile'}</button></div></form></CardContent>
+            <CardContent className="p-5"><form onSubmit={save} className="space-y-5">{message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}<div className="grid sm:grid-cols-2 gap-4"><div className="sm:col-span-2"><PersonNameFields value={nameParts} onChange={setNameParts} /></div><ReadOnlyEmail value={email} /></div><div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800"><button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/10 transition-all"><Save className="w-4 h-4" />{saved ? 'Profile saved' : 'Save profile'}</button></div></form></CardContent>
           </Card>
           <MfaSettingsCard userEmail={email || 'faculty@bicol-u.edu.ph'} roleName="Faculty Member" />
           <GoogleLinkCard />
@@ -96,4 +80,15 @@ export const Profile: React.FC = () => {
     </div>
   );
 };
-const Field = ({ label, value, setValue, type = 'text', icon }: { label: string; value: string; setValue: (value: string) => void; type?: string; icon?: React.ReactNode }) => { const isEmail = type === 'email'; const hasDomain = value.includes('@'); return <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}<span className="relative block">{icon && <span className="absolute left-3.5 top-4 text-slate-400">{icon}</span>}<span className="flex"><input type={isEmail ? 'text' : type} inputMode={isEmail ? 'email' : undefined} required={isEmail} placeholder={isEmail ? (hasDomain ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username') : undefined} value={value} onChange={event => { let val = event.target.value; if (label.toLowerCase().includes('name')) val = val.replace(/[0-9]/g, ''); if (label.toLowerCase().includes('contact')) val = val.replace(/[^0-9\+\-\s\(\)]/g, ''); setValue(val); }} onBlur={() => { if (label.toLowerCase().includes('name')) setValue(normalizePersonName(value)); }} className={`${inputClass} ${icon ? 'pl-10' : ''} ${isEmail && !hasDomain ? 'rounded-l-xl rounded-r-none' : 'rounded-xl'}`} />{isEmail && !hasDomain && <span className="mt-1.5 flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-clinical-700 dark:border-slate-800 dark:bg-slate-900 dark:text-clinical-300">@{DEFAULT_EMAIL_DOMAIN}</span>}</span></span></label>; };
+
+/** The login email is permanent after activation (REG-009), so it is shown, not edited. */
+const ReadOnlyEmail = ({ value }: { value: string }) => (
+  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+    Email address
+    <span className="relative block">
+      <span className="absolute left-3.5 top-4 text-slate-400"><Mail className="w-4 h-4" /></span>
+      <input type="text" value={value} readOnly aria-readonly="true" className="mt-1.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 pl-10 px-3.5 py-2.5 text-sm text-slate-600 dark:text-slate-300 outline-none cursor-not-allowed" />
+    </span>
+    <span className="mt-1 block normal-case tracking-normal font-medium">Your login email cannot be changed.</span>
+  </div>
+);

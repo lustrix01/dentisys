@@ -296,6 +296,29 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Settings/i);
   });
 
+  test('faculty profile email is read-only and is not sent on save', async ({ page }) => {
+    let postedProfile: Record<string, unknown> | null = null;
+    await page.route('**/api/faculty/profile', async (route) => {
+      if (route.request().method() === 'POST') {
+        postedProfile = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Faculty profile updated successfully.' }) });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'ok', profile: { name: 'Jane Doe', firstName: 'Jane', lastName: 'Doe', email: 'faculty@bicol-u.edu.ph' } }),
+      });
+    });
+    await page.click('a[href="/faculty/profile"]');
+    const emailInput = page.locator('input[readonly]').first();
+    await expect(emailInput).toHaveValue('faculty@bicol-u.edu.ph');
+    await expect(page.getByText('Your login email cannot be changed.')).toBeVisible();
+    await page.getByRole('button', { name: /Save profile/i }).click();
+    await expect.poll(() => postedProfile).not.toBeNull();
+    expect(postedProfile).not.toHaveProperty('email');
+  });
+
   test('faculty theme applies on click and is saved to the account', async ({ page }) => {
     const savedThemes: unknown[] = [];
     await page.route('**/api/auth/theme', async route => {
