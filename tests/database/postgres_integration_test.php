@@ -637,6 +637,14 @@ expect_same(null, $activeAfterEndBody['activeSession'] ?? null, 'Ended session n
 ]);
 expect_same(409, $repeatEndStatus, 'Ending an already-ended session returns a conflict');
 
+[$geofenceNoLocationStatus, $geofenceNoLocationBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'csId' => $secretarySessionClassId,
+    'sessionDate' => $sessionDate,
+    'geofenceEnabled' => true,
+]);
+expect_same(422, $geofenceNoLocationStatus, 'Secretary cannot start a geofenced session without a session location');
+expect_same('geofenceLatitude', $geofenceNoLocationBody['errors'][0]['field'] ?? null, 'Missing geofence location is reported on geofenceLatitude');
+
 [$secretaryAttendanceStatus, $secretaryAttendanceBody] = integration_http_get_json('/api/secretary/attendance', $secretaryAccessToken);
 expect_same(200, $secretaryAttendanceStatus, 'Secretary attendance reads remain available after session linkage');
 $linkedAttendanceRows = array_values(array_filter(
@@ -1225,6 +1233,24 @@ $googleContext = [
 expect_same(200, $facultyLoginStatus, 'Faculty integration login succeeds');
 $facultyAccessToken = (string) ($facultyLoginBody['access_token'] ?? '');
 $seedFacultyAccessToken = $facultyAccessToken;
+
+$facultyGeofenceClassStmt = $pdo->prepare(
+    "SELECT cs.cs_id FROM class_sections cs JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
+      WHERE ua.login_email = 'faculty@bicol-u.edu.ph' AND LOWER(cs.status) = 'active'
+        AND UPPER(cs.school_year) = UPPER(?) ORDER BY cs.cs_id LIMIT 1"
+);
+$facultyGeofenceClassStmt->execute([academic_current_school_year($pdo)]);
+$facultyGeofenceClassId = (int) $facultyGeofenceClassStmt->fetchColumn();
+expect_true($facultyGeofenceClassId > 0, 'Seed Faculty owns an active class for geofence validation');
+[$facultyGeofenceStatus, $facultyGeofenceBody] = integration_http_json('/api/faculty/attendance/session', $facultyAccessToken, [
+    'csId' => $facultyGeofenceClassId,
+    'geofenceEnabled' => true,
+    'geofenceRadiusMeters' => 100,
+    'latitude' => 13.1436,
+    'longitude' => 123.7438,
+]);
+expect_same(422, $facultyGeofenceStatus, 'Faculty geofenced session requires geofenceLatitude/geofenceLongitude, not legacy latitude/longitude');
+expect_same('geofenceLatitude', $facultyGeofenceBody['errors'][0]['field'] ?? null, 'Faculty missing geofence location is reported on geofenceLatitude');
 
 $facultyInvitationEmail = 'invite-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
 [$facultyInvitationStatus, $facultyInvitationBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [

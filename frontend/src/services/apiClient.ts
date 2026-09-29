@@ -1109,8 +1109,8 @@ export function createFacultyAttendanceSessionApi(data: {
   biometricRequired?: boolean;
   geofenceEnabled?: boolean;
   geofenceRadiusMeters?: number;
-  latitude?: number;
-  longitude?: number;
+  geofenceLatitude?: number;
+  geofenceLongitude?: number;
 }): Promise<{ status: string; message?: string; sessionCode?: string; createdCount?: number; session?: Record<string, unknown> }> {
   return request('POST', '/faculty/attendance/session', data);
 }

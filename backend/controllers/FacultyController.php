@@ -3997,6 +3997,9 @@ function handle_faculty_attendance_session_create(): void
         if (($latitude === null) !== ($longitude === null)) {
             throw new ValidationException([['field' => 'geofenceLatitude', 'message' => 'Geofence latitude and longitude must be provided together.']]);
         }
+        if ($geofenceEnabled && $latitude === null) {
+            throw new ValidationException([['field' => 'geofenceLatitude', 'message' => 'A geofenced session requires the session location (latitude and longitude).']]);
+        }
         if ($geofenceEnabled && $radius === null) {
             $radius = 100.0;
         }

@@ -481,8 +481,8 @@ export const AttendanceMonitoring: React.FC = () => {
         biometricRequired,
         geofenceEnabled,
         geofenceRadiusMeters: geofenceEnabled ? geofenceRadius : undefined,
-        latitude: geofenceEnabled ? sessionLocation?.latitude : undefined,
-        longitude: geofenceEnabled ? sessionLocation?.longitude : undefined,
+        geofenceLatitude: geofenceEnabled ? sessionLocation?.latitude : undefined,
+        geofenceLongitude: geofenceEnabled ? sessionLocation?.longitude : undefined,
       });
       setIsStartSessionOpen(false);
       setNotification({ type: 'success', message: 'Attendance session started. The class roll call is now live.' });
