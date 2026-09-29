@@ -2128,7 +2128,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       // Check category options in the modal. The category select renders once the
       // grading configuration has loaded, so wait for it before reading options.
       await expect(modalForm.locator('option', { hasText: 'Quizzes (25%)' })).toBeAttached();
-      const categorySelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       const categoryOptions = await categorySelect.evaluate((sel: HTMLSelectElement) =>
         Array.from(sel.options).map(opt => ({ value: opt.value, text: opt.textContent?.trim() }))
       );
@@ -2228,7 +2228,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByRole('heading', { name: 'Edit Assessment Spec' })).toBeVisible();
 
       // Category select is preselected with stable ID 12
-      const categorySelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       await expect(categorySelect).toHaveValue('12');
 
       // Confirm without changing category: preserves stable ID
@@ -2290,7 +2290,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await row.getByRole('button', { name: 'Edit' }).click();
 
       const modalForm = page.locator('form').last();
-      const categorySelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       await expect(categorySelect).toHaveValue('11');
 
       // Change category to Clinical Work (13)
@@ -2322,7 +2322,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       const modalForm = page.locator('form').last();
       await expect(modalForm.getByTestId('assessment-target-class')).toContainText('CLIN401-B');
-      const categorySelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       await categorySelect.selectOption('13');
       await expect(categorySelect).toHaveValue('13');
     });
@@ -2409,7 +2409,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByText(/requires a valid grading category assignment/i)).toBeVisible();
 
       // Category select is empty and submit button is disabled
-      const categorySelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       await expect(categorySelect).toHaveValue('');
       const submitBtn = modalForm.getByRole('button', { name: 'Confirm Assessment' });
       await expect(submitBtn).toBeDisabled();
@@ -2469,7 +2469,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await retryBtn.click();
 
       // Recovers to show dynamic categories
-      const categorySelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
       await expect(categorySelect).toBeVisible();
       await expect(categorySelect).toContainText('Quizzes (25%)');
     });
@@ -2628,7 +2628,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       const modalForm = page.locator('form').last();
       await expect(modalForm.getByTestId('assessment-target-class')).toContainText('CLIN401-Sem2');
-      const categorySelect = modalForm.locator('select').nth(0);
+      const categorySelect = modalForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) });
 
       // Configuration categories of the chosen offering are shown (21: Case Presentations)
       await expect(categorySelect).toContainText('Case Presentations (50%)');
