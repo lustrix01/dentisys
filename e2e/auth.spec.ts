@@ -163,10 +163,16 @@ test.describe('Auth Module E2E Tests', () => {
     await page.getByLabel('Institutional email').fill('test.faculty@bicol-u.edu.ph');
     await page.getByRole('button', { name: 'Send invite' }).click();
     await expect(page.getByRole('cell', { name: 'test.faculty@bicol-u.edu.ph' })).toBeVisible();
-    await expect(page.getByText('Pending')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Pending' })).toBeVisible();
     await page.getByRole('button', { name: 'Reissue' }).click();
     await expect(page.getByText(/Invitation sent to test.faculty@bicol-u.edu.ph/)).toBeVisible();
     expect(reissuePayload).toEqual({ id: '17' });
+    const statusFilter = page.getByLabel('Filter Faculty invitations by status');
+    await statusFilter.selectOption('Accepted');
+    await expect(page.getByRole('cell', { name: 'test.faculty@bicol-u.edu.ph' })).toHaveCount(0);
+    await expect(page.getByText('No Faculty invitations found.')).toBeVisible();
+    await statusFilter.selectOption('Pending');
+    await expect(page.getByRole('cell', { name: 'test.faculty@bicol-u.edu.ph' })).toBeVisible();
   });
 
   test('Faculty roster invite sends canonical Student and class identifiers to the server', async ({ page }) => {

@@ -42,6 +42,7 @@ export const FacultyInvitation: React.FC = () => {
 
   const [invitations, setInvitations] = useState<FacultyInvitationRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -90,9 +91,10 @@ export const FacultyInvitation: React.FC = () => {
   }, [refresh]);
 
   const filteredInvitations = useMemo(() => invitations.filter(invitation =>
-    invitation.name.toLowerCase().includes(searchQuery.toLowerCase())
-    || invitation.email.toLowerCase().includes(searchQuery.toLowerCase())
-  ), [invitations, searchQuery]);
+    (statusFilter === 'all' || invitation.status === statusFilter)
+    && (invitation.name.toLowerCase().includes(searchQuery.toLowerCase())
+      || invitation.email.toLowerCase().includes(searchQuery.toLowerCase()))
+  ), [invitations, searchQuery, statusFilter]);
 
   const emailLocalPart = email.includes('@') ? email.split('@')[0] : email;
   const editEmailLocalPart = editEmail.includes('@') ? editEmail.split('@')[0] : editEmail;
@@ -418,6 +420,19 @@ export const FacultyInvitation: React.FC = () => {
             <span>Invitation status</span>
           </CardTitle>
           <div className="flex gap-2">
+            <select
+              aria-label="Filter Faculty invitations by status"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+            >
+              <option value="all">All statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Expired">Expired</option>
+              <option value="Revoked">Revoked</option>
+              <option value="Accepted">Accepted</option>
+              <option value="Not invited">Not invited</option>
+            </select>
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
