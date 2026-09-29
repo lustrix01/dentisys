@@ -1,58 +1,29 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Student, AttendanceRecord, SystemSettings, RemedialExam, GradeComponents, EnrolledSubject, AttendanceStatus, Assessment, AssessmentScore, GradingComponentConfig, RetentionLog } from '../types';
+import { Student, AttendanceRecord, SystemSettings, Assessment, AssessmentScore } from '../types';
 import { recordAudit } from '../services/auditService';
-import { computeSubjectGrade, computeOverallGWA, percentageToGWA, effectiveAssessmentPercentage } from '../utils/gradeHelper';
 import { getFacultyAssessmentScoresApi, getFacultyAssessmentsApi, getFacultyAttendanceApi, getFacultyStudentsApi } from '../services/apiClient';
 import { useAuth } from './AuthContext';
 
+/**
+ * Shared Faculty data loaded from the server. Grades, retention status and
+ * remedial state come only from the server (ACA-001); nothing here recomputes
+ * them, and roster, attendance, assessment and score data are never written
+ * to browser storage.
+ */
 interface AppContextProps {
   students: Student[];
   attendanceRecords: AttendanceRecord[];
   settings: SystemSettings;
   assessments: Assessment[];
   assessmentScores: AssessmentScore[];
-  gradingComponents: GradingComponentConfig[];
-  addStudent: (student: Omit<Student, 'overallGWA' | 'remedialExams' | 'status'>) => void;
-  updateStudent: (student: Student) => void;
-  deleteStudent: (id: string) => void;
-  updateStudentGrade: (studentId: string, subjectCode: string, components: GradeComponents) => void;
+  /** Development-only attendance simulation; kept in memory, never persisted. */
   addAttendanceRecord: (record: Omit<AttendanceRecord, 'id'>) => void;
-  overrideAttendanceRecord: (params: {
-    recordId?: string;
-    studentId: string;
-    date: string;
-    subjectCode: string;
-    status: Exclude<AttendanceStatus, 'excused'>;
-    reason: string;
-    changedBy: string;
-    changedByName: string;
-    assignedClassId?: string;
-  }) => void;
-  addRemedialExam: (remedial: Omit<RemedialExam, 'id' | 'status' | 'remedialScore' | 'remedialGrade'>) => void;
-  updateRemedialExam: (remedialId: string, score: number, notes?: string) => void;
-  deleteRemedialExam: (remedialId: string) => void;
   updateSettings: (settings: SystemSettings) => void;
   /** Apply a theme immediately without recording a settings audit entry. */
   applyTheme: (theme: 'light' | 'dark') => void;
-  
-  // Assessment Actions
-  addAssessment: (assessment: Omit<Assessment, 'createdAt'>) => void;
-  updateAssessment: (assessment: Assessment) => void;
-  deleteAssessment: (id: string) => void;
-  archiveAssessment: (id: string) => void;
   refreshAssessments: () => Promise<Assessment[]>;
+  /** Mirror scores that the server has already saved. */
   saveAssessmentScores: (assessmentId: string, scores: { studentId: string; score: number; remarks?: string }[]) => void;
-  
-  // Grading Components Actions
-  updateSubjectGradingComponents: (subjectCode: string, configs: GradingComponentConfig[]) => void;
-  
-  // Retention Status Overrides
-  overrideRetentionStatus: (studentId: string, status: Student['status'], remarks: string, changedBy: string) => void;
-  
-  // Face Enrollment
-  enrollStudentFace: (studentId: string, images: string[]) => void;
-  deleteStudentFace: (studentId: string) => void;
-  updateFaceConsent: (studentId: string, status: 'approved' | 'declined') => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -72,99 +43,51 @@ const defaultSettings: SystemSettings = {
   },
 };
 
-const initialAssessments: Assessment[] = [];
-const initialAssessmentScores: AssessmentScore[] = [];
-const initialStudents: Student[] = [];
-const generateInitialAttendance = (): AttendanceRecord[] => [];
+// Academic data older builds copied into browser storage. It is removed on
+// load and on sign-out so it cannot outlive the session or be mistaken for
+// server data.
+const LEGACY_ACADEMIC_STORAGE_KEYS = [
+  'dentisys_students',
+  'dentisys_attendance',
+  'dentisys_assessments',
+  'dentisys_assessment_scores',
+  'dentisys_grading_components',
+  'dentisys_mock_version',
+  'dentisys_secretary_invitations',
+  'dentisys_email_logs',
+];
+
+const clearLegacyAcademicStorage = () => {
+  for (const key of LEGACY_ACADEMIC_STORAGE_KEYS) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Storage may be unavailable; there is nothing to clear then.
+    }
+  }
+};
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { phase, user } = useAuth();
-  const isV3 = false;
 
-  const [students, setStudents] = useState<Student[]>(() => {
-    if (!isV3) return initialStudents;
-    const localData = localStorage.getItem('dentisys_students');
-    if (localData) {
-      try {
-        return JSON.parse(localData);
-      } catch (e) {
-        console.error('Failed parsing students cache', e);
-      }
-    }
-    return initialStudents;
-  });
+  const [students, setStudents] = useState<Student[]>([]);
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  const [settings, setSettings] = useState<SystemSettings>(defaultSettings);
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [assessmentScores, setAssessmentScores] = useState<AssessmentScore[]>([]);
 
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>(() => {
-    if (!isV3) return generateInitialAttendance();
-    const localData = localStorage.getItem('dentisys_attendance');
-    if (localData) {
-      try {
-        return JSON.parse(localData);
-      } catch (e) {
-        console.error('Failed parsing attendance cache', e);
-      }
-    }
-    return generateInitialAttendance();
-  });
-
-  const [settings, setSettings] = useState<SystemSettings>(() => {
-    if (!isV3) return defaultSettings;
-    const localData = localStorage.getItem('dentisys_settings');
-    if (localData) {
-      try {
-        return JSON.parse(localData);
-      } catch (e) {
-        console.error('Failed parsing settings cache', e);
-      }
-    }
-    return defaultSettings;
-  });
-
-  const [assessments, setAssessments] = useState<Assessment[]>(() => {
-    if (!isV3) return initialAssessments;
-    const localData = localStorage.getItem('dentisys_assessments');
-    if (localData) {
-      try {
-        return JSON.parse(localData);
-      } catch (e) {
-        console.error('Failed parsing assessments cache', e);
-      }
-    }
-    return initialAssessments;
-  });
-
-  const [assessmentScores, setAssessmentScores] = useState<AssessmentScore[]>(() => {
-    if (!isV3) return initialAssessmentScores;
-    const localData = localStorage.getItem('dentisys_assessment_scores');
-    if (localData) {
-      try {
-        return JSON.parse(localData);
-      } catch (e) {
-        console.error('Failed parsing assessment scores cache', e);
-      }
-    }
-    return initialAssessmentScores;
-  });
-
-  const [gradingComponents, setGradingComponents] = useState<GradingComponentConfig[]>(() => {
-    if (!isV3) return [];
-    const localData = localStorage.getItem('dentisys_grading_components');
-    if (localData) {
-      try {
-        return JSON.parse(localData);
-      } catch (e) {
-        console.error('Failed parsing grading components cache', e);
-      }
-    }
-    return [];
-  });
+  useEffect(() => {
+    clearLegacyAcademicStorage();
+  }, []);
 
   useEffect(() => {
     let ignore = false;
-    localStorage.setItem('dentisys_mock_version', 'v3');
     if (phase !== 'authenticated' || user?.role !== 'faculty') {
       setStudents([]);
+      setAttendanceRecords([]);
+      setAssessments([]);
       setAssessmentScores([]);
+      if (phase !== 'authenticated') clearLegacyAcademicStorage();
       return () => {
         ignore = true;
       };
@@ -208,11 +131,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAssessments(loadedAssessments);
         setAttendanceRecords(attendanceData.records as AttendanceRecord[]);
 
-        // Keep the authoritative score hydration bounded.  The seeded Faculty view can
-        // contain dozens of assessments; opening a route must not create one burst of
-        // concurrent requests that starves the route-specific API calls.
         // Bounded concurrency: fast enough for dozens of assessments without
-        // flooding the API with one burst of parallel requests.
+        // flooding the API with one burst of parallel requests that starves
+        // the route-specific API calls.
         const SCORE_FETCH_CONCURRENCY = 4;
         const scoreCollections: AssessmentScore[][] = loadedAssessments.map(() => []);
         let nextAssessmentIndex = 0;
@@ -252,26 +173,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [phase, user?.role, user?.user_id]);
 
   useEffect(() => {
-    localStorage.setItem('dentisys_students', JSON.stringify(students));
-  }, [students]);
-
-  useEffect(() => {
-    localStorage.setItem('dentisys_attendance', JSON.stringify(attendanceRecords));
-  }, [attendanceRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('dentisys_assessments', JSON.stringify(assessments));
-  }, [assessments]);
-
-  useEffect(() => {
-    localStorage.setItem('dentisys_assessment_scores', JSON.stringify(assessmentScores));
-  }, [assessmentScores]);
-
-  useEffect(() => {
-    localStorage.setItem('dentisys_grading_components', JSON.stringify(gradingComponents));
-  }, [gradingComponents]);
-
-  useEffect(() => {
     localStorage.setItem('dentisys_settings', JSON.stringify(settings));
     // Apply dark mode class to html element
     if (settings.theme === 'dark') {
@@ -281,525 +182,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [settings]);
 
-  // Compute Grade Components helper
-  const computeStudentGradesForSubject = (
-    studentId: string,
-    subjectCode: string,
-    scores: AssessmentScore[],
-    assList: Assessment[],
-    compList: GradingComponentConfig[],
-    attendanceRate: number,
-    attList: AttendanceRecord[]
-  ): GradeComponents | null => {
-    const subjectAssessments = assList.filter(a => a.subjectCode === subjectCode && a.status !== 'Archived');
-    
-    const getWeightAndMax = (category: string) => {
-      const config = compList.find(c => c.subjectCode === subjectCode && c.category === category);
-      if (config) return { weight: config.weight, maxScore: config.maxScore };
-      
-      const defaults: Record<string, { weight: number; maxScore: number }> = {
-        'Quiz': { weight: 15, maxScore: 50 },
-        'Activity': { weight: 15, maxScore: 50 },
-        'Assignment': { weight: 10, maxScore: 100 },
-        'Laboratory': { weight: 30, maxScore: 100 },
-        'Midterm Exam': { weight: 10, maxScore: 100 },
-        'Final Exam': { weight: 10, maxScore: 100 },
-        'Attendance': { weight: 10, maxScore: 100 }
-      };
-      return defaults[category] || { weight: 0, maxScore: 100 };
-    };
-
-    const categories = ['Quiz', 'Activity', 'Assignment', 'Laboratory', 'Midterm Exam', 'Final Exam'];
-    const catSums: Record<string, { earned: number; max: number }> = {};
-    
-    categories.forEach(cat => {
-      catSums[cat] = { earned: 0, max: 0 };
-    });
-
-    let incompleteTransmutation = false;
-    subjectAssessments.forEach(ass => {
-      const studentScore = scores.find(s => s.assessmentId === ass.id && s.studentId === studentId);
-      if (studentScore && studentScore.score !== undefined) {
-        const linkedAttendance = ass.transmutationEnabled
-          ? attList.find(record => record.studentId === studentId
-            && record.classId === ass.classId
-            && record.date === ass.attendanceSessionDate
-            && record.sessionCode === ass.attendanceSessionCode)
-          : undefined;
-        const effectivePercentage = effectiveAssessmentPercentage(
-          studentScore.score,
-          ass.maxScore,
-          ass,
-          linkedAttendance?.status,
-        );
-        if (effectivePercentage === null && ass.transmutationEnabled) {
-          incompleteTransmutation = true;
-          return;
-        }
-        catSums[ass.type].earned += ((effectivePercentage ?? 0) / 100) * ass.maxScore;
-        catSums[ass.type].max += ass.maxScore;
-      }
-    });
-
-    if (incompleteTransmutation) return null;
-
-    const catPercentages: Record<string, number> = {};
-    categories.forEach(cat => {
-      if (catSums[cat].max > 0) {
-        catPercentages[cat] = (catSums[cat].earned / catSums[cat].max) * 100;
-      } else {
-        // Find existing mock percentages for initial students so we do not break layout on fresh load
-        const rawStud = students.find(s => s.id === studentId);
-        const rawSubj = rawStud?.enrolledSubjects.find(su => su.code === subjectCode);
-        if (rawSubj && rawSubj.components) {
-          if (cat === 'Laboratory') return catPercentages[cat] = rawSubj.components.practicum;
-          if (cat === 'Quiz') return catPercentages[cat] = rawSubj.components.quizzes;
-          if (cat === 'Midterm Exam' || cat === 'Final Exam') return catPercentages[cat] = rawSubj.components.exams;
-        }
-        catPercentages[cat] = 80; // default placeholder
-      }
-    });
-
-    const wQuiz = getWeightAndMax('Quiz').weight;
-    const wAct = getWeightAndMax('Activity').weight;
-    const wAsg = getWeightAndMax('Assignment').weight;
-    const quizSumWeight = wQuiz + wAct + wAsg;
-    let quizzesPct = 80;
-    if (quizSumWeight > 0) {
-      quizzesPct = (catPercentages['Quiz'] * wQuiz + catPercentages['Activity'] * wAct + catPercentages['Assignment'] * wAsg) / quizSumWeight;
-    }
-
-    const wMid = getWeightAndMax('Midterm Exam').weight;
-    const wFin = getWeightAndMax('Final Exam').weight;
-    const examSumWeight = wMid + wFin;
-    let examsPct = 80;
-    if (examSumWeight > 0) {
-      examsPct = (catPercentages['Midterm Exam'] * wMid + catPercentages['Final Exam'] * wFin) / examSumWeight;
-    }
-
-    const wLab = getWeightAndMax('Laboratory').weight;
-    let practicumPct = catPercentages['Laboratory'];
-
-    return {
-      quizzes: Math.round(quizzesPct * 100) / 100,
-      exams: Math.round(examsPct * 100) / 100,
-      practicum: Math.round(practicumPct * 100) / 100,
-      attendance: Math.round(attendanceRate * 100) / 100
-    };
-  };
-
-  const syncStudentGrades = (
-    studentList: Student[],
-    assList: Assessment[],
-    scList: AssessmentScore[],
-    compList: GradingComponentConfig[],
-    attList: AttendanceRecord[]
-  ): Student[] => {
-    return studentList.map(student => {
-      const updatedSubjects = student.enrolledSubjects.map(subj => {
-        const passedRem = student.remedialExams.find(
-          rem => rem.subjectCode === subj.code && rem.status === 'passed'
-        );
-        if (passedRem && passedRem.remedialGrade !== null) {
-          return {
-            ...subj,
-            grade: passedRem.remedialGrade,
-            hasRemedial: false,
-          };
-        }
-
-        const rawStud = students.find(s => s.id === student.id);
-        const rawSub = rawStud?.enrolledSubjects.find(u => u.code === subj.code);
-
-        // Finding 3: Preserve server grades and authoritative_periods breakdowns through reloads and score/attendance refreshes
-        const existingComponents = subj.components ?? rawSub?.components;
-        const isAuthoritativePeriods = Boolean(
-          existingComponents &&
-          typeof existingComponents === 'object' &&
-          (existingComponents as any).calculationMode === 'authoritative_periods'
-        );
-
-        if (isAuthoritativePeriods) {
-          const preservedGrade = subj.grade ?? rawSub?.grade ?? null;
-          const isClinicalViolation = subj.isClinical && typeof preservedGrade === 'number' && preservedGrade >= settings.retentionThreshold;
-          const isFailing = preservedGrade === 5.0;
-          const needsRemedial = isClinicalViolation || isFailing;
-          return {
-            ...subj,
-            grade: preservedGrade,
-            components: existingComponents,
-            hasRemedial: needsRemedial,
-          };
-        }
-
-        const subjRecords = attList.filter(
-          r => r.studentId === student.id && r.subjectCode === subj.code
-        );
-        let attRate = 90; // Default
-        if (rawSub?.components?.attendance !== undefined) {
-          attRate = rawSub.components.attendance;
-        }
-        if (subjRecords.length > 0) {
-          const presents = subjRecords.filter(r => r.status === 'present' || r.status === 'late').length;
-          attRate = (presents / subjRecords.length) * 100;
-        }
-
-        const components = computeStudentGradesForSubject(
-          student.id,
-          subj.code,
-          scList,
-          assList,
-          compList,
-          attRate,
-          attList
-        );
-
-        if (components === null) {
-          return subj;
-        }
-        let computedGrade = computeSubjectGrade(components, settings.weights);
-
-        const isClinicalViolation = subj.isClinical && computedGrade >= settings.retentionThreshold;
-        const isFailing = computedGrade === 5.0;
-        const needsRemedial = isClinicalViolation || isFailing;
-
-        return {
-          ...subj,
-          components,
-          grade: computedGrade,
-          hasRemedial: needsRemedial,
-        };
-      });
-
-      const overallGWA = computeOverallGWA(updatedSubjects);
-
-      const remedialExams = [...student.remedialExams];
-      updatedSubjects.forEach(subj => {
-        const hasRemedialTriggered = subj.hasRemedial;
-        const alreadyHasExam = remedialExams.some(
-          rem => rem.subjectCode === subj.code && rem.status === 'pending'
-        );
-
-        if (hasRemedialTriggered && !alreadyHasExam) {
-          remedialExams.push({
-            id: `rem-${Math.random().toString(36).substr(2, 9)}`,
-            studentId: student.id,
-            studentName: student.name,
-            subjectCode: subj.code,
-            subjectName: subj.name,
-            originalGrade: subj.grade,
-            remedialScore: null,
-            remedialGrade: null,
-            examDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            status: 'pending',
-            notes: `Automatic remediation scheduled due to grade of ${subj.grade} in ${subj.name}.`,
-          });
-        } else if (!hasRemedialTriggered) {
-          const index = remedialExams.findIndex(
-            rem => rem.subjectCode === subj.code && rem.status === 'pending'
-          );
-          if (index !== -1) {
-            remedialExams.splice(index, 1);
-          }
-        }
-      });
-
-      const clinicalFails = updatedSubjects.filter(
-        subj => subj.isClinical && subj.grade >= settings.retentionThreshold
-      );
-      const outrightFails = updatedSubjects.filter(subj => subj.grade === 5.0);
-      const pendingRemedials = remedialExams.filter(rem => rem.status === 'pending');
-
-      let status: Student['status'] = student.status;
-
-      if (pendingRemedials.length > 0) {
-        status = 'remedial';
-      } else if (outrightFails.length > 0 || clinicalFails.length > 0) {
-        status = clinicalFails.length >= 2 || outrightFails.length >= 2 ? 'critical' : 'warning';
-      } else if (remedialExams.some(rem => rem.status === 'failed')) {
-        status = 'critical';
-      } else {
-        status = 'active';
-      }
-
-      return {
-        ...student,
-        enrolledSubjects: updatedSubjects,
-        remedialExams,
-        overallGWA,
-        status,
-      };
-    });
-  };
-
-  // Keep students state updated when scores/assessments change
-  useEffect(() => {
-    setStudents(prev => {
-      const synced = syncStudentGrades(prev, assessments, assessmentScores, gradingComponents, attendanceRecords);
-      if (JSON.stringify(synced) !== JSON.stringify(prev)) {
-        return synced;
-      }
-      return prev;
-    });
-  }, [assessments, assessmentScores, gradingComponents, attendanceRecords, settings.weights, settings.retentionThreshold]);
-
-  const addStudent = (newStudent: Omit<Student, 'overallGWA' | 'remedialExams' | 'status'>) => {
-    const created: Student = {
-      ...newStudent,
-      id: newStudent.id,
-      status: 'active',
-      overallGWA: computeOverallGWA(newStudent.enrolledSubjects),
-      remedialExams: [],
-    };
-    setStudents(prev => syncStudentGrades([...prev, created], assessments, assessmentScores, gradingComponents, attendanceRecords));
-    recordAudit({ action: 'Created student', module: 'Student Management', description: `Created student record for ${created.name}.`, status: 'Success' });
-  };
-
-  const updateStudent = (updatedStudent: Student) => {
-    setStudents(prev => {
-      const list = prev.map(s => (s.id === updatedStudent.id ? updatedStudent : s));
-      return syncStudentGrades(list, assessments, assessmentScores, gradingComponents, attendanceRecords);
-    });
-    recordAudit({ action: 'Updated student', module: 'Student Management', description: `Updated student record for ${updatedStudent.name}.`, status: 'Success' });
-  };
-
-  const deleteStudent = (id: string) => {
-    setStudents(prev => prev.filter(s => s.id !== id));
-    recordAudit({ action: 'Deleted student', module: 'Student Management', description: `Deleted student record ${id}.`, status: 'Warning' });
-  };
-
-  const updateStudentGrade = (studentId: string, subjectCode: string, components: GradeComponents) => {
-    // Compatibility cache for the grade recalculator; persisted APIs remain authoritative.
-    setStudents(prev => {
-      const updated = prev.map(student => {
-        if (student.id !== studentId) return student;
-
-        const updatedSubjects = student.enrolledSubjects.map(subj => {
-          if (subj.code !== subjectCode) return subj;
-          const isPeriod = Boolean(
-            (components && typeof components === 'object' && (components as any).calculationMode === 'authoritative_periods') ||
-            (subj.components && typeof subj.components === 'object' && (subj.components as any).calculationMode === 'authoritative_periods')
-          );
-          let computedGrade = isPeriod && typeof subj.grade === 'number'
-            ? subj.grade
-            : computeSubjectGrade(components, settings.weights);
-          const isClinicalViolation = subj.isClinical && typeof computedGrade === 'number' && computedGrade >= settings.retentionThreshold;
-          const isFailing = computedGrade === 5.0;
-          const needsRemedial = isClinicalViolation || isFailing;
-
-          return {
-            ...subj,
-            components,
-            grade: computedGrade,
-            hasRemedial: needsRemedial,
-          };
-        });
-
-        return { ...student, enrolledSubjects: updatedSubjects };
-      });
-      return syncStudentGrades(updated, assessments, assessmentScores, gradingComponents, attendanceRecords);
-    });
-    recordAudit({ action: 'Modified grade', module: 'Grade Computation', description: `Updated grade components for ${studentId} in ${subjectCode}.`, status: 'Success' });
-  };
-
   const addAttendanceRecord = (record: Omit<AttendanceRecord, 'id'>) => {
     const newRecord: AttendanceRecord = {
       ...record,
       id: `att-${Math.random().toString(36).substr(2, 9)}`,
     };
     setAttendanceRecords(prev => [...prev, newRecord]);
-    recordAudit({ action: 'Created attendance record', module: 'Attendance', description: `Recorded ${record.status} attendance for ${record.studentId}.`, status: 'Success' });
-  };
-
-  const overrideAttendanceRecord: AppContextProps['overrideAttendanceRecord'] = ({
-    recordId,
-    studentId,
-    date,
-    subjectCode,
-    status,
-    reason,
-    changedBy,
-    changedByName,
-    assignedClassId,
-  }) => {
-    const cleanedReason = reason.trim().replace(/\s+/g, ' ');
-    const allowedStatuses: AttendanceStatus[] = ['present', 'late', 'absent'];
-    const targetStudent = students.find(student => student.id === studentId);
-
-    if (!targetStudent) {
-      throw new Error('Attendance override rejected: student record was not found.');
-    }
-
-    if (assignedClassId && targetStudent.classId !== assignedClassId) {
-      throw new Error('Attendance override rejected: student is outside the assigned class.');
-    }
-
-    if (!allowedStatuses.includes(status)) {
-      throw new Error('Attendance override rejected: invalid attendance status.');
-    }
-
-    if (cleanedReason.length < 8 || cleanedReason.length > 240) {
-      throw new Error('Attendance override rejected: reason must be 8 to 240 characters.');
-    }
-
-    setAttendanceRecords(prev => {
-      const existingIndex = prev.findIndex(record =>
-        (recordId && record.id === recordId) ||
-        (!recordId && record.studentId === studentId && record.date === date && record.subjectCode === subjectCode)
-      );
-
-      if (existingIndex === -1) {
-        const createdAt = new Date().toISOString();
-        return [
-          ...prev,
-          {
-            id: `att-${Math.random().toString(36).substr(2, 9)}`,
-            studentId,
-            date,
-            subjectCode,
-            status,
-            overrideReason: cleanedReason,
-            overrideBy: changedBy,
-            overrideByName: changedByName,
-            overrideAt: createdAt,
-            auditTrail: [{
-              id: `audit-${Math.random().toString(36).substr(2, 9)}`,
-              previousStatus: 'absent',
-              newStatus: status,
-              reason: cleanedReason,
-              changedBy,
-              changedByName,
-              changedAt: createdAt,
-            }],
-          },
-        ];
-      }
-
-      const next = [...prev];
-      const existing = next[existingIndex];
-      const changedAt = new Date().toISOString();
-      next[existingIndex] = {
-        ...existing,
-        status,
-        overrideReason: cleanedReason,
-        overrideBy: changedBy,
-        overrideByName: changedByName,
-        overrideAt: changedAt,
-        auditTrail: [
-          ...(existing.auditTrail || []),
-          {
-            id: `audit-${Math.random().toString(36).substr(2, 9)}`,
-            previousStatus: existing.status,
-            newStatus: status,
-            reason: cleanedReason,
-            changedBy,
-            changedByName,
-            changedAt,
-          },
-        ],
-      };
-      return next;
-    });
-    recordAudit({ action: 'Overrode attendance', module: 'Attendance', description: `Applied ${status} attendance override for ${studentId}.`, status: 'Warning' });
-  };
-
-  const addRemedialExam = (newRem: Omit<RemedialExam, 'id' | 'status' | 'remedialScore' | 'remedialGrade'>) => {
-    const exam: RemedialExam = {
-      ...newRem,
-      id: `rem-${Math.random().toString(36).substr(2, 9)}`,
-      status: 'pending',
-      remedialScore: null,
-      remedialGrade: null,
-    };
-
-    setStudents(prev => {
-      const updated = prev.map(student => {
-        if (student.id !== exam.studentId) return student;
-        return {
-          ...student,
-          remedialExams: [...student.remedialExams, exam],
-        };
-      });
-      return syncStudentGrades(updated, assessments, assessmentScores, gradingComponents, attendanceRecords);
-    });
-  };
-
-  const updateRemedialExam = (remedialId: string, score: number, notes?: string) => {
-    setStudents(prev => {
-      const updated = prev.map(student => {
-        const examIndex = student.remedialExams.findIndex(rem => rem.id === remedialId);
-        if (examIndex === -1) return student;
-
-        const originalExam = student.remedialExams[examIndex];
-        const isPassed = score >= 75;
-        const status = isPassed ? 'passed' : 'failed';
-
-        let resolvedGrade: number;
-        const subj = student.enrolledSubjects.find(s => s.code === originalExam.subjectCode);
-        const isClinical = subj?.isClinical ?? false;
-
-        if (isPassed) {
-          resolvedGrade = isClinical ? 2.5 : 3.0; // Pass cap
-        } else {
-          resolvedGrade = originalExam.originalGrade;
-        }
-
-        const updatedExam: RemedialExam = {
-          ...originalExam,
-          remedialScore: score,
-          remedialGrade: resolvedGrade,
-          status,
-          notes: notes || `Remediation exam resolved. Score: ${score}%. Status: ${status.toUpperCase()}.`,
-        };
-
-        const updatedExams = [...student.remedialExams];
-        updatedExams[examIndex] = updatedExam;
-
-        const updatedSubjects = student.enrolledSubjects.map(s => {
-          if (s.code === originalExam.subjectCode) {
-            return {
-              ...s,
-              grade: resolvedGrade,
-              hasRemedial: !isPassed,
-            };
-          }
-          return s;
-        });
-
-        return {
-          ...student,
-          enrolledSubjects: updatedSubjects,
-          remedialExams: updatedExams,
-        };
-      });
-
-      return syncStudentGrades(updated, assessments, assessmentScores, gradingComponents, attendanceRecords);
-    });
-    recordAudit({ action: 'Resolved remedial exam', module: 'Retention Monitoring', description: `Recorded remedial score for ${remedialId}.`, status: 'Success' });
-  };
-
-  const deleteRemedialExam = (remedialId: string) => {
-    setStudents(prev => {
-      const updated = prev.map(student => {
-        const exam = student.remedialExams.find(rem => rem.id === remedialId);
-        if (!exam) return student;
-
-        const updatedExams = student.remedialExams.filter(rem => rem.id !== remedialId);
-        const updatedSubjects = student.enrolledSubjects.map(s => {
-          if (s.code === exam.subjectCode) {
-            return { ...s, hasRemedial: false };
-          }
-          return s;
-        });
-
-        return {
-          ...student,
-          enrolledSubjects: updatedSubjects,
-          remedialExams: updatedExams,
-        };
-      });
-      return syncStudentGrades(updated, assessments, assessmentScores, gradingComponents, attendanceRecords);
-    });
   };
 
   const applyTheme = (theme: 'light' | 'dark') => {
@@ -809,32 +197,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateSettings = (newSettings: SystemSettings) => {
     setSettings(newSettings);
     recordAudit({ action: 'Updated settings', module: 'Settings', description: 'Updated permitted system or workspace settings.', status: 'Success' });
-  };
-
-  // Assessment Actions
-  const addAssessment = (newAss: Omit<Assessment, 'createdAt'>) => {
-    const created: Assessment = {
-      ...newAss,
-      id: newAss.id,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    setAssessments(prev => [...prev, created]);
-    recordAudit({ action: 'Created assessment', module: 'Grade Computation', description: `Created assessment ${created.title}.`, status: 'Success' });
-  };
-
-  const updateAssessment = (updated: Assessment) => {
-    setAssessments(prev => prev.map(a => a.id === updated.id ? updated : a));
-    recordAudit({ action: 'Updated assessment', module: 'Grade Computation', description: `Updated assessment ${updated.title}.`, status: 'Success' });
-  };
-
-  const deleteAssessment = (id: string) => {
-    setAssessments(prev => prev.filter(a => a.id !== id));
-    setAssessmentScores(prev => prev.filter(s => s.assessmentId !== id));
-    recordAudit({ action: 'Deleted assessment', module: 'Grade Computation', description: `Deleted assessment ${id}.`, status: 'Warning' });
-  };
-
-  const archiveAssessment = (id: string) => {
-    setAssessments(prev => prev.map(a => a.id === id ? { ...a, status: 'Archived' } : a));
   };
 
   const refreshAssessments = async (): Promise<Assessment[]> => {
@@ -851,7 +213,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const saveAssessmentScores = (assId: string, inputScores: { studentId: string; score: number; remarks?: string }[]) => {
     setAssessmentScores(prev => {
-      const filtered = prev.filter(s => s.assessmentId !== assId);
+      const savedStudentIds = new Set(inputScores.map(is => is.studentId));
+      const filtered = prev.filter(s => s.assessmentId !== assId || !savedStudentIds.has(s.studentId));
       const newScores: AssessmentScore[] = inputScores.map(is => ({
         id: `sc-${Math.random().toString(36).substr(2, 9)}`,
         assessmentId: assId,
@@ -862,74 +225,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
       return [...filtered, ...newScores];
     });
-    recordAudit({ action: 'Saved assessment scores', module: 'Grade Computation', description: `Saved ${inputScores.length} scores for assessment ${assId}.`, status: 'Success' });
-  };
-
-  // Grading Components Actions
-  const updateSubjectGradingComponents = (subCode: string, configs: GradingComponentConfig[]) => {
-    setGradingComponents(prev => {
-      const filtered = prev.filter(c => c.subjectCode !== subCode);
-      return [...filtered, ...configs];
-    });
-    recordAudit({ action: 'Updated grading components', module: 'Grade Computation', description: `Updated grading components for ${subCode}.`, status: 'Success' });
-  };
-
-  // Retention Override
-  const overrideRetentionStatus = (studId: string, newStatus: Student['status'], remarks: string, changedBy: string) => {
-    setStudents(prev => prev.map(s => {
-      if (s.id !== studId) return s;
-      const log: RetentionLog = {
-        id: `ret-log-${Math.random().toString(36).substr(2, 9)}`,
-        studentId: studId,
-        date: new Date().toISOString().split('T')[0],
-        previousStatus: s.status,
-        newStatus,
-        remarks,
-        changedBy
-      };
-      return {
-        ...s,
-        status: newStatus,
-        retentionHistory: [...(s.retentionHistory || []), log]
-      };
-    }));
-    recordAudit({ action: 'Overrode retention status', module: 'Retention Monitoring', description: `Changed retention status for ${studId} to ${newStatus}.`, status: 'Warning' });
-  };
-
-  // Facial Recognition Enrollment
-  const enrollStudentFace = (studId: string, images: string[]) => {
-    setStudents(prev => prev.map(s => {
-      if (s.id !== studId) return s;
-      return {
-        ...s,
-        faceEnrolled: true,
-        faceEnrollmentDetails: {
-          images,
-          status: 'Enrolled & Verified',
-          enrolledAt: new Date().toISOString().split('T')[0]
-        }
-      };
-    }));
-  };
-
-  const deleteStudentFace = (studId: string) => {
-    setStudents(prev => prev.map(s => {
-      if (s.id !== studId) return s;
-      return {
-        ...s,
-        faceEnrolled: false,
-        faceEnrollmentDetails: undefined
-      };
-    }));
-  };
-
-  const updateFaceConsent = (studId: string, status: 'approved' | 'declined') => {
-    setStudents(prev => prev.map(s => s.id === studId ? {
-      ...s,
-      consentStatus: status,
-      consentRespondedAt: new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })
-    } : s));
-    recordAudit({ action: `Facial recognition consent ${status}`, module: 'Email Management', description: `Recorded ${status} consent for ${studId}.`, status: 'Success' });
   };
 
   return (
@@ -940,29 +235,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         settings,
         assessments,
         assessmentScores,
-        gradingComponents,
-        addStudent,
-        updateStudent,
-        deleteStudent,
-        updateStudentGrade,
         addAttendanceRecord,
-        overrideAttendanceRecord,
-        addRemedialExam,
-        updateRemedialExam,
-        deleteRemedialExam,
         updateSettings,
         applyTheme,
-        addAssessment,
-        updateAssessment,
-        deleteAssessment,
-        archiveAssessment,
         refreshAssessments,
         saveAssessmentScores,
-        updateSubjectGradingComponents,
-        overrideRetentionStatus,
-        enrollStudentFace,
-        deleteStudentFace,
-        updateFaceConsent,
       }}
     >
       {children}

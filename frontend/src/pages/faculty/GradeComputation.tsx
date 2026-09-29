@@ -36,7 +36,6 @@ import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore 
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
-import { percentageToGWA, gwaToDescription, computeSubjectGrade } from '../../utils/gradeHelper';
 import { recordAudit } from '../../services/auditService';
 
 import {
@@ -94,13 +93,8 @@ export const GradeComputation: React.FC = () => {
     settings,
     assessments,
     assessmentScores,
-    addAssessment,
-    updateAssessment,
-    deleteAssessment,
-    archiveAssessment,
     refreshAssessments,
     saveAssessmentScores,
-    updateStudentGrade
   } = useApp();
 
   const location = useLocation();
@@ -2246,13 +2240,11 @@ export const GradeComputation: React.FC = () => {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPreviewData, setCsvPreviewData] = useState<{ id: string; name: string; score: number; valid: boolean; error?: string }[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
-  const [importSuccess, setImportSuccess] = useState(false);
 
   const handleCsvSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setCsvFile(file);
-    setImportSuccess(false);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -2320,47 +2312,6 @@ export const GradeComputation: React.FC = () => {
     };
 
     reader.readAsText(file);
-  };
-
-  const handleConfirmImport = async () => {
-    if (csvErrors.length > 0) {
-      showFeedback('Please fix the CSV errors listed below before importing.', 'error');
-      return;
-    }
-
-    if (csvPreviewData.length === 0) return;
-
-    const confirmed = await requestConfirmation(
-      `Import grades for ${csvPreviewData.length} students?\nThis will automatically recalculate student scores.`
-    );
-    if (!confirmed) return;
-
-    // Recalculate components based on score import
-    csvPreviewData.forEach(row => {
-      const student = students.find(s => s.studentId === row.id);
-      if (!student) return;
-
-      const currentSubj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
-      if (!currentSubj) return;
-
-      // Update base components quizzes / exams / practicum relative to imported score
-      const updatedComponents: GradeComponents = { ...currentSubj.components };
-
-      if (importPeriod === 'Midterm') {
-        updatedComponents.exams = row.score; // Map to exams components
-      } else if (importPeriod === 'Final') {
-        updatedComponents.quizzes = row.score;
-      } else {
-        updatedComponents.practicum = row.score;
-      }
-
-      updateStudentGrade(student.id, selectedSubjectCode, updatedComponents);
-    });
-
-    setImportSuccess(true);
-    setCsvFile(null);
-    setCsvPreviewData([]);
-    showFeedback('CSV grades imported and student grades recalculated.', 'success');
   };
 
   // Helper styles
@@ -4160,6 +4111,13 @@ export const GradeComputation: React.FC = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div role="note" className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                Not functional yet: this tab only checks a CSV file and shows a preview. It saves nothing, and no
+                grades are imported or recalculated. Enter scores in the Score Entry tab.
+              </span>
+            </div>
             <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs text-slate-550 dark:text-slate-400 space-y-1.5">
               <h4 className="font-bold text-slate-800 dark:text-slate-205">Import File Requirements:</h4>
               <ul className="list-disc pl-4 space-y-1 text-[11px]">
@@ -4242,22 +4200,15 @@ export const GradeComputation: React.FC = () => {
               </div>
             )}
 
-            {/* Import Success */}
-            {importSuccess && (
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl text-xs font-semibold text-emerald-600 flex items-center gap-1.5">
-                <CheckCircle className="w-4.5 h-4.5 text-emerald-500" />
-                Grades imported and dynamic subject GWAs recalculated successfully!
-              </div>
-            )}
-
             <div className="flex justify-end pt-2 border-t border-slate-150 dark:border-slate-800/80">
               <button
-                onClick={handleConfirmImport}
-                disabled={csvPreviewData.length === 0 || csvErrors.length > 0}
-                className="flex items-center gap-1 px-5 py-3 rounded-2xl bg-clinical-600 hover:bg-clinical-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white font-semibold text-xs shadow-sm transition-all"
+                type="button"
+                disabled
+                title="Importing grade sheets is not available yet. Nothing is saved."
+                className="flex items-center gap-1 px-5 py-3 rounded-2xl bg-clinical-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 font-semibold text-xs shadow-sm transition-all"
               >
                 <Save className="w-4 h-4" />
-                <span>Save Grades Import</span>
+                <span>Import not available</span>
               </button>
             </div>
           </CardContent>

@@ -54,8 +54,6 @@ export interface PasswordCriteria {
   isValid: boolean;
 }
 
-const SECRETARY_INVITATIONS_KEY = 'dentisys_secretary_invitations';
-const EMAIL_LOGS_KEY = 'dentisys_email_logs';
 
 /**
  * Validates whether an email address belongs to an authorized institutional domain.
@@ -134,48 +132,6 @@ export const validatePasswordRequirements = (password: string): PasswordCriteria
     hasSpecial,
     isValid,
   };
-};
-
-/**
- * Helper to log system emails into Email Management history.
- */
-export const logSystemEmail = (emailEntry: {
-  recipient: string;
-  subject: string;
-  type: 'Privacy Consent' | 'At-Risk Notification' | 'Class Secretary Invitation';
-  status: 'Sent' | 'Failed' | 'Pending';
-}) => {
-  try {
-    const stored = JSON.parse(localStorage.getItem(EMAIL_LOGS_KEY) || '[]');
-    const now = new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
-    const newEntry = {
-      id: `mail-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      recipient: emailEntry.recipient,
-      subject: emailEntry.subject,
-      type: emailEntry.type,
-      sentAt: now,
-      status: emailEntry.status,
-    };
-    localStorage.setItem(EMAIL_LOGS_KEY, JSON.stringify([newEntry, ...stored]));
-  } catch (err) {
-    console.error('Failed to log system email', err);
-  }
-};
-
-/**
- * Class Secretary Invitations Management.
- */
-export const getSecretaryInvitations = (): SecretaryInvitation[] => {
-  try {
-    const data = localStorage.getItem(SECRETARY_INVITATIONS_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveSecretaryInvitations = (invitations: SecretaryInvitation[]) => {
-  localStorage.setItem(SECRETARY_INVITATIONS_KEY, JSON.stringify(invitations));
 };
 
 export const createSecretaryInvitation = async (input: {
