@@ -785,6 +785,15 @@ function handle_faculty_student_update(array $params = []): void
             'ip_address' => $context['ip_address'],
             'user_agent' => $context['user_agent'],
         ], $macKey, $before, $after);
+        // BIO-005: an inactive Student's usable biometric reference is deleted.
+        if (isset($status) && $status !== 'active') {
+            student_biometric_invalidate(
+                $pdo, $config, $authCtx, $context, (int) $before['student_id'], 'revoked',
+                'biometric_enrollment_revoked_inactive',
+                'Biometric enrollment deleted because the Student is no longer active.',
+                "Student status set to {$status}"
+            );
+        }
         $pdo->commit();
 
         json_response([
@@ -816,6 +825,10 @@ function handle_faculty_student_update(array $params = []): void
     } catch (DomainException $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         safe_error_response($e->getMessage(), 409);
+    } catch (StudentBiometricException $e) {
+        // The status change is not saved while the biometric reference cannot be deleted.
+        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
+        safe_error_response($e->getMessage(), 503);
     } catch (Throwable $e) {
         if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty student update error: ' . sanitize_for_log($e));

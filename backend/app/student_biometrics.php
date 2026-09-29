@@ -287,6 +287,53 @@ function student_biometric_expire_if_needed(
     return $row;
 }
 
+/**
+ * Delete a Student's usable biometric reference and mark the enrollment
+ * revoked or expired (BIO-005). Consent is left unchanged, so the Student can
+ * re-enroll. Must run inside the caller's transaction; the sidecar deletion
+ * happens first, and a failure aborts the change so no usable template is
+ * left behind. Returns false when there was no usable enrollment.
+ */
+function student_biometric_invalidate(
+    PDO $pdo,
+    array $config,
+    array $authCtx,
+    array $context,
+    int $studentId,
+    string $enrollmentStatus,
+    string $actionCode,
+    string $description,
+    ?string $reason = null
+): bool {
+    if (!in_array($enrollmentStatus, ['revoked', 'expired'], true)) {
+        throw new InvalidArgumentException('Biometric invalidation status must be revoked or expired.');
+    }
+    $row = student_biometric_profile($pdo, $studentId, true);
+    if ($row === null || !in_array((string) $row['enrollment_status'], ['active', 'enrolling'], true)) {
+        return false;
+    }
+    if ($row['protected_object_reference'] !== null) {
+        student_biometric_sidecar_revoke($config, (string) $row['protected_object_reference']);
+    }
+    $now = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
+    $clearSql = "UPDATE biometric_profiles
+            SET enrollment_status = ?, face_enrolled = 0,
+                template_reference = NULL, image_references = NULL, protected_object_reference = NULL,
+                reference_expires_on = NULL, usable_sample_count = NULL, updated_at = ?";
+    if ($enrollmentStatus === 'revoked') {
+        $update = $pdo->prepare($clearSql . ', revoked_at = ?, revoked_by_user_id = ? WHERE profile_id = ?');
+        $update->execute([$enrollmentStatus, $now, $now, $authCtx['user_id'] ?? null, (int) $row['profile_id']]);
+    } else {
+        $update = $pdo->prepare($clearSql . ' WHERE profile_id = ?');
+        $update->execute([$enrollmentStatus, $now, (int) $row['profile_id']]);
+    }
+    student_biometric_record_audit(
+        $pdo, $config, $authCtx, $context, $actionCode, $studentId, $description, $reason,
+        student_biometric_snapshot($row), student_biometric_snapshot(student_biometric_profile($pdo, $studentId, true))
+    );
+    return true;
+}
+
 function student_biometric_reference_expiry(PDO $pdo, int $studentId): string
 {
     $stmt = $pdo->prepare(

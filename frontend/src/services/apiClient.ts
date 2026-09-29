@@ -743,6 +743,11 @@ export function getAdminSettingsApi(): Promise<{
   return request('GET', '/admin/settings');
 }
 
+/** BIO-002: the Dean revokes a Student's biometric enrollment; the Student must re-enroll. */
+export function revokeStudentBiometricApi(studentId: string, reason: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/admin/biometrics/revoke', { studentId, reason });
+}
+
 export function updateAdminSettingsApi(settings: any): Promise<{ status: string; message: string }> {
   return request('POST', '/admin/settings', settings);
 }

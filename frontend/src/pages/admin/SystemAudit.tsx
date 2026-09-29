@@ -24,7 +24,8 @@ const PRINT_STYLES = `
   @page { margin: 1.2cm; }
 }`;
 
-import { getAdminReportsSummaryApi, getAdminSettingsApi } from '../../services/apiClient';
+import { getAdminReportsSummaryApi, getAdminSettingsApi, revokeStudentBiometricApi } from '../../services/apiClient';
+import { Modal } from '../../components/Modal';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 
 export const DeanReports: React.FC = () => {
@@ -34,6 +35,11 @@ export const DeanReports: React.FC = () => {
   const [dbStudents, setDbStudents] = useState<any[]>([]);
   const [dbAttendance, setDbAttendance] = useState<any[]>([]);
   const [schoolYear, setSchoolYear] = useState('current');
+  const [revokeTarget, setRevokeTarget] = useState<{ id: string; name: string } | null>(null);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [revokeError, setRevokeError] = useState('');
+  const [revoking, setRevoking] = useState(false);
+  const [revokeNotice, setRevokeNotice] = useState('');
   const [currentSchoolYear, setCurrentSchoolYear] = useState<string | null>(null);
   const [availableSchoolYears, setAvailableSchoolYears] = useState<string[]>([]);
 
@@ -286,6 +292,50 @@ export const DeanReports: React.FC = () => {
         </div>
       </Card>
 
+      {revokeNotice && (
+        <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 no-print">{revokeNotice}</div>
+      )}
+      <Modal isOpen={revokeTarget !== null} onClose={() => setRevokeTarget(null)} title="Revoke biometric enrollment">
+        <form
+          className="space-y-4 text-xs"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!revokeTarget) return;
+            const reason = revokeReason.trim();
+            if (reason.length < 8) {
+              setRevokeError('Give a reason of at least 8 characters.');
+              return;
+            }
+            setRevoking(true);
+            setRevokeError('');
+            try {
+              const response = await revokeStudentBiometricApi(revokeTarget.id, reason);
+              setRevokeNotice(`${revokeTarget.name}: ${response.message}`);
+              setRevokeTarget(null);
+              fetchReportData();
+            } catch (err) {
+              setRevokeError(err instanceof Error ? err.message : 'Unable to revoke the biometric enrollment.');
+            } finally {
+              setRevoking(false);
+            }
+          }}
+        >
+          <p className="text-slate-600 dark:text-slate-300">
+            This deletes <strong>{revokeTarget?.name}</strong>'s facial reference. The Student is notified and must re-enroll to use face check-in; manual attendance stays available and recorded attendance is kept.
+          </p>
+          <label className="block font-bold text-slate-700 dark:text-slate-300">
+            Reason
+            <textarea value={revokeReason} onChange={(event) => setRevokeReason(event.target.value)} maxLength={240} rows={3} required
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-normal dark:border-slate-700 dark:bg-slate-900" />
+          </label>
+          {revokeError && <p role="alert" className="text-rose-600">{revokeError}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setRevokeTarget(null)} className="rounded-xl px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Cancel</button>
+            <button type="submit" disabled={revoking} className="rounded-xl bg-rose-600 px-4 py-2 font-bold text-white hover:bg-rose-700 disabled:opacity-50">{revoking ? 'Revoking…' : 'Revoke enrollment'}</button>
+          </div>
+        </form>
+      </Modal>
+
       {/* ── Printable Report Area ──────────────────────────── */}
       <div id="dean-report-print">
         {/* Report Header (shows on print) */}
@@ -330,9 +380,18 @@ export const DeanReports: React.FC = () => {
                       </td>
                       <td className="py-3 px-3"><StatusBadge status={s.status} /></td>
                       <td className="py-3 px-3">
-                        <span className={`text-[9px] font-bold ${s.faceEnrolled ? 'text-emerald-600' : 'text-rose-500'}`}>
-                          {s.faceEnrolled ? '✓ Enrolled' : '✗ Pending'}
+                        <span className={`text-[9px] font-bold ${s.faceEnrolled ? 'text-emerald-600' : 'text-slate-400'}`}>
+                          {s.faceEnrolled ? '✓ Enrolled' : 'Not enrolled'}
                         </span>
+                        {s.faceEnrolled && (
+                          <button
+                            type="button"
+                            onClick={() => { setRevokeTarget({ id: String(s.id), name: s.name }); setRevokeReason(''); setRevokeError(''); }}
+                            className="ml-2 text-[9px] font-bold text-rose-600 hover:underline no-print"
+                          >
+                            Revoke
+                          </button>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <span className="font-bold text-slate-700 dark:text-slate-300">{Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0}</span>

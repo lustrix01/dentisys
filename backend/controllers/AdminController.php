@@ -676,6 +676,75 @@ function handle_admin_settings_update(): void
     }
 }
 
+/**
+ * BIO-002: the Dean may revoke a Student's biometric enrollment; the Student
+ * must then re-enroll. The Dean cannot enroll on the Student's behalf.
+ */
+function handle_admin_biometric_revoke(): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = admin_verify_auth($pdo, $config);
+        $body = request_body();
+        $data = $body['has_body'] && is_array($body['data']) ? $body['data'] : [];
+        $studentId = filter_var($data['studentId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($studentId === false) {
+            throw new ValidationException([['field' => 'studentId', 'message' => 'A valid student is required.']]);
+        }
+        $reason = validate_required_string($data, 'reason', 8, 240);
+
+        $pdo->beginTransaction();
+        try {
+            $revoked = student_biometric_invalidate(
+                $pdo, $config, $authCtx, $context, (int) $studentId, 'revoked',
+                'biometric_enrollment_revoked_by_dean',
+                'The Dean revoked the Student\'s biometric enrollment; re-enrollment is required.',
+                $reason
+            );
+            if (!$revoked) {
+                $pdo->rollBack();
+                safe_error_response('This Student has no active biometric enrollment.', 409);
+                return;
+            }
+            $recipientStmt = $pdo->prepare('SELECT COALESCE(student_account_user_id, user_id) FROM students WHERE student_id = ?');
+            $recipientStmt->execute([(int) $studentId]);
+            $recipientUserId = (int) $recipientStmt->fetchColumn();
+            if ($recipientUserId > 0) {
+                notification_create_idempotent(
+                    $pdo,
+                    $recipientUserId,
+                    'biometric_enrollment',
+                    'Face check-in enrollment revoked',
+                    "The Dean revoked your face check-in enrollment. Re-enroll from Face Registration to use face check-in again; manual attendance remains available. Reason: {$reason}",
+                    'student',
+                    (string) $studentId,
+                    'biometric-dean-revoke:' . $studentId . ':' . attendance_session_now_utc()->format('YmdHisu')
+                );
+            }
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+        json_response(['status' => 'ok', 'message' => 'Biometric enrollment revoked. The Student must re-enroll to use face check-in.'], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (StudentBiometricException $e) {
+        safe_error_response($e->getMessage(), 503);
+    } catch (\Throwable $e) {
+        error_log('Admin biometric revoke error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
 function handle_admin_reports_summary(): void
 {
     try {

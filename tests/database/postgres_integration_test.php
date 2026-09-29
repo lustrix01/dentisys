@@ -5976,6 +5976,77 @@ expect_true(($auditPageOne['logs'][0]['id'] ?? null) !== ($auditPageTwo['logs'][
 [$auditBadDateStatus] = integration_http_get_json('/api/admin/audit-logs?date=yesterday', $adminAccessToken);
 expect_same(422, $auditBadDateStatus, 'Audit trail rejects a malformed date');
 
+// BIO-002 / BIO-005: the Dean can revoke an enrollment, an inactive Student's
+// enrollment is deleted, and the sweep expires ended references. Fixtures use
+// "enrolling" profiles (no stored reference); the biometric sidecar is off in
+// the test environment, so a stored reference cannot be deleted here.
+$bioStudentStmt = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, 'Biometric', ?, ?, 'active') RETURNING student_id"
+);
+$bioEnrollStmt = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active')");
+$bioProfileStmt = $pdo->prepare(
+    "INSERT INTO biometric_profiles (student_id, consent_status, face_enrolled, enrollment_status, reference_expires_on)
+     VALUES (?, 'approved', 0, 'enrolling', ?)"
+);
+$bioStatusStmt = $pdo->prepare('SELECT enrollment_status, consent_status FROM biometric_profiles WHERE student_id = ?');
+$bioStudents = [];
+foreach (['Dean', 'Inactive', 'Expired', 'Stored'] as $bioLabel) {
+    $bioSuffix = strtolower(bin2hex(random_bytes(3)));
+    $bioStudentStmt->execute(['BIO-' . strtoupper($bioSuffix), $bioLabel, "bio-{$bioSuffix}@bicol-u.edu.ph"]);
+    $bioStudents[$bioLabel] = (int) $bioStudentStmt->fetchColumn();
+    $bioEnrollStmt->execute([$bioStudents[$bioLabel], $studentClassId]);
+}
+$bioProfileStmt->execute([$bioStudents['Dean'], '2099-12-31']);
+$bioProfileStmt->execute([$bioStudents['Inactive'], '2099-12-31']);
+$bioProfileStmt->execute([$bioStudents['Expired'], '2020-12-31']);
+$pdo->prepare(
+    "INSERT INTO biometric_profiles
+        (student_id, consent_status, face_enrolled, enrollment_status, protected_object_reference, reference_expires_on, enrolled_at)
+     VALUES (?, 'approved', 1, 'active', 'integration-stored-reference', '2099-12-31', CURRENT_TIMESTAMP(6))"
+)->execute([$bioStudents['Stored']]);
+
+[$deanRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $adminAccessToken, [
+    'studentId' => $bioStudents['Dean'],
+    'reason' => 'Enrollment captured in poor lighting',
+]);
+expect_same(200, $deanRevokeStatus, 'The Dean can revoke a Student biometric enrollment');
+$bioStatusStmt->execute([$bioStudents['Dean']]);
+expect_same(['enrollment_status' => 'revoked', 'consent_status' => 'approved'], $bioStatusStmt->fetch(PDO::FETCH_ASSOC), 'Dean revocation deletes the enrollment and keeps consent so the Student can re-enroll');
+[$deanRevokeAgainStatus] = integration_http_json('/api/admin/biometrics/revoke', $adminAccessToken, [
+    'studentId' => $bioStudents['Dean'],
+    'reason' => 'Enrollment captured in poor lighting',
+]);
+expect_same(409, $deanRevokeAgainStatus, 'Revoking an enrollment that is no longer active is refused');
+[$facultyRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $facultyAccessToken, [
+    'studentId' => $bioStudents['Inactive'],
+    'reason' => 'Faculty must not revoke enrollments',
+]);
+expect_same(403, $facultyRevokeStatus, 'Only the Dean can revoke a Student biometric enrollment');
+[$storedRevokeStatus] = integration_http_json('/api/admin/biometrics/revoke', $adminAccessToken, [
+    'studentId' => $bioStudents['Stored'],
+    'reason' => 'Stored reference cannot be deleted here',
+]);
+expect_same(503, $storedRevokeStatus, 'Revocation is refused when the stored reference cannot be deleted');
+$bioStatusStmt->execute([$bioStudents['Stored']]);
+expect_same('active', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_status'] ?? null, 'A refused revocation leaves the enrollment unchanged');
+
+[$inactiveStatus] = integration_http_put_json('/api/faculty/students/' . $bioStudents['Inactive'], $seedFacultyAccessToken, ['status' => 'disabled']);
+expect_same(200, $inactiveStatus, 'Faculty can set a Student inactive');
+$bioStatusStmt->execute([$bioStudents['Inactive']]);
+expect_same('revoked', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_status'] ?? null, 'Setting a Student inactive deletes their biometric enrollment');
+
+exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../../backend/bin/expire-biometrics.php') . ' 2>&1', $bioSweepOutput);
+$bioStatusStmt->execute([$bioStudents['Expired']]);
+expect_same('expired', $bioStatusStmt->fetch(PDO::FETCH_ASSOC)['enrollment_status'] ?? null, 'The sweep expires an enrollment whose validity ended: ' . implode(' | ', array_slice($bioSweepOutput, -3)));
+$bioAuditStmt = $pdo->prepare('SELECT COUNT(*) FROM audit_events WHERE action_code = ?');
+foreach (['biometric_enrollment_revoked_by_dean', 'biometric_enrollment_revoked_inactive', 'biometric_enrollment_expired'] as $bioAction) {
+    $bioAuditStmt->execute([$bioAction]);
+    expect_true((int) $bioAuditStmt->fetchColumn() > 0, "Biometric deletion is audited ({$bioAction})");
+}
+$pdo->prepare("UPDATE biometric_profiles SET enrollment_status = 'not_enrolled', face_enrolled = 0, protected_object_reference = NULL, reference_expires_on = NULL, enrolled_at = NULL WHERE student_id = ?")
+    ->execute([$bioStudents['Stored']]);
+
 // Score matrix saves are all or nothing, and clearing a cell deletes the score
 // while the audit event keeps the removed value.
 $batchAssessmentStmt = $pdo->prepare(

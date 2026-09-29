@@ -335,6 +335,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/admin/biometrics/revoke',
+        'handler' => 'handle_admin_biometric_revoke',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/admin/profile',
         'handler' => 'handle_admin_profile_get',
