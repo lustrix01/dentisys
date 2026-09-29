@@ -32,6 +32,27 @@ test.describe('Class Secretary Module E2E Tests', () => {
 
   test('secretary dashboard renders correctly', async ({ page }) => {
     await expect(page.locator('body')).toContainText(/Secretary|Class|Attendance|Dashboard/i);
+    await expect(page.getByText('No attendance session is running for your section.')).toBeVisible();
+    await expect(page.getByText('Quick Actions')).toHaveCount(0);
+  });
+
+  test('secretary dashboard shows the live attendance session', async ({ page }) => {
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          activeSession: {
+            sessionId: '77', csId: 1, courseCode: 'CLIN401', sessionDate: '2026-09-29',
+            sessionCode: 'CLIN401-20260929', startedAt: '2026-09-29T00:30:00Z', status: 'active', room: 'Room 101',
+          },
+        }),
+      });
+    });
+    await page.reload();
+    await expect(page.getByText('CLIN401-20260929')).toBeVisible();
+    await expect(page.getByText('Live', { exact: true })).toBeVisible();
   });
 
   test('secretary can navigate to Attendance List page', async ({ page }) => {

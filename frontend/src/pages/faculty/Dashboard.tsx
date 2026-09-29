@@ -333,66 +333,6 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* 4. Quick Actions Panel (Clean Typography Cards) */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold font-heading text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Quick Actions
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <button
-                onClick={() => navigate('/grades?tab=assessments')}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-clinical-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
-              >
-                <span className="text-[10px] font-bold text-clinical-600 dark:text-clinical-400 uppercase tracking-wider block">Assessment</span>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-clinical-600 transition-colors">
-                  New Assessment
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Create exam or quiz
-                </p>
-              </button>
-
-              <button
-                onClick={() => navigate('/grades?tab=scores')}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-emerald-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
-              >
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Grading</span>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-emerald-600 transition-colors">
-                  Encode Scores
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Input student grades
-                </p>
-              </button>
-
-              <button
-                onClick={() => navigate('/attendance?tab=history')}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-teal-500/50 hover:shadow-xs transition-all text-left group cursor-pointer"
-              >
-                <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider block">Attendance</span>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-teal-600 transition-colors">
-                  Attendance Sheet
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Verify daily check-ins
-                </p>
-              </button>
-
-              <button
-                onClick={() => navigate('/reports')}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200/60 dark:border-slate-800/80 hover:border-emerald-600/50 hover:shadow-xs transition-all text-left group cursor-pointer"
-              >
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">Analytics</span>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1 group-hover:text-emerald-600 transition-colors">
-                  Export Reports
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
-                  Generate grade reports
-                </p>
-              </button>
-            </div>
-          </div>
-
           {/* 5. Search Bar Section */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
             <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">

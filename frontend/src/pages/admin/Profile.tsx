@@ -74,7 +74,6 @@ export const Profile: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
               <p>Academic policy configuration</p>
-              <p>Retention standard oversight</p>
               <p>System data administration</p>
             </CardContent>
           </Card>
