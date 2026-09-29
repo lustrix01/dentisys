@@ -3069,11 +3069,18 @@ function handle_faculty_scores_get(): void
 
         $assessmentId = (int) ($_GET['assessmentId'] ?? 0);
         $owner = $pdo->prepare(
-            "SELECT 1 FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id
-             WHERE a.assessment_id = ? AND cs.instructor_user_id = ?"
+            "SELECT cs.instructor_user_id FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id
+             WHERE a.assessment_id = ?"
         );
-        $owner->execute([$assessmentId, $authCtx['user_id']]);
-        if (!$owner->fetchColumn()) {
+        $owner->execute([$assessmentId]);
+        $instructorUserId = $owner->fetchColumn();
+        if ($instructorUserId === false && $assessmentId > 0) {
+            // A deleted assessment has no scores. Pages that listed it just
+            // before the deletion may still ask; this is not an error.
+            json_response(['status' => 'ok', 'assessmentId' => (string) $assessmentId, 'scores' => [], 'deleted' => true], 200);
+            return;
+        }
+        if ((int) $instructorUserId !== (int) $authCtx['user_id']) {
             safe_error_response('Assessment not found.', 404);
             return;
         }

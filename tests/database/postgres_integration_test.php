@@ -6189,6 +6189,19 @@ $auditDeleteAssessmentId = (int) $auditDeleteAssessmentStmt->fetchColumn();
     'assessmentId' => $auditDeleteAssessmentId,
 ]);
 expect_same(200, $auditDeleteStatus, 'Faculty can delete an assessment in a current class');
+[$deletedScoresStatus, $deletedScoresBody] = integration_http_get_json('/api/faculty/scores?assessmentId=' . $auditDeleteAssessmentId, $seedFacultyAccessToken);
+expect_same(200, $deletedScoresStatus, 'Scores of a just-deleted assessment read as empty instead of failing');
+expect_same([], $deletedScoresBody['scores'] ?? null, 'A deleted assessment has no scores');
+$foreignAssessmentId = (int) $pdo->query(
+    "SELECT a.assessment_id FROM assessments a
+       JOIN class_sections cs ON cs.cs_id = a.cs_id
+       JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
+      WHERE ua.login_email <> 'faculty@bicol-u.edu.ph'
+      ORDER BY a.assessment_id LIMIT 1"
+)->fetchColumn();
+expect_true($foreignAssessmentId > 0, 'Another Faculty member owns an assessment');
+[$foreignScoresStatus] = integration_http_get_json('/api/faculty/scores?assessmentId=' . $foreignAssessmentId, $seedFacultyAccessToken);
+expect_same(404, $foreignScoresStatus, 'Scores of another Faculty member\'s assessment stay hidden');
 $auditDeleteEventStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code = 'assessment_deleted' AND target_id = ?");
 $auditDeleteEventStmt->execute([(string) $auditDeleteAssessmentId]);
 expect_same(1, (int) $auditDeleteEventStmt->fetchColumn(), 'Deleting the assessment appends one audit event');
