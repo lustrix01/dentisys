@@ -217,6 +217,23 @@ function app_config(?array $overrides = null): array
         ? 'sidecar'
         : ($mockFlags['biometrics'] ? 'development-mock' : 'disabled');
 
+    // Committed development keys. A production-like environment must supply
+    // its own private keys instead.
+    $developmentKeys = [
+        'JWT_SIGNING_KEY_B64' => 'ZGVudGlzeXMtZGV2LWp3dC1zaWduaW5nLWtleS0zMmI=',
+        'MFA_ENCRYPTION_KEY_B64' => 'ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI=',
+        'AUDIT_MAC_KEY_B64' => 'ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ=',
+    ];
+    if (!$isDevelopment && !$isTest) {
+        foreach ($developmentKeys as $keyName => $developmentKey) {
+            if (hash_equals($developmentKey, (string) config_value($keyName, $values, $developmentKey))) {
+                throw new RuntimeException(
+                    "Configuration value \"{$keyName}\" must be set to a private key when APP_ENV is production-like; the committed development key is not allowed."
+                );
+            }
+        }
+    }
+
     return [
         'debug' => filter_var(config_value('APP_DEBUG', $values, false), FILTER_VALIDATE_BOOLEAN),
         'db' => [
@@ -239,15 +256,15 @@ function app_config(?array $overrides = null): array
             'allowed_origins' => (string) config_value('CORS_ALLOWED_ORIGINS', $values, 'http://localhost:5173'),
         ],
         'jwt' => [
-            'signing_key_b64' => (string) config_value('JWT_SIGNING_KEY_B64', $values, 'ZGVudGlzeXMtZGV2LWp3dC1zaWduaW5nLWtleS0zMmI='),
+            'signing_key_b64' => (string) config_value('JWT_SIGNING_KEY_B64', $values, $developmentKeys['JWT_SIGNING_KEY_B64']),
             'access_ttl' => (int) config_value('JWT_ACCESS_TTL', $values, 86400),
         ],
         'mfa' => [
-            'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $values, 'ZGVudGlzeXMtZGV2LW1mYS1lbmNyeXB0LWtleS0zMmI='),
+            'encryption_key_b64' => (string) config_value('MFA_ENCRYPTION_KEY_B64', $values, $developmentKeys['MFA_ENCRYPTION_KEY_B64']),
             'issuer' => 'DentiSys',
         ],
         'audit' => [
-            'mac_key_b64' => (string) config_value('AUDIT_MAC_KEY_B64', $values, 'ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ='),
+            'mac_key_b64' => (string) config_value('AUDIT_MAC_KEY_B64', $values, $developmentKeys['AUDIT_MAC_KEY_B64']),
         ],
         'rate_limit' => [
             'enabled' => filter_var(config_value('RATE_LIMIT_ENABLED', $values, 'true'), FILTER_VALIDATE_BOOLEAN),

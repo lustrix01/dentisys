@@ -59,7 +59,23 @@ assert_same(
     'application links use the configured base URL and RFC3986-encode tokens'
 );
 
-$singleServer = app_config([
+// Production-like environments must supply private keys.
+$privateKeys = [
+    'JWT_SIGNING_KEY_B64' => base64_encode(str_repeat('j', 32)),
+    'MFA_ENCRYPTION_KEY_B64' => base64_encode(str_repeat('m', 32)),
+    'AUDIT_MAC_KEY_B64' => base64_encode(str_repeat('a', 32)),
+];
+foreach (array_keys($privateKeys) as $developmentKeyName) {
+    $withDevelopmentKey = $privateKeys;
+    unset($withDevelopmentKey[$developmentKeyName]);
+    assert_throws(
+        static fn() => app_config(['APP_ENV' => 'production', 'EMAIL_PROVIDER' => 'smtp'] + $withDevelopmentKey),
+        $developmentKeyName,
+        "production refuses the committed development {$developmentKeyName}"
+    );
+}
+
+$singleServer = app_config($privateKeys + [
     'APP_ENV' => 'single-server',
     'APP_BASE_URL' => 'https://dentisys.example.edu/',
     'SHOW_DEV_RESET_LINK' => 'true',
@@ -133,7 +149,7 @@ assert_throws(
     'EMAIL_PROVIDER',
     'unknown email provider is rejected'
 );
-$productionSmtp = app_config([
+$productionSmtp = app_config($privateKeys + [
     'APP_ENV' => 'production',
     'EMAIL_PROVIDER' => 'smtp',
     'SMTP_ENCRYPTION' => 'starttls',
@@ -153,7 +169,7 @@ $testConfig = app_config([
 assert_same(true, $testConfig['mocks']['identity'], 'test environment permits explicit mock identity');
 assert_same(true, $testConfig['mocks']['browser_attendance_prototype'], 'test environment permits explicit browser prototype');
 assert_same(true, $testConfig['features']['student_auth_enabled'], 'test environment permits Student authentication');
-assert_same('disabled', app_config([
+assert_same('disabled', app_config($privateKeys + [
     'APP_ENV' => 'single-server',
     'APP_BASE_URL' => 'https://dentisys.example.edu',
     'BIOMETRIC_SIDECAR_URL' => 'http://biometric:8000',
