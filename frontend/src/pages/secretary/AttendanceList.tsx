@@ -123,7 +123,7 @@ export const AttendanceList: React.FC = () => {
     });
   }, [date, query, sessions, subject]);
 
-  const attended = filtered.filter((record) => record.status === 'present' || record.status === 'late').length;
+  const attended = filtered.filter((record) => record.status === 'present' || record.status === 'late' || record.status === 'excused').length;
   const present = filtered.filter((record) => record.status === 'present').length;
   const late = filtered.filter((record) => record.status === 'late').length;
   const absent = filtered.filter((record) => record.status === 'absent').length;

@@ -148,11 +148,12 @@ function handle_faculty_dashboard_kpis(): void
                 c.name AS course_name,
                 COUNT(DISTINCT e.student_id) AS student_count,
                 COUNT(ar.record_id) AS attendance_total,
-                SUM(CASE WHEN ar.status IN ('present', 'late') THEN 1 ELSE 0 END) AS attendance_met
+                SUM(CASE WHEN ar.status IN ('present', 'late', 'excused') THEN 1 ELSE 0 END) AS attendance_met
             FROM class_sections cs
             JOIN courses c ON c.course_id = cs.course_id
             LEFT JOIN enrollments e ON e.cs_id = cs.cs_id AND LOWER(e.status) = 'active'
             LEFT JOIN attendance_records ar ON ar.enrollment_id = e.enrollment_id
+                AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = ar.attendance_session_id AND rs.status = 'revoked')
             WHERE cs.instructor_user_id = :faculty_id
               AND (LOWER(cs.status) = 'active' OR cs.status IS NULL)
               {$yearFilter}

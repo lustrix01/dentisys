@@ -247,7 +247,7 @@ export const Classes: React.FC = () => {
               r => r.studentId === currentMockStudent?.id && r.subjectCode === subject.code
             );
             const totalAtt = subjectRecords.length;
-            const presentAtt = subjectRecords.filter(r => r.status === 'present' || r.status === 'late').length;
+            const presentAtt = subjectRecords.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
             const attRate = totalAtt > 0 ? Math.round((presentAtt / totalAtt) * 100) : null;
 
             return (

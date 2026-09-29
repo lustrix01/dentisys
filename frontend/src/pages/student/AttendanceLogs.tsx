@@ -130,7 +130,7 @@ export const AttendanceLogs: React.FC = () => {
     ? logs.filter(r => r.status === 'excused').length
     : mockStudentRecords.filter(r => r.status === 'excused').length;
   const attendanceRate = totalCount > 0
-    ? Math.round(((presentCount + lateCount) / totalCount) * 100)
+    ? Math.round(((presentCount + lateCount + excusedCount) / totalCount) * 100)
     : null;
 
   const uniqueSubjects = Array.from(

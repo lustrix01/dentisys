@@ -81,7 +81,7 @@ export const Dashboard: React.FC = () => {
 
   const studentRecords = attendanceRecords.filter(r => r.studentId === currentStudent?.id);
   const totalLogs = studentRecords.length;
-  const presentCount = studentRecords.filter(r => r.status === 'present' || r.status === 'late').length;
+  const presentCount = studentRecords.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
   const overallAttendanceRate = totalLogs > 0 ? Math.round(((presentCount) / totalLogs) * 100) : null;
 
   const isLowAttendance = overallAttendanceRate !== null && overallAttendanceRate < 85;

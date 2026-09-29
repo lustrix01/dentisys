@@ -233,12 +233,13 @@ function handle_student_dashboard_get(): void
         $graded = array_values(array_filter($classes, static fn(array $row): bool => $row['grade'] !== null));
         $gwa = $graded === [] ? null : array_sum(array_column($graded, 'grade')) / count($graded);
         $attendance = $pdo->prepare(
-            'SELECT COUNT(*) FILTER (WHERE r.status IN (\'present\', \'late\')) AS attended,
+            'SELECT COUNT(*) FILTER (WHERE r.status IN (\'present\', \'late\', \'excused\')) AS attended,
                     COUNT(*) AS total
                FROM attendance_records r
                JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                JOIN class_sections cs ON cs.cs_id = e.cs_id
               WHERE e.student_id = ? AND LOWER(e.status) = \'active\'
+                AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = \'revoked\')
                 AND (CAST(? AS TEXT) IS NULL OR UPPER(cs.school_year) = UPPER(CAST(? AS TEXT)))'
         );
         $attendance->execute([(int) $authCtx['student_id'], $schoolYear, $schoolYear]);

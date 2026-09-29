@@ -47,6 +47,6 @@ export const getStatusClasses = (status: AttendanceStatus) => {
 
 export const getAttendanceRate = (records: AttendanceRecord[]) => {
   if (records.length === 0) return 0;
-  const attended = records.filter(record => record.status === 'present' || record.status === 'late').length;
+  const attended = records.filter(record => record.status === 'present' || record.status === 'late' || record.status === 'excused').length;
   return Math.round((attended / records.length) * 100);
 };

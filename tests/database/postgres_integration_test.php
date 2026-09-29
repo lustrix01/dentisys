@@ -2297,6 +2297,19 @@ expect_true(is_array($studentClassesBody['classes'] ?? null), 'Student class rea
 [$studentDashboardStatus, $studentDashboardBody] = integration_http_get_json('/api/student/dashboard', $studentCredentials['access_token']);
 expect_same(200, $studentDashboardStatus, 'Student dashboard read returns HTTP 200');
 expect_same('26', (string) ($studentDashboardBody['student']['id'] ?? ''), 'Student dashboard resolves the authenticated Student identity');
+// Excused counts as attended; records of revoked sessions are ignored.
+$studentRateRow = $pdo->query(
+    "SELECT COUNT(*) FILTER (WHERE r.status <> 'absent') AS attended, COUNT(*) AS total
+       FROM attendance_records r
+       JOIN enrollments e ON e.enrollment_id = r.enrollment_id AND LOWER(e.status) = 'active'
+       LEFT JOIN attendance_sessions s ON s.session_id = r.attendance_session_id
+      WHERE e.student_id = 26 AND (s.session_id IS NULL OR s.status <> 'revoked')"
+)->fetch(PDO::FETCH_ASSOC);
+expect_same(
+    (int) $studentRateRow['total'] > 0 ? round(((int) $studentRateRow['attended'] / (int) $studentRateRow['total']) * 100, 2) : null,
+    isset($studentDashboardBody['summary']['attendanceRate']) ? (float) $studentDashboardBody['summary']['attendanceRate'] : null,
+    'Student attendance rate counts Excused as attended and ignores revoked sessions'
+);
 
 // Remedial notifications are committed with the enrollment mutation and are
 // recipient-scoped at both list and mark-read boundaries.

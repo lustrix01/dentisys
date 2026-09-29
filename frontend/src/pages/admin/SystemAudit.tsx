@@ -571,7 +571,7 @@ export const DeanReports: React.FC = () => {
                 const clsName = clsStudents[0]?.className || cls;
                 const recs = attendanceRecords.filter(r => clsStudents.some(s => s.id === r.studentId));
                 const total = recs.length;
-                const present = recs.filter(r => r.status === 'present' || r.status === 'late').length;
+                const present = recs.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
                 const rate = total > 0 ? Math.round((present / total) * 100) : 0;
                 return (
                   <Card key={cls} className="p-4">

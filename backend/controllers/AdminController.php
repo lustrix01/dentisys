@@ -52,7 +52,7 @@ function handle_admin_dashboard_kpis(): void
         $yearParams = $schoolYear === null ? [] : [':school_year' => $schoolYear];
         $studentYearWhere = $schoolYear === null ? '' : 'WHERE UPPER(cs_scope.school_year) = UPPER(:school_year)';
         $facultyYearJoin = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
-        $attendanceYearWhere = $schoolYear === null ? '' : 'WHERE UPPER(cs.school_year) = UPPER(:school_year)';
+        $attendanceYearAnd = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
         $availableSchoolYears = academic_school_year_options(
             $pdo->query('SELECT DISTINCT school_year FROM class_sections WHERE school_year IS NOT NULL')->fetchAll(PDO::FETCH_COLUMN),
             $currentSchoolYear
@@ -112,7 +112,8 @@ function handle_admin_dashboard_kpis(): void
             FROM attendance_records ar
             LEFT JOIN enrollments e ON ar.enrollment_id = e.enrollment_id
             LEFT JOIN class_sections cs ON e.cs_id = cs.cs_id
-            {$attendanceYearWhere}
+            WHERE NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = ar.attendance_session_id AND rs.status = 'revoked')
+            {$attendanceYearAnd}
         ");
         $attStmt->execute($yearParams);
         $attendance = $attStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -177,7 +178,8 @@ function handle_admin_dashboard_kpis(): void
             }
             $classAttCounts[$cName]['total']++;
 
-            if ($st === 'present' || $st === 'late') {
+            // Excused counts as attended.
+            if ($st === 'present' || $st === 'late' || $st === 'excused') {
                 $presentCount++;
                 $classAttCounts[$cName]['present']++;
             }

@@ -786,6 +786,7 @@ function handle_secretary_dashboard_kpis(): void
              WHERE cs.secretary_user_id = ?
                AND LOWER(e.status) = 'active'
                AND (? = 0 OR cs.cs_id = ?)
+               AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
              ORDER BY r.created_at DESC"
         );
         $selectedClass = $classId === '' ? 0 : (int) $classId;
@@ -805,7 +806,8 @@ function handle_secretary_dashboard_kpis(): void
                 $overriddenCount++;
             }
             $st = strtolower($rec['status'] ?? '');
-            if ($st === 'present' || $st === 'late') {
+            // Excused counts as attended.
+            if ($st === 'present' || $st === 'late' || $st === 'excused') {
                 $presentOrLate++;
             }
         }
