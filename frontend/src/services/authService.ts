@@ -36,7 +36,10 @@ export interface SecretaryInvitation {
   facultyName: string;
   className: string;
   classId: string;
-  token: string;
+  /** Raw token; known only on the activation page, which reads it from its own URL. */
+  token?: string;
+  /** Activation link returned once at issue time, only when the server enables development links. */
+  devLink?: string | null;
   status: 'Pending' | 'Accepted' | 'Expired' | 'Revoked';
   createdAt: string;
   expiresAt: string;
@@ -181,24 +184,24 @@ export const createSecretaryInvitation = async (input: {
   email: string;
   facultyName: string;
   className: string;
-  classId?: string;
+  classId: string;
 }): Promise<{ success: boolean; message: string; invitation?: SecretaryInvitation }> => {
   try {
     const res = await inviteSecretaryApi({
       student_name: input.studentName,
       student_number: input.studentId,
-      class_name: input.className,
+      cs_id: Number(input.classId),
       email: input.email,
     });
     const newInv: SecretaryInvitation = {
-      id: res.token,
+      id: res.invitationId,
       studentId: input.studentId,
       studentName: normalizePersonName(input.studentName),
       email: input.email,
       facultyName: normalizePersonName(input.facultyName),
       className: input.className,
-      classId: input.classId || '',
-      token: res.token,
+      classId: input.classId,
+      devLink: res.invitation_link,
       status: 'Pending',
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),

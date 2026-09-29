@@ -250,6 +250,7 @@ $expectedMigrations = [
     '033_canonical_class_semester.sql',
     '034_retention_status_override.sql',
     '035_fixed_retention_trigger.sql',
+    '036_scrub_secretary_invitation_tokens.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -1491,6 +1492,65 @@ $invitedStudentId = (int) $invitedStudentInsert->fetchColumn();
 $invitedEnrollmentInsert = $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active') RETURNING enrollment_id");
 $invitedEnrollmentInsert->execute([$invitedStudentId, $studentClassId]);
 $invitedEnrollmentId = (int) $invitedEnrollmentInsert->fetchColumn();
+
+// Secretary invitations store only the token digest and are scoped by cs_id.
+$secInviteEmail = 'invite-secretary-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
+$secInviteNumber = 'SEC-' . bin2hex(random_bytes(4));
+$invitedStudentInsert->execute([$secInviteNumber, 'Secretary', 'Candidate', $secInviteEmail, 'active']);
+$secInviteStudentId = (int) $invitedStudentInsert->fetchColumn();
+$invitedEnrollmentInsert->execute([$secInviteStudentId, $studentClassId]);
+$secInvitePayload = [
+    'student_name' => 'Secretary Candidate',
+    'student_number' => $secInviteNumber,
+    'cs_id' => $studentClassId,
+    'email' => $secInviteEmail,
+];
+[$secInviteWrongClassStatus] = integration_http_json('/api/secretary/invite', $facultyAccessToken, ['cs_id' => 999999] + $secInvitePayload);
+expect_same(403, $secInviteWrongClassStatus, 'Secretary invitation rejects a class section the student is not enrolled in');
+[$secInviteMissingClassStatus] = integration_http_json('/api/secretary/invite', $facultyAccessToken, array_diff_key($secInvitePayload, ['cs_id' => true]));
+expect_same(422, $secInviteMissingClassStatus, 'Secretary invitation requires cs_id');
+[$secInviteStatus, $secInviteBody] = integration_http_json('/api/secretary/invite', $facultyAccessToken, $secInvitePayload);
+expect_same(201, $secInviteStatus, 'Faculty can issue a Secretary invitation by cs_id');
+expect_same(null, $secInviteBody['token'] ?? null, 'Test environment does not return the raw Secretary invitation token');
+expect_same(null, $secInviteBody['invitation_link'] ?? null, 'Test environment does not return a Secretary invitation link');
+$secInviteId = (int) ($secInviteBody['invitationId'] ?? 0);
+expect_true($secInviteId > 0, 'Secretary invitation response returns the invitation id');
+$secInviteRowStmt = $pdo->prepare('SELECT related_cs_id, metadata_json FROM security_tokens WHERE token_id = ?');
+$secInviteRowStmt->execute([$secInviteId]);
+$secInviteRow = $secInviteRowStmt->fetch(PDO::FETCH_ASSOC);
+$secInviteMeta = json_decode((string) ($secInviteRow['metadata_json'] ?? '{}'), true);
+expect_same($studentClassId, (int) ($secInviteRow['related_cs_id'] ?? 0), 'Secretary invitation is bound to the requested cs_id');
+expect_true(is_array($secInviteMeta) && !array_key_exists('token', $secInviteMeta), 'Secretary invitation metadata does not store the raw token');
+[, $secInviteListBody] = integration_http_get_json('/api/secretary/invitations', $facultyAccessToken);
+$secInviteListed = array_values(array_filter(
+    $secInviteListBody['invitations'] ?? [],
+    static fn(array $item): bool => (string) ($item['id'] ?? '') === (string) $secInviteId,
+));
+expect_same(1, count($secInviteListed), 'Secretary invitation list includes the issued invitation');
+expect_true(!array_key_exists('token', $secInviteListed[0] ?? []), 'Secretary invitation list does not expose a token');
+$secInviteKnownToken = bin2hex(random_bytes(16));
+$pdo->prepare('UPDATE security_tokens SET secret_hash = ? WHERE token_id = ?')
+    ->execute([hash('sha256', $secInviteKnownToken), $secInviteId]);
+[$secInviteGetStatus, $secInviteGetBody] = integration_http_get_json('/api/secretary/invitation?token=' . $secInviteKnownToken, '');
+expect_same(200, $secInviteGetStatus, 'Pending Secretary invitation can be previewed by token');
+expect_same($secInviteEmail, $secInviteGetBody['invitation']['email'] ?? null, 'Secretary invitation preview returns the invited email');
+[$secInviteRevokeStatus] = integration_http_json('/api/secretary/invitations/revoke', $facultyAccessToken, ['invitationId' => (string) $secInviteId]);
+expect_same(200, $secInviteRevokeStatus, 'Faculty can revoke a pending Secretary invitation');
+$secInviteAuditStmt = $pdo->prepare(
+    "SELECT COUNT(*) FROM audit_events
+      WHERE action_code = 'secretary_invitation_revoked' AND target_type = 'security_token' AND target_id = ?"
+);
+$secInviteAuditStmt->execute([(string) $secInviteId]);
+expect_same(1, (int) $secInviteAuditStmt->fetchColumn(), 'Secretary invitation revoke is audited');
+[$secInviteRevokeAgainStatus] = integration_http_json('/api/secretary/invitations/revoke', $facultyAccessToken, ['invitationId' => (string) $secInviteId]);
+expect_same(404, $secInviteRevokeAgainStatus, 'Revoking an already revoked Secretary invitation returns not found');
+[$secInviteRevokedGetStatus] = integration_http_get_json('/api/secretary/invitation?token=' . $secInviteKnownToken, '');
+expect_same(410, $secInviteRevokedGetStatus, 'Revoked Secretary invitation cannot be previewed');
+[$secInviteRevokedActivateStatus] = integration_http_json('/api/secretary/activate', '', [
+    'token' => $secInviteKnownToken,
+    'password' => 'SecretaryInvite123!',
+]);
+expect_same(400, $secInviteRevokedActivateStatus, 'Revoked Secretary invitation cannot be activated');
 $facultyRosterAccountStatus = static function (string $accessToken, int $studentId): ?string {
     [, $rosterBody] = integration_http_get_json('/api/faculty/students', $accessToken);
     foreach (is_array($rosterBody) ? $rosterBody : [] as $rosterRow) {

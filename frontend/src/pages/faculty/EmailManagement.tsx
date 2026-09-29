@@ -121,6 +121,8 @@ export const EmailManagement: React.FC = () => {
   const [logs, setLogs] = useState<EmailLog[]>(initialLogs);
   const [studentInvitationStates, setStudentInvitationStates] = useState<Record<string, { status: 'Sent' | 'Failed' | 'Pending'; sentAt: string }>>({});
   const [secretaryInvs, setSecretaryInvs] = useState<SecretaryInvitation[]>([]);
+  // Development-only activation links, returned once when an invitation is issued.
+  const [secretaryDevLinks, setSecretaryDevLinks] = useState<Record<string, string>>({});
   
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -215,18 +217,27 @@ export const EmailManagement: React.FC = () => {
       for (const studentId of selected) {
         const student = safeStudents.find((s) => s.id === studentId || s.studentId === studentId);
         if (!student) continue;
+        const classId = invitationClassId(student);
+        if (!classId) {
+          setNotice({ type: 'error', message: `No class section found for ${student.name}.` });
+          continue;
+        }
 
         const res = await createSecretaryInvitation({
           studentId: student.studentId,
           studentName: student.name,
           email: student.email,
           facultyName: user?.display_name || 'Faculty Member',
-          className: student.classSections?.[0]?.className || 'Section 4-A',
-          classId: student.classSections?.[0]?.classId || 'cls-1',
+          className: student.classSections?.find(section => section.classId === classId)?.className ?? '',
+          classId,
         });
 
         if (res.success) {
           count++;
+          const issued = res.invitation;
+          if (issued?.devLink) {
+            setSecretaryDevLinks(prev => ({ ...prev, [issued.id]: issued.devLink as string }));
+          }
         } else {
           setNotice({ type: 'error', message: res.message });
         }
@@ -292,8 +303,7 @@ export const EmailManagement: React.FC = () => {
     }
   };
 
-  const handleCopyLink = (token: string) => {
-    const link = `${window.location.origin}/activate-secretary?token=${token}`;
+  const handleCopyLink = (link: string) => {
     navigator.clipboard.writeText(link);
     setNotice({ type: 'success', message: 'Secretary invitation link copied to clipboard.' });
   };
@@ -657,18 +667,20 @@ export const EmailManagement: React.FC = () => {
                   <div key={inv.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 text-xs">
                     <div>
                       <span className="font-bold text-slate-800 dark:text-slate-100 block">{inv.studentName} ({inv.email})</span>
-                      <span className="text-[10px] text-slate-400 font-mono">Token: {inv.token} • Status: {inv.status.toUpperCase()}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">Status: {inv.status.toUpperCase()}</span>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleCopyLink(inv.token)}
-                        className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                      >
-                        <Copy className="w-3 h-3" />
-                        Copy Link
-                      </button>
+                      {inv.status === 'Pending' && secretaryDevLinks[inv.id] && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyLink(secretaryDevLinks[inv.id])}
+                          className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          Copy Dev Link
+                        </button>
+                      )}
 
                       {inv.status === 'Pending' && (
                         <button

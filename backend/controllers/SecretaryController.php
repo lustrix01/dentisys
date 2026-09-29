@@ -74,7 +74,10 @@ function handle_secretary_invite(): void
         $data = $body['data'];
         $studentName = validate_person_name($data, 'student_name', 2, 255);
         $studentNumber = validate_required_string($data, 'student_number', 1, 50);
-        $className = validate_required_string($data, 'class_name', 2, 255);
+        $csId = filter_var($data['cs_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($csId === false) {
+            throw new ValidationException([['field' => 'cs_id', 'message' => 'A class section is required.']]);
+        }
         $email = validate_institutional_email($data['email'] ?? '');
 
         $scopeSql = "SELECT s.student_id, s.person_id, s.user_id AS student_user_id,
@@ -88,8 +91,8 @@ function handle_secretary_invite(): void
                      JOIN person_identities pi ON pi.person_id = s.person_id
                      JOIN enrollments e ON e.student_id = s.student_id
                      JOIN class_sections cs ON cs.cs_id = e.cs_id
-                     WHERE s.student_number = ? AND cs.cs_name = ?";
-        $scopeParams = [$studentNumber, $className];
+                     WHERE s.student_number = ? AND cs.cs_id = ?";
+        $scopeParams = [$studentNumber, $csId];
         if ($authCtx['role'] === 'faculty') {
             $scopeSql .= " AND cs.instructor_user_id = ?";
             $scopeParams[] = $authCtx['user_id'];
@@ -127,6 +130,7 @@ function handle_secretary_invite(): void
         }
         $studentName = $persistedName;
         $email = $persistedEmail;
+        $className = (string) $assignment['cs_name'];
 
         $invToken = bin2hex(random_bytes(16));
         $tokenHash = hash('sha256', $invToken);
@@ -136,7 +140,6 @@ function handle_secretary_invite(): void
         $expiresSql = $now->add(new DateInterval('P7D'))->format('Y-m-d H:i:s.u');
 
         $metadata = json_encode([
-            'token' => $invToken,
             'student_name' => $studentName,
             'student_number' => $studentNumber,
             'class_name' => $className,
@@ -220,6 +223,7 @@ function handle_secretary_invite(): void
 
         json_response([
             'status' => 'ok',
+            'invitationId' => (string) $stId,
             'token' => $showDevLink ? $invToken : null,
             'invitation_link' => $showDevLink ? $invitationLink : null,
             'dev_invitation_link' => $showDevLink ? $invitationLink : null,
@@ -265,7 +269,6 @@ function handle_secretary_list_invitations(): void
                 'facultyName' => $meta['faculty_name'] ?? '',
                 'className' => $meta['class_name'] ?? '',
                 'classId' => '',
-                'token' => $meta['token'] ?? '',
                 'status' => $status,
                 'createdAt' => $row['issued_at'],
                 'expiresAt' => $row['expires_at'],
@@ -290,16 +293,51 @@ function handle_secretary_revoke_invitation(): void
             safe_error_response('Invitation identifier is required.', 422);
             return;
         }
-        $stmt = $pdo->prepare(
-            "UPDATE security_tokens
-             SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Revoked by issuing faculty member'
-             WHERE token_id = ? AND purpose = 'secretary_invitation' AND user_id = ?
-               AND used_at IS NULL AND revoked_at IS NULL"
-        );
-        $stmt->execute([$tokenId, $authCtx['user_id']]);
-        if ($stmt->rowCount() === 0) {
-            safe_error_response('Pending invitation not found.', 404);
-            return;
+        $actorIdentity = account_identity_fetch($pdo, (int) $authCtx['user_id']);
+        $pdo->beginTransaction();
+        try {
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditCtx = audit_begin_operation($pdo);
+            $stmt = $pdo->prepare(
+                "UPDATE security_tokens
+                 SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Revoked by issuing faculty member'
+                 WHERE token_id = ? AND purpose = 'secretary_invitation' AND user_id = ?
+                   AND used_at IS NULL AND revoked_at IS NULL
+                 RETURNING related_cs_id, metadata_json"
+            );
+            $stmt->execute([$tokenId, $authCtx['user_id']]);
+            $revoked = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($revoked === false) {
+                $pdo->rollBack();
+                safe_error_response('Pending invitation not found.', 404);
+                return;
+            }
+            $meta = json_decode($revoked['metadata_json'] ?? '{}', true);
+            $studentLabel = trim((string) ($meta['student_name'] ?? '') . ' (' . (string) ($meta['email'] ?? '') . ')');
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'secretary',
+                'action_code' => 'secretary_invitation_revoked',
+                'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'],
+                'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'],
+                'actor_display_name' => $actorIdentity !== null ? account_identity_display_name($actorIdentity) : null,
+                'session_id' => $authCtx['session_id'],
+                'scope_cs_id' => $revoked['related_cs_id'] !== null ? (int) $revoked['related_cs_id'] : null,
+                'target_type' => 'security_token',
+                'target_id' => (string) $tokenId,
+                'description' => "Revoked the Class Secretary invitation for {$studentLabel}.",
+                'reason' => 'Revoked by issuing faculty member',
+                'http_method' => request_method(),
+                'endpoint' => request_path(),
+                'request_id' => request_id(),
+                'ip_address' => request_ip(),
+                'user_agent' => request_user_agent(),
+            ], $macKey);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
         }
         json_response(['status' => 'ok', 'message' => 'Invitation revoked successfully.'], 200);
     } catch (\Throwable $e) {
@@ -437,6 +475,21 @@ function handle_secretary_activate(): void
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
 
+            $tokenLock = $pdo->prepare(
+                "SELECT used_at, revoked_at, expires_at > CURRENT_TIMESTAMP(6) AS is_live
+                   FROM security_tokens
+                  WHERE token_id = ? AND purpose = 'secretary_invitation'
+                  FOR UPDATE"
+            );
+            $tokenLock->execute([(int) $row['token_id']]);
+            $lockedToken = $tokenLock->fetch(PDO::FETCH_ASSOC);
+            if ($lockedToken === false
+                || $lockedToken['used_at'] !== null
+                || $lockedToken['revoked_at'] !== null
+                || !in_array($lockedToken['is_live'], [true, 't', '1', 1], true)) {
+                throw new DomainException('Invalid or expired invitation token.');
+            }
+
             $studentLock = $pdo->prepare(
                 "SELECT s.student_id, s.person_id, s.user_id, s.student_account_user_id, s.bu_email,
                         pi.name_prefix AS canonical_name_prefix,
@@ -518,8 +571,14 @@ function handle_secretary_activate(): void
             }
 
             // Mark token as used
-            $markUsed = $pdo->prepare("UPDATE security_tokens SET used_at = ? WHERE token_id = ?");
+            $markUsed = $pdo->prepare(
+                "UPDATE security_tokens SET used_at = ?
+                  WHERE token_id = ? AND used_at IS NULL AND revoked_at IS NULL"
+            );
             $markUsed->execute([$nowSql, $row['token_id']]);
+            if ($markUsed->rowCount() !== 1) {
+                throw new DomainException('Invalid or expired invitation token.');
+            }
 
             audit_finish_operation($pdo, $auditCtx, [
                 'module_code' => 'secretary',

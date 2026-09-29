@@ -583,7 +583,7 @@ export function activateFacultyInvitation(token: string, password: string, crede
   });
 }
 
-export function inviteSecretaryApi(data: { student_name: string; student_number?: string; class_name: string; email: string }): Promise<{ status: string; token: string; invitation_link: string; message: string }> {
+export function inviteSecretaryApi(data: { student_name: string; student_number?: string; cs_id: number; email: string }): Promise<{ status: string; invitationId: string; token: string | null; invitation_link: string | null; delivery_status: string; message: string }> {
   return request('POST', '/secretary/invite', data);
 }
 
