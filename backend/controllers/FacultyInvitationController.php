@@ -70,9 +70,9 @@ function faculty_invitation_name_parts_from_payload(array $data): array
 
     $first = validate_person_name($data, 'firstName', 2, 100);
     $last = validate_person_name($data, 'lastName', 2, 100);
-    $middle = validate_optional_person_name($data, 'middleName', 2, 100);
-    $prefix = validate_optional_string($data, 'prefix', 1, 50);
-    $suffix = validate_optional_string($data, 'suffix', 1, 50);
+    $middle = validate_optional_person_name($data, 'middleName', 1, 100);
+    $prefix = validate_optional_name_affix($data, 'prefix');
+    $suffix = validate_optional_name_affix($data, 'suffix');
     return [
         'displayName' => normalize_person_name(trim(implode(' ', array_filter(
             [$prefix, $first, $middle, $last, $suffix],

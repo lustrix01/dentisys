@@ -93,6 +93,28 @@ function validate_optional_person_name(array $data, string $field, int $minBytes
     return validate_person_name($data, $field, $minBytes, $maxBytes);
 }
 
+/**
+ * Optional name prefix or suffix such as "Dr.", "Jr.", "III" or "DMD, PhD":
+ * letters with periods, commas, apostrophes, hyphens and spaces. Digits and
+ * values without a letter (for example "Dr2" or "123") are rejected.
+ */
+function validate_optional_name_affix(array $data, string $field): ?string
+{
+    $value = validate_optional_string($data, $field, 1, 50);
+    if ($value === null) {
+        return null;
+    }
+    $value = trim($value);
+    if ($value === '') {
+        return null;
+    }
+    if (!preg_match('/^(?=.*\p{L})[\p{L}\s.,\'’\-]+$/u', $value)) {
+        $label = $field === 'prefix' ? 'Prefix' : 'Suffix';
+        throw new ValidationException([['field' => $field, 'message' => "{$label} can only contain letters, periods, commas, apostrophes, and hyphens."]]);
+    }
+    return $value;
+}
+
 function normalize_person_name(string $value): string
 {
     $collapsed = preg_replace('/\s+/u', ' ', trim($value)) ?? trim($value);

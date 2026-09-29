@@ -408,13 +408,13 @@ function handle_faculty_student_create(): void
         }
         $studentNumber = trim((string) ($data['studentNumber'] ?? $data['studentId'] ?? ''));
         $prefix = array_key_exists('prefix', $data) && $data['prefix'] !== null
-            ? validate_optional_string($data, 'prefix', 1, 50)
+            ? validate_optional_name_affix($data, 'prefix')
             : null;
         $firstName = normalize_person_name((string) ($data['firstName'] ?? ''));
         $middleName = normalize_person_name((string) ($data['middleName'] ?? ''));
         $lastName = normalize_person_name((string) ($data['lastName'] ?? ''));
         $suffix = array_key_exists('suffix', $data) && $data['suffix'] !== null
-            ? validate_optional_string($data, 'suffix', 1, 50)
+            ? validate_optional_name_affix($data, 'suffix')
             : null;
 
         $email = trim((string) ($data['email'] ?? ''));
@@ -441,6 +441,18 @@ function handle_faculty_student_create(): void
         }
         if (empty($lastName) || strlen($lastName) < 2) {
             $errors['lastName'] = 'Last name must be at least 2 characters.';
+        }
+        // Names use letters, spaces, hyphens, apostrophes and periods; a middle
+        // name may be a single initial.
+        foreach (['firstName' => $firstName, 'middleName' => $middleName, 'lastName' => $lastName] as $nameField => $nameValue) {
+            if ($nameValue === '' || isset($errors[$nameField])) {
+                continue;
+            }
+            try {
+                validate_person_name([$nameField => $nameValue], $nameField, 1, 100);
+            } catch (ValidationException $e) {
+                $errors[$nameField] = $e->getErrors()[0]['message'] ?? 'Name is not valid.';
+            }
         }
         if (!empty($email)) {
             try {
@@ -654,7 +666,7 @@ function handle_faculty_student_update(array $params = []): void
         ];
         if (array_key_exists('prefix', $data)) {
             $namePartsChanged = true;
-            $nameParts['prefix'] = $data['prefix'] === null ? null : validate_optional_string($data, 'prefix', 1, 50);
+            $nameParts['prefix'] = $data['prefix'] === null ? null : validate_optional_name_affix($data, 'prefix');
         }
         if (array_key_exists('firstName', $data)) {
             $namePartsChanged = true;
@@ -662,7 +674,7 @@ function handle_faculty_student_update(array $params = []): void
         }
         if (array_key_exists('middleName', $data)) {
             $namePartsChanged = true;
-            $nameParts['middleName'] = validate_optional_person_name($data, 'middleName', 2, 100);
+            $nameParts['middleName'] = validate_optional_person_name($data, 'middleName', 1, 100);
         }
         if (array_key_exists('lastName', $data)) {
             $namePartsChanged = true;
@@ -670,7 +682,7 @@ function handle_faculty_student_update(array $params = []): void
         }
         if (array_key_exists('suffix', $data)) {
             $namePartsChanged = true;
-            $nameParts['suffix'] = $data['suffix'] === null ? null : validate_optional_string($data, 'suffix', 1, 50);
+            $nameParts['suffix'] = $data['suffix'] === null ? null : validate_optional_name_affix($data, 'suffix');
         }
         if (array_key_exists('email', $data)) {
             $email = trim((string) $data['email']);

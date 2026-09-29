@@ -1317,6 +1317,28 @@ expect_same(200, $facultyNameOnlyStatus, 'Faculty profile saves without an email
 $facultyEmailStmt->execute();
 expect_same($facultyAccountBefore, $facultyEmailStmt->fetch(PDO::FETCH_ASSOC), 'Faculty login email is unchanged after profile updates');
 
+// Name rules: prefixes and suffixes contain letters (no "Dr2" or "123"), and a
+// middle name may be a single initial.
+foreach (['prefix' => 'Dr2', 'suffix' => '123'] as $badAffixField => $badAffixValue) {
+    [$badAffixStatus, $badAffixBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
+        'firstName' => 'Affix',
+        'lastName' => 'Check',
+        $badAffixField => $badAffixValue,
+        'email' => 'affix-check-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph',
+    ]);
+    expect_same(422, $badAffixStatus, "Faculty invitation rejects {$badAffixField} \"{$badAffixValue}\"");
+    expect_same($badAffixField, $badAffixBody['errors'][0]['field'] ?? null, "Rejected {$badAffixField} is reported on its field");
+}
+[$middleInitialStatus] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
+    'prefix' => 'Dr.',
+    'firstName' => 'Initial',
+    'middleName' => 'M.',
+    'lastName' => 'Check',
+    'suffix' => 'Jr.',
+    'email' => 'initial-check-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph',
+]);
+expect_same(201, $middleInitialStatus, 'Faculty invitation accepts a single-letter middle initial');
+
 $facultyInvitationEmail = 'invite-faculty-' . bin2hex(random_bytes(4)) . '@bicol-u.edu.ph';
 [$facultyInvitationStatus, $facultyInvitationBody] = integration_http_json('/api/admin/faculty-invitations', $adminAccessToken, [
     'prefix' => 'Dr.',

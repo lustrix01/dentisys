@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createHmac } from 'node:crypto';
 
+// Person names cannot contain digits, so unique suffixes are spelled with letters.
+const nameSafe = (value: string) => value.replace(/[0-9]/g, digit => 'abcdefghij'[Number(digit)]);
+
 const adminEmail = process.env.E2E_ADMIN_EMAIL ?? 'admin@bicol-u.edu.ph';
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? 'Admin123!';
 const facultyEmail = process.env.E2E_FACULTY_EMAIL ?? 'faculty@bicol-u.edu.ph';
@@ -274,7 +277,7 @@ test('Faculty-issued Student invitation, Mailpit acceptance, password login, and
     headers: { Authorization: `Bearer ${facultyCredentials.access_token}` },
     data: {
       studentNumber: `P03-${suffix}`,
-      firstName: 'P03',
+      firstName: 'Probe',
       lastName: 'Student',
       email,
       yearLevel: 1,
@@ -456,7 +459,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
     data: {
       studentNumber: `ATT-${suffix}`,
       firstName: 'LiveAttendance',
-      lastName: `Student-${suffix}`,
+      lastName: `Student-${nameSafe(suffix)}`,
       email: `attendance.${suffix}@bicol-u.edu.ph`,
       yearLevel: 1,
       classId: targetCsId,
@@ -464,7 +467,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   });
   const createdData = await jsonResponse(create);
   expect(createdData.status).toBe('ok');
-  const studentFullName = `LiveAttendance Student-${suffix}`;
+  const studentFullName = `LiveAttendance Student-${nameSafe(suffix)}`;
 
   // 4. Navigate directly to /attendance
   await page.goto('/attendance');

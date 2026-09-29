@@ -10,11 +10,12 @@ function account_identity_name_parts(array $data): ?array
 {
     if (!array_intersect(['prefix', 'firstName', 'middleName', 'lastName', 'suffix'], array_keys($data))) return null;
     return [
-        'prefix' => validate_optional_string($data, 'prefix', 1, 50),
+        'prefix' => validate_optional_name_affix($data, 'prefix'),
         'firstName' => validate_person_name($data, 'firstName', 2, 100),
-        'middleName' => validate_optional_person_name($data, 'middleName', 2, 100),
+        // A middle initial ("M" or "M.") is allowed.
+        'middleName' => validate_optional_person_name($data, 'middleName', 1, 100),
         'lastName' => validate_person_name($data, 'lastName', 2, 100),
-        'suffix' => validate_optional_string($data, 'suffix', 1, 50),
+        'suffix' => validate_optional_name_affix($data, 'suffix'),
     ];
 }
 
