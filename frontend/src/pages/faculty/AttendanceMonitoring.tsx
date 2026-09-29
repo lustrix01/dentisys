@@ -79,6 +79,8 @@ const attendanceMethodLabel = (method?: string | null, overrideReason?: string |
   }
 };
 
+const manilaDateToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+
 export const AttendanceMonitoring: React.FC = () => {
   // Assigned classes from API
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
@@ -88,12 +90,11 @@ export const AttendanceMonitoring: React.FC = () => {
   // Hierarchy Selection States
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [selectedCsId, setSelectedCsId] = useState<string>('');
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    return new Date().toLocaleDateString('en-CA');
-  });
+  // Attendance dates are Asia/Manila calendar days, as on the server.
+  const [selectedDate, setSelectedDate] = useState<string>(() => manilaDateToday());
 
   // Maximum date constraint (UX guidance; backend remains authoritative)
-  const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
+  const todayStr = useMemo(() => manilaDateToday(), []);
 
   // Worksheet State
   const [worksheet, setWorksheet] = useState<FacultyAttendanceWorksheet | null>(null);

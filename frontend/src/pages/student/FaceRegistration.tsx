@@ -304,7 +304,7 @@ export const FaceRegistration: React.FC = () => {
     try {
       await updateStudentBiometricConsent({
         granted: true,
-        disclosureVersion: 'v1.0-2026',
+        disclosureVersion: 'v1.1-2026-09',
       });
       setAuthStep(2);
     } catch (err) {
@@ -787,19 +787,28 @@ export const FaceRegistration: React.FC = () => {
             </p>
             <ul className="list-disc list-inside space-y-2 pl-1">
               <li>
-                <strong>Strict Attendance-Only Purpose (BIO-001):</strong> Your facial biometric reference is processed solely for 1:1 automated attendance verification in enrolled clinical classes. It is never used for login, identity proofing, or 1:N population discovery.
+                <strong>Attendance-only purpose:</strong> Your face is used only to confirm your own attendance in your enrolled classes (a one-to-one check against your own reference). It is never used for sign-in, identity checks, or searching for other people.
               </li>
               <li>
-                <strong>Protected Reference & Ephemeral Images (BIO-003):</strong> Temporary camera captures are processed in memory to generate an encrypted template and are immediately discarded. Raw facial photographs and video frames are never retained in permanent storage or database backups.
+                <strong>What is processed:</strong> Short camera captures of your face taken during enrollment and attendance check-in, and the facial measurements derived from them.
               </li>
               <li>
-                <strong>Security at Rest (BIO-004):</strong> Protected references are stored in dedicated storage encrypted using server-controlled AES-256-GCM.
+                <strong>No raw images kept:</strong> Camera captures are processed temporarily and then discarded. Raw photos and video frames are never stored.
               </li>
               <li>
-                <strong>Semester Expiration & Revocation (BIO-005):</strong> Biometric enrollment automatically expires every semester, requiring seasonal re-enrollment. You retain the right to revoke your biometric enrollment at any time from this portal.
+                <strong>Protected reference:</strong> An encrypted reference derived from your enrollment is kept so attendance can be checked. It expires every semester, and you must re-enroll to keep using face check-in.
               </li>
               <li>
-                <strong>Authorized Manual Attendance Guarantee (BIO-002):</strong> Participation is voluntary. Refusal or revocation will never penalize academic standing or attendance credit; authorized manual attendance (Secretary-assisted or Faculty) remains available at all times.
+                <strong>Revocation and deletion:</strong> You may revoke at any time on this page. Your reference is deleted when you revoke, when the Dean revokes your enrollment, when you re-enroll (the old reference is replaced), when it expires at the end of the semester, when your Student account becomes inactive, or when your account is deleted.
+              </li>
+              <li>
+                <strong>Who can see your enrollment status:</strong> You, the Faculty of your classes, and the Dean can see whether you are enrolled. No one can see your reference or camera captures.
+              </li>
+              <li>
+                <strong>Manual attendance alternative:</strong> Face check-in is voluntary. If you refuse, revoke, or cannot use it, authorized manual attendance by your Class Secretary or Faculty remains available, and it never affects your standing.
+              </li>
+              <li>
+                <strong>Your attendance history stays:</strong> Revoking or deleting your reference does not erase attendance already recorded.
               </li>
             </ul>
           </div>

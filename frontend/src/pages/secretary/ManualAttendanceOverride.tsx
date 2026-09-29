@@ -182,11 +182,13 @@ export const ManualAttendanceOverride: React.FC = () => {
         status,
         reason,
       });
+      // A "Not recorded" row has no id yet, so match by student too.
       setRecords((current) =>
         current.map((record) =>
-          record.id === selected.id
+          record.id === selected.id && record.studentId === selected.studentId
             ? {
                 ...record,
+                id: response.record?.id ?? record.id,
                 status,
                 overrideReason: reason,
                 overrideAt: response.record?.overrideAt || new Date().toISOString(),
@@ -306,7 +308,7 @@ export const ManualAttendanceOverride: React.FC = () => {
                       <td className="px-5 py-4"><p className="font-bold text-slate-800 dark:text-slate-100">{record.studentName}</p><p className="text-xs text-slate-400">{record.studentNumber}</p></td>
                       <td className="px-5 py-4">{record.date}</td>
                       <td className="px-5 py-4">{record.subjectCode}</td>
-                      <td className="px-5 py-4"><span className={`rounded-lg px-2.5 py-1 text-xs font-bold capitalize ${statusClasses[record.status] || ''}`}>{record.status}</span></td>
+                      <td className="px-5 py-4"><span className={`rounded-lg px-2.5 py-1 text-xs font-bold capitalize ${statusClasses[record.status] || 'bg-slate-100 text-slate-500'}`}>{record.status === 'not_recorded' ? 'Not recorded' : record.status}</span></td>
                       <td className="px-5 py-4 text-right"><button type="button" onClick={() => selectRecord(record)} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700 dark:bg-slate-900 dark:text-slate-300">Select</button></td>
                     </tr>
                   ))}

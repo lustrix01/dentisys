@@ -58,7 +58,8 @@ export const StartSession: React.FC = () => {
   const [lateCutoffStr, setLateCutoffStr] = useState('12:00');
   const [requireFace, setRequireFace] = useState(true);
   const [requireGeo, setRequireGeo] = useState(true);
-  const [geofenceRadius, setGeofenceRadius] = useState(200);
+  // Same default as the server and the Faculty form (100 m).
+  const [geofenceRadius, setGeofenceRadius] = useState(100);
 
   // Secretary GPS state (kept as prototype location fixture)
   const [gpsLocation, setGpsLocation] = useState<{ lat: number; lng: number; address: string } | null>(simulationEnabled ? {

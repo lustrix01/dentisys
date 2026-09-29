@@ -811,6 +811,42 @@ $secretaryCorrectionStmt->execute([$sessionAttendanceRecordId]);
 $secretaryCorrection = $secretaryCorrectionStmt->fetch(PDO::FETCH_ASSOC);
 expect_same('late', $secretaryCorrection['new_status'] ?? null, 'Secretary correction is kept in the correction history');
 expect_same('secretary', $secretaryCorrection['corrected_by_role'] ?? null, 'Secretary correction history records the Secretary role');
+
+// A student with no record for a session can be recorded manually by the Secretary.
+$lateEnrollStudentStmt = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, 'Late', 'Enrollee', ?, 'active') RETURNING student_id"
+);
+$lateEnrollSuffix = strtoupper(bin2hex(random_bytes(3)));
+$lateEnrollStudentStmt->execute(['LATE-' . $lateEnrollSuffix, 'late-enrollee-' . strtolower($lateEnrollSuffix) . '@bicol-u.edu.ph']);
+$lateEnrollStudentId = (int) $lateEnrollStudentStmt->fetchColumn();
+$pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status) VALUES (?, ?, 'Active')")->execute([$lateEnrollStudentId, $secretarySessionClassId]);
+[$missingListStatus, $missingListBody] = integration_http_get_json(
+    '/api/secretary/attendance?sessionId=' . $secondAttendanceSessionId,
+    $secretaryAccessToken
+);
+expect_same(200, $missingListStatus, 'Secretary session attendance list loads');
+$missingRows = array_values(array_filter(
+    $missingListBody['records'] ?? [],
+    static fn(array $row): bool => ($row['studentId'] ?? null) === (string) $lateEnrollStudentId,
+));
+expect_same('not_recorded', $missingRows[0]['status'] ?? null, 'A student without a record is listed as not recorded');
+[$manualCreateStatus, $manualCreateBody] = integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, [
+    'studentId' => (string) $lateEnrollStudentId,
+    'sessionId' => (string) $secondAttendanceSessionId,
+    'status' => 'present',
+    'reason' => 'Enrolled late; present in class',
+]);
+expect_same(200, $manualCreateStatus, 'Secretary can record attendance for a student who has no record');
+expect_same('created', $manualCreateBody['operation'] ?? null, 'Manual recording reports a created record');
+$manualCreatedStmt = $pdo->prepare('SELECT attendance_session_id, status, verification_method FROM attendance_records WHERE record_id = ?');
+$manualCreatedStmt->execute([(int) ($manualCreateBody['record']['id'] ?? 0)]);
+$manualCreated = $manualCreatedStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(
+    [(string) $secondAttendanceSessionId, 'present', 'manual_secretary'],
+    [(string) ($manualCreated['attendance_session_id'] ?? ''), $manualCreated['status'] ?? null, $manualCreated['verification_method'] ?? null],
+    'The manual record is linked to the session and marked as Secretary-entered'
+);
 echo "PASS: Persistent Secretary attendance-session integration coverage completed.\n";
 
 $originalAdminGradingDefaultsJson = (string) $pdo->query(

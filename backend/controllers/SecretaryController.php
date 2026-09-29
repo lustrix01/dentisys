@@ -1682,10 +1682,10 @@ function handle_secretary_attendance_get(): void
                 'studentId' => (string) $r['student_id'],
                 'studentNumber' => $r['student_number'],
                 'studentName' => account_identity_display_name($r),
-                'yearLevel' => isset($r['year_level']) ? (int) $r['year_level'] : 1,
+                'yearLevel' => isset($r['year_level']) ? (int) $r['year_level'] : null,
                 'date' => $r['session_date'],
                 'timeRecorded' => attendance_session_timestamp($r['time_recorded'] ?? null),
-                'verificationMethod' => $r['verification_method'] ?? 'face_biometric_geofence',
+                'verificationMethod' => $r['verification_method'] ?? null,
                 'subjectCode' => $r['course_code'],
                 'classId' => (string) $r['cs_id'],
                 'className' => $r['cs_name'],
@@ -1694,6 +1694,55 @@ function handle_secretary_attendance_get(): void
                 'overrideAt' => attendance_session_timestamp($r['override_at'] ?? null),
             ];
         }, $records);
+
+        if ($sessionId > 0) {
+            // Students of the session's class with no record for that day are
+            // listed as "not_recorded" so manual attendance can be recorded.
+            $missingStmt = $pdo->prepare(
+                "SELECT s.student_id, s.student_number, s.year_level,
+                        COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                        COALESCE(pi.first_name, s.first_name) AS first_name,
+                        COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                        COALESCE(pi.last_name, s.last_name) AS last_name,
+                        COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
+                        cs.cs_id, cs.cs_name, c.course_code, a.session_date
+                   FROM attendance_sessions a
+                   JOIN class_sections cs ON cs.cs_id = a.cs_id
+                   JOIN courses c ON c.course_id = cs.course_id
+                   JOIN enrollments e ON e.cs_id = a.cs_id AND LOWER(e.status) = 'active'
+                   JOIN students s ON s.student_id = e.student_id
+                   JOIN person_identities pi ON pi.person_id = s.person_id
+                  WHERE a.session_id = ? AND cs.secretary_user_id = ? AND a.status <> 'revoked'
+                    AND NOT EXISTS (
+                        SELECT 1 FROM attendance_records r
+                          LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
+                         WHERE r.enrollment_id = e.enrollment_id
+                           AND (r.attendance_session_id = a.session_id
+                                OR (r.session_date = a.session_date AND (rs.session_id IS NULL OR rs.status <> 'revoked')))
+                    )
+                  ORDER BY s.student_number"
+            );
+            $missingStmt->execute([$sessionId, $authCtx['user_id']]);
+            foreach ($missingStmt->fetchAll(PDO::FETCH_ASSOC) as $m) {
+                $mapped[] = [
+                    'id' => '',
+                    'attendanceSessionId' => (string) $sessionId,
+                    'studentId' => (string) $m['student_id'],
+                    'studentNumber' => $m['student_number'],
+                    'studentName' => account_identity_display_name($m),
+                    'yearLevel' => $m['year_level'] !== null ? (int) $m['year_level'] : null,
+                    'date' => $m['session_date'],
+                    'timeRecorded' => null,
+                    'verificationMethod' => null,
+                    'subjectCode' => $m['course_code'],
+                    'classId' => (string) $m['cs_id'],
+                    'className' => $m['cs_name'],
+                    'status' => 'not_recorded',
+                    'overrideReason' => null,
+                    'overrideAt' => null,
+                ];
+            }
+        }
 
         json_response([
             'status' => 'ok',
@@ -1771,6 +1820,92 @@ function handle_secretary_attendance_override(): void
             $targetRecord = $lookup->fetch(PDO::FETCH_ASSOC);
             $targetRecordId = (int) ($targetRecord['record_id'] ?? 0);
             $targetCsId = (int) ($targetRecord['cs_id'] ?? 0);
+            if ($targetRecordId <= 0 && $recordId === 0 && $sessionId > 0) {
+                // No record yet: record manual attendance for this session.
+                $session = secretary_attendance_session_fetch($pdo, (int) $authCtx['user_id'], $sessionId, null, true);
+                if ($session === null || strtolower((string) $session['status']) === 'revoked') {
+                    throw new ValidationException([['field' => 'sessionId', 'message' => 'Attendance session was not found in an assigned class.']]);
+                }
+                if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
+                    $pdo->rollBack();
+                    safe_error_response('Past school-year classes are view-only.', 409);
+                    return;
+                }
+                $enrollmentStmt = $pdo->prepare(
+                    "SELECT e.enrollment_id, s.student_id, s.student_number
+                       FROM enrollments e
+                       JOIN students s ON s.student_id = e.student_id
+                      WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
+                        AND (s.student_id = ? OR s.student_number = ?)
+                      LIMIT 1
+                      FOR UPDATE OF e"
+                );
+                $enrollmentStmt->execute([(int) $session['cs_id'], ctype_digit($studentId) ? (int) $studentId : 0, $studentId]);
+                $enrollment = $enrollmentStmt->fetch(PDO::FETCH_ASSOC);
+                if ($enrollment === false) {
+                    throw new ValidationException([['field' => 'studentId', 'message' => 'The student is not enrolled in the session class.']]);
+                }
+                // One record per student per day; records of revoked sessions do not count.
+                $sameDayStmt = $pdo->prepare(
+                    "SELECT 1 FROM attendance_records r
+                       LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
+                      WHERE r.enrollment_id = ? AND r.session_date = ?
+                        AND (rs.session_id IS NULL OR rs.status <> 'revoked')
+                      LIMIT 1"
+                );
+                $sameDayStmt->execute([(int) $enrollment['enrollment_id'], $session['session_date']]);
+                if ($sameDayStmt->fetchColumn() !== false) {
+                    $pdo->rollBack();
+                    safe_error_response('This student already has an attendance record for that day; correct that record instead.', 409);
+                    return;
+                }
+                $insert = $pdo->prepare(
+                    "INSERT INTO attendance_records
+                        (enrollment_id, attendance_session_id, session_date, session_code, status,
+                         verification_method, time_recorded, secretary_user_id,
+                         override_reason, override_by_user_id, override_at)
+                     VALUES (?, ?, ?, ?, ?, 'manual_secretary', ?, ?, ?, ?, ?)
+                     RETURNING record_id"
+                );
+                $insert->execute([
+                    (int) $enrollment['enrollment_id'], $sessionId, $session['session_date'], $session['session_code'],
+                    $status, $nowSql, $authCtx['user_id'], $reason, $authCtx['user_id'], $nowSql,
+                ]);
+                $createdRecordId = (int) $insert->fetchColumn();
+                audit_finish_operation($pdo, $auditCtx, [
+                    'module_code' => 'secretary',
+                    'action_code' => 'secretary_attendance_override',
+                    'event_status' => 'Success',
+                    'actor_user_id' => $authCtx['user_id'],
+                    'actor_username' => $authCtx['login_email'],
+                    'actor_role' => $authCtx['role'],
+                    'actor_display_name' => $authCtx['display_name'],
+                    'session_id' => $authCtx['session_id'],
+                    'scope_cs_id' => (int) $session['cs_id'],
+                    'target_type' => 'attendance_record',
+                    'target_id' => (string) $createdRecordId,
+                    'description' => "Manual attendance recorded for student {$enrollment['student_number']} as '{$status}'. Reason: {$reason}",
+                    'reason' => $reason,
+                    'http_method' => $context['http_method'],
+                    'endpoint' => $context['endpoint'],
+                    'request_id' => $context['request_id'],
+                    'ip_address' => $context['ip_address'],
+                    'user_agent' => $context['user_agent'],
+                ], $macKey, null, ['recordId' => $createdRecordId, 'status' => $status, 'attendanceSessionId' => $sessionId]);
+                $pdo->commit();
+                json_response([
+                    'status' => 'ok',
+                    'message' => 'Manual attendance recorded and audit trail updated.',
+                    'operation' => 'created',
+                    'record' => [
+                        'id' => (string) $createdRecordId,
+                        'status' => $status,
+                        'overrideReason' => $reason,
+                        'overrideAt' => attendance_session_timestamp($nowSql),
+                    ],
+                ], 200);
+                return;
+            }
             if ($targetRecordId <= 0) {
                 throw new ValidationException([['field' => 'recordId', 'message' => 'Attendance record was not found in an assigned class.']]);
             }
