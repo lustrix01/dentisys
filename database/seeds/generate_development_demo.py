@@ -11,6 +11,7 @@ PASSWORD and the bcrypt hashes in HASH below.
 import random
 import sys
 from datetime import date, datetime, timedelta, time
+from decimal import ROUND_HALF_UP, Decimal
 
 R = random.Random(20260927)
 
@@ -19,6 +20,8 @@ HASH = {
     'faculty': '$2y$10$3OfHmV2FaxfK911l8ZZxV.paOsQVbJTTwTtEtzPkxY3TEv9xyDBlm',    # Faculty123!
     'secretary': '$2y$10$GZiQTRYcddOZ6iml/GBtI.4usZeczmzJWgiqCn1iYHfd2eUiOBLhq',  # Secretary123!
     'student': '$2y$10$C4JygFNbn/ISoVUs6J1HMeSItSvxMk.8ZMlzch4J284p9777BJoDq',    # Student123!
+    # Invited Faculty cannot sign in before accepting: a hash of a discarded random value.
+    'invited': '$2y$12$anHybX0zCxYNejHISsXT0eNwoWBI7u4BRxD.Hu7UEO9aX1uxhZULy',
 }
 PASSWORD = {'admin': 'Admin123!', 'faculty': 'Faculty123!', 'secretary': 'Secretary123!', 'student': 'Student123!'}
 CURRENT_SY = '2026-2027'
@@ -52,6 +55,19 @@ def slug(s: str) -> str:
     return out
 
 
+def php_round(v: float, places: int) -> float:
+    """PHP 8 round(): half away from zero on the value's shortest decimal form."""
+    return float(Decimal(repr(v)).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
+
+def php_sum(values) -> float:
+    """PHP array_sum(): plain left-to-right float addition (Python 3.12+ sum() compensates)."""
+    total = 0.0
+    for v in values:
+        total += v
+    return total
+
+
 def pct_to_gwa(p: float) -> float:
     for lo, g in ((97, 1.0), (94, 1.25), (91, 1.5), (88, 1.75), (85, 2.0), (82, 2.25), (80, 2.5), (78, 2.75), (75, 3.0)):
         if p >= lo:
@@ -70,8 +86,8 @@ STAFF = [
     (4, 'dr.cruz@', 'faculty', 'Dr.', 'Fernando', 'Ocampo', 'Cruz', 'DMD', 'Clinical Instructor, Prosthodontics', 'Active', date(2024, 1, 17)),
     (5, 'dr.aquino@', 'faculty', 'Dr.', 'Patricia', 'Salazar', 'Aquino', 'DMD', 'Lecturer, Oral Anatomy', 'Active', date(2024, 1, 18)),
     (6, 'dr.torres@', 'faculty', 'Dr.', 'Ramon', 'Dizon', 'Torres', 'DMD', 'Lecturer, Ethics and Practice Management', 'Active', date(2024, 1, 19)),
-    (7, 'pending.faculty1@', 'faculty', 'Dr.', 'Jessica', 'Lorenzo', 'Mendoza', 'DMD', 'Applicant Faculty', 'Pending Approval', date(2026, 9, 21)),
-    (8, 'pending.faculty2@', 'faculty', 'Dr.', 'Gabriel', 'Soriano', 'Navarro', 'DMD', 'Applicant Faculty', 'Pending Approval', date(2026, 9, 22)),
+    (7, 'dr.mendoza@', 'faculty', 'Dr.', 'Jessica', 'Lorenzo', 'Mendoza', 'DMD', 'Dental Faculty Member', 'Pending Activation', date(2026, 9, 25)),
+    (8, 'dr.navarro@', 'faculty', 'Dr.', 'Gabriel', 'Soriano', 'Navarro', 'DMD', 'Dental Faculty Member', 'Pending Activation', date(2026, 9, 10)),
     (11, 'dr.bautista@', 'faculty', 'Dr.', 'Carmela', 'Ramos', 'Bautista', 'DMD', 'Assistant Professor, Oral Medicine', 'Active', date(2024, 6, 3)),
     (12, 'dr.villanueva@', 'faculty', 'Dr.', 'Enrique', 'Pascual', 'Villanueva', 'DMD, MPH', 'Associate Professor, Community Dentistry', 'Active', date(2024, 6, 4)),
     (13, 'dr.delrosario@', 'faculty', 'Dr.', 'Kristine', 'Abad', 'Del Rosario', 'DMD', 'Clinical Instructor, Pediatric Dentistry', 'Active', date(2025, 6, 2)),
@@ -79,6 +95,16 @@ STAFF = [
     (15, 'dr.lopez@', 'faculty', 'Dr.', 'Rowena', 'Tan', 'Lopez', 'DMD', 'Instructor, Dental Materials', 'Active', date(2025, 6, 3)),
 ]
 FAC = {s[1].split('@')[0]: s[0] for s in STAFF}
+
+# Faculty invitations issued by the Dean. The stored digests are of values that
+# are not valid invitation tokens, so no seeded link can be accepted; the Dean
+# reissues an invitation to send a working link to Mailpit.
+# (user_id, state, issued, expires): 'pending' is issued when the seed loads and
+# lasts the normal 7 days; 'expired' lapsed before the seed's current date.
+INVITATIONS = [
+    (7, 'pending', None, None),
+    (8, 'expired', datetime(2026, 9, 10, 1, 0), datetime(2026, 9, 17, 1, 0)),
+]
 
 # ---------------------------------------------------------------------------
 # Courses: code -> (name, units, year, sem, desc, clinical, grading_config)
@@ -298,21 +324,71 @@ def assessment_plan(sec):
     ]
 
 
+def attendance_date_ranges(sec):
+    """Same split as backend/bin/bootstrap-grade-weights.php."""
+    t0, t1 = sec['start'], sec['end']
+    mid = t0 + timedelta(days=(t1 - t0).days // 2)
+    return {'midterm': {'startDate': t0.isoformat(), 'endDate': mid.isoformat()},
+            'final': {'startDate': (mid + timedelta(days=1)).isoformat(), 'endDate': t1.isoformat()}}
+
+
+TERM_RATIO = {'midterm': 40, 'final': 60}
+RETENTION_TRIGGER = 2.5
+ATTENDANCE_POINTS = {'present': 100.0, 'excused': 100.0, 'late': 80.0, 'absent': 0.0}
+
+
+def grade_breakdown(sec, course, scored, attendance):
+    """Mirror faculty_compute_period_result() for the bootstrap's categories
+    (Quiz, Laboratory, <period> Exam, Attendance; weights from the course
+    ratios, 40 / 60 term split) and return the stored grade_components_json."""
+    wq, we, wp, wa = course[7]
+    ranges = attendance_date_ranges(sec)
+    periods = {}
+    for period, exam in (('Midterm', 'Midterm Exam'), ('Final', 'Final Exam')):
+        rng = ranges[period.lower()]
+        cats = []
+        for name, weight in (('Quiz', wq), ('Laboratory', wp), (exam, we)):
+            rows = scored[(period, name)]
+            earned = possible = 0.0
+            for raw, mx in rows:  # same float steps as faculty_compute_period_result()
+                earned += ((raw / mx) * 100 / 100) * mx
+                possible += mx
+            ratio = earned / possible
+            cats.append({'name': name, 'sourceKind': 'assessment', 'earnedPoints': round(earned, 4),
+                         'possiblePoints': round(float(possible), 4), 'ratio': round(ratio, 6),
+                         'weight': float(weight), 'contribution': php_round(ratio * weight, 4)})
+        marks = [ATTENDANCE_POINTS[st] for d, st in attendance if rng['startDate'] <= d.isoformat() <= rng['endDate']]
+        assert marks, (sec['key'], period)
+        att = php_sum(marks) / len(marks)
+        cats.append({'name': 'Attendance', 'sourceKind': 'attendance', 'earnedPoints': round(att, 4),
+                     'possiblePoints': 100.0, 'ratio': round(att / 100, 6), 'weight': float(wa),
+                     'contribution': php_round(att / 100 * wa, 4)})
+        periods[period.lower()] = {'period': period, 'status': 'computed', 'categories': cats, 'incomplete': [],
+                                   'attendanceDateRange': rng,
+                                   'percentage': php_round(php_sum(c['contribution'] for c in cats), 2)}
+    pct = php_round(periods['midterm']['percentage'] * TERM_RATIO['midterm'] / 100
+                    + periods['final']['percentage'] * TERM_RATIO['final'] / 100, 2)
+    gwa = pct_to_gwa(pct)
+    return {'calculationMode': 'authoritative_periods', 'termRatio': TERM_RATIO, 'periods': periods,
+            'retentionThreshold': RETENTION_TRIGGER, 'percentage': pct, 'gwa': gwa,
+            'retentionState': 'remedial' if gwa >= RETENTION_TRIGGER else 'active'}
+
+
 assessments = []   # (ckey, title, type, period, max, weight, due, status)
 scores = []        # (ckey, title, student_number, score, submitted_at)
 enrollments = []   # dict
 att_sessions = []  # dict
 att_records = []   # dict
 remedials = []     # (ckey, student_number, attempt, scheduled, pct, outcome, actor)
+cost_recovery = []  # (ckey, student_number, final_grade, outcome, actor, recorded_at)
 
 WEEKDAY = {'A': 0, 'B': 2}  # Monday / Wednesday
 
 for sec in sections:
     members = [s for s in students if s['cohort'] == sec['cohort'] and s['block'] == sec['block']]
     course = COURSE_BY[sec['course']]
-    wq, we, wp, wa = course[7]
     plan = assessment_plan(sec)
-    per_student = {s['number']: {'Quiz': [], 'Laboratory': [], 'Exam': []} for s in members}
+    per_student = {s['number']: {} for s in members}  # (period, category) -> [(raw, max)]
     for title, typ, period, mx, w, due in plan:
         graded = due < TODAY
         status = 'Closed' if graded else 'Active'
@@ -324,13 +400,14 @@ for sec in sections:
             pct = max(48.0, min(100.0, R.gauss(s['ability'] + (1.5 if typ == 'Laboratory' else 0), spread)))
             raw = round(pct * mx / 100 * 2) / 2  # half-point scores
             scores.append((ckey(sec), title, s['number'], raw, utc(due, time(17, 0))))
-            per_student[s['number']]['Exam' if typ.endswith('Exam') else typ].append(raw / mx * 100)
+            per_student[s['number']].setdefault((period, typ), []).append((raw, mx))
 
-    # Attendance sessions: weekly, starting the second week, up to the day before "today".
+    # Attendance sessions: weekly from the second week. Past sections cover the
+    # whole term (both grading periods); the current term stops before "today".
     first = sec['start'] + timedelta(days=7)
     first += timedelta(days=(WEEKDAY[sec['block']] - first.weekday()) % 7)
-    dates = [first + timedelta(weeks=i) for i in range(12)]
-    dates = [d for d in dates if d < min(sec['end'], TODAY)][: (6 if sec['current'] else 10)]
+    dates = [first + timedelta(weeks=i) for i in range(20)]
+    dates = [d for d in dates if d < min(sec['end'], TODAY)][: (6 if sec['current'] else 20)]
     owner = sec['secretary'] if sec['current'] else sec['instructor']
     sess_list = []
     for d in dates:
@@ -374,7 +451,7 @@ for sec in sections:
                     reason = 'Excused: medical certificate on file.' if st == 'excused' else None
                     rec.update(method='manual_faculty', recorded=when, reason=reason, by=owner, at=when)
             att_records.append(rec)
-            att_by_student[s['number']].append(st)
+            att_by_student[s['number']].append((sess['date'], st))
 
     for s in members:
         e = dict(ckey=ckey(sec), number=s['number'], date=sec['start'], final_pct=None, gwa=None,
@@ -383,17 +460,9 @@ for sec in sections:
         if course[6]:
             e['hours'] = R.randint(8, 30) if sec['current'] else R.randint(60, 120)
         if not sec['current']:
-            ps = per_student[s['number']]
-            quizzes = sum(ps['Quiz']) / len(ps['Quiz'])
-            exams = sum(ps['Exam']) / len(ps['Exam'])
-            practicum = sum(ps['Laboratory']) / len(ps['Laboratory'])
-            pts = {'present': 100.0, 'excused': 100.0, 'late': 80.0, 'absent': 0.0}
-            att = sum(pts[x] for x in att_by_student[s['number']]) / max(1, len(att_by_student[s['number']]))
-            final = round((quizzes * wq + exams * we + practicum * wp + att * wa) / 100, 2)
-            gwa = pct_to_gwa(final)
-            e.update(final_pct=final, gwa=gwa, retention='remedial' if gwa >= 2.5 else 'active',
-                     components={'quizzes': round(quizzes, 2), 'exams': round(exams, 2),
-                                 'practicum': round(practicum, 2), 'attendance': round(att, 2)})
+            components = grade_breakdown(sec, course, per_student[s['number']], att_by_student[s['number']])
+            e.update(final_pct=components['percentage'], gwa=components['gwa'],
+                     retention=components['retentionState'], components=components)
         enrollments.append(e)
 
 # Remedial progressions for past remedial enrollments (canonical attempts only).
@@ -424,6 +493,13 @@ for i, e in enumerate(past_remedial):
     else:
         remedials.append((e['ckey'], e['number'], 1, exam1, float(R.choice([35, 42])), 'failed', actor))
         remedials.append((e['ckey'], e['number'], 2, exam2, float(R.choice([40, 46])), 'failed', actor))
+        # Cost recovery: passed (a grade better than the 2.50 trigger), failed, or still required.
+        done = exam2 + timedelta(days=45)
+        k = sum(1 for r in remedials if r[2] == 2 and r[5] == 'failed') % 3
+        if k == 1:
+            cost_recovery.append((e['ckey'], e['number'], 2.25, 'passed', actor, utc(done, time(10, 0))))
+        elif k == 2:
+            cost_recovery.append((e['ckey'], e['number'], 5.0, 'failed', actor, utc(done, time(10, 0))))
 
 
 # ---------------------------------------------------------------------------
@@ -471,7 +547,8 @@ $guard$;
     for (u, email, role, pre, fi, mi, la, su, title, status, created) in STAFF:
         disp = ' '.join(x for x in (pre, fi, mi, la) if x) + (', ' + su if su else '')
         approved = datetime.combine(created, time(1, 0)) if status == 'Active' else None
-        rows.append((u, email + DOMAIN, HASH[role], role, disp, title, status, datetime.combine(created, time(1, 0)),
+        pw = HASH['invited'] if status == 'Pending Activation' else HASH[role]
+        rows.append((u, email + DOMAIN, pw, role, disp, title, status, datetime.combine(created, time(1, 0)),
                      approved, pre, fi, mi, la, su))
     for s in sorted(students, key=lambda s: (s['user_id'] or s['account_user_id'] or 10**9)):
         u = s['user_id'] or s['account_user_id']
@@ -625,13 +702,32 @@ $guard$;
     w(') AS v(ckey, student_number, attempt_number, scheduled_date, percentage, outcome, actor)')
     w('JOIN seed_enr e ON e.ckey = v.ckey AND e.student_number = v.student_number;')
     w('')
-    w('-- 9. Keep identity sequences ahead of the explicit ids')
+    w('-- 9. Cost recovery results after two failed remedial attempts')
+    w('INSERT INTO enrollment_cost_recovery (enrollment_id, final_grade, outcome, actor_user_id, recorded_at)')
+    w('SELECT e.enrollment_id, v.final_grade::numeric, v.outcome, v.actor::integer, v.recorded_at::timestamp')
+    w('FROM (VALUES')
+    w(values_block(cost_recovery))
+    w(') AS v(ckey, student_number, final_grade, outcome, actor, recorded_at)')
+    w('JOIN seed_enr e ON e.ckey = v.ckey AND e.student_number = v.student_number;')
+    w('')
+    w('-- 10. Faculty invitations (the digests match no valid token; reissue to get a working link)')
+    w("INSERT INTO security_tokens (purpose, user_id, token_digest, issued_at, expires_at)")
+    w("SELECT 'faculty_invitation', v.user_id::integer, sha256(convert_to('dentisys-demo-invitation-' || v.user_id, 'UTF8')),")
+    w("       COALESCE(v.issued_at::timestamp, LOCALTIMESTAMP), COALESCE(v.expires_at::timestamp, LOCALTIMESTAMP + INTERVAL '7 days')")
+    w('FROM (VALUES')
+    w(values_block([(u, issued, expires) for u, _, issued, expires in INVITATIONS]))
+    w(') AS v(user_id, issued_at, expires_at)')
+    w("JOIN user_accounts ua ON ua.user_id = v.user_id::integer AND ua.status = 'Pending Activation'")
+    w('WHERE (SELECT go FROM seed_run);')
+    w('')
+    w('-- 11. Keep identity sequences ahead of the explicit ids')
     w('DO $seq$')
     w('BEGIN')
     for t, c in (('user_accounts', 'user_id'), ('students', 'student_id'), ('courses', 'course_id'),
                  ('class_sections', 'cs_id'), ('enrollments', 'enrollment_id'), ('assessments', 'assessment_id'),
                  ('assessment_scores', 'score_id'), ('attendance_sessions', 'session_id'),
-                 ('attendance_records', 'record_id'), ('enrollment_remedial_attempts', 'remedial_attempt_id')):
+                 ('attendance_records', 'record_id'), ('enrollment_remedial_attempts', 'remedial_attempt_id'),
+                 ('security_tokens', 'token_id')):
         w(f"    PERFORM setval(pg_get_serial_sequence('{t}', '{c}'), GREATEST((SELECT COALESCE(MAX({c}), 1) FROM {t}), 1), true);")
     w('END')
     w('$seq$;')
@@ -678,7 +774,7 @@ def build_md():
         classes = ', '.join(cur.get(u, [])) or ('—' if role == 'faculty' else 'n/a')
         w(f'| `{email}{DOMAIN}` | {name} | {title} | {status} | {classes} |')
     w('')
-    w('The two *Pending Approval* faculty rows are inactive legacy applicants. They cannot sign in and are never activated automatically; an Admin must issue a new invitation from **Faculty Invitations**. Faculty without a current class (—) taught only in past school years; use the dashboard school-year filter to see their classes.')
+    w('The two *Pending Activation* faculty rows are Dean invitations: `dr.mendoza@` is pending (issued when the seed loads, valid 7 days) and `dr.navarro@` has expired. They cannot sign in until they accept. The seeded links cannot be accepted; reissue the invitation from **Faculty Invitations** and open the link in Mailpit. Faculty without a current class (—) taught only in past school years; use the dashboard school-year filter to see their classes.')
     w('')
     w('## Class secretaries (password `Secretary123!`)')
     w('')
@@ -719,7 +815,9 @@ def build_md():
     w(f'- {len(students)} students in four cohorts (admitted 2023–2026), two blocks of 15 per cohort.')
     w(f'- {len(enrollments)} enrollments, {len(assessments)} assessments, {len(scores)} scores, {len(att_sessions)} attendance sessions, {len(att_records)} attendance records.')
     rem = sum(1 for e in enrollments if e['retention'] == 'remedial')
-    w(f'- Past enrollments have final grades; {rem} are flagged for remedial, with {len(remedials)} recorded remedial attempts (passed, failed, cost recovery, and upcoming).')
+    w(f'- Past enrollments have final grades computed like the server: Quiz, Laboratory, the period exam and Attendance weighted by the course ratios, attendance split at the term midpoint, and a 40 / 60 Midterm / Final ratio. Run `backend/bin/bootstrap-grade-weights.php` (or `start-dev.ps1`) after seeding to create the matching grade weights.')
+    cr_pass = sum(1 for c in cost_recovery if c[3] == 'passed')
+    w(f'- {rem} past enrollments are flagged for remedial, with {len(remedials)} recorded remedial attempts (passed, failed, and upcoming) and {len(cost_recovery)} cost recovery results ({cr_pass} passed, {len(cost_recovery) - cr_pass} failed); other double failures still require cost recovery.')
     w(f'- Current-year enrollments have quiz and laboratory scores only, so their grades show *Pending evaluation*.')
     w('- Current-term check-ins are stored as biometric attendance history, but **no face (biometric) profiles are seeded**: every student or secretary must complete Face Registration before a new biometric check-in. Notifications and audit events are not seeded.')
     w('')
@@ -728,8 +826,8 @@ def build_md():
 
 
 if __name__ == '__main__':
-    open(sys.argv[1], 'w').write(build_sql())
-    open(sys.argv[2], 'w').write(build_md())
+    open(sys.argv[1], 'w', encoding='utf-8').write(build_sql())
+    open(sys.argv[2], 'w', encoding='utf-8').write(build_md())
     print('students', len(students), 'accounts up to', LAST_UID, 'sections', len(sections), 'enrollments', len(enrollments),
           'assessments', len(assessments), 'scores', len(scores), 'sessions', len(att_sessions), 'records', len(att_records),
-          'remedial_enr', len(past_remedial), 'attempts', len(remedials))
+          'remedial_enr', len(past_remedial), 'attempts', len(remedials), 'cost_recovery', len(cost_recovery))

@@ -14,6 +14,9 @@ declare(strict_types=1);
  *   Final:   Quiz, Laboratory, Final Exam,   Attendance
  * using the course's stored component ratios (quizzes / practicum / exams /
  * attendance) or 20 / 40 / 30 / 10, with a 40 / 60 Midterm / Final split.
+ * Attendance date ranges come from the classes' term dates: Midterm runs from
+ * the term start to its midpoint, Final from the next day to the term end
+ * (left unset when the classes have no term dates).
  * Existing assessments are linked by name; any other type is linked by keyword
  * (exam -> the period exam, lab/practic/clinic -> Laboratory, otherwise Quiz)
  * and listed in the output. Faculty can edit the weights afterwards.
@@ -73,6 +76,21 @@ function bootstrap_period_categories(array $weights, string $period): array
     return $categories;
 }
 
+function bootstrap_attendance_date_ranges(?string $termStart, ?string $termEnd): ?array
+{
+    if ($termStart === null || $termEnd === null || $termStart >= $termEnd) {
+        return null;
+    }
+    $start = new DateTimeImmutable($termStart);
+    $end = new DateTimeImmutable($termEnd);
+    $days = (int) $start->diff($end)->days;
+    $midtermEnd = $start->modify('+' . intdiv($days, 2) . ' days');
+    return [
+        'midterm' => ['startDate' => $start->format('Y-m-d'), 'endDate' => $midtermEnd->format('Y-m-d')],
+        'final' => ['startDate' => $midtermEnd->modify('+1 day')->format('Y-m-d'), 'endDate' => $end->format('Y-m-d')],
+    ];
+}
+
 function bootstrap_keyword_category(string $type, ?string $period): string
 {
     $key = strtolower($type);
@@ -86,9 +104,10 @@ function bootstrap_keyword_category(string $type, ?string $period): string
 }
 
 $offerings = $pdo->query(
-    "SELECT DISTINCT cs.instructor_user_id, cs.course_id, cs.semester, cs.school_year,
+    "SELECT cs.instructor_user_id, cs.course_id, cs.semester, cs.school_year,
             c.course_code, c.grading_config::text AS grading_config,
-            ua.login_email, ua.role, ua.display_name
+            ua.login_email, ua.role, ua.display_name,
+            MIN(cs.term_start_date)::text AS term_start, MAX(cs.term_end_date)::text AS term_end
        FROM class_sections cs
        JOIN courses c ON c.course_id = cs.course_id
        JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
@@ -99,6 +118,8 @@ $offerings = $pdo->query(
                AND gc.course_id = cs.course_id
                AND gc.semester = UPPER(cs.semester)
                AND gc.school_year = UPPER(cs.school_year))
+      GROUP BY cs.instructor_user_id, cs.course_id, cs.semester, cs.school_year,
+               c.course_code, c.grading_config::text, ua.login_email, ua.role, ua.display_name
       ORDER BY cs.school_year, cs.semester, c.course_code, cs.instructor_user_id"
 )->fetchAll(PDO::FETCH_ASSOC);
 
@@ -138,6 +159,10 @@ foreach ($offerings as $offering) {
         'midtermCategories' => bootstrap_period_categories($weights, 'Midterm'),
         'finalCategories' => bootstrap_period_categories($weights, 'Final'),
     ];
+    $dateRanges = bootstrap_attendance_date_ranges($offering['term_start'], $offering['term_end']);
+    if ($dateRanges !== null) {
+        $payload['attendanceDateRanges'] = $dateRanges;
+    }
     $keywordLinks = [];
     for ($attempt = 0; $attempt < 2; $attempt++) {
         try {

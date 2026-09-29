@@ -31,15 +31,15 @@ Every account of a role uses that role's password. Current school year in the se
 | `dr.cruz@bicol-u.edu.ph` | Dr. Fernando Ocampo Cruz, DMD | Clinical Instructor, Prosthodontics | Active | PROSTHO-3A |
 | `dr.aquino@bicol-u.edu.ph` | Dr. Patricia Salazar Aquino, DMD | Lecturer, Oral Anatomy | Active | ORAL-2A |
 | `dr.torres@bicol-u.edu.ph` | Dr. Ramon Dizon Torres, DMD | Lecturer, Ethics and Practice Management | Active | DENT-1A |
-| `pending.faculty1@bicol-u.edu.ph` | Dr. Jessica Lorenzo Mendoza, DMD | Applicant Faculty | Pending Approval | — |
-| `pending.faculty2@bicol-u.edu.ph` | Dr. Gabriel Soriano Navarro, DMD | Applicant Faculty | Pending Approval | — |
+| `dr.mendoza@bicol-u.edu.ph` | Dr. Jessica Lorenzo Mendoza, DMD | Dental Faculty Member | Pending Activation | — |
+| `dr.navarro@bicol-u.edu.ph` | Dr. Gabriel Soriano Navarro, DMD | Dental Faculty Member | Pending Activation | — |
 | `dr.bautista@bicol-u.edu.ph` | Dr. Carmela Ramos Bautista, DMD | Assistant Professor, Oral Medicine | Active | — |
 | `dr.villanueva@bicol-u.edu.ph` | Dr. Enrique Pascual Villanueva, DMD, MPH | Associate Professor, Community Dentistry | Active | — |
 | `dr.delrosario@bicol-u.edu.ph` | Dr. Kristine Abad Del Rosario, DMD | Clinical Instructor, Pediatric Dentistry | Active | DENT-1B |
 | `dr.garcia@bicol-u.edu.ph` | Dr. Antonio Manalo Garcia, DMD, MS | Professor, Oral and Maxillofacial Surgery | Active | — |
 | `dr.lopez@bicol-u.edu.ph` | Dr. Rowena Tan Lopez, DMD | Instructor, Dental Materials | Active | ORAL-2B |
 
-The two *Pending Approval* faculty rows are inactive legacy applicants. They cannot sign in and are never activated automatically; an Admin must issue a new invitation from **Faculty Invitations**. Faculty without a current class (—) taught only in past school years; use the dashboard school-year filter to see their classes.
+The two *Pending Activation* faculty rows are Dean invitations: `dr.mendoza@` is pending (issued when the seed loads, valid 7 days) and `dr.navarro@` has expired. They cannot sign in until they accept. The seeded links cannot be accepted; reissue the invitation from **Faculty Invitations** and open the link in Mailpit. Faculty without a current class (—) taught only in past school years; use the dashboard school-year filter to see their classes.
 
 ## Class secretaries (password `Secretary123!`)
 
@@ -186,8 +186,9 @@ These current first-year students have no login yet. Faculty can send them an in
 
 - 8 courses, 28 class sections (8 in 2026-2027, 20 in 2024-2025 and 2025-2026).
 - 120 students in four cohorts (admitted 2023–2026), two blocks of 15 per cohort.
-- 420 enrollments, 168 assessments, 2040 scores, 248 attendance sessions, 3720 attendance records.
-- Past enrollments have final grades; 27 are flagged for remedial, with 32 recorded remedial attempts (passed, failed, cost recovery, and upcoming).
+- 420 enrollments, 168 assessments, 2040 scores, 418 attendance sessions, 6270 attendance records.
+- Past enrollments have final grades computed like the server: Quiz, Laboratory, the period exam and Attendance weighted by the course ratios, attendance split at the term midpoint, and a 40 / 60 Midterm / Final ratio. Run `backend/bin/bootstrap-grade-weights.php` (or `start-dev.ps1`) after seeding to create the matching grade weights.
+- 25 past enrollments are flagged for remedial, with 32 recorded remedial attempts (passed, failed, and upcoming) and 3 cost recovery results (2 passed, 1 failed); other double failures still require cost recovery.
 - Current-year enrollments have quiz and laboratory scores only, so their grades show *Pending evaluation*.
 - Current-term check-ins are stored as biometric attendance history, but **no face (biometric) profiles are seeded**: every student or secretary must complete Face Registration before a new biometric check-in. Notifications and audit events are not seeded.
 
