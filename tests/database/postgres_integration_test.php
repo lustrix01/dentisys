@@ -5940,6 +5940,49 @@ expect_true(($auditPageOne['logs'][0]['id'] ?? null) !== ($auditPageTwo['logs'][
 [$auditBadDateStatus] = integration_http_get_json('/api/admin/audit-logs?date=yesterday', $adminAccessToken);
 expect_same(422, $auditBadDateStatus, 'Audit trail rejects a malformed date');
 
+// Score matrix saves are all or nothing, and clearing a cell deletes the score
+// while the audit event keeps the removed value.
+$batchAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments (cs_id, title, type, grading_period, max_score, weight, status)
+     VALUES (?, ?, 'Quiz', 'Midterm', 10, 1, 'Active') RETURNING assessment_id"
+);
+$batchAssessmentStmt->execute([$studentClassId, 'Batch Fixture A']);
+$batchAssessmentA = (int) $batchAssessmentStmt->fetchColumn();
+$batchAssessmentStmt->execute([$studentClassId, 'Batch Fixture B']);
+$batchAssessmentB = (int) $batchAssessmentStmt->fetchColumn();
+$batchScoreStmt = $pdo->prepare('SELECT score FROM assessment_scores WHERE assessment_id = ? AND student_id = ?');
+$batchScore = static function (int $assessmentId) use ($batchScoreStmt, $invitedStudentId): ?string {
+    $batchScoreStmt->execute([$assessmentId, $invitedStudentId]);
+    $value = $batchScoreStmt->fetchColumn();
+    return $value === false ? null : (string) $value;
+};
+[$batchSaveStatus, $batchSaveBody] = integration_http_json('/api/faculty/scores', $seedFacultyAccessToken, ['batches' => [
+    ['assessmentId' => $batchAssessmentA, 'scores' => [['studentId' => (string) $invitedStudentId, 'score' => 5]]],
+    ['assessmentId' => $batchAssessmentB, 'scores' => [['studentId' => (string) $invitedStudentId, 'score' => 7]]],
+]]);
+expect_same(200, $batchSaveStatus, 'Faculty can save scores for several assessments in one request');
+expect_same(2, $batchSaveBody['savedCount'] ?? null, 'Batch save reports every saved score');
+expect_same(['5.00', '7.00'], [$batchScore($batchAssessmentA), $batchScore($batchAssessmentB)], 'Batch save stores both assessments');
+[$batchInvalidStatus] = integration_http_json('/api/faculty/scores', $seedFacultyAccessToken, ['batches' => [
+    ['assessmentId' => $batchAssessmentA, 'scores' => [['studentId' => (string) $invitedStudentId, 'score' => 6]]],
+    ['assessmentId' => $batchAssessmentB, 'scores' => [['studentId' => (string) $invitedStudentId, 'score' => 99]]],
+]]);
+expect_same(422, $batchInvalidStatus, 'A batch with one invalid score is rejected');
+expect_same('5.00', $batchScore($batchAssessmentA), 'A rejected batch saves nothing, not even its valid scores');
+[$clearScoreStatus, $clearScoreBody] = integration_http_json('/api/faculty/scores', $seedFacultyAccessToken, [
+    'assessmentId' => $batchAssessmentA,
+    'scores' => [['studentId' => (string) $invitedStudentId, 'score' => null]],
+]);
+expect_same(200, $clearScoreStatus, 'Faculty can clear a stored score');
+expect_same(1, $clearScoreBody['clearedCount'] ?? null, 'Clearing reports the cleared score');
+expect_same(null, $batchScore($batchAssessmentA), 'A cleared score is deleted');
+$clearAuditStmt = $pdo->prepare(
+    "SELECT before_state_json FROM audit_events
+      WHERE action_code = 'assessment_scores_saved' AND target_id = ? ORDER BY sequence_number DESC LIMIT 1"
+);
+$clearAuditStmt->execute([(string) $batchAssessmentA]);
+expect_true(str_contains((string) $clearAuditStmt->fetchColumn(), '5.00'), 'The audit event keeps the value of the cleared score');
+
 $auditDeleteAssessmentStmt = $pdo->prepare(
     "INSERT INTO assessments (cs_id, title, type, grading_period, max_score, weight, status)
      VALUES (?, 'Audit Delete Fixture', 'Quiz', 'Midterm', 10, 1, 'Active')

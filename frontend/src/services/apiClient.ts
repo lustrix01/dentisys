@@ -1167,8 +1167,16 @@ export function getFacultyAssessmentScoresApi(assessmentId: string): Promise<{ s
   return request('GET', `/faculty/scores?assessmentId=${encodeURIComponent(assessmentId)}`);
 }
 
-export function saveFacultyAssessmentScoresApi(assessmentId: string, scores: Array<{ studentId: string; score: number; remarks?: string }>): Promise<{ status: string; message: string; savedCount: number }> {
+/** A null score clears that student's stored score. */
+export type FacultyScoreEntry = { studentId: string; score: number | null; remarks?: string };
+
+export function saveFacultyAssessmentScoresApi(assessmentId: string, scores: FacultyScoreEntry[]): Promise<{ status: string; message: string; savedCount: number; clearedCount?: number }> {
   return request('POST', '/faculty/scores', { assessmentId, scores });
+}
+
+/** Saves several assessments' scores in one transaction (all or nothing). */
+export function saveFacultyScoreBatchesApi(batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }>): Promise<{ status: string; message: string; savedCount: number; clearedCount?: number }> {
+  return request('POST', '/faculty/scores', { batches });
 }
 
 export function computeFacultyGradesApi(classId?: string): Promise<FacultyComputeGradesResponse> {

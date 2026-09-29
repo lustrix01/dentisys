@@ -3142,28 +3142,21 @@ function handle_faculty_scores_save(): void
             return;
         }
         $data = $body['data'];
-        $assessmentId = (int) ($data['assessmentId'] ?? 0);
-        $scores = $data['scores'] ?? [];
-        $assessment = $pdo->prepare(
-            "SELECT a.max_score, a.cs_id
-             FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id
-             WHERE a.assessment_id = ? AND cs.instructor_user_id = ?"
-        );
-        $assessment->execute([$assessmentId, $authCtx['user_id']]);
-        $row = $assessment->fetch(PDO::FETCH_ASSOC);
-        if (!$row) {
-            safe_error_response('Assessment not found.', 404);
-            return;
-        }
-        if (academic_class_section_is_past($pdo, (int) $row['cs_id'])) {
-            safe_error_response('Past school-year classes are view-only.', 409);
-            return;
-        }
-        if (!is_array($scores) || $scores === []) {
+        // One assessment ({assessmentId, scores}) or several ({batches: [...]});
+        // every batch is saved in one transaction, so a matrix save is all or nothing.
+        $batches = array_key_exists('batches', $data)
+            ? $data['batches']
+            : [['assessmentId' => $data['assessmentId'] ?? 0, 'scores' => $data['scores'] ?? []]];
+        if (!is_array($batches) || $batches === []) {
             safe_error_response('At least one score is required.', 422);
             return;
         }
-        $pdo->beginTransaction();
+        $assessment = $pdo->prepare(
+            "SELECT a.max_score, a.cs_id
+             FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id
+             WHERE a.assessment_id = ? AND cs.instructor_user_id = ?
+             FOR UPDATE OF a"
+        );
         $enrolled = $pdo->prepare(
             "SELECT 1 FROM enrollments WHERE cs_id = ? AND student_id = ? AND status = 'Active'"
         );
@@ -3175,39 +3168,96 @@ function handle_faculty_scores_save(): void
                  submitted_at = EXCLUDED.submitted_at,
                  remarks = EXCLUDED.remarks"
         );
+        $previousScore = $pdo->prepare('SELECT score FROM assessment_scores WHERE assessment_id = ? AND student_id = ?');
+        $clear = $pdo->prepare('DELETE FROM assessment_scores WHERE assessment_id = ? AND student_id = ?');
+
+        $pdo->beginTransaction();
         $saved = 0;
-        foreach ($scores as $scoreRow) {
-            if ($scoreRow instanceof \stdClass) {
-                $scoreRow = get_object_vars($scoreRow);
+        $cleared = 0;
+        foreach ($batches as $batch) {
+            if ($batch instanceof \stdClass) {
+                $batch = get_object_vars($batch);
             }
-            if (!is_array($scoreRow)) {
+            $assessmentId = is_array($batch) ? (int) ($batch['assessmentId'] ?? 0) : 0;
+            $scores = is_array($batch) ? ($batch['scores'] ?? []) : [];
+            $assessment->execute([$assessmentId, $authCtx['user_id']]);
+            $row = $assessment->fetch(PDO::FETCH_ASSOC);
+            if (!$row) {
                 $pdo->rollBack();
-                safe_error_response('Every score must be a valid score entry.', 422);
+                safe_error_response('Assessment not found.', 404);
                 return;
             }
-            $studentId = (int) ($scoreRow['studentId'] ?? 0);
-            $score = (float) ($scoreRow['score'] ?? -1);
-            if ($studentId <= 0 || $score < 0 || $score > (float) $row['max_score']) {
+            if (academic_class_section_is_past($pdo, (int) $row['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Every score must belong to the class and be between zero and the assessment maximum.', 422);
+                safe_error_response('Past school-year classes are view-only.', 409);
                 return;
             }
-            $enrolled->execute([$row['cs_id'], $studentId]);
-            if (!$enrolled->fetchColumn()) {
+            if (!is_array($scores) || $scores === []) {
                 $pdo->rollBack();
-                safe_error_response('A scored student is not enrolled in the assessment class.', 422);
+                safe_error_response('At least one score is required.', 422);
                 return;
             }
-            $upsert->execute([$assessmentId, $studentId, $score, $scoreRow['remarks'] ?? null]);
-            $saved++;
+            $batchSaved = 0;
+            $clearedScores = [];
+            foreach ($scores as $scoreRow) {
+                if ($scoreRow instanceof \stdClass) {
+                    $scoreRow = get_object_vars($scoreRow);
+                }
+                if (!is_array($scoreRow) || !array_key_exists('score', $scoreRow)) {
+                    $pdo->rollBack();
+                    safe_error_response('Every score must be a valid score entry.', 422);
+                    return;
+                }
+                $studentId = (int) ($scoreRow['studentId'] ?? 0);
+                if ($studentId <= 0) {
+                    $pdo->rollBack();
+                    safe_error_response('Every score must belong to the class and be between zero and the assessment maximum.', 422);
+                    return;
+                }
+                $enrolled->execute([$row['cs_id'], $studentId]);
+                if (!$enrolled->fetchColumn()) {
+                    $pdo->rollBack();
+                    safe_error_response('A scored student is not enrolled in the assessment class.', 422);
+                    return;
+                }
+                // A null score clears the cell; the removed value stays in the audit event.
+                if ($scoreRow['score'] === null) {
+                    $previousScore->execute([$assessmentId, $studentId]);
+                    $previous = $previousScore->fetchColumn();
+                    if ($previous !== false) {
+                        $clear->execute([$assessmentId, $studentId]);
+                        $clearedScores[] = ['studentId' => $studentId, 'score' => (string) $previous];
+                    }
+                    continue;
+                }
+                $score = is_numeric($scoreRow['score']) ? (float) $scoreRow['score'] : -1.0;
+                if ($score < 0 || $score > (float) $row['max_score']) {
+                    $pdo->rollBack();
+                    safe_error_response('Every score must belong to the class and be between zero and the assessment maximum.', 422);
+                    return;
+                }
+                $upsert->execute([$assessmentId, $studentId, $score, $scoreRow['remarks'] ?? null]);
+                $batchSaved++;
+            }
+            audit_record_action(
+                $pdo, $config, $authCtx, 'grading', 'assessment_scores_saved', 'assessment', (string) $assessmentId,
+                "Saved {$batchSaved} score(s) and cleared " . count($clearedScores) . " for assessment #{$assessmentId}.",
+                [
+                    'scope_cs_id' => (int) $row['cs_id'],
+                    'before' => $clearedScores === [] ? null : ['clearedScores' => $clearedScores],
+                    'after' => ['assessmentId' => $assessmentId, 'savedCount' => $batchSaved, 'clearedCount' => count($clearedScores)],
+                ]
+            );
+            $saved += $batchSaved;
+            $cleared += count($clearedScores);
         }
-        audit_record_action(
-            $pdo, $config, $authCtx, 'grading', 'assessment_scores_saved', 'assessment', (string) $assessmentId,
-            "Saved {$saved} score(s) for assessment #{$assessmentId}.",
-            ['scope_cs_id' => (int) $row['cs_id'], 'after' => ['assessmentId' => $assessmentId, 'savedCount' => $saved]]
-        );
         $pdo->commit();
-        json_response(['status' => 'ok', 'message' => 'Student scores persisted successfully.', 'savedCount' => $saved], 200);
+        json_response([
+            'status' => 'ok',
+            'message' => 'Student scores persisted successfully.',
+            'savedCount' => $saved,
+            'clearedCount' => $cleared,
+        ], 200);
     } catch (\Throwable $e) {
         if (isset($pdo) && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty scores save error: ' . sanitize_for_log($e));

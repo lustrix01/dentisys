@@ -1084,6 +1084,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.locator('#final-end-date').fill('2026-12-20');
 
       await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      // Saving asks for confirmation first.
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
       expect(putPayload).not.toBeNull();
@@ -1188,6 +1190,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(nameInputs.nth(1)).toHaveValue('Quizzes');
 
       await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      // Saving asks for confirmation first.
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
       expect(putPayload).not.toBeNull();
@@ -1261,6 +1265,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await weightInputs.nth(1).fill('40');
 
       await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      // Saving asks for confirmation first.
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       // Conflict banner appears
       await expect(page.getByText(/Version Conflict Detected/i)).toBeVisible();
@@ -1320,6 +1326,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const weightInputs = page.locator('input[placeholder="0"]');
 
       await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      // Saving asks for confirmation first.
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       // 422 warning banner appears
       await expect(page.getByText(/Existing Assessments Require Matching Categories/i)).toBeVisible();
@@ -1354,6 +1362,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=components');
       await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      // Saving asks for confirmation first.
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       const picker = page.getByRole('combobox', { name: 'Category for Practical Exam 1' });
       await expect(picker).toBeVisible();
       const options = await picker.locator('option').allTextContents();
@@ -1362,6 +1372,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await picker.selectOption('Activity');
       await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      // Saving asks for confirmation first.
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect.poll(() => putPayloads.length).toBe(2);
       expect(putPayloads[1].assessmentAssignments).toEqual([{ assessmentId: 42, categoryName: 'Activity' }]);
     });
@@ -1961,6 +1973,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=components');
       await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      // Saving asks for confirmation first.
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       // Specific error message must be visible
       await expect(page.getByText('A grading category referenced by an assessment cannot be deleted.').first()).toBeVisible();
@@ -2012,6 +2026,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=components');
       await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      // Saving asks for confirmation first.
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       // Specific error message must be visible
       await expect(page.getByText('An existing period configuration cannot be changed back to overall categories.').first()).toBeVisible();

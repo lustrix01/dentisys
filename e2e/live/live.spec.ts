@@ -654,6 +654,8 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
       response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
     );
     await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+    // Saving asks for confirmation first.
+    await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
     const failRes = await firstSaveFailPromise;
     expect(failRes.status()).toBe(422);
@@ -694,6 +696,8 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
       response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
     );
     await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+    // Saving asks for confirmation first.
+    await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
     const saveRes = await savePromise;
     expect([200, 201]).toContain(saveRes.status());
@@ -728,6 +732,8 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
   );
   await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+  // Saving asks for confirmation first.
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
   const updateRes = await updatePromise;
   expect(updateRes.status()).toBe(200);
@@ -763,6 +769,8 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     response => response.url().includes('/api/faculty/grading-config') && response.request().method() === 'PUT'
   );
   await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+  // Saving asks for confirmation first.
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
   const reorderSaveRes = await reorderSavePromise;
   expect(reorderSaveRes.status()).toBe(200);

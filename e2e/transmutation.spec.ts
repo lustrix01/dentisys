@@ -146,6 +146,8 @@ test.describe('Assessment transmutation UI coverage', () => {
     const scoreInput = page.getByRole('spinbutton').nth(0);
     await scoreInput.fill('25');
     await page.getByRole('button', { name: 'Save Scores Sheet' }).click();
+    // Saving asks for confirmation first.
+    await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect.poll(() => postedScorePayload).not.toBeNull();
     await expect.poll(() => computeRequestCount).toBe(1);
     expect(persistedScores['assessment-1']).toEqual([{
@@ -179,6 +181,8 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByLabel('Enable Auto-Save on score input blur').uncheck();
     await reloadedScoreInput.fill('30');
     await page.getByRole('button', { name: 'Save Scores Sheet' }).click();
+    // Saving asks for confirmation first.
+    await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Scores Saved Successfully!' })).toHaveCount(0);
     await expect(reloadedScoreInput).toHaveValue('30');

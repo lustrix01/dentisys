@@ -44,6 +44,8 @@ import {
   getFacultyClassesApi,
   getFacultySettingsApi,
   saveFacultyAssessmentScoresApi,
+  saveFacultyScoreBatchesApi,
+  type FacultyScoreEntry,
   saveFacultyAssessmentsApi,
   getFacultyGradingConfigApi,
   saveFacultyGradingConfigApi,
@@ -1003,6 +1005,9 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
+  const hasStoredScore = (assessmentId: string, studentId: string): boolean =>
+    assessmentScores.some(score => score.assessmentId === assessmentId && score.studentId === studentId);
+
   // Auto-save on input blur
   const handleScoreBlur = async (studentId: string) => {
     if (!autoSaveEnabled || !selectedAssessmentId || !activeAssessment) return;
@@ -1011,11 +1016,11 @@ export const GradeComputation: React.FC = () => {
 
     if (!validateSingleScore(item.score, activeAssessment.maxScore)) return;
 
-    const saveList = Object.entries(scoresInputState)
-      .filter(([id, val]) => val.score !== '')
+    const saveList: FacultyScoreEntry[] = Object.entries(scoresInputState)
+      .filter(([id, val]) => val.score !== '' || hasStoredScore(selectedAssessmentId, id))
       .map(([id, val]) => ({
         studentId: id,
-        score: parseFloat(val.score),
+        score: val.score === '' ? null : parseFloat(val.score),
         remarks: val.remarks
       }));
     try {
@@ -1031,10 +1036,14 @@ export const GradeComputation: React.FC = () => {
     if (!selectedAssessmentId || !activeAssessment) return;
 
     let hasErrors = false;
-    const saveList: { studentId: string; score: number; remarks?: string }[] = [];
+    const saveList: FacultyScoreEntry[] = [];
 
     Object.entries(scoresInputState).forEach(([studentId, val]) => {
-      if (val.score === '') return;
+      if (val.score === '') {
+        // Clearing a stored score deletes it.
+        if (hasStoredScore(selectedAssessmentId, studentId)) saveList.push({ studentId, score: null, remarks: val.remarks });
+        return;
+      }
 
       const num = parseFloat(val.score);
       if (isNaN(num) || num < 0 || num > activeAssessment.maxScore) {
@@ -1052,6 +1061,12 @@ export const GradeComputation: React.FC = () => {
       showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
       return;
     }
+    const clearedCount = saveList.filter(entry => entry.score === null).length;
+    const confirmed = await requestConfirmation(
+      `Save ${saveList.length - clearedCount} score(s)${clearedCount > 0 ? ` and clear ${clearedCount}` : ''} for ${activeAssessment.title}?`,
+      'Save scores'
+    );
+    if (!confirmed) return;
 
     try {
       await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
@@ -1096,42 +1111,54 @@ export const GradeComputation: React.FC = () => {
   const handleSaveMatrixScores = async () => {
     let hasErrors = false;
     let saveCount = 0;
+    let clearedCount = 0;
+    const batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }> = [];
 
     for (const ass of activeAssessments) {
-      const saveList: { studentId: string; score: number; remarks?: string }[] = [];
+      const scores: FacultyScoreEntry[] = [];
       activeStudents.forEach(student => {
         const valStr = matrixScoresState[student.id]?.[ass.id] ?? '';
-        if (valStr !== '') {
-          const num = parseFloat(valStr);
-          if (isNaN(num) || num < 0 || num > ass.maxScore) {
-            hasErrors = true;
-          } else {
-            const existingMatch = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
-            saveList.push({
-              studentId: student.id,
-              score: num,
-              remarks: existingMatch?.remarks || ''
-            });
+        const existingMatch = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
+        if (valStr === '') {
+          // Clearing a stored score deletes it.
+          if (existingMatch) {
+            scores.push({ studentId: student.id, score: null, remarks: existingMatch.remarks || '' });
+            clearedCount++;
           }
-        }
-      });
-
-      if (!hasErrors && saveList.length > 0) {
-        try {
-          await saveFacultyAssessmentScoresApi(ass.id, saveList);
-          saveAssessmentScores(ass.id, saveList);
-          saveCount += saveList.length;
-        } catch {
-          showFeedback(`Failed to save scores for ${ass.title}`, 'error');
           return;
         }
-      }
+        const num = parseFloat(valStr);
+        if (isNaN(num) || num < 0 || num > ass.maxScore) {
+          hasErrors = true;
+        } else {
+          scores.push({ studentId: student.id, score: num, remarks: existingMatch?.remarks || '' });
+          saveCount++;
+        }
+      });
+      if (scores.length > 0) batches.push({ assessmentId: ass.id, scores });
     }
 
     if (hasErrors) {
       showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
       return;
     }
+    if (batches.length === 0) {
+      showFeedback('There are no scores to save.', 'info');
+      return;
+    }
+    const confirmed = await requestConfirmation(
+      `Save ${saveCount} score(s)${clearedCount > 0 ? ` and clear ${clearedCount}` : ''} across ${batches.length} assessment(s)? All changes are saved together or not at all.`,
+      'Save scores'
+    );
+    if (!confirmed) return;
+
+    try {
+      await saveFacultyScoreBatchesApi(batches);
+    } catch (requestError) {
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix. Nothing was saved.', 'error');
+      return;
+    }
+    batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
 
     const targetClassId = selectedClassId || availableClasses[0]?.id;
     if (targetClassId) {
@@ -1591,13 +1618,14 @@ export const GradeComputation: React.FC = () => {
     });
   };
 
-  const handleRemoveCategory = (tempId: string) => {
+  const handleRemoveCategory = async (tempId: string) => {
     const target = categoryRows.find(r => r.tempId === tempId);
     if (!target) return;
     if (target.inUse) {
       showFeedback('Cannot remove category that has associated assessments.', 'error');
       return;
     }
+    if (!await requestConfirmation(`Remove the "${target.name || 'unnamed'}" category? It is removed when you save the grade weights.`, 'Remove category')) return;
     setCategoryRows(prev => {
       const filtered = prev.filter(r => r.tempId !== tempId);
       return filtered.map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
@@ -1744,7 +1772,7 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
-  const handleRemovePeriodCategory = (period: 'Midterm' | 'Final', compositeKey: string) => {
+  const handleRemovePeriodCategory = async (period: 'Midterm' | 'Final', compositeKey: string) => {
     const list = period === 'Midterm' ? midtermCategories : finalCategories;
     const target = list.find(r => r.compositeKey === compositeKey);
     if (!target) return;
@@ -1752,6 +1780,7 @@ export const GradeComputation: React.FC = () => {
       showFeedback('Cannot remove category that has associated assessments.', 'error');
       return;
     }
+    if (!await requestConfirmation(`Remove the "${target.name || 'unnamed'}" ${period} category? It is removed when you save the grade weights.`, 'Remove category')) return;
     const filtered = list.filter(r => r.compositeKey !== compositeKey).map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
     if (period === 'Midterm') {
       setMidtermCategories(filtered);
@@ -1890,6 +1919,14 @@ export const GradeComputation: React.FC = () => {
         showFeedback(periodValidationError, 'error');
         return;
       }
+    }
+
+    if (!options?.convertFromOverall) {
+      const confirmed = await requestConfirmation(
+        'Save these grade weights? Grades for this course are computed with the saved weights.',
+        'Save grade weights'
+      );
+      if (!confirmed) return;
     }
 
     setConfigSaving(true);

@@ -23,7 +23,7 @@ interface AppContextProps {
   applyTheme: (theme: 'light' | 'dark') => void;
   refreshAssessments: () => Promise<Assessment[]>;
   /** Mirror scores that the server has already saved. */
-  saveAssessmentScores: (assessmentId: string, scores: { studentId: string; score: number; remarks?: string }[]) => void;
+  saveAssessmentScores: (assessmentId: string, scores: { studentId: string; score: number | null; remarks?: string }[]) => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -211,18 +211,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const saveAssessmentScores = (assId: string, inputScores: { studentId: string; score: number; remarks?: string }[]) => {
+  const saveAssessmentScores = (assId: string, inputScores: { studentId: string; score: number | null; remarks?: string }[]) => {
     setAssessmentScores(prev => {
       const savedStudentIds = new Set(inputScores.map(is => is.studentId));
       const filtered = prev.filter(s => s.assessmentId !== assId || !savedStudentIds.has(s.studentId));
-      const newScores: AssessmentScore[] = inputScores.map(is => ({
+      const newScores: AssessmentScore[] = inputScores.flatMap(is => is.score === null ? [] : [{
         id: `sc-${Math.random().toString(36).substr(2, 9)}`,
         assessmentId: assId,
         studentId: is.studentId,
         score: is.score,
         submittedAt: new Date().toISOString().split('T')[0],
         remarks: is.remarks
-      }));
+      }]);
       return [...filtered, ...newScores];
     });
   };
