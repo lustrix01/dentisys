@@ -363,6 +363,8 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
     response => response.url().includes('/api/secretary/attendance/session') && response.request().method() === 'POST'
   );
   await page.getByText('Enforce GPS Geofence Verification').click();
+  // The class end time must still be ahead whenever this suite runs.
+  await page.getByLabel('Class End Time').fill('23:59');
   await page.getByRole('button', { name: /Start Class Session Now/i }).click();
 
   const startResponse = await startPromise;

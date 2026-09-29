@@ -528,6 +528,7 @@ function handle_student_attendance_active_sessions(): void
 {
     try {
         [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $stmt = $pdo->prepare(
             "SELECT s.session_id, s.cs_id, s.secretary_user_id, s.owner_user_id,
                     s.session_date, s.session_code, s.room, s.started_at, s.ended_at,
@@ -592,6 +593,7 @@ function handle_student_attendance_biometric(): void
     $config = [];
     try {
         [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $studentId = $identity['student_id'];
         student_biometric_require_sidecar($config);
         $sessionId = ctype_digit((string) ($_POST['attendanceSessionId'] ?? $_POST['sessionId'] ?? ''))

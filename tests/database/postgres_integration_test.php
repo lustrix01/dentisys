@@ -275,6 +275,7 @@ $expectedMigrations = [
     '036_scrub_secretary_invitation_tokens.sql',
     '037_attendance_record_corrections.sql',
     '038_remedial_attempt_notes.sql',
+    '039_attendance_session_class_end_time.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -495,6 +496,7 @@ expect_same(null, $activeBeforeBody['activeSession'] ?? null, 'Secretary active-
 
 $sessionCode = 'INTEGRATION-SESSION-' . strtoupper(bin2hex(random_bytes(4)));
 [$startSessionStatus, $startSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => $secretarySessionClassId,
     'sessionDate' => $sessionDate,
     'sessionCode' => $sessionCode,
@@ -540,6 +542,7 @@ expect_same((string) $attendanceSessionId, (string) ($activeSessionBody['activeS
 expect_same($sessionCode, $activeSessionBody['activeSession']['sessionCode'] ?? null, 'Active-session lookup returns the persisted session code');
 
 [$duplicateSessionStatus, $duplicateSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => $secretarySessionClassId,
     'sessionDate' => $sessionDate,
     'sessionCode' => $sessionCode . '-DUPLICATE',
@@ -549,6 +552,7 @@ expect_same('error', $duplicateSessionBody['status'] ?? null, 'Duplicate active 
 
 $futureDate = $sessionNowUtc->setTimezone($sessionLocalTimezone)->modify('+1 day')->format('Y-m-d');
 [$futureSessionStatus, $futureSessionBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => $secretarySessionClassId,
     'sessionDate' => $futureDate,
 ]);
@@ -566,12 +570,14 @@ $unassignedClassStmt->execute([$secretarySessionClassId]);
 $unassignedClassId = (int) $unassignedClassStmt->fetchColumn();
 expect_true($unassignedClassId > 0, 'Integration fixture exposes an unassigned class for authorization testing');
 [$unassignedSessionStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => $unassignedClassId,
     'sessionDate' => $sessionDate,
 ]);
 expect_same(403, $unassignedSessionStatus, 'Secretary cannot start a session for an unassigned class');
 
 [$invalidSectionStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => 999999,
     'sessionDate' => $sessionDate,
 ]);
@@ -663,6 +669,7 @@ expect_same(null, $activeAfterEndBody['activeSession'] ?? null, 'Ended session n
 expect_same(409, $repeatEndStatus, 'Ending an already-ended session returns a conflict');
 
 [$geofenceNoLocationStatus, $geofenceNoLocationBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => $secretarySessionClassId,
     'sessionDate' => $sessionDate,
     'geofenceEnabled' => true,
@@ -764,6 +771,7 @@ foreach ($secretaryFilteredRecords as $secretaryFilteredRecord) {
 }
 $secondSessionCode = 'INTEGRATION-SESSION-OLDER-' . strtoupper(bin2hex(random_bytes(4)));
 [$secondSessionStartStatus, $secondSessionStartBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => $secretarySessionClassId,
     'sessionDate' => $sessionDate,
     'sessionCode' => $secondSessionCode,
@@ -1341,6 +1349,7 @@ $facultyGeofenceClassStmt->execute([academic_current_school_year($pdo)]);
 $facultyGeofenceClassId = (int) $facultyGeofenceClassStmt->fetchColumn();
 expect_true($facultyGeofenceClassId > 0, 'Seed Faculty owns an active class for geofence validation');
 [$facultyGeofenceStatus, $facultyGeofenceBody] = integration_http_json('/api/faculty/attendance/session', $facultyAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => $facultyGeofenceClassId,
     'geofenceEnabled' => true,
     'geofenceRadiusMeters' => 100,
@@ -1620,6 +1629,24 @@ expect_same('Revoked by administrator', $revokeFacultyState['revocation_reason']
     'password' => 'FacultyInvitePass123!',
 ]);
 expect_same(400, $revokeFacultyAcceptStatus, 'Revoked Faculty invitation token cannot be activated');
+
+// ATT-001: every new session needs a class end time at or after the Late cutoff.
+[$noEndTimeStatus, $noEndTimeBody] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, [
+    'csId' => $secretarySessionClassId,
+    'openingTime' => '08:00',
+    'presentCutoff' => '09:00',
+    'lateCutoff' => '10:00',
+]);
+expect_same(422, $noEndTimeStatus, 'A session without a class end time is rejected');
+expect_same('classEndTime', $noEndTimeBody['errors'][0]['field'] ?? null, 'The missing class end time is reported on its field');
+[$earlyEndStatus] = integration_http_json('/api/faculty/attendance/session', $facultyAccessToken, [
+    'csId' => $facultyGeofenceClassId,
+    'openingTime' => '08:00',
+    'presentCutoff' => '09:00',
+    'lateCutoff' => '10:00',
+    'classEndTime' => '09:30',
+]);
+expect_same(422, $earlyEndStatus, 'A class end time before the Late cutoff is rejected');
 
 // REG-010 first Dean from deployment configuration. Every step runs in one
 // transaction that is rolled back, so the shared integration data is unchanged.
@@ -2699,6 +2726,7 @@ $historicalAttendanceCountStmt = $pdo->prepare('SELECT COUNT(*) FROM attendance_
 $historicalAttendanceCountStmt->execute([$historicalRemedialEnrollmentId]);
 expect_same(0, (int) $historicalAttendanceCountStmt->fetchColumn(), 'Rejected past-year attendance mark creates no record');
 [$historicalSessionStatus] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, [
+    'classEndTime' => '23:59',
     'csId' => $historicalRemedialClassId,
 ]);
 expect_same(409, $historicalSessionStatus, 'Attendance sessions cannot be started for a past school-year class');
@@ -4220,6 +4248,31 @@ $gradeAttendanceA = (int) $gradeAttendanceStmt->fetchColumn();
 [$restoredLinkStatus] = $computeFixtureGrades();
 expect_same(200, $restoredLinkStatus, 'Restoring the linked attendance recomputes successfully');
 expect_same('75.00', $readFixtureGrades($pdo)[0]['final_percentage'], 'Restored linked attendance applies the transmutation again');
+
+// ATT-003: a session whose class end time has passed ends automatically the
+// next time sessions are read; students without a record become Absent as of
+// the class end time. The fixture session was yesterday (Asia/Manila).
+$manilaYesterday = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->modify('-1 day')->format('Y-m-d');
+$overdueSessionStmt = $pdo->prepare(
+    "INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, status, class_end_time)
+     SELECT cs_id, instructor_user_id, instructor_user_id, ?, 'ATT003-OVERDUE', 'active', TIME '15:00' FROM class_sections WHERE cs_id = ?
+     RETURNING session_id"
+);
+$overdueSessionStmt->execute([$manilaYesterday, $gradeClassId]);
+$overdueSessionId = (int) $overdueSessionStmt->fetchColumn();
+[$overdueReadStatus] = integration_http_get_json('/api/faculty/attendance?csId=' . $gradeClassId . '&date=' . $manilaYesterday, $facultyAccessToken);
+expect_same(200, $overdueReadStatus, 'Reading the attendance worksheet succeeds while overdue sessions end');
+$overdueRow = $pdo->query("SELECT status, ended_at FROM attendance_sessions WHERE session_id = {$overdueSessionId}")->fetch(PDO::FETCH_ASSOC);
+expect_same('ended', $overdueRow['status'] ?? null, 'A session past its class end time ends automatically');
+expect_same($manilaYesterday . ' 07:00:00', substr((string) ($overdueRow['ended_at'] ?? ''), 0, 19), 'The automatic end is recorded at the class end time (15:00 Asia/Manila)');
+$overdueAbsentStmt = $pdo->prepare("SELECT COUNT(*) FROM attendance_records WHERE attendance_session_id = ? AND status = 'absent' AND verification_method = 'system_resolution'");
+$overdueAbsentStmt->execute([$overdueSessionId]);
+expect_same(2, (int) $overdueAbsentStmt->fetchColumn(), 'Every student without a record is resolved to Absent');
+$overdueAuditStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code = 'attendance_session_auto_ended' AND target_id = ?");
+$overdueAuditStmt->execute([(string) $overdueSessionId]);
+expect_same(1, (int) $overdueAuditStmt->fetchColumn(), 'The automatic end is audited');
+$pdo->prepare('DELETE FROM attendance_records WHERE attendance_session_id = ?')->execute([$overdueSessionId]);
+$pdo->prepare("UPDATE attendance_sessions SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP WHERE session_id = ?")->execute([$overdueSessionId]);
 $rawScoreAfterCorrection = (float) $pdo->query(
     "SELECT score FROM assessment_scores WHERE assessment_id = {$gradeAssessmentId} AND student_id = {$gradeStudentB}"
 )->fetchColumn();

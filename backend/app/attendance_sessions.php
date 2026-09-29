@@ -84,6 +84,31 @@ function attendance_session_timing_from_request(array $data): array
     return [$opening, $present, $late];
 }
 
+/**
+ * ATT-001: required class end time (HH:MM, Asia/Manila) on the session day, at
+ * or after the Late cutoff. A session for today cannot end in the past.
+ */
+function attendance_session_class_end_time_from_request(
+    array $data,
+    ?string $lateCutoff,
+    string $sessionDate,
+    array $config
+): string {
+    $classEnd = attendance_session_parse_time($data, 'classEndTime');
+    if ($classEnd === null) {
+        throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end time is required.']]);
+    }
+    if ($lateCutoff !== null && $classEnd < $lateCutoff) {
+        throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end time must be at or after the Late cutoff.']]);
+    }
+    $timezone = new DateTimeZone((string) $config['app']['operational_timezone']);
+    $end = new DateTimeImmutable($sessionDate . ' ' . $classEnd, $timezone);
+    if ($end <= attendance_session_now_utc()) {
+        throw new ValidationException([['field' => 'classEndTime', 'message' => 'Class end time has already passed.']]);
+    }
+    return $classEnd;
+}
+
 function attendance_session_require_timing_for_biometric(
     bool $biometricRequired,
     ?string $opening,
@@ -155,7 +180,7 @@ function attendance_session_fetch_for_manager(
                     s.status, s.geofence_enabled, s.geofence_latitude,
                     s.geofence_longitude, s.geofence_radius_meters,
                     s.biometric_required, s.opening_time, s.present_cutoff_time,
-                    s.late_cutoff_time, s.revoked_at, s.revoked_by_user_id,
+                    s.late_cutoff_time, s.class_end_time, s.revoked_at, s.revoked_by_user_id,
                     s.revocation_reason, s.created_at, s.updated_at,
                     cs.cs_name, cs.block, c.course_id, c.course_code,
                     c.name AS course_name, u.display_name AS instructor_name
@@ -190,7 +215,7 @@ function attendance_session_fetch_for_student(
                     s.status, s.geofence_enabled, s.geofence_latitude,
                     s.geofence_longitude, s.geofence_radius_meters,
                     s.biometric_required, s.opening_time, s.present_cutoff_time,
-                    s.late_cutoff_time, s.revoked_at, s.revoked_by_user_id,
+                    s.late_cutoff_time, s.class_end_time, s.revoked_at, s.revoked_by_user_id,
                     s.revocation_reason, s.created_at, s.updated_at,
                     e.enrollment_id, e.student_id, e.status AS enrollment_status,
                     cs.cs_name, cs.block, c.course_id, c.course_code,
@@ -245,6 +270,7 @@ function attendance_session_map(array $row, bool $includeLocation = false): arra
         'openingTime' => $row['opening_time'] !== null ? substr((string) $row['opening_time'], 0, 5) : null,
         'presentCutoff' => $row['present_cutoff_time'] !== null ? substr((string) $row['present_cutoff_time'], 0, 5) : null,
         'lateCutoff' => $row['late_cutoff_time'] !== null ? substr((string) $row['late_cutoff_time'], 0, 5) : null,
+        'classEndTime' => isset($row['class_end_time']) ? substr((string) $row['class_end_time'], 0, 5) : null,
         'timingConfigured' => $row['opening_time'] !== null && $row['present_cutoff_time'] !== null && $row['late_cutoff_time'] !== null,
         'geofenceEnabled' => attendance_session_bool($row['geofence_enabled']),
         'geofenceRadiusMeters' => $row['geofence_radius_meters'] !== null ? (float) $row['geofence_radius_meters'] : null,
@@ -330,6 +356,87 @@ function attendance_session_resolve_absences(PDO $pdo, int $sessionId, DateTimeI
     );
     $stmt->execute([$nowSql, $nowSql, $sessionId]);
     return $stmt->rowCount();
+}
+
+/**
+ * Request metadata for audit events written while serving a request.
+ */
+function attendance_session_request_context(): array
+{
+    return [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+}
+
+/**
+ * ATT-003: end every active session whose class end time has passed
+ * (Asia/Manila) and resolve students without a record to Absent, as of the
+ * class end time. Called when sessions are read or used, so a session ends
+ * by the time anyone looks at it. Each session ends in its own transaction
+ * and is audited as a system action. Returns the number of sessions ended.
+ */
+function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context): int
+{
+    if ($pdo->inTransaction()) {
+        throw new AttendanceSessionException('Automatic session end must run outside a transaction.', 500, 'attendance_resolution_failed');
+    }
+    $timezone = new DateTimeZone((string) $config['app']['operational_timezone']);
+    $nowLocal = attendance_session_now_utc()->setTimezone($timezone);
+    $candidates = $pdo->prepare(
+        "SELECT session_id FROM attendance_sessions
+          WHERE status = 'active' AND class_end_time IS NOT NULL
+            AND (session_date < ? OR (session_date = ? AND class_end_time <= ?))
+          ORDER BY session_id"
+    );
+    $today = $nowLocal->format('Y-m-d');
+    $candidates->execute([$today, $today, $nowLocal->format('H:i:s')]);
+    $system = ['user_id' => null, 'login_email' => null, 'role' => 'system', 'display_name' => 'Automatic session end', 'session_id' => null];
+    $ended = 0;
+    foreach ($candidates->fetchAll(PDO::FETCH_COLUMN) as $sessionId) {
+        $pdo->beginTransaction();
+        try {
+            $lock = $pdo->prepare(
+                "SELECT session_id, cs_id, session_code, session_date, class_end_time
+                   FROM attendance_sessions
+                  WHERE session_id = ? AND status = 'active'
+                  FOR UPDATE SKIP LOCKED"
+            );
+            $lock->execute([(int) $sessionId]);
+            $session = $lock->fetch(PDO::FETCH_ASSOC);
+            if ($session === false) {
+                $pdo->commit();
+                continue;
+            }
+            $endUtc = (new DateTimeImmutable($session['session_date'] . ' ' . $session['class_end_time'], $timezone))
+                ->setTimezone(new DateTimeZone('UTC'));
+            $endSql = $endUtc->format('Y-m-d H:i:s.u');
+            $update = $pdo->prepare(
+                "UPDATE attendance_sessions SET status = 'ended', ended_at = ?, updated_at = ?
+                  WHERE session_id = ? AND status = 'active'"
+            );
+            $update->execute([$endSql, attendance_session_now_utc()->format('Y-m-d H:i:s.u'), (int) $sessionId]);
+            $absent = attendance_session_resolve_absences($pdo, (int) $sessionId, $endUtc);
+            attendance_session_record_audit(
+                $pdo, $config, $system, $context, 'attendance_session_auto_ended', (int) $sessionId, (int) $session['cs_id'],
+                "Attendance session '{$session['session_code']}' ended automatically at its class end time; {$absent} student(s) resolved to Absent.",
+                null,
+                ['session_id' => (int) $sessionId, 'status' => 'active'],
+                ['session_id' => (int) $sessionId, 'status' => 'ended', 'ended_at' => $endSql, 'resolved_absent_count' => $absent]
+            );
+            $pdo->commit();
+            $ended++;
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+    return $ended;
 }
 
 /**

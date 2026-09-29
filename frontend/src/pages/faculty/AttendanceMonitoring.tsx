@@ -23,6 +23,7 @@ import {
   correctFacultyAttendanceApi,
   createFacultyAttendanceSessionApi,
   revokeFacultyAttendanceSessionApi,
+  endFacultyAttendanceSessionApi,
   FacultyClassItem,
   FacultyAttendanceWorksheet,
   FacultyAttendanceWorksheetRosterItem,
@@ -134,6 +135,10 @@ export const AttendanceMonitoring: React.FC = () => {
   const [openingTime, setOpeningTime] = useState('08:00');
   const [presentCutoff, setPresentCutoff] = useState('09:00');
   const [lateCutoff, setLateCutoff] = useState('12:00');
+  const [classEndTime, setClassEndTime] = useState('13:00');
+  const [isEndModalOpen, setIsEndModalOpen] = useState(false);
+  const [endError, setEndError] = useState<string | null>(null);
+  const [submittingEnd, setSubmittingEnd] = useState(false);
   const [biometricRequired, setBiometricRequired] = useState(true);
   const [geofenceEnabled, setGeofenceEnabled] = useState(true);
   const [geofenceRadius, setGeofenceRadius] = useState(100);
@@ -430,6 +435,26 @@ export const AttendanceMonitoring: React.FC = () => {
     }
   };
 
+  // End the session now: students without a record are resolved to Absent (ATT-003).
+  const handleEndSession = async () => {
+    if (!worksheet?.attendanceSession?.sessionId) return;
+    setSubmittingEnd(true);
+    setEndError(null);
+    try {
+      await endFacultyAttendanceSessionApi({ sessionId: worksheet.attendanceSession.sessionId });
+      setIsEndModalOpen(false);
+      setNotification({ type: 'success', message: 'Attendance session ended. Students without a record were marked Absent.' });
+      const csIdNum = parseInt(selectedCsId, 10);
+      if (csIdNum > 0) {
+        await loadWorksheet(csIdNum, selectedDate);
+      }
+    } catch (err) {
+      setEndError(err instanceof Error ? err.message : 'Failed to end the attendance session.');
+    } finally {
+      setSubmittingEnd(false);
+    }
+  };
+
   const handleAcquireSessionLocation = () => {
     if (!navigator.geolocation) {
       setSessionError('Location is not available in this browser. Disable geofencing or use a supported device.');
@@ -464,6 +489,10 @@ export const AttendanceMonitoring: React.FC = () => {
       setSessionError('Set the times in order: opening, Present cutoff, then Late cutoff.');
       return;
     }
+    if (!classEndTime || classEndTime < lateCutoff) {
+      setSessionError('Set a class end time at or after the Late cutoff.');
+      return;
+    }
     if (geofenceEnabled && !sessionLocation) {
       setSessionError('Acquire the session location before starting a geofenced session.');
       return;
@@ -479,6 +508,7 @@ export const AttendanceMonitoring: React.FC = () => {
         openingTime,
         presentCutoff,
         lateCutoff,
+        classEndTime,
         biometricRequired,
         geofenceEnabled,
         geofenceRadiusMeters: geofenceEnabled ? geofenceRadius : undefined,
@@ -835,11 +865,24 @@ export const AttendanceMonitoring: React.FC = () => {
                       <Clock className="w-3 h-3 text-blue-500" />
                       <span>
                         Timing (Asia/Manila): Open {worksheet.attendanceSession.openingTime} → Present Cutoff {worksheet.attendanceSession.presentCutoff} → Late Cutoff {worksheet.attendanceSession.lateCutoff || 'Late'}
+                        {worksheet.attendanceSession.classEndTime ? ` → Class ends ${worksheet.attendanceSession.classEndTime}` : ''}
                       </span>
                     </div>
                   )}
                 </div>
 
+                <div className="flex gap-2 self-start sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEndError(null);
+                    setIsEndModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>End Session</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -852,6 +895,7 @@ export const AttendanceMonitoring: React.FC = () => {
                   <Ban className="w-3.5 h-3.5" />
                   <span>Revoke Session</span>
                 </button>
+                </div>
               </div>
             ) : null
           )}
@@ -1055,6 +1099,11 @@ export const AttendanceMonitoring: React.FC = () => {
               <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Present cutoff</span><input type="time" value={presentCutoff} onChange={(event) => setPresentCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
               <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Late cutoff</span><input type="time" value={lateCutoff} onChange={(event) => setLateCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
             </div>
+            <label className="block">
+              <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class end time</span>
+              <input type="time" required aria-label="Class end time" value={classEndTime} onChange={(event) => setClassEndTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
+              <small className="mt-1 block text-slate-400">The session ends automatically at this time; students without a record are marked Absent.</small>
+            </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
@@ -1232,6 +1281,49 @@ export const AttendanceMonitoring: React.FC = () => {
         </Modal>
       )}
 
+      {/* Session End Confirmation */}
+      {isEndModalOpen && worksheet?.attendanceSession && (
+        <Modal
+          isOpen={isEndModalOpen}
+          onClose={() => {
+            setIsEndModalOpen(false);
+            setEndError(null);
+          }}
+          title="End Attendance Session"
+        >
+          <div className="space-y-4 text-xs">
+            {endError && (
+              <div role="alert" className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-medium">
+                {endError}
+              </div>
+            )}
+            <p className="text-slate-700 dark:text-slate-300">
+              End session <span className="font-mono font-bold">{worksheet.attendanceSession.sessionCode}</span> now? Students without an attendance record will be marked Absent. Corrections remain possible afterwards.
+            </p>
+            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEndModalOpen(false);
+                  setEndError(null);
+                }}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submittingEnd}
+                onClick={() => void handleEndSession()}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold disabled:opacity-50 cursor-pointer"
+              >
+                {submittingEnd ? 'Ending…' : 'Confirm End Session'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* 6. Session Revocation Modal */}
       {isRevokeModalOpen && worksheet?.attendanceSession && (
         <Modal
@@ -1255,7 +1347,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <ul className="list-disc list-inside space-y-1 text-[11px]">
                 <li>Revoking immediately closes biometric capture and blocks further student submissions.</li>
                 <li><strong>All attendance already recorded is strictly preserved.</strong></li>
-                <li>Unresolved students remain subject to normal final attendance resolution (not automatically marked Absent).</li>
+                <li>A revoked session is treated as if it never happened: it does not count toward attendance rates or grades, and no student is marked Absent for it.</li>
               </ul>
             </div>
 

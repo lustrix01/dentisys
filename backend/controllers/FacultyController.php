@@ -3348,6 +3348,7 @@ function handle_faculty_grades_compute(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $body = request_body();
         $data = $body['has_body'] ? $body['data'] : [];
         $classRef = $data['classId'] ?? '';
@@ -3784,6 +3785,7 @@ function faculty_attendance_session_payload(?array $session): ?array
         'openingTime' => $session['opening_time'] !== null ? substr((string) $session['opening_time'], 0, 5) : null,
         'presentCutoff' => $session['present_cutoff_time'] !== null ? substr((string) $session['present_cutoff_time'], 0, 5) : null,
         'lateCutoff' => $session['late_cutoff_time'] !== null ? substr((string) $session['late_cutoff_time'], 0, 5) : null,
+        'classEndTime' => isset($session['class_end_time']) ? substr((string) $session['class_end_time'], 0, 5) : null,
         'timingConfigured' => $session['opening_time'] !== null && $session['present_cutoff_time'] !== null && $session['late_cutoff_time'] !== null,
         'revokedAt' => attendance_session_timestamp($session['revoked_at'] ?? null),
         'revocationReason' => $session['revocation_reason'] ?? null,
@@ -3820,6 +3822,7 @@ function handle_faculty_attendance_get(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $query = is_array($_GET ?? null) ? $_GET : [];
         $hasWorksheetQuery = array_key_exists('csId', $query)
             || array_key_exists('date', $query)
@@ -3892,7 +3895,7 @@ function handle_faculty_attendance_get(): void
         $sessionStmt = $pdo->prepare(
             "SELECT session_id, cs_id, session_date, session_code, room, status, started_at, ended_at,
                     geofence_enabled, geofence_radius_meters, biometric_required,
-                    opening_time, present_cutoff_time, late_cutoff_time, revoked_at,
+                    opening_time, present_cutoff_time, late_cutoff_time, class_end_time, revoked_at,
                     revocation_reason
              FROM attendance_sessions
              WHERE cs_id = ? AND session_date = ?
@@ -4034,6 +4037,7 @@ function handle_faculty_attendance_session_create(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $body = request_body();
         if (!$body['has_body']) {
             safe_error_response('Request body required.', 400);
@@ -4066,6 +4070,7 @@ function handle_faculty_attendance_session_create(): void
             return;
         }
         [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
+        $classEndTime = attendance_session_class_end_time_from_request($data, $lateCutoff, $sessionDate, $config);
         $room = array_key_exists('room', $data) && trim((string) $data['room']) !== ''
             ? validate_required_string($data, 'room', 1, 255)
             : null;
@@ -4124,20 +4129,20 @@ function handle_faculty_attendance_session_create(): void
                     cs_id, secretary_user_id, owner_user_id, session_date, session_code, room,
                     started_at, status, geofence_enabled, geofence_latitude, geofence_longitude,
                     geofence_radius_meters, biometric_required, opening_time, present_cutoff_time,
-                    late_cutoff_time, created_at, updated_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    late_cutoff_time, class_end_time, created_at, updated_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  RETURNING session_id"
             );
             $insert->execute([
                 $csId, $secretaryUserId, $authCtx['user_id'], $sessionDate, $sessionCode, $room,
                 $nowSql, $geofenceEnabled ? 1 : 0, $latitude, $longitude, $radius, $biometricRequired ? 1 : 0,
-                $openingTime, $presentCutoff, $lateCutoff, $nowSql, $nowSql,
+                $openingTime, $presentCutoff, $lateCutoff, $classEndTime, $nowSql, $nowSql,
             ]);
             $sessionId = (int) $insert->fetchColumn();
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_started', $sessionId, $csId,
                 "Created attendance session '{$sessionCode}' for class section #{$csId}.", null, null,
-                ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => 'active', 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff]
+                ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => 'active', 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff, 'class_end_time' => $classEndTime]
             );
             $pdo->commit();
         } catch (PDOException $e) {

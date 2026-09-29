@@ -1029,7 +1029,7 @@ function secretary_attendance_session_fetch(
                    s.session_code, s.room, s.started_at, s.ended_at, s.status,
                    s.geofence_enabled, s.geofence_latitude, s.geofence_longitude,
                    s.geofence_radius_meters, s.biometric_required, s.opening_time,
-                   s.present_cutoff_time, s.late_cutoff_time, s.revoked_at,
+                   s.present_cutoff_time, s.late_cutoff_time, s.class_end_time, s.revoked_at,
                    s.revoked_by_user_id, s.revocation_reason, s.created_at,
                    s.updated_at, cs.cs_name, cs.block, c.course_id,
                    c.course_code, c.name AS course_name,
@@ -1088,6 +1088,7 @@ function secretary_attendance_session_map(array $row): array
         'openingTime' => $row['opening_time'] !== null ? substr((string) $row['opening_time'], 0, 5) : null,
         'presentCutoff' => $row['present_cutoff_time'] !== null ? substr((string) $row['present_cutoff_time'], 0, 5) : null,
         'lateCutoff' => $row['late_cutoff_time'] !== null ? substr((string) $row['late_cutoff_time'], 0, 5) : null,
+        'classEndTime' => isset($row['class_end_time']) ? substr((string) $row['class_end_time'], 0, 5) : null,
         'timingConfigured' => $row['opening_time'] !== null && $row['present_cutoff_time'] !== null && $row['late_cutoff_time'] !== null,
         'revokedAt' => secretary_attendance_session_timestamp($row['revoked_at'] !== null ? (string) $row['revoked_at'] : null),
         'revocationReason' => $row['revocation_reason'] ?? null,
@@ -1110,6 +1111,7 @@ function handle_secretary_attendance_session_start(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $body = request_body();
         if (!$body['has_body']) {
             safe_error_response('Request body required.', 400);
@@ -1129,6 +1131,7 @@ function handle_secretary_attendance_session_start(): void
             $room = validate_required_string($data, 'room', 1, 255);
         }
         [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
+        $classEndTime = attendance_session_class_end_time_from_request($data, $lateCutoff, $sessionDate, $config);
 
         $biometricRequired = secretary_attendance_session_bool(
             $data,
@@ -1218,9 +1221,9 @@ function handle_secretary_attendance_session_start(): void
                     cs_id, secretary_user_id, owner_user_id, session_date, session_code, room,
                     started_at, status, geofence_enabled, geofence_latitude,
                     geofence_longitude, geofence_radius_meters, biometric_required,
-                    opening_time, present_cutoff_time, late_cutoff_time,
+                    opening_time, present_cutoff_time, late_cutoff_time, class_end_time,
                     created_at, updated_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  RETURNING session_id"
             );
             $insert->execute([
@@ -1239,6 +1242,7 @@ function handle_secretary_attendance_session_start(): void
                 $openingTime,
                 $presentCutoff,
                 $lateCutoff,
+                $classEndTime,
                 $nowSql,
                 $nowSql,
             ]);
@@ -1315,6 +1319,7 @@ function handle_secretary_attendance_session_active(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
 
         $requestedCsId = null;
         if (isset($_GET['csId']) && $_GET['csId'] !== '') {
@@ -1571,6 +1576,7 @@ function handle_secretary_attendance_get(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
 
         $rawDate = $_GET['date'] ?? null;
         $date = null;

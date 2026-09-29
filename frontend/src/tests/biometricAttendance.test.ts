@@ -426,6 +426,7 @@ test('Session Timing: Asia/Manila cutoffs and strict ordering validation (openin
     openingTime: '08:00',
     presentCutoff: '08:30',
     lateCutoff: '12:00',
+    classEndTime: '13:00',
     room: 'Dental Lab 2',
     biometricRequired: true,
     geofenceEnabled: true,
@@ -446,6 +447,7 @@ test('Secretary Session Start: biometric-required sessions must submit openingTi
     openingTimeStr: string;
     presentCutoffStr: string;
     lateCutoffStr: string;
+    classEndTimeStr?: string;
     gpsLocation?: { lat: number; lng: number };
   }): StartSecretaryAttendanceSessionPayload => {
     return {
@@ -457,6 +459,7 @@ test('Secretary Session Start: biometric-required sessions must submit openingTi
       openingTime: params.openingTimeStr,
       presentCutoff: params.presentCutoffStr,
       lateCutoff: params.lateCutoffStr,
+      classEndTime: params.classEndTimeStr ?? '13:00',
       geofenceLatitude: params.gpsLocation?.lat,
       geofenceLongitude: params.gpsLocation?.lng,
       latitude: params.gpsLocation?.lat,

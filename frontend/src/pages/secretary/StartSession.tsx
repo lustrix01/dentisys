@@ -56,6 +56,7 @@ export const StartSession: React.FC = () => {
   const [openingTimeStr, setOpeningTimeStr] = useState('08:00');
   const [presentCutoffStr, setPresentCutoffStr] = useState('08:30');
   const [lateCutoffStr, setLateCutoffStr] = useState('12:00');
+  const [classEndTimeStr, setClassEndTimeStr] = useState('13:00');
   const [requireFace, setRequireFace] = useState(true);
   const [requireGeo, setRequireGeo] = useState(true);
   // Same default as the server and the Faculty form (100 m).
@@ -249,6 +250,14 @@ export const StartSession: React.FC = () => {
       return;
     }
 
+    if (!classEndTimeStr || classEndTimeStr < lateCutoffStr) {
+      setNotification({
+        type: 'warning',
+        message: 'Invalid timing: Class end time must be at or after the Late cutoff (Asia/Manila).',
+      });
+      return;
+    }
+
     setSubmitting(true);
     setNotification(null);
 
@@ -262,6 +271,7 @@ export const StartSession: React.FC = () => {
         openingTime: openingTimeStr,
         presentCutoff: presentCutoffStr,
         lateCutoff: lateCutoffStr,
+        classEndTime: classEndTimeStr,
         ...(requireGeo && gpsLocation
           ? {
               geofenceLatitude: gpsLocation.lat,
@@ -521,7 +531,7 @@ export const StartSession: React.FC = () => {
                   </span>
                   {activeSession.openingTime && activeSession.presentCutoff && (
                     <span className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-xl font-mono text-[11px]">
-                      {activeSession.openingTime} (Open) → {activeSession.presentCutoff} (Present) → {activeSession.lateCutoff || 'Late'} (Late) Asia/Manila
+                      {activeSession.openingTime} (Open) → {activeSession.presentCutoff} (Present) → {activeSession.lateCutoff || 'Late'} (Late){activeSession.classEndTime ? ` → ${activeSession.classEndTime} (Class ends)` : ''} Asia/Manila
                     </span>
                   )}
                   {activeSession.instructorName && (
@@ -849,6 +859,21 @@ export const StartSession: React.FC = () => {
                     />
                     <span className="text-[10px] text-slate-400 block">Capture closes</span>
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="secretary-class-end-time" className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                    Class End Time
+                  </label>
+                  <input
+                    id="secretary-class-end-time"
+                    type="time"
+                    value={classEndTimeStr}
+                    onChange={(e) => setClassEndTimeStr(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span className="text-[10px] text-slate-400 block">The session ends automatically at this time; students without a record are marked Absent.</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">

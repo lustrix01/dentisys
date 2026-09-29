@@ -661,6 +661,42 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.locator('div').filter({ hasText: /^Recorded/ }).getByText('1', { exact: true })).toBeVisible();
   });
 
+  test('worksheet: Faculty can end an active session after confirming', async ({ page }) => {
+    let ended = false;
+    let endPayload: Record<string, unknown> | null = null;
+    const activeSession = {
+      sessionId: '900', classId: '1', sessionDate: '2026-09-20', sessionCode: 'CS1-END-TEST', room: null,
+      status: 'active', openingTime: '08:00', presentCutoff: '09:00', lateCutoff: '10:00', classEndTime: '12:00',
+      timingConfigured: true, geofenceEnabled: false, biometricRequired: false, revokedAt: null, revocationReason: null,
+    };
+    await page.route('**/api/faculty/attendance?*csId=1*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          worksheet: { ...mockWorksheetSectionA, attendanceSession: ended ? { ...activeSession, status: 'ended' } : activeSession },
+        }),
+      });
+    });
+    await page.route('**/api/faculty/attendance/session/end', async (route) => {
+      endPayload = route.request().postDataJSON() as Record<string, unknown>;
+      ended = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...activeSession, status: 'ended' } }) });
+    });
+
+    await page.goto('/attendance');
+    await page.locator('select').first().selectOption('101');
+    await page.locator('select').nth(1).selectOption('1');
+    await expect(page.getByText(/Class ends 12:00/)).toBeVisible();
+    await page.getByRole('button', { name: 'End Session' }).click();
+    await expect(page.getByText(/Students without an attendance record will be marked Absent/)).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm End Session' }).click();
+    await expect.poll(() => endPayload).toEqual({ sessionId: '900' });
+    await expect(page.getByText(/Attendance session ended/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'End Session' })).toHaveCount(0);
+  });
+
   test('worksheet: API failure renders error and retry button without injecting mock data', async ({ page }) => {
     await page.route('**/api/faculty/attendance?*csId=1*', async (route) => {
       await route.fulfill({

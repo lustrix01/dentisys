@@ -1030,6 +1030,7 @@ export interface FacultyAttendanceWorksheet {
     openingTime?: string | null;
     presentCutoff?: string | null;
     lateCutoff?: string | null;
+    classEndTime?: string | null;
     timingConfigured?: boolean;
     revokedAt?: string | null;
     revocationReason?: string | null;
@@ -1112,6 +1113,7 @@ export function createFacultyAttendanceSessionApi(data: {
   openingTime?: string;
   presentCutoff?: string;
   lateCutoff?: string;
+  classEndTime: string;
   biometricRequired?: boolean;
   geofenceEnabled?: boolean;
   geofenceRadiusMeters?: number;
@@ -1119,6 +1121,12 @@ export function createFacultyAttendanceSessionApi(data: {
   geofenceLongitude?: number;
 }): Promise<{ status: string; message?: string; sessionCode?: string; createdCount?: number; session?: Record<string, unknown> }> {
   return request('POST', '/faculty/attendance/session', data);
+}
+
+export function endFacultyAttendanceSessionApi(data: {
+  sessionId: string | number;
+}): Promise<{ status: string; session: Record<string, unknown> }> {
+  return request('POST', '/faculty/attendance/session/end', data);
 }
 
 export function updateFacultyRetentionStatusApi(data: {
@@ -1373,6 +1381,7 @@ export interface SecretaryAttendanceSession {
   openingTime?: string | null;
   presentCutoff?: string | null;
   lateCutoff?: string | null;
+  classEndTime?: string | null;
   timingConfigured?: boolean;
   geofenceEnabled: boolean;
   geofenceLatitude?: number | null;
@@ -1400,6 +1409,7 @@ export interface StartSecretaryAttendanceSessionPayload {
   openingTime?: string;
   presentCutoff?: string;
   lateCutoff?: string;
+  classEndTime: string;
 }
 
 export function startSecretaryAttendanceSessionApi(
