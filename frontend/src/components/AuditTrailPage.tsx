@@ -17,11 +17,18 @@ const statusClass: Record<AuditStatus, string> = {
   Failed: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400',
 };
 
-function localDateKey(timestamp: string): string {
+// Audit dates are Asia/Manila calendar days, the same as the server filter.
+const manilaDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' });
+function manilaDateKey(timestamp: string): string {
   const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) return timestamp.slice(0, 10);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+  return Number.isNaN(parsed.getTime()) ? timestamp.slice(0, 10) : manilaDateFormatter.format(parsed);
+}
+
+const ADMIN_PAGE_SIZE = 50;
+
+function formatState(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 }
 
 export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs = false, accent }) => {
@@ -37,17 +44,23 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
   const [dbLogs, setDbLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // Dean view: the server filters, sorts and pages.
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<Record<string, number> | null>(null);
+  const [serverModules, setServerModules] = useState<string[]>([]);
 
   const fetchLogs = () => {
     setLoading(true);
     setError('');
 
     if (role === 'admin') {
-      getAdminAuditLogsApi({ query, role: roleFilter, module: moduleFilter, status: statusFilter, date })
+      getAdminAuditLogsApi({ query, role: roleFilter, module: moduleFilter, status: statusFilter, date, sort, page, pageSize: ADMIN_PAGE_SIZE })
         .then((data) => {
-          if (Array.isArray(data)) {
-            setDbLogs(data as AuditLog[]);
-          }
+          setDbLogs(Array.isArray(data?.logs) ? data.logs : []);
+          setTotal(typeof data?.total === 'number' ? data.total : 0);
+          setStatusCounts(data?.statusCounts ?? null);
+          setServerModules(Array.isArray(data?.modules) ? data.modules : []);
         })
         .catch((err) => {
           setError(err instanceof Error ? err.message : 'Failed to retrieve audit trail records.');
@@ -107,30 +120,41 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
   };
 
   useEffect(() => {
+    setPage(1);
+  }, [query, roleFilter, moduleFilter, statusFilter, date, sort]);
+
+  useEffect(() => {
     fetchLogs();
-  }, [query, roleFilter, moduleFilter, statusFilter, date]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, roleFilter, moduleFilter, statusFilter, date, sort, page]);
+
+  const isServerFiltered = role === 'admin';
 
   // Faculty activity includes authorized class-scoped events from other
   // actors, so only Admin and Secretary views apply an actor-role projection.
   const logs = allLogs || role === 'faculty' ? dbLogs : dbLogs.filter(log => log.userRole === role);
-  const modules = Array.from(new Set(logs.map(log => log.module))).sort();
+  const modules = isServerFiltered ? serverModules : Array.from(new Set(logs.map(log => log.module))).sort();
 
-  const filtered = useMemo(() => logs.filter(log =>
+  // The Dean view is already filtered and sorted by the server; the Faculty
+  // and Secretary activity views filter their own rows.
+  const filtered = useMemo(() => isServerFiltered ? logs : logs.filter(log =>
     (!query || `${log.userName} ${log.action} ${log.description}`.toLowerCase().includes(query.toLowerCase())) &&
     (roleFilter === 'all' || log.userRole === roleFilter) &&
     (moduleFilter === 'all' || log.module === moduleFilter) &&
     (statusFilter === 'all' || log.status === statusFilter) &&
-    (!date || localDateKey(log.timestamp) === date)
+    (!date || manilaDateKey(log.timestamp) === date)
   ).sort((a, b) => sort === 'newest' ? b.timestamp.localeCompare(a.timestamp) : a.timestamp.localeCompare(b.timestamp)),
-  [logs, query, roleFilter, moduleFilter, statusFilter, date, sort]);
+  [isServerFiltered, logs, query, roleFilter, moduleFilter, statusFilter, date, sort]);
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
 
   const exportCsv = () => {
     const rows = [
       role === 'admin'
-        ? ['Timestamp', 'User', 'Role', 'Action', 'Module', 'Description', 'Status', 'IP Address', 'Device']
+        ? ['Timestamp', 'Name', 'Email', 'Role', 'Action', 'Module', 'Target', 'Description', 'Reason', 'Status', 'IP Address', 'Device']
         : ['Timestamp', 'User', 'Role', 'Action', 'Module', 'Description', 'Status'],
       ...filtered.map(log => role === 'admin'
-        ? [log.timestamp, log.userName, log.userRole, log.action, log.module, log.description, log.status, log.ipAddress, log.device]
+        ? [log.timestamp, log.userDisplayName ?? '', log.userEmail ?? log.userName, log.userRole, log.action, log.module,
+          log.targetType ? `${log.targetType} #${log.targetId ?? ''}` : '', log.description, log.reason ?? '', log.status, log.ipAddress ?? '', log.device ?? '']
         : [log.timestamp, log.userName, log.userRole, log.action, log.module, log.description, log.status])
     ];
     const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
@@ -142,10 +166,10 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
   };
 
   const cards = [
-    { label: 'Success', count: logs.filter(log => log.status === 'Success').length, icon: CheckCircle2, iconClass: theme.icon, surface: theme.surface },
-    { label: 'Warning', count: logs.filter(log => log.status === 'Warning').length, icon: AlertTriangle, iconClass: 'text-amber-500', surface: 'border-amber-200/60 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/15' },
-    { label: 'Failed', count: logs.filter(log => log.status === 'Failed').length, icon: XCircle, iconClass: 'text-rose-500', surface: 'border-rose-200/60 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/15' },
-    { label: 'All activity', count: logs.length, icon: Activity, iconClass: theme.icon, surface: theme.surface },
+    { label: 'Success', count: statusCounts?.Success ?? logs.filter(log => log.status === 'Success').length, icon: CheckCircle2, iconClass: theme.icon, surface: theme.surface },
+    { label: 'Warning', count: statusCounts?.Warning ?? logs.filter(log => log.status === 'Warning').length, icon: AlertTriangle, iconClass: 'text-amber-500', surface: 'border-amber-200/60 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/15' },
+    { label: 'Failed', count: statusCounts?.Failed ?? logs.filter(log => log.status === 'Failed').length, icon: XCircle, iconClass: 'text-rose-500', surface: 'border-rose-200/60 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/15' },
+    { label: 'All activity', count: isServerFiltered ? total : logs.length, icon: Activity, iconClass: theme.icon, surface: theme.surface },
   ];
 
   return (
@@ -219,7 +243,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
               <SlidersHorizontal className="w-3.5 h-3.5" />
               {sort === 'newest' ? 'Newest first' : 'Oldest first'}
             </button>
-            <span className="ml-auto text-[10px] text-slate-400 font-semibold">{filtered.length} logs</span>
+            <span className="ml-auto text-[10px] text-slate-400 font-semibold">{isServerFiltered ? `${total} logs` : `${filtered.length} logs`}</span>
           </div>
         </CardContent>
       </Card>
@@ -254,7 +278,8 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
                   <tr key={log.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/30">
                     <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{new Date(log.timestamp).toLocaleString()}</td>
                     <td className="px-5 py-3">
-                      <p className="font-bold text-slate-800 dark:text-slate-200">{log.userName}</p>
+                      <p className="font-bold text-slate-800 dark:text-slate-200">{log.userDisplayName || log.userName}</p>
+                      {log.userDisplayName && log.userEmail && <p className="text-[10px] text-slate-400">{log.userEmail}</p>}
                       <p className="text-[10px] text-slate-400 capitalize">{log.userRole}</p>
                     </td>
                     <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-300">{log.action}</td>
@@ -284,21 +309,51 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
         </CardContent>
       </Card>
 
+      {isServerFiltered && total > ADMIN_PAGE_SIZE && (
+        <div className="flex items-center justify-between text-xs no-print">
+          <span className="text-slate-400">
+            Showing {(page - 1) * ADMIN_PAGE_SIZE + 1}–{Math.min(page * ADMIN_PAGE_SIZE, total)} of {total}
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page === 1 || loading}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 font-bold disabled:opacity-40">Previous</button>
+            <span className="font-bold text-slate-700 dark:text-slate-200">Page {page} of {totalPages}</span>
+            <button type="button" onClick={() => setPage(current => Math.min(totalPages, current + 1))} disabled={page >= totalPages || loading}
+              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 font-bold disabled:opacity-40">Next</button>
+          </div>
+        </div>
+      )}
+
       <Modal isOpen={Boolean(selected)} onClose={() => setSelected(null)} title="Audit log details">
         <div className="grid grid-cols-2 gap-4 text-xs">
           {selected && Object.entries({
             Timestamp: new Date(selected.timestamp).toLocaleString(),
-            User: selected.userName,
+            ...(role === 'admin'
+              ? { Name: selected.userDisplayName || '—', Email: selected.userEmail || selected.userName }
+              : { User: selected.userName }),
             Role: selected.userRole,
             Action: selected.action,
             Module: selected.module,
             Status: selected.status,
-            ...(role === 'admin' ? { 'IP address': selected.ipAddress, Device: selected.device } : {}),
+            ...(role === 'admin' ? {
+              Target: selected.targetType ? `${selected.targetType} #${selected.targetId ?? ''}` : '—',
+              'IP address': selected.ipAddress || '—',
+              Device: selected.device || '—',
+            } : {}),
             Description: selected.description,
+            ...(role === 'admin' ? { Reason: selected.reason || '—' } : {}),
           }).map(([label, value]) => (
-            <div key={label} className={label === 'Description' || label === 'Device' ? 'col-span-2' : ''}>
+            <div key={label} className={label === 'Description' || label === 'Device' || label === 'Reason' ? 'col-span-2' : ''}>
               <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">{label}</p>
               <p className="mt-1 font-medium text-slate-700 dark:text-slate-300 break-words">{value}</p>
+            </div>
+          ))}
+          {selected && role === 'admin' && (['Before', 'After'] as const).map(label => (
+            <div key={label} className="col-span-2">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">{label}</p>
+              <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-50 dark:bg-slate-900 p-2 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words">
+                {formatState(label === 'Before' ? selected.beforeState : selected.afterState)}
+              </pre>
             </div>
           ))}
         </div>

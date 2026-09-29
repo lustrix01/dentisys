@@ -10,8 +10,17 @@ export interface AuditLog {
   module: string;
   description: string;
   status: AuditStatus;
-  ipAddress: string;
-  device: string;
+  /** Null when the event recorded no request details. */
+  ipAddress: string | null;
+  device: string | null;
+  /** Dean audit trail only: identity as recorded at the time, and the change. */
+  userEmail?: string | null;
+  userDisplayName?: string | null;
+  targetType?: string | null;
+  targetId?: string | null;
+  reason?: string | null;
+  beforeState?: unknown;
+  afterState?: unknown;
 }
 
 type AuditInput = Omit<

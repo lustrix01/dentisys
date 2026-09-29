@@ -5896,6 +5896,32 @@ $mfaRevokeAuditStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE act
 $mfaRevokeAuditStmt->execute([(string) $revokeMfaFixture['user_id']]);
 expect_same(1, (int) $mfaRevokeAuditStmt->fetchColumn(), 'Disabling authenticator 2FA is audited');
 
+// Dean audit trail: server-side filters and paging, with target, reason and
+// the display name recorded at the time.
+[$auditTrailStatus, $auditTrailBody] = integration_http_get_json('/api/admin/audit-logs?module=mfa&query=' . rawurlencode('mfa-revoke-') . '&pageSize=10', $adminAccessToken);
+expect_same(200, $auditTrailStatus, 'Dean audit trail loads');
+$auditTrailRevoke = null;
+foreach ($auditTrailBody['logs'] ?? [] as $auditTrailRow) {
+    if (($auditTrailRow['action'] ?? null) === 'mfa_revoked' && ($auditTrailRow['targetId'] ?? null) === (string) $revokeMfaFixture['user_id']) {
+        $auditTrailRevoke = $auditTrailRow;
+    }
+}
+expect_true(is_array($auditTrailRevoke), 'Dean audit trail returns the MFA revoke event');
+expect_same('user_account', $auditTrailRevoke['targetType'] ?? null, 'Audit trail rows include the target type');
+expect_same('Revoked by account owner', $auditTrailRevoke['reason'] ?? null, 'Audit trail rows include the reason');
+expect_same('Google MFA Integration User', $auditTrailRevoke['userDisplayName'] ?? null, 'Audit trail rows include the display name recorded at the time');
+expect_true(str_starts_with((string) ($auditTrailRevoke['userEmail'] ?? ''), 'mfa-revoke-'), 'Audit trail rows include the actor email');
+expect_true(in_array('mfa', $auditTrailBody['modules'] ?? [], true) && in_array('auth', $auditTrailBody['modules'] ?? [], true), 'Audit trail module list is not narrowed by the module filter');
+[$auditPageOneStatus, $auditPageOne] = integration_http_get_json('/api/admin/audit-logs?pageSize=2&page=1', $adminAccessToken);
+[$auditPageTwoStatus, $auditPageTwo] = integration_http_get_json('/api/admin/audit-logs?pageSize=2&page=2', $adminAccessToken);
+expect_same([200, 200], [$auditPageOneStatus, $auditPageTwoStatus], 'Audit trail pages load');
+expect_same(2, count($auditPageOne['logs'] ?? []), 'Audit trail honours the page size');
+$auditTrailDbTotal = (int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE action_code <> 'refresh_rotation'")->fetchColumn();
+expect_same($auditTrailDbTotal, (int) ($auditPageOne['total'] ?? -1), 'Audit trail total counts every event, not a capped page');
+expect_true(($auditPageOne['logs'][0]['id'] ?? null) !== ($auditPageTwo['logs'][0]['id'] ?? null), 'Audit trail page 2 returns different rows');
+[$auditBadDateStatus] = integration_http_get_json('/api/admin/audit-logs?date=yesterday', $adminAccessToken);
+expect_same(422, $auditBadDateStatus, 'Audit trail rejects a malformed date');
+
 $auditDeleteAssessmentStmt = $pdo->prepare(
     "INSERT INTO assessments (cs_id, title, type, grading_period, max_score, weight, status)
      VALUES (?, 'Audit Delete Fixture', 'Quiz', 'Midterm', 10, 1, 'Active')

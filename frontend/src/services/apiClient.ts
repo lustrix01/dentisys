@@ -669,26 +669,26 @@ export function saveRetentionCriteriaApi(criteria: any[]): Promise<{ status: str
   return request('POST', '/admin/retention/criteria', criteria);
 }
 
-export function getAdminAuditLogsApi(params?: { query?: string; role?: string; module?: string; status?: string; date?: string }): Promise<Array<{
-  id: string;
-  timestamp: string;
-  userName: string;
-  userRole: string;
-  action: string;
-  module: string;
-  description: string;
-  status: 'Success' | 'Warning' | 'Failed';
-  ipAddress: string;
-  device: string;
-}>> {
-  const queryParts: string[] = [];
-  if (params?.query) queryParts.push(`query=${encodeURIComponent(params.query)}`);
-  if (params?.role) queryParts.push(`role=${encodeURIComponent(params.role)}`);
-  if (params?.module) queryParts.push(`module=${encodeURIComponent(params.module)}`);
-  if (params?.status) queryParts.push(`status=${encodeURIComponent(params.status)}`);
-  if (params?.date) queryParts.push(`date=${encodeURIComponent(params.date)}`);
-  const qs = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
-  return request('GET', `/admin/audit-logs${qs}`);
+export interface AdminAuditLogPage {
+  status: string;
+  logs: import('./auditService').AuditLog[];
+  total: number;
+  page: number;
+  pageSize: number;
+  statusCounts: Record<'Success' | 'Warning' | 'Failed', number>;
+  modules: string[];
+}
+
+export function getAdminAuditLogsApi(params?: {
+  query?: string; role?: string; module?: string; status?: string; date?: string;
+  sort?: 'newest' | 'oldest'; page?: number; pageSize?: number;
+}): Promise<AdminAuditLogPage> {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return request('GET', `/admin/audit-logs${qs ? `?${qs}` : ''}`);
 }
 
 export interface FacultyActivityRecord {

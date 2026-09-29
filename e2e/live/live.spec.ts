@@ -129,8 +129,9 @@ test('administrator login, auth/me, reload refresh, settings, and logout invalid
   });
   const auditPayload = await jsonResponse(audit);
   // Owner decision 2026-09-27 (D5): token-rotation events are stored but hidden from the audit trail.
-  expect(Array.isArray(auditPayload)).toBeTruthy();
-  expect(auditPayload.some((event: { action?: string }) => event.action === 'refresh_rotation')).toBeFalsy();
+  // The audit trail is paged: { logs, total, page, pageSize, statusCounts, modules }.
+  expect(Array.isArray(auditPayload.logs)).toBeTruthy();
+  expect(auditPayload.logs.some((event: { action?: string }) => event.action === 'refresh_rotation')).toBeFalsy();
 
   // Stop the mounted application before logging out; otherwise a background
   // UI request (notifications, session refresh) racing the logout reports

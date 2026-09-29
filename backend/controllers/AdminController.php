@@ -348,81 +348,113 @@ function handle_admin_audit_logs(): void
             return;
         }
 
-        $query = $_GET['query'] ?? '';
-        $role = $_GET['role'] ?? 'all';
-        $module = $_GET['module'] ?? 'all';
-        $status = $_GET['status'] ?? 'all';
-        $date = $_GET['date'] ?? '';
-
-        $sql = "SELECT event_id AS id, event_uuid, occurred_at AS timestamp, actor_username AS \"userName\", actor_role AS \"userRole\", action_code AS action, module_code AS module, description, event_status AS status, ip_address AS \"ipAddress\", user_agent AS device
-                FROM audit_events WHERE action_code <> 'refresh_rotation'";
-        $params = [];
-
-        // Scoping for non-admin users (faculty/secretary)
-        if ($authCtx['role'] !== 'admin') {
-            $sql .= " AND (
-                actor_user_id = ?
-                OR (
-                    canonical_schema_version >= 2
-                    AND scope_cs_id IS NOT NULL
-                    AND EXISTS (
-                        SELECT 1 FROM class_sections cs
-                         WHERE cs.cs_id = audit_events.scope_cs_id
-                           AND (cs.instructor_user_id = ? OR cs.secretary_user_id = ?)
-                    )
-                )
-            )";
-            $params[] = $authCtx['user_id'];
-            $params[] = $authCtx['user_id'];
-            $params[] = $authCtx['user_id'];
+        $query = trim((string) ($_GET['query'] ?? ''));
+        $role = (string) ($_GET['role'] ?? 'all');
+        $module = (string) ($_GET['module'] ?? 'all');
+        $status = (string) ($_GET['status'] ?? 'all');
+        $date = trim((string) ($_GET['date'] ?? ''));
+        $sortDirection = ($_GET['sort'] ?? 'newest') === 'oldest' ? 'ASC' : 'DESC';
+        $pageSize = max(1, min(200, (int) ($_GET['pageSize'] ?? 50)));
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        if ($date !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
+            throw new ValidationException([['field' => 'date', 'message' => 'Date must be YYYY-MM-DD.']]);
         }
 
+        // Filters are applied here only; the date is the Asia/Manila calendar day.
+        $where = ["action_code <> 'refresh_rotation'"];
+        $params = [];
         if ($role !== 'all') {
-            $sql .= " AND actor_role = ?";
+            $where[] = 'actor_role = ?';
             $params[] = $role;
         }
         if ($module !== 'all') {
-            $sql .= " AND module_code = ?";
+            $where[] = 'module_code = ?';
             $params[] = $module;
         }
-        if ($status !== 'all') {
-            $sql .= " AND event_status = ?";
-            $params[] = $status;
-        }
         if ($date !== '') {
-            $sql .= " AND DATE((occurred_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Manila') = ?";
+            $where[] = "DATE((occurred_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Manila') = ?";
             $params[] = $date;
         }
         if ($query !== '') {
-            $sql .= " AND (actor_username ILIKE ? OR action_code ILIKE ? OR description ILIKE ?)";
-            $params[] = "%{$query}%";
-            $params[] = "%{$query}%";
-            $params[] = "%{$query}%";
+            $where[] = '(actor_username ILIKE ? OR actor_display_name ILIKE ? OR action_code ILIKE ? OR description ILIKE ?)';
+            array_push($params, "%{$query}%", "%{$query}%", "%{$query}%", "%{$query}%");
         }
+        // Status counts ignore the status filter, so every card stays meaningful.
+        $countStmt = $pdo->prepare(
+            'SELECT event_status, COUNT(*) FROM audit_events WHERE ' . implode(' AND ', $where) . ' GROUP BY event_status'
+        );
+        $countStmt->execute($params);
+        $statusCounts = ['Success' => 0, 'Warning' => 0, 'Failed' => 0];
+        foreach ($countStmt->fetchAll(PDO::FETCH_KEY_PAIR) as $countStatus => $count) {
+            $statusCounts[(string) $countStatus] = (int) $count;
+        }
+        if ($status !== 'all') {
+            $where[] = 'event_status = ?';
+            $params[] = $status;
+        }
+        $whereSql = implode(' AND ', $where);
+        $totalStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE {$whereSql}");
+        $totalStmt->execute($params);
+        $total = (int) $totalStmt->fetchColumn();
 
-        $sql .= " ORDER BY occurred_at DESC LIMIT 200";
-
-        $stmt = $pdo->prepare($sql);
+        $stmt = $pdo->prepare(
+            "SELECT event_id, occurred_at, actor_username, actor_display_name, actor_role, action_code,
+                    module_code, description, event_status, ip_address, user_agent, target_type,
+                    target_id, reason, before_state_json, after_state_json
+               FROM audit_events
+              WHERE {$whereSql}
+              ORDER BY occurred_at {$sortDirection}, sequence_number {$sortDirection}
+              LIMIT {$pageSize} OFFSET " . (($page - 1) * $pageSize)
+        );
         $stmt->execute($params);
         $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Normalize data for frontend AuditLog format
-        $normalized = array_map(function ($l) {
-            return [
-                'id' => (string) $l['id'],
-                'timestamp' => attendance_session_timestamp($l['timestamp']),
-                'userName' => $l['userName'] ?? 'System',
-                'userRole' => $l['userRole'] ?? 'system',
-                'action' => $l['action'] ?? 'Operation',
-                'module' => $l['module'] ?? 'System',
-                'description' => $l['description'] ?? '',
-                'status' => $l['status'] ?? 'Success',
-                'ipAddress' => $l['ipAddress'] ?? '127.0.0.1',
-                'device' => $l['device'] ?? 'Browser',
-            ];
-        }, $logs);
+        // The module list comes from all events, so it does not shrink as filters change.
+        $modules = $pdo->query(
+            "SELECT DISTINCT module_code FROM audit_events
+              WHERE action_code <> 'refresh_rotation' AND module_code IS NOT NULL
+              ORDER BY module_code"
+        )->fetchAll(PDO::FETCH_COLUMN);
 
-        json_response($normalized, 200);
+        $decodeState = static function (mixed $json): mixed {
+            if ($json === null || $json === '') {
+                return null;
+            }
+            $decoded = json_decode((string) $json, true);
+            return $decoded ?? (string) $json;
+        };
+        // Missing request details stay null; nothing is filled in.
+        $normalized = array_map(static fn(array $l): array => [
+            'id' => (string) $l['event_id'],
+            'timestamp' => attendance_session_timestamp($l['occurred_at']),
+            'userName' => $l['actor_username'] ?? 'System',
+            'userEmail' => $l['actor_username'],
+            'userDisplayName' => $l['actor_display_name'],
+            'userRole' => $l['actor_role'] ?? 'system',
+            'action' => $l['action_code'] ?? 'Operation',
+            'module' => $l['module_code'] ?? 'System',
+            'description' => $l['description'] ?? '',
+            'status' => $l['event_status'] ?? 'Success',
+            'ipAddress' => $l['ip_address'],
+            'device' => $l['user_agent'],
+            'targetType' => $l['target_type'],
+            'targetId' => $l['target_id'],
+            'reason' => $l['reason'],
+            'beforeState' => $decodeState($l['before_state_json']),
+            'afterState' => $decodeState($l['after_state_json']),
+        ], $logs);
+
+        json_response([
+            'status' => 'ok',
+            'logs' => $normalized,
+            'total' => $total,
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'statusCounts' => $statusCounts,
+            'modules' => $modules,
+        ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Admin audit logs error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);

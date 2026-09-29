@@ -457,7 +457,14 @@ test.describe('P03 Student identity and authentication', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(role === 'student' ? [studentEvent] : [studentEvent, facultyEvent]),
+        body: JSON.stringify((() => {
+          const logs = role === 'student' ? [studentEvent] : [studentEvent, facultyEvent];
+          return {
+            status: 'ok', logs, total: logs.length, page: 1, pageSize: 50,
+            statusCounts: { Success: logs.filter(log => log.status === 'Success').length, Warning: 0, Failed: logs.filter(log => log.status === 'Failed').length },
+            modules: ['auth', 'profile'],
+          };
+        })()),
       });
     });
     await page.goto('/admin/audit-trail');
