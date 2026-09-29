@@ -25,6 +25,7 @@ const PRINT_STYLES = `
 }`;
 
 import { getAdminReportsSummaryApi, getAdminSettingsApi } from '../../services/apiClient';
+import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 
 export const DeanReports: React.FC = () => {
   const [retentionThreshold, setRetentionThreshold] = useState(2.5);
@@ -32,18 +33,19 @@ export const DeanReports: React.FC = () => {
   const [error, setError] = useState('');
   const [dbStudents, setDbStudents] = useState<any[]>([]);
   const [dbAttendance, setDbAttendance] = useState<any[]>([]);
+  const [schoolYear, setSchoolYear] = useState('current');
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<string | null>(null);
+  const [availableSchoolYears, setAvailableSchoolYears] = useState<string[]>([]);
 
   const fetchReportData = () => {
     setLoading(true);
     setError('');
-    getAdminReportsSummaryApi()
+    getAdminReportsSummaryApi(schoolYear)
       .then((res) => {
-        if (res.reports?.students) {
-          setDbStudents(res.reports.students);
-        }
-        if (res.reports?.attendance) {
-          setDbAttendance(res.reports.attendance);
-        }
+        setDbStudents(res.reports?.students ?? []);
+        setDbAttendance(res.reports?.attendance ?? []);
+        setCurrentSchoolYear(res.currentSchoolYear ?? null);
+        setAvailableSchoolYears(res.availableSchoolYears ?? []);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to fetch report summary from server.');
@@ -53,7 +55,8 @@ export const DeanReports: React.FC = () => {
 
   React.useEffect(() => {
     fetchReportData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schoolYear]);
 
   React.useEffect(() => {
     getAdminSettingsApi()
@@ -168,6 +171,7 @@ export const DeanReports: React.FC = () => {
       warning: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400',
       critical: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400',
       remedial: 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400',
+      cleared: 'bg-sky-50 text-sky-700 dark:bg-sky-950/30 dark:text-sky-400',
     };
     return (
       <span className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${map[status] || 'bg-slate-100 text-slate-500'}`}>
@@ -270,7 +274,14 @@ export const DeanReports: React.FC = () => {
             <option value="warning">Warning</option>
             <option value="critical">Critical</option>
             <option value="remedial">Remedial</option>
+            <option value="cleared">Cleared</option>
           </select>
+          <SchoolYearFilter
+            value={schoolYear}
+            currentSchoolYear={currentSchoolYear}
+            availableSchoolYears={availableSchoolYears}
+            onChange={value => { setSchoolYear(value); setClassFilter('all'); }}
+          />
           <span className="text-[10px] text-slate-400 font-semibold ml-auto">{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
         </div>
       </Card>
@@ -422,12 +433,13 @@ export const DeanReports: React.FC = () => {
         {activeTab === 'retention' && (
           <div className="space-y-4">
             {/* Summary row */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 no-print">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 no-print">
               {[
                 { label: 'Good Standing', val: filtered.filter((s: any) => s.status === 'active').length, color: 'text-emerald-600' },
                 { label: 'Warning', val: filtered.filter((s: any) => s.status === 'warning').length, color: 'text-amber-600' },
                 { label: 'Critical', val: filtered.filter((s: any) => s.status === 'critical').length, color: 'text-rose-600' },
                 { label: 'Remedial', val: filtered.filter((s: any) => s.status === 'remedial').length, color: 'text-violet-600' },
+                { label: 'Cleared', val: filtered.filter((s: any) => s.status === 'cleared').length, color: 'text-sky-600' },
               ].map(item => (
                 <Card key={item.label} className="p-4 text-center">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{item.label}</p>

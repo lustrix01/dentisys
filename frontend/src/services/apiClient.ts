@@ -747,15 +747,18 @@ export function updateAdminSettingsApi(settings: any): Promise<{ status: string;
   return request('POST', '/admin/settings', settings);
 }
 
-export function getAdminReportsSummaryApi(): Promise<{
+export function getAdminReportsSummaryApi(schoolYear = 'current'): Promise<{
   status: string;
   reports: {
     students: any[];
     attendance?: any[];
     totalCount: number;
   };
+  schoolYear?: string | null;
+  currentSchoolYear?: string;
+  availableSchoolYears?: string[];
 }> {
-  return request('GET', '/admin/reports/summary');
+  return request('GET', `/admin/reports/summary?schoolYear=${encodeURIComponent(schoolYear)}`);
 }
 
 export function getFacultyReportsSummaryApi(): Promise<{

@@ -3582,6 +3582,29 @@ $dupAbsentRow = $dupStatusStmt->fetch(PDO::FETCH_ASSOC);
 expect_same('absent', $dupAbsentRow['status'] ?? null, 'End marks a student with no record Absent');
 expect_same('system_resolution', $dupAbsentRow['verification_method'] ?? null, 'End-of-session Absent is recorded as a system resolution');
 
+// Dean reports: attendance rows use camelCase keys and follow the school-year filter.
+[$adminReportStatus, $adminReportBody] = integration_http_get_json('/api/admin/reports/summary?schoolYear=current', $adminAccessToken);
+expect_same(200, $adminReportStatus, 'Dean report summary loads for the current school year');
+expect_same(academic_current_school_year($pdo), $adminReportBody['schoolYear'] ?? null, 'Dean report resolves "current" to the server school year');
+expect_true(in_array(academic_current_school_year($pdo), $adminReportBody['availableSchoolYears'] ?? [], true), 'Dean report lists the current school year as an option');
+$adminReportDupRows = array_values(array_filter(
+    $adminReportBody['reports']['attendance'] ?? [],
+    static fn(array $row): bool => ($row['className'] ?? null) === 'Attendance Duplicate Fixture ' . $attendanceFixtureSuffix,
+));
+expect_true(count($adminReportDupRows) >= 4, 'Dean report attendance rows expose the className key');
+expect_true(($adminReportDupRows[0]['studentId'] ?? '') !== '' && ($adminReportDupRows[0]['subjectCode'] ?? '') !== '', 'Dean report attendance rows expose studentId and subjectCode keys');
+[$adminReportPastStatus, $adminReportPastBody] = integration_http_get_json('/api/admin/reports/summary?schoolYear=2025-2026', $adminAccessToken);
+expect_same(200, $adminReportPastStatus, 'Dean report summary loads for a past school year');
+$adminReportPastStudentIds = array_map(static fn(array $row): string => (string) ($row['id'] ?? ''), $adminReportPastBody['reports']['students'] ?? []);
+expect_true(in_array((string) $invitedStudentId, $adminReportPastStudentIds, true), 'Past-year Dean report includes a student enrolled that year');
+$adminReportPastDupRows = array_filter(
+    $adminReportPastBody['reports']['attendance'] ?? [],
+    static fn(array $row): bool => ($row['className'] ?? null) === 'Attendance Duplicate Fixture ' . $attendanceFixtureSuffix,
+);
+expect_same(0, count($adminReportPastDupRows), 'Past-year Dean report excludes current-year attendance');
+[$adminReportBadStatus] = integration_http_get_json('/api/admin/reports/summary?schoolYear=last-year', $adminAccessToken);
+expect_same(422, $adminReportBadStatus, 'Dean report rejects a malformed school year');
+
 $digestStmt = $pdo->prepare('SELECT token_digest FROM security_tokens WHERE token_id = ?');
 $digestStmt->execute([$refresh['token_id']]);
 $storedDigest = pdo_binary_value($digestStmt->fetchColumn());

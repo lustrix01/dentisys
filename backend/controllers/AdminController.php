@@ -622,9 +622,18 @@ function handle_admin_reports_summary(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = admin_verify_auth($pdo, $config);
+        $currentSchoolYear = academic_current_school_year($pdo);
+        $schoolYear = academic_resolve_school_year_filter($pdo, $_GET['schoolYear'] ?? null);
+        $yearParams = $schoolYear === null ? [] : [':school_year' => $schoolYear];
+        $yearWhere = $schoolYear === null ? '' : 'WHERE UPPER(cs.school_year) = UPPER(:school_year)';
+        $availableSchoolYears = academic_school_year_options(
+            $pdo->query('SELECT DISTINCT school_year FROM class_sections WHERE school_year IS NOT NULL')->fetchAll(PDO::FETCH_COLUMN),
+            $currentSchoolYear
+        );
 
-        // Fetch students with biometric consent
-        $stmt = $pdo->query(
+        // Fetch students with biometric consent. With a school year, only
+        // students enrolled in that year's classes are listed.
+        $stmt = $pdo->prepare(
             "SELECT s.student_id, s.student_number,
                     COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
                     COALESCE(pi.first_name, s.first_name) AS first_name,
@@ -650,22 +659,34 @@ function handle_admin_reports_summary(): void
              LEFT JOIN class_sections cs ON cs.cs_id = e.cs_id
              LEFT JOIN courses c ON c.course_id = cs.course_id
              LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
+             {$yearWhere}
              ORDER BY s.student_number ASC, cs.cs_id ASC"
         );
-        $students = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $stmt->execute($yearParams);
+        $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Fetch attendance logs
-        $attStmt = $pdo->query(
-            "SELECT r.record_id AS id, s.student_id AS studentId, r.session_date AS date,
-                    c.course_code AS subjectCode, cs.cs_name AS className, r.status
+        // Fetch attendance logs. Aliases are quoted: PostgreSQL lowercases
+        // unquoted aliases, and the page reads these camelCase keys.
+        $attStmt = $pdo->prepare(
+            "SELECT r.record_id AS id, s.student_id AS \"studentId\", r.session_date AS date,
+                    c.course_code AS \"subjectCode\", cs.cs_name AS \"className\", r.status
              FROM attendance_records r
              JOIN enrollments e ON e.enrollment_id = r.enrollment_id
              JOIN students s ON s.student_id = e.student_id
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
+             {$yearWhere}
              ORDER BY session_date DESC LIMIT 500"
         );
-        $attendanceLogs = $attStmt ? $attStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $attStmt->execute($yearParams);
+        $attendanceLogs = array_map(static fn(array $row): array => [
+            'id' => (string) $row['id'],
+            'studentId' => (string) $row['studentId'],
+            'date' => $row['date'],
+            'subjectCode' => $row['subjectCode'],
+            'className' => $row['className'],
+            'status' => $row['status'],
+        ], $attStmt->fetchAll(PDO::FETCH_ASSOC));
 
         $grouped = [];
         $gwaTotals = [];
@@ -734,7 +755,12 @@ function handle_admin_reports_summary(): void
                 'attendance' => $attendanceLogs,
                 'totalCount' => count($mappedStudents),
             ],
+            'schoolYear' => $schoolYear,
+            'currentSchoolYear' => $currentSchoolYear,
+            'availableSchoolYears' => $availableSchoolYears,
         ], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Admin reports error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
