@@ -1,5 +1,7 @@
 # Roadmap
 
+> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
+
 ## Current priority - Owner reset, 2026-09-24
 
 1. Copy the entire `owhie_backend` UI into `lighthal5`, incorporating UI Changes.pdf. Visual parity comes first; temporarily failing tests and missing wiring are recorded for later repair.

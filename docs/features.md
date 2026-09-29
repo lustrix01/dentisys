@@ -1,5 +1,7 @@
 # Implemented Features and Boundaries
 
+> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
+
 ## Current platform
 
 - Password authentication, role-based access control, sessions, refresh rotation, audit events, rate limiting, and password reset.

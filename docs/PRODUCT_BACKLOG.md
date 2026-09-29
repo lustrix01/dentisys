@@ -728,11 +728,9 @@ Assigning a remedial changes the Student's relevant status to:
 
 ### Passing rule
 
-Existing approved rule:
+Current approved rule (spec.md, Owner-approved amendment 2026-09-26; it replaces the earlier 75% rule):
 
-**Passing score threshold is 75%. Scores ≥75% automatically clear the Student.**
-
-Preserve this rule.
+**Each of the first two remedial exams passes at 50% or higher.** Failing the first permits the second; failing the second requires cost recovery. Remedial results never replace the original course grade.
 
 ### Remedial information
 

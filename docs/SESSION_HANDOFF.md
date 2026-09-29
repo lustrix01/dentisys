@@ -1,5 +1,7 @@
 # Current continuation: UI migration and normalization on lighthal5
 
+> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
+
 ## QA fix rounds 1–2 — 2026-09-27 (branch lumbanglighthal)
 
 - Branch `lumbanglighthal` (not merged into `lumbang_final`), HEAD `bee8c53`.
