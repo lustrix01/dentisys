@@ -643,6 +643,17 @@ export function getAdminDashboardKpisApi(schoolYear?: string): Promise<SchoolYea
   gwaBuckets: Array<{ range: string; count: number; color: string }>;
   statusCounts: { active: number; warning: number; critical: number; remedial: number };
   classAttendance: Array<{ name: string; rate: number }>;
+  recentAuditEvents?: Array<{
+    id: string;
+    occurredAt: string | null;
+    actorName: string | null;
+    actorEmail: string | null;
+    actorRole: string | null;
+    module: string;
+    action: string;
+    description: string;
+    status: string;
+  }>;
 }> {
   return request('GET', `/admin/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }

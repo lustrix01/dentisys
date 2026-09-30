@@ -889,6 +889,13 @@ $pdo->prepare(
      WHERE setting_key = 'grading_defaults'"
 )->execute([json_encode($gradingDefaultsWithSentinel, JSON_THROW_ON_ERROR)]);
 
+[$deanDashboardStatus, $deanDashboardBody] = integration_http_get_json('/api/admin/dashboard/kpis', $adminAccessToken);
+expect_same(200, $deanDashboardStatus, 'Dean Dashboard data loads');
+$deanRecentEvents = $deanDashboardBody['recentAuditEvents'] ?? null;
+expect_true(is_array($deanRecentEvents) && count($deanRecentEvents) >= 1 && count($deanRecentEvents) <= 5, 'Dean Dashboard returns up to the latest 5 audit events');
+$latestAuditEventId = (string) $pdo->query("SELECT event_id FROM audit_events WHERE action_code <> 'refresh_rotation' ORDER BY occurred_at DESC, event_id DESC LIMIT 1")->fetchColumn();
+expect_same($latestAuditEventId, (string) ($deanRecentEvents[0]['id'] ?? ''), 'The newest audit event is listed first');
+expect_true(array_key_exists('actorName', $deanRecentEvents[0] ?? []) && array_key_exists('actorEmail', $deanRecentEvents[0] ?? []), 'Each event carries the recorded name and e-mail');
 [$adminSettingsGetStatus, $adminSettingsGetBody] = integration_http_get_json('/api/admin/settings', $adminAccessToken);
 expect_same(200, $adminSettingsGetStatus, 'Existing Admin transmutation defaults can be read through the API');
 $adminSettingsBefore = $adminSettingsGetBody['settings'] ?? [];

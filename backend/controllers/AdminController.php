@@ -41,6 +41,34 @@ function admin_verify_auth(PDO $pdo, array $config): array
     return $authCtx;
 }
 
+/**
+ * Latest audit events for the Dean Dashboard, with the actor's name and
+ * e-mail as recorded at the time.
+ */
+function admin_recent_audit_events(PDO $pdo, int $limit): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT event_id, occurred_at, actor_display_name, actor_username, actor_role,
+                module_code, action_code, description, event_status
+           FROM audit_events
+          WHERE action_code <> 'refresh_rotation'
+          ORDER BY occurred_at DESC, event_id DESC
+          LIMIT " . max(1, min(20, $limit))
+    );
+    $stmt->execute();
+    return array_map(static fn(array $row): array => [
+        'id' => (string) $row['event_id'],
+        'occurredAt' => attendance_session_timestamp((string) $row['occurred_at']),
+        'actorName' => $row['actor_display_name'],
+        'actorEmail' => $row['actor_username'],
+        'actorRole' => $row['actor_role'],
+        'module' => $row['module_code'],
+        'action' => $row['action_code'],
+        'description' => $row['description'],
+        'status' => $row['event_status'],
+    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+}
+
 function handle_admin_dashboard_kpis(): void
 {
     try {
@@ -234,6 +262,7 @@ function handle_admin_dashboard_kpis(): void
                 'remedial' => $remedialCount,
             ],
             'classAttendance' => $classAttendance,
+            'recentAuditEvents' => admin_recent_audit_events($pdo, 5),
         ], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
