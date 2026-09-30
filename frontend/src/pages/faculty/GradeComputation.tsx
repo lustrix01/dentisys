@@ -34,6 +34,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
+import { GradebookMatrix } from '../../components/GradebookMatrix';
 import { Modal } from '../../components/Modal';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
 import { recordAudit } from '../../services/auditService';
@@ -1076,6 +1077,7 @@ export const GradeComputation: React.FC = () => {
   const [scoreEntryMode, setScoreEntryMode] = useState<'single' | 'matrix'>('single');
   const [matrixScoresState, setMatrixScoresState] = useState<Record<string, Record<string, string>>>({});
   const [isMatrixSavedAlert, setIsMatrixSavedAlert] = useState(false);
+  const [matrixRefreshKey, setMatrixRefreshKey] = useState(0);
 
   // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
   useEffect(() => {
@@ -1157,6 +1159,7 @@ export const GradeComputation: React.FC = () => {
     if (targetClassId) {
       await refreshPersistedGrades(targetClassId);
     }
+    setMatrixRefreshKey(key => key + 1);
     setIsMatrixSavedAlert(true);
     showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
     setTimeout(() => setIsMatrixSavedAlert(false), 3000);
@@ -2532,63 +2535,24 @@ export const GradeComputation: React.FC = () => {
                 </div>
               </div>
 
-              <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
-                <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800 border-collapse">
-                  <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
-                    <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-left divide-x divide-slate-200 dark:divide-slate-800">
-                      <th className="px-4 py-3 min-w-[180px]">Student Details</th>
-                      {activeAssessments.map(ass => (
-                        <th key={ass.id} className="px-3 py-3 text-center min-w-[120px]">
-                          <div className="font-bold text-slate-700 dark:text-slate-200">{ass.title}</div>
-                          <div className="text-[9px] font-semibold text-clinical-600 dark:text-clinical-400 font-mono mt-0.5">
-                            {ass.type} • Max {ass.maxScore}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
-                    {filteredScoreStudents.length === 0 ? (
-                      <tr>
-                        <td colSpan={activeAssessments.length + 1} className="py-12 text-center text-slate-400 font-semibold">
-                          No matching student records found.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredScoreStudents.map(student => (
-                        <tr key={student.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/20 divide-x divide-slate-100 dark:divide-slate-800/40">
-                          <td className="px-4 py-3">
-                            <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">{student.name}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{student.studentId}</div>
-                          </td>
-                          {activeAssessments.map(ass => {
-                            const val = matrixScoresState[student.id]?.[ass.id] ?? '';
-                            const isValid = validateSingleScore(val, ass.maxScore);
-                            return (
-                              <td key={ass.id} className="px-2 py-2.5 text-center">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={ass.maxScore}
-                                  placeholder={`0-${ass.maxScore}`}
-                                  value={val}
-                                  onChange={(e) => handleMatrixScoreChange(student.id, ass.id, e.target.value)}
-                                  className={`w-20 px-2 py-1 rounded-lg border text-xs text-center font-bold focus:outline-none ${!isValid
-                                      ? 'border-rose-500 bg-rose-50/50 focus:ring-rose-500'
-                                      : val === ''
-                                        ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'
-                                        : 'border-clinical-500/30 bg-clinical-50/20 text-clinical-650 dark:text-clinical-400'
-                                    }`}
-                                />
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              {(() => {
+                const matrixClass = facultyClasses.find(c => c.id === selectedClassId);
+                const matrixOffering = matrixClass && matrixClass.courseId !== undefined && matrixClass.courseId !== null
+                  ? { courseId: Number(matrixClass.courseId), semester: matrixClass.semester || '', schoolYear: matrixClass.schoolYear || '' }
+                  : null;
+                return (
+                  <GradebookMatrix
+                    classId={selectedClassId}
+                    offering={matrixOffering}
+                    students={filteredScoreStudents.map(student => ({ id: student.id, studentId: String(student.studentId ?? ''), name: student.name }))}
+                    assessments={activeAssessments}
+                    scores={matrixScoresState}
+                    onScoreChange={handleMatrixScoreChange}
+                    isValidScore={validateSingleScore}
+                    refreshKey={matrixRefreshKey}
+                  />
+                );
+              })()}
             </Card>
           ) : (
             /* ENHANCED SINGLE ACTIVITY VIEW */

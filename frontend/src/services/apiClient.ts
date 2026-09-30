@@ -1233,6 +1233,11 @@ export function computeFacultyGradesApi(classId?: string): Promise<FacultyComput
   return request<FacultyComputeGradesResponse>('POST', '/faculty/grades/compute', classId ? { classId } : {});
 }
 
+/** The same server computation for one class, returned without saving anything. */
+export function previewFacultyGradesApi(classId: string): Promise<FacultyComputeGradesResponse> {
+  return request<FacultyComputeGradesResponse>('POST', '/faculty/grades/compute', { classId, preview: true });
+}
+
 export function getFacultyProfileApi(): Promise<{
   status: string;
   profile: {

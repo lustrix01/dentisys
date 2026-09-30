@@ -3509,9 +3509,16 @@ function handle_faculty_grades_compute(): void
         $body = request_body();
         $data = $body['has_body'] ? $body['data'] : [];
         $classRef = $data['classId'] ?? '';
+        // Preview: the same computation, rolled back instead of saved (no grade,
+        // notification or audit changes). Used by the grading matrix.
+        $preview = ($data['preview'] ?? false) === true;
         $csId = $classRef !== '' ? faculty_owned_class_id($pdo, (int) $authCtx['user_id'], $classRef) : 0;
         if ($classRef !== '' && $csId <= 0) {
             safe_error_response('Class is not assigned to this faculty member.', 403);
+            return;
+        }
+        if ($preview && $csId <= 0) {
+            safe_error_response('A class is required for a grade preview.', 422);
             return;
         }
         if ($csId > 0 && academic_class_section_is_past($pdo, $csId)) {
@@ -3841,6 +3848,11 @@ function handle_faculty_grades_compute(): void
                 'studentId' => $group['studentId'],
                 'message' => 'Grade weights have not been set up for this course. Set them up in the Grade Weights editor, then recompute.',
             ];
+        }
+        if ($preview) {
+            $pdo->rollBack();
+            json_response(['status' => 'ok', 'message' => 'Grade preview computed; nothing was saved.', 'preview' => true, 'results' => $results], 200);
+            return;
         }
         $computedCount = count(array_filter($results, static fn(array $result): bool => ($result['status'] ?? '') === 'computed'));
         audit_record_action(

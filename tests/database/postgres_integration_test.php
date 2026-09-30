@@ -4384,6 +4384,17 @@ $gradeAttendanceA = (int) $gradeAttendanceStmt->fetchColumn();
 expect_same(200, $restoredLinkStatus, 'Restoring the linked attendance recomputes successfully');
 expect_same('75.00', $readFixtureGrades($pdo)[0]['final_percentage'], 'Restored linked attendance applies the transmutation again');
 
+// Grading matrix preview: the same computation, returned without saving.
+$previewAuditBefore = (int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE action_code = 'grades_recomputed'")->fetchColumn();
+$pdo->prepare("UPDATE attendance_records SET status = 'absent' WHERE record_id = ?")->execute([$gradeAttendanceA]);
+[$previewStatus, $previewBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, ['classId' => (string) $gradeClassId, 'preview' => true]);
+expect_same(200, $previewStatus, 'The grade preview returns HTTP 200');
+expect_same(true, $previewBody['preview'] ?? null, 'The response is marked as a preview');
+expect_same('0.00', number_format((float) ($findEnrollmentResult($previewBody, $gradeEnrollmentA)['percentage'] ?? -1), 2), 'The preview reflects the current scores and attendance');
+expect_same('75.00', $readFixtureGrades($pdo)[0]['final_percentage'], 'The preview does not save grades');
+expect_same($previewAuditBefore, (int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE action_code = 'grades_recomputed'")->fetchColumn(), 'The preview writes no audit event');
+$pdo->prepare("UPDATE attendance_records SET status = 'late' WHERE record_id = ?")->execute([$gradeAttendanceA]);
+
 // ATT-003: a session whose class end time has passed ends automatically the
 // next time sessions are read; students without a record become Absent as of
 // the class end time. The fixture session was yesterday (Asia/Manila).
