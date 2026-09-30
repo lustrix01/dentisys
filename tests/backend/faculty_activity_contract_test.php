@@ -32,9 +32,15 @@ assert_faculty_activity_contract(
 );
 assert_faculty_activity_contract(str_contains($handler, 'faculty_verify_auth'), 'Faculty activity requires server-side authentication');
 assert_faculty_activity_contract(str_contains($handler, "'activity' => faculty_activity_rows"), 'Faculty activity returns the exact activity response envelope');
-assert_faculty_activity_contract(str_contains($controller, 'actor_user_id = ?'), 'Faculty activity includes the authenticated actor scope');
-assert_faculty_activity_contract(str_contains($controller, 'cs.instructor_user_id = ?'), 'Faculty activity includes only authorized Faculty class scopes');
-assert_faculty_activity_contract(str_contains($controller, 'canonical_schema_version >= 2'), 'Faculty activity ignores legacy unscoped audit rows');
+$rowsStart = strpos($controller, 'function faculty_activity_rows(');
+$rowsSource = substr($controller, (int) $rowsStart, (int) strpos($controller, 'function handle_faculty_activity_get', (int) $rowsStart) - (int) $rowsStart);
+assert_faculty_activity_contract(str_contains($rowsSource, 'AND actor_user_id = ?') && !str_contains($rowsSource, 'scope_cs_id'), 'My Activity shows only the Faculty member\'s own actions');
+assert_faculty_activity_contract(
+    str_contains($routes, "'path' => '/api/faculty/attendance-activity'")
+        && str_contains($routes, "'handler' => 'handle_faculty_attendance_activity_get'"),
+    'Class Attendance Activity route is registered'
+);
+assert_faculty_activity_contract(str_contains($controller, 'FROM attendance_record_corrections ac') && str_contains($controller, 'WHERE cs.instructor_user_id = :faculty_id'), 'Class Attendance Activity is limited to the Faculty member\'s classes');
 assert_faculty_activity_contract(!str_contains($handler, 'handle_admin_audit_logs'), 'Faculty activity does not reuse Admin-wide audit handling');
 assert_faculty_activity_contract(!str_contains($controller, 'before_state_json') && !str_contains($controller, 'after_state_json'), 'Faculty activity does not expose raw audit state');
 assert_faculty_activity_contract(str_contains($controller, "LIMIT ' . " . '$limit'), 'Faculty activity bounds the requested refresh payload');

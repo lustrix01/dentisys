@@ -242,6 +242,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       { name: 'Reports & Export', path: '/reports', icon: FileSpreadsheet },
       { name: 'Email Management', path: '/email-management', icon: Mail },
       { name: 'My Activity Log', path: '/faculty/audit-trail', icon: ListChecks },
+      { name: 'Class Attendance Activity', path: '/faculty/attendance-activity', icon: CalendarDays },
       { name: 'My Profile', path: '/faculty/profile', icon: UserCircle },
       { name: 'Faculty Settings', path: '/faculty/settings', icon: SettingsIcon },
     ];
@@ -461,6 +462,8 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'My Activity Log', path: '/secretary/audit-trail' });
     } else if (path === '/faculty/audit-trail') {
       crumbs.push({ name: 'My Activity Log', path: '/faculty/audit-trail' });
+    } else if (path === '/faculty/attendance-activity') {
+      crumbs.push({ name: 'Class Attendance Activity', path: '/faculty/attendance-activity' });
     } else if (path === '/student/dashboard') {
       crumbs.push({ name: 'Student Dashboard', path: '/student/dashboard' });
     } else if (path === '/student/attendance') {

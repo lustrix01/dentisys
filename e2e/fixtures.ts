@@ -42,7 +42,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/faculty/profile', '/api/faculty/settings', '/api/faculty/send-email', '/api/faculty/email-logs', '/api/faculty/reports/summary',
   '/api/faculty/classes', '/api/faculty/courses', '/api/faculty/classes/available-students', '/api/faculty/classes/enroll',
   '/api/faculty/classes/unenroll', '/api/faculty/grading-config',
-  '/api/notifications', '/api/notifications/read-all', '/api/secretary/activity', '/api/faculty/activity',
+  '/api/notifications', '/api/notifications/read-all', '/api/secretary/activity', '/api/faculty/activity', '/api/faculty/attendance-activity',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
   '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/biometric/profile',
   '/api/student/profile',
@@ -134,6 +134,7 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname.endsWith('/faculty/courses')) return { status: 'ok', courses: [] };
   if (pathname.endsWith('/faculty/classes')) return { status: 'ok', classes: [] };
   if (pathname.endsWith('/faculty/activity')) return { status: 'ok', activity: [] };
+  if (pathname.endsWith('/faculty/attendance-activity')) return { status: 'ok', activity: [] };
   if (pathname === '/api/faculty/grading-config') {
     if (method === 'GET') {
       return { status: 'ok', configuration: null };

@@ -709,6 +709,28 @@ export function getFacultyActivityApi(limit = 100): Promise<{
   return request('GET', `/faculty/activity?limit=${boundedLimit}`);
 }
 
+export interface FacultyAttendanceActivityRow {
+  id: string;
+  occurredAt: string | null;
+  studentName: string | null;
+  studentNumber: string | null;
+  classId: string | null;
+  className: string | null;
+  courseCode: string | null;
+  sessionDate: string | null;
+  sessionCode: string | null;
+  previousStatus: string | null;
+  newStatus: string;
+  reason: string | null;
+  actorRole: string;
+  actorName: string | null;
+}
+
+export function getFacultyAttendanceActivityApi(limit = 100): Promise<{ status: string; activity: FacultyAttendanceActivityRow[] }> {
+  const boundedLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
+  return request('GET', `/faculty/attendance-activity?limit=${boundedLimit}`);
+}
+
 export function getAdminProfileApi(): Promise<{
   status: string;
   profile: {

@@ -385,6 +385,12 @@ return [
     ],
     [
         'method' => 'GET',
+        'path' => '/api/faculty/attendance-activity',
+        'handler' => 'handle_faculty_attendance_activity_get',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
         'path' => '/api/faculty/students',
         'handler' => 'handle_faculty_students',
         'has_params' => false,

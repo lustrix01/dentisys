@@ -697,6 +697,33 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByRole('button', { name: 'End Session' })).toHaveCount(0);
   });
 
+  test('Class Attendance Activity lists attendance changes with old and new status', async ({ page }) => {
+    await page.route('**/api/faculty/attendance-activity**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          activity: [
+            { id: 'correction-1', occurredAt: '2026-09-20T02:00:00Z', studentName: 'Alice Green', studentNumber: '2024-0001', classId: '1', className: 'Section A', courseCode: 'CLIN401',
+              sessionDate: '2026-09-20', sessionCode: 'CS1-20260920', previousStatus: 'absent', newStatus: 'excused', reason: 'Medical certificate', actorRole: 'secretary', actorName: 'Bea Alonzo' },
+            { id: 'record-9', occurredAt: '2026-09-19T02:00:00Z', studentName: 'Bob White', studentNumber: '2024-0002', classId: '1', className: 'Section A', courseCode: 'CLIN401',
+              sessionDate: '2026-09-19', sessionCode: 'CS1-20260919', previousStatus: null, newStatus: 'present', reason: 'Enrolled late', actorRole: 'faculty', actorName: 'Prof. Jane Doe' },
+          ],
+        }),
+      });
+    });
+    await page.goto('/faculty/attendance-activity');
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Class Attendance Activity' })).toBeVisible();
+    const aliceRow = page.getByRole('row').filter({ hasText: 'Alice Green' });
+    await expect(aliceRow).toContainText('Absent → Excused');
+    await expect(aliceRow).toContainText('Medical certificate');
+    await expect(aliceRow).toContainText('Bea Alonzo');
+    await expect(page.getByRole('row').filter({ hasText: 'Bob White' })).toContainText('Not recorded → Present');
+    await page.getByLabel('Search class attendance activity').fill('Bob');
+    await expect(page.getByRole('row').filter({ hasText: 'Alice Green' })).toHaveCount(0);
+  });
+
   test('worksheet: API failure renders error and retry button without injecting mock data', async ({ page }) => {
     await page.route('**/api/faculty/attendance?*csId=1*', async (route) => {
       await route.fulfill({

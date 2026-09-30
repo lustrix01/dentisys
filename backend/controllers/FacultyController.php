@@ -54,21 +54,13 @@ function faculty_activity_rows(PDO $pdo, int $userId, int $limit = 100): array
                 description, event_status AS status, ip_address, user_agent
            FROM audit_events
           WHERE action_code <> \'refresh_rotation\'
-            AND (actor_user_id = ?
-             OR (
-                canonical_schema_version >= 2
-                AND scope_cs_id IS NOT NULL
-                AND EXISTS (
-                    SELECT 1
-                      FROM class_sections cs
-                     WHERE cs.cs_id = audit_events.scope_cs_id
-                       AND cs.instructor_user_id = ?
-                )
-             ))
+            AND actor_user_id = ?
           ORDER BY occurred_at DESC, event_id DESC
           LIMIT ' . $limit
     );
-    $stmt->execute([$userId, $userId]);
+    // My Activity: only the Faculty member's own actions. Attendance changes
+    // made by others in their classes are in Class Attendance Activity.
+    $stmt->execute([$userId]);
 
     return array_map(static fn(array $row): array => [
         'id' => (string) $row['id'],
@@ -99,6 +91,119 @@ function handle_faculty_activity_get(): void
     } catch (\Throwable $e) {
         error_log('Faculty activity error: ' . sanitize_for_log($e));
         safe_error_response('Unable to read Faculty activity.', 500);
+    }
+}
+
+/**
+ * Class Attendance Activity: attendance status changes in the Faculty member's
+ * classes, newest first. Corrections of existing records carry the old and
+ * new status; manual records (Faculty or Secretary) have no old status.
+ */
+function faculty_attendance_activity_rows(PDO $pdo, int $userId, int $limit = 100): array
+{
+    $limit = max(1, min(200, $limit));
+    $stmt = $pdo->prepare(
+        "SELECT * FROM (
+            SELECT 'correction-' || ac.correction_id AS id, ac.corrected_at AS occurred_at,
+                   ac.previous_status, ac.new_status, ac.reason,
+                   ac.corrected_by_role AS actor_role, ac.corrected_by_user_id AS actor_user_id,
+                   r.record_id, r.session_date, r.session_code, e.enrollment_id
+              FROM attendance_record_corrections ac
+              JOIN attendance_records r ON r.record_id = ac.record_id
+              JOIN enrollments e ON e.enrollment_id = r.enrollment_id
+              JOIN class_sections cs ON cs.cs_id = e.cs_id
+             WHERE cs.instructor_user_id = :faculty_id
+            UNION ALL
+            -- A manual record as first entered: a later correction keeps its
+            -- original status as previous_status and overwrites the reason.
+            SELECT 'record-' || r.record_id, r.created_at,
+                   NULL,
+                   COALESCE(first_fix.previous_status, r.status),
+                   CASE WHEN first_fix.previous_status IS NULL THEN r.override_reason END,
+                   CASE r.verification_method WHEN 'manual_secretary' THEN 'secretary' ELSE 'faculty' END,
+                   CASE r.verification_method WHEN 'manual_secretary' THEN COALESCE(r.secretary_user_id, r.override_by_user_id)
+                        ELSE r.override_by_user_id END,
+                   r.record_id, r.session_date, r.session_code, e.enrollment_id
+              FROM attendance_records r
+              LEFT JOIN LATERAL (
+                  SELECT fx.previous_status FROM attendance_record_corrections fx
+                   WHERE fx.record_id = r.record_id ORDER BY fx.correction_id LIMIT 1
+              ) first_fix ON TRUE
+              JOIN enrollments e ON e.enrollment_id = r.enrollment_id
+              JOIN class_sections cs ON cs.cs_id = e.cs_id
+             WHERE cs.instructor_user_id = :faculty_id2
+               AND r.verification_method IN ('manual_secretary', 'manual_faculty')
+         ) activity
+         ORDER BY occurred_at DESC, id DESC
+         LIMIT {$limit}"
+    );
+    $stmt->execute([':faculty_id' => $userId, ':faculty_id2' => $userId]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($rows === []) {
+        return [];
+    }
+    $details = $pdo->prepare(
+        "SELECT e.enrollment_id, s.student_number,
+                COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                COALESCE(pi.first_name, s.first_name) AS first_name,
+                COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                COALESCE(pi.last_name, s.last_name) AS last_name,
+                COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
+                cs.cs_id, cs.cs_name, c.course_code
+           FROM enrollments e
+           JOIN students s ON s.student_id = e.student_id
+           LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+           JOIN class_sections cs ON cs.cs_id = e.cs_id
+           JOIN courses c ON c.course_id = cs.course_id
+          WHERE e.enrollment_id = ANY (CAST(? AS INTEGER[]))"
+    );
+    $details->execute(['{' . implode(',', array_unique(array_map(static fn(array $row): int => (int) $row['enrollment_id'], $rows))) . '}']);
+    $byEnrollment = [];
+    foreach ($details->fetchAll(PDO::FETCH_ASSOC) as $detail) {
+        $byEnrollment[(int) $detail['enrollment_id']] = $detail;
+    }
+    $actors = $pdo->prepare('SELECT user_id, display_name FROM user_accounts WHERE user_id = ANY (CAST(? AS INTEGER[]))');
+    $actorIds = array_filter(array_unique(array_map(static fn(array $row): int => (int) $row['actor_user_id'], $rows)));
+    $actors->execute(['{' . implode(',', $actorIds) . '}']);
+    $actorNames = [];
+    foreach ($actors->fetchAll(PDO::FETCH_ASSOC) as $actor) {
+        $actorNames[(int) $actor['user_id']] = $actor['display_name'];
+    }
+
+    return array_map(static function (array $row) use ($byEnrollment, $actorNames): array {
+        $detail = $byEnrollment[(int) $row['enrollment_id']] ?? [];
+        return [
+            'id' => (string) $row['id'],
+            'occurredAt' => attendance_session_timestamp((string) $row['occurred_at']),
+            'studentName' => $detail !== [] ? account_identity_display_name($detail) : null,
+            'studentNumber' => $detail['student_number'] ?? null,
+            'classId' => isset($detail['cs_id']) ? (string) $detail['cs_id'] : null,
+            'className' => $detail['cs_name'] ?? null,
+            'courseCode' => $detail['course_code'] ?? null,
+            'sessionDate' => $row['session_date'],
+            'sessionCode' => $row['session_code'],
+            'previousStatus' => $row['previous_status'],
+            'newStatus' => $row['new_status'],
+            'reason' => $row['reason'],
+            'actorRole' => $row['actor_role'],
+            'actorName' => $actorNames[(int) $row['actor_user_id']] ?? null,
+        ];
+    }, $rows);
+}
+
+function handle_faculty_attendance_activity_get(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        json_response([
+            'status' => 'ok',
+            'activity' => faculty_attendance_activity_rows($pdo, (int) $authCtx['user_id'], (int) ($_GET['limit'] ?? 100)),
+        ], 200);
+    } catch (\Throwable $e) {
+        error_log('Faculty attendance activity error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to read class attendance activity.', 500);
     }
 }
 

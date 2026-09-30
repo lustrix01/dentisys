@@ -748,7 +748,8 @@ $facultyScopedSessionActivity = array_values(array_filter(
     static fn(array $event): bool => ($event['action'] ?? $event['actionCode'] ?? null) === 'attendance_session_started'
         && str_contains((string) ($event['description'] ?? ''), $sessionCode)
 ));
-expect_true(count($facultyScopedSessionActivity) >= 1, 'Faculty activity includes attendance events scoped to an authorized class');
+expect_same(0, count($facultyScopedSessionActivity), 'My Activity leaves out the Secretary\'s session events in the Faculty member\'s class');
+expect_same([], array_values(array_filter($facultyActivityBody['activity'] ?? [], static fn(array $event): bool => ($event['userRole'] ?? '') !== 'faculty')), 'My Activity contains only the Faculty member\'s own actions');
 [$facultyActivityRefreshStatus, $facultyActivityRefreshBody] = integration_http_get_json('/api/faculty/activity?limit=100', $facultyActivityAccessToken);
 expect_same(200, $facultyActivityRefreshStatus, 'Faculty activity refresh remains available');
 if (($facultyActivityBody['activity'] ?? []) !== []) {
@@ -855,6 +856,21 @@ expect_same(
     [(string) ($manualCreated['attendance_session_id'] ?? ''), $manualCreated['status'] ?? null, $manualCreated['verification_method'] ?? null],
     'The manual record is linked to the session and marked as Secretary-entered'
 );
+[$attendanceActivityStatus, $attendanceActivityBody] = integration_http_get_json('/api/faculty/attendance-activity', $facultyActivityAccessToken);
+expect_same(200, $attendanceActivityStatus, 'Class Attendance Activity loads for the class Faculty member');
+$secretaryCorrectionRows = array_values(array_filter(
+    $attendanceActivityBody['activity'] ?? [],
+    static fn(array $row): bool => ($row['reason'] ?? '') === 'Correct older linked session' && ($row['actorRole'] ?? '') === 'secretary',
+));
+expect_same('late', $secretaryCorrectionRows[0]['newStatus'] ?? null, 'Class Attendance Activity shows the Secretary correction with its new status');
+expect_true(($secretaryCorrectionRows[0]['previousStatus'] ?? null) !== null && ($secretaryCorrectionRows[0]['studentName'] ?? null) !== null && ($secretaryCorrectionRows[0]['className'] ?? null) !== null, 'The correction row names the old status, student and section');
+$manualActivityRows = array_values(array_filter(
+    $attendanceActivityBody['activity'] ?? [],
+    static fn(array $row): bool => ($row['reason'] ?? '') === 'Enrolled late; present in class',
+));
+expect_same([null, 'present', 'secretary'], [array_key_exists('previousStatus', $manualActivityRows[0] ?? []) ? $manualActivityRows[0]['previousStatus'] : 'missing', $manualActivityRows[0]['newStatus'] ?? null, $manualActivityRows[0]['actorRole'] ?? null], 'A manual Secretary record appears with no previous status');
+[$attendanceActivityDeniedStatus] = integration_http_get_json('/api/faculty/attendance-activity', $secretaryAccessToken);
+expect_same(403, $attendanceActivityDeniedStatus, 'Secretary cannot read the Faculty Class Attendance Activity endpoint');
 echo "PASS: Persistent Secretary attendance-session integration coverage completed.\n";
 
 $originalAdminGradingDefaultsJson = (string) $pdo->query(
