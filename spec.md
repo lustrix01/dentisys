@@ -472,7 +472,7 @@ The following capabilities are currently part of DentiSys and MUST NOT be remove
 | Reporting                               | CURRENT  |
 | Email history and notification delivery | CURRENT  |
 | Google Sign-In                          | APPROVED |
-| Google verification during invitation acceptance | APPROVED |
+| Google linking after activation (REG-003) | APPROVED |
 | Multi-domain institutional allowlist    | APPROVED |
 
 Detailed implementation status belongs in `docs/features.md`, not here.
@@ -834,7 +834,7 @@ The source branch defines the interface, not automatic approval of its backend s
 
 Provide Single Activity View and Full Matrix View, including course/class filters, for entering one activity or multiple student/activity scores. Both ultimately use the same authoritative score records.
 
-Allow a blank due date for activities without a deadline. The Owner clarified on 2026-09-24 that activity due dates MAY overlap, including multiple activities in one class and activities across classes, Faculty, and courses. This corrects the PDF's no-overlap instruction; no collision restriction or uniqueness constraint applies to due dates. A blank due date does not waive GRD-001's separate attendance-link requirement.
+Allow a blank due date for activities without a deadline. The Owner clarified on 2026-09-24 that activity due dates MAY overlap, including multiple activities in one class and activities across classes, Faculty, and courses. This corrects the PDF's no-overlap instruction; no collision restriction or uniqueness constraint applies to due dates. A blank due date is allowed; GRD-001's optional attendance link is unaffected.
 
 Explain overall Midterm/Final contributions and each period's category weights clearly, identify the target offering, and show totals. Preserve GRD-002's calculation, saved-configuration, and 100% validation rules; screenshot examples do not override saved values.
 
@@ -901,7 +901,7 @@ Upon Owner approval of this specification:
 * Any roadmap statement describing Google as a **replacement** for password authentication is superseded.
 * The approved direction is **password authentication + Google Sign-In**.
 * Faculty and Student account establishment MUST require an authorized invitation and DentiSys password.
-* Google may verify an invited identity during acceptance, but MUST NOT provide invitation authority or enable public signup.
+* Google may be linked only after activation (REG-003); it MUST NOT provide invitation authority or enable public signup.
 * Google-linked users MUST retain email + password login capability.
 * The previous BIO-001 placeholder wording, insofar as it left biometric product requirements unresolved, is superseded by BIO-001–BIO-010 and ATT-001–ATT-006. Those product requirements and boundaries are approved and implemented as a research prototype; the numeric thresholds and other technical selections listed in BIO-007 and §9, and the BIO-002 institutional review, remain deferred.
 
