@@ -72,6 +72,38 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await expect(page.locator('a[href="/secretary/cctv"]')).toHaveCount(0);
   });
 
+  test('Excused (ATT-006): the Secretary sends an Excused request instead of setting Excused', async ({ page }) => {
+    let requestPayload: Record<string, unknown> | null = null;
+    let overrideCalled = false;
+    const record = {
+      id: '501', attendanceSessionId: '900', studentId: '42', studentNumber: '2024-0042', studentName: 'Request Student', yearLevel: 4,
+      date: '2026-09-20', timeRecorded: null, verificationMethod: 'system_resolution', subjectCode: 'CLIN401', classId: '8',
+      className: 'CLINIC-4B', status: 'absent', overrideReason: null, overrideAt: null,
+    };
+    await page.route('**/api/secretary/attendance**', async (route) => {
+      if (route.request().url().includes('/override')) { overrideCalled = true; }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [], records: [record] }) });
+    });
+    await page.route('**/api/secretary/profile', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', profile: { assignedClassName: 'CLINIC-4B' } }) });
+    });
+    await page.route('**/api/secretary/excused-requests', async (route) => {
+      requestPayload = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Excused request sent to Faculty for approval.', request: null }) });
+    });
+    await page.goto('/secretary/override');
+    await page.getByRole('row').filter({ hasText: 'Request Student' }).getByRole('button', { name: 'Select' }).click();
+    await page.getByRole('button', { name: 'Request Excused' }).click();
+    await expect(page.getByText(/Excused needs Faculty approval/)).toBeVisible();
+    await page.locator('textarea').fill('Medical certificate given to the Secretary');
+    await page.getByRole('button', { name: 'Review and Apply Override' }).click();
+    await page.getByRole('button', { name: 'Send request' }).click();
+    await expect.poll(() => requestPayload).toEqual({ studentId: '42', recordId: '501', sessionId: 900, reason: 'Medical certificate given to the Secretary' });
+    await expect(page.getByText('Excused request sent to Faculty for approval.')).toBeVisible();
+    expect(overrideCalled).toBe(false);
+    await expect(page.getByRole('row').filter({ hasText: 'Request Student' })).toContainText('absent');
+  });
+
   test('secretary can navigate to Audit Trail page', async ({ page }) => {
     await page.click('a[href="/secretary/audit-trail"]');
     await expect(page).toHaveURL('/secretary/audit-trail');

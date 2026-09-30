@@ -261,6 +261,18 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/secretary/excused-requests',
+        'handler' => 'handle_secretary_excused_request_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/secretary/excused-requests',
+        'handler' => 'handle_secretary_excused_requests_list',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/secretary/profile',
         'handler' => 'handle_secretary_profile_get',
@@ -594,6 +606,18 @@ return [
         'method' => 'POST',
         'path' => '/api/faculty/attendance/override',
         'handler' => 'handle_faculty_attendance_override',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'GET',
+        'path' => '/api/faculty/excused-requests',
+        'handler' => 'handle_faculty_excused_requests_list',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/excused-requests/decide',
+        'handler' => 'handle_faculty_excused_request_decide',
         'has_params' => false,
     ],
     [

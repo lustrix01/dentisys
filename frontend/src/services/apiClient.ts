@@ -1473,6 +1473,53 @@ export function revokeSecretaryAttendanceSessionApi(data: {
   return request('POST', '/secretary/attendance/session/revoke', data);
 }
 
+/** ATT-006 Excused request (Secretary submits; Faculty approve or reject). */
+export interface AttendanceExcusedRequest {
+  id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  studentId: string;
+  studentNumber: string | null;
+  studentName: string;
+  classId: string;
+  className: string;
+  courseCode: string;
+  sessionId: string | null;
+  sessionDate: string;
+  sessionCode: string | null;
+  currentStatus: string | null;
+  reason: string;
+  requestedBy: string | null;
+  requestedAt: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+}
+
+export function createSecretaryExcusedRequestApi(data: {
+  studentId: string;
+  recordId?: string;
+  sessionId?: number;
+  reason: string;
+}): Promise<{ status: string; message: string; request: AttendanceExcusedRequest | null }> {
+  return request('POST', '/secretary/excused-requests', data);
+}
+
+export function getSecretaryExcusedRequestsApi(): Promise<{ status: string; requests: AttendanceExcusedRequest[] }> {
+  return request('GET', '/secretary/excused-requests');
+}
+
+export function getFacultyExcusedRequestsApi(): Promise<{ status: string; requests: AttendanceExcusedRequest[] }> {
+  return request('GET', '/faculty/excused-requests');
+}
+
+export function decideFacultyExcusedRequestApi(data: {
+  requestId: string;
+  decision: 'approve' | 'reject';
+  note?: string;
+}): Promise<{ status: string; message: string; request: AttendanceExcusedRequest | null }> {
+  return request('POST', '/faculty/excused-requests/decide', data);
+}
+
 export function revokeFacultyAttendanceSessionApi(data: {
   sessionId: string | number;
   reason?: string | null;

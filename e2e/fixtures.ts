@@ -42,7 +42,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/faculty/profile', '/api/faculty/settings', '/api/faculty/send-email', '/api/faculty/email-logs', '/api/faculty/reports/summary',
   '/api/faculty/classes', '/api/faculty/courses', '/api/faculty/classes/available-students', '/api/faculty/classes/enroll',
   '/api/faculty/classes/unenroll', '/api/faculty/grading-config',
-  '/api/notifications', '/api/notifications/read-all', '/api/secretary/activity', '/api/faculty/activity', '/api/faculty/attendance-activity',
+  '/api/notifications', '/api/notifications/read-all', '/api/secretary/activity', '/api/faculty/activity', '/api/faculty/attendance-activity', '/api/faculty/excused-requests', '/api/secretary/excused-requests',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
   '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/biometric/profile',
   '/api/student/profile',
@@ -66,7 +66,7 @@ const MULTI_METHOD_API_PATHS = new Set([
   '/api/admin/retention/criteria', '/api/admin/profile', '/api/admin/settings',
   '/api/secretary/profile', '/api/secretary/settings', '/api/faculty/scores', '/api/faculty/profile',
   '/api/faculty/settings', '/api/faculty/classes',
-  '/api/notifications',
+  '/api/notifications', '/api/faculty/excused-requests', '/api/secretary/excused-requests',
 ]);
 
 function isKnownApiPath(pathname: string): boolean {
@@ -135,6 +135,7 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname.endsWith('/faculty/classes')) return { status: 'ok', classes: [] };
   if (pathname.endsWith('/faculty/activity')) return { status: 'ok', activity: [] };
   if (pathname.endsWith('/faculty/attendance-activity')) return { status: 'ok', activity: [] };
+  if (pathname.endsWith('/excused-requests')) return { status: 'ok', requests: [] };
   if (pathname === '/api/faculty/grading-config') {
     if (method === 'GET') {
       return { status: 'ok', configuration: null };

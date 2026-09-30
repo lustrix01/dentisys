@@ -697,6 +697,33 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByRole('button', { name: 'End Session' })).toHaveCount(0);
   });
 
+  test('Excused requests (ATT-006): Faculty approve a pending Secretary request', async ({ page }) => {
+    let decision: Record<string, unknown> | null = null;
+    let decided = false;
+    const pending = {
+      id: '31', status: 'pending', studentId: '1001', studentNumber: '2024-0001', studentName: 'Alice Green', classId: '1',
+      className: 'Section A', courseCode: 'CLIN401', sessionId: '900', sessionDate: '2026-09-20', sessionCode: 'CS1-20260920',
+      currentStatus: 'absent', reason: 'Medical certificate given to the Secretary', requestedBy: 'Bea Alonzo',
+      requestedAt: '2026-09-20T03:00:00Z', decidedBy: null, decidedAt: null, decisionNote: null,
+    };
+    await page.route('**/api/faculty/excused-requests', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', requests: decided ? [{ ...pending, status: 'approved' }] : [pending] }) });
+    });
+    await page.route('**/api/faculty/excused-requests/decide', async (route) => {
+      decision = route.request().postDataJSON() as Record<string, unknown>;
+      decided = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Excused request approved; attendance set to Excused.', request: { ...pending, status: 'approved' } }) });
+    });
+    await page.goto('/attendance');
+    const panel = page.getByRole('region', { name: 'Excused requests' });
+    await expect(panel).toContainText('Alice Green');
+    await expect(panel).toContainText('Medical certificate given to the Secretary');
+    await panel.getByLabel('Decision note for Alice Green').fill('Certificate verified');
+    await panel.getByRole('button', { name: 'Approve' }).click();
+    await expect.poll(() => decision).toEqual({ requestId: '31', decision: 'approve', note: 'Certificate verified' });
+    await expect(panel).toContainText('Excused request approved');
+  });
+
   test('Student Notices sends an At-Risk notice and reports suppressed test-mode deliveries', async ({ page }) => {
     let posted: Record<string, unknown> | null = null;
     await page.route('**/api/faculty/students', async (route) => {

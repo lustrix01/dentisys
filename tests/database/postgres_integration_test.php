@@ -277,6 +277,7 @@ $expectedMigrations = [
     '038_remedial_attempt_notes.sql',
     '039_attendance_session_class_end_time.sql',
     '040_email_outbox_suppressed_status.sql',
+    '041_attendance_excused_requests.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -873,6 +874,68 @@ expect_same([null, 'present', 'secretary'], [array_key_exists('previousStatus', 
 [$attendanceActivityDeniedStatus] = integration_http_get_json('/api/faculty/attendance-activity', $secretaryAccessToken);
 expect_same(403, $attendanceActivityDeniedStatus, 'Secretary cannot read the Faculty Class Attendance Activity endpoint');
 echo "PASS: Persistent Secretary attendance-session integration coverage completed.\n";
+
+// ATT-006: the Secretary requests Excused; only Faculty approve or reject it.
+[$secretaryDirectExcusedStatus, $secretaryDirectExcusedBody] = integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, [
+    'studentId' => (string) $sessionStudentId,
+    'recordId' => $sessionAttendanceRecordId,
+    'status' => 'excused',
+    'reason' => 'Direct excused attempt',
+]);
+expect_same(422, $secretaryDirectExcusedStatus, 'The Secretary cannot set Excused through the manual override');
+expect_same('status', $secretaryDirectExcusedBody['errors'][0]['field'] ?? null, 'The rejected override names the status field');
+[$excusedRequestStatus, $excusedRequestBody] = integration_http_json('/api/secretary/excused-requests', $secretaryAccessToken, [
+    'studentId' => (string) $sessionStudentId,
+    'recordId' => (string) $sessionAttendanceRecordId,
+    'reason' => 'Medical certificate given to the Secretary',
+]);
+expect_same(201, $excusedRequestStatus, 'The Secretary submits an Excused request');
+$excusedRequestId = (string) ($excusedRequestBody['request']['id'] ?? '');
+expect_same('pending', $excusedRequestBody['request']['status'] ?? null, 'A new Excused request is pending');
+[$duplicateExcusedStatus] = integration_http_json('/api/secretary/excused-requests', $secretaryAccessToken, [
+    'studentId' => (string) $sessionStudentId,
+    'recordId' => (string) $sessionAttendanceRecordId,
+    'reason' => 'Second request for the same day',
+]);
+expect_same(409, $duplicateExcusedStatus, 'Only one pending Excused request exists per student and day');
+$recordStatusStmt = $pdo->prepare('SELECT status FROM attendance_records WHERE record_id = ?');
+$recordStatusStmt->execute([$sessionAttendanceRecordId]);
+expect_same('late', $recordStatusStmt->fetchColumn(), 'A pending Excused request leaves the attendance unchanged');
+[$facultyExcusedListStatus, $facultyExcusedListBody] = integration_http_get_json('/api/faculty/excused-requests', $facultyActivityAccessToken);
+expect_same(200, $facultyExcusedListStatus, 'Faculty list Excused requests for their classes');
+expect_true(in_array($excusedRequestId, array_column($facultyExcusedListBody['requests'] ?? [], 'id'), true), 'The class Faculty member sees the pending request');
+[$secretaryDecideStatus] = integration_http_json('/api/faculty/excused-requests/decide', $secretaryAccessToken, ['requestId' => $excusedRequestId, 'decision' => 'approve']);
+expect_same(403, $secretaryDecideStatus, 'The Secretary cannot decide an Excused request');
+[$approveStatus, $approveBody] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, [
+    'requestId' => $excusedRequestId,
+    'decision' => 'approve',
+    'note' => 'Certificate verified',
+]);
+expect_same(200, $approveStatus, 'Faculty approve the Excused request');
+expect_same('approved', $approveBody['request']['status'] ?? null, 'The request is recorded as approved');
+$recordStatusStmt->execute([$sessionAttendanceRecordId]);
+expect_same('excused', $recordStatusStmt->fetchColumn(), 'Approval sets the attendance to Excused');
+$excusedCorrectionStmt = $pdo->prepare("SELECT previous_status, new_status, corrected_by_role FROM attendance_record_corrections WHERE record_id = ? ORDER BY correction_id DESC LIMIT 1");
+$excusedCorrectionStmt->execute([$sessionAttendanceRecordId]);
+expect_same(['previous_status' => 'late', 'new_status' => 'excused', 'corrected_by_role' => 'faculty'], $excusedCorrectionStmt->fetch(PDO::FETCH_ASSOC) ?: null, 'Approval keeps the old status in the correction history');
+[$redecideStatus] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, ['requestId' => $excusedRequestId, 'decision' => 'reject']);
+expect_same(409, $redecideStatus, 'A decided Excused request cannot be decided again');
+[$rejectRequestStatus, $rejectRequestBody] = integration_http_json('/api/secretary/excused-requests', $secretaryAccessToken, [
+    'studentId' => (string) $lateEnrollStudentId,
+    'sessionId' => $secondAttendanceSessionId,
+    'reason' => 'Claimed family emergency',
+]);
+expect_same(201, $rejectRequestStatus, 'A request can target a session day');
+[$rejectStatus, $rejectBody] = integration_http_json('/api/faculty/excused-requests/decide', $facultyActivityAccessToken, [
+    'requestId' => (string) ($rejectRequestBody['request']['id'] ?? ''),
+    'decision' => 'reject',
+    'note' => 'No supporting information',
+]);
+expect_same(200, $rejectStatus, 'Faculty reject an Excused request');
+expect_same(['rejected', 'present'], [$rejectBody['request']['status'] ?? null, $rejectBody['request']['currentStatus'] ?? null], 'A rejection leaves the attendance unchanged');
+[$secretaryExcusedListStatus, $secretaryExcusedListBody] = integration_http_get_json('/api/secretary/excused-requests', $secretaryAccessToken);
+expect_same(200, $secretaryExcusedListStatus, 'The Secretary lists their Excused requests');
+expect_true(count(array_filter($secretaryExcusedListBody['requests'] ?? [], static fn(array $row): bool => in_array($row['status'], ['approved', 'rejected'], true))) >= 2, 'The Secretary sees the Faculty decisions');
 
 $originalAdminGradingDefaultsJson = (string) $pdo->query(
     "SELECT setting_value FROM system_settings WHERE setting_key = 'grading_defaults'"

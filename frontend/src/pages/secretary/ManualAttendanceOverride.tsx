@@ -15,6 +15,7 @@ import {
   getSecretaryAttendanceApi,
   getSecretaryProfileApi,
   overrideSecretaryAttendanceApi,
+  createSecretaryExcusedRequestApi,
 } from '../../services/apiClient';
 
 type EditableStatus = 'present' | 'late' | 'absent' | 'excused';
@@ -173,6 +174,21 @@ export const ManualAttendanceOverride: React.FC = () => {
       const targetSessionId = selected.attendanceSessionId
         ? Number(selected.attendanceSessionId)
         : (selectedSessionId ? Number(selectedSessionId) : undefined);
+
+      if (status === 'excused') {
+        // ATT-006: Excused needs Faculty approval; the record is unchanged until then.
+        const requestResponse = await createSecretaryExcusedRequestApi({
+          studentId: selected.studentId,
+          recordId: selected.id || undefined,
+          sessionId: targetSessionId,
+          reason,
+        });
+        setSelected(null);
+        setReason('');
+        setConfirming(false);
+        setMessage({ type: 'success', text: requestResponse.message });
+        return;
+      }
 
       const response = await overrideSecretaryAttendanceApi({
         studentId: selected.studentId,
@@ -352,11 +368,16 @@ export const ManualAttendanceOverride: React.FC = () => {
                       }`}
                     >
                       <Icon className="w-4 h-4" />
-                      {nextStatus}
+                      {nextStatus === 'excused' ? 'Request Excused' : nextStatus}
                     </button>
                   );
                 })}
               </div>
+              {status === 'excused' && (
+                <p className="rounded-xl bg-blue-500/10 p-3 text-[11px] text-blue-800 dark:text-blue-300">
+                  Excused needs Faculty approval. Sending the request leaves the attendance unchanged until the Faculty member approves it.
+                </p>
+              )}
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wide">
                 Required correction reason
                 <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={4} maxLength={240} className="mt-1.5 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-normal normal-case tracking-normal text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100" />
@@ -371,12 +392,14 @@ export const ManualAttendanceOverride: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-300">
             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <p>Change {selected?.studentName} from <strong>{selected?.status}</strong> to <strong>{status}</strong>? This creates a permanent audit event.</p>
+            {status === 'excused'
+              ? <p>Send an Excused request for {selected?.studentName} to the Faculty member for approval? The attendance stays <strong>{selected?.status === 'not_recorded' ? 'not recorded' : selected?.status}</strong> until it is approved.</p>
+              : <p>Change {selected?.studentName} from <strong>{selected?.status}</strong> to <strong>{status}</strong>? This creates a permanent audit event.</p>}
           </div>
           <p className="text-xs text-slate-500">Reason: {reason}</p>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setConfirming(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600">Cancel</button>
-            <button type="button" onClick={() => void save()} disabled={submitting} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{submitting ? 'Saving…' : 'Confirm override'}</button>
+            <button type="button" onClick={() => void save()} disabled={submitting} className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{submitting ? 'Saving…' : status === 'excused' ? 'Send request' : 'Confirm override'}</button>
           </div>
         </div>
       </Modal>

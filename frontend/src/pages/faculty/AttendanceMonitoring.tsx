@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { LocationPicker } from '../../components/LocationPicker';
+import { FacultyExcusedRequestsPanel } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
 import {
   getFacultyClassesApi,
@@ -570,6 +571,10 @@ export const AttendanceMonitoring: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
+      <FacultyExcusedRequestsPanel onDecided={() => {
+        const csIdNum = parseInt(selectedCsId, 10);
+        if (csIdNum > 0) void loadWorksheet(csIdNum, selectedDate);
+      }} />
       {/* Source UI: page title and the primary session action sit together. */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>

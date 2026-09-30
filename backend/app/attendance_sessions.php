@@ -460,6 +460,63 @@ function attendance_record_correction_insert(
     $stmt->execute([$recordId, $previousStatus, $newStatus, $reason, $actorUserId, $actorRole]);
 }
 
+/**
+ * ATT-006 Excused requests with display details. $scopeSql restricts the rows
+ * (for example to one Faculty member's or Secretary's classes).
+ */
+function attendance_excused_requests_rows(PDO $pdo, string $scopeSql, array $params, int $limit = 200): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT xr.request_id, xr.status, xr.reason, xr.session_date, xr.session_code, xr.requested_at,
+                xr.decided_at, xr.decision_note, xr.attendance_session_id,
+                requester.display_name AS requested_by, decider.display_name AS decided_by,
+                s.student_id, s.student_number,
+                COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                COALESCE(pi.first_name, s.first_name) AS first_name,
+                COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                COALESCE(pi.last_name, s.last_name) AS last_name,
+                COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
+                cs.cs_id, cs.cs_name, c.course_code,
+                (SELECT r.status FROM attendance_records r
+                   LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
+                  WHERE r.enrollment_id = xr.enrollment_id AND r.session_date = xr.session_date
+                    AND (rs.session_id IS NULL OR rs.status <> 'revoked')
+                  ORDER BY r.record_id DESC LIMIT 1) AS current_status
+           FROM attendance_excused_requests xr
+           JOIN enrollments e ON e.enrollment_id = xr.enrollment_id
+           JOIN students s ON s.student_id = e.student_id
+           LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+           JOIN class_sections cs ON cs.cs_id = e.cs_id
+           JOIN courses c ON c.course_id = cs.course_id
+           JOIN user_accounts requester ON requester.user_id = xr.requested_by_user_id
+           LEFT JOIN user_accounts decider ON decider.user_id = xr.decided_by_user_id
+          WHERE {$scopeSql}
+          ORDER BY CASE xr.status WHEN 'pending' THEN 0 ELSE 1 END, xr.requested_at DESC, xr.request_id DESC
+          LIMIT " . max(1, min(500, $limit))
+    );
+    $stmt->execute($params);
+    return array_map(static fn(array $row): array => [
+        'id' => (string) $row['request_id'],
+        'status' => $row['status'],
+        'studentId' => (string) $row['student_id'],
+        'studentNumber' => $row['student_number'],
+        'studentName' => account_identity_display_name($row),
+        'classId' => (string) $row['cs_id'],
+        'className' => $row['cs_name'],
+        'courseCode' => $row['course_code'],
+        'sessionId' => $row['attendance_session_id'] !== null ? (string) $row['attendance_session_id'] : null,
+        'sessionDate' => $row['session_date'],
+        'sessionCode' => $row['session_code'],
+        'currentStatus' => $row['current_status'],
+        'reason' => $row['reason'],
+        'requestedBy' => $row['requested_by'],
+        'requestedAt' => attendance_session_timestamp((string) $row['requested_at']),
+        'decidedBy' => $row['decided_by'],
+        'decidedAt' => attendance_session_timestamp($row['decided_at'] !== null ? (string) $row['decided_at'] : null),
+        'decisionNote' => $row['decision_note'],
+    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+}
+
 function attendance_session_record_audit(
     PDO $pdo,
     array $config,
