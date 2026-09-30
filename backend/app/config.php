@@ -112,6 +112,30 @@ function config_email_provider(string $value): string
     return $normalized;
 }
 
+/**
+ * EML-001 test allowlist: comma-separated e-mail addresses; '*' matches any
+ * run of characters (for example live.*@bicol-u.edu.ph).
+ */
+function config_email_test_allowlist(string $raw): array
+{
+    return array_values(array_filter(array_map(
+        static fn(string $entry): string => strtolower(trim($entry)),
+        explode(',', $raw)
+    ), static fn(string $entry): bool => $entry !== ''));
+}
+
+function email_test_allowlist_allows(array $allowlist, string $email): bool
+{
+    $email = strtolower(trim($email));
+    foreach ($allowlist as $pattern) {
+        $regex = '/^' . str_replace('\\*', '.*', preg_quote($pattern, '/')) . '$/';
+        if (preg_match($regex, $email) === 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function config_allowed_email_domains(array $overrides): array
 {
     $pluralPresent = (getenv('ALLOWED_EMAIL_DOMAINS') !== false && trim((string) getenv('ALLOWED_EMAIL_DOMAINS')) !== '')
@@ -297,6 +321,9 @@ function app_config(?array $overrides = null): array
                 'active' => $mockFlags['location'] ? 'development-mock' : 'disabled',
             ],
         ],
+        // EML-001: outside production, Faculty notices go only to allowlisted addresses.
+        'email_test_mode' => $appEnv !== 'production',
+        'email_test_allowlist' => config_email_test_allowlist((string) config_value('EMAIL_TEST_ALLOWLIST', $values, '')),
         'show_dev_reset_link' => $isDevelopment && filter_var(config_value('SHOW_DEV_RESET_LINK', $values, true), FILTER_VALIDATE_BOOLEAN),
         'show_dev_invitation_link' => $isDevelopment && filter_var(config_value('SHOW_DEV_INVITATION_LINK', $values, true), FILTER_VALIDATE_BOOLEAN),
         'smtp' => [

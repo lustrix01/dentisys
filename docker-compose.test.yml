@@ -22,6 +22,8 @@ services:
       DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED: "false"
       STUDENT_AUTH_ENABLED: ${STUDENT_AUTH_ENABLED:-false}
       RATE_LIMIT_STORAGE_DIR: /tmp/dentisys-ratelimit
+      # EML-001: only the live-suite recipients receive Faculty notices.
+      EMAIL_TEST_ALLOWLIST: "live.*@bicol-u.edu.ph"
     volumes:
       - ./tests:/var/www/html/tests:ro
       - ./database:/var/www/html/database:ro

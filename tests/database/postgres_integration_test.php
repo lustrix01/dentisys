@@ -276,6 +276,7 @@ $expectedMigrations = [
     '037_attendance_record_corrections.sql',
     '038_remedial_attempt_notes.sql',
     '039_attendance_session_class_end_time.sql',
+    '040_email_outbox_suppressed_status.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2443,6 +2444,22 @@ $demoStudentEnrollmentStmt = $pdo->prepare(
 $demoStudentEnrollmentStmt->execute([$studentClassId]);
 $demoStudentEnrollmentId = (int) $demoStudentEnrollmentStmt->fetchColumn();
 expect_true($demoStudentEnrollmentId > 0, 'Demo Student is enrolled in the Faculty-owned test class');
+
+// EML-001: outside production a Faculty notice to an address that is not on
+// the test allowlist is recorded as Suppressed and not delivered.
+[$suppressedNoticeStatus, $suppressedNoticeBody] = integration_http_json('/api/faculty/send-email', $seedFacultyAccessToken, [
+    'studentIds' => ['26'],
+    'emailType' => 'At-Risk Notification',
+    'subject' => 'Integration suppressed notice',
+    'message' => 'This notice must not be delivered in test mode.',
+]);
+expect_same(200, $suppressedNoticeStatus, 'A suppressed notice is not an error');
+expect_same('Suppressed', $suppressedNoticeBody['deliveries'][0]['status'] ?? null, 'A notice to a non-allowlisted address is suppressed in test mode');
+expect_same(1, $suppressedNoticeBody['suppressedCount'] ?? null, 'The response counts suppressed notices');
+$suppressedRowStmt = $pdo->prepare('SELECT status, sent_at FROM email_outbox WHERE email_id = ?');
+$suppressedRowStmt->execute([(int) ($suppressedNoticeBody['deliveries'][0]['id'] ?? 0)]);
+$suppressedRow = $suppressedRowStmt->fetch(PDO::FETCH_ASSOC);
+expect_same(['Suppressed', null], [$suppressedRow['status'] ?? null, is_array($suppressedRow) && array_key_exists('sent_at', $suppressedRow) ? $suppressedRow['sent_at'] : 'missing'], 'The suppressed notice stays in the e-mail history without a sent time');
 
 // Owner decision: a computed grade that moves an enrollment into remedial, or
 // clears it, notifies the Student once per change. Rolled back afterwards.

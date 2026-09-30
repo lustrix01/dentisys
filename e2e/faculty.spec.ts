@@ -697,6 +697,28 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByRole('button', { name: 'End Session' })).toHaveCount(0);
   });
 
+  test('Student Notices sends an At-Risk notice and reports suppressed test-mode deliveries', async ({ page }) => {
+    let posted: Record<string, unknown> | null = null;
+    await page.route('**/api/faculty/students', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+        { id: '42', studentId: '2024-0042', name: 'Notice Student', email: 'notice.student@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [{ classId: '1', className: 'CLIN401 - Section A', enrollmentId: '88' }] },
+      ]) });
+    });
+    await page.route('**/api/faculty/send-email', async (route) => {
+      posted = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', message: '0 email(s) sent; 1 suppressed (test mode); 0 failed.', sentCount: 0, suppressedCount: 1, failedCount: 0,
+        deliveries: [{ id: '5', recipient: 'notice.student@bicol-u.edu.ph', status: 'Suppressed' }],
+      }) });
+    });
+    await page.goto('/email-management');
+    await page.getByRole('button', { name: 'Student Notices' }).click();
+    await page.getByLabel('Select Notice Student').check();
+    await page.getByRole('button', { name: /Send Notice \(1\)/ }).click();
+    await expect.poll(() => posted).toMatchObject({ studentIds: ['42'], emailType: 'At-Risk Notification', subject: 'DentiSys At-Risk Notice' });
+    await expect(page.getByText('1 suppressed (test mode)')).toBeVisible();
+  });
+
   test('Class Attendance Activity lists attendance changes with old and new status', async ({ page }) => {
     await page.route('**/api/faculty/attendance-activity**', async (route) => {
       await route.fulfill({

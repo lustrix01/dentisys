@@ -15,7 +15,7 @@ export type EmailLog = {
   subject: string;
   type: EmailType;
   sentAt: string;
-  status: 'Sent' | 'Failed' | 'Pending';
+  status: 'Sent' | 'Failed' | 'Pending' | 'Suppressed';
 };
 
 interface EmailHistoryTableProps {
@@ -99,10 +99,12 @@ export const EmailHistoryTable: React.FC<EmailHistoryTableProps> = ({
                         ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
                         : log.status === 'Failed'
                         ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                        : log.status === 'Suppressed'
+                        ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                         : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
                     }`}
                   >
-                    {log.status}
+                    {log.status === 'Suppressed' ? 'Suppressed (test mode)' : log.status}
                   </span>
                 </td>
               </tr>

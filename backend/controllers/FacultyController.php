@@ -6156,6 +6156,12 @@ function handle_faculty_email_send(): void
             if ($emailId <= 0) {
                 throw new RuntimeException('Email outbox insert did not return a valid identifier.');
             }
+            if (!empty($config['email_test_mode']) && !email_test_allowlist_allows($config['email_test_allowlist'] ?? [], $recipientEmail)) {
+                // EML-001: recorded in history but not delivered outside production.
+                $finish->execute(['Suppressed', null, 'Test mode: the recipient is not on the e-mail test allowlist.', $emailId]);
+                $results[] = ['id' => (string) $emailId, 'recipient' => $recipientEmail, 'status' => 'Suppressed'];
+                continue;
+            }
             $sent = send_email($recipientEmail, $subject, $messageBody, $config);
             $status = $sent ? 'Sent' : 'Failed';
             $sentAt = $sent ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null;
@@ -6169,13 +6175,15 @@ function handle_faculty_email_send(): void
         }
 
         $sentCount = count(array_filter($results, static fn(array $row): bool => $row['status'] === 'Sent'));
-        $failedCount = count($results) - $sentCount;
+        $suppressedCount = count(array_filter($results, static fn(array $row): bool => $row['status'] === 'Suppressed'));
+        $failedCount = count($results) - $sentCount - $suppressedCount;
         json_response([
             'status' => $failedCount === 0 ? 'ok' : 'partial',
-            'message' => $failedCount === 0
+            'message' => $failedCount === 0 && $suppressedCount === 0
                 ? 'Notification email(s) sent successfully.'
-                : "{$sentCount} email(s) sent; {$failedCount} failed.",
+                : "{$sentCount} email(s) sent; {$suppressedCount} suppressed (test mode); {$failedCount} failed.",
             'sentCount' => $sentCount,
+            'suppressedCount' => $suppressedCount,
             'failedCount' => $failedCount,
             'deliveries' => $results,
         ], $failedCount === 0 ? 200 : 207);

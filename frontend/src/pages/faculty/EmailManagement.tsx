@@ -26,11 +26,24 @@ import {
   revokeSecretaryInvitation,
   SecretaryInvitation,
 } from '../../services/authService';
-import { createStudentInvitation } from '../../services/apiClient';
+import { createStudentInvitation, sendFacultyEmailApi } from '../../services/apiClient';
 import { Student } from '../../types';
 import { getFacultyStudentsApi, getFacultyClassesApi } from '../../services/apiClient';
 
-type Tab = 'student_invites' | 'secretary' | 'history';
+type Tab = 'student_invites' | 'secretary' | 'notices' | 'history';
+type NoticeType = 'At-Risk Notification' | 'Privacy Consent';
+
+// EML-001 notice defaults; the Faculty member can edit the message before sending.
+const NOTICE_DEFAULTS: Record<NoticeType, { subject: string; message: string }> = {
+  'At-Risk Notification': {
+    subject: 'DentiSys At-Risk Notice',
+    message: 'Your current standing in this course needs attention. Please review your grades and attendance in DentiSys and consult your Faculty member about the support available to you.',
+  },
+  'Privacy Consent': {
+    subject: 'DentiSys Privacy Consent Notice',
+    message: 'DentiSys uses your personal data, including optional face check-in data, to manage your academic records and attendance. Please review the privacy consent information in DentiSys and respond there.',
+  },
+};
 
 const initialLogs: EmailLog[] = [];
 
@@ -121,13 +134,15 @@ export const EmailManagement: React.FC = () => {
   const [previewStudentId, setPreviewStudentId] = useState('');
   
   const [logs, setLogs] = useState<EmailLog[]>(initialLogs);
-  const [studentInvitationStates, setStudentInvitationStates] = useState<Record<string, { status: 'Sent' | 'Failed' | 'Pending'; sentAt: string }>>({});
+  const [studentInvitationStates, setStudentInvitationStates] = useState<Record<string, { status: 'Sent' | 'Failed' | 'Pending' | 'Suppressed'; sentAt: string }>>({});
   const [secretaryInvs, setSecretaryInvs] = useState<SecretaryInvitation[]>([]);
   // Development-only activation links, returned once when an invitation is issued.
   const [secretaryDevLinks, setSecretaryDevLinks] = useState<Record<string, string>>({});
   
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [noticeType, setNoticeType] = useState<NoticeType>('At-Risk Notification');
+  const [noticeMessage, setNoticeMessage] = useState(NOTICE_DEFAULTS['At-Risk Notification'].message);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
   const safeStudents = useMemo(() => dbStudents || [], [dbStudents]);
@@ -146,7 +161,7 @@ export const EmailManagement: React.FC = () => {
       const res = await import('../../services/apiClient').then(m => m.getFacultyEmailLogsApi());
         if (Array.isArray(res.logs)) {
           setLogs(res.logs as EmailLog[]);
-          const latestByEmail: Record<string, { status: 'Sent' | 'Failed' | 'Pending'; sentAt: string }> = {};
+          const latestByEmail: Record<string, { status: 'Sent' | 'Failed' | 'Pending' | 'Suppressed'; sentAt: string }> = {};
           for (const log of res.logs) {
             if (log.type !== 'Student Invitation' || !log.recipientEmail) continue;
             const key = log.recipientEmail.toLowerCase();
@@ -294,6 +309,30 @@ export const EmailManagement: React.FC = () => {
     }
   };
 
+  const handleSendNotices = async () => {
+    if (!selected.length) {
+      setNotice({ type: 'error', message: 'Please select at least one student recipient.' });
+      return;
+    }
+    setIsSending(true);
+    setNotice(null);
+    try {
+      const response = await sendFacultyEmailApi({
+        studentIds: selected,
+        emailType: noticeType,
+        subject: NOTICE_DEFAULTS[noticeType].subject,
+        message: noticeMessage.trim() || NOTICE_DEFAULTS[noticeType].message,
+      });
+      setNotice({ type: response.failedCount === 0 ? 'success' : 'error', message: response.message });
+      setSelected([]);
+      await fetchEmailLogs();
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Unable to send the notices.' });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   const handleRevoke = async (id: string, studentId: string) => {
     const res = await revokeSecretaryInvitation(id, studentId);
     if (res.success) {
@@ -386,6 +425,17 @@ export const EmailManagement: React.FC = () => {
             }`}
           >
             Class Secretary Invitations
+          </button>
+
+          <button
+            onClick={() => { setTab('notices'); setSelected([]); }}
+            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              tab === 'notices'
+                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            Student Notices
           </button>
 
           <button
@@ -698,6 +748,81 @@ export const EmailManagement: React.FC = () => {
                 ))}
               </div>
             )}
+          </div>
+        </Card>
+      )}
+
+      {/* Student notices (EML-001): At-Risk and Privacy Consent */}
+      {tab === 'notices' && (
+        <Card className="p-6">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="space-y-3 flex-1">
+              <div>
+                <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Student Notices</h2>
+                <p className="text-xs text-slate-400">Send an At-Risk or Privacy Consent notice to selected students using the institutional email template. Outside production, only allowlisted test addresses receive it; the others are recorded as "Suppressed (test mode)".</p>
+              </div>
+              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
+                Notice type
+                <select
+                  aria-label="Notice type"
+                  value={noticeType}
+                  onChange={event => {
+                    const next = event.target.value as NoticeType;
+                    setNoticeType(next);
+                    setNoticeMessage(NOTICE_DEFAULTS[next].message);
+                  }}
+                  className="mt-1 block w-full sm:w-72 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <option value="At-Risk Notification">At-Risk notice</option>
+                  <option value="Privacy Consent">Privacy Consent notice</option>
+                </select>
+              </label>
+              <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
+                Message
+                <textarea
+                  aria-label="Notice message"
+                  rows={3}
+                  maxLength={10000}
+                  value={noticeMessage}
+                  onChange={event => setNoticeMessage(event.target.value)}
+                  className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              disabled={isSending || selected.length === 0}
+              onClick={() => void handleSendNotices()}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{isSending ? 'Sending...' : `Send Notice (${selected.length})`}</span>
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="py-3 px-4 w-10">
+                    <input type="checkbox" aria-label="Select all students" checked={selected.length > 0 && selected.length === filteredStudents.length} onChange={toggleSelectAll} className="w-4 h-4 accent-emerald-600 cursor-pointer" />
+                  </th>
+                  <th className="py-3 px-4">Student</th>
+                  <th className="py-3 px-4">Institutional email</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                {filteredStudents.map(student => (
+                  <tr key={student.id}>
+                    <td className="py-3 px-4">
+                      <input type="checkbox" aria-label={`Select ${student.name}`} checked={selected.includes(student.id)} onChange={() => toggleSelect(student.id)} className="w-4 h-4 accent-emerald-600 cursor-pointer" />
+                    </td>
+                    <td className="py-3 px-4"><span className="font-bold text-slate-800 dark:text-slate-100">{student.name}</span><span className="block text-[10px] text-slate-400 font-mono">{student.studentId}</span></td>
+                    <td className="py-3 px-4 text-slate-500">{student.email}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredStudents.length === 0 && <p className="py-8 text-center text-xs text-slate-400">No students match these filters.</p>}
           </div>
         </Card>
       )}

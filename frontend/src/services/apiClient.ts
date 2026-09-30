@@ -1485,7 +1485,7 @@ export function sendFacultyEmailApi(data: {
   emailType: string;
   subject?: string;
   message?: string;
-}): Promise<{ status: string; message: string; sentCount: number; failedCount: number }> {
+}): Promise<{ status: string; message: string; sentCount: number; suppressedCount?: number; failedCount: number }> {
   return request('POST', '/faculty/send-email', data);
 }
 
@@ -1498,7 +1498,7 @@ export function getFacultyEmailLogsApi(): Promise<{
     subject: string;
     type: string;
     sentAt: string;
-    status: 'Sent' | 'Failed';
+    status: 'Sent' | 'Failed' | 'Suppressed';
   }>;
 }> {
   return request('GET', '/faculty/email-logs');
