@@ -449,7 +449,7 @@ Grade displays and exports must distinguish authoritative Midterm, Finals, and o
 
 **Status: APPROVED**
 
-Faculty may send At-Risk and Privacy Consent notices to their students using the institutional email template. Outside production, email is sent only to addresses on a configured test allowlist. Other messages are recorded in history as "Suppressed (test mode)" and are not delivered.
+Faculty may send At-Risk and Privacy Consent notices to their students using the institutional email template. When the email mode is `custom`, every outgoing email is delivered to Mailpit, and only recipients on the configured allowlist also receive it by real email; Faculty notices to other recipients are recorded in history as "Suppressed (test mode)". In `mailpit` mode all email goes to Mailpit only; in `smtp` mode all email is delivered normally.
 
 ---
 
