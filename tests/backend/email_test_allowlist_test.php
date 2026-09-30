@@ -20,6 +20,14 @@ assert_allowlist(email_test_allowlist_allows($list, 'live.abc123@bicol-u.edu.ph'
 assert_allowlist(!email_test_allowlist_allows($list, 'student@bicol-u.edu.ph'), 'Other addresses are not allowed');
 assert_allowlist(!email_test_allowlist_allows($list, 'live.x@bicol-u.edu.ph.evil.test'), 'A wildcard entry is anchored at both ends');
 assert_allowlist(!email_test_allowlist_allows([], 'tester@bicol-u.edu.ph'), 'An empty allowlist allows nothing');
-$production = app_config(['APP_ENV' => 'test']);
-assert_allowlist($production['email_test_mode'] === true, 'Test mode applies outside production');
+// The container environment takes precedence over overrides; clear it so the defaults are tested.
+putenv('EMAIL_ALLOWLIST_ENABLED');
+foreach (['development', 'single-server', 'production'] as $appEnv) {
+    $config = app_config(['APP_ENV' => $appEnv]);
+    assert_allowlist($config['email_test_mode'] === true, "The allowlist is enabled by default when APP_ENV={$appEnv}");
+}
+$disabled = app_config(['APP_ENV' => 'single-server', 'EMAIL_ALLOWLIST_ENABLED' => 'false']);
+assert_allowlist($disabled['email_test_mode'] === false, 'EMAIL_ALLOWLIST_ENABLED=false turns the allowlist off');
+$enabled = app_config(['APP_ENV' => 'production', 'EMAIL_ALLOWLIST_ENABLED' => 'true']);
+assert_allowlist($enabled['email_test_mode'] === true, 'EMAIL_ALLOWLIST_ENABLED=true keeps the allowlist on in production');
 echo "ALL EMAIL TEST ALLOWLIST TESTS PASSED.\n";

@@ -6310,7 +6310,7 @@ function handle_faculty_email_send(): void
                 throw new RuntimeException('Email outbox insert did not return a valid identifier.');
             }
             if (!empty($config['email_test_mode']) && !email_test_allowlist_allows($config['email_test_allowlist'] ?? [], $recipientEmail)) {
-                // EML-001: recorded in history but not delivered outside production.
+                // EML-001: recorded in history but not delivered while the allowlist is enabled.
                 $finish->execute(['Suppressed', null, 'Test mode: the recipient is not on the e-mail test allowlist.', $emailId]);
                 $results[] = ['id' => (string) $emailId, 'recipient' => $recipientEmail, 'status' => 'Suppressed'];
                 continue;

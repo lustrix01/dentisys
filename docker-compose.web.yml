@@ -7,6 +7,7 @@ services:
     environment:
       APP_ENV: single-server
       EMAIL_PROVIDER: smtp
+      EMAIL_ALLOWLIST_ENABLED: ${EMAIL_ALLOWLIST_ENABLED:-true}
       EMAIL_TEST_ALLOWLIST: ${EMAIL_TEST_ALLOWLIST:-}
       DEV_MOCK_IDENTITY_ENABLED: "false"
       DEV_MOCK_BIOMETRIC_ENABLED: "false"

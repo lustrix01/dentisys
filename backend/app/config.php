@@ -321,8 +321,9 @@ function app_config(?array $overrides = null): array
                 'active' => $mockFlags['location'] ? 'development-mock' : 'disabled',
             ],
         ],
-        // EML-001: outside production, Faculty notices go only to allowlisted addresses.
-        'email_test_mode' => $appEnv !== 'production',
+        // EML-001: while the allowlist is enabled (the default, in every
+        // environment), Faculty notices go only to allowlisted addresses.
+        'email_test_mode' => config_strict_bool(config_value('EMAIL_ALLOWLIST_ENABLED', $values, true), 'EMAIL_ALLOWLIST_ENABLED', true),
         'email_test_allowlist' => config_email_test_allowlist((string) config_value('EMAIL_TEST_ALLOWLIST', $values, '')),
         'show_dev_reset_link' => $isDevelopment && filter_var(config_value('SHOW_DEV_RESET_LINK', $values, true), FILTER_VALIDATE_BOOLEAN),
         'show_dev_invitation_link' => $isDevelopment && filter_var(config_value('SHOW_DEV_INVITATION_LINK', $values, true), FILTER_VALIDATE_BOOLEAN),

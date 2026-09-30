@@ -2511,7 +2511,7 @@ $demoStudentEnrollmentStmt->execute([$studentClassId]);
 $demoStudentEnrollmentId = (int) $demoStudentEnrollmentStmt->fetchColumn();
 expect_true($demoStudentEnrollmentId > 0, 'Demo Student is enrolled in the Faculty-owned test class');
 
-// EML-001: outside production a Faculty notice to an address that is not on
+// EML-001: while the allowlist is enabled a Faculty notice to an address that is not on
 // the test allowlist is recorded as Suppressed and not delivered.
 [$suppressedNoticeStatus, $suppressedNoticeBody] = integration_http_json('/api/faculty/send-email', $seedFacultyAccessToken, [
     'studentIds' => ['26'],
