@@ -45,3 +45,6 @@ playwright-report/
 .dentisys-local
 .agent-worktrees/
 frontend/certs/
+
+# Local database backups (contain private data)
+/backups/

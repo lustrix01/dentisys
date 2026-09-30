@@ -17,11 +17,16 @@ if ($LASTEXITCODE -ne 0) { throw 'The PostgreSQL service failed to become ready.
 & (Join-Path $PSScriptRoot 'migrate.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'PostgreSQL migrations failed.' }
 
-if ($NoBuild) {
-    & docker compose up -d
-} else {
-    & docker compose up --build -d
+if (-not $NoBuild) {
+    & docker compose build
+    if ($LASTEXITCODE -ne 0) { throw 'The development images failed to build.' }
 }
+# The frontend keeps node_modules in a named volume that an image rebuild does
+# not refresh. Reinstall only when package-lock.json changed since last time.
+& docker compose run --rm --no-deps frontend sh -c 'cmp -s package-lock.json node_modules/.dentisys-package-lock.json || { npm ci --no-audit --no-fund && cp package-lock.json node_modules/.dentisys-package-lock.json; }'
+if ($LASTEXITCODE -ne 0) { throw 'Frontend dependencies could not be installed.' }
+
+& docker compose up -d
 if ($LASTEXITCODE -ne 0) { throw 'The development stack failed to start.' }
 
 Write-Host 'DentiSys development environment is ready.'

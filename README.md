@@ -15,7 +15,7 @@ The development stack runs entirely on your device as Docker containers. Postgre
 ### 1. Install prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose available.
-- Node.js 18 or newer for frontend builds and browser tests.
+- Node.js 20.19 or newer (22 LTS recommended; the containers use Node 24) for frontend builds and browser tests. Vite 8 does not run on Node 18.
 - Playwright Chromium only when running end-to-end tests.
 
 This repository supports Docker Compose only. Do not use XAMPP, native PHP, native MySQL/MariaDB, or phpMyAdmin.
@@ -42,8 +42,10 @@ npx playwright install chromium
 ### 4. Start the complete development system
 
 ```powershell
-docker compose up --build -d
+.\scripts\start-dev.ps1
 ```
+
+On macOS or Linux, run `./scripts/start-dev.sh`. The script applies pending migrations, builds the images, installs frontend packages when `frontend/package-lock.json` changed, starts the stack, and runs the maintenance scripts described in step 6. `docker compose up --build -d` also works for a brand-new setup, but it does not refresh frontend packages in an existing setup.
 
 This starts the five development services: PostgreSQL, PHP API, Vite frontend, Mailpit, and loopback-only pgAdmin. On a new PostgreSQL volume, the database, application role, schema, and pending additive migrations are created automatically. Startup never loads demo data, drops tables, or truncates the database.
 
@@ -109,6 +111,66 @@ docker compose down
 Run migrations after pulling schema changes. `docker compose down` stops the stack but preserves all volumes and local data. `docker compose down -v` deletes the PostgreSQL volume and is destructive—use it only when intentionally discarding local database data.
 
 For a detailed walkthrough, test commands, and the safe pgAdmin-only reset, see [the development environment guide](docs/development-environment.md).
+
+### 8. Upgrading an existing setup (or switching branches)
+
+Use this when you already ran an older DentiSys build on your device (you have a `.env` and a database volume) and want to run the current code. Your local data is kept.
+
+1. **Stop the stack, keeping its data.** Never add `-v`; it deletes the database volume.
+
+   ```powershell
+   docker compose down
+   ```
+
+2. **Back up the database.** New migrations change the schema and some existing records (for example, Class Secretary accounts are linked to their Student records). A backup lets you go back.
+
+   ```powershell
+   New-Item -ItemType Directory -Force backups | Out-Null
+   docker compose up -d --wait db
+   docker compose exec -T db pg_dump -U postgres -d dentisys -Fc -f /tmp/dentisys-before-upgrade.dump
+   docker compose cp db:/tmp/dentisys-before-upgrade.dump backups/dentisys-before-upgrade.dump
+   ```
+
+   `backups/` is ignored by git. Keep the file private: it contains all local data.
+
+3. **Get the code.**
+
+   ```powershell
+   git fetch origin
+   git switch lumbanglighthal-owhie
+   git pull
+   ```
+
+4. **Check `.env` against `.env.example`.** Your `.env` keeps working; newer optional settings use safe defaults when absent:
+   - `EMAIL_TEST_ALLOWLIST`: outside production, Faculty notices (At-Risk, Privacy Consent) reach only these addresses; other notices are recorded as "Suppressed (test mode)". Add your test addresses to see them in Mailpit.
+   - `FIRST_DEAN_*`: only used on a database without a Dean account.
+
+5. **Start the system with the script** (not plain `docker compose up`):
+
+   ```powershell
+   .\scripts\start-dev.ps1
+   ```
+
+   It applies the pending migrations, rebuilds the images, reinstalls the frontend packages because `package-lock.json` changed, and runs the maintenance scripts (grade-weight bootstrap, first-Dean invitation, biometric expiry sweep).
+
+6. **Refresh host test dependencies** if you run builds or browser tests on your device:
+
+   ```powershell
+   npm ci
+   npm --prefix frontend ci
+   ```
+
+**What users will notice after upgrading:** Class Secretaries sign in with their own Student account (the sidebar toggle switches to their Student pages); new attendance sessions need a class end time and end automatically at that time; Secretaries request Excused and Faculty approve or reject it; the Full Matrix View uses the class-record layout.
+
+**Troubleshooting**
+- *Frontend shows "Failed to resolve import" (for example `leaflet`)*: run `.\scripts\start-dev.ps1` again, or `docker compose run --rm --no-deps frontend npm ci`, then `docker compose restart frontend`.
+- *A migration fails*: stop, do not retry repeatedly, and report the error. To return to the backup, switch back to your previous branch and restore it (this replaces the current local data):
+
+  ```powershell
+  docker compose up -d --wait db
+  docker compose cp backups/dentisys-before-upgrade.dump db:/tmp/restore.dump
+  docker compose exec -T db pg_restore -U postgres -d dentisys --clean --if-exists /tmp/restore.dump
+  ```
 
 ## Same-host single-server deployment foundation
 

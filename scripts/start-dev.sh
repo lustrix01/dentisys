@@ -11,7 +11,11 @@ fi
 
 docker compose up -d --wait db
 docker compose exec -T db sh /docker-entrypoint-initdb.d/001-migrations.sh
-docker compose up --build -d
+docker compose build
+# The frontend keeps node_modules in a named volume that an image rebuild does
+# not refresh. Reinstall only when package-lock.json changed since last time.
+docker compose run --rm --no-deps frontend sh -c 'cmp -s package-lock.json node_modules/.dentisys-package-lock.json || { npm ci --no-audit --no-fund && cp package-lock.json node_modules/.dentisys-package-lock.json; }'
+docker compose up -d
 echo "Development stack started: frontend http://localhost:5173, API http://localhost:8080, Mailpit http://localhost:8025, pgAdmin http://127.0.0.1:5050"
 echo "Existing database data was preserved. To add demo data manually, paste database/seeds/development-demo.sql into pgAdmin Query Tool."
 # Every class needs grade weights; give any class offering without them a starting configuration.
