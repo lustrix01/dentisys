@@ -34,6 +34,11 @@ $singleServerServices = & docker compose --env-file .env.single-server.example -
 if ($singleServerServices -contains 'pgadmin' -or $singleServerServices -contains 'mailpit') {
     throw 'Single-server Compose must not include development-only services.'
 }
+# EML-001: Mailpit joins single-server only through the CUSTOM e-mail profile.
+$customServices = & docker compose --env-file .env.single-server.example -f docker-compose.web.yml -f docker-compose.database.yml --profile mailpit config --services
+if ($customServices -notcontains 'mailpit' -or $customServices -contains 'pgadmin') {
+    throw 'Single-server CUSTOM e-mail profile must add Mailpit and nothing else.'
+}
 
 $compose = Get-Content -LiteralPath (Join-Path $root 'docker-compose.yml') -Raw
 if ($compose -match 'DB_HOST_PORT|xampp|XAMPP') { throw 'Docker Compose still contains a removed native-runtime reference.' }

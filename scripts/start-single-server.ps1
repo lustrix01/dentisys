@@ -30,8 +30,14 @@ if (-not [Uri]::TryCreate($values['APP_BASE_URL'], [UriKind]::Absolute, [ref]$ap
     throw 'APP_BASE_URL must be a valid absolute HTTP(S) URL.'
 }
 
-& docker compose --env-file $envPath -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml config --quiet
+# EML-001: CUSTOM e-mail mode also runs Mailpit.
+$composeArgs = @('--env-file', $envPath, '-p', 'dentisys-single-server', '-f', 'docker-compose.web.yml', '-f', 'docker-compose.database.yml')
+if ($values['EMAIL_PROVIDER'] -eq 'custom') {
+    $composeArgs += @('--profile', 'mailpit')
+}
+
+& docker compose @composeArgs config --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Single-server Compose configuration is invalid.' }
-& docker compose --env-file $envPath -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml up -d --build
+& docker compose @composeArgs up -d --build
 if ($LASTEXITCODE -ne 0) { throw 'Single-server stack failed to start.' }
 Write-Host 'Single-server stack started. PostgreSQL remains internal; access the application on APP_HTTP_PORT.'

@@ -105,16 +105,17 @@ function app_local_date(array $config, DateTimeImmutable $instant): string
 function config_email_provider(string $value): string
 {
     $normalized = strtolower(trim($value));
-    if (!in_array($normalized, ['mailpit', 'smtp'], true)) {
-        throw new RuntimeException('Configuration value "EMAIL_PROVIDER" must be mailpit or smtp.');
+    if (!in_array($normalized, ['mailpit', 'smtp', 'custom'], true)) {
+        throw new RuntimeException('Configuration value "EMAIL_PROVIDER" must be mailpit, smtp, or custom.');
     }
 
     return $normalized;
 }
 
 /**
- * EML-001 test allowlist: comma-separated e-mail addresses; '*' matches any
- * run of characters (for example live.*@bicol-u.edu.ph).
+ * EML-001 allowlist for EMAIL_PROVIDER=custom: comma-separated e-mail
+ * addresses; '*' matches any run of characters (for example
+ * live.*@bicol-u.edu.ph).
  */
 function config_email_test_allowlist(string $raw): array
 {
@@ -321,9 +322,8 @@ function app_config(?array $overrides = null): array
                 'active' => $mockFlags['location'] ? 'development-mock' : 'disabled',
             ],
         ],
-        // EML-001: while the allowlist is enabled (the default, in every
-        // environment), Faculty notices go only to allowlisted addresses.
-        'email_test_mode' => config_strict_bool(config_value('EMAIL_ALLOWLIST_ENABLED', $values, true), 'EMAIL_ALLOWLIST_ENABLED', true),
+        // EML-001: with EMAIL_PROVIDER=custom every e-mail goes to Mailpit and
+        // only allowlisted recipients also receive it through SMTP.
         'email_test_allowlist' => config_email_test_allowlist((string) config_value('EMAIL_TEST_ALLOWLIST', $values, '')),
         'show_dev_reset_link' => $isDevelopment && filter_var(config_value('SHOW_DEV_RESET_LINK', $values, true), FILTER_VALIDATE_BOOLEAN),
         'show_dev_invitation_link' => $isDevelopment && filter_var(config_value('SHOW_DEV_INVITATION_LINK', $values, true), FILTER_VALIDATE_BOOLEAN),
@@ -336,6 +336,10 @@ function app_config(?array $overrides = null): array
             'encryption' => strtolower((string) config_value('SMTP_ENCRYPTION', $values, $isDevelopment ? 'none' : 'starttls')),
             'verify_peer' => filter_var(config_value('SMTP_VERIFY_PEER', $values, $isDevelopment ? 'false' : 'true'), FILTER_VALIDATE_BOOLEAN),
             'ca_file' => (string) config_value('SMTP_CA_FILE', $values, ''),
+        ],
+        'mailpit_smtp' => [
+            'host' => (string) config_value('MAILPIT_SMTP_HOST', $values, 'mailpit'),
+            'port' => (int) config_value('MAILPIT_SMTP_PORT', $values, 1025),
         ],
     ];
 }

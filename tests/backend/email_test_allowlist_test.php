@@ -20,14 +20,14 @@ assert_allowlist(email_test_allowlist_allows($list, 'live.abc123@bicol-u.edu.ph'
 assert_allowlist(!email_test_allowlist_allows($list, 'student@bicol-u.edu.ph'), 'Other addresses are not allowed');
 assert_allowlist(!email_test_allowlist_allows($list, 'live.x@bicol-u.edu.ph.evil.test'), 'A wildcard entry is anchored at both ends');
 assert_allowlist(!email_test_allowlist_allows([], 'tester@bicol-u.edu.ph'), 'An empty allowlist allows nothing');
-// The container environment takes precedence over overrides; clear it so the defaults are tested.
-putenv('EMAIL_ALLOWLIST_ENABLED');
-foreach (['development', 'single-server', 'production'] as $appEnv) {
-    $config = app_config(['APP_ENV' => $appEnv]);
-    assert_allowlist($config['email_test_mode'] === true, "The allowlist is enabled by default when APP_ENV={$appEnv}");
+
+require_once __DIR__ . '/../../backend/app/mailer.php';
+
+$custom = ['providers' => ['email' => ['active' => 'custom']], 'email_test_allowlist' => $list];
+assert_allowlist(email_reaches_recipient('live.abc@bicol-u.edu.ph', $custom), 'CUSTOM mode delivers to an allowlisted recipient');
+assert_allowlist(!email_reaches_recipient('student@bicol-u.edu.ph', $custom), 'CUSTOM mode sends other recipients to Mailpit only');
+foreach (['smtp', 'mailpit'] as $provider) {
+    $other = ['providers' => ['email' => ['active' => $provider]], 'email_test_allowlist' => $list];
+    assert_allowlist(email_reaches_recipient('student@bicol-u.edu.ph', $other), "The allowlist does not apply when EMAIL_PROVIDER={$provider}");
 }
-$disabled = app_config(['APP_ENV' => 'single-server', 'EMAIL_ALLOWLIST_ENABLED' => 'false']);
-assert_allowlist($disabled['email_test_mode'] === false, 'EMAIL_ALLOWLIST_ENABLED=false turns the allowlist off');
-$enabled = app_config(['APP_ENV' => 'production', 'EMAIL_ALLOWLIST_ENABLED' => 'true']);
-assert_allowlist($enabled['email_test_mode'] === true, 'EMAIL_ALLOWLIST_ENABLED=true keeps the allowlist on in production');
 echo "ALL EMAIL TEST ALLOWLIST TESTS PASSED.\n";

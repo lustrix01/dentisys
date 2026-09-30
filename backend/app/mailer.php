@@ -51,7 +51,8 @@ function smtp_transport(string $to, string $subject, string $body, array $config
     $caFile = (string) ($smtp['ca_file'] ?? '');
     $environment = strtolower((string) ($config['app']['env'] ?? 'production'));
     $provider = strtolower((string) ($config['providers']['email']['active'] ?? 'smtp'));
-    $isMailpit = $provider === 'mailpit';
+    // The CUSTOM-mode Mailpit copy is unencrypted local delivery.
+    $isMailpit = $provider === 'mailpit' || !empty($smtp['mailpit_copy']);
     $isDevelopmentOrTest = in_array($environment, ['development', 'test'], true);
 
     $headers = [
@@ -68,13 +69,15 @@ function smtp_transport(string $to, string $subject, string $body, array $config
     if ($host === '') {
         return ['sent' => false, 'error' => 'SMTP host is not configured.', 'headers' => $headers];
     }
-    if (!$isMailpit && !in_array($encryption, ['tls', 'starttls'], true)) {
+    // Development and test CUSTOM mode may use Mailpit as its SMTP server.
+    $allowsPlainSmtp = $isMailpit || ($provider === 'custom' && $isDevelopmentOrTest);
+    if (!$allowsPlainSmtp && !in_array($encryption, ['tls', 'starttls'], true)) {
         return ['sent' => false, 'error' => 'Encrypted SMTP is required outside development.', 'headers' => $headers];
     }
-    if (!$isMailpit && !$verifyPeer) {
+    if (!$allowsPlainSmtp && !$verifyPeer) {
         return ['sent' => false, 'error' => 'SMTP certificate verification is required outside development.', 'headers' => $headers];
     }
-    if ($isMailpit && !$isDevelopmentOrTest) {
+    if ($provider === 'mailpit' && !$isDevelopmentOrTest) {
         return ['sent' => false, 'error' => 'Mailpit is available only in development and test.', 'headers' => $headers];
     }
 
@@ -168,6 +171,16 @@ function send_smtp_email(string $to, string $subject, string $body, array $confi
     return smtp_transport($to, $subject, $body, $config)['sent'];
 }
 
+/**
+ * EML-001: false when EMAIL_PROVIDER=custom and the recipient is not on the
+ * allowlist, so the message reaches only Mailpit.
+ */
+function email_reaches_recipient(string $to, array $config): bool
+{
+    $provider = strtolower((string) ($config['providers']['email']['active'] ?? 'smtp'));
+    return $provider !== 'custom' || email_test_allowlist_allows($config['email_test_allowlist'] ?? [], $to);
+}
+
 function send_email(
     string $to,
     string $subject,
@@ -175,6 +188,33 @@ function send_email(
     array $config,
     bool $redactBody = false
 ): bool {
+    $provider = strtolower((string) ($config['providers']['email']['active'] ?? 'smtp'));
+    if ($provider === 'custom') {
+        // CUSTOM: every message is copied to Mailpit; only allowlisted
+        // recipients also receive it through the real SMTP server below.
+        $mailpitConfig = $config;
+        $mailpitConfig['smtp'] = [
+            'host' => (string) ($config['mailpit_smtp']['host'] ?? 'mailpit'),
+            'port' => (int) ($config['mailpit_smtp']['port'] ?? 1025),
+            'from' => (string) ($config['smtp']['from'] ?? 'noreply@dentisys.local'),
+            'encryption' => 'none',
+            'verify_peer' => false,
+            'mailpit_copy' => true,
+        ];
+        $copy = smtp_transport($to, $subject, $body, $mailpitConfig);
+        if (!email_reaches_recipient($to, $config)) {
+            log_to_outbox(
+                $to,
+                $subject,
+                $redactBody ? '[REDACTED AUTHENTICATION MESSAGE]' : $body,
+                $copy['headers'] + ['X-DentiSys-Delivery' => 'mailpit-only'],
+                $copy['sent'],
+                $copy['error']
+            );
+            return $copy['sent'];
+        }
+    }
+
     $result = smtp_transport($to, $subject, $body, $config);
     log_to_outbox(
         $to,

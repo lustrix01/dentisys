@@ -6,8 +6,8 @@ services:
     image: ${WEB_IMAGE:-dentisys-web:local}
     environment:
       APP_ENV: single-server
-      EMAIL_PROVIDER: smtp
-      EMAIL_ALLOWLIST_ENABLED: ${EMAIL_ALLOWLIST_ENABLED:-true}
+      # smtp or custom (custom also needs COMPOSE_PROFILES=mailpit).
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       EMAIL_TEST_ALLOWLIST: ${EMAIL_TEST_ALLOWLIST:-}
       DEV_MOCK_IDENTITY_ENABLED: "false"
       DEV_MOCK_BIOMETRIC_ENABLED: "false"
@@ -79,6 +79,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
+  # EML-001: only started for EMAIL_PROVIDER=custom (COMPOSE_PROFILES=mailpit).
+  # The UI stays on the server's loopback; it holds copies of every e-mail.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    profiles: ["mailpit"]
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    restart: unless-stopped
 
   frontend:
     build:

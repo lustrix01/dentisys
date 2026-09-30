@@ -21,5 +21,11 @@ if ! printf '%s' "$APP_BASE_URL" | grep -Eq '^https?://[^/?#[:space:]]+(/[^?#[:s
   exit 1
 fi
 
-docker compose --env-file "$env_file" -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml config --quiet
-docker compose --env-file "$env_file" -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml up -d --build
+# EML-001: CUSTOM e-mail mode also runs Mailpit.
+profile=""
+if [ "${EMAIL_PROVIDER:-smtp}" = "custom" ]; then
+  profile="--profile mailpit"
+fi
+
+docker compose --env-file "$env_file" -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml $profile config --quiet
+docker compose --env-file "$env_file" -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml $profile up -d --build

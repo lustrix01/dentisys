@@ -10,7 +10,12 @@ It currently starts separate containers for Nginx frontend, PHP API, and Postgre
 Browser -> Nginx frontend -> PHP API -> PostgreSQL
 ```
 
-Only the frontend HTTP port is published. PostgreSQL remains internal to Docker. Vite, Mailpit, and pgAdmin are intentionally not included.
+Only the frontend HTTP port is published. PostgreSQL remains internal to Docker. Vite and pgAdmin are intentionally not included. Mailpit starts only when `EMAIL_PROVIDER=custom`; its UI is bound to the server's loopback address (`http://127.0.0.1:MAILPIT_UI_PORT`).
+
+E-mail modes (`EMAIL_PROVIDER`):
+
+- `smtp`: every e-mail is delivered through the configured SMTP server.
+- `custom`: every e-mail is copied to Mailpit, and recipients on `EMAIL_TEST_ALLOWLIST` also receive it through SMTP. Faculty notices to anyone else are recorded as "Suppressed (test mode)". Mailpit holds copies of every message, including invitation links, so keep its UI private and switch to `smtp` at go-live.
 
 ## Controlled prototype startup
 

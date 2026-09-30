@@ -142,7 +142,7 @@ Use this when you already ran an older DentiSys build on your device (you have a
    ```
 
 4. **Check `.env` against `.env.example`.** Your `.env` keeps working; newer optional settings use safe defaults when absent:
-   - `EMAIL_ALLOWLIST_ENABLED` / `EMAIL_TEST_ALLOWLIST`: while the allowlist is enabled (the default in every environment, including single-server), Faculty notices (At-Risk, Privacy Consent) reach only the listed addresses; other notices are recorded as "Suppressed (test mode)". Add your test addresses to see them in Mailpit. Set `EMAIL_ALLOWLIST_ENABLED=false` only when the deployment should email real recipients.
+   - `EMAIL_PROVIDER=custom` with `EMAIL_TEST_ALLOWLIST`: every e-mail goes to Mailpit, and only the listed addresses also receive real e-mail through the SMTP settings. Faculty notices to anyone else are recorded as "Suppressed (test mode)". The default `mailpit` sends everything to Mailpit only; `smtp` sends everything for real.
    - `FIRST_DEAN_*`: only used on a database without a Dean account.
 
 5. **Start the system with the script** (not plain `docker compose up`):

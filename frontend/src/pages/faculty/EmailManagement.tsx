@@ -784,7 +784,7 @@ export const EmailManagement: React.FC = () => {
             <div className="space-y-3 flex-1">
               <div>
                 <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Student Notices</h2>
-                <p className="text-xs text-slate-400">Send an At-Risk or Privacy Consent notice to selected students using the institutional email template. Outside production, only allowlisted test addresses receive it; the others are recorded as "Suppressed (test mode)".</p>
+                <p className="text-xs text-slate-400">Send an At-Risk or Privacy Consent notice to selected students using the institutional email template. In custom e-mail mode, only allowlisted addresses receive it; the others go to Mailpit and are recorded as "Suppressed (test mode)".</p>
               </div>
               <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">
                 Notice type

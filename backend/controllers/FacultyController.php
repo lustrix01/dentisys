@@ -6309,13 +6309,13 @@ function handle_faculty_email_send(): void
             if ($emailId <= 0) {
                 throw new RuntimeException('Email outbox insert did not return a valid identifier.');
             }
-            if (!empty($config['email_test_mode']) && !email_test_allowlist_allows($config['email_test_allowlist'] ?? [], $recipientEmail)) {
-                // EML-001: recorded in history but not delivered while the allowlist is enabled.
-                $finish->execute(['Suppressed', null, 'Test mode: the recipient is not on the e-mail test allowlist.', $emailId]);
+            $sent = send_email($recipientEmail, $subject, $messageBody, $config);
+            if ($sent && !email_reaches_recipient($recipientEmail, $config)) {
+                // EML-001: CUSTOM mode delivered it to Mailpit only.
+                $finish->execute(['Suppressed', null, 'Custom e-mail mode: the recipient is not on the allowlist; delivered to Mailpit only.', $emailId]);
                 $results[] = ['id' => (string) $emailId, 'recipient' => $recipientEmail, 'status' => 'Suppressed'];
                 continue;
             }
-            $sent = send_email($recipientEmail, $subject, $messageBody, $config);
             $status = $sent ? 'Sent' : 'Failed';
             $sentAt = $sent ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null;
             $failure = $sent ? null : 'SMTP delivery failed or is not configured.';

@@ -127,7 +127,7 @@ try {
         throw 'Runtime configuration endpoint must send Pragma: no-cache.'
     }
     $runtimePayload = $runtimeResponse.Content | ConvertFrom-Json
-    if ($runtimePayload.environment -ne 'test' -or $runtimePayload.providers.email.active -ne 'mailpit') {
+    if ($runtimePayload.environment -ne 'test' -or $runtimePayload.providers.email.active -ne 'custom') {
         throw 'Runtime configuration endpoint returned an unexpected safe provider payload.'
     }
     foreach ($secretName in @('JWT_SIGNING_KEY_B64', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 'DB_PASS')) {
