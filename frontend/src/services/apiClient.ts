@@ -872,6 +872,8 @@ export interface FacultyRemedialProgression {
 export interface FacultyRetentionRecord {
   midtermComplete?: boolean;
   midtermPercentage?: number | null;
+  /** UI-003 risk (informational): assumed 75% assessments until the grade is 2.50 or worse. */
+  risk?: { level: 'High' | 'At Risk' | 'Low'; assumedAssessments: number | null; period: 'Midterm' | 'Overall' } | null;
   watchlistUnlocked?: boolean;
   unlockedAt?: string | null;
   schoolYear?: string;

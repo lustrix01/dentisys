@@ -4957,6 +4957,186 @@ function handle_faculty_watchlist_unlock(): void
     }
 }
 
+/**
+ * UI-003 risk projection, pure part. $categories: one entry per period
+ * category, ['kind' => 'assessment', 'weight', 'earned', 'possible'] or
+ * ['kind' => 'attendance', 'weight', 'percentage' (null = unknown, left out)].
+ * $n assumed assessments of $size points scored 75% are spread across the
+ * assessment categories by weight (Owner decision, 2026-09-30). Returns the
+ * weighted period percentage, or null when nothing can be computed.
+ */
+function faculty_risk_period_percentage(array $categories, float $size, int $n): ?float
+{
+    $assessmentWeight = 0.0;
+    foreach ($categories as $category) {
+        if ($category['kind'] === 'assessment') {
+            $assessmentWeight += (float) $category['weight'];
+        }
+    }
+    $weighted = 0.0;
+    $includedWeight = 0.0;
+    foreach ($categories as $category) {
+        $weight = (float) $category['weight'];
+        if ($category['kind'] === 'attendance') {
+            if ($category['percentage'] === null) {
+                continue;
+            }
+            $ratio = (float) $category['percentage'] / 100;
+        } else {
+            $extra = $assessmentWeight > 0 ? $n * $size * ($weight / $assessmentWeight) : 0.0;
+            $possible = (float) $category['possible'] + $extra;
+            if ($possible <= 0) {
+                continue;
+            }
+            $ratio = ((float) $category['earned'] + 0.75 * $extra) / $possible;
+        }
+        $weighted += $weight * $ratio;
+        $includedWeight += $weight;
+    }
+    return $includedWeight > 0 ? $weighted / $includedWeight * 100 : null;
+}
+
+/**
+ * UI-003 risk level from a grade projection: how many assumed 75%
+ * assessments until the grade is 2.50 or worse (below 82%).
+ * High = already there or 1-2, At Risk = 3-4, Low = 5 or more.
+ */
+function faculty_risk_level(callable $percentageAfter): ?array
+{
+    for ($n = 0; $n <= 4; $n++) {
+        $percentage = $percentageAfter($n);
+        if ($percentage === null) {
+            return null;
+        }
+        if (faculty_percentage_to_gwa(round($percentage, 2)) >= RETENTION_GWA_TRIGGER) {
+            return ['level' => $n <= 2 ? 'High' : 'At Risk', 'assumedAssessments' => $n];
+        }
+    }
+    return ['level' => 'Low', 'assumedAssessments' => null];
+}
+
+/**
+ * Categories and completed assessments of one period for the risk projection.
+ * Returns [categories, completedSizes] or null without a period configuration.
+ */
+function faculty_risk_period_inputs(PDO $pdo, array $enrollment, array $grading, string $period): ?array
+{
+    $memberships = $pdo->prepare(
+        'SELECT gcp.category_id, gcp.weight, gcp.source_kind
+           FROM grading_category_period_memberships gcp
+           JOIN grading_categories gc ON gc.category_id = gcp.category_id
+          WHERE gc.config_id = ? AND gcp.grading_period = ?'
+    );
+    $memberships->execute([(int) $grading['config_id'], $period]);
+    $rows = $memberships->fetchAll(PDO::FETCH_ASSOC);
+    if ($rows === []) {
+        return null;
+    }
+    $assessments = $pdo->prepare(
+        "SELECT a.assessment_id, a.grading_category_id, a.max_score, a.transmutation_enabled,
+                a.transmutation_minimum_percentage, a.transmutation_maximum_percentage, sc.score,
+                " . faculty_linked_attendance_sql('CAST(:enrollment_id AS INTEGER)') . " AS linked_attendance_status
+           FROM assessments a
+           JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = :student_id
+          WHERE a.cs_id = :cs_id AND a.grading_period = :period AND a.status <> 'Archived'"
+    );
+    $assessments->execute([
+        ':enrollment_id' => $enrollment['enrollment_id'],
+        ':student_id' => $enrollment['student_id'],
+        ':cs_id' => $enrollment['cs_id'],
+        ':period' => $period,
+    ]);
+    $earned = [];
+    $possible = [];
+    $sizes = [];
+    foreach ($assessments->fetchAll(PDO::FETCH_ASSOC) as $assessment) {
+        $effective = faculty_effective_assessment_percentage(
+            (float) $assessment['score'],
+            (float) $assessment['max_score'],
+            filter_var($assessment['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN),
+            (float) $assessment['transmutation_minimum_percentage'],
+            (float) $assessment['transmutation_maximum_percentage'],
+            $assessment['linked_attendance_status'] !== null ? (string) $assessment['linked_attendance_status'] : null
+        );
+        if ($effective === null) {
+            continue; // not completed yet
+        }
+        $categoryId = (int) $assessment['grading_category_id'];
+        $earned[$categoryId] = ($earned[$categoryId] ?? 0.0) + $effective / 100 * (float) $assessment['max_score'];
+        $possible[$categoryId] = ($possible[$categoryId] ?? 0.0) + (float) $assessment['max_score'];
+        $sizes[] = (float) $assessment['max_score'];
+    }
+    $key = strtolower($period);
+    $categories = [];
+    foreach ($rows as $row) {
+        if ((string) $row['source_kind'] === 'attendance') {
+            $attendance = faculty_period_attendance_summary(
+                $pdo, (int) $enrollment['cs_id'], (int) $enrollment['enrollment_id'],
+                $grading[$key . '_start_date'] ?? null, $grading[$key . '_end_date'] ?? null
+            );
+            $categories[] = ['kind' => 'attendance', 'weight' => (float) $row['weight'],
+                'percentage' => $attendance['status'] === 'computed' ? (float) $attendance['percentage'] : null];
+            continue;
+        }
+        $categoryId = (int) $row['category_id'];
+        $categories[] = ['kind' => 'assessment', 'weight' => (float) $row['weight'],
+            'earned' => $earned[$categoryId] ?? 0.0, 'possible' => $possible[$categoryId] ?? 0.0];
+    }
+    return [$categories, $sizes];
+}
+
+/**
+ * UI-003 risk for one enrollment in the current grading period: Midterm, or
+ * the running overall grade once Final-period work is scored. Informational
+ * only; it never changes a retention state.
+ */
+function faculty_risk_projection(PDO $pdo, array $enrollment): ?array
+{
+    $config = $pdo->prepare(
+        "SELECT gc.config_id, gc.term_midterm_weight, gc.term_final_weight,
+                gc.midterm_start_date, gc.midterm_end_date, gc.final_start_date, gc.final_end_date
+           FROM grading_configs gc JOIN class_sections cs
+             ON gc.faculty_user_id = cs.instructor_user_id AND gc.course_id = cs.course_id
+            AND gc.semester = UPPER(cs.semester) AND gc.school_year = UPPER(cs.school_year)
+          WHERE cs.cs_id = ? AND gc.schema_mode = 'periods'"
+    );
+    $config->execute([$enrollment['cs_id']]);
+    $grading = $config->fetch(PDO::FETCH_ASSOC);
+    if (!$grading) {
+        return null;
+    }
+    $midterm = faculty_risk_period_inputs($pdo, $enrollment, $grading, 'Midterm');
+    $final = faculty_risk_period_inputs($pdo, $enrollment, $grading, 'Final');
+    if ($midterm === null) {
+        return null;
+    }
+    [$midtermCategories, $midtermSizes] = $midterm;
+    if ($final !== null && $final[1] !== []) {
+        // After Midterm: the running overall grade, with assumed work in Finals.
+        [$finalCategories, $finalSizes] = $final;
+        $size = array_sum($finalSizes) / count($finalSizes);
+        $midtermNow = faculty_risk_period_percentage($midtermCategories, 0.0, 0);
+        $midWeight = (float) $grading['term_midterm_weight'];
+        $finWeight = (float) $grading['term_final_weight'];
+        $risk = faculty_risk_level(static function (int $n) use ($finalCategories, $size, $midtermNow, $midWeight, $finWeight): ?float {
+            $finalPercentage = faculty_risk_period_percentage($finalCategories, $size, $n);
+            if ($finalPercentage === null) {
+                return null;
+            }
+            return $midtermNow === null || $midWeight + $finWeight <= 0
+                ? $finalPercentage
+                : ($midtermNow * $midWeight + $finalPercentage * $finWeight) / ($midWeight + $finWeight);
+        });
+        return $risk === null ? null : $risk + ['period' => 'Overall'];
+    }
+    if ($midtermSizes === []) {
+        return null;
+    }
+    $size = array_sum($midtermSizes) / count($midtermSizes);
+    $risk = faculty_risk_level(static fn(int $n): ?float => faculty_risk_period_percentage($midtermCategories, $size, $n));
+    return $risk === null ? null : $risk + ['period' => 'Midterm'];
+}
+
 function faculty_watchlist_midterm(PDO $pdo, array $enrollment): array
 {
     // Recompute the existing period calculation read-only so a newly added or
@@ -5079,6 +5259,8 @@ function handle_faculty_retention_get(): void
             'schoolYear' => $row['school_year'],
             'midtermComplete' => $midterm['complete'],
             'midtermPercentage' => $midterm['percentage'],
+            // UI-003: informational risk for current-year classes only.
+            'risk' => $isCurrentYear ? faculty_risk_projection($pdo, $row) : null,
             'remedialEligible' => $remedialEligible,
         ];
         }, $dbRows);

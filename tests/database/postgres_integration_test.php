@@ -2912,6 +2912,11 @@ expect_same($remedialOriginalGrade, $remedialOriginalStmt->fetch(PDO::FETCH_ASSO
 
 [$remedialFacultyGetStatus, $remedialFacultyGetBody] = integration_http_get_json('/api/faculty/retention', $seedFacultyAccessToken);
 expect_same(200, $remedialFacultyGetStatus, 'Faculty retention reload returns HTTP 200 after canonical remedial writes');
+// UI-003: every retention row carries a risk entry (null when not computable).
+$riskRows = $remedialFacultyGetBody['retention'] ?? [];
+expect_true($riskRows !== [] && array_reduce($riskRows, static fn(bool $ok, array $row): bool => $ok && array_key_exists('risk', $row), true), 'Every retention row includes the risk projection field');
+$riskLevels = array_filter(array_map(static fn(array $row): ?string => $row['risk']['level'] ?? null, $riskRows));
+expect_true(array_diff($riskLevels, ['High', 'At Risk', 'Low']) === [], 'Risk levels are High, At Risk or Low');
 $remedialReloadRow = array_values(array_filter(
     $remedialFacultyGetBody['retention'] ?? [],
     static fn(array $row): bool => (string) ($row['enrollmentId'] ?? '') === (string) $invitedEnrollmentId,
