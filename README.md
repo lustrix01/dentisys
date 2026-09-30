@@ -1,128 +1,228 @@
 # DentiSys
 
-DentiSys is a Docker-first academic and clinical management system for the Bicol University College of Dental Medicine. Its supported runtime today is local development on one device, using React/Vite, a plain PHP API, PostgreSQL, Mailpit, and pgAdmin.
+DentiSys is an academic and clinical management system for the Bicol University College of Dental Medicine. It runs entirely in Docker: a React/Vite frontend, a plain PHP API, PostgreSQL, a private face-recognition sidecar, and Mailpit for catching e-mail.
 
 | Runtime | Status | Use it for |
 | --- | --- | --- |
-| Development workstation | **Supported** | Daily development and local testing on one device |
-| Same-host single-server stack | **Unfinished private-LAN prototype** | Controlled implementation testing only |
-| Separate application/database servers | **Not implemented** | Future work |
+| [Development environment](#part-a-development-environment) | **Supported** | Daily development and local testing on one computer |
+| [Single-server mode](#part-b-single-server-mode-future) | **Unfinished prototype** | Controlled testing on one private-network server; future deployment path |
+| Separate application and database servers | **Not implemented** | Future work |
 
-## Development environment: from-scratch guide
+**Contents**
 
-The development stack runs entirely on your device as Docker containers. PostgreSQL communicates only on Docker's internal network; it has no published host port.
+- [Part A: Development environment](#part-a-development-environment)
+  - [A1. Install the prerequisites](#a1-install-the-prerequisites)
+  - [A2. Get the code](#a2-get-the-code)
+  - [A3. Create your `.env`](#a3-create-your-env)
+  - [A4. Start DentiSys](#a4-start-dentisys)
+  - [A5. Open the services](#a5-open-the-services)
+  - [A6. Get a first account](#a6-get-a-first-account)
+  - [A7. Choose how e-mail is delivered](#a7-choose-how-e-mail-is-delivered)
+  - [A8. Optional: face-recognition attendance](#a8-optional-face-recognition-attendance)
+  - [A9. Optional: test on a phone](#a9-optional-test-on-a-phone)
+  - [A10. Everyday commands](#a10-everyday-commands)
+  - [A11. Upgrading an existing setup or switching branches](#a11-upgrading-an-existing-setup-or-switching-branches)
+  - [A12. Running the tests](#a12-running-the-tests)
+- [Part B: Single-server mode (future)](#part-b-single-server-mode-future)
+- [Validation rules for contributors](#validation-rules-for-contributors)
+- [Documentation](#documentation)
 
-### 1. Install prerequisites
+> **Ground rules.** DentiSys runs through Docker Compose only; do not use XAMPP, native PHP, or MySQL/MariaDB. Never commit `.env` files. Never run `docker compose down -v` unless you mean to erase your local database.
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose available.
-- Node.js 20.19 or newer (22 LTS recommended; the containers use Node 24) for frontend builds and browser tests. Vite 8 does not run on Node 18.
-- Playwright Chromium only when running end-to-end tests.
+---
 
-This repository supports Docker Compose only. Do not use XAMPP, native PHP, native MySQL/MariaDB, or phpMyAdmin.
+## Part A: Development environment
 
-### 2. Create the development environment file
+Everything runs on your computer as Docker containers. PostgreSQL is reachable only inside Docker's network; it has no port on your computer.
+
+```text
+Browser -> Vite frontend (5173) -> PHP API (8080) -> PostgreSQL
+                                                  -> Mailpit (8025)
+                                                  -> Face-recognition sidecar
+pgAdmin (5050) -----------------------------------> PostgreSQL
+```
+
+### A1. Install the prerequisites
+
+| Tool | Needed for | Notes |
+| --- | --- | --- |
+| [Git](https://git-scm.com/downloads) | Getting the code | Windows: keep the default "checkout Windows-style line endings". |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Running DentiSys | Start it and wait until it says *Engine running*. `docker compose version` must work. |
+| [Node.js](https://nodejs.org/) 20.19 or newer (22 LTS recommended) | Only for running tests or building the frontend on your computer | Not needed just to run DentiSys. Node 18 does not work (Vite 8). |
+
+### A2. Get the code
+
+```powershell
+git clone https://github.com/lustrix01/dentisys.git
+cd dentisys
+git switch lumbanglighthal-owhie
+```
+
+### A3. Create your `.env`
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-The committed example contains development-safe defaults. Keep `.env` local and do not commit secrets.
+On macOS or Linux: `cp .env.example .env`.
 
-### 3. Install test dependencies when needed
+The example already contains safe development defaults, so DentiSys starts without editing it. `.env` is ignored by Git; keep it that way.
 
-For frontend builds or Playwright tests, install the root test dependency and the Chromium browser once:
-
-```powershell
-npm ci
-npx playwright install chromium
-```
-
-`npm run test:e2e` checks for the frontend Vite dependency and installs `frontend/package-lock.json` automatically when `frontend/node_modules` is absent. The root `npm ci` above remains required for Playwright itself.
-
-### 4. Start the complete development system
+### A4. Start DentiSys
 
 ```powershell
 .\scripts\start-dev.ps1
 ```
 
-On macOS or Linux, run `./scripts/start-dev.sh`. The script applies pending migrations, builds the images, installs frontend packages when `frontend/package-lock.json` changed, starts the stack, and runs the maintenance scripts described in step 6. `docker compose up --build -d` also works for a brand-new setup, but it does not refresh frontend packages in an existing setup.
+- Windows alternative: double-click `start-dev.bat`.
+- macOS or Linux: `./scripts/start-dev.sh`.
 
-This starts the five development services: PostgreSQL, PHP API, Vite frontend, Mailpit, and loopback-only pgAdmin. On a new PostgreSQL volume, the database, application role, schema, and pending additive migrations are created automatically. Startup never loads demo data, drops tables, or truncates the database.
+The first run downloads and builds images and takes several minutes. The script:
 
-The default `docker-compose.yml` intentionally falls back to `APP_ENV=development` when `.env` is absent; this supports a safe local developer stack and is not a production deployment path. The single-server/production-like Compose definition requires explicit environment and provider settings, and the startup validator fails closed when mock providers or Mailpit are selected there.
+1. starts PostgreSQL and applies any pending database migrations (a new database is created automatically);
+2. builds the images and installs frontend packages when `frontend/package-lock.json` changed;
+3. starts all services;
+4. runs three maintenance scripts: grade-weight setup for classes that have none, the first-Dean invitation ([A6](#a6-get-a-first-account)), and the expired-biometrics sweep.
 
-### 5. Verify the local services
+Starting never loads demo data, drops tables, or deletes records. Run the same script again any time; it is safe to repeat.
 
-| Service | URL |
-| --- | --- |
-| Frontend | http://localhost:5173 |
-| API health | http://localhost:8080/api/health |
-| Mailpit | http://localhost:8025 |
-| pgAdmin | http://127.0.0.1:5050 |
+### A5. Open the services
 
-### 6. Load demo data manually (optional)
+| Service | Address | What it is |
+| --- | --- | --- |
+| DentiSys | http://localhost:5173 | The application |
+| API health | http://localhost:8080/api/health | Should report `"status": "ok"` |
+| Mailpit | http://localhost:8025 | Every e-mail DentiSys sends in development lands here |
+| pgAdmin | http://127.0.0.1:5050 | Database browser (sign-in values are `PGADMIN_DEFAULT_*` in `.env`) |
 
-Demo users and academic/clinical records are intentionally separate from startup. The seed loads only into a database that has **no students yet** (a new volume); on any other database it does nothing.
+### A6. Get a first account
 
-Either paste all of [`database/seeds/development-demo.sql`](database/seeds/development-demo.sql) into pgAdmin's **Query Tool** for the `dentisys` database and execute it, or run:
+A new database has no users. Pick one of the two options.
+
+**Option 1: load the demo data** (recommended for development). It adds fictional Deans, Faculty, Secretaries, Students, classes, and records. It loads only into a database with no students yet, and does nothing otherwise.
 
 ```powershell
 docker compose cp database/seeds/development-demo.sql db:/tmp/development-demo.sql
 docker compose exec -T db psql -U postgres -d dentisys -v ON_ERROR_STOP=1 -f /tmp/development-demo.sql
+.\scripts\start-dev.ps1
 ```
 
-The seed is transaction-wrapped and non-destructive: it makes no schema changes and never drops, truncates, updates, or deletes data. All people and records are fictional.
+You can also paste [`database/seeds/development-demo.sql`](database/seeds/development-demo.sql) into pgAdmin's **Query Tool** and run it. Re-running `start-dev.ps1` afterwards gives the seeded classes their grade weights.
 
-After seeding, run `.\scripts\start-dev.ps1` again (or the commands below). It runs three maintenance scripts inside the `web` container:
+Development-only credentials (every account of a role shares the password):
 
-- `backend/bin/bootstrap-grade-weights.php` gives every class offering without grade weights a starting configuration (the course's component ratios, a 40 / 60 Midterm / Final split, and attendance date ranges from the class term), so seeded classes can be graded.
-- `backend/bin/bootstrap-first-dean.php` (REG-010): on a database with no Dean account, it invites the Dean named by `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME` and `FIRST_DEAN_LAST_NAME` in `.env` (optional `FIRST_DEAN_PREFIX`, `FIRST_DEAN_MIDDLE_NAME`, `FIRST_DEAN_SUFFIX`). The invitation arrives by e-mail (Mailpit in development) and is accepted like a Faculty invitation. It does nothing once a Dean account is active.
-- `backend/bin/expire-biometrics.php` deletes biometric references whose validity has ended or whose Student is no longer active (BIO-005). Consent and attendance history are kept.
-
-```powershell
-docker compose exec web php /var/www/html/backend/bin/bootstrap-grade-weights.php
-docker compose exec web php /var/www/html/backend/bin/bootstrap-first-dean.php
-docker compose exec web php /var/www/html/backend/bin/expire-biometrics.php
-```
-
-`bootstrap-grade-weights.php` and `expire-biometrics.php` accept `--dry-run`.
-
-These are committed local development/demo credentials only. Do not reuse them outside development or testing. Every account of a role shares that role's password.
-
-| Role | Email | Password |
+| Role | E-mail | Password |
 | --- | --- | --- |
-| Admin | `admin@bicol-u.edu.ph` | `Admin123!` |
+| Dean (Admin) | `admin@bicol-u.edu.ph` | `Admin123!` |
 | Faculty | `faculty@bicol-u.edu.ph` | `Faculty123!` |
 | Secretary | `secretary@bicol-u.edu.ph` | `Secretary123!` |
 | Student | `student@bicol-u.edu.ph` | `Student123!` |
 
-The complete list (10 faculty, 8 class secretaries, 120 students, and students without an account for invitation testing) is in [docs/demo-accounts.md](docs/demo-accounts.md).
+The full list is in [docs/demo-accounts.md](docs/demo-accounts.md). Never reuse these outside your own computer.
 
-### 7. Daily development commands
+**Option 2: invite a real first Dean** (starts from an empty system). In `.env`, fill in:
 
-```powershell
-docker compose up -d
-docker compose logs -f web
-.\scripts\migrate.ps1
-.\scripts\smoke.ps1 -CheckPgAdmin
-docker compose down
+```dotenv
+FIRST_DEAN_EMAIL=your.name@bicol-u.edu.ph
+FIRST_DEAN_FIRST_NAME=Your
+FIRST_DEAN_LAST_NAME=Name
 ```
 
-Run migrations after pulling schema changes. `docker compose down` stops the stack but preserves all volumes and local data. `docker compose down -v` deletes the PostgreSQL volume and is destructive—use it only when intentionally discarding local database data.
+`FIRST_DEAN_PREFIX`, `FIRST_DEAN_MIDDLE_NAME`, and `FIRST_DEAN_SUFFIX` are optional. The address must use an allowed domain (`ALLOWED_EMAIL_DOMAINS`). Run `.\scripts\start-dev.ps1`; the invitation appears in Mailpit. Open its link, set a password, and sign in. Nothing happens once a Dean account is active.
 
-For a detailed walkthrough, test commands, and the safe pgAdmin-only reset, see [the development environment guide](docs/development-environment.md).
+### A7. Choose how e-mail is delivered
 
-### 8. Upgrading an existing setup (or switching branches)
+`EMAIL_PROVIDER` in `.env` controls every e-mail DentiSys sends (invitations, password resets, notices):
 
-Use this when you already ran an older DentiSys build on your device (you have a `.env` and a database volume) and want to run the current code. Your local data is kept.
+| `EMAIL_PROVIDER` | Recipients on `EMAIL_TEST_ALLOWLIST` | Everyone else |
+| --- | --- | --- |
+| `mailpit` (default) | Mailpit only | Mailpit only |
+| `smtp` | Real e-mail | Real e-mail |
+| `custom` | Real e-mail **and** a Mailpit copy | Mailpit only |
 
-1. **Stop the stack, keeping its data.** Never add `-v`; it deletes the database volume.
+`smtp` and `custom` need a real SMTP account in the `SMTP_*` settings. For example, a Google account with an [App Password](https://support.google.com/accounts/answer/185833):
+
+```dotenv
+EMAIL_PROVIDER=custom
+EMAIL_TEST_ALLOWLIST=your.name@bicol-u.edu.ph,tester.*@bicol-u.edu.ph
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_ENCRYPTION=starttls
+SMTP_VERIFY_PEER=true
+SMTP_USER=your.sender@gmail.com
+SMTP_PASS=<16-character App Password>
+SMTP_FROM=your.sender@gmail.com
+```
+
+The allowlist is comma-separated, and `*` matches anything. In `custom` mode, Faculty notices to people not on the list are recorded as "Suppressed (test mode)". After editing `.env`, run `docker compose up -d` to apply it.
+
+### A8. Optional: face-recognition attendance
+
+DentiSys starts and works without this; biometric attendance just reports that it is unavailable, and manual attendance still works. To enable it:
+
+1. **Download the face-landmark model** (about 3.8 MB) to a folder **next to** the repository, not inside it:
 
    ```powershell
-   docker compose down
+   New-Item -ItemType Directory -Force ..\dentisys-biometric-assets | Out-Null
+   Invoke-WebRequest https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task -OutFile ..\dentisys-biometric-assets\face_landmarker.task
+   (Get-FileHash ..\dentisys-biometric-assets\face_landmarker.task -Algorithm SHA256).Hash.ToLower()
    ```
 
-2. **Back up the database.** New migrations change the schema and some existing records (for example, Class Secretary accounts are linked to their Student records). A backup lets you go back.
+   The hash must be `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`.
+
+2. **Generate two secrets** (run twice; use one output for each):
+
+   ```powershell
+   $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+   ```
+
+   On macOS or Linux: `openssl rand -base64 32`.
+
+3. **Fill in `.env`:**
+
+   ```dotenv
+   BIOMETRIC_SIDECAR_URL=http://biometric:8000
+   BIOMETRIC_SIDECAR_SHARED_SECRET=<first generated value>
+   BIOMETRIC_STORAGE_KEY_B64=<second generated value>
+   MEDIAPIPE_FACE_LANDMARKER_SHA256=64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
+   ```
+
+   Also set the `BIOMETRIC_HAAR_*`, `BIOMETRIC_QUALITY_*`, `BIOMETRIC_LBPH_*`, `BIOMETRIC_MATCH_COUNT`, `BIOMETRIC_BLINK_THRESHOLD`, and `BIOMETRIC_HEAD_TURN_RATIO` values from the table in [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Keep `DEV_MOCK_BIOMETRIC_ENABLED=false`.
+
+4. Run `.\scripts\start-dev.ps1`. `docker compose ps` should show `biometric` as healthy.
+
+These are provisional development values, not validated production thresholds.
+
+### A9. Optional: test on a phone
+
+The camera works only over HTTPS. To open the development site from a phone on the same Wi-Fi:
+
+```powershell
+.\scripts\dev-lan-https.ps1
+```
+
+It creates a self-signed certificate, exposes the frontend on your network, and prints the phone address. Anyone on that network can reach the site while this is on. Turn it off with `.\scripts\dev-lan-https.ps1 -Disable`. Details, including the firewall rule, are in [docs/development-environment.md](docs/development-environment.md).
+
+### A10. Everyday commands
+
+```powershell
+.\scripts\start-dev.ps1                    # start or update everything (safe to repeat)
+docker compose ps                          # what is running
+docker compose logs -f web                 # follow the API log
+.\scripts\migrate.ps1                      # apply new migrations to a running stack
+.\scripts\smoke.ps1 -CheckPgAdmin          # quick health check of a running stack
+docker compose down                        # stop; keeps your data
+```
+
+`docker compose down -v` **deletes your local database**. Use it only when you really mean to start over.
+
+### A11. Upgrading an existing setup or switching branches
+
+Use this if you already ran an older DentiSys build (you have a `.env` and a database). Your data is kept.
+
+1. **Stop the stack, keeping its data:** `docker compose down` (never `-v`).
+
+2. **Back up the database.** New migrations change the schema and some records, and a backup lets you go back.
 
    ```powershell
    New-Item -ItemType Directory -Force backups | Out-Null
@@ -131,9 +231,9 @@ Use this when you already ran an older DentiSys build on your device (you have a
    docker compose cp db:/tmp/dentisys-before-upgrade.dump backups/dentisys-before-upgrade.dump
    ```
 
-   `backups/` is ignored by git. Keep the file private: it contains all local data.
+   `backups/` is ignored by Git. Keep the file private; it contains all your local data.
 
-3. **Get the code.**
+3. **Get the code:**
 
    ```powershell
    git fetch origin
@@ -141,30 +241,16 @@ Use this when you already ran an older DentiSys build on your device (you have a
    git pull
    ```
 
-4. **Check `.env` against `.env.example`.** Your `.env` keeps working; newer optional settings use safe defaults when absent:
-   - `EMAIL_PROVIDER=custom` with `EMAIL_TEST_ALLOWLIST`: every e-mail goes to Mailpit, and only the listed addresses also receive real e-mail through the SMTP settings. Faculty notices to anyone else are recorded as "Suppressed (test mode)". The default `mailpit` sends everything to Mailpit only; `smtp` sends everything for real.
-   - `FIRST_DEAN_*`: only used on a database without a Dean account.
+4. **Compare `.env` with `.env.example`** and copy over any settings you want. Your existing `.env` keeps working, because missing settings use safe defaults. See [A7](#a7-choose-how-e-mail-is-delivered) for the e-mail modes and [A6](#a6-get-a-first-account) for `FIRST_DEAN_*`.
 
-5. **Start the system with the script** (not plain `docker compose up`):
+5. **Start with the script**, not plain `docker compose up`: `.\scripts\start-dev.ps1`. It applies the migrations, rebuilds images, refreshes frontend packages, and runs the maintenance scripts.
 
-   ```powershell
-   .\scripts\start-dev.ps1
-   ```
-
-   It applies the pending migrations, rebuilds the images, reinstalls the frontend packages because `package-lock.json` changed, and runs the maintenance scripts (grade-weight bootstrap, first-Dean invitation, biometric expiry sweep).
-
-6. **Refresh host test dependencies** if you run builds or browser tests on your device:
-
-   ```powershell
-   npm ci
-   npm --prefix frontend ci
-   ```
-
-**What users will notice after upgrading:** Class Secretaries sign in with their own Student account (the sidebar toggle switches to their Student pages); new attendance sessions need a class end time and end automatically at that time; Secretaries request Excused and Faculty approve or reject it; the Full Matrix View uses the class-record layout.
+6. **If you run tests on your computer**, refresh their packages: `npm ci` and `npm --prefix frontend ci`.
 
 **Troubleshooting**
-- *Frontend shows "Failed to resolve import" (for example `leaflet`)*: run `.\scripts\start-dev.ps1` again, or `docker compose run --rm --no-deps frontend npm ci`, then `docker compose restart frontend`.
-- *A migration fails*: stop, do not retry repeatedly, and report the error. To return to the backup, switch back to your previous branch and restore it (this replaces the current local data):
+
+- *The frontend shows "Failed to resolve import" (for example `leaflet`):* run `.\scripts\start-dev.ps1` again, or `docker compose run --rm --no-deps frontend npm ci` then `docker compose restart frontend`.
+- *A migration fails:* stop, do not keep retrying, and report the error. To return to your backup, switch back to your previous branch and restore it. This replaces the current local data:
 
   ```powershell
   docker compose up -d --wait db
@@ -172,41 +258,141 @@ Use this when you already ran an older DentiSys build on your device (you have a
   docker compose exec -T db pg_restore -U postgres -d dentisys --clean --if-exists /tmp/restore.dump
   ```
 
-## Same-host single-server deployment foundation
+### A12. Running the tests
 
-The Compose files and start script can launch Nginx, the PHP API, and internal PostgreSQL on one private host. This is an **unfinished private-LAN prototype**, not a supported production deployment process. DentiSys does not yet have the operational deployment workflow used by LearningFullStack.
-
-For controlled implementation testing only:
+One-time setup on your computer (needs Node.js, see [A1](#a1-install-the-prerequisites)):
 
 ```powershell
-Copy-Item .env.single-server.example .env.single-server
-.\scripts\start-single-server.ps1
+npm ci
+npx playwright install chromium
 ```
 
-Before starting, set unique database/admin passwords, application signing/encryption keys, and real SMTP values in `.env.single-server`. The stack publishes only the frontend HTTP port; Vite, Mailpit, pgAdmin, and a PostgreSQL host port are intentionally absent.
-
-It is not ready for production or public-internet use. A complete deployment process still needs a defined runbook, TLS/reverse-proxy policy, firewall guidance, backups and restore testing, secret handling, monitoring, upgrade/rollback procedures, and deployment automation. See [the single-server deployment foundation](docs/single-server.md).
-
-## Future: separate application and database servers
-
-This model is unsupported and non-runnable. It requires external PostgreSQL connectivity and credential rotation, restricted network policy, TLS/reverse-proxy configuration, tested backups/restores, secret management, monitoring, and deployment automation. No provisional commands are provided.
-
-## Validation
-
-Use the smallest relevant check while coding. `check.ps1` is the normal aggregate check for ordinary runtime changes; `check-postgres.ps1` is the isolated integration check for database, authentication, runtime-sensitive, milestone, and final work. Do not repeat commands already included in a successful aggregate check unless diagnosing a failure.
-
-| Change | While iterating | Before handoff |
+| Command | What it runs | Needs |
 | --- | --- | --- |
-| Documentation or instructions | `git diff --check` and targeted reference checks | Run the documentation contract when its covered files or migration naming changes. |
-| Frontend or backend runtime | Relevant build/test | `./scripts/check.ps1` |
-| Dockerfiles, dependency locks, or Compose build config | `docker compose config --quiet` and build the affected service | `./scripts/check.ps1`; add PostgreSQL integration when runtime behavior is affected. |
-| Database, authentication, or milestone/final work | Relevant targeted checks | `./scripts/check.ps1` and `./scripts/check-postgres.ps1` |
+| `.\scripts\check.ps1` | Config, PHP and TypeScript checks, backend tests, frontend build, mocked browser tests | Docker running and the images built once by `start-dev.ps1` |
+| `.\scripts\check-postgres.ps1` | Database integration tests and live browser tests in a separate, throw-away Docker project | Docker; it never touches your development database |
+| `npm run test:e2e -- e2e/<file>.spec.ts` | One mocked browser test file (all API calls are faked) | Only the Node packages above |
 
-Run `./scripts/migrate.ps1` only when applying or verifying migrations against an existing development database. Run `./scripts/smoke.ps1` only when checking a running stack.
+---
 
-For the normal developer loop, start the application with `.\scripts\start-dev.ps1`, make a change, then run the smallest relevant validation above. Use pgAdmin only for manual data inspection or SQL; it is not required for automated tests.
+## Part B: Single-server mode (future)
+
+> **Status: unfinished prototype.** Single-server mode runs DentiSys on one server in a private network, using production-style images: Nginx serving the built frontend, the PHP API, PostgreSQL, and the face-recognition sidecar. It is **not ready for production or the public internet**. Use it only for controlled testing. The gaps are listed at the end of this part.
+
+```text
+Browser -> Nginx frontend (APP_HTTP_PORT, default 8080) -> PHP API -> PostgreSQL
+                                                                   -> Face-recognition sidecar
+                                                                   -> SMTP server (and Mailpit in custom mode)
+```
+
+Only the frontend port is published. PostgreSQL, the API, and the sidecar are reachable only inside Docker. Vite and pgAdmin are not included.
+
+### B1. Prepare the server
+
+- A Linux or Windows server with Docker Engine and the Compose plugin (`docker compose version` must work), plus Git.
+- A fixed private address or hostname that users' browsers will use.
+- A real SMTP account for sending e-mail.
+
+### B2. Get the code
+
+```bash
+git clone https://github.com/lustrix01/dentisys.git
+cd dentisys
+git switch lumbanglighthal-owhie
+cp .env.single-server.example .env.single-server
+```
+
+On Windows: `Copy-Item .env.single-server.example .env.single-server`.
+
+### B3. Fill in `.env.single-server`
+
+Every value that starts with `replace_with_` must be replaced; the start script refuses to run otherwise.
+
+| Setting | What to put there |
+| --- | --- |
+| `APP_BASE_URL` | The exact address users open, for example `http://dentisys.lan:8080`. Invitation and reset links use it. |
+| `APP_HTTP_PORT` | The published port (default `8080`). |
+| `APP_IS_HTTPS` | `true` only when users reach DentiSys over HTTPS. |
+| `DB_PASS`, `DB_ADMIN_PASS` | Two different strong passwords. |
+| `JWT_SIGNING_KEY_B64`, `MFA_ENCRYPTION_KEY_B64`, `AUDIT_MAC_KEY_B64`, `BIOMETRIC_STORAGE_KEY_B64`, `BIOMETRIC_SIDECAR_SHARED_SECRET` | A different generated value for each (see below). |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Your SMTP account. Encryption (`starttls` or `tls`) and certificate checking are required. |
+| `EMAIL_PROVIDER`, `EMAIL_TEST_ALLOWLIST` | `smtp` to e-mail everyone, or `custom` to send real e-mail only to the allowlist and keep a copy of everything in Mailpit (see [A7](#a7-choose-how-e-mail-is-delivered)). |
+| `ALLOWED_EMAIL_DOMAINS` | Institutional domains allowed to sign in (default `bicol-u.edu.ph`). |
+| `MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH`, `MEDIAPIPE_FACE_LANDMARKER_SHA256` | Absolute path to the downloaded model and its hash (see [A8](#a8-optional-face-recognition-attendance), step 1). |
+| `BIOMETRIC_*` calibration values | From [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Biometric attendance still stays off in single-server mode until it is approved for deployment. |
+
+Generate each secret separately:
+
+```bash
+openssl rand -base64 32
+```
+
+On Windows, use the PowerShell command in [A8](#a8-optional-face-recognition-attendance), step 2.
+
+Keep `.env.single-server` on the server only. It holds every secret.
+
+### B4. Start it
+
+```bash
+./scripts/start-single-server.sh
+```
+
+On Windows: `.\scripts\start-single-server.ps1`.
+
+The script checks the required settings and builds and starts the stack under the Compose project name `dentisys-single-server`. On the first start, PostgreSQL creates the database and applies all migrations. With `EMAIL_PROVIDER=custom` it also starts Mailpit. Its page is at `http://127.0.0.1:8025` on the server itself only; from another computer use an SSH tunnel: `ssh -L 8025:127.0.0.1:8025 user@server`.
+
+Check it: open `APP_BASE_URL`, and `APP_BASE_URL/api/health` should report `"status": "ok"`.
+
+### B5. Invite the first Dean
+
+Single-server mode never loads demo data. Create the first account by inviting a Dean. Pass the details to the bootstrap script directly:
+
+```bash
+docker compose --env-file .env.single-server -p dentisys-single-server \
+  -f docker-compose.web.yml -f docker-compose.database.yml \
+  exec -e FIRST_DEAN_EMAIL=dean.name@bicol-u.edu.ph \
+       -e FIRST_DEAN_FIRST_NAME=First -e FIRST_DEAN_LAST_NAME=Last \
+  web php /var/www/html/backend/bin/bootstrap-first-dean.php
+```
+
+The Dean receives an invitation e-mail, sets a password, and then invites Faculty from inside DentiSys.
+
+### B6. Stop it
+
+```bash
+docker compose --env-file .env.single-server -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml down
+```
+
+As in development, never add `-v`; it deletes the database.
+
+### B7. What is still missing before real use
+
+- **Upgrades:** re-running the start script rebuilds the images, but migrations are applied automatically only when the database is first created. There is no tested upgrade, rollback, or migration procedure for an existing single-server database yet.
+- **Maintenance:** the grade-weight setup and the expired-biometrics sweep are not scheduled.
+- **Operations:** there is no HTTPS/reverse-proxy setup, firewall guidance, tested backup and restore, secret rotation, or monitoring.
+- **Biometrics:** real biometric attendance is disabled outside development until it is approved for deployment.
+
+More detail: [docs/single-server.md](docs/single-server.md).
+
+---
+
+## Validation rules for contributors
+
+Use the smallest relevant check while working, then the gate for the kind of change:
+
+| Change | While iterating | Before handing off |
+| --- | --- | --- |
+| Documentation or instructions | `git diff --check` and link/reference checks | The documentation contract, when its covered files or migration names change |
+| Frontend or backend code | The relevant build or test | `.\scripts\check.ps1` |
+| Dockerfiles, dependency locks, Compose files | `docker compose config --quiet` and build the affected service | `.\scripts\check.ps1`, plus `.\scripts\check-postgres.ps1` when runtime behavior changes |
+| Database, authentication, milestone, or final work | The relevant targeted checks | `.\scripts\check.ps1` and `.\scripts\check-postgres.ps1` |
+
+Repository rules for contributors and coding agents are in [AGENTS.md](AGENTS.md).
 
 ## Documentation
 
-- [Authoritative product specification](spec.md)
-Start with [the documentation index](docs/README.md).
+- [Product specification](spec.md): the authoritative source for approved behavior.
+- [Documentation index](docs/README.md): architecture, features, database, and guides.
+- [Development environment details](docs/development-environment.md)
+- [Single-server details](docs/single-server.md)
+- [Demo accounts](docs/demo-accounts.md)
