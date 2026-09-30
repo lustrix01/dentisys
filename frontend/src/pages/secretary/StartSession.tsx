@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
+import { LocationPicker } from '../../components/LocationPicker';
 import { 
   Play, 
   Square, 
@@ -69,6 +70,7 @@ export const StartSession: React.FC = () => {
     address: 'BU Dental Room Location Verified (13.1436°, 123.7438°)',
   } : null);
   const [isLocating, setIsLocating] = useState(false);
+  const [showGpsMap, setShowGpsMap] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [liveAttendanceRecords, setLiveAttendanceRecords] = useState<Array<{ id: string; status: string; date: string }>>([]);
 
@@ -748,7 +750,27 @@ export const StartSession: React.FC = () => {
                     <RefreshCw className={`w-3 h-3 ${isLocating ? 'animate-spin' : ''}`} />
                     <span>{isLocating ? 'Locating...' : 'Locate My GPS'}</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowGpsMap(shown => !shown)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-600 text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer"
+                  >
+                    <MapPin className="w-3 h-3" />
+                    <span>{showGpsMap ? 'Hide map' : 'Pick on map'}</span>
+                  </button>
                 </div>
+
+                {showGpsMap && (
+                  <LocationPicker
+                    value={gpsLocation ? { latitude: gpsLocation.lat, longitude: gpsLocation.lng } : null}
+                    radiusMeters={geofenceRadius}
+                    onChange={location => setGpsLocation({
+                      lat: location.latitude,
+                      lng: location.longitude,
+                      address: `Map location (${location.latitude.toFixed(5)}°, ${location.longitude.toFixed(5)}°)`,
+                    })}
+                  />
+                )}
 
                 {gpsError && (
                   <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">{gpsError}</p>

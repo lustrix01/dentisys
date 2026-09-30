@@ -391,6 +391,43 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     expect(storedItem).toBeNull();
   });
 
+  test('map picker (ATT-002): clicking the OpenStreetMap map sets the geofence location sent on start', async ({ page }) => {
+    let startApiPayload: Record<string, unknown> | null = null;
+    // Keep the suite offline: tiles are served as a blank image.
+    await page.route('https://tile.openstreetmap.org/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'),
+      });
+    });
+    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: null }) });
+    });
+    await page.route('**/api/secretary/attendance/session', async (route) => {
+      if (route.request().method() !== 'POST') { await route.continue(); return; }
+      startApiPayload = route.request().postDataJSON();
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...mockActiveSession, sessionId: '101' } }) });
+    });
+
+    await page.goto('/secretary/start-session');
+    await page.getByRole('button', { name: 'Pick on map' }).click();
+    const map = page.getByRole('application', { name: 'Session location map' });
+    await expect(map).toBeVisible();
+    await expect(page.getByText('OpenStreetMap')).toBeVisible();
+    await map.click({ position: { x: 60, y: 60 } });
+    await expect(page.getByText(/Map location \(/)).toBeVisible();
+    await page.getByRole('button', { name: /Start Class Session Now/i }).click();
+    await expect.poll(() => startApiPayload).not.toBeNull();
+    const payload = startApiPayload as unknown as Record<string, number | boolean>;
+    expect(payload.geofenceEnabled).toBe(true);
+    expect(typeof payload.geofenceLatitude).toBe('number');
+    expect(typeof payload.geofenceLongitude).toBe('number');
+    // The click was up and left of the default centre, so both coordinates moved.
+    expect(payload.geofenceLatitude).toBeGreaterThan(13.1436);
+    expect(payload.geofenceLongitude).toBeLessThan(123.7438);
+  });
+
   test('refresh/recovery semantics: component reconstructs state from active lookup rather than browser persistence', async ({ page }) => {
     await page.route('**/api/secretary/attendance/session/active*', async (route) => {
       await route.fulfill({

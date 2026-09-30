@@ -15,6 +15,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
+import { LocationPicker } from '../../components/LocationPicker';
 import { Modal } from '../../components/Modal';
 import {
   getFacultyClassesApi,
@@ -143,6 +144,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const [geofenceEnabled, setGeofenceEnabled] = useState(true);
   const [geofenceRadius, setGeofenceRadius] = useState(100);
   const [sessionLocation, setSessionLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [showSessionMap, setShowSessionMap] = useState(false);
   const [locatingSession, setLocatingSession] = useState(false);
   const [submittingSession, setSubmittingSession] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -1121,7 +1123,13 @@ export const AttendanceMonitoring: React.FC = () => {
                 <div className="flex items-center justify-between gap-3">
                   <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span><input type="number" min={25} max={1000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
                   <button type="button" onClick={handleAcquireSessionLocation} disabled={locatingSession} className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"><Navigation className="w-3.5 h-3.5" />{locatingSession ? 'Locating…' : 'Use device location'}</button>
+                  <button type="button" onClick={() => setShowSessionMap(shown => !shown)} className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-emerald-600 px-3 py-2.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300"><MapPin className="w-3.5 h-3.5" />{showSessionMap ? 'Hide map' : 'Pick on map'}</button>
                 </div>
+                {showSessionMap && (
+                  <div className="mt-3">
+                    <LocationPicker value={sessionLocation} radiusMeters={geofenceRadius} onChange={setSessionLocation} />
+                  </div>
+                )}
                 <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{sessionLocation ? `Location acquired: ${sessionLocation.latitude}, ${sessionLocation.longitude}` : 'The server stores the configured session location and radius; Student coordinates remain temporary.'}</p>
               </div>
             )}
