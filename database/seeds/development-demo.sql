@@ -176,7 +176,8 @@ FROM (VALUES
 WHERE (SELECT go FROM seed_run)
 ON CONFLICT (course_code) DO NOTHING;
 
--- 3. Students (explicit ids; student 24 is the secretary@ student, kept for integration tests)
+-- 3. Students (explicit ids; student 24 is the secretary@ student, kept for integration tests).
+--    A Class Secretary signs in with their own Student account (REG-006).
 INSERT INTO students (student_id, student_number, first_name, middle_name, last_name, bu_email, contact, sex,
                       year_level, status, admission_date, birthdate, user_id, student_account_user_id)
 SELECT v.student_id::integer, v.student_number, v.first_name, v.middle_name, v.last_name, v.bu_email::citext, v.contact, v.sex,
@@ -184,7 +185,7 @@ SELECT v.student_id::integer, v.student_number, v.first_name, v.middle_name, v.l
 FROM (VALUES
     (1, '2023-DENT-0001', 'Mark Anthony', 'Castro', 'Hernandez', 'markanthony.hernandez@bicol-u.edu.ph', '09651412744', 'M', 4, 'active', '2023-08-01', '2005-02-16', NULL, 23),
     (2, '2023-DENT-0002', 'Rodel', 'Perez', 'Agustin', 'rodel.agustin@bicol-u.edu.ph', '09439616109', 'M', 4, 'active', '2023-08-01', '2005-09-03', NULL, 24),
-    (3, '2023-DENT-0003', 'Alyssa', 'Fernandez', 'Clemente', 'alyssa.clemente@bicol-u.edu.ph', '09272922130', 'F', 4, 'active', '2023-08-01', '2004-06-01', 16, NULL),
+    (3, '2023-DENT-0003', 'Alyssa', 'Fernandez', 'Clemente', 'alyssa.clemente@bicol-u.edu.ph', '09272922130', 'F', 4, 'active', '2023-08-01', '2004-06-01', 16, 16),
     (4, '2023-DENT-0004', 'Ralph', 'Borja', 'Nicolas', 'ralph.nicolas@bicol-u.edu.ph', '09041379810', 'M', 4, 'active', '2023-08-01', '2005-11-25', NULL, 25),
     (5, '2023-DENT-0005', 'Edgar', 'Valenzuela', 'Ortega', 'edgar.ortega@bicol-u.edu.ph', '09325921157', 'M', 4, 'active', '2023-08-01', '2005-05-28', NULL, 26),
     (6, '2023-DENT-0006', 'Mark Anthony', 'Castro', 'Agustin', 'markanthony.agustin@bicol-u.edu.ph', '09676566893', 'M', 4, 'active', '2023-08-01', '2004-12-21', NULL, 27),
@@ -205,7 +206,7 @@ FROM (VALUES
     (21, '2023-DENT-0021', 'Tristan', 'Gonzales', 'Feliciano', 'tristan.feliciano@bicol-u.edu.ph', '09710105753', 'M', 4, 'active', '2023-08-01', '2004-02-06', NULL, 42),
     (22, '2023-DENT-0022', 'Kristel', 'Nicolas', 'Dela Paz', 'kristel.delapaz@bicol-u.edu.ph', '09417574145', 'F', 4, 'active', '2023-08-01', '2004-06-19', NULL, 43),
     (23, '2023-DENT-0023', 'Christine', 'Manansala', 'Cabrera', 'christine.cabrera@bicol-u.edu.ph', '09794811128', 'F', 4, 'active', '2023-08-01', '2005-03-23', NULL, 44),
-    (24, '2023-DENT-0024', 'Bea', 'Mercado', 'Alonzo', 'secretary@bicol-u.edu.ph', '09010347138', 'F', 4, 'active', '2023-08-01', '2005-11-25', 9, NULL),
+    (24, '2023-DENT-0024', 'Bea', 'Mercado', 'Alonzo', 'secretary@bicol-u.edu.ph', '09010347138', 'F', 4, 'active', '2023-08-01', '2005-11-25', 9, 9),
     (25, '2023-DENT-0025', 'Bryan', 'Zamora', 'Llanes', 'bryan.llanes@bicol-u.edu.ph', '09743806590', 'M', 4, 'active', '2023-08-01', '2005-04-18', NULL, 45),
     (26, '2026-DENT-0001', 'Juan Miguel', 'Reyes', 'Dela Cruz', 'student@bicol-u.edu.ph', '09898254404', 'M', 1, 'active', '2026-08-01', '2007-07-28', NULL, 10),
     (27, '2023-DENT-0027', 'Gwyneth', 'Espiritu', 'Ignacio', 'gwyneth.ignacio@bicol-u.edu.ph', '09579126195', 'F', 4, 'active', '2023-08-01', '2005-08-08', NULL, 46),
@@ -217,7 +218,7 @@ FROM (VALUES
     (33, '2024-DENT-0003', 'Katrina', 'Manansala', 'Quiambao', 'katrina.quiambao@bicol-u.edu.ph', '09421260384', 'F', 3, 'active', '2024-08-01', '2005-05-23', NULL, 52),
     (34, '2024-DENT-0004', 'Rafael', 'Fernandez', 'Macaraeg', 'rafael.macaraeg@bicol-u.edu.ph', '09256635172', 'M', 3, 'active', '2024-08-01', '2006-05-04', NULL, 53),
     (35, '2024-DENT-0005', 'Emmanuel', 'Flores', 'Serrano', 'emmanuel.serrano@bicol-u.edu.ph', '09258202089', 'M', 3, 'active', '2024-08-01', '2005-11-04', NULL, 54),
-    (36, '2024-DENT-0006', 'Gwyneth', 'Belmonte', 'Nepomuceno', 'gwyneth.nepomuceno@bicol-u.edu.ph', '09081405567', 'F', 3, 'active', '2024-08-01', '2006-09-07', 17, NULL),
+    (36, '2024-DENT-0006', 'Gwyneth', 'Belmonte', 'Nepomuceno', 'gwyneth.nepomuceno@bicol-u.edu.ph', '09081405567', 'F', 3, 'active', '2024-08-01', '2006-09-07', 17, 17),
     (37, '2024-DENT-0007', 'Rica', 'Esteban', 'Feliciano', 'rica.feliciano@bicol-u.edu.ph', '09708975365', 'F', 3, 'active', '2024-08-01', '2005-08-01', NULL, 55),
     (38, '2024-DENT-0008', 'Veronica', 'Tolentino', 'Perez', 'veronica.perez@bicol-u.edu.ph', '09613626874', 'F', 3, 'active', '2024-08-01', '2006-02-12', NULL, 56),
     (39, '2024-DENT-0009', 'Harold', 'Gutierrez', 'Vergara', 'harold.vergara@bicol-u.edu.ph', '09379011455', 'M', 3, 'active', '2024-08-01', '2005-05-03', NULL, 57),
@@ -227,7 +228,7 @@ FROM (VALUES
     (43, '2024-DENT-0013', 'Andrei', 'Balagtas', 'San Jose', 'andrei.sanjose@bicol-u.edu.ph', '09414640318', 'M', 3, 'active', '2024-08-01', '2005-07-25', NULL, 61),
     (44, '2024-DENT-0014', 'Elijah', 'Magbanua', 'Gonzales', 'elijah.gonzales@bicol-u.edu.ph', '09795403185', 'M', 3, 'active', '2024-08-01', '2005-04-24', NULL, 62),
     (45, '2024-DENT-0015', 'Earl', 'Valdez', 'Ignacio', 'earl.ignacio@bicol-u.edu.ph', '09188553048', 'M', 3, 'active', '2024-08-01', '2006-09-11', NULL, 63),
-    (46, '2024-DENT-0016', 'Joshua', 'Abad', 'Cortez', 'joshua.cortez@bicol-u.edu.ph', '09033707860', 'M', 3, 'active', '2024-08-01', '2006-10-15', 18, NULL),
+    (46, '2024-DENT-0016', 'Joshua', 'Abad', 'Cortez', 'joshua.cortez@bicol-u.edu.ph', '09033707860', 'M', 3, 'active', '2024-08-01', '2006-10-15', 18, 18),
     (47, '2024-DENT-0017', 'Elaine', 'Buenaventura', 'Samonte', 'elaine.samonte@bicol-u.edu.ph', '09847189442', 'F', 3, 'active', '2024-08-01', '2006-02-21', NULL, 64),
     (48, '2024-DENT-0018', 'Elijah', 'Guevarra', 'Calleja', 'elijah.calleja@bicol-u.edu.ph', '09784520807', 'M', 3, 'active', '2024-08-01', '2005-08-19', NULL, 65),
     (49, '2024-DENT-0019', 'Harold', 'Nicolas', 'Francisco', 'harold.francisco@bicol-u.edu.ph', '09723279267', 'M', 3, 'active', '2024-08-01', '2006-10-11', NULL, 66),
@@ -252,12 +253,12 @@ FROM (VALUES
     (68, '2025-DENT-0008', 'Bryan', 'Marasigan', 'Serrano', 'bryan.serrano@bicol-u.edu.ph', '09255425898', 'M', 2, 'active', '2025-08-01', '2007-01-01', NULL, 85),
     (69, '2025-DENT-0009', 'Erika', 'Calleja', 'Hernandez', 'erika.hernandez@bicol-u.edu.ph', '09389806448', 'F', 2, 'active', '2025-08-01', '2007-11-23', NULL, 86),
     (70, '2025-DENT-0010', 'Katrina', 'De Guzman', 'Fernandez', 'katrina.fernandez@bicol-u.edu.ph', '09969333393', 'F', 2, 'active', '2025-08-01', '2007-06-05', NULL, 87),
-    (71, '2025-DENT-0011', 'Regine', 'Lagman', 'Yap', 'regine.yap@bicol-u.edu.ph', '09715371529', 'F', 2, 'active', '2025-08-01', '2007-02-05', 19, NULL),
+    (71, '2025-DENT-0011', 'Regine', 'Lagman', 'Yap', 'regine.yap@bicol-u.edu.ph', '09715371529', 'F', 2, 'active', '2025-08-01', '2007-02-05', 19, 19),
     (72, '2025-DENT-0012', 'Elijah', 'Valenzuela', 'Borja', 'elijah.borja@bicol-u.edu.ph', '09129528837', 'M', 2, 'active', '2025-08-01', '2007-08-07', NULL, 88),
     (73, '2025-DENT-0013', 'Kenneth', 'Cortez', 'Manansala', 'kenneth.manansala@bicol-u.edu.ph', '09995055304', 'M', 2, 'active', '2025-08-01', '2006-05-11', NULL, 89),
     (74, '2025-DENT-0014', 'Danica', 'San Jose', 'Padilla', 'danica.padilla@bicol-u.edu.ph', '09600140768', 'F', 2, 'active', '2025-08-01', '2006-08-02', NULL, 90),
     (75, '2025-DENT-0015', 'Bryan', 'Barrameda', 'Valdez', 'bryan.valdez@bicol-u.edu.ph', '09204806635', 'M', 2, 'active', '2025-08-01', '2006-01-23', NULL, 91),
-    (76, '2025-DENT-0016', 'Patrick', 'Serrano', 'Fajardo', 'patrick.fajardo@bicol-u.edu.ph', '09726435043', 'M', 2, 'active', '2025-08-01', '2007-12-22', 20, NULL),
+    (76, '2025-DENT-0016', 'Patrick', 'Serrano', 'Fajardo', 'patrick.fajardo@bicol-u.edu.ph', '09726435043', 'M', 2, 'active', '2025-08-01', '2007-12-22', 20, 20),
     (77, '2025-DENT-0017', 'Joanna', 'Panganiban', 'Abad', 'joanna.abad@bicol-u.edu.ph', '09563755708', 'F', 2, 'active', '2025-08-01', '2007-10-16', NULL, 92),
     (78, '2025-DENT-0018', 'Abigail', 'San Jose', 'Lacson', 'abigail.lacson@bicol-u.edu.ph', '09987159716', 'F', 2, 'active', '2025-08-01', '2006-04-22', NULL, 93),
     (79, '2025-DENT-0019', 'Rafael', 'Gonzales', 'Padilla', 'rafael.padilla@bicol-u.edu.ph', '09128670651', 'M', 2, 'active', '2025-08-01', '2007-01-18', NULL, 94),
@@ -278,7 +279,7 @@ FROM (VALUES
     (94, '2026-DENT-0004', 'Aaron', 'Quiambao', 'Ortega', 'aaron.ortega@bicol-u.edu.ph', '09328994722', 'M', 1, 'active', '2026-08-01', '2008-03-09', NULL, 109),
     (95, '2026-DENT-0005', 'Kristel', 'David', 'Magbanua', 'kristel.magbanua@bicol-u.edu.ph', '09874125210', 'F', 1, 'active', '2026-08-01', '2008-02-04', NULL, 110),
     (96, '2026-DENT-0006', 'Christian', 'San Jose', 'Agustin', 'christian.agustin@bicol-u.edu.ph', '09526312422', 'M', 1, 'active', '2026-08-01', '2007-07-24', NULL, 111),
-    (97, '2026-DENT-0007', 'Clarisse', 'Feliciano', 'Buenaventura', 'clarisse.buenaventura@bicol-u.edu.ph', '09292224971', 'F', 1, 'active', '2026-08-01', '2008-07-21', 21, NULL),
+    (97, '2026-DENT-0007', 'Clarisse', 'Feliciano', 'Buenaventura', 'clarisse.buenaventura@bicol-u.edu.ph', '09292224971', 'F', 1, 'active', '2026-08-01', '2008-07-21', 21, 21),
     (98, '2026-DENT-0008', 'Mark Anthony', 'Calleja', 'Esteban', 'markanthony.esteban@bicol-u.edu.ph', '09998915772', 'M', 1, 'active', '2026-08-01', '2007-04-27', NULL, 112),
     (99, '2026-DENT-0009', 'Charmaine', 'Agustin', 'Domingo', 'charmaine.domingo@bicol-u.edu.ph', '09132994560', 'F', 1, 'active', '2026-08-01', '2008-08-03', NULL, 113),
     (100, '2026-DENT-0010', 'Carlo', 'Guevarra', 'Balagtas', 'carlo.balagtas@bicol-u.edu.ph', '09483925082', 'M', 1, 'active', '2026-08-01', '2008-05-06', NULL, 114),
@@ -291,7 +292,7 @@ FROM (VALUES
     (107, '2026-DENT-0017', 'Kimberly', 'Francisco', 'Umali', 'kimberly.umali@bicol-u.edu.ph', '09532606594', 'F', 1, 'active', '2026-08-01', '2008-12-06', NULL, 121),
     (108, '2026-DENT-0018', 'Angelo', 'Quizon', 'Llanes', 'angelo.llanes@bicol-u.edu.ph', '09272928609', 'M', 1, 'active', '2026-08-01', '2008-10-05', NULL, 122),
     (109, '2026-DENT-0019', 'Stephanie', 'Olivares', 'Quiambao', 'stephanie.quiambao@bicol-u.edu.ph', '09226005048', 'F', 1, 'active', '2026-08-01', '2007-02-19', NULL, 123),
-    (110, '2026-DENT-0020', 'Gabriel', 'Esteban', 'Yap', 'gabriel.yap@bicol-u.edu.ph', '09485588850', 'M', 1, 'active', '2026-08-01', '2007-01-03', 22, NULL),
+    (110, '2026-DENT-0020', 'Gabriel', 'Esteban', 'Yap', 'gabriel.yap@bicol-u.edu.ph', '09485588850', 'M', 1, 'active', '2026-08-01', '2007-01-03', 22, 22),
     (111, '2026-DENT-0021', 'Anthony', 'Sarmiento', 'Zamora', 'anthony.zamora@bicol-u.edu.ph', '09010621522', 'M', 1, 'active', '2026-08-01', '2008-07-12', NULL, 124),
     (112, '2026-DENT-0022', 'Samuel', 'Espiritu', 'Barrameda', 'samuel.barrameda@bicol-u.edu.ph', '09936161131', 'M', 1, 'active', '2026-08-01', '2008-02-08', NULL, 125),
     (113, '2026-DENT-0023', 'Frances', 'Ignacio', 'Feliciano', 'frances.feliciano@bicol-u.edu.ph', '09497271933', 'F', 1, 'active', '2026-08-01', '2007-12-14', NULL, 126),

@@ -278,6 +278,7 @@ $expectedMigrations = [
     '039_attendance_session_class_end_time.sql',
     '040_email_outbox_suppressed_status.sql',
     '041_attendance_excused_requests.sql',
+    '042_secretary_same_student_account.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -1061,8 +1062,10 @@ $transmutationDefaults = $pdo->query(
 expect_same(['50', '100'], $transmutationDefaults, 'Grading defaults include the approved transmutation bounds');
 
 $legacySecretary = $pdo->query("SELECT user_id, student_account_user_id FROM students WHERE student_id = 24")->fetch(PDO::FETCH_ASSOC);
-expect_same(9, (int) ($legacySecretary['user_id'] ?? 0), 'Legacy Secretary link remains present');
-expect_same(null, $legacySecretary['student_account_user_id'] ?? null, 'P03 does not backfill legacy Secretary links');
+expect_same(9, (int) ($legacySecretary['user_id'] ?? 0), 'Secretary link remains present');
+// REG-006: a Class Secretary signs in with their own Student account, so the
+// Secretary account is also the Student's canonical account.
+expect_same(9, (int) ($legacySecretary['student_account_user_id'] ?? 0), 'The Secretary account is the Student\'s own canonical account');
 $studentFixture = $pdo->query("SELECT ua.user_id, s.student_account_user_id FROM user_accounts ua JOIN students s ON s.student_account_user_id = ua.user_id WHERE ua.login_email = 'student@bicol-u.edu.ph'")->fetch(PDO::FETCH_ASSOC);
 expect_same(10, (int) ($studentFixture['user_id'] ?? 0), 'Development Student canonical account link is present');
 expect_same(10, (int) ($studentFixture['student_account_user_id'] ?? 0), 'Development Student fixture links to its account');
@@ -6428,5 +6431,59 @@ expect_same(0, $unlinkedAfterBootstrap, 'After the bootstrap every active assess
 exec($bootstrapCommand . ' 2>&1', $secondBootstrapOutput, $secondBootstrapExit);
 expect_same(0, $secondBootstrapExit, 'Running the bootstrap again is harmless');
 expect_true(in_array('Every active class offering already has grade weights.', $secondBootstrapOutput, true), 'A second bootstrap run has nothing left to create');
+
+// REG-006 / BIO-010: a Class Secretary is a Student appointed with their own
+// account. The demo Student (account 10) is appointed to a fresh section,
+// removed, appointed again, and the appointment ends when the section is
+// archived. The account ends as a plain Student again.
+$appointFacultyId = (int) $pdo->query("SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph'")->fetchColumn();
+$appointClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections
+        (cs_name, course_id, instructor_user_id, secretary_user_id, semester, school_year, year_level, block, status, term_code, created_at)
+     SELECT ?, course_id, ?, NULL, '1ST', '2026-2027', 1, 'S', 'Active', '2026-2027-1ST', CURRENT_TIMESTAMP(6)
+       FROM class_sections WHERE instructor_user_id = ? ORDER BY cs_id LIMIT 1
+     RETURNING cs_id"
+);
+$appointClassStmt->execute(['Appointment Section ' . strtoupper(bin2hex(random_bytes(3))), $appointFacultyId, $appointFacultyId]);
+$appointClassId = (int) $appointClassStmt->fetchColumn();
+$pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status, date_enrolled) VALUES (26, ?, 'Active', CURRENT_DATE)")->execute([$appointClassId]);
+$appointStudent = $pdo->query(
+    "SELECT s.student_number, s.bu_email,
+            CONCAT_WS(' ', NULLIF(pi.name_prefix, ''), NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''), NULLIF(pi.last_name, ''), NULLIF(pi.name_suffix, '')) AS name
+       FROM students s JOIN person_identities pi ON pi.person_id = s.person_id WHERE s.student_id = 26"
+)->fetch(PDO::FETCH_ASSOC);
+$appointPayload = ['student_name' => $appointStudent['name'], 'student_number' => $appointStudent['student_number'], 'cs_id' => $appointClassId, 'email' => $appointStudent['bu_email']];
+$appointRole = static function () use ($pdo): array {
+    return $pdo->query("SELECT ua.role, s.user_id, s.student_account_user_id FROM students s JOIN user_accounts ua ON ua.user_id = s.student_account_user_id WHERE s.student_id = 26")->fetch(PDO::FETCH_ASSOC);
+};
+[$appointStatus, $appointBody] = integration_http_json('/api/secretary/invite', $seedFacultyAccessToken, $appointPayload);
+expect_same(201, $appointStatus, 'Faculty appoint a Student with an existing account as Class Secretary');
+expect_same('Appointed', $appointBody['delivery_status'] ?? null, 'The existing account is appointed directly, without a second account');
+expect_same(['role' => 'secretary', 'user_id' => 10, 'student_account_user_id' => 10], $appointRole(), 'The Student\'s own account becomes the Secretary account');
+expect_same(10, (int) $pdo->query("SELECT secretary_user_id FROM class_sections WHERE cs_id = {$appointClassId}")->fetchColumn(), 'The section records the appointed account');
+[$secondAppointStatus] = integration_http_json('/api/secretary/invite', $seedFacultyAccessToken, $appointPayload);
+expect_same(409, $secondAppointStatus, 'A section has at most one Class Secretary');
+[$appointedLoginStatus, $appointedLoginBody] = integration_http_json('/api/auth/login', '', ['email' => 'student@bicol-u.edu.ph', 'password' => $demoPasswords['student@bicol-u.edu.ph']]);
+expect_same(200, $appointedLoginStatus, 'The appointed Student signs in with the same account');
+$appointedToken = (string) ($appointedLoginBody['access_token'] ?? '');
+[$appointedSecretaryStatus] = integration_http_get_json('/api/secretary/dashboard/kpis', $appointedToken);
+expect_same(200, $appointedSecretaryStatus, 'The appointed account opens the Secretary pages');
+[$appointedStudentStatus] = integration_http_get_json('/api/student/dashboard', $appointedToken);
+expect_same(200, $appointedStudentStatus, 'The Secretary keeps their own Student pages (BIO-010)');
+[$removeStatus] = integration_http_json('/api/faculty/secretary-appointments/remove', $seedFacultyAccessToken, ['studentId' => 26]);
+expect_same(200, $removeStatus, 'Faculty remove the Secretary appointment');
+expect_same(['role' => 'student', 'user_id' => null, 'student_account_user_id' => 10], $appointRole(), 'After removal the account is a plain Student again');
+expect_same(null, $pdo->query("SELECT secretary_user_id FROM class_sections WHERE cs_id = {$appointClassId}")->fetchColumn() ?: null, 'The section no longer has a Secretary');
+[$reappointStatus] = integration_http_json('/api/secretary/invite', $seedFacultyAccessToken, $appointPayload);
+expect_same(201, $reappointStatus, 'The Student can be appointed again');
+[$reloginStatus, $reloginBody] = integration_http_json('/api/auth/login', '', ['email' => 'student@bicol-u.edu.ph', 'password' => $demoPasswords['student@bicol-u.edu.ph']]);
+expect_same(200, $reloginStatus, 'The re-appointed Secretary signs in');
+$pdo->prepare("UPDATE class_sections SET status = 'Archived' WHERE cs_id = ?")->execute([$appointClassId]);
+[$endedSecretaryStatus] = integration_http_get_json('/api/secretary/dashboard/kpis', (string) ($reloginBody['access_token'] ?? ''));
+expect_same(403, $endedSecretaryStatus, 'An appointment ends when its section is archived');
+expect_same('student', $appointRole()['role'] ?? null, 'The ended appointment returns the account to Student access');
+$endedAuditStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code IN ('secretary_appointed', 'secretary_appointment_ended') AND target_id = '10'");
+$endedAuditStmt->execute();
+expect_true((int) $endedAuditStmt->fetchColumn() >= 4, 'Appointments and their end are audited');
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

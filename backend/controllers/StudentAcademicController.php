@@ -16,6 +16,16 @@ function student_academic_verify_auth(PDO $pdo, array $config): array
         $token = auth_extract_bearer_token($authHeader);
         $jwtKey = config_key_bytes_at_least($config['jwt']['signing_key_b64'], 32, 'JWT_SIGNING_KEY');
         $authCtx = auth_verify_access_token($pdo, $config, $token, $jwtKey);
+        if (($authCtx['role'] ?? null) === 'secretary') {
+            // BIO-010: a Class Secretary keeps their own Student self-service.
+            try {
+                $identity = student_biometric_identity($pdo, $config, $authCtx);
+            } catch (StudentBiometricException $e) {
+                throw new AuthException('Student authentication required.');
+            }
+            $authCtx['student_id'] = (int) $identity['student_id'];
+            return $authCtx;
+        }
         if (($authCtx['role'] ?? null) !== 'student') {
             throw new AuthException('Student authentication required.');
         }

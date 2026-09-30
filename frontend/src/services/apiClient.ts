@@ -580,8 +580,13 @@ export function activateFacultyInvitation(token: string, password: string): Prom
   return request('POST', '/auth/faculty/activate', { token, password });
 }
 
-export function inviteSecretaryApi(data: { student_name: string; student_number?: string; cs_id: number; email: string }): Promise<{ status: string; invitationId: string; token: string | null; invitation_link: string | null; delivery_status: string; message: string }> {
+export function inviteSecretaryApi(data: { student_name: string; student_number?: string; cs_id: number; email: string }): Promise<{ status: string; invitationId: string | null; token: string | null; invitation_link: string | null; delivery_status: string; message: string }> {
   return request('POST', '/secretary/invite', data);
+}
+
+/** REG-006: remove a Class Secretary appointment; the account returns to Student access. */
+export function removeSecretaryAppointmentApi(studentId: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/secretary-appointments/remove', { studentId });
 }
 
 export function listSecretaryInvitationsApi(): Promise<{ status: string; invitations: Array<Record<string, unknown>> }> {

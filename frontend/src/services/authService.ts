@@ -149,6 +149,10 @@ export const createSecretaryInvitation = async (input: {
       cs_id: Number(input.classId),
       email: input.email,
     });
+    if (!res.invitationId) {
+      // The Student already had an account and was appointed directly.
+      return { success: true, message: res.message };
+    }
     const newInv: SecretaryInvitation = {
       id: res.invitationId,
       studentId: input.studentId,

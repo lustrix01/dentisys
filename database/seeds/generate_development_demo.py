@@ -591,14 +591,15 @@ $guard$;
     w('ON CONFLICT (course_code) DO NOTHING;')
     w('')
     # ---- students
-    w('-- 3. Students (explicit ids; student 24 is the secretary@ student, kept for integration tests)')
+    w('-- 3. Students (explicit ids; student 24 is the secretary@ student, kept for integration tests).')
+    w('--    A Class Secretary signs in with their own Student account (REG-006).')
     w('INSERT INTO students (student_id, student_number, first_name, middle_name, last_name, bu_email, contact, sex,')
     w('                      year_level, status, admission_date, birthdate, user_id, student_account_user_id)')
     w('SELECT v.student_id::integer, v.student_number, v.first_name, v.middle_name, v.last_name, v.bu_email::citext, v.contact, v.sex,')
     w('       v.year_level::smallint, v.status, v.admission_date::date, v.birthdate::date, v.user_id::integer, v.student_account_user_id::integer')
     w('FROM (VALUES')
     srow = [(s['student_id'], s['number'], s['first'], s['middle'], s['last'], s['email'], s['contact'], s['sex'],
-             s['year'], 'active', s['admission'], s['birthdate'], s['user_id'], s['account_user_id']) for s in students]
+             s['year'], 'active', s['admission'], s['birthdate'], s['user_id'], s['account_user_id'] or s['user_id']) for s in students]
     w(values_block(srow))
     w(') AS v(student_id, student_number, first_name, middle_name, last_name, bu_email, contact, sex,')
     w('       year_level, status, admission_date, birthdate, user_id, student_account_user_id)')

@@ -609,6 +609,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/faculty/secretary-appointments/remove',
+        'handler' => 'handle_faculty_secretary_remove',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/faculty/excused-requests',
         'handler' => 'handle_faculty_excused_requests_list',

@@ -26,7 +26,7 @@ import {
   revokeSecretaryInvitation,
   SecretaryInvitation,
 } from '../../services/authService';
-import { createStudentInvitation, sendFacultyEmailApi } from '../../services/apiClient';
+import { createStudentInvitation, sendFacultyEmailApi, removeSecretaryAppointmentApi } from '../../services/apiClient';
 import { Student } from '../../types';
 import { getFacultyStudentsApi, getFacultyClassesApi } from '../../services/apiClient';
 
@@ -267,8 +267,10 @@ export const EmailManagement: React.FC = () => {
       if (count > 0) {
         setNotice({
           type: 'success',
-          message: `Class Secretary invitation issued to ${count} student${count === 1 ? '' : 's'}.`,
+          message: `Class Secretary appointment processed for ${count} student${count === 1 ? '' : 's'}: students with an account are appointed now; others receive an invitation that activates their Student account.`,
         });
+        const refreshed = await getFacultyStudentsApi();
+        if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
       }
     } else if (tab === 'student_invites') {
       let successCount = 0;
@@ -328,6 +330,22 @@ export const EmailManagement: React.FC = () => {
       await fetchEmailLogs();
     } catch (error) {
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Unable to send the notices.' });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleRemoveSecretary = async (student: Student) => {
+    if (!window.confirm(`Remove ${student.name} as Class Secretary? Their Student access stays the same.`)) return;
+    setIsSending(true);
+    setNotice(null);
+    try {
+      const response = await removeSecretaryAppointmentApi(student.id);
+      setNotice({ type: 'success', message: response.message });
+      const refreshed = await getFacultyStudentsApi();
+      if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
+    } catch (error) {
+      setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Unable to remove the appointment.' });
     } finally {
       setIsSending(false);
     }
@@ -689,14 +707,21 @@ export const EmailManagement: React.FC = () => {
 
                       <td className="py-3.5 px-4">
                         <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
-                          {student.classSections?.[0]?.className || 'Section 4-A'}
+                          {student.classSections?.[0]?.className || '—'}
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4 text-center">
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                          Student Candidate
-                        </span>
+                        {student.accountStatus === 'secretary' ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">Class Secretary</span>
+                            <button type="button" disabled={isSending} onClick={() => void handleRemoveSecretary(student)} className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[10px] hover:bg-rose-100 disabled:opacity-50 cursor-pointer">Remove</button>
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            {student.accountStatus === 'active' ? 'Student (has account)' : 'Student (no account yet)'}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );

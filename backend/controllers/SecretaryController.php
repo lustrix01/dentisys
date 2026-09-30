@@ -119,11 +119,33 @@ function handle_secretary_invite(): void
             safe_error_response($roleConflict, 409);
             return;
         }
+        if (academic_class_section_is_past($pdo, (int) $assignment['cs_id'])) {
+            safe_error_response('Past school-year classes are view-only.', 409);
+            return;
+        }
+        // REG-006: at most one Secretary per section, counting pending invitations.
+        $occupied = $pdo->prepare(
+            "SELECT 1 FROM class_sections WHERE cs_id = ? AND secretary_user_id IS NOT NULL
+             UNION ALL
+             SELECT 1 FROM security_tokens
+              WHERE purpose = 'secretary_invitation' AND related_cs_id = ?
+                AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP(6)
+             LIMIT 1"
+        );
+        $occupied->execute([(int) $assignment['cs_id'], (int) $assignment['cs_id']]);
+        if ($occupied->fetchColumn() !== false) {
+            safe_error_response('This section already has a Class Secretary or a pending Secretary invitation.', 409);
+            return;
+        }
+        if ($assignment['student_account_user_id'] !== null) {
+            // REG-006: the appointment uses the Student's existing account.
+            secretary_appoint_existing_account($pdo, $config, $authCtx, $actorDisplayName, $assignment, $context);
+            return;
+        }
         $accountCheck = $pdo->prepare("SELECT user_id FROM user_accounts WHERE lower(login_email) = lower(?) LIMIT 1");
         $accountCheck->execute([$persistedEmail]);
         if ($accountCheck->fetchColumn() !== false
             || $assignment['student_user_id'] !== null
-            || $assignment['student_account_user_id'] !== null
             || $assignment['person_id'] === null) {
             safe_error_response('This canonical Student identity already has an account or cannot be safely linked.', 409);
             return;
@@ -554,14 +576,15 @@ function handle_secretary_activate(): void
                 'Secretary activation could not preserve the canonical Student identity.'
             );
 
+            // REG-006: one invitation activates the Student account and appoints it.
             $linkStudent = $pdo->prepare(
                 "UPDATE students
-                    SET user_id = ?,
+                    SET user_id = ?, student_account_user_id = ?,
                         name_prefix = ?, first_name = ?, middle_name = ?, last_name = ?, name_suffix = ?
-                  WHERE student_id = ? AND user_id IS NULL"
+                  WHERE student_id = ? AND user_id IS NULL AND student_account_user_id IS NULL"
             );
             $linkStudent->execute([
-                $userId,
+                $userId, $userId,
                 $student['canonical_name_prefix'], $student['canonical_first_name'],
                 $student['canonical_middle_name'], $student['canonical_last_name'],
                 $student['canonical_name_suffix'],
@@ -650,6 +673,13 @@ function secretary_verify_auth(PDO $pdo, array $config): array
         safe_error_response('Access denied. Class Secretary privileges required.', 403);
         exit;
     }
+    // REG-006: an appointment ends when its section is archived or its school
+    // year ends; the account then returns to plain Student access.
+    if (!secretary_has_current_appointment($pdo, (int) $authCtx['user_id'])) {
+        secretary_end_appointment_role($pdo, $config, $authCtx, 'The Class Secretary appointment ended with its section or school year.');
+        safe_error_response('Your Class Secretary appointment has ended. Sign in again to continue as a Student.', 403);
+        exit;
+    }
 
     if (account_identity_fetch($pdo, (int) $authCtx['user_id']) === null) {
         safe_error_response('Secretary identity is unavailable.', 409);
@@ -657,6 +687,168 @@ function secretary_verify_auth(PDO $pdo, array $config): array
     }
 
     return $authCtx;
+}
+
+function secretary_has_current_appointment(PDO $pdo, int $userId): bool
+{
+    $current = academic_current_school_year($pdo);
+    $stmt = $pdo->prepare(
+        "SELECT 1 FROM class_sections
+          WHERE secretary_user_id = ? AND LOWER(status) = 'active'
+            AND UPPER(school_year) = UPPER(?)
+          LIMIT 1"
+    );
+    $stmt->execute([$userId, $current]);
+    return $stmt->fetchColumn() !== false;
+}
+
+/**
+ * Return an account whose appointment ended to plain Student access: the
+ * role becomes student and the Secretary link on the Student row is cleared.
+ * Past sections keep secretary_user_id as history.
+ */
+function secretary_end_appointment_role(PDO $pdo, array $config, array $actor, string $description, ?int $accountUserId = null): void
+{
+    $accountUserId ??= (int) $actor['user_id'];
+    $ownTransaction = !$pdo->inTransaction();
+    if ($ownTransaction) {
+        $pdo->beginTransaction();
+    }
+    try {
+        $studentStmt = $pdo->prepare('SELECT student_id FROM students WHERE student_account_user_id = ? FOR UPDATE');
+        $studentStmt->execute([$accountUserId]);
+        $studentId = $studentStmt->fetchColumn();
+        if ($studentId === false) {
+            // A legacy Secretary-only account without a Student link keeps its role.
+            if ($ownTransaction) { $pdo->commit(); }
+            return;
+        }
+        $pdo->prepare('UPDATE students SET user_id = NULL WHERE student_id = ? AND user_id = ?')->execute([(int) $studentId, $accountUserId]);
+        $pdo->prepare("UPDATE user_accounts SET role = 'student', title = 'Student' WHERE user_id = ? AND role = 'secretary'")->execute([$accountUserId]);
+        audit_record_action(
+            $pdo, $config, $actor, 'secretary', 'secretary_appointment_ended', 'user_account', (string) $accountUserId, $description,
+            ['context' => attendance_session_request_context(), 'after' => ['role' => 'student']]
+        );
+        if ($ownTransaction) { $pdo->commit(); }
+    } catch (\Throwable $e) {
+        if ($ownTransaction && $pdo->inTransaction()) { $pdo->rollBack(); }
+        throw $e;
+    }
+}
+
+/** REG-006: appoint a Student who already has an account; no second account. */
+function secretary_appoint_existing_account(PDO $pdo, array $config, array $authCtx, string $actorDisplayName, array $assignment, array $context): void
+{
+    $accountUserId = (int) $assignment['student_account_user_id'];
+    $pdo->beginTransaction();
+    try {
+        $account = $pdo->prepare('SELECT user_id, role, status, login_email FROM user_accounts WHERE user_id = ? FOR UPDATE');
+        $account->execute([$accountUserId]);
+        $row = $account->fetch(PDO::FETCH_ASSOC);
+        if ($row === false || $row['status'] !== 'Active' || !in_array($row['role'], ['student', 'secretary'], true)) {
+            $pdo->rollBack();
+            safe_error_response('The Student account is not active; the Student must activate it first.', 409);
+            return;
+        }
+        if (secretary_has_current_appointment($pdo, $accountUserId)) {
+            $pdo->rollBack();
+            safe_error_response('This Student is already the Class Secretary of another section.', 409);
+            return;
+        }
+        $section = $pdo->prepare('UPDATE class_sections SET secretary_user_id = ? WHERE cs_id = ? AND secretary_user_id IS NULL');
+        $section->execute([$accountUserId, (int) $assignment['cs_id']]);
+        if ($section->rowCount() !== 1) {
+            $pdo->rollBack();
+            safe_error_response('This section already has a Class Secretary.', 409);
+            return;
+        }
+        $pdo->prepare('UPDATE students SET user_id = ? WHERE student_id = ?')->execute([$accountUserId, (int) $assignment['student_id']]);
+        $pdo->prepare("UPDATE user_accounts SET role = 'secretary', title = 'Class Secretary' WHERE user_id = ?")->execute([$accountUserId]);
+        notification_create_idempotent(
+            $pdo, $accountUserId, 'secretary_appointment', "Class Secretary for {$assignment['cs_name']}",
+            "{$actorDisplayName} appointed you Class Secretary for {$assignment['cs_name']}. Sign in again to open the Secretary pages; your Student pages stay available from the sidebar.",
+            'class_section', (string) $assignment['cs_id'],
+            'secretary-appointed:' . $assignment['cs_id'] . ':' . $accountUserId . ':' . attendance_session_now_utc()->format('YmdHisu')
+        );
+        audit_record_action(
+            $pdo, $config, $authCtx, 'secretary', 'secretary_appointed', 'user_account', (string) $accountUserId,
+            "Appointed {$assignment['persisted_name']} as Class Secretary for {$assignment['cs_name']} using the Student's existing account.",
+            ['scope_cs_id' => (int) $assignment['cs_id'], 'context' => $context, 'after' => ['role' => 'secretary', 'csId' => (int) $assignment['cs_id']]]
+        );
+        $pdo->commit();
+    } catch (\Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        throw $e;
+    }
+    json_response([
+        'status' => 'ok',
+        'invitationId' => null,
+        'token' => null,
+        'invitation_link' => null,
+        'dev_invitation_link' => null,
+        'delivery_status' => 'Appointed',
+        'message' => 'The Student already has an account and is now the Class Secretary for this section.',
+    ], 201);
+}
+
+/** REG-006: Faculty remove a Secretary appointment from their section. */
+function handle_faculty_secretary_remove(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $body = request_body();
+        $data = $body['has_body'] && is_array($body['data']) ? $body['data'] : [];
+        $studentId = filter_var($data['studentId'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($studentId === false) {
+            throw new ValidationException([['field' => 'studentId', 'message' => 'A valid student is required.']]);
+        }
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT cs.cs_id, cs.cs_name, s.student_number, s.user_id AS secretary_user_id
+                   FROM students s
+                   JOIN class_sections cs ON cs.secretary_user_id = s.user_id
+                  WHERE s.student_id = ? AND cs.instructor_user_id = ? AND LOWER(cs.status) = 'active'
+                  ORDER BY cs.cs_id DESC LIMIT 1
+                  FOR UPDATE OF cs"
+            );
+            $stmt->execute([(int) $studentId, $authCtx['user_id']]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row === false) {
+                $pdo->rollBack();
+                safe_error_response('This student is not the Class Secretary of one of your sections.', 404);
+                return;
+            }
+            if (academic_class_section_is_past($pdo, (int) $row['cs_id'])) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are view-only.', 409);
+                return;
+            }
+            $accountUserId = (int) $row['secretary_user_id'];
+            $pdo->prepare('UPDATE class_sections SET secretary_user_id = NULL WHERE cs_id = ?')->execute([(int) $row['cs_id']]);
+            if (!secretary_has_current_appointment($pdo, $accountUserId)) {
+                secretary_end_appointment_role($pdo, $config, $authCtx, "Removed the Class Secretary appointment of student {$row['student_number']} for {$row['cs_name']}.", $accountUserId);
+            }
+            notification_create_idempotent(
+                $pdo, $accountUserId, 'secretary_appointment', "Class Secretary appointment removed",
+                "Your Class Secretary appointment for {$row['cs_name']} was removed. Your Student access is unchanged.",
+                'class_section', (string) $row['cs_id'],
+                'secretary-removed:' . $row['cs_id'] . ':' . $accountUserId . ':' . attendance_session_now_utc()->format('YmdHisu')
+            );
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+        json_response(['status' => 'ok', 'message' => 'Class Secretary appointment removed; the account is back to Student access.'], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (\Throwable $e) {
+        error_log('Faculty secretary remove error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
 }
 
 function secretary_activity_rows(PDO $pdo, int $userId, int $limit = 20): array
