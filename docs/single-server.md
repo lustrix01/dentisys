@@ -19,7 +19,7 @@ E-mail modes (`EMAIL_PROVIDER`):
 
 ## Setting it up
 
-Follow [README Part B](../README.md#part-b-single-server-mode-future). It covers preparing the server, filling in `.env.single-server`, starting it with `scripts/start-single-server.ps1` (or `.sh`), inviting the first Dean, and stopping it. The stack runs under the Compose project name `dentisys-single-server`. The application and its API health check (`/api/health`) are served on `APP_HTTP_PORT` (default `8080`).
+Follow [README Part B](../README.md#part-b-single-server-mode-future). It covers preparing the server, filling in `.env.single-server`, starting it with `scripts/start-single-server.ps1` (or `.sh`), the first Dean, stopping, upgrading and restoring, and daily maintenance. The stack runs under the Compose project name `dentisys-single-server`. The application and its API health check (`/api/health`) are served on `APP_HTTP_PORT` (default `8080`).
 
 Do not run this prototype alongside the development stack unless one stack uses a different published application port.
 
@@ -32,10 +32,10 @@ Before DentiSys can call this a supported single-server deployment, it needs:
 - a defined deployment and operations runbook;
 - TLS and reverse-proxy policy;
 - firewall and private-network guidance;
-- automated backups plus tested restore procedures;
+- scheduled, off-server backups (the start script backs up only before migrations);
 - production secret storage and rotation;
 - monitoring, alerts, and log-retention guidance;
-- an upgrade, rollback, and database-migration procedure; and
+- a tested rollback procedure beyond restoring the pre-migration backup; and
 - deployment automation.
 
 Do not expose this prototype to the public internet. Its current Compose behavior is not a substitute for the missing operational controls.

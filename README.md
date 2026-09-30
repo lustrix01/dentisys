@@ -318,6 +318,7 @@ Every value that starts with `replace_with_` must be replaced; the start script 
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Your SMTP account. Encryption (`starttls` or `tls`) and certificate checking are required. |
 | `EMAIL_PROVIDER`, `EMAIL_TEST_ALLOWLIST` | `smtp` to e-mail everyone, or `custom` to send real e-mail only to the allowlist and keep a copy of everything in Mailpit (see [A7](#a7-choose-how-e-mail-is-delivered)). |
 | `ALLOWED_EMAIL_DOMAINS` | Institutional domains allowed to sign in (default `bicol-u.edu.ph`). |
+| `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME`, `FIRST_DEAN_LAST_NAME` | The person who receives the first Dean invitation (see [B5](#b5-the-first-dean)). |
 | `MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH`, `MEDIAPIPE_FACE_LANDMARKER_SHA256` | Absolute path to the downloaded model and its hash (see [A8](#a8-optional-face-recognition-attendance), step 1). |
 | `BIOMETRIC_*` calibration values | From [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Biometric attendance still stays off in single-server mode until it is approved for deployment. |
 
@@ -339,37 +340,63 @@ Keep `.env.single-server` on the server only. It holds every secret.
 
 On Windows: `.\scripts\start-single-server.ps1`.
 
-The script checks the required settings and builds and starts the stack under the Compose project name `dentisys-single-server`. On the first start, PostgreSQL creates the database and applies all migrations. With `EMAIL_PROVIDER=custom` it also starts Mailpit. Its page is at `http://127.0.0.1:8025` on the server itself only; from another computer use an SSH tunnel: `ssh -L 8025:127.0.0.1:8025 user@server`.
+The script runs under the Compose project name `dentisys-single-server` and does the following, in order:
+
+1. It checks the required settings.
+2. It starts PostgreSQL. On the first start, this creates the database and applies every migration.
+3. On later starts, if the code has new migrations, it saves a backup to `backups/single-server-before-migrate-<date>.dump`, then applies only the new migrations.
+4. It builds and starts the rest of the stack and waits until every service is healthy.
+5. It runs the same maintenance as development: grade weights for new classes, the first-Dean invitation ([B5](#b5-the-first-dean)), and the expired-biometrics sweep.
+
+It is safe to run again at any time.
+
+With `EMAIL_PROVIDER=custom` the script also starts Mailpit. Its page is at `http://127.0.0.1:8025` on the server itself only; from another computer use an SSH tunnel: `ssh -L 8025:127.0.0.1:8025 user@server`.
 
 Check it: open `APP_BASE_URL`, and `APP_BASE_URL/api/health` should report `"status": "ok"`.
 
-### B5. Invite the first Dean
+### B5. The first Dean
 
-Single-server mode never loads demo data. Create the first account by inviting a Dean. Pass the details to the bootstrap script directly:
+Single-server mode never loads demo data. The first account is a Dean invited by e-mail. Before the first start, fill in `FIRST_DEAN_EMAIL`, `FIRST_DEAN_FIRST_NAME`, and `FIRST_DEAN_LAST_NAME` in `.env.single-server`. The address must use an allowed domain. The start script sends the invitation. The Dean opens the link, sets a password, and then invites Faculty from inside DentiSys.
 
-```bash
-docker compose --env-file .env.single-server -p dentisys-single-server \
-  -f docker-compose.web.yml -f docker-compose.database.yml \
-  exec -e FIRST_DEAN_EMAIL=dean.name@bicol-u.edu.ph \
-       -e FIRST_DEAN_FIRST_NAME=First -e FIRST_DEAN_LAST_NAME=Last \
-  web php /var/www/html/backend/bin/bootstrap-first-dean.php
-```
+If the settings were empty on the first start, fill them in and run the start script again. Nothing happens once a Dean account is active.
 
-The Dean receives an invitation e-mail, sets a password, and then invites Faculty from inside DentiSys.
+### B6. Stop, upgrade, and restore
 
-### B6. Stop it
+Stop the stack:
 
 ```bash
-docker compose --env-file .env.single-server -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml down
+docker compose --env-file .env.single-server -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml --profile mailpit down
 ```
 
 As in development, never add `-v`; it deletes the database.
 
-### B7. What is still missing before real use
+**Upgrade** to newer code: run `git pull`, compare `.env.single-server` with `.env.single-server.example` for new settings, then run the start script again. It backs up the database before applying new migrations.
 
-- **Upgrades:** re-running the start script rebuilds the images, but migrations are applied automatically only when the database is first created. There is no tested upgrade, rollback, or migration procedure for an existing single-server database yet.
-- **Maintenance:** the grade-weight setup and the expired-biometrics sweep are not scheduled.
-- **Operations:** there is no HTTPS/reverse-proxy setup, firewall guidance, tested backup and restore, secret rotation, or monitoring.
+**Restore** a backup if an upgrade goes wrong. First switch back to the previous code (`git switch` or `git checkout` the earlier commit). Then run the commands below, which replace the current data with the backup:
+
+```bash
+C="docker compose --env-file .env.single-server -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml"
+$C stop web frontend
+$C cp backups/<backup-file>.dump db:/tmp/restore.dump
+$C exec -T db pg_restore -U postgres -d dentisys --clean --if-exists /tmp/restore.dump
+./scripts/start-single-server.sh
+```
+
+Keep `backups/` private; the files contain all DentiSys data.
+
+### B7. Daily maintenance
+
+Biometric enrollments expire each semester (BIO-005). The start script removes expired ones, but a server that runs for months should also run the sweep daily. On Linux, add a cron entry (`crontab -e`) such as:
+
+```cron
+0 2 * * * cd /path/to/dentisys && docker compose --env-file .env.single-server -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml exec -T web php /var/www/html/backend/bin/expire-biometrics.php
+```
+
+On Windows, create a daily Task Scheduler task that runs the same command from the repository folder.
+
+### B8. What is still missing before real use
+
+- **Operations:** there is no HTTPS/reverse-proxy setup, firewall guidance, off-server or scheduled backups, secret rotation, or monitoring.
 - **Biometrics:** real biometric attendance is disabled outside development until it is approved for deployment.
 
 More detail: [docs/single-server.md](docs/single-server.md).

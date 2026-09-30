@@ -38,6 +38,50 @@ if ($values['EMAIL_PROVIDER'] -eq 'custom') {
 
 & docker compose @composeArgs config --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Single-server Compose configuration is invalid.' }
-& docker compose @composeArgs up -d --build
+
+# Migrations: a new database applies them on creation; an existing one is
+# backed up first when migrations are pending, then brought up to date.
+& docker compose @composeArgs up -d --wait db
+if ($LASTEXITCODE -ne 0) { throw 'The PostgreSQL service failed to become ready.' }
+$dbName = if ($values['DB_NAME']) { $values['DB_NAME'] } else { 'dentisys' }
+$adminUser = if ($values['DB_ADMIN_USER']) { $values['DB_ADMIN_USER'] } else { 'postgres' }
+# First-time creation runs on a socket-only server; TCP answers once it is done.
+$ready = $false
+for ($i = 0; $i -lt 90; $i++) {
+    try {
+        & docker compose @composeArgs exec -T db pg_isready -h 127.0.0.1 -U $adminUser -d $dbName *> $null
+        if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+    } catch { }
+    Start-Sleep -Seconds 2
+}
+if (-not $ready) { throw 'PostgreSQL did not finish starting.' }
+$applied = @(& docker compose @composeArgs exec -T db psql -U $adminUser -d $dbName -qtAX -c 'SELECT version FROM _schema_migrations')
+if ($LASTEXITCODE -ne 0) { throw 'Unable to read the applied migrations.' }
+$pending = @(Get-ChildItem -LiteralPath (Join-Path $root 'database\migrations') -File -Filter '*.sql' | Where-Object { $applied -notcontains $_.Name })
+if ($pending.Count -gt 0) {
+    $backupDir = Join-Path $root 'backups'
+    New-Item -ItemType Directory -Force $backupDir | Out-Null
+    $backupName = "single-server-before-migrate-$(Get-Date -Format 'yyyyMMdd-HHmmss').dump"
+    & docker compose @composeArgs exec -T db pg_dump -U $adminUser -d $dbName -Fc -f "/tmp/$backupName"
+    if ($LASTEXITCODE -ne 0) { throw 'The pre-migration backup failed; nothing was migrated.' }
+    & docker compose @composeArgs cp "db:/tmp/$backupName" (Join-Path $backupDir $backupName)
+    if ($LASTEXITCODE -ne 0) { throw 'The pre-migration backup could not be copied; nothing was migrated.' }
+    & docker compose @composeArgs exec -T db rm -f "/tmp/$backupName"
+    Write-Host "Backup before $($pending.Count) pending migration(s): backups\$backupName"
+    & docker compose @composeArgs exec -T db sh /docker-entrypoint-initdb.d/001-migrations.sh
+    if ($LASTEXITCODE -ne 0) { throw "Migrations failed. Restore from backups\$backupName if needed." }
+}
+
+& docker compose @composeArgs up -d --build --wait
 if ($LASTEXITCODE -ne 0) { throw 'Single-server stack failed to start.' }
+
+# Same maintenance as start-dev.ps1. A failure is reported but does not stop the stack.
+foreach ($task in @(
+    @{ Script = 'bootstrap-grade-weights.php'; Label = 'Grade-weight setup' },
+    @{ Script = 'bootstrap-first-dean.php'; Label = 'First Dean invitation (check FIRST_DEAN_*)' },
+    @{ Script = 'expire-biometrics.php'; Label = 'Biometric expiry sweep' }
+)) {
+    & docker compose @composeArgs exec -T web php "/var/www/html/backend/bin/$($task.Script)"
+    if ($LASTEXITCODE -ne 0) { Write-Warning "$($task.Label) did not finish." }
+}
 Write-Host 'Single-server stack started. PostgreSQL remains internal; access the application on APP_HTTP_PORT.'
