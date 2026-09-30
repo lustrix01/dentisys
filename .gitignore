@@ -48,3 +48,7 @@ frontend/certs/
 
 # Local database backups (contain private data)
 /backups/
+
+# Local working folders (not shared)
+/Claude outputs/
+/_maintenance/

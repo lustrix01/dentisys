@@ -48,7 +48,7 @@ links remain present and usable. The destination deliberately uses Gemini's
 approved presentation-only two-panel treatment rather than the source's
 single-column styling. This is a destination presentation deviation, not a
 missing recovery capability; password recovery remains required by
-[`AUTH-005`](../spec.md#auth-005-password-authentication), and the live API,
+[`AUTH-005`](../../spec.md#auth-005-password-authentication), and the live API,
 Mailpit delivery, expiry, replay, policy, and token-consumption checks pass.
 
 The route groups explicitly covered are:
@@ -124,32 +124,32 @@ The following differences are deliberate semantic/data differences:
    prototype banner and mock metric cards. The destination Student dashboard
    displays enrolled classes, authoritative GWA, attendance, clinical hours,
    and retention-alert cards instead. This follows [`spec.md`'s
-   server-authoritative academic decision rule](../spec.md); real
+   server-authoritative academic decision rule](../../spec.md); real
    camera/provider acceptance remains a separate manual gate.
 2. The frozen source and destination use the same SQL fixture, but the source
    and current controller contracts expose different assigned-class/report
    records and source-only prototype announcements. These are content/state
    differences, not a mismatch in responsive layout; destination data was not
    replaced with source mock data. The destination retains the current API and
-   historical-data rules in [`spec.md`'s UI-005 and academic sections](../spec.md).
+   historical-data rules in [`spec.md`'s UI-005 and academic sections](../../spec.md).
 3. Google provider display is configuration-dependent. Offline comparison uses
    the disabled-provider state; real Google acceptance remains separate under
-   [`spec.md`'s AUTH-002/AUTH-003 Google rules](../spec.md).
+   [`spec.md`'s AUTH-002/AUTH-003 Google rules](../../spec.md).
 4. Secretary/source browser-session simulation text and destination
    authoritative session/attendance messaging differ because the destination
    preserves the approved server-backed workflow required by [`spec.md`'s
-   UI-005 and attendance-session rules](../spec.md). No camera or provider
+   UI-005 and attendance-session rules](../../spec.md). No camera or provider
    state was claimed from this visual run.
 5. The destination Create Class dialog uses a selected course offering,
    current school year, semester, year level, and separate lecture/laboratory
    rooms, while the frozen source uses free-form course code/title, section,
    venue, days, and time. This is the approved destination deviation required
    by [`spec.md`'s current-school-year, course/offering, and distinct-room
-   contract](../spec.md); it is not unreviewed CSS drift.
+   contract](../../spec.md); it is not unreviewed CSS drift.
 6. The destination invitation Edit dialog is a current lifecycle capability
    absent from the frozen source. It is recorded as a destination enhancement,
    not silently counted as source parity; invitation/activation behavior stays
-   governed by [`spec.md`'s REG-002/REG-006 rules](../spec.md).
+   governed by [`spec.md`'s REG-002/REG-006 rules](../../spec.md).
 
 This document records visual acceptance for the executable UI surface with the
 above approved deviations. It does not claim acceptance of real Google,

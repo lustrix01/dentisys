@@ -1,6 +1,6 @@
 # UI migration status
 
-> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
+> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](../HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../../spec.md). The content below is kept for history and may be out of date.
 
 Current destination: local `lighthal5`, based on `f9ac7df`. The original functional baseline is `67e16a0`; the refreshed and frozen source UI for this batch is `owhie_backend@e9ead0b3f8a4b0c49904a2274d3e80264203098b` (fast-forwarded from the prior pin `bd5ab789cc537f1503fc78357ad5937e7926651a`). Recovered changes from the `c9fe` checkout are already included. Do not copy them again.
 

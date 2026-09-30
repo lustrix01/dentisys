@@ -1,6 +1,6 @@
 # Requirements Traceability Matrix — Phase 2/P03
 
-> Historical Phase 2/P03 traceability snapshot. It is not the authoritative current feature-status source; use [`features.md`](features.md), [`roadmap.md`](roadmap.md), and active runtime code for current behavior.
+> Historical Phase 2/P03 traceability snapshot. It is not the authoritative current feature-status source; use [`features.md`](../features.md), [`roadmap.md`](../roadmap.md), and active runtime code for current behavior.
 
 ## Source Register
 

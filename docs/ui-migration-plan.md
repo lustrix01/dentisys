@@ -68,4 +68,4 @@ Registrar format, unapproved policy details, Google, and camera acceptance stay 
 
 ## Next execution packet
 
-Continue from the current lighthal5 working tree; do not restart or recopy the parked worktree. Use ui-migration-status.md and ui-source-inventory.md to inspect remaining differences. Use AGENTS.md ownership rules. This priority change does not grant Gemini authority over functional code. Final integration into `lighthal5` must identify exactly which state is visual-only, schema-ready, or fully wired.
+Continue from the current lighthal5 working tree; do not restart or recopy the parked worktree. Use archive/ui-migration-status.md and archive/ui-source-inventory.md to inspect remaining differences. Use AGENTS.md ownership rules. This priority change does not grant Gemini authority over functional code. Final integration into `lighthal5` must identify exactly which state is visual-only, schema-ready, or fully wired.

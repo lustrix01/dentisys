@@ -17,29 +17,9 @@ E-mail modes (`EMAIL_PROVIDER`):
 - `smtp`: every e-mail is delivered through the configured SMTP server.
 - `custom`: every e-mail is copied to Mailpit, and recipients on `EMAIL_TEST_ALLOWLIST` also receive it through SMTP. Faculty notices to anyone else are recorded as "Suppressed (test mode)". Mailpit holds copies of every message, including invitation links, so keep its UI private and switch to `smtp` at go-live.
 
-## Controlled prototype startup
+## Setting it up
 
-Use these commands only for implementation testing in a controlled private-LAN environment:
-
-```powershell
-Copy-Item .env.single-server.example .env.single-server
-```
-
-Before starting, replace every placeholder with deployment-specific values:
-
-- `APP_BASE_URL` with the public absolute `http://` or `https://` URL used by browsers (for example, `https://dentisys.example.edu`)
-- `DB_PASS` and `DB_ADMIN_PASS`
-- `JWT_SIGNING_KEY_B64`, `MFA_ENCRYPTION_KEY_B64`, and `AUDIT_MAC_KEY_B64`
-- SMTP host, sender, credentials, encryption, and certificate-verification settings
-- `APP_HTTP_PORT` when port `8080` is unsuitable
-
-Then run:
-
-```powershell
-.\scripts\start-single-server.ps1
-```
-
-The script validates the required configuration and starts `docker-compose.web.yml` with `docker-compose.database.yml` under the `dentisys-single-server` project name. Open `http://server-address:APP_HTTP_PORT`; the default is port `8080`. Check API health at `http://server-address:APP_HTTP_PORT/api/health`.
+Follow [README Part B](../README.md#part-b-single-server-mode-future). It covers preparing the server, filling in `.env.single-server`, starting it with `scripts/start-single-server.ps1` (or `.sh`), inviting the first Dean, and stopping it. The stack runs under the Compose project name `dentisys-single-server`. The application and its API health check (`/api/health`) are served on `APP_HTTP_PORT` (default `8080`).
 
 Do not run this prototype alongside the development stack unless one stack uses a different published application port.
 

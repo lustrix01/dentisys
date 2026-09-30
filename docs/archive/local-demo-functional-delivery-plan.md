@@ -1,6 +1,6 @@
 # Local demo functional delivery plan
 
-> **Superseded execution order, 2026-09-24:** The Owner now prioritizes complete `owhie_backend` UI migration into `lighthal5`, database 3NF/schema fit, then functional wiring and test repair. Follow [UI migration plan](ui-migration-plan.md) and spec.md section 9B. This document's functional inventory remains historical context; its one-day schedule, functional-first gates, and outdated provider status do not define the current work order. Temporary test failures are allowed during UI migration and must remain tracked.
+> **Superseded execution order, 2026-09-24:** The Owner now prioritizes complete `owhie_backend` UI migration into `lighthal5`, database 3NF/schema fit, then functional wiring and test repair. Follow [UI migration plan](../ui-migration-plan.md) and spec.md section 9B. This document's functional inventory remains historical context; its one-day schedule, functional-first gates, and outdated provider status do not define the current work order. Temporary test failures are allowed during UI migration and must remain tracked.
 
 **Status: NON-AUTHORITATIVE implementation inventory.** This document is a delivery plan and review aid. It does not amend `spec.md`, `docs/PRODUCT_BACKLOG.md`, routes, runtime behavior, or database state.
 

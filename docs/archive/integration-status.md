@@ -1,10 +1,10 @@
 # Local integration status
 
-> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
+> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](../HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../../spec.md). The content below is kept for history and may be out of date.
 
 ## Current planning amendment - 2026-09-24
 
-The current task checkout started clean at `67e16a0`; the continuation reports local `lighthal5` at the same functional commit. New UI source is `owhie_backend` at `bd5ab789cc537f1503fc78357ad5937e7926651a`. The [UI-first plan](ui-migration-plan.md) supersedes older integration priorities below. This amendment does not merge branches, run migrations, or declare UI/runtime completion. Preserve all parked changes and volumes. Older ref inventories below are timestamped historical snapshots, not current branch verification.
+The current task checkout started clean at `67e16a0`; the continuation reports local `lighthal5` at the same functional commit. New UI source is `owhie_backend` at `bd5ab789cc537f1503fc78357ad5937e7926651a`. The [UI-first plan](../ui-migration-plan.md) supersedes older integration priorities below. This amendment does not merge branches, run migrations, or declare UI/runtime completion. Preserve all parked changes and volumes. Older ref inventories below are timestamped historical snapshots, not current branch verification.
 
 Inventory captured 2026-09-24 01:04:26 +08:00 after integrating the reviewed period-grading line.
 
