@@ -87,6 +87,13 @@ test.afterEach(async ({ page }) => {
   expect(errors, errors.join('\n')).toEqual([]);
 });
 
+test('authenticator enrollment requires an authenticated profile session', async ({ request }) => {
+  const response = await request.post('/api/auth/mfa/enroll/start', {
+    headers: { Authorization: 'Bearer invalid-access-token' },
+  });
+  expect(response.status()).toBe(401);
+});
+
 test('administrator login, auth/me, reload refresh, settings, and logout invalidation', async ({ page }) => {
   const credentials = await login(page, adminEmail, adminPassword);
   const me = await page.request.get('/api/auth/me', {

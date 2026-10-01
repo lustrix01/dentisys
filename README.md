@@ -360,6 +360,8 @@ Single-server mode never loads demo data. The first account is a Dean invited by
 
 If the settings were empty on the first start, fill them in and run the start script again. Nothing happens once a Dean account is active.
 
+If invitation delivery fails, fix the mail configuration and run the start script again. The failed token is revoked and the retry sends a fresh invitation for the same pending Dean account. An invitation whose delivery succeeded is left pending without being resent on each start.
+
 ### B6. Stop, upgrade, and restore
 
 Stop the stack:
@@ -372,17 +374,24 @@ As in development, never add `-v`; it deletes the database.
 
 **Upgrade** to newer code: run `git pull`, compare `.env.single-server` with `.env.single-server.example` for new settings, then run the start script again. It backs up the database before applying new migrations.
 
-**Restore** a backup if an upgrade goes wrong. First switch back to the previous code (`git switch` or `git checkout` the earlier commit). Then run the commands below, which replace the current data with the backup:
+**Restore** a backup if an upgrade goes wrong. First switch back to the previous code (`git switch` or `git checkout` the earlier commit). Restore into a new, empty database: `pg_restore --clean` against the upgraded database can leave new objects behind or fail because of their dependencies. The following Linux shell commands stop application traffic and preserve the current database. Replace the backup filename before running:
 
 ```bash
-C="docker compose --env-file .env.single-server -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml"
-$C stop web frontend
-$C cp backups/<backup-file>.dump db:/tmp/restore.dump
-$C exec -T db pg_restore -U postgres -d dentisys --clean --if-exists /tmp/restore.dump
-./scripts/start-single-server.sh
+set -eu
+. ./.env.single-server
+compose() { docker compose --env-file .env.single-server -p dentisys-single-server -f docker-compose.web.yml -f docker-compose.database.yml "$@"; }
+restore_db="${DB_NAME:-dentisys}_restore_$(date +%Y%m%d_%H%M%S)"
+compose stop web frontend
+compose cp backups/<backup-file>.dump db:/tmp/restore.dump
+compose exec -T db createdb -U "${DB_ADMIN_USER:-postgres}" --template=template0 --owner="${DB_USER:-dentisys}" "$restore_db"
+compose exec -T db pg_restore -U "${DB_ADMIN_USER:-postgres}" -d "$restore_db" --exit-on-error --single-transaction /tmp/restore.dump
+compose exec -T db rm -f /tmp/restore.dump
+printf 'Restore completed. Set DB_NAME=%s in .env.single-server before restarting.\n' "$restore_db"
 ```
 
-Keep `backups/` private; the files contain all DentiSys data.
+Only after the restore succeeds, set `DB_NAME` in `.env.single-server` to the printed database name. In a fresh terminal, run the start script and verify `/api/health` and sign-in. If any restore command fails, leave the application stopped and investigate; do not restart against a partially restored database. Keep the previous database until the restored application has been verified. Do not remove a database or volume without Owner approval.
+
+Keep `backups/` private; the files contain all DentiSys data. The Linux start script enforces directory mode `0700` and backup mode `0600`. On Windows, restrict access to the backup directory to the operator and authorized administrators.
 
 ### B7. Daily maintenance
 

@@ -67,7 +67,12 @@ test('Faculty UI exposes both attempts and the truthful terminal stage', () => {
   assert.match(facultyPage, /attemptNumber/);
   assert.match(facultyPage, /stageLabel/);
   assert.match(facultyPage, /saveFacultyRemedialApi/);
-  assert.doesNotMatch(facultyPage, /75\s*%|>=\s*75|>=\s*0\.75/);
+  // UI-003 also uses 75% for informational risk projection. Check the remedial
+  // result form specifically so that its distinct 50% policy stays enforced.
+  const resultForm = facultyPage.match(/title="Grade Remedial Exam Result"[\s\S]*?<\/form>/)?.[0];
+  assert.ok(resultForm, 'Remedial result form exists');
+  assert.match(resultForm, /Pass or Fail at 50% or higher/);
+  assert.doesNotMatch(resultForm, /75\s*%|>=\s*75|>=\s*0\.75/);
   assert.doesNotMatch(facultyPage, /status\s*:\s*['"](?:passed|failed)['"]/i);
 });
 

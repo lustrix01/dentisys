@@ -62,11 +62,14 @@ if ($pending.Count -gt 0) {
     $backupDir = Join-Path $root 'backups'
     New-Item -ItemType Directory -Force $backupDir | Out-Null
     $backupName = "single-server-before-migrate-$(Get-Date -Format 'yyyyMMdd-HHmmss').dump"
-    & docker compose @composeArgs exec -T db pg_dump -U $adminUser -d $dbName -Fc -f "/tmp/$backupName"
+    # mktemp protects database contents inside the Linux container before writing.
+    $backupTemp = (& docker compose @composeArgs exec -T db mktemp /tmp/dentisys-backup.XXXXXX | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($backupTemp)) { throw 'Unable to create a private backup file; nothing was migrated.' }
+    & docker compose @composeArgs exec -T db pg_dump -U $adminUser -d $dbName -Fc -f $backupTemp
     if ($LASTEXITCODE -ne 0) { throw 'The pre-migration backup failed; nothing was migrated.' }
-    & docker compose @composeArgs cp "db:/tmp/$backupName" (Join-Path $backupDir $backupName)
+    & docker compose @composeArgs cp "db:$backupTemp" (Join-Path $backupDir $backupName)
     if ($LASTEXITCODE -ne 0) { throw 'The pre-migration backup could not be copied; nothing was migrated.' }
-    & docker compose @composeArgs exec -T db rm -f "/tmp/$backupName"
+    & docker compose @composeArgs exec -T db rm -f $backupTemp
     Write-Host "Backup before $($pending.Count) pending migration(s): backups\$backupName"
     & docker compose @composeArgs exec -T db sh /docker-entrypoint-initdb.d/001-migrations.sh
     if ($LASTEXITCODE -ne 0) { throw "Migrations failed. Restore from backups\$backupName if needed." }

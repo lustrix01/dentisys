@@ -11,7 +11,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 
 ## Current work
 
-- [Current handoff](HANDOFF_2026-09-29.md): current state, remaining work, and working rules.
+- [Current handoff](HANDOFF_2026-10-01.md): current state, remaining work, and working rules.
 - [Product backlog](PRODUCT_BACKLOG.md)
 - [UI migration plan](ui-migration-plan.md): the Owner-approved delivery order.
 - [Roadmap](roadmap.md) and [implemented features](features.md): older snapshots; the handoff is more current.

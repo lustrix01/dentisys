@@ -63,8 +63,21 @@ echo $result['message'] . "\n";
 if ($result['action'] === 'invited') {
     $link = app_url($config, '/activate-faculty', ['token' => $result['token']]);
     $sent = send_email($result['email'], 'DentiSys Dean Invitation', email_dean_invitation_html($result['name'], $result['email'], $link), $config, true);
+    if (!$sent) {
+        try {
+            $pdo->beginTransaction();
+            first_dean_invitation_delivery_failed($pdo, $config, $result, $context);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            fwrite(STDERR, 'Invitation delivery failed and its token could not be revoked: ' . $e->getMessage() . "\n");
+            exit(1);
+        }
+    }
     echo $sent ? "Invitation e-mail sent to {$result['email']}.\n" : "Invitation e-mail delivery failed; rerun after fixing mail delivery.\n";
-    if (!empty($config['show_dev_invitation_link'])) {
+    if ($sent && !empty($config['show_dev_invitation_link'])) {
         echo "Development invitation link: {$link}\n";
     }
     exit($sent ? 0 : 1);

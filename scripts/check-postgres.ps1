@@ -208,15 +208,38 @@ FROM (
     $sourceSequences = Invoke-PsqlScalar $sequenceQuery
     $sourceAccounts = Invoke-PsqlScalar $accountQuery
     try {
+        Invoke-Compose @('exec', '-T', 'db', 'createdb', '-U', 'postgres', '--template=template0', '--owner=dentisys', $restoreDatabase)
+        $privateBackup = (& docker compose @composeFiles exec -T db mktemp /tmp/dentisys-backup.XXXXXX | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $privateBackup) { throw 'Private backup creation failed.' }
+        $backupPath = $privateBackup
         Invoke-Compose @('exec', '-T', 'db', 'pg_dump', '-U', 'postgres', '-d', 'dentisys', '-Fc', '-f', $backupPath)
-        Invoke-Compose @('exec', '-T', 'db', 'createdb', '-U', 'postgres', $restoreDatabase)
-        Invoke-Compose @('exec', '-T', 'db', 'pg_restore', '--exit-on-error', '--no-owner', '--no-privileges', '-U', 'postgres', '-d', $restoreDatabase, $backupPath)
+        $backupMode = (& docker compose @composeFiles exec -T db stat -c '%a' $backupPath | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $backupMode -ne '600') { throw 'Database backup must be private (mode 0600).' }
+        Invoke-Compose @('exec', '-T', 'db', 'pg_restore', '--exit-on-error', '--single-transaction', '-U', 'postgres', '-d', $restoreDatabase, $backupPath)
         $restoreCounts = Invoke-PsqlScalarDatabase $restoreDatabase $countQuery
         $restoreSequences = Invoke-PsqlScalarDatabase $restoreDatabase $sequenceQuery
         $restoreAccounts = Invoke-PsqlScalarDatabase $restoreDatabase $accountQuery
         if ($restoreCounts -ne $sourceCounts) { throw "Backup/restore counts differ (source $sourceCounts; restored $restoreCounts)." }
         if ($restoreSequences -ne $sourceSequences) { throw "Backup/restore sequence positions differ (source $sourceSequences; restored $restoreSequences)." }
         if ($restoreAccounts -ne $sourceAccounts) { throw 'Backup/restore seeded account ledger differs.' }
+
+        # Exercise the real bootstrap CLI against only the restored disposable DB.
+        # A refused SMTP connection must leave a retryable pending account.
+        Invoke-PsqlScalarDatabase $restoreDatabase "UPDATE user_accounts SET role = 'faculty' WHERE role = 'admin';" | Out-Null
+        $deanBootstrapArgs = @('exec', '-T', '-e', "DB_NAME=$restoreDatabase",
+            '-e', 'FIRST_DEAN_EMAIL=bootstrap.delivery@bicol-u.edu.ph', '-e', 'FIRST_DEAN_FIRST_NAME=Delivery', '-e', 'FIRST_DEAN_LAST_NAME=Test',
+            '-e', 'EMAIL_PROVIDER=mailpit', '-e', 'SMTP_ENCRYPTION=none', '-e', 'SMTP_VERIFY_PEER=false')
+        & docker compose @composeFiles @deanBootstrapArgs -e SMTP_HOST=127.0.0.1 -e SMTP_PORT=1 web php /var/www/html/backend/bin/bootstrap-first-dean.php
+        if ($LASTEXITCODE -ne 1) { throw 'Failed first Dean delivery must exit 1.' }
+        $deanTokenQuery = "SELECT count(*) FROM security_tokens st JOIN user_accounts ua ON ua.user_id = st.user_id WHERE ua.login_email = 'bootstrap.delivery@bicol-u.edu.ph' AND st.purpose = 'faculty_invitation' AND st.used_at IS NULL AND st.revoked_at IS NULL;"
+        if ((Invoke-PsqlScalarDatabase $restoreDatabase $deanTokenQuery) -ne '0') { throw 'Failed first Dean delivery left a live token.' }
+        Invoke-Compose ($deanBootstrapArgs + @('-e', 'SMTP_HOST=mailpit', '-e', 'SMTP_PORT=1025', 'web', 'php', '/var/www/html/backend/bin/bootstrap-first-dean.php'))
+        if ((Invoke-PsqlScalarDatabase $restoreDatabase $deanTokenQuery) -ne '1') { throw 'First Dean delivery retry did not issue a live token.' }
+        $deanAuditQuery = "SELECT count(*) FROM audit_events WHERE action_code = 'first_dean_invited';"
+        $deanIssueCount = Invoke-PsqlScalarDatabase $restoreDatabase $deanAuditQuery
+        Invoke-Compose ($deanBootstrapArgs + @('-e', 'SMTP_HOST=mailpit', '-e', 'SMTP_PORT=1025', 'web', 'php', '/var/www/html/backend/bin/bootstrap-first-dean.php'))
+        if ((Invoke-PsqlScalarDatabase $restoreDatabase $deanAuditQuery) -ne $deanIssueCount) { throw 'A healthy restart reissued the pending Dean invitation.' }
+        Write-Host 'PASS: Private backup, empty-target restore, and first Dean SMTP failure/retry verified.'
     }
     finally {
         try { Invoke-Compose @('exec', '-T', 'db', 'dropdb', '-U', 'postgres', '--if-exists', $restoreDatabase) } catch { Write-Warning $_ }

@@ -272,7 +272,31 @@ function first_dean_invitation_issue(PDO $pdo, array $config, array $settings, a
         ['context' => $context]
     );
     return ['action' => 'invited', 'message' => "First Dean invitation issued for {$email}.", 'userId' => $userId,
-            'email' => $email, 'name' => $name, 'token' => $token];
+            'email' => $email, 'name' => $name, 'token' => $token, 'tokenId' => $tokenId];
+}
+
+/** Revoke only the undelivered bootstrap token, inside the caller's transaction. */
+function first_dean_invitation_delivery_failed(PDO $pdo, array $config, array $invitation, array $context): void
+{
+    $revoke = $pdo->prepare(
+        "UPDATE security_tokens st
+            SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'First Dean invitation email delivery failed'
+          WHERE st.token_id = ? AND st.user_id = ? AND st.purpose = 'faculty_invitation'
+            AND st.used_at IS NULL AND st.revoked_at IS NULL
+            AND EXISTS (SELECT 1 FROM user_accounts ua WHERE ua.user_id = st.user_id
+                         AND ua.role = 'admin' AND ua.status = 'Pending Activation')"
+    );
+    $revoke->execute([(int) $invitation['tokenId'], (int) $invitation['userId']]);
+    if ($revoke->rowCount() === 0) {
+        return;
+    }
+    audit_record_action(
+        $pdo, $config,
+        ['user_id' => null, 'login_email' => null, 'role' => 'system', 'display_name' => 'First Dean bootstrap', 'session_id' => null],
+        'admin', 'first_dean_invitation_delivery_failed', 'security_token', (string) $invitation['tokenId'],
+        'First Dean invitation revoked after email delivery failed; the next bootstrap may retry.',
+        ['context' => $context]
+    );
 }
 
 function handle_admin_faculty_invitation_create(): void

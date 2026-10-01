@@ -515,14 +515,6 @@ test('mocked Google direct login completes normal authentication', async ({ page
     await expect(page).toHaveURL('/');
   });
 
-  test('authenticator enrollment requires an authenticated profile session', async ({ request }) => {
-    const response = await request.post('/api/auth/mfa/enroll/start', {
-      headers: {
-        'Authorization': 'Bearer invalid-access-token',
-      },
-    });
-    expect([401, 502]).toContain(response.status());
-  });
 });
 
 test('configured Google Sign-In reports GIS script load failure without blocking password login', async ({ page }) => {

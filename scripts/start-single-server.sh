@@ -55,11 +55,16 @@ for migration in database/migrations/[0-9][0-9][0-9]_*.sql; do
   fi
 done
 if [ "$pending" -gt 0 ]; then
+  umask 077
   mkdir -p backups
+  chmod 700 backups
   backup_name="single-server-before-migrate-$(date +%Y%m%d-%H%M%S).dump"
-  compose exec -T db pg_dump -U "$admin_user" -d "$db_name" -Fc -f "/tmp/$backup_name"
-  compose cp "db:/tmp/$backup_name" "backups/$backup_name"
-  compose exec -T db rm -f "/tmp/$backup_name"
+  # mktemp creates mode 0600 before pg_dump writes any database contents.
+  backup_temp="$(compose exec -T db mktemp /tmp/dentisys-backup.XXXXXX)"
+  compose exec -T db pg_dump -U "$admin_user" -d "$db_name" -Fc -f "$backup_temp"
+  compose cp "db:$backup_temp" "backups/$backup_name"
+  chmod 600 "backups/$backup_name"
+  compose exec -T db rm -f "$backup_temp"
   echo "Backup before $pending pending migration(s): backups/$backup_name"
   compose exec -T db sh /docker-entrypoint-initdb.d/001-migrations.sh || {
     echo "Migrations failed. Restore from backups/$backup_name if needed." >&2

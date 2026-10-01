@@ -1754,6 +1754,18 @@ try {
     expect_same('admin', $firstDeanRow['role'] ?? null, 'First Dean invitation belongs to a Dean account');
     expect_true($firstDeanRow !== null && faculty_invitation_row_is_live($firstDeanRow), 'First Dean invitation is accepted by the normal invitation flow');
     expect_same('pending', first_dean_invitation_issue($pdo, $config, $firstDeanSettings, $firstDeanContext)['action'], 'First Dean bootstrap does not resend a live invitation');
+    first_dean_invitation_delivery_failed($pdo, $config, $firstDean, $firstDeanContext);
+    expect_true(!faculty_invitation_row_is_live(faculty_invitation_token_row($pdo, $firstDean['token'])), 'An undelivered first Dean invitation is revoked');
+    $firstDeanRetry = first_dean_invitation_issue($pdo, $config, $firstDeanSettings, $firstDeanContext);
+    expect_same('invited', $firstDeanRetry['action'], 'First Dean bootstrap retries after email delivery failure');
+    expect_same($firstDean['userId'], $firstDeanRetry['userId'], 'Delivery retry reuses the pending Dean account');
+    expect_true($firstDean['token'] !== $firstDeanRetry['token'], 'Delivery retry issues a fresh token');
+    first_dean_invitation_delivery_failed($pdo, $config, $firstDean, $firstDeanContext);
+    expect_true(faculty_invitation_row_is_live(faculty_invitation_token_row($pdo, $firstDeanRetry['token'])), 'A repeated failure report cannot revoke the replacement invitation');
+    $failedDeliveryAudit = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code = 'first_dean_invitation_delivery_failed' AND target_id = ?");
+    $failedDeliveryAudit->execute([(string) $firstDean['tokenId']]);
+    expect_same(1, (int) $failedDeliveryAudit->fetchColumn(), 'Failed first Dean delivery is audited exactly once');
+    expect_same('pending', first_dean_invitation_issue($pdo, $config, $firstDeanSettings, $firstDeanContext)['action'], 'A live replacement invitation is not repeatedly sent');
     $pdo->prepare("UPDATE security_tokens SET expires_at = expires_at - INTERVAL '8 days' WHERE purpose = 'faculty_invitation' AND user_id = ?")->execute([(int) $firstDean['userId']]);
     $firstDeanRenewed = first_dean_invitation_issue($pdo, $config, $firstDeanSettings, $firstDeanContext);
     expect_same('invited', $firstDeanRenewed['action'], 'An expired first Dean invitation is replaced');
