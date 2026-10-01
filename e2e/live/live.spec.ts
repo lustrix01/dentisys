@@ -490,10 +490,10 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await page.evaluate(() => localStorage.removeItem('dentisys_attendance'));
 
   // 5. Select Course and Section
-  const courseSelect = page.locator('select').first();
+  const courseSelect = page.getByLabel('Assigned course', { exact: true });
   await courseSelect.selectOption(targetCourseId);
 
-  const sectionSelect = page.locator('select').nth(1);
+  const sectionSelect = page.getByLabel('Class section', { exact: true });
   await sectionSelect.selectOption(targetCsId);
 
   // Wait for worksheet to load from PostgreSQL
@@ -532,8 +532,8 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   // Even if localStorage is cleared completely, state restores from PostgreSQL
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.locator('select').first().selectOption(targetCourseId);
-  await page.locator('select').nth(1).selectOption(targetCsId);
+  await page.getByLabel('Assigned course', { exact: true }).selectOption(targetCourseId);
+  await page.getByLabel('Class section', { exact: true }).selectOption(targetCsId);
 
   // Verify row still displays Present from PostgreSQL
   const studentRowAfterReload = page.locator('tbody tr').filter({ hasText: studentFullName });
@@ -574,8 +574,8 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   // 9. Refresh browser again to confirm correction persists in PostgreSQL
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.locator('select').first().selectOption(targetCourseId);
-  await page.locator('select').nth(1).selectOption(targetCsId);
+  await page.getByLabel('Assigned course', { exact: true }).selectOption(targetCourseId);
+  await page.getByLabel('Class section', { exact: true }).selectOption(targetCsId);
 
   const studentRowAfterCorrectionReload = page.locator('tbody tr').filter({ hasText: studentFullName });
   await expect(studentRowAfterCorrectionReload.getByTestId('attendance-status').getByText('Late', { exact: true })).toBeVisible();

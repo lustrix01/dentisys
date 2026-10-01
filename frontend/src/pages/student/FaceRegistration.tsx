@@ -7,10 +7,7 @@ import {
   FileText,
   ArrowRight,
   AlertCircle,
-  ShieldCheck,
   Trash2,
-  Eye,
-  RotateCcw,
   Loader2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -112,7 +109,6 @@ export const FaceRegistration: React.FC = () => {
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const selectedCameraIdRef = useRef('');
   const [livenessChallenge, setLivenessChallenge] = useState<LivenessChallengeResponse | null>(null);
-  const [activeActionIndex, setActiveActionIndex] = useState<0 | 1>(0);
   const [isProcessingEnrollment, setIsProcessingEnrollment] = useState(false);
   const [serverUsableCount, setServerUsableCount] = useState(0);
 
@@ -237,7 +233,6 @@ export const FaceRegistration: React.FC = () => {
     if (!preserveMessage) {
       setAuthError(null);
     }
-    setActiveActionIndex(0);
     setLivenessChallenge(null);
     stopCamera();
     const abortController = new AbortController();
@@ -428,7 +423,6 @@ export const FaceRegistration: React.FC = () => {
     const guidanceAbortController = new AbortController();
     guidanceAbortRef.current = guidanceAbortController;
     primeGuidanceAudio();
-    setActiveActionIndex(0);
     setCapturedFrameCount(0);
 
     setLastActionSuccess(null);
@@ -462,9 +456,8 @@ export const FaceRegistration: React.FC = () => {
           if (phase === 'phase1_neutral') setLastActionSuccess(null);
         },
         onFrameCount: setCapturedFrameCount,
-        onActionSuccess: (index, action) => {
+        onActionSuccess: (_index, action) => {
           if (!isRunActive()) return;
-          setActiveActionIndex(index);
           setLastActionSuccess(formatAction(action).title);
           playGuidanceSuccessTone();
         },
@@ -903,45 +896,6 @@ export const FaceRegistration: React.FC = () => {
                 <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2">
                   <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
                   <span>Requesting camera access and preparing the liveness challenge…</span>
-                </div>
-              )}
-
-              {/* Server Liveness Instructions (Authoritative) */}
-              {isAuthoritative && livenessChallenge && (
-                <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4" />
-                      Server-Directed Active Liveness Instructions
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-400">
-                      Step {activeActionIndex + 1} of 2
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {livenessChallenge.actions.map((act, idx) => {
-                      const details = formatAction(act);
-                      const isActive = activeActionIndex === idx;
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => setActiveActionIndex(idx as 0 | 1)}
-                          className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${isActive
-                            ? 'bg-white dark:bg-slate-900 border-blue-500 shadow-xs'
-                            : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-70'
-                            }`}
-                        >
-                          <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
-                            {act === 'blink' ? <Eye className="w-4 h-4 text-blue-600" /> : <RotateCcw className="w-4 h-4 text-blue-600" />}
-                            <span>Action {idx + 1}: {details.title}</span>
-                          </div>
-                          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            {details.instruction}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               )}
 

@@ -1040,6 +1040,7 @@ export interface FacultyAttendanceWorksheetRosterItem {
 }
 
 export interface FacultyAttendanceWorksheet {
+  pendingSessions?: Array<{ sessionId: string; sessionDate: string; sessionCode: string; status: string; openingTime: string | null; classEndTime: string | null }>;
   classSection: {
     id: string;
     name: string;
@@ -1085,6 +1086,7 @@ export interface FacultyAttendanceWorksheetResponse {
 }
 
 export interface FacultyAttendanceInitialEntryPayload {
+  sessionId?: number;
   csId: number;
   enrollmentId: number;
   sessionDate: string;
@@ -1159,7 +1161,7 @@ export function createFacultyAttendanceSessionApi(data: {
   geofenceRadiusMeters?: number;
   geofenceLatitude?: number;
   geofenceLongitude?: number;
-}): Promise<{ status: string; message?: string; sessionCode?: string; createdCount?: number; session?: Record<string, unknown> }> {
+}): Promise<{ status: string; message?: string; sessionCode?: string; createdCount?: number; session: NonNullable<FacultyAttendanceWorksheet['attendanceSession']> }> {
   return request('POST', '/faculty/attendance/session', data);
 }
 
@@ -1305,6 +1307,8 @@ export function getSecretaryAttendanceApi(params?: {
     sessionCode: string;
     room?: string;
     status: string;
+    openingTime?: string | null;
+    classEndTime?: string | null;
     startedAt?: string;
     endedAt?: string;
     revokedAt?: string | null;
@@ -1562,7 +1566,16 @@ export function getFacultyEmailLogsApi(): Promise<{
 }
 
 // Class Management API Services
+export interface ClassMeeting {
+  component: 'Lecture' | 'Laboratory';
+  day: string;
+  room: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface FacultyClassItem {
+  meetings?: ClassMeeting[];
   isHistorical?: boolean;
   isCurrentSchoolYear?: boolean;
   id: string;
@@ -1614,6 +1627,7 @@ export function getFacultyCoursesApi(): Promise<{ status: string; courses: Cours
 }
 
 export function createFacultyClassApi(data: {
+  meetings?: ClassMeeting[];
   csName: string;
   courseId?: number;
   courseCode?: string;
@@ -1631,6 +1645,7 @@ export function createFacultyClassApi(data: {
 }
 
 export function updateFacultyClassApi(data: {
+  meetings?: ClassMeeting[];
   csId: number;
   courseCode?: string;
   courseName?: string;

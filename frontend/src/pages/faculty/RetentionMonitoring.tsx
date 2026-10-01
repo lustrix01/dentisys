@@ -433,6 +433,10 @@ export const RetentionMonitoring: React.FC = () => {
     [filteredRecords],
   );
 
+  const currentAttentionStudents = useMemo(() => new Set(usableRecords.filter(record => record.schoolYear === currentSchoolYear
+    && ['warning', 'critical', 'remedial'].includes(record.state)).map(record => record.studentId)).size, [usableRecords, currentSchoolYear]);
+  const visibleStudentCount = useMemo(() => new Set(filteredRecords.map(record => record.studentId)).size, [filteredRecords]);
+
   const remedialRows = useMemo<RetentionRemedialRow[]>(() => {
     const rows: RetentionRemedialRow[] = [];
     filteredRecords.forEach(record => {
@@ -751,7 +755,7 @@ export const RetentionMonitoring: React.FC = () => {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">View persisted Faculty retention records and submit authorized remedial or status updates.</p>
+          <p className="text-xs text-slate-400 mt-1 max-w-xl">Review standing and remedial progress for each student’s course enrollment.</p>
         </div>
       </div>
 
@@ -816,6 +820,14 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {!isLoading && !loadError && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+        <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : `S.Y. ${selectedSchoolYear}`}</p>
+        <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear || 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
+        {currentAttentionStudents > 0 && <button type="button" onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); setActiveTab('watchlist'); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">View current-year students needing attention</button>}
+        {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Watchlist. Midterm Watchlist shows grade completeness and informational risk separately.</p>}
+        {(selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() !== '') && <button type="button" onClick={() => { setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">Clear course, section and search filters</button>}
+      </div>}
 
       {activeTab === 'midterm' && (
         <Card className="p-6 space-y-5">

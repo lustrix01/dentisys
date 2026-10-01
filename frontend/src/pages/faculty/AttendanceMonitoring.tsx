@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Search,
   RefreshCw,
@@ -89,20 +89,47 @@ export const AttendanceMonitoring: React.FC = () => {
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
   const [loadingClasses, setLoadingClasses] = useState<boolean>(true);
   const [classesError, setClassesError] = useState<string | null>(null);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState('');
+  const [selectedSchoolYear, setSelectedSchoolYear] = useState('current');
 
   // Hierarchy Selection States
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState('');
+  const [sessionDate, setSessionDate] = useState(() => manilaDateToday());
   const [selectedCsId, setSelectedCsId] = useState<string>('');
   // Attendance dates are Asia/Manila calendar days, as on the server.
   const [selectedDate, setSelectedDate] = useState<string>(() => manilaDateToday());
 
-  // Maximum date constraint (UX guidance; backend remains authoritative)
-  const todayStr = useMemo(() => manilaDateToday(), []);
-
   // Worksheet State
+  const worksheetRequest = useRef(0);
+  const worksheetMutations = useRef(0);
+  const worksheetRefreshPending = useRef(false);
+  const [worksheetReload, setWorksheetReload] = useState(0);
+  const worksheetScope = useRef('');
   const [worksheet, setWorksheet] = useState<FacultyAttendanceWorksheet | null>(null);
+  worksheetScope.current = `${selectedCsId}:${selectedDate}:${selectedSessionId || worksheet?.attendanceSession?.sessionId || ''}`;
   const [loadingWorksheet, setLoadingWorksheet] = useState<boolean>(false);
   const [worksheetError, setWorksheetError] = useState<string | null>(null);
+
+  const beginWorksheetMutation = () => {
+    ++worksheetMutations.current;
+    ++worksheetRequest.current;
+    setLoadingWorksheet(false);
+    return worksheetScope.current;
+  };
+  const finishWorksheetMutation = (scope: string) => {
+    --worksheetMutations.current;
+    // Cancel stale reads of the written worksheet and their loading state,
+    // while allowing a newly selected class/date/session to finish loading.
+    if (worksheetScope.current === scope) {
+      ++worksheetRequest.current;
+      setLoadingWorksheet(false);
+    }
+    if (worksheetMutations.current === 0 && worksheetRefreshPending.current) {
+      worksheetRefreshPending.current = false;
+      setWorksheetReload(version => version + 1);
+    }
+  };
 
   // Row mutation states
   const [savingStudentId, setSavingStudentId] = useState<string | null>(null);
@@ -149,6 +176,8 @@ export const AttendanceMonitoring: React.FC = () => {
   const [locatingSession, setLocatingSession] = useState(false);
   const [submittingSession, setSubmittingSession] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const attendanceWritePending = savingStudentId !== null || bulkMarking || submittingCorrection
+    || submittingSession || submittingEnd || submittingRevocation || worksheetMutations.current > 0;
 
   // Load Faculty-owned classes on mount
   const loadClasses = useCallback(async () => {
@@ -157,6 +186,7 @@ export const AttendanceMonitoring: React.FC = () => {
     try {
       const res = await getFacultyClassesApi();
       setClasses(res.classes || []);
+      setCurrentSchoolYear(res.currentSchoolYear || '');
     } catch (err) {
       setClasses([]);
       setClassesError(err instanceof Error ? err.message : 'Failed to load assigned classes.');
@@ -170,59 +200,84 @@ export const AttendanceMonitoring: React.FC = () => {
   }, [loadClasses]);
 
   // Derive unique courses represented by Faculty-owned classes
+  const availableSchoolYears = useMemo(() => Array.from(new Set([
+    currentSchoolYear, ...classes.map(item => item.schoolYear || ''),
+  ].filter(Boolean))).sort().reverse(), [classes, currentSchoolYear]);
+  const scopedClasses = useMemo(() => classes.filter(item => selectedSchoolYear === 'all'
+    || item.schoolYear === (selectedSchoolYear === 'current' ? currentSchoolYear : selectedSchoolYear)), [classes, currentSchoolYear, selectedSchoolYear]);
+  const selectedClassIsPast = Boolean(selectedCsId && currentSchoolYear && classes.find(item => String(item.csId) === selectedCsId)?.schoolYear !== currentSchoolYear);
+  const worksheetIsReadOnly = selectedClassIsPast || selectedDate > manilaDateToday() || worksheet?.attendanceSession?.status === 'scheduled' || (Boolean(worksheet?.attendanceSessions.length) && !worksheet?.attendanceSession);
   const assignedCourses = useMemo(() => {
     const map = new Map<number, { id: number; code: string; name: string }>();
-    classes.forEach(c => {
+    scopedClasses.forEach(c => {
       if (!map.has(c.courseId)) {
         map.set(c.courseId, { id: c.courseId, code: c.courseCode, name: c.courseName });
       }
     });
     return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
-  }, [classes]);
+  }, [scopedClasses]);
 
   // Filter sections belonging strictly to the selected course
   const availableSections = useMemo(() => {
     if (selectedCourseId === null) return [];
-    return classes.filter(c => c.courseId === selectedCourseId);
-  }, [classes, selectedCourseId]);
+    return scopedClasses.filter(c => c.courseId === selectedCourseId);
+  }, [scopedClasses, selectedCourseId]);
 
   // Handle Assigned Course Change (Rule 3: clear section and worksheet; do NOT auto-select first section)
   const handleCourseChange = (courseIdVal: string) => {
+    worksheetRequest.current++;
     if (!courseIdVal) {
       setSelectedCourseId(null);
     } else {
       setSelectedCourseId(Number(courseIdVal));
     }
     setSelectedCsId('');
+    setSelectedSessionId('');
     setWorksheet(null);
     setWorksheetError(null);
   };
 
   // Load Worksheet from authoritative backend
-  const loadWorksheet = useCallback(async (csIdNum: number, dateStr: string) => {
+  const loadWorksheet = useCallback(async (csIdNum: number, dateStr: string, sessionId = selectedSessionId) => {
+    // A read during row/bulk saves can replace already saved rows with an older snapshot.
     if (!csIdNum || !dateStr) return;
+    if (worksheetMutations.current > 0) {
+      worksheetRefreshPending.current = true;
+      return;
+    }
+    const request = ++worksheetRequest.current;
     setLoadingWorksheet(true);
     setWorksheetError(null);
     try {
-      const res = await getFacultyAttendanceWorksheetApi({ csId: csIdNum, date: dateStr });
-      setWorksheet(res.worksheet);
+      const res = await getFacultyAttendanceWorksheetApi({ csId: csIdNum, date: dateStr, sessionId: sessionId ? Number(sessionId) : undefined });
+      if (request === worksheetRequest.current) setWorksheet(res.worksheet);
     } catch (err) {
-      setWorksheet(null);
-      setWorksheetError(err instanceof Error ? err.message : 'Unable to load attendance worksheet.');
+      if (request === worksheetRequest.current) {
+        setWorksheet(null);
+        setWorksheetError(err instanceof Error ? err.message : 'Unable to load attendance worksheet.');
+      }
     } finally {
-      setLoadingWorksheet(false);
+      if (request === worksheetRequest.current) setLoadingWorksheet(false);
     }
-  }, []);
+  }, [selectedSessionId]);
 
   useEffect(() => {
     const csIdNum = parseInt(selectedCsId, 10);
     if (csIdNum > 0 && selectedDate) {
       loadWorksheet(csIdNum, selectedDate);
     } else {
+      worksheetRequest.current++;
       setWorksheet(null);
       setWorksheetError(null);
+      setLoadingWorksheet(false);
     }
-  }, [selectedCsId, selectedDate, loadWorksheet]);
+  }, [selectedCsId, selectedDate, loadWorksheet, worksheetReload]);
+
+  useEffect(() => {
+    if (!selectedCsId || !worksheet?.pendingSessions?.length) return;
+    const timer = setInterval(() => { if (worksheetMutations.current > 0) return; void loadWorksheet(Number(selectedCsId), selectedDate); }, 30000);
+    return () => clearInterval(timer);
+  }, [selectedCsId, selectedDate, worksheet?.pendingSessions?.length, loadWorksheet]);
 
   // Handle Status Button Click
   const handleStatusClick = async (
@@ -230,7 +285,7 @@ export const AttendanceMonitoring: React.FC = () => {
     newStatus: SupportedStatus
   ) => {
     // Rule 1 / Rule 4: No-op if selecting the identical persisted status
-    if (item.status === newStatus) {
+    if (worksheetIsReadOnly || item.status === newStatus) {
       return;
     }
 
@@ -240,16 +295,19 @@ export const AttendanceMonitoring: React.FC = () => {
     // Initial entry (status: null / Not recorded): no reason required
     if (item.status === null) {
       setSavingStudentId(item.enrollmentId);
+      const writeScope = beginWorksheetMutation();
       try {
         const res = await recordFacultyInitialAttendanceApi({
           csId: csIdNum,
           enrollmentId: enrollmentIdNum,
           sessionDate: selectedDate,
+          sessionId: worksheet?.attendanceSession?.sessionId ? Number(worksheet.attendanceSession.sessionId) : undefined,
           status: newStatus,
         });
 
         // Update local worksheet state
         setWorksheet(prev => {
+          if (worksheetScope.current !== writeScope) return prev;
           if (!prev) return null;
           return {
             ...prev,
@@ -277,6 +335,7 @@ export const AttendanceMonitoring: React.FC = () => {
         });
       } finally {
         setSavingStudentId(null);
+        finishWorksheetMutation(writeScope);
       }
       return;
     }
@@ -296,6 +355,7 @@ export const AttendanceMonitoring: React.FC = () => {
     setIsBulkConfirmOpen(false);
     if (targets.length === 0) return;
     setBulkMarking(true);
+    const writeScope = beginWorksheetMutation();
     let saved = 0;
     const failed: string[] = [];
     for (const item of targets) {
@@ -304,10 +364,11 @@ export const AttendanceMonitoring: React.FC = () => {
           csId: parseInt(selectedCsId, 10),
           enrollmentId: parseInt(item.enrollmentId, 10),
           sessionDate: selectedDate,
+          sessionId: worksheet?.attendanceSession?.sessionId ? Number(worksheet.attendanceSession.sessionId) : undefined,
           status: 'present',
         });
         saved += 1;
-        setWorksheet(prev => prev ? {
+        setWorksheet(prev => worksheetScope.current !== writeScope ? prev : prev ? {
           ...prev,
           roster: prev.roster.map(r => r.enrollmentId === item.enrollmentId
             ? { ...r, id: res.recordId || r.id, status: 'present', date: selectedDate }
@@ -318,6 +379,7 @@ export const AttendanceMonitoring: React.FC = () => {
       }
     }
     setBulkMarking(false);
+    finishWorksheetMutation(writeScope);
     setNotification(failed.length === 0
       ? { type: 'success', message: `Marked ${saved} student${saved === 1 ? '' : 's'} as present.` }
       : { type: 'error', message: `Marked ${saved} as present; could not record ${failed.join(', ')}.` });
@@ -336,6 +398,7 @@ export const AttendanceMonitoring: React.FC = () => {
     }
 
     setSubmittingCorrection(true);
+    const writeScope = beginWorksheetMutation();
     setCorrectionError(null);
     try {
       if (correctionTarget.id) {
@@ -347,6 +410,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
         // Update local worksheet row
         setWorksheet(prev => {
+          if (worksheetScope.current !== writeScope) return prev;
           if (!prev) return null;
           return {
             ...prev,
@@ -367,12 +431,14 @@ export const AttendanceMonitoring: React.FC = () => {
           csId: Number(selectedCsId),
           enrollmentId: Number(correctionTarget.enrollmentId),
           sessionDate: selectedDate,
+          sessionId: worksheet?.attendanceSession?.sessionId ? Number(worksheet.attendanceSession.sessionId) : undefined,
           status: targetStatus,
           reason: trimmedReason,
         });
 
         // Update local worksheet row
         setWorksheet(prev => {
+          if (worksheetScope.current !== writeScope) return prev;
           if (!prev) return null;
           return {
             ...prev,
@@ -404,6 +470,7 @@ export const AttendanceMonitoring: React.FC = () => {
       setCorrectionError(err instanceof Error ? err.message : 'Failed to save attendance change.');
     } finally {
       setSubmittingCorrection(false);
+      finishWorksheetMutation(writeScope);
     }
   };
 
@@ -413,6 +480,7 @@ export const AttendanceMonitoring: React.FC = () => {
     if (!worksheet?.attendanceSession?.sessionId) return;
 
     setSubmittingRevocation(true);
+    const writeScope = beginWorksheetMutation();
     setRevokeError(null);
     try {
       await revokeFacultyAttendanceSessionApi({
@@ -428,13 +496,14 @@ export const AttendanceMonitoring: React.FC = () => {
       });
 
       const csIdNum = parseInt(selectedCsId, 10);
-      if (csIdNum > 0) {
+      if (csIdNum > 0 && worksheetScope.current === writeScope) {
         await loadWorksheet(csIdNum, selectedDate);
       }
     } catch (err) {
       setRevokeError(err instanceof Error ? err.message : 'Failed to revoke attendance session.');
     } finally {
       setSubmittingRevocation(false);
+      finishWorksheetMutation(writeScope);
     }
   };
 
@@ -442,19 +511,21 @@ export const AttendanceMonitoring: React.FC = () => {
   const handleEndSession = async () => {
     if (!worksheet?.attendanceSession?.sessionId) return;
     setSubmittingEnd(true);
+    const writeScope = beginWorksheetMutation();
     setEndError(null);
     try {
       await endFacultyAttendanceSessionApi({ sessionId: worksheet.attendanceSession.sessionId });
       setIsEndModalOpen(false);
       setNotification({ type: 'success', message: 'Attendance session ended. Students without a record were marked Absent.' });
       const csIdNum = parseInt(selectedCsId, 10);
-      if (csIdNum > 0) {
+      if (csIdNum > 0 && worksheetScope.current === writeScope) {
         await loadWorksheet(csIdNum, selectedDate);
       }
     } catch (err) {
       setEndError(err instanceof Error ? err.message : 'Failed to end the attendance session.');
     } finally {
       setSubmittingEnd(false);
+      finishWorksheetMutation(writeScope);
     }
   };
 
@@ -483,11 +554,13 @@ export const AttendanceMonitoring: React.FC = () => {
 
   const handleStartSession = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (loadingWorksheet) { setSessionError('Wait for the selected worksheet to finish loading.'); return; }
     const csId = Number.parseInt(selectedCsId, 10);
     if (!csId) {
       setSessionError('Select a class section before starting an attendance session.');
       return;
     }
+    if (!sessionDate || sessionDate < manilaDateToday()) { setSessionError('Choose today or a future date (Asia/Manila).'); return; }
     if (openingTime >= presentCutoff || presentCutoff >= lateCutoff) {
       setSessionError('Set the times in order: opening, Present cutoff, then Late cutoff.');
       return;
@@ -502,11 +575,12 @@ export const AttendanceMonitoring: React.FC = () => {
     }
 
     setSubmittingSession(true);
+    const writeScope = beginWorksheetMutation();
     setSessionError(null);
     try {
-      await createFacultyAttendanceSessionApi({
+      const response = await createFacultyAttendanceSessionApi({
         csId,
-        sessionDate: selectedDate,
+        sessionDate,
         room: sessionRoom.trim() || undefined,
         openingTime,
         presentCutoff,
@@ -519,12 +593,17 @@ export const AttendanceMonitoring: React.FC = () => {
         geofenceLongitude: geofenceEnabled ? sessionLocation?.longitude : undefined,
       });
       setIsStartSessionOpen(false);
-      setNotification({ type: 'success', message: 'Attendance session started. The class roll call is now live.' });
-      await loadWorksheet(csId, selectedDate);
+      setNotification({ type: 'success', message: response.session.status === 'scheduled' ? `Attendance session scheduled for ${sessionDate} at ${openingTime} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
+      if (worksheetScope.current === writeScope) {
+        setSelectedDate(sessionDate);
+        setSelectedSessionId(response.session.sessionId);
+        await loadWorksheet(csId, sessionDate, response.session.sessionId);
+      }
     } catch (err) {
       setSessionError(err instanceof Error ? err.message : 'Unable to start the attendance session.');
     } finally {
       setSubmittingSession(false);
+      finishWorksheetMutation(writeScope);
     }
   };
 
@@ -599,7 +678,8 @@ export const AttendanceMonitoring: React.FC = () => {
               setSessionError(null);
               setIsStartSessionOpen(true);
             }}
-            disabled={!selectedCsId}
+            disabled={!selectedCsId || selectedClassIsPast || loadingWorksheet || attendanceWritePending}
+            title={selectedClassIsPast ? 'Past school-year classes are view-only.' : undefined}
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Play className="w-4 h-4 fill-white" /> Start Attendance Session
@@ -611,7 +691,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 const csIdNum = parseInt(selectedCsId, 10);
                 if (csIdNum > 0) loadWorksheet(csIdNum, selectedDate);
               }}
-              disabled={loadingWorksheet}
+              disabled={loadingWorksheet || attendanceWritePending}
               aria-label="Refresh attendance worksheet"
               className="inline-flex items-center justify-center p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-200 transition-all cursor-pointer disabled:opacity-50"
             >
@@ -649,7 +729,20 @@ export const AttendanceMonitoring: React.FC = () => {
 
       {/* Source UI: compact filter rail above the roll call. */}
       <Card className="p-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+          <div>
+            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5">School year
+              <select aria-label="Attendance school year" value={selectedSchoolYear} disabled={attendanceWritePending} onChange={event => {
+                setSelectedSchoolYear(event.target.value);
+                handleCourseChange('');
+                setIsStartSessionOpen(false);
+              }} className="mt-1.5 w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100">
+                <option value="current">{currentSchoolYear ? `${currentSchoolYear} (Current)` : 'Current school year'}</option>
+                <option value="all">All school years</option>
+                {availableSchoolYears.filter(year => year !== currentSchoolYear).map(year => <option key={year} value={year}>{year}</option>)}
+              </select>
+            </label>
+          </div>
           {/* Step 1: Assigned Course */}
           <div>
             <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
@@ -657,9 +750,10 @@ export const AttendanceMonitoring: React.FC = () => {
               <span>Assigned Course</span>
             </label>
             <select
+              aria-label="Assigned course"
               value={selectedCourseId !== null ? String(selectedCourseId) : ''}
               onChange={(e) => handleCourseChange(e.target.value)}
-              disabled={loadingClasses || assignedCourses.length === 0}
+              disabled={loadingClasses || assignedCourses.length === 0 || attendanceWritePending}
               className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-50"
             >
               <option value="">-- Select Assigned Course --</option>
@@ -678,9 +772,9 @@ export const AttendanceMonitoring: React.FC = () => {
               <span>Class Section</span>
             </label>
             <select
-              value={selectedCsId}
-              onChange={(e) => setSelectedCsId(e.target.value)}
-              disabled={selectedCourseId === null || availableSections.length === 0}
+              aria-label="Class section" value={selectedCsId}
+              onChange={(e) => { setWorksheet(null); setSelectedCsId(e.target.value); setSelectedSessionId(''); }}
+              disabled={selectedCourseId === null || availableSections.length === 0 || attendanceWritePending}
               className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-50"
             >
               <option value="">
@@ -707,8 +801,9 @@ export const AttendanceMonitoring: React.FC = () => {
             <input
               type="date"
               value={selectedDate}
-              max={todayStr}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              disabled={attendanceWritePending}
+
+              onChange={(e) => { setWorksheet(null); setSelectedDate(e.target.value); setSelectedSessionId(''); }}
               className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
             />
           </div>
@@ -825,6 +920,20 @@ export const AttendanceMonitoring: React.FC = () => {
         </Card>
       ) : worksheet ? (
         <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-4">
+          {worksheetIsReadOnly && <p role="status" className="text-xs font-semibold text-amber-700 dark:text-amber-300">{selectedClassIsPast ? 'Past school-year attendance is view-only.' : selectedDate > manilaDateToday() || worksheet.attendanceSession?.status === 'scheduled' ? 'Scheduled session: attendance opens at its chosen date/time in Asia/Manila.' : 'Choose a session to manage its attendance.'}</p>}
+          {worksheet.attendanceSessions.length > 1 && <label className="block text-xs font-bold">Attendance session
+            <select value={selectedSessionId} disabled={attendanceWritePending} onChange={event => setSelectedSessionId(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
+              <option value="">Choose a session</option>
+              {worksheet.attendanceSessions.map(session => <option key={String(session.sessionId)} value={String(session.sessionId)}>{String(session.openingTime ?? 'Unconfigured')}–{String(session.classEndTime ?? '')} · {String(session.sessionCode)} · {String(session.status)}</option>)}
+            </select>
+          </label>}
+          {Boolean(worksheet.pendingSessions?.length) && <div aria-label="Upcoming and open sessions" className="space-y-2 text-xs">
+            <p className="font-bold">Upcoming and open sessions (Asia/Manila)</p>
+            {worksheet.pendingSessions?.map(session => <button key={session.sessionId} type="button" disabled={attendanceWritePending} onClick={() => { setSelectedDate(session.sessionDate); setSelectedSessionId(session.sessionId); }} className="block w-full rounded-xl border border-slate-200 p-2 text-left dark:border-slate-700 disabled:opacity-50">
+              {session.sessionDate} · {session.openingTime ?? 'Unconfigured'}–{session.classEndTime ?? ''} · {session.status === 'scheduled' ? 'Scheduled' : 'Open'} · {session.sessionCode}
+            </button>)}
+          </div>}
+          {worksheet.attendanceSession?.status === 'scheduled' && !selectedClassIsPast && <button type="button" onClick={() => { setRevokeError(null); setIsRevokeModalOpen(true); }} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700">Revoke scheduled session</button>}
           {/* Attendance Session Information / Revocation Control */}
           {worksheet.attendanceSession && (
             worksheet.attendanceSession.status === 'revoked' ? (
@@ -881,6 +990,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 <div className="flex gap-2 self-start sm:self-auto shrink-0">
                 <button
                   type="button"
+                  disabled={selectedClassIsPast}
                   onClick={() => {
                     setEndError(null);
                     setIsEndModalOpen(true);
@@ -892,6 +1002,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  disabled={selectedClassIsPast}
                   onClick={() => {
                     setRevokeError(null);
                     setRevokeReason('');
@@ -937,7 +1048,7 @@ export const AttendanceMonitoring: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsBulkConfirmOpen(true)}
-                disabled={bulkMarking || worksheet.roster.every(r => r.status !== null)}
+                disabled={worksheetIsReadOnly || bulkMarking || worksheet.roster.every(r => r.status !== null)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold whitespace-nowrap transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {bulkMarking ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
@@ -1044,7 +1155,7 @@ export const AttendanceMonitoring: React.FC = () => {
                                   key={status}
                                   type="button"
                                   onClick={() => { void handleStatusClick(item, status); }}
-                                  disabled={isSaving || bulkMarking}
+                                  disabled={worksheetIsReadOnly || isSaving || bulkMarking}
                                   aria-pressed={isCurrent}
                                   title={item.status && !isCurrent ? `Change to ${STATUS_LABELS[status]} (reason required)` : `Mark ${STATUS_LABELS[status]}`}
                                   className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -1093,9 +1204,12 @@ export const AttendanceMonitoring: React.FC = () => {
               <p className="mt-1 font-bold text-slate-800 dark:text-slate-100">
                 {assignedCourses.find(course => course.id === selectedCourseId)?.code || 'Course'} · {availableSections.find(section => String(section.csId) === selectedCsId)?.csName || 'Class section'}
               </p>
-              <p className="mt-0.5 text-[11px] text-slate-500">Session date: {selectedDate} · Asia/Manila</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Session date: {sessionDate} · Asia/Manila</p>
             </div>
 
+            <label className="block font-bold text-slate-700 dark:text-slate-300">Session date (Asia/Manila)
+              <input type="date" required min={manilaDateToday()} value={sessionDate} onChange={event => setSessionDate(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
+            </label>
             <label className="block">
               <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</span>
               <input value={sessionRoom} onChange={(event) => setSessionRoom(event.target.value)} placeholder="e.g. Dental Clinic Room 101" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
@@ -1141,7 +1255,7 @@ export const AttendanceMonitoring: React.FC = () => {
 
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
               <button type="button" onClick={() => setIsStartSessionOpen(false)} disabled={submittingSession} className="rounded-xl bg-slate-100 px-4 py-2 font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200 disabled:opacity-50">Cancel</button>
-              <button type="submit" disabled={submittingSession} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white shadow-md shadow-emerald-600/20 disabled:opacity-50"><Play className="w-3.5 h-3.5 fill-white" />{submittingSession ? 'Starting…' : 'Start Session'}</button>
+              <button type="submit" disabled={submittingSession} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white shadow-md shadow-emerald-600/20 disabled:opacity-50"><Play className="w-3.5 h-3.5 fill-white" />{submittingSession ? 'Saving…' : sessionDate > manilaDateToday() ? 'Schedule Session' : 'Start Session'}</button>
             </div>
           </form>
         </Modal>

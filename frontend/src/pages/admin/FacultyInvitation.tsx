@@ -1,3 +1,4 @@
+import { filterPersonNameInput, preventInvalidPersonNameKey } from '../../utils/personNameValidation';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
@@ -313,7 +314,7 @@ export const FacultyInvitation: React.FC = () => {
                 Prefix
                 <select
                   value={prefix}
-                  onChange={e => setPrefix(e.target.value)}
+                  onChange={event => setPrefix(filterPersonNameInput('prefix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setPrefix(filterPersonNameInput('prefix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('prefix', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 >
                   {PREFIX_OPTIONS.map(p => (
@@ -327,7 +328,7 @@ export const FacultyInvitation: React.FC = () => {
                 <input
                   required
                   value={firstName}
-                  onChange={e => setFirstName(e.target.value)}
+                  onChange={event => setFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="Maria"
                 />
@@ -337,7 +338,7 @@ export const FacultyInvitation: React.FC = () => {
                 Middle name
                 <input
                   value={middleName}
-                  onChange={e => setMiddleName(e.target.value)}
+                  onChange={event => setMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="Clara"
                 />
@@ -348,7 +349,7 @@ export const FacultyInvitation: React.FC = () => {
                 <input
                   required
                   value={lastName}
-                  onChange={e => setLastName(e.target.value)}
+                  onChange={event => setLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="Santos"
                 />
@@ -358,7 +359,7 @@ export const FacultyInvitation: React.FC = () => {
                 Suffix
                 <input
                   value={suffix}
-                  onChange={e => setSuffix(e.target.value)}
+                  onChange={event => setSuffix(filterPersonNameInput('suffix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setSuffix(filterPersonNameInput('suffix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('suffix', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="DMD, Jr."
                 />
@@ -545,7 +546,7 @@ export const FacultyInvitation: React.FC = () => {
                   <input
                     required
                     value={editFullName}
-                    onChange={e => setEditFullName(e.target.value)}
+                    onChange={event => setEditFullName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditFullName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                     className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   />
                 </label>
@@ -557,7 +558,7 @@ export const FacultyInvitation: React.FC = () => {
                 Prefix
                 <select
                   value={editPrefix}
-                  onChange={e => setEditPrefix(e.target.value)}
+                  onChange={event => setEditPrefix(filterPersonNameInput('prefix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditPrefix(filterPersonNameInput('prefix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('prefix', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 >
                   {PREFIX_OPTIONS.map(p => (
@@ -571,7 +572,7 @@ export const FacultyInvitation: React.FC = () => {
                 <input
                   required
                   value={editFirstName}
-                  onChange={e => setEditFirstName(e.target.value)}
+                  onChange={event => setEditFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
               </label>
@@ -580,7 +581,7 @@ export const FacultyInvitation: React.FC = () => {
                 Middle name
                 <input
                   value={editMiddleName}
-                  onChange={e => setEditMiddleName(e.target.value)}
+                  onChange={event => setEditMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
               </label>
@@ -590,7 +591,7 @@ export const FacultyInvitation: React.FC = () => {
                 <input
                   required
                   value={editLastName}
-                  onChange={e => setEditLastName(e.target.value)}
+                  onChange={event => setEditLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                 />
               </label>
@@ -599,7 +600,7 @@ export const FacultyInvitation: React.FC = () => {
                 Suffix
                 <input
                   value={editSuffix}
-                  onChange={e => setEditSuffix(e.target.value)}
+                  onChange={event => setEditSuffix(filterPersonNameInput('suffix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditSuffix(filterPersonNameInput('suffix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('suffix', event)}
                   className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-medium dark:border-slate-700 dark:bg-slate-900"
                   placeholder="DMD, Jr."
                 />

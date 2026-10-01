@@ -279,6 +279,8 @@ $expectedMigrations = [
     '040_email_outbox_suppressed_status.sql',
     '041_attendance_excused_requests.sql',
     '042_secretary_same_student_account.sql',
+    '043_class_meetings.sql',
+    '044_scheduled_attendance_sessions.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -559,7 +561,7 @@ $futureDate = $sessionNowUtc->setTimezone($sessionLocalTimezone)->modify('+1 day
     'csId' => $secretarySessionClassId,
     'sessionDate' => $futureDate,
 ]);
-expect_same(422, $futureSessionStatus, 'Future attendance session date is rejected server-side');
+expect_same(422, $futureSessionStatus, 'A future session without opening times is rejected server-side');
 expect_same('VALIDATION_ERROR', $futureSessionBody['code'] ?? null, 'Future attendance session date uses the validation error contract');
 
 $unassignedClassStmt = $pdo->prepare(
@@ -1429,6 +1431,8 @@ $googleContext = [
 expect_same(200, $facultyLoginStatus, 'Faculty integration login succeeds');
 $facultyAccessToken = (string) ($facultyLoginBody['access_token'] ?? '');
 $seedFacultyAccessToken = $facultyAccessToken;
+
+require __DIR__ . '/schedule_session_integration.php';
 
 $facultyGeofenceClassStmt = $pdo->prepare(
     "SELECT cs.cs_id FROM class_sections cs JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
@@ -3662,8 +3666,8 @@ expect_same($attendanceToday, $attendanceCurrentReadBody['worksheet']['date'] ??
     '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendanceFutureDate,
     $generatedFacultyAccessToken
 );
-expect_same(422, $attendanceFutureReadStatus, 'Faculty worksheet rejects a future application-local date');
-expect_same('VALIDATION_ERROR', $attendanceFutureReadBody['code'] ?? null, 'Future worksheet date uses the validation error contract');
+expect_same(200, $attendanceFutureReadStatus, 'Faculty can inspect a future date for scheduled sessions');
+expect_same($attendanceFutureDate, $attendanceFutureReadBody['worksheet']['date'] ?? null, 'Future worksheet read preserves its selected calendar date');
 
 [$attendancePastReadStatus, $attendancePastReadBody] = integration_http_get_json(
     '/api/faculty/attendance?csId=' . $attendanceClassId . '&date=' . $attendancePastDate,

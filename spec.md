@@ -705,6 +705,10 @@ Faculty may start and manage attendance sessions only for classes they are autho
 
 Faculty-created and Secretary-created sessions use the same attendance-session functionality. Both authorized roles may configure the applicable opening time, Present cutoff, Late cutoff, geofence setting, session location, and radius. Session timing is interpreted in the application's `Asia/Manila` timezone; server time is authoritative, and browser/device clocks are never authoritative. The session creation timestamp does not determine when attendance opens.
 
+Owner decision (2026-10-01): Faculty and Secretary may queue multiple sessions for today or a future Asia/Manila date, never a past date. Sessions open at the chosen date/time and reject attendance before opening. Overlapping sessions for the same class are rejected across both roles; the message identifies the existing date/time and the Faculty or Secretary who created it. End-time and absence-resolution rules remain unchanged.
+
+Only open and scheduled sessions reserve a time period. Ending or revoking a session releases that period for another booking.
+
 An authorized Faculty or Secretary may revoke an attendance session that they are authorized to manage. Revocation immediately closes biometric capture and prevents further attendance submissions. Already-recorded attendance is preserved, and unresolved attendance remains subject to the normal final attendance-resolution lifecycle rather than being automatically marked Absent by revocation. Revocation MUST be recorded in the audit trail with the actor and timestamp; an explanatory reason MAY be recorded. Revocation MUST NOT delete or rewrite existing attendance records.
 
 When a session is created, eligible Students have an attendance state that remains unresolved until attendance is recorded or the attendance-resolution lifecycle resolves it; this requirement does not select a database representation.
@@ -805,6 +809,8 @@ These technical items remain unresolved. Listing them does not select or approve
 **Status: CURRENT**
 
 Faculty may edit authorized class-section fields through audited server-side APIs. Course catalog identity and protected term identity remain controlled; Faculty class-section editing MUST NOT change the course identity, semester, or school year. Lecture-room, laboratory-room, and schedule concepts remain distinct.
+
+Owner decision (2026-10-01): Each lecture/laboratory meeting stores its weekday, start time and end time separately; different days may use different times. Existing schedules are preserved.
 
 ## ID-001 - Split Student identity
 **Status: CURRENT**

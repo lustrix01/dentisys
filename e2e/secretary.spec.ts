@@ -356,6 +356,108 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
   });
 
+  test('Secretary queues a future session and sees cross-role booking conflicts', async ({ page }) => {
+    let payload: Record<string, unknown> | null = null;
+    let queued = false;
+    const scheduled = { ...mockActiveSession, sessionId: '101', sessionDate: '2099-10-02', status: 'scheduled', openingTime: '08:00', classEndTime: '13:00' };
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: null }) }));
+    await page.route('**/api/secretary/attendance', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions: queued ? [scheduled] : [] }) }));
+    await page.route('**/api/secretary/attendance/session', async route => {
+      payload = route.request().postDataJSON();
+      if (queued) await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'A schedule already exists on 2099-10-02 from 08:00 to 13:00 (Asia/Manila), created by Faculty Jane Doe.' }) });
+      else {
+        queued = true;
+        await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: scheduled }) });
+      }
+    });
+    await page.goto('/secretary/start-session');
+    const date = page.getByLabel('Session date (Asia/Manila)');
+    expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await date.fill('2099-10-02');
+    await page.getByRole('checkbox', { name: /Geolocation|Geofence/ }).uncheck();
+    await page.getByRole('button', { name: 'Schedule Class Session', exact: true }).click();
+    await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
+    await expect(page.getByRole('heading', { name: 'Scheduled sessions (Asia/Manila)' })).toBeVisible();
+    await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Schedule Class Session', exact: true }).click();
+    await expect(page.getByText(/created by Faculty Jane Doe/)).toBeVisible();
+  });
+
+  test('Secretary live counters refresh for the active session without counting another same-day session', async ({ page }) => {
+    await page.clock.install();
+    let activeId = '42';
+    const scopedReads: string[] = [];
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: { ...mockActiveSession, sessionId: activeId } }) }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, async route => {
+      const sessionId = new URL(route.request().url()).searchParams.get('sessionId');
+      if (sessionId) scopedReads.push(sessionId);
+      // Deliberately include an extra same-day record to prove ID-based counting.
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [], records: [
+        { id: '1', date: mockActiveSession.sessionDate, attendanceSessionId: sessionId ?? '42', status: sessionId === '43' ? 'not_recorded' : 'present' },
+        { id: '2', date: mockActiveSession.sessionDate, attendanceSessionId: '99', status: 'present' },
+        { id: '3', date: mockActiveSession.sessionDate, attendanceSessionId: null, status: 'late' },
+      ] }) });
+    });
+    await page.goto('/secretary/start-session');
+    await expect(page.getByText('2 / 2 (100%)', { exact: true })).toBeVisible();
+    activeId = '43';
+    await page.clock.fastForward(31000);
+    await expect(page.getByText('1 / 2 (50%)', { exact: true })).toBeVisible();
+    expect(scopedReads).toContain('42');
+    expect(scopedReads).toContain('43');
+  });
+
+  test('a delayed Secretary poll cannot restore a successfully ended session', async ({ page }) => {
+    await page.clock.install();
+    let ended = false;
+    let scopedReads = 0;
+    let pollWaiting = false;
+    let releasePoll: () => void = () => {};
+    const pollGate = new Promise<void>(resolve => { releasePoll = resolve; });
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: ended ? null : mockActiveSession }) }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, async route => {
+      if (new URL(route.request().url()).searchParams.has('sessionId') && ++scopedReads === 2) {
+        pollWaiting = true;
+        await pollGate;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions: [] }) });
+    });
+    await page.route('**/api/secretary/attendance/session/end', async route => {
+      ended = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...mockActiveSession, status: 'ended' } }) });
+    });
+    await page.goto('/secretary/start-session');
+    await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
+    await page.clock.fastForward(31000);
+    await expect.poll(() => pollWaiting).toBe(true);
+    await page.getByRole('button', { name: /End Session/i }).click();
+    await page.getByRole('button', { name: /Confirm End Session/i }).click();
+    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
+    const pollResponse = page.waitForResponse(response => response.url().includes('/api/secretary/attendance?sessionId=42'));
+    releasePoll();
+    await pollResponse;
+    await page.clock.runFor(100);
+    await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
+    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
+  });
+
+  test('cancelling a queued revocation does not change the active-session revoke target', async ({ page }) => {
+    let revokedId: string | null = null;
+    const queued = { ...mockActiveSession, sessionId: '101', status: 'scheduled', date: '2099-10-02', openingTime: '08:00', classEndTime: '13:00' };
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: mockActiveSession }) }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions: [queued] }) }));
+    await page.route('**/api/secretary/attendance/session/revoke', async route => {
+      revokedId = route.request().postDataJSON().sessionId;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...mockActiveSession, status: 'revoked' } }) });
+    });
+    await page.goto('/secretary/start-session');
+    await page.getByRole('button', { name: 'Revoke scheduled session', exact: true }).click();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Revoke Session', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm Revoke Session', exact: true }).click();
+    await expect.poll(() => revokedId).toBe('42');
+  });
+
   test('initial state: active lookup returns session -> active-session state shown', async ({ page }) => {
     await page.route('**/api/secretary/attendance/session/active*', async (route) => {
       await route.fulfill({
@@ -371,7 +473,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('CLIN402 — CLINIC-4B')).toBeVisible();
     await expect(page.getByText('CS8-20260921-ABC123')).toBeVisible();
     await expect(page.getByRole('button', { name: /End Session/i })).toBeVisible();
-    await expect(page.getByText('Session Configuration')).toHaveCount(0);
+    await expect(page.getByText('Session Configuration')).toBeVisible();
   });
 
   test('start: submitting invokes backend start API, renders authoritative session, and does not write to localStorage', async ({ page }) => {

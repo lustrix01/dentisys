@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { LocationPicker } from '../../components/LocationPicker';
 import { 
   Play, 
@@ -31,6 +31,8 @@ import {
   type StartSecretaryAttendanceSessionPayload,
 } from '../../services/apiClient';
 
+const manilaToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+
 export const StartSession: React.FC = () => {
   const config = useRuntimeConfig();
   const simulationEnabled = config.providers.location.active === 'development-mock' && config.features.browser_attendance_prototype;
@@ -53,6 +55,9 @@ export const StartSession: React.FC = () => {
   const [revoking, setRevoking] = useState(false);
 
   // Form inputs for starting a new session with distinct timing cutoffs in Asia/Manila
+  const [sessionDate, setSessionDate] = useState(() => manilaToday());
+  const [queuedSessions, setQueuedSessions] = useState<NonNullable<Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['sessions']>>([]);
+  const [queuedRevokeId, setQueuedRevokeId] = useState<string | null>(null);
   const [customRoom, setCustomRoom] = useState('');
   const [openingTimeStr, setOpeningTimeStr] = useState('08:00');
   const [presentCutoffStr, setPresentCutoffStr] = useState('08:30');
@@ -72,7 +77,7 @@ export const StartSession: React.FC = () => {
   const [isLocating, setIsLocating] = useState(false);
   const [showGpsMap, setShowGpsMap] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
-  const [liveAttendanceRecords, setLiveAttendanceRecords] = useState<Array<{ id: string; status: string; date: string }>>([]);
+  const [liveAttendanceRecords, setLiveAttendanceRecords] = useState<Array<{ id: string; status: string; date: string; attendanceSessionId?: string | null }>>([]);
 
   // Notifications
   const [notification, setNotification] = useState<{
@@ -82,6 +87,8 @@ export const StartSession: React.FC = () => {
 
   // Elapsed time tracker for active session
   const [elapsedText, setElapsedText] = useState('00:00:00');
+  const sessionReadGeneration = useRef(0);
+  const sessionMutationPending = useRef(false);
 
   const computeDurationMinutes = (start: string, end: string): number => {
     if (!start || !end) return 120;
@@ -102,15 +109,17 @@ export const StartSession: React.FC = () => {
 
   // Load authoritative session and assignment from backend
   const loadInitialData = async () => {
+    const generation = ++sessionReadGeneration.current;
     setLoading(true);
     setError(null);
     try {
       const [activeResult, kpisResult, attResult] = await Promise.all([
         getSecretaryActiveAttendanceSessionApi(),
         getSecretaryDashboardKpisApi(),
-        getSecretaryAttendanceApi().catch(() => ({ records: [] })),
+        getSecretaryAttendanceApi().catch(() => ({ records: [], sessions: [] })),
       ]);
 
+      if (generation !== sessionReadGeneration.current) return;
       if (kpisResult?.assignedClass) {
         setAssignedClass(kpisResult.assignedClass);
         if (kpisResult.assignedClass.classroomName && !customRoom) {
@@ -118,9 +127,12 @@ export const StartSession: React.FC = () => {
         }
       }
 
-      if (attResult?.records) {
-        setLiveAttendanceRecords(attResult.records);
-      }
+      if (activeResult.activeSession?.status === 'active') {
+        const attendance = await getSecretaryAttendanceApi({ sessionId: activeResult.activeSession.sessionId });
+        if (generation !== sessionReadGeneration.current) return;
+        setLiveAttendanceRecords(attendance.records ?? []);
+      } else setLiveAttendanceRecords([]);
+      setQueuedSessions((attResult.sessions ?? []).filter(session => session.status === 'scheduled'));
 
       if (activeResult?.activeSession && (activeResult.activeSession.status === 'active' || activeResult.activeSession.status === 'revoked')) {
         setActiveSession(activeResult.activeSession);
@@ -137,6 +149,21 @@ export const StartSession: React.FC = () => {
 
   useEffect(() => {
     void loadInitialData();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (sessionMutationPending.current) return;
+      const generation = ++sessionReadGeneration.current;
+      void Promise.all([getSecretaryActiveAttendanceSessionApi(), getSecretaryAttendanceApi()]).then(async ([active, attendance]) => {
+        const records = active.activeSession?.status === 'active' ? await getSecretaryAttendanceApi({ sessionId: active.activeSession.sessionId }) : { records: [] };
+        if (generation !== sessionReadGeneration.current) return;
+        setLiveAttendanceRecords(records.records ?? []);
+        setActiveSession(active.activeSession);
+        setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
+      }).catch(() => { /* Keep the last successful server state. */ });
+    }, 30000);
+    return () => { clearInterval(timer); ++sessionReadGeneration.current; };
   }, []);
 
   // Never retain the development fixture when the real location provider is active.
@@ -260,12 +287,16 @@ export const StartSession: React.FC = () => {
       return;
     }
 
+    if (!sessionDate || sessionDate < manilaToday()) { setNotification({ type: 'warning', message: 'Choose today or a future date (Asia/Manila).' }); return; }
     setSubmitting(true);
+    sessionMutationPending.current = true;
+    ++sessionReadGeneration.current;
     setNotification(null);
 
     try {
       const payload: StartSecretaryAttendanceSessionPayload = {
         csId: parseInt(assignedClass.classId, 10),
+        sessionDate,
         room: customRoom.trim() || undefined,
         biometricRequired: requireFace,
         geofenceEnabled: requireGeo,
@@ -285,10 +316,16 @@ export const StartSession: React.FC = () => {
       };
 
       const res = await startSecretaryAttendanceSessionApi(payload);
-      setActiveSession(res.session);
+      if (res.session.status === 'active') {
+        setActiveSession(res.session);
+        const current = await getSecretaryAttendanceApi({ sessionId: res.session.sessionId });
+        setLiveAttendanceRecords(current.records ?? []);
+      }
+      const attendance = await getSecretaryAttendanceApi();
+      setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
       setNotification({
         type: 'success',
-        message: `Class session for ${res.session.courseCode || res.session.className} is now ACTIVE! Session code: ${res.session.sessionCode}`,
+        message: res.session.status === 'scheduled' ? `Session scheduled for ${sessionDate} at ${openingTimeStr} (Asia/Manila). Session code: ${res.session.sessionCode}` : `Class session for ${res.session.courseCode || res.session.className} is now ACTIVE! Session code: ${res.session.sessionCode}`,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to start session.';
@@ -298,12 +335,16 @@ export const StartSession: React.FC = () => {
       });
     } finally {
       setSubmitting(false);
+      sessionMutationPending.current = false;
+      ++sessionReadGeneration.current;
     }
   };
 
   const handleEndSession = async () => {
     if (!activeSession) return;
     setEnding(true);
+    sessionMutationPending.current = true;
+    ++sessionReadGeneration.current;
 
     try {
       const res = await endSecretaryAttendanceSessionApi({ sessionId: activeSession.sessionId });
@@ -321,19 +362,26 @@ export const StartSession: React.FC = () => {
       });
     } finally {
       setEnding(false);
+      sessionMutationPending.current = false;
+      ++sessionReadGeneration.current;
     }
   };
 
   const handleRevokeSession = async () => {
-    if (!activeSession) return;
+    if (!activeSession && !queuedRevokeId) return;
     setRevoking(true);
+    sessionMutationPending.current = true;
+    ++sessionReadGeneration.current;
 
     try {
       const res = await revokeSecretaryAttendanceSessionApi({
-        sessionId: activeSession.sessionId,
+        sessionId: queuedRevokeId ?? activeSession!.sessionId,
         reason: revokeReason.trim() || null,
       });
-      setActiveSession(res.session);
+      if (!queuedRevokeId) setActiveSession(res.session);
+      const attendance = await getSecretaryAttendanceApi();
+      setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
+      setQueuedRevokeId(null);
       setShowRevokeModal(false);
       setRevokeReason('');
       setNotification({
@@ -348,6 +396,8 @@ export const StartSession: React.FC = () => {
       });
     } finally {
       setRevoking(false);
+      sessionMutationPending.current = false;
+      ++sessionReadGeneration.current;
     }
   };
 
@@ -411,9 +461,9 @@ export const StartSession: React.FC = () => {
   }
 
   // Live session student metrics (preserves student attendance counts)
-  const todayDateStr = activeSession?.sessionDate || new Date().toISOString().split('T')[0];
   const sessionRecords = activeSession 
-    ? liveAttendanceRecords.filter(r => r.date === todayDateStr)
+    ? liveAttendanceRecords.filter(r => r.attendanceSessionId === activeSession.sessionId
+      || (r.attendanceSessionId == null && r.date === activeSession.sessionDate))
     : [];
   const checkedInCount = sessionRecords.filter(r => r.status === 'present' || r.status === 'late').length;
   const totalEnrolled = sessionRecords.length;
@@ -568,7 +618,7 @@ export const StartSession: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => setShowRevokeModal(true)}
+                  onClick={() => { setQueuedRevokeId(null); setRevokeReason(''); setShowRevokeModal(true); }}
                   className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-md shadow-rose-600/20 transition-all cursor-pointer"
                 >
                   <Ban className="w-3.5 h-3.5" />
@@ -636,7 +686,7 @@ export const StartSession: React.FC = () => {
       )}
 
       {/* Revoke Session Confirmation Modal */}
-      {showRevokeModal && activeSession && (
+      {showRevokeModal && (activeSession || queuedRevokeId) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fade-in">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -648,6 +698,7 @@ export const StartSession: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setShowRevokeModal(false);
+                  setQueuedRevokeId(null);
                   setRevokeReason('');
                 }}
                 disabled={revoking}
@@ -688,6 +739,7 @@ export const StartSession: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setShowRevokeModal(false);
+                  setQueuedRevokeId(null);
                   setRevokeReason('');
                 }}
                 disabled={revoking}
@@ -718,8 +770,17 @@ export const StartSession: React.FC = () => {
         </div>
       )}
 
-      {/* 3. Session Setup & Configuration Form (Visible when no active session) */}
-      {!activeSession && (
+      {queuedSessions.length > 0 && <Card className="space-y-3 p-5">
+        <h2 className="text-sm font-bold">Scheduled sessions (Asia/Manila)</h2>
+        {queuedSessions.map(session => <div key={session.sessionId} className="flex items-center justify-between gap-3 text-xs">
+          <span>{session.date} · {session.openingTime ?? ''}–{session.classEndTime ?? ''} · {session.subjectCode} · {session.sessionCode}</span>
+          <button type="button" onClick={() => { setQueuedRevokeId(session.sessionId); setRevokeReason(''); setShowRevokeModal(true); }} className="rounded-lg border border-rose-200 px-3 py-2 font-bold text-rose-700">Revoke scheduled session</button>
+        </div>)}
+        <p className="text-[11px] text-slate-500">Attendance opens automatically on the chosen date/time. You may queue another session below.</p>
+      </Card>}
+
+      {/* Session setup remains available while another session is open. */}
+      {(
         <div className="max-w-3xl mx-auto">
           <Card className="p-6">
             <CardHeader className="p-0 pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
@@ -733,6 +794,10 @@ export const StartSession: React.FC = () => {
             </CardHeader>
 
             <form onSubmit={handleStartSession} className="space-y-5">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Session date (Asia/Manila)
+                <input type="date" required min={manilaToday()} value={sessionDate} onChange={event => setSessionDate(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
+              </label>
+
 
               {/* GPS Location Acquisition Block */}
               <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 space-y-3">
@@ -987,7 +1052,7 @@ export const StartSession: React.FC = () => {
                 ) : (
                   <>
                     <Play className="w-5 h-5 fill-white" />
-                    <span>Start Class Session Now</span>
+                    <span>{sessionDate > manilaToday() ? 'Schedule Class Session' : 'Start Class Session Now'}</span>
                   </>
                 )}
               </button>

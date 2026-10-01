@@ -199,6 +199,7 @@ function handle_student_biometric_challenge(): void
         $attendanceSessionId = null;
         $csId = null;
         if ($purpose === 'attendance') {
+            attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
             $attendanceSessionId = ctype_digit((string) ($data['attendanceSessionId'] ?? ''))
                 ? (int) $data['attendanceSessionId']
                 : 0;
@@ -616,15 +617,15 @@ function handle_student_attendance_biometric(): void
                 $pdo->rollBack();
                 throw new StudentBiometricException('Attendance session is not active for this Student.', 409, 'session_not_active');
             }
-            // A manual mark or another session's record for the same day also
-            // counts (records of revoked sessions do not), so no second row is added.
+            // This session's result or a legacy unlinked manual day mark
+            // prevents duplicates; another session has its own result.
             $existingStmt = $pdo->prepare(
                 "SELECT r.record_id, r.status
                    FROM attendance_records r
                    LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                   WHERE r.enrollment_id = ?
                     AND (r.attendance_session_id = ?
-                         OR (r.session_date = ? AND (rs.session_id IS NULL OR rs.status <> 'revoked')))
+                         OR (r.session_date = ? AND r.attendance_session_id IS NULL))
                   ORDER BY CASE WHEN r.attendance_session_id = ? THEN 0 ELSE 1 END, r.record_id DESC
                   LIMIT 1"
             );

@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { personNameFieldError, isPersonNameValid } from '../utils/personNameValidation.ts';
+import { filterPersonNameInput, personNameFieldError, isPersonNameValid } from '../utils/personNameValidation.ts';
+
+test('name input excludes digits and unsupported symbols while preserving legitimate names', () => {
+  assert.equal(filterPersonNameInput('firstName', 'Ana123@#$'), 'Ana');
+  assert.equal(filterPersonNameInput('lastName', 'José Dela Cruz-O’Neil'), 'José Dela Cruz-O’Neil');
+  assert.equal(filterPersonNameInput('firstName', 'Jose\u0301'), 'José');
+  assert.equal(filterPersonNameInput('middleName', 'M.1'), 'M.');
+  assert.equal(filterPersonNameInput('suffix', 'DMD, PhD2'), 'DMD, PhD');
+  assert.equal(filterPersonNameInput('lastName', 'Dela,Cruz'), 'DelaCruz');
+});
 
 test('prefix and suffix accept titles and reject digits or letterless values', () => {
   for (const value of ['Dr.', 'Prof.', 'Jr.', 'III', 'DMD, PhD', '']) {

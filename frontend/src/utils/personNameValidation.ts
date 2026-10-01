@@ -4,6 +4,24 @@ const AFFIX_PATTERN = /^(?=.*\p{L})[\p{L}\s.,'’\-]+$/u;
 
 export type PersonNamePartKey = 'prefix' | 'firstName' | 'middleName' | 'lastName' | 'suffix';
 
+/** Input filtering follows the same character set as validation, without
+ * rejecting unfinished names while a user is still typing. */
+export function filterPersonNameInput(key: PersonNamePartKey, value: string, isComposing = false): string {
+  if (isComposing) return value;
+  const pattern = key === 'prefix' || key === 'suffix'
+    ? /[^\p{L}\p{M}\s.,'’\-]/gu
+    : /[^\p{L}\p{M}\s'’\-.]/gu;
+  return value.normalize('NFC').replace(pattern, '');
+}
+
+export function preventInvalidPersonNameKey(key: PersonNamePartKey, event: {
+  key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean;
+  nativeEvent: { isComposing: boolean }; preventDefault(): void;
+}): void {
+  if (!event.nativeEvent.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey
+    && event.key.length === 1 && filterPersonNameInput(key, event.key) === '') event.preventDefault();
+}
+
 /** Error message for one name part, or null when it is valid. */
 export function personNameFieldError(key: PersonNamePartKey, rawValue: string): string | null {
   const value = rawValue.trim();

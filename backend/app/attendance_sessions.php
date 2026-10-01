@@ -20,6 +20,48 @@ function attendance_session_now_utc(): DateTimeImmutable
     return new DateTimeImmutable('now', new DateTimeZone('UTC'));
 }
 
+function attendance_session_creation_date(mixed $value, array $config, ?DateTimeImmutable $now = null): string
+{
+    $today = app_local_date($config, $now ?? attendance_session_now_utc());
+    $raw = is_string($value) ? trim($value) : '';
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $raw);
+    $errors = DateTimeImmutable::getLastErrors();
+    if (!$date || ($errors !== false && ($errors['warning_count'] || $errors['error_count'])) || $date->format('Y-m-d') !== $raw) {
+        throw new ValidationException(['sessionDate' => 'Session date must be a valid YYYY-MM-DD date.']);
+    }
+    if ($raw < $today) throw new ValidationException(['sessionDate' => 'Past attendance session dates are not allowed.']);
+    return $raw;
+}
+
+function attendance_session_creation_status(string $date, ?string $opening, array $config): string
+{
+    $now = attendance_session_now_utc()->setTimezone(new DateTimeZone($config['app']['operational_timezone']));
+    if ($date > $now->format('Y-m-d') && $opening === null) {
+        throw new ValidationException(['openingTime' => 'A scheduled session requires opening time, Present cutoff and Late cutoff.']);
+    }
+    return $date . ' ' . ($opening ?? '00:00:00') > $now->format('Y-m-d H:i:s') ? 'scheduled' : 'active';
+}
+
+/** Called while holding the class-section row lock in both creation paths. */
+function attendance_session_booking_conflict(PDO $pdo, int $csId, string $date, ?string $opening, string $end): ?string
+{
+    $stmt = $pdo->prepare("SELECT s.session_date, s.opening_time, s.class_end_time, s.created_by_role,
+        u.display_name AS creator_name FROM attendance_sessions s
+        LEFT JOIN user_accounts u ON u.user_id = s.owner_user_id
+        WHERE s.cs_id = ? AND s.session_date = ? AND s.status IN ('active', 'scheduled')
+          AND COALESCE(s.opening_time, TIME '00:00') < CAST(? AS time)
+          AND CAST(? AS time) < COALESCE(s.class_end_time, TIME '23:59:59')
+        ORDER BY s.opening_time, s.session_id LIMIT 1");
+    $stmt->execute([$csId, $date, $end, $opening ?? '00:00:00']);
+    $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$existing) return null;
+    $role = ($existing['created_by_role'] ?? '') === 'faculty' ? 'Faculty' : 'Secretary';
+    $name = trim((string) ($existing['creator_name'] ?? ''));
+    $from = isset($existing['opening_time']) ? substr($existing['opening_time'], 0, 5) : '00:00';
+    $to = isset($existing['class_end_time']) ? substr($existing['class_end_time'], 0, 5) : '23:59';
+    return "A schedule already exists on {$date} from {$from} to {$to} (Asia/Manila), created by {$role}" . ($name !== '' ? " {$name}" : '') . '.';
+}
+
 function attendance_session_bool(mixed $value): bool
 {
     return in_array($value, [true, 't', 'true', '1', 1], true);
@@ -295,6 +337,9 @@ function attendance_session_timing_decision(array $session, DateTimeImmutable $n
     if ($status === 'revoked') {
         return ['allowed' => false, 'code' => 'session_revoked', 'status' => null];
     }
+    if ($status === 'scheduled') {
+        return ['allowed' => false, 'code' => 'attendance_not_open', 'status' => null];
+    }
     if ($status !== 'active') {
         return ['allowed' => false, 'code' => 'session_not_active', 'status' => null];
     }
@@ -342,15 +387,15 @@ function attendance_session_resolve_absences(PDO $pdo, int $sessionId, DateTimeI
            JOIN enrollments e ON e.cs_id = s.cs_id AND e.status = 'Active'
           WHERE s.session_id = ?
             AND s.status = 'ended'
-            -- Any record for this enrollment on the session date (a manual mark,
-            -- another session's record) counts; records of revoked sessions do not.
+            -- A legacy manual mark may cover the day; another session's mark
+            -- never resolves attendance for this session.
             AND NOT EXISTS (
                 SELECT 1 FROM attendance_records r
                   LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                  WHERE r.enrollment_id = e.enrollment_id
                    AND (r.attendance_session_id = s.session_id
                         OR (r.session_date = s.session_date
-                            AND (rs.session_id IS NULL OR rs.status <> 'revoked')))
+                            AND r.attendance_session_id IS NULL))
             )
          ON CONFLICT DO NOTHING"
     );
@@ -387,8 +432,8 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
     $timezone = new DateTimeZone((string) $config['app']['operational_timezone']);
     $nowLocal = attendance_session_now_utc()->setTimezone($timezone);
     $candidates = $pdo->prepare(
-        "SELECT session_id FROM attendance_sessions
-          WHERE status = 'active' AND class_end_time IS NOT NULL
+        "SELECT session_id, cs_id FROM attendance_sessions
+          WHERE status IN ('active', 'scheduled') AND class_end_time IS NOT NULL
             AND (session_date < ? OR (session_date = ? AND class_end_time <= ?))
           ORDER BY session_id"
     );
@@ -396,13 +441,15 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
     $candidates->execute([$today, $today, $nowLocal->format('H:i:s')]);
     $system = ['user_id' => null, 'login_email' => null, 'role' => 'system', 'display_name' => 'Automatic session end', 'session_id' => null];
     $ended = 0;
-    foreach ($candidates->fetchAll(PDO::FETCH_COLUMN) as $sessionId) {
+    foreach ($candidates->fetchAll(PDO::FETCH_ASSOC) as $candidate) {
+        $sessionId = (int) $candidate['session_id'];
         $pdo->beginTransaction();
         try {
+            $pdo->prepare('SELECT cs_id FROM class_sections WHERE cs_id = ? FOR UPDATE')->execute([$candidate['cs_id']]);
             $lock = $pdo->prepare(
-                "SELECT session_id, cs_id, session_code, session_date, class_end_time
+                "SELECT session_id, cs_id, session_code, session_date, class_end_time, status
                    FROM attendance_sessions
-                  WHERE session_id = ? AND status = 'active'
+                  WHERE session_id = ? AND status IN ('active', 'scheduled')
                   FOR UPDATE SKIP LOCKED"
             );
             $lock->execute([(int) $sessionId]);
@@ -416,7 +463,7 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
             $endSql = $endUtc->format('Y-m-d H:i:s.u');
             $update = $pdo->prepare(
                 "UPDATE attendance_sessions SET status = 'ended', ended_at = ?, updated_at = ?
-                  WHERE session_id = ? AND status = 'active'"
+                  WHERE session_id = ? AND status IN ('active', 'scheduled')"
             );
             $update->execute([$endSql, attendance_session_now_utc()->format('Y-m-d H:i:s.u'), (int) $sessionId]);
             $absent = attendance_session_resolve_absences($pdo, (int) $sessionId, $endUtc);
@@ -424,7 +471,7 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
                 $pdo, $config, $system, $context, 'attendance_session_auto_ended', (int) $sessionId, (int) $session['cs_id'],
                 "Attendance session '{$session['session_code']}' ended automatically at its class end time; {$absent} student(s) resolved to Absent.",
                 null,
-                ['session_id' => (int) $sessionId, 'status' => 'active'],
+                ['session_id' => (int) $sessionId, 'status' => $session['status']],
                 ['session_id' => (int) $sessionId, 'status' => 'ended', 'ended_at' => $endSql, 'resolved_absent_count' => $absent]
             );
             $pdo->commit();
@@ -436,7 +483,43 @@ function attendance_sessions_end_overdue(PDO $pdo, array $config, array $context
             throw $e;
         }
     }
+    attendance_sessions_open_due($pdo, $config, $context, $nowLocal);
     return $ended;
+}
+
+function attendance_sessions_open_due(PDO $pdo, array $config, array $context, DateTimeImmutable $nowLocal): void
+{
+    $due = $pdo->prepare("SELECT session_id, cs_id, session_date, opening_time FROM attendance_sessions WHERE status = 'scheduled'
+        AND session_date = ? AND opening_time <= ? AND class_end_time > ? ORDER BY session_id");
+    $due->execute([$nowLocal->format('Y-m-d'), $nowLocal->format('H:i:s'), $nowLocal->format('H:i:s')]);
+    foreach ($due->fetchAll(PDO::FETCH_ASSOC) as $candidate) {
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('SELECT cs_id FROM class_sections WHERE cs_id = ? FOR UPDATE')->execute([$candidate['cs_id']]);
+            $openedAt = (new DateTimeImmutable($candidate['session_date'] . ' ' . $candidate['opening_time'], $nowLocal->getTimezone()))->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
+            // An overdue predecessor may be skipped while biometric verification
+            // holds its lock. Leave the next booking queued until it can end.
+            $active = $pdo->prepare("SELECT 1 FROM attendance_sessions WHERE cs_id = ? AND session_date = ? AND status = 'active'");
+            $active->execute([$candidate['cs_id'], $candidate['session_date']]);
+            if ($active->fetchColumn() !== false) {
+                $pdo->commit();
+                continue;
+            }
+            $update = $pdo->prepare("UPDATE attendance_sessions SET status = 'active', started_at = ?, updated_at = ? WHERE session_id = ? AND status = 'scheduled' RETURNING session_code");
+            $update->execute([$openedAt, attendance_session_now_utc()->format('Y-m-d H:i:s.u'), $candidate['session_id']]);
+            $code = $update->fetchColumn();
+            if ($code !== false) {
+                $system = ['user_id' => null, 'login_email' => null, 'role' => 'system', 'display_name' => 'Automatic session opening', 'session_id' => null];
+                attendance_session_record_audit($pdo, $config, $system, $context, 'attendance_session_auto_opened', (int) $candidate['session_id'], (int) $candidate['cs_id'],
+                    "Scheduled attendance session '{$code}' opened automatically.", null,
+                    ['status' => 'scheduled'], ['status' => 'active']);
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
 }
 
 /**
@@ -480,6 +563,7 @@ function attendance_excused_requests_rows(PDO $pdo, string $scopeSql, array $par
                 (SELECT r.status FROM attendance_records r
                    LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                   WHERE r.enrollment_id = xr.enrollment_id AND r.session_date = xr.session_date
+                    AND (r.attendance_session_id = xr.attendance_session_id OR r.attendance_session_id IS NULL)
                     AND (rs.session_id IS NULL OR rs.status <> 'revoked')
                   ORDER BY r.record_id DESC LIMIT 1) AS current_status
            FROM attendance_excused_requests xr

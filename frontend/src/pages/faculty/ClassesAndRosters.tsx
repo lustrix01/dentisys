@@ -1,3 +1,4 @@
+import { filterPersonNameInput, preventInvalidPersonNameKey } from '../../utils/personNameValidation';
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import {
   BookOpen,
@@ -52,10 +53,12 @@ import {
   ROOM_OPTIONS,
   SCHEDULE_DAYS,
   SCHEDULE_PRESETS,
-  SCHEDULE_TIME_SLOTS,
   checkScheduleConflicts,
   formatSessionsForSubmission,
+  displayMeetingTime,
+  meetingDayKey,
 } from '../../utils/scheduleHelper';
+import { MeetingTimes, type DayTimes } from '../../components/MeetingTimes';
 import { RoomSelector } from '../../components/RoomSelector';
 import { RosterImportModal } from '../../components/RosterImportModal';
 
@@ -140,14 +143,7 @@ const parseRoomSchedule = (raw: string | undefined | null) => {
   };
 };
 
-const formatRoomSchedule = (room: string, days: string[], startTime: string, endTime: string): string => {
-  const r = room.trim();
-  if (!r) return '';
-  if (days.length > 0) {
-    return `${r} (${days.join('/')} ${startTime} - ${endTime})`;
-  }
-  return r;
-};
+
 
 export const ClassesAndRosters: React.FC = () => {
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
@@ -227,7 +223,10 @@ export const ClassesAndRosters: React.FC = () => {
   const [editCourseName, setEditCourseName] = useState('');
   const [editBlock, setEditBlock] = useState('');
   const [editYearLevel, setEditYearLevel] = useState(4);
+  const [editOriginalSchedule, setEditOriginalSchedule] = useState('');
   const [editLecRoom, setEditLecRoom] = useState('');
+  const [editLecDayTimes, setEditLecDayTimes] = useState<DayTimes>({});
+  const [editLabDayTimes, setEditLabDayTimes] = useState<DayTimes>({});
   const [editLecDays, setEditLecDays] = useState<string[]>([]);
   const [editLecStartTime, setEditLecStartTime] = useState('08:00 AM');
   const [editLecEndTime, setEditLecEndTime] = useState('09:00 AM');
@@ -555,6 +554,13 @@ export const ClassesAndRosters: React.FC = () => {
     setEditLabDays(parsedLab.days);
     setEditLabStartTime(parsedLab.startTime || '10:00 AM');
     setEditLabEndTime(parsedLab.endTime || '01:00 PM');
+    const lectureMeetings = cls.meetings?.filter(meeting => meeting.component === 'Lecture') ?? [];
+    const labMeetings = cls.meetings?.filter(meeting => meeting.component === 'Laboratory') ?? [];
+    setEditLecDayTimes(Object.fromEntries(lectureMeetings.map((meeting, index) => [meetingDayKey(lectureMeetings.map(row => row.day), index), { startTime: displayMeetingTime(meeting.startTime), endTime: displayMeetingTime(meeting.endTime), room: meeting.room }])));
+    setEditLabDayTimes(Object.fromEntries(labMeetings.map((meeting, index) => [meetingDayKey(labMeetings.map(row => row.day), index), { startTime: displayMeetingTime(meeting.startTime), endTime: displayMeetingTime(meeting.endTime), room: meeting.room }])));
+    if (lectureMeetings.length) { setEditLecDays(lectureMeetings.map(meeting => meeting.day)); setEditLecRoom(lectureMeetings[0].room); }
+    if (labMeetings.length) { setEditLabDays(labMeetings.map(meeting => meeting.day)); setEditLabRoom(labMeetings[0].room); }
+
 
     setEditSemester(canonicalSemester(cls.semester));
     // Older courses without a recorded split: infer from the rooms in use.
@@ -562,6 +568,13 @@ export const ClassesAndRosters: React.FC = () => {
       ?? (cls.lecRoom && cls.labRoom ? 'both' : cls.labRoom && !cls.lecRoom ? 'lab' : 'lecture'));
     setEditLectureUnits(String(cls.lectureUnits || 3));
     setEditLabUnits(String(cls.labUnits || 1));
+    setEditOriginalSchedule(JSON.stringify({
+      components: componentsFromUnits(cls.lectureUnits, cls.labUnits) ?? (cls.lecRoom && cls.labRoom ? 'both' : cls.labRoom && !cls.lecRoom ? 'lab' : 'lecture'),
+      lecRoom: lectureMeetings[0]?.room ?? parsedLec.room, lecDays: lectureMeetings.length ? lectureMeetings.map(row => row.day) : parsedLec.days,
+      lecTimes: Object.fromEntries(lectureMeetings.map((meeting, index) => [meetingDayKey(lectureMeetings.map(row => row.day), index), { startTime: displayMeetingTime(meeting.startTime), endTime: displayMeetingTime(meeting.endTime), room: meeting.room }])),
+      labRoom: labMeetings[0]?.room ?? parsedLab.room, labDays: labMeetings.length ? labMeetings.map(row => row.day) : parsedLab.days,
+      labTimes: Object.fromEntries(labMeetings.map((meeting, index) => [meetingDayKey(labMeetings.map(row => row.day), index), { startTime: displayMeetingTime(meeting.startTime), endTime: displayMeetingTime(meeting.endTime), room: meeting.room }])),
+    }));
     setEditSchoolYear(cls.schoolYear || '2025-2026');
     setEditError(null);
   };
@@ -662,8 +675,7 @@ export const ClassesAndRosters: React.FC = () => {
       return;
     }
 
-    const formattedLec = formatRoomSchedule(editLecRoom, editLecDays, editLecStartTime, editLecEndTime);
-    const formattedLab = formatRoomSchedule(editLabRoom, editLabDays, editLabStartTime, editLabEndTime);
+
     const codeChanged = editCourseCode.trim().toLowerCase() !== (editingClass.courseCode || '').trim().toLowerCase();
     const semesterChanged = editSemester !== canonicalSemester(editingClass.semester);
     const newCatalogCode = codeChanged && editCodeIsNew;
@@ -680,6 +692,15 @@ export const ClassesAndRosters: React.FC = () => {
       || labUnits !== ((editingClass.labUnits ?? 0) > 0 ? editingClass.labUnits : null)
     );
 
+    const editSlots: ClassSessionSlot[] = [
+      ...(includesLecture ? [{ id: 'edit-lecture', type: 'Lecture' as const, room: editLecRoom, days: editLecDays, startTime: editLecStartTime, endTime: editLecEndTime, dayTimes: editLecDayTimes }] : []),
+      ...(includesLab ? [{ id: 'edit-lab', type: 'Laboratory' as const, room: editLabRoom, days: editLabDays, startTime: editLabStartTime, endTime: editLabEndTime, dayTimes: editLabDayTimes }] : []),
+    ];
+    const scheduleChanged = JSON.stringify({ components: editComponents, lecRoom: editLecRoom, lecDays: editLecDays, lecTimes: editLecDayTimes, labRoom: editLabRoom, labDays: editLabDays, labTimes: editLabDayTimes }) !== editOriginalSchedule;
+    const scheduledSlots = editSlots.filter(slot => slot.days.length > 0);
+    const conflict = scheduleChanged && scheduledSlots.length ? checkScheduleConflicts(scheduledSlots, classes, newSchoolYear, parsedCsId) : null;
+    if (conflict) { setEditError(conflict); return; }
+    const formatted = formatSessionsForSubmission(editSlots);
     setIsUpdatingClass(true);
     try {
       const res = await updateFacultyClassApi({
@@ -693,8 +714,11 @@ export const ClassesAndRosters: React.FC = () => {
         yearLevel: editYearLevel,
         semester: semesterChanged ? editSemester : undefined,
         // A component the class no longer has loses its schedule.
-        lecRoom: includesLecture ? (formattedLec || undefined) : '',
-        labRoom: includesLab ? (formattedLab || undefined) : '',
+        ...(scheduleChanged ? {
+          lecRoom: includesLecture ? (formatted.lecRoom || undefined) : '',
+          labRoom: includesLab ? (formatted.labRoom || undefined) : '',
+          meetings: formatted.meetings,
+        } : {}),
         ...(newCatalogCode || unitsChanged ? { lectureUnits, labUnits } : {}),
       });
 
@@ -848,7 +872,7 @@ export const ClassesAndRosters: React.FC = () => {
       return;
     }
 
-    const { lecRoom, labRoom } = formatSessionsForSubmission(sessionSlots);
+    const { lecRoom, labRoom, meetings } = formatSessionsForSubmission(sessionSlots);
 
     setIsSubmittingClass(true);
     try {
@@ -865,6 +889,7 @@ export const ClassesAndRosters: React.FC = () => {
         labRoom: includesLab ? (labRoom || undefined) : undefined,
         lectureUnits,
         labUnits,
+        meetings,
       });
 
       showFeedback(res.message || `Class section ${csName} created successfully for current S.Y. ${newSchoolYear}!`, 'success');
@@ -1668,7 +1693,7 @@ export const ClassesAndRosters: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <label className="font-bold text-slate-700 dark:text-slate-300">
                   Prefix
-                  <input value={studentPrefix} readOnly={studentAutofilled} onChange={e => setStudentPrefix(e.target.value)} maxLength={50} placeholder="e.g. Ms."
+                  <input value={studentPrefix} readOnly={studentAutofilled} onChange={event => setStudentPrefix(filterPersonNameInput('prefix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setStudentPrefix(filterPersonNameInput('prefix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('prefix', event)} maxLength={50} placeholder="e.g. Ms."
                     className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
                 </label>
                 <div>
@@ -1678,7 +1703,7 @@ export const ClassesAndRosters: React.FC = () => {
                     required
                     value={studentFirstName}
                     readOnly={studentAutofilled}
-                    onChange={(e) => setStudentFirstName(e.target.value.replace(/[0-9]/g, ''))}
+                    onChange={event => setStudentFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setStudentFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                     placeholder="e.g. Juan"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
@@ -1689,7 +1714,7 @@ export const ClassesAndRosters: React.FC = () => {
                     type="text"
                     value={studentMiddleName}
                     readOnly={studentAutofilled}
-                    onChange={(e) => setStudentMiddleName(e.target.value.replace(/[0-9]/g, ''))}
+                    onChange={event => setStudentMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setStudentMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                     placeholder="e.g. Santos"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
@@ -1701,7 +1726,7 @@ export const ClassesAndRosters: React.FC = () => {
                     required
                     value={studentLastName}
                     readOnly={studentAutofilled}
-                    onChange={(e) => setStudentLastName(e.target.value.replace(/[0-9]/g, ''))}
+                    onChange={event => setStudentLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setStudentLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                     placeholder="e.g. Dela Cruz"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
                   />
@@ -1710,7 +1735,7 @@ export const ClassesAndRosters: React.FC = () => {
 
               <label className="block font-bold text-slate-700 dark:text-slate-300">
                 Suffix
-                <input value={studentSuffix} readOnly={studentAutofilled} onChange={e => setStudentSuffix(e.target.value)} maxLength={50} placeholder="e.g. Jr., III"
+                <input value={studentSuffix} readOnly={studentAutofilled} onChange={event => setStudentSuffix(filterPersonNameInput('suffix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setStudentSuffix(filterPersonNameInput('suffix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('suffix', event)} maxLength={50} placeholder="e.g. Jr., III"
                   className="mt-1 w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-xs" />
               </label>
               <div className="p-2.5 bg-slate-100 dark:bg-slate-800/60 rounded-xl text-xs text-slate-600 dark:text-slate-300 flex items-center justify-between">
@@ -2033,32 +2058,8 @@ export const ClassesAndRosters: React.FC = () => {
                   </div>
 
                   {/* Time Range */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
-                      <select
-                        value={slot.startTime}
-                        onChange={(e) => handleUpdateSlot(slot.id, { startTime: e.target.value })}
-                        className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
-                      >
-                        {SCHEDULE_TIME_SLOTS.map(t => (
-                          <option key={`${slot.id}-start-${t}`} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">End Time</span>
-                      <select
-                        value={slot.endTime}
-                        onChange={(e) => handleUpdateSlot(slot.id, { endTime: e.target.value })}
-                        className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
-                      >
-                        {SCHEDULE_TIME_SLOTS.map(t => (
-                          <option key={`${slot.id}-end-${t}`} value={t}>{t}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                  <MeetingTimes component={slot.type} days={slot.days} value={slot.dayTimes ?? {}} defaultStart={slot.startTime} defaultEnd={slot.endTime}
+                    onChange={dayTimes => handleUpdateSlot(slot.id, { dayTimes })} />
                 </div>
               ))}
             </div>
@@ -2076,7 +2077,7 @@ export const ClassesAndRosters: React.FC = () => {
                     {slot.type}
                   </span>
                   <span>
-                    {slot.room || 'Venue TBA'} &bull; {slot.days.length > 0 ? `${slot.days.join('/')} ${slot.startTime} - ${slot.endTime}` : 'No days selected'}
+                    {slot.room || 'Venue TBA'} &bull; {slot.days.length > 0 ? slot.days.map(day => `${day} ${slot.dayTimes?.[day]?.startTime ?? slot.startTime} - ${slot.dayTimes?.[day]?.endTime ?? slot.endTime}`).join('; ') : 'No days selected'}
                   </span>
                 </div>
               ))}
@@ -2139,12 +2140,12 @@ export const ClassesAndRosters: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 Prefix
-                <input value={editStudentPrefix} onChange={e => setEditStudentPrefix(e.target.value)} maxLength={50}
+                <input value={editStudentPrefix} onChange={event => setEditStudentPrefix(filterPersonNameInput('prefix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentPrefix(filterPersonNameInput('prefix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('prefix', event)} maxLength={50}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900" />
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 Suffix
-                <input value={editStudentSuffix} onChange={e => setEditStudentSuffix(e.target.value)} maxLength={50}
+                <input value={editStudentSuffix} onChange={event => setEditStudentSuffix(filterPersonNameInput('suffix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentSuffix(filterPersonNameInput('suffix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('suffix', event)} maxLength={50}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900" />
               </label>
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
@@ -2152,7 +2153,7 @@ export const ClassesAndRosters: React.FC = () => {
                 <input
                   required
                   value={editStudentFirstName}
-                  onChange={event => setEditStudentFirstName(event.target.value)}
+                  onChange={event => setEditStudentFirstName(filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentFirstName(filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </label>
@@ -2161,7 +2162,7 @@ export const ClassesAndRosters: React.FC = () => {
                 <input
                   required
                   value={editStudentLastName}
-                  onChange={event => setEditStudentLastName(event.target.value)}
+                  onChange={event => setEditStudentLastName(filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentLastName(filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </label>
@@ -2169,7 +2170,7 @@ export const ClassesAndRosters: React.FC = () => {
                 Middle name
                 <input
                   value={editStudentMiddleName}
-                  onChange={event => setEditStudentMiddleName(event.target.value)}
+                  onChange={event => setEditStudentMiddleName(filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentMiddleName(filterPersonNameInput('middleName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('middleName', event)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </label>
@@ -2407,7 +2408,7 @@ export const ClassesAndRosters: React.FC = () => {
                 </span>
                 {editLecDays.length > 0 && editLecRoom && (
                   <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
-                    {editLecDays.join('/')} {editLecStartTime} - {editLecEndTime}
+                    {editLecDays.length} lecture meeting(s)
                   </span>
                 )}
               </div>
@@ -2418,6 +2419,7 @@ export const ClassesAndRosters: React.FC = () => {
                 value={editLecRoom}
                 onChange={(r) => {
                   setEditLecRoom(r);
+                  setEditLecDayTimes(value => Object.fromEntries(Object.entries(value).map(([day, times]) => [day, { ...times, room: r }])));
                   setEditError(null);
                 }}
                 placeholder="Choose Lecture Room"
@@ -2474,32 +2476,7 @@ export const ClassesAndRosters: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
-                  <select
-                    value={editLecStartTime}
-                    onChange={(e) => setEditLecStartTime(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
-                  >
-                    {SCHEDULE_TIME_SLOTS.map(t => (
-                      <option key={`edit-lec-start-${t}`} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">End Time</span>
-                  <select
-                    value={editLecEndTime}
-                    onChange={(e) => setEditLecEndTime(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
-                  >
-                    {SCHEDULE_TIME_SLOTS.map(t => (
-                      <option key={`edit-lec-end-${t}`} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              <MeetingTimes component="Lecture" days={editLecDays} value={editLecDayTimes} defaultStart={editLecStartTime} defaultEnd={editLecEndTime} onChange={setEditLecDayTimes} />
             </div>
             </>
             )}
@@ -2515,7 +2492,7 @@ export const ClassesAndRosters: React.FC = () => {
                 </span>
                 {editLabDays.length > 0 && editLabRoom && (
                   <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md">
-                    {editLabDays.join('/')} {editLabStartTime} - {editLabEndTime}
+                    {editLabDays.length} laboratory meeting(s)
                   </span>
                 )}
               </div>
@@ -2526,6 +2503,7 @@ export const ClassesAndRosters: React.FC = () => {
                 value={editLabRoom}
                 onChange={(r) => {
                   setEditLabRoom(r);
+                  setEditLabDayTimes(value => Object.fromEntries(Object.entries(value).map(([day, times]) => [day, { ...times, room: r }])));
                   setEditError(null);
                 }}
                 placeholder="Choose Laboratory Room (Optional)"
@@ -2582,32 +2560,7 @@ export const ClassesAndRosters: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">Start Time</span>
-                  <select
-                    value={editLabStartTime}
-                    onChange={(e) => setEditLabStartTime(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
-                  >
-                    {SCHEDULE_TIME_SLOTS.map(t => (
-                      <option key={`edit-lab-start-${t}`} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-semibold block mb-0.5">End Time</span>
-                  <select
-                    value={editLabEndTime}
-                    onChange={(e) => setEditLabEndTime(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold cursor-pointer text-xs"
-                  >
-                    {SCHEDULE_TIME_SLOTS.map(t => (
-                      <option key={`edit-lab-end-${t}`} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              <MeetingTimes component="Laboratory" days={editLabDays} value={editLabDayTimes} defaultStart={editLabStartTime} defaultEnd={editLabEndTime} onChange={setEditLabDayTimes} />
             </div>
             </>
             )}

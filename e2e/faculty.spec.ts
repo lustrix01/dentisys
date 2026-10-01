@@ -180,7 +180,13 @@ test.describe('Faculty Module E2E Tests', () => {
   });
 
   test('Create Class records lecture and laboratory units with a separate schedule for each', async ({ page }) => {
-    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [] }) }));
+    let created: Record<string, unknown> | null = null;
+    await page.route('**/api/faculty/classes', async route => {
+      if (route.request().method() === 'POST') {
+        created = route.request().postDataJSON();
+        await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', csId: 91, message: 'Class section created successfully.' }) });
+      } else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [] }) });
+    });
     await page.route('**/api/faculty/courses', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', courses: [] }) }));
     await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
 
@@ -194,6 +200,20 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.getByLabel('Laboratory Units *').fill('1.5');
     await expect(page.getByText('Lecture Schedule', { exact: true })).toBeVisible();
     await expect(page.getByText('Laboratory Schedule', { exact: true })).toBeVisible();
+    await page.getByRole('radio', { name: 'Lecture only' }).click();
+    await page.getByLabel('Lecture Room Venue *').selectOption('Room 101');
+    await page.getByRole('button', { name: 'Mon', exact: true }).click();
+    await page.getByRole('button', { name: 'Tue', exact: true }).click();
+    await page.getByLabel('Lecture Mon end time').selectOption('10:00 AM');
+    await page.getByLabel('Lecture Tue start time').selectOption('03:00 PM');
+    await page.getByLabel('Lecture Tue end time').selectOption('05:00 PM');
+    await expect(page.getByText('Room 101 • Mon 08:00 AM - 10:00 AM; Tue 03:00 PM - 05:00 PM')).toBeVisible();
+    await page.getByRole('button', { name: 'Save Class Section' }).click();
+    await expect.poll(() => created?.meetings).toEqual([
+      { component: 'Lecture', day: 'Mon', room: 'Room 101', startTime: '08:00', endTime: '10:00' },
+      { component: 'Lecture', day: 'Tue', room: 'Room 101', startTime: '15:00', endTime: '17:00' },
+    ]);
+    await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
     // Lab only: the lecture units and lecture schedule disappear.
     await page.getByRole('radio', { name: 'Lab only' }).click();
     await expect(page.getByLabel('Lecture Units *')).toHaveCount(0);
@@ -221,6 +241,33 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Save Changes' }).click();
     await expect.poll(() => updates.length).toBe(1);
     expect(updates[0]).toMatchObject({ csId: 91, lectureUnits: null, labUnits: 3, lecRoom: '' });
+  });
+
+  test('class editing preserves legacy text on metadata changes and keeps two Monday meetings separate', async ({ page }) => {
+    const meetings = [
+      { component: 'Lecture', day: 'Mon', room: 'Room 101', startTime: '08:00', endTime: '10:00' },
+      { component: 'Lecture', day: 'Mon', room: 'Room 102', startTime: '15:00', endTime: '17:00' },
+    ];
+    const cls = { id: '91', csId: 91, csName: 'NEW601-A', courseId: 9, courseCode: 'NEW601', courseName: 'Advanced Clinic', units: 3, lectureUnits: 3, labUnits: 0, courseUnitsEditable: true, hasGrades: false, schoolYear: '2026-2027', semester: '1ST', yearLevel: 6, block: 'A', lecRoom: 'Room 101 (Mon 08:00 AM - 10:00 AM); Room 102 (Mon 03:00 PM - 05:00 PM); Unfinished', labRoom: '', meetings, status: 'Active' };
+    const updates: Array<Record<string, unknown>> = [];
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [cls] }) }));
+    await page.route('**/api/faculty/classes/update', async route => { updates.push(route.request().postDataJSON()); await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok' }) }); });
+    await page.route('**/api/faculty/courses', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', courses: [] }) }));
+    await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+    await page.goto('/classes');
+    await expect(page.getByText(/Unfinished/).first()).toBeVisible();
+    await page.getByTitle('Edit Class Section Details').first().click();
+    await expect(page.getByLabel('Lecture Mon start time', { exact: true })).toHaveValue('08:00 AM');
+    await expect(page.getByLabel('Lecture Mon meeting 2 start time')).toHaveValue('03:00 PM');
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(() => updates.length).toBe(1);
+    expect(updates[0]).not.toHaveProperty('meetings');
+    expect(updates[0]).not.toHaveProperty('lecRoom');
+    await page.getByTitle('Edit Class Section Details').first().click();
+    await page.getByLabel('Lecture Mon meeting 2 end time').selectOption('06:00 PM');
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(() => updates.length).toBe(2);
+    expect(updates[1].meetings).toEqual([meetings[0], { ...meetings[1], endTime: '18:00' }]);
   });
 
   test('Classes and Rosters surfaces the backend eligibility conflict for an active Student', async ({ page }) => {
@@ -340,6 +387,52 @@ test.describe('Faculty Module E2E Tests', () => {
     await dialog.getByRole('button', { name: 'Confirm & Schedule Exam' }).click();
     await expect.poll(() => remedialPosts.length).toBe(1);
     expect(remedialPosts[0]).toMatchObject({ enrollmentId: '901', attemptNumber: 1, notes: 'Bring the lab manual.' });
+  });
+
+  test('person names block digits while typing, sanitize paste and preserve accents, punctuation and IME', async ({ page }) => {
+    await page.goto('/faculty/profile');
+    const first = page.getByRole('textbox', { name: /First name/ });
+    await first.fill('Ana');
+    await first.pressSequentially('123@#$');
+    await expect(first).toHaveValue('Ana');
+    await first.fill("José123-María@");
+    await expect(first).toHaveValue('José-María');
+    await first.press('ControlOrMeta+a');
+    await first.pressSequentially("O'Neill");
+    await expect(first).toHaveValue("O'Neill");
+    await first.dispatchEvent('compositionstart');
+    await first.evaluate(input => {
+      const element = input as HTMLInputElement;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(element, '山田1');
+      element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertCompositionText', data: '山田1', isComposing: true }));
+    });
+    await expect(first).toHaveValue('山田1');
+    await first.dispatchEvent('compositionend', { data: '山田1' });
+    await expect(first).toHaveValue('山田');
+    await page.getByRole('textbox', { name: /Suffix/ }).fill('DMD, PhD2');
+    await expect(page.getByRole('textbox', { name: /Suffix/ })).toHaveValue('DMD, PhD');
+  });
+
+  test('retention identifies current-year students separately from enrollments and exposes filtered alerts', async ({ page }) => {
+    const common = { studentNumber: '2026-0042', studentName: 'Current Candidate', studentId: '42', percentage: 70, gwa: 2.75, state: 'warning', schoolYear: '2026-2027', remedialEligible: true };
+    await page.route('**/api/faculty/dashboard/kpis**', route => {
+      const year = new URL(route.request().url()).searchParams.get('schoolYear');
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', kpis: { retentionAlerts: year === 'current' ? 1 : 2, remedialCount: 0 } }) });
+    });
+    await page.route('**/api/faculty/retention', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', retentionThreshold: 2.5, retention: [
+      { ...common, enrollmentId: '901', classId: '77', className: 'CLIN401-A', subjectCode: 'CLIN401' },
+      { ...common, enrollmentId: '902', classId: '78', className: 'CLIN402-A', subjectCode: 'CLIN402' },
+      { ...common, enrollmentId: '903', studentId: '43', studentName: 'Historical Candidate', classId: '79', className: 'OLD401-A', subjectCode: 'OLD401', schoolYear: '2025-2026' },
+    ] }) }));
+    await page.goto('/retention');
+    await expect(page.getByText('Showing 1 student across 2 course enrollments', { exact: false })).toBeVisible();
+    await expect(page.getByText('1 student needs attention in the current school year', { exact: false })).toBeVisible();
+    await expect(page.getByLabel('1 students needing attention in the current school year')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'Historical Candidate' })).toHaveCount(0);
+    await page.getByPlaceholder('Search...').fill('not-a-student');
+    await expect(page.getByRole('row').filter({ hasText: 'Current Candidate' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'View current-year students needing attention' }).click();
+    await expect(page.getByRole('row').filter({ hasText: 'Current Candidate' })).toHaveCount(2);
   });
 
   test('faculty profile email is read-only and is not sent on save', async ({ page }) => {
@@ -588,7 +681,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'ok', classes: mockClasses }),
+        body: JSON.stringify({ status: 'ok', currentSchoolYear: '2025-2026', classes: mockClasses }),
       });
     });
 
@@ -599,18 +692,58 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page).toHaveURL('/');
   });
 
+  test('attendance defaults to configured current year and makes historical classes filterable and read-only', async ({ page }) => {
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2025-2026', classes: [...mockClasses,
+      { ...mockClasses[0], id: '4', csId: 4, courseId: 103, courseCode: 'OLD401', schoolYear: '2024-2025' },
+    ] }) }));
+    await page.route('**/api/faculty/attendance?*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: mockWorksheetSectionA }) }));
+    await page.goto('/attendance');
+    await expect(page.getByLabel('Attendance school year')).toHaveValue('current');
+    await expect(page.getByLabel('Assigned course').locator('option[value="103"]')).toHaveCount(0);
+    await page.getByLabel('Attendance school year').selectOption('2024-2025');
+    await page.getByLabel('Assigned course').selectOption('103');
+    await page.getByLabel('Class section').selectOption('4');
+    await expect(page.getByText('Past school-year attendance is view-only.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start Attendance Session', exact: true })).toBeDisabled();
+    await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByRole('button', { name: 'Present', exact: true })).toBeDisabled();
+    await page.getByLabel('Attendance school year').selectOption('current');
+    await expect(page.getByLabel('Assigned course')).toHaveValue('');
+    await expect(page.getByLabel('Class section')).toHaveValue('');
+    await expect(page.getByText('Alice Green')).toHaveCount(0);
+  });
+
+  test('Faculty can choose a future session date and sees creator details for overlapping bookings', async ({ page }) => {
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/api/faculty/attendance?*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: mockWorksheetSectionA }) }));
+    await page.route('**/api/faculty/attendance/session', async route => {
+      payload = route.request().postDataJSON();
+      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'A schedule already exists on 2099-10-02 from 08:00 to 13:00 (Asia/Manila), created by Secretary Bea Alonzo.' }) });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course').selectOption('101');
+    await page.getByLabel('Class section').selectOption('1');
+    await page.getByRole('button', { name: 'Start Attendance Session', exact: true }).click();
+    const date = page.getByLabel('Session date (Asia/Manila)');
+    expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await date.fill('2099-10-02');
+    await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
+    await page.locator('form').getByRole('button', { name: 'Schedule Session', exact: true }).click();
+    await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
+    await expect(page.getByText(/created by Secretary Bea Alonzo/)).toBeVisible();
+  });
+
   test('hierarchy: courses derive from classes, section list filters by course, course change clears section', async ({ page }) => {
     await page.goto('/attendance');
     await expect(page.getByRole('main').getByRole('heading', { name: 'Attendance Monitoring' })).toBeVisible();
 
     // Verify course options are derived and deduplicated
-    const courseSelect = page.locator('select').first();
+    const courseSelect = page.getByLabel('Assigned course', { exact: true });
     await expect(courseSelect.locator('option[value="101"]')).toHaveCount(1);
     await expect(courseSelect.locator('option[value="102"]')).toHaveCount(1);
     await expect(courseSelect.locator('option')).toHaveCount(3); // placeholder + 2 courses
 
     // Class section select is initially disabled
-    const sectionSelect = page.locator('select').nth(1);
+    const sectionSelect = page.getByLabel('Class section', { exact: true });
     await expect(sectionSelect).toBeDisabled();
 
     // Select course CLIN401
@@ -639,10 +772,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
-    const courseSelect = page.locator('select').first();
+    const courseSelect = page.getByLabel('Assigned course', { exact: true });
     await courseSelect.selectOption('101');
 
-    const sectionSelect = page.locator('select').nth(1);
+    const sectionSelect = page.getByLabel('Class section', { exact: true });
     await sectionSelect.selectOption('1');
 
     // Roster should appear
@@ -686,8 +819,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
-    await page.locator('select').first().selectOption('101');
-    await page.locator('select').nth(1).selectOption('1');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
     await expect(page.getByText(/Class ends 12:00/)).toBeVisible();
     await page.getByRole('button', { name: 'End Session' }).click();
     await expect(page.getByText(/Students without an attendance record will be marked Absent/)).toBeVisible();
@@ -783,14 +916,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
-    await page.locator('select').first().selectOption('101');
-    await page.locator('select').nth(1).selectOption('1');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
     await expect(page.getByText(/A server error occurred|Internal server error|Unable to load/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
   });
 
-  test('date: max attribute prevents future date selection and sends exact YYYY-MM-DD', async ({ page }) => {
+  test('date: worksheet accepts a viewing date and sends exact YYYY-MM-DD', async ({ page }) => {
     let capturedDateQuery = '';
     await page.route('**/api/faculty/attendance?*', async (route) => {
       const url = new URL(route.request().url());
@@ -805,14 +938,206 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.goto('/attendance');
     const dateInput = page.locator('input[type="date"]');
     const maxVal = await dateInput.getAttribute('max');
-    expect(maxVal).not.toBeNull();
+    expect(maxVal).toBeNull();
 
-    await page.locator('select').first().selectOption('101');
-    await page.locator('select').nth(1).selectOption('1');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
     // Change date
     await dateInput.fill('2026-09-18');
     await expect.poll(() => capturedDateQuery).toBe('2026-09-18');
+  });
+
+  for (const operation of ['initial', 'correction', 'bulk'] as const) {
+    test(`Faculty polling waits for the pending ${operation} attendance write`, async ({ page }) => {
+      await page.clock.install();
+      let reads = 0;
+      let writing = false;
+      let releaseWrite: () => void = () => {};
+      const writeGate = new Promise<void>(resolve => { releaseWrite = resolve; });
+      await page.route('**/api/faculty/attendance?*csId=1*', route => {
+        ++reads;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: { ...mockWorksheetSectionA, pendingSessions: [{ sessionId: '101', status: 'scheduled', sessionDate: '2099-10-02' }] } }) });
+      });
+      await page.route('**/api/faculty/attendance/override', async route => {
+        writing = true;
+        await writeGate;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'updated', recordId: '999' }) });
+      });
+      await page.goto('/attendance');
+      await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+      await page.getByLabel('Class section', { exact: true }).selectOption('1');
+      const student = operation === 'correction' ? 'Bob White' : 'Alice Green';
+      const row = page.locator('tbody tr').filter({ hasText: student });
+      await expect(row).toBeVisible();
+      // Begin the write just before the 30-second poll, within the API timeout.
+      await page.clock.fastForward(28000);
+      if (operation === 'bulk') {
+        await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
+        await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
+      } else {
+        await row.getByRole('button', { name: operation === 'correction' ? 'Absent' : 'Present', exact: true }).click();
+        if (operation === 'correction') {
+          await page.locator('textarea').fill('Student was absent due to illness');
+          await page.getByRole('button', { name: 'Save Correction', exact: true }).click();
+        }
+      }
+      await expect.poll(() => writing).toBe(true);
+      await expect(page.getByLabel('Assigned course', { exact: true })).toBeDisabled();
+      await expect(page.getByLabel('Class section', { exact: true })).toBeDisabled();
+      await expect(page.locator('input[type="date"]')).toBeDisabled();
+      const readsBefore = reads;
+      await page.clock.fastForward(3100);
+      await page.clock.runFor(100);
+      expect(reads).toBe(readsBefore);
+      releaseWrite();
+      await expect(page.getByText(operation === 'bulk' ? 'Marked 1 student as present.' : operation === 'correction' ? 'Attendance corrected for Bob White (absent).' : 'Recorded Alice Green as present.', { exact: true })).toBeVisible();
+    });
+  }
+
+  for (const newerRead of ['refresh', 'date change', 'same session'] as const) {
+    test(`Faculty ${newerRead} during a write keeps the target fixed and avoids stale results`, async ({ page }) => {
+      let reads = 0;
+      let writing = false;
+      let releaseWrite: () => void = () => {};
+      const writeGate = new Promise<void>(resolve => { releaseWrite = resolve; });
+      await page.route('**/api/faculty/attendance?*csId=1*', async route => {
+        const date = new URL(route.request().url()).searchParams.get('date');
+        ++reads;
+        let result = mockWorksheetSectionA;
+        if (newerRead === 'same session') result = { ...result, date,
+          attendanceSession: { sessionId: '42', sessionDate: date, sessionCode: 'SAME-SESSION', status: 'active', openingTime: '08:00', classEndTime: '23:59', room: 'Room 101' },
+          attendanceSessions: [{ sessionId: '42', sessionDate: date, sessionCode: 'SAME-SESSION', status: 'active' }],
+          pendingSessions: [{ sessionId: '42', sessionDate: date, sessionCode: 'SAME-SESSION', status: 'active', openingTime: '08:00', classEndTime: '23:59' }],
+        } as typeof result;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: result }) });
+      });
+      await page.route('**/api/faculty/attendance/override', async route => {
+        writing = true;
+        await writeGate;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'created', recordId: '999' }) });
+      });
+      await page.goto('/attendance');
+      await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+      await page.getByLabel('Class section', { exact: true }).selectOption('1');
+      const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
+      await alice.getByRole('button', { name: 'Present', exact: true }).click();
+      await expect.poll(() => writing).toBe(true);
+      if (newerRead !== 'refresh') {
+        await expect(page.getByLabel('Attendance school year', { exact: true })).toBeDisabled();
+        await expect(page.getByLabel('Assigned course', { exact: true })).toBeDisabled();
+        await expect(page.getByLabel('Class section', { exact: true })).toBeDisabled();
+        await expect(page.locator('input[type="date"]')).toBeDisabled();
+        if (newerRead === 'same session') await expect(page.getByRole('button', { name: /Open.*SAME-SESSION/ })).toBeDisabled();
+        releaseWrite();
+        await expect(page.getByText('Recorded Alice Green as present.', { exact: true })).toBeVisible();
+        await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
+        await expect(page.locator('input[type="date"]')).toBeEnabled();
+        await expect(page.getByLabel('Class section', { exact: true })).toBeEnabled();
+        expect(reads).toBe(1);
+        return;
+      }
+      await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeDisabled();
+      releaseWrite();
+      await expect(page.getByText('Recorded Alice Green as present.', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeEnabled();
+      await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
+      expect(reads).toBe(1);
+    });
+  }
+
+  for (const action of ['manual refresh', 'session revocation'] as const) {
+  test(`Faculty defers ${action} between bulk row saves and preserves each saved result`, async ({ page }) => {
+    let reads = 0;
+    let writes = 0;
+    const releases: Array<() => void> = [];
+    const gates = [0, 1, 2].map(() => new Promise<void>(resolve => { releases.push(resolve); }));
+    const roster = mockWorksheetSectionA.roster.map(row => ({ ...row, id: null, status: null }));
+    roster.push({ ...roster[0], enrollmentId: '12', studentId: '1003', studentNumber: '2024-0003', studentName: 'Carol Brown' });
+    let revoked = false;
+    const activeSession = { sessionId: '900', sessionDate: '2026-09-20', sessionCode: 'BULK-SESSION', status: 'active', openingTime: '08:00', classEndTime: '23:59' };
+    expect(roster).toHaveLength(3);
+    await page.route('**/api/faculty/attendance?*csId=1*', route => {
+      ++reads;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: { ...mockWorksheetSectionA, roster: roster.map((row, index) => ({ ...row, status: index < completed ? 'present' : null })), attendanceSession: action === 'session revocation' ? { ...activeSession, status: revoked ? 'revoked' : 'active' } : null } }) });
+    });
+    let completed = 0;
+    await page.route('**/api/faculty/attendance/override', async route => {
+      const index = writes++;
+      await gates[index];
+      ++completed;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'created', recordId: String(900 + index) }) });
+    });
+    await page.route('**/api/faculty/attendance/session/revoke', route => {
+      revoked = true;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...activeSession, status: 'revoked' } }) });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
+    await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
+    await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
+    const refresh = page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true });
+    for (let index = 0; index < roster.length; ++index) {
+      await expect.poll(() => writes).toBe(index + 1);
+      await expect(refresh).toBeDisabled();
+      expect(reads).toBe(1);
+      if (action === 'session revocation' && index === 1) {
+        await page.getByRole('button', { name: 'Revoke Session', exact: true }).click();
+        await page.getByRole('button', { name: 'Confirm Revoke Session', exact: true }).click();
+        await expect(page.getByText(/Attendance session revoked\. Already-recorded/)).toBeVisible();
+        expect(reads).toBe(1);
+      }
+      releases[index]();
+      const row = page.locator('tbody tr').filter({ hasText: roster[index].studentName });
+      await expect(row.getByTestId('attendance-status')).toHaveText(/Present$/);
+    }
+    await expect(page.getByText('Marked 3 students as present.', { exact: true })).toBeVisible();
+    await expect(refresh).toBeEnabled();
+    for (const student of roster) {
+      await expect(page.locator('tbody tr').filter({ hasText: student.studentName }).getByTestId('attendance-status')).toHaveText(/Present$/);
+    }
+    await expect.poll(() => reads).toBe(action === 'session revocation' ? 2 : 1);
+  });
+  }
+
+  test('Faculty defers an Excused approval refresh until the pending row save completes', async ({ page }) => {
+    let reads = 0;
+    let approved = false;
+    let saved = false;
+    let writing = false;
+    let releaseWrite: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseWrite = resolve; });
+    const pending = { id: '31', status: 'pending', studentId: '1002', studentName: 'Bob White', studentNumber: '2024-0002', classId: '1', className: 'Section A', courseCode: 'CLIN401', sessionDate: '2026-09-20', currentStatus: 'present', reason: 'Medical certificate', requestedBy: 'Secretary' };
+    await page.route('**/api/faculty/excused-requests', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', requests: approved ? [] : [pending] }) }));
+    await page.route('**/api/faculty/excused-requests/decide', route => {
+      approved = true;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Bob approval saved.', request: { ...pending, status: 'approved' } }) });
+    });
+    await page.route('**/api/faculty/attendance?*csId=1*', route => {
+      ++reads;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: { ...mockWorksheetSectionA, roster: mockWorksheetSectionA.roster.map((row, index) => ({ ...row, status: index === 0 ? saved ? 'present' : null : approved ? 'excused' : 'present' })) } }) });
+    });
+    await page.route('**/api/faculty/attendance/override', async route => {
+      writing = true;
+      await gate;
+      saved = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'created', recordId: '999' }) });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
+    const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
+    await alice.getByRole('button', { name: 'Present', exact: true }).click();
+    await expect.poll(() => writing).toBe(true);
+    await page.getByRole('region', { name: 'Excused requests' }).getByRole('button', { name: 'Approve', exact: true }).click();
+    await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
+    expect(reads).toBe(1);
+    releaseWrite();
+    await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
+    await expect(page.locator('tbody tr').filter({ hasText: 'Bob White' }).getByTestId('attendance-status')).toHaveText(/Excused$/);
+    expect(reads).toBe(2);
+    await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeEnabled();
   });
 
   test('initial entry: unset student status -> present submits without reason', async ({ page }) => {
@@ -840,8 +1165,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
-    await page.locator('select').first().selectOption('101');
-    await page.locator('select').nth(1).selectOption('1');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
     await expect(page.getByText('Alice Green')).toBeVisible();
 
@@ -889,8 +1214,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
-    await page.locator('select').first().selectOption('101');
-    await page.locator('select').nth(1).selectOption('1');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
     // Bob White currently has 'present'. Click 'Absent'
     const bobRow = page.locator('tbody tr').filter({ hasText: 'Bob White' });
@@ -939,8 +1264,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
-    await page.locator('select').first().selectOption('101');
-    await page.locator('select').nth(1).selectOption('1');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
     // Bob White is already 'present'. Click 'Present'
     const bobRow = page.locator('tbody tr').filter({ hasText: 'Bob White' });
@@ -962,8 +1287,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
-    await page.locator('select').first().selectOption('101');
-    await page.locator('select').nth(1).selectOption('1');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
     await expect(page.getByText('Alice Green')).toBeVisible();
 
     await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();

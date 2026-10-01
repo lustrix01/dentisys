@@ -158,7 +158,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   useEffect(() => {
     if (!isFacultyUser || !refreshRetentionBadge) return;
     let cancelled = false;
-    getFacultyDashboardKpisApi()
+    getFacultyDashboardKpisApi('current')
       .then(res => {
         if (cancelled) return;
         const count = (res.kpis?.retentionAlerts ?? 0) + (res.kpis?.remedialCount ?? 0);
@@ -166,7 +166,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       })
       .catch(() => { /* keep the last known badge */ });
     return () => { cancelled = true; };
-  }, [isFacultyUser, refreshRetentionBadge]);
+  }, [isFacultyUser, refreshRetentionBadge, location.pathname]);
   const navigate = useNavigate();
 
   const { changeTheme } = useThemePreference();
@@ -708,7 +708,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive}`
                       : `text-slate-600 dark:text-slate-300 ${colors.hoverBg}`
                   }`}
-                  title={isSidebarCollapsed ? item.name : undefined}
+                  title={item.badge === 'retention' ? `${retentionBadgeCount ?? 0} students needing attention in the current school year` : isSidebarCollapsed ? item.name : undefined}
                 >
                   <div className="flex items-center space-x-3 min-w-0">
                     <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${
@@ -719,7 +719,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     )}
                   </div>
                   {badgeValue !== undefined && !isSidebarCollapsed && (
-                    <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
+                    <span aria-label={item.badge === 'retention' ? `${badgeValue} students needing attention in the current school year` : undefined} className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
                       {badgeValue}
                     </span>
                   )}

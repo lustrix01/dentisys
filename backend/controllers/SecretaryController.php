@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__) . '/app/attendance_sessions.php';
+
 if (!function_exists('sanitize_for_log')) {
     function sanitize_for_log(\Throwable $e): string
     {
@@ -1151,40 +1153,7 @@ function secretary_attendance_session_optional_float(
 
 function secretary_attendance_session_date(array $data, DateTimeImmutable $now, array $config): string
 {
-    $today = app_local_date($config, $now);
-    $rawDate = array_key_exists('sessionDate', $data)
-        ? $data['sessionDate']
-        : ($data['date'] ?? $today);
-
-    if (!is_string($rawDate) || trim($rawDate) === '') {
-        throw new ValidationException([[
-            'field' => 'sessionDate',
-            'message' => 'Session date must be a valid YYYY-MM-DD date.',
-        ]]);
-    }
-
-    $rawDate = trim($rawDate);
-    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $rawDate, new DateTimeZone('UTC'));
-    $errors = DateTimeImmutable::getLastErrors();
-    if (
-        !$date
-        || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
-        || $date->format('Y-m-d') !== $rawDate
-    ) {
-        throw new ValidationException([[
-            'field' => 'sessionDate',
-            'message' => 'Session date must be a valid YYYY-MM-DD date.',
-        ]]);
-    }
-
-    if ($rawDate > $today) {
-        throw new ValidationException([[
-            'field' => 'sessionDate',
-            'message' => 'Future attendance session dates are not allowed.',
-        ]]);
-    }
-
-    return $rawDate;
+    return attendance_session_creation_date($data['sessionDate'] ?? ($data['date'] ?? app_local_date($config, $now)), $config, $now);
 }
 
 function secretary_attendance_session_code(int $csId, string $sessionDate): string
@@ -1395,18 +1364,13 @@ function handle_secretary_attendance_session_start(): void
                 return;
             }
 
-            $activeStmt = $pdo->prepare(
-                "SELECT session_id
-                 FROM attendance_sessions
-                 WHERE cs_id = ? AND status = 'active'
-                 FOR UPDATE"
-            );
-            $activeStmt->execute([$csId]);
-            if ($activeStmt->fetchColumn() !== false) {
+            $conflict = attendance_session_booking_conflict($pdo, $csId, $sessionDate, $openingTime, $classEndTime);
+            if ($conflict !== null) {
                 $pdo->rollBack();
-                safe_error_response('An active attendance session already exists for this class section.', 409);
+                safe_error_response($conflict, 409);
                 return;
             }
+            $creationStatus = attendance_session_creation_status($sessionDate, $openingTime, $config);
 
             $insert = $pdo->prepare(
                 "INSERT INTO attendance_sessions (
@@ -1414,8 +1378,8 @@ function handle_secretary_attendance_session_start(): void
                     started_at, status, geofence_enabled, geofence_latitude,
                     geofence_longitude, geofence_radius_meters, biometric_required,
                     opening_time, present_cutoff_time, late_cutoff_time, class_end_time,
-                    created_at, updated_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at, created_by_role
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'secretary')
                  RETURNING session_id"
             );
             $insert->execute([
@@ -1426,6 +1390,7 @@ function handle_secretary_attendance_session_start(): void
                 $sessionCode,
                 $room,
                 $nowSql,
+                $creationStatus,
                 $geofenceEnabled ? 1 : 0,
                 $latitude,
                 $longitude,
@@ -1466,7 +1431,7 @@ function handle_secretary_attendance_session_start(): void
                 'cs_id' => $csId,
                 'session_date' => $sessionDate,
                 'session_code' => $sessionCode,
-                'status' => 'active',
+                'status' => $creationStatus,
                 'started_at' => $nowSql,
             ]);
 
@@ -1725,7 +1690,7 @@ function handle_secretary_attendance_session_revoke(): void
                 safe_error_response('Past school-year classes are view-only.', 409);
                 return;
             }
-            if (strtolower((string) $session['status']) !== 'active') {
+            if (!in_array(strtolower((string) $session['status']), ['active', 'scheduled'], true)) {
                 $pdo->rollBack();
                 safe_error_response('Attendance session is not active.', 409);
                 return;
@@ -1734,13 +1699,13 @@ function handle_secretary_attendance_session_revoke(): void
                 "UPDATE attendance_sessions
                     SET status = 'revoked', revoked_at = ?, revoked_by_user_id = ?,
                         revocation_reason = ?, updated_at = ?
-                  WHERE session_id = ? AND status = 'active'"
+                  WHERE session_id = ? AND status IN ('active', 'scheduled')"
             );
             $update->execute([$nowSql, $authCtx['user_id'], $reason, $nowSql, $sessionId]);
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_revoked', $sessionId, (int) $session['cs_id'],
                 "Revoked attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.", $reason,
-                ['session_id' => $sessionId, 'status' => 'active'],
+                ['session_id' => $sessionId, 'status' => $session['status']],
                 ['session_id' => $sessionId, 'status' => 'revoked', 'revoked_at' => $nowSql]
             );
             $pdo->commit();
@@ -1801,7 +1766,7 @@ function handle_secretary_attendance_get(): void
 
         $sessionSql =
             "SELECT a.session_id, a.cs_id, a.session_date, a.session_code, a.room,
-                    a.status, a.started_at, a.ended_at, a.revoked_at,
+                    a.status, a.started_at, a.ended_at, a.revoked_at, a.opening_time, a.class_end_time,
                     cs.cs_name, c.course_code
                FROM attendance_sessions a
                JOIN class_sections cs ON cs.cs_id = a.cs_id
@@ -1832,6 +1797,8 @@ function handle_secretary_attendance_get(): void
             'sessionCode' => $row['session_code'],
             'room' => $row['room'],
             'status' => $row['status'],
+            'openingTime' => isset($row['opening_time']) ? substr($row['opening_time'], 0, 5) : null,
+            'classEndTime' => isset($row['class_end_time']) ? substr($row['class_end_time'], 0, 5) : null,
             'startedAt' => attendance_session_timestamp($row['started_at']),
             'endedAt' => attendance_session_timestamp($row['ended_at']),
             'revokedAt' => attendance_session_timestamp($row['revoked_at']),
@@ -1868,8 +1835,14 @@ function handle_secretary_attendance_get(): void
             $recordParams[] = $classId;
         }
         if ($sessionId > 0) {
-            $recordSql .= ' AND r.attendance_session_id = ?';
-            $recordParams[] = $sessionId;
+            // Prefer this session's result; an unlinked day mark remains the
+            // compatibility fallback, never a result linked to another session.
+            $recordSql .= ' AND (r.attendance_session_id = ? OR (r.attendance_session_id IS NULL
+                AND EXISTS (SELECT 1 FROM attendance_sessions a WHERE a.session_id = ?
+                    AND a.cs_id = cs.cs_id AND a.session_date = r.session_date)
+                AND NOT EXISTS (SELECT 1 FROM attendance_records own WHERE own.enrollment_id = r.enrollment_id
+                    AND own.attendance_session_id = ?)))';
+            array_push($recordParams, $sessionId, $sessionId, $sessionId);
         }
         $recordSql .= ' ORDER BY r.session_date DESC, r.record_id DESC';
         $stmt = $pdo->prepare($recordSql);
@@ -1919,7 +1892,7 @@ function handle_secretary_attendance_get(): void
                           LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                          WHERE r.enrollment_id = e.enrollment_id
                            AND (r.attendance_session_id = a.session_id
-                                OR (r.session_date = a.session_date AND (rs.session_id IS NULL OR rs.status <> 'revoked')))
+                                OR (r.session_date = a.session_date AND r.attendance_session_id IS NULL))
                     )
                   ORDER BY s.student_number"
             );
@@ -1972,6 +1945,7 @@ function handle_secretary_attendance_override(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
 
         $body = request_body();
         if (!$body['has_body']) {
@@ -1998,7 +1972,6 @@ function handle_secretary_attendance_override(): void
         $pdo->beginTransaction();
         try {
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
-            $auditCtx = audit_begin_operation($pdo);
 
             $lookupSql = "SELECT r.record_id, r.attendance_session_id, r.status, cs.cs_id
                           FROM attendance_records r
@@ -2031,6 +2004,9 @@ function handle_secretary_attendance_override(): void
                 if ($session === null || strtolower((string) $session['status']) === 'revoked') {
                     throw new ValidationException([['field' => 'sessionId', 'message' => 'Attendance session was not found in an assigned class.']]);
                 }
+                if ($session['status'] === 'scheduled') {
+                    throw new ValidationException(['sessionId' => 'Attendance has not opened for this scheduled session.']);
+                }
                 if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
                     $pdo->rollBack();
                     safe_error_response('Past school-year classes are view-only.', 409);
@@ -2050,15 +2026,15 @@ function handle_secretary_attendance_override(): void
                 if ($enrollment === false) {
                     throw new ValidationException([['field' => 'studentId', 'message' => 'The student is not enrolled in the session class.']]);
                 }
-                // One record per student per day; records of revoked sessions do not count.
+                // Each session has its own result; legacy unlinked manual marks still cover the day.
                 $sameDayStmt = $pdo->prepare(
                     "SELECT 1 FROM attendance_records r
                        LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                       WHERE r.enrollment_id = ? AND r.session_date = ?
-                        AND (rs.session_id IS NULL OR rs.status <> 'revoked')
+                        AND (r.attendance_session_id = ? OR r.attendance_session_id IS NULL)
                       LIMIT 1"
                 );
-                $sameDayStmt->execute([(int) $enrollment['enrollment_id'], $session['session_date']]);
+                $sameDayStmt->execute([(int) $enrollment['enrollment_id'], $session['session_date'], $sessionId]);
                 if ($sameDayStmt->fetchColumn() !== false) {
                     $pdo->rollBack();
                     safe_error_response('This student already has an attendance record for that day; correct that record instead.', 409);
@@ -2077,6 +2053,7 @@ function handle_secretary_attendance_override(): void
                     $status, $nowSql, $authCtx['user_id'], $reason, $authCtx['user_id'], $nowSql,
                 ]);
                 $createdRecordId = (int) $insert->fetchColumn();
+                $auditCtx = audit_begin_operation($pdo);
                 audit_finish_operation($pdo, $auditCtx, [
                     'module_code' => 'secretary',
                     'action_code' => 'secretary_attendance_override',
@@ -2143,6 +2120,7 @@ function handle_secretary_attendance_override(): void
                 );
             }
 
+            $auditCtx = audit_begin_operation($pdo);
             audit_finish_operation($pdo, $auditCtx, [
                 'module_code' => 'secretary',
                 'action_code' => 'secretary_attendance_override',
@@ -2199,6 +2177,7 @@ function handle_secretary_excused_request_create(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $body = request_body();
         $data = $body['has_body'] && is_array($body['data']) ? $body['data'] : [];
         $studentId = validate_required_string($data, 'studentId', 1, 100);
@@ -2228,6 +2207,11 @@ function handle_secretary_excused_request_create(): void
             } else {
                 $session = secretary_attendance_session_fetch($pdo, (int) $authCtx['user_id'], $sessionId, null, true);
                 if ($session !== null && strtolower((string) $session['status']) !== 'revoked') {
+                    if ($session['status'] === 'scheduled') {
+                        $pdo->rollBack();
+                        safe_error_response('Attendance has not opened for this scheduled session.', 409);
+                        return;
+                    }
                     $stmt = $pdo->prepare(
                         "SELECT NULL AS record_id, e.enrollment_id, CAST(? AS INTEGER) AS attendance_session_id, CAST(? AS DATE) AS session_date,
                                 CAST(? AS VARCHAR) AS session_code, NULL AS status, e.cs_id, s.student_number
@@ -2238,14 +2222,14 @@ function handle_secretary_excused_request_create(): void
                     $stmt->execute([$sessionId, $session['session_date'], $session['session_code'], (int) $session['cs_id'], $studentKey, $studentId]);
                     $target = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
                     if ($target !== null) {
-                        // A same-day record (of a session that was not revoked) is the one to excuse.
+                        // Select this session's result, or a legacy unlinked day result.
                         $existing = $pdo->prepare(
                             "SELECT r.record_id, r.status, r.session_code FROM attendance_records r
                                LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
-                              WHERE r.enrollment_id = ? AND r.session_date = ? AND (rs.session_id IS NULL OR rs.status <> 'revoked')
+                              WHERE r.enrollment_id = ? AND r.session_date = ? AND (r.attendance_session_id = ? OR r.attendance_session_id IS NULL)
                               ORDER BY CASE WHEN r.attendance_session_id = ? THEN 0 ELSE 1 END, r.record_id DESC LIMIT 1"
                         );
-                        $existing->execute([(int) $target['enrollment_id'], $target['session_date'], $sessionId]);
+                        $existing->execute([(int) $target['enrollment_id'], $target['session_date'], $sessionId, $sessionId]);
                         $record = $existing->fetch(PDO::FETCH_ASSOC);
                         if ($record !== false) {
                             $target['record_id'] = $record['record_id'];

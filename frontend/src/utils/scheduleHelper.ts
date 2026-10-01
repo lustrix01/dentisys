@@ -1,4 +1,4 @@
-import { FacultyClassItem } from '../services/apiClient';
+import { ClassMeeting, FacultyClassItem } from '../services/apiClient';
 
 export interface ClassSessionSlot {
   id: string;
@@ -7,6 +7,7 @@ export interface ClassSessionSlot {
   days: string[];
   startTime: string;
   endTime: string;
+  dayTimes?: Record<string, { startTime: string; endTime: string; room?: string }>;
   lectureData?: { room: string; days: string[]; startTime: string; endTime: string };
   labData?: { room: string; days: string[]; startTime: string; endTime: string };
 }
@@ -104,6 +105,10 @@ export const checkScheduleConflicts = (
   currentSchoolYear: string,
   excludeCsId?: number | string
 ): string | null => {
+  slots = slots.flatMap(slot => slot.days.length ? slot.days.map((day, index) => ({ ...slot, days: [day],
+    room: slot.dayTimes?.[meetingDayKey(slot.days, index)]?.room ?? slot.room,
+    startTime: slot.dayTimes?.[meetingDayKey(slot.days, index)]?.startTime ?? slot.startTime,
+    endTime: slot.dayTimes?.[meetingDayKey(slot.days, index)]?.endTime ?? slot.endTime })) : [slot]);
   if (slots.length === 0) return 'At least one session is required.';
 
   // 1. Validate each slot individually
@@ -158,7 +163,12 @@ export const checkScheduleConflicts = (
 
     const existingSessions: Array<{ room: string; days: string[]; start: number; end: number; raw: string }> = [];
 
-    const parsedLec = extractSessionFromText(cls.lecRoom || '', cls.lecRoom || '');
+    for (const meeting of cls.meetings ?? []) {
+      const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+      existingSessions.push({ room: meeting.room.toLowerCase(), days: [meeting.day], start: minutes(meeting.startTime), end: minutes(meeting.endTime),
+        raw: `${meeting.day} ${meeting.startTime} - ${meeting.endTime}` });
+    }
+    const parsedLec = cls.meetings?.length ? null : extractSessionFromText(cls.lecRoom || '', cls.lecRoom || '');
     if (parsedLec) {
       existingSessions.push({
         room: parsedLec.room.toLowerCase(),
@@ -169,7 +179,7 @@ export const checkScheduleConflicts = (
       });
     }
 
-    const parsedLab = extractSessionFromText(cls.labRoom || '', cls.labRoom || '');
+    const parsedLab = cls.meetings?.length ? null : extractSessionFromText(cls.labRoom || '', cls.labRoom || '');
     if (parsedLab) {
       existingSessions.push({
         room: parsedLab.room.toLowerCase(),
@@ -202,24 +212,28 @@ export const checkScheduleConflicts = (
   return null;
 };
 
-export const formatSessionsForSubmission = (slots: ClassSessionSlot[]): { lecRoom: string; labRoom: string } => {
-  if (slots.length === 0) return { lecRoom: '', labRoom: '' };
+// Keep the identity of repeated same-component meetings on one day.
+export const meetingDayKey = (days: string[], index: number): string => {
+  const day = days[index];
+  const occurrence = days.slice(0, index).filter(value => value === day).length;
+  return occurrence ? `${day}:${occurrence}` : day;
+};
 
-  const lecSlots = slots.filter(s => s.type === 'Lecture');
-  const labSlots = slots.filter(s => s.type === 'Laboratory');
+export const displayMeetingTime = (time: string): string => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return `${String(hours % 12 || 12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`;
+};
 
-  const formatSlot = (s: ClassSessionSlot) => {
-    const daysStr = s.days.join('/');
-    const timeStr = `${s.startTime} - ${s.endTime}`;
-    const roomStr = s.room.trim() || 'TBA';
-    return daysStr ? `${roomStr} (${daysStr} ${timeStr})` : roomStr;
+export const formatSessionsForSubmission = (slots: ClassSessionSlot[]): { lecRoom: string; labRoom: string; meetings: ClassMeeting[] } => {
+  const clock = (value: string) => {
+    const minutes = parseTimeToMinutes(value);
+    if (minutes === null) return '';
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
   };
-
-  const lecParts = lecSlots.map(formatSlot).join('; ');
-  const labParts = labSlots.map(formatSlot).join('; ');
-
   return {
-    lecRoom: lecParts.slice(0, 100),
-    labRoom: labParts.slice(0, 100),
+    lecRoom: slots.find(slot => slot.type === 'Lecture')?.room.trim() ?? '',
+    labRoom: slots.find(slot => slot.type === 'Laboratory')?.room.trim() ?? '',
+    meetings: slots.flatMap(slot => slot.days.map((day, index) => ({ component: slot.type, day, room: slot.dayTimes?.[meetingDayKey(slot.days, index)]?.room ?? slot.room.trim(),
+      startTime: clock(slot.dayTimes?.[meetingDayKey(slot.days, index)]?.startTime ?? slot.startTime), endTime: clock(slot.dayTimes?.[meetingDayKey(slot.days, index)]?.endTime ?? slot.endTime) }))),
   };
 };

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/remedial_attempts.php';
+require_once dirname(__DIR__) . '/app/class_meetings.php';
 require_once dirname(__DIR__) . '/app/notifications.php';
 
 if (!function_exists('sanitize_for_log')) {
@@ -3908,7 +3909,7 @@ function faculty_attendance_positive_int(mixed $value): ?int
     return null;
 }
 
-function faculty_attendance_validate_date(string $value, array $config, string $field = 'date'): string
+function faculty_attendance_validate_date(string $value, array $config, string $field = 'date', bool $allowFuture = false): string
 {
     $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value, new DateTimeZone('UTC'));
     $errors = DateTimeImmutable::getLastErrors();
@@ -3923,7 +3924,7 @@ function faculty_attendance_validate_date(string $value, array $config, string $
     }
 
     $today = app_local_date($config, new DateTimeImmutable('now', new DateTimeZone('UTC')));
-    if ($value > $today) {
+    if (!$allowFuture && $value > $today) {
         throw new ValidationException([[
             'field' => $field,
             'message' => 'Worksheet date cannot be in the future.',
@@ -4040,7 +4041,7 @@ function handle_faculty_attendance_get(): void
             faculty_attendance_error_response('csId and date are required for a worksheet read.', 422, 'VALIDATION_ERROR');
             return;
         }
-        $worksheetDate = faculty_attendance_validate_date($dateValue, $config);
+        $worksheetDate = faculty_attendance_validate_date($dateValue, $config, 'date', true);
         $sessionId = faculty_attendance_positive_int(faculty_attendance_query_value($query, 'sessionId'));
         if (array_key_exists('sessionId', $query) && $sessionId === null) {
             faculty_attendance_error_response('sessionId must be a positive integer when supplied.', 422, 'VALIDATION_ERROR');
@@ -4090,22 +4091,7 @@ function handle_faculty_attendance_get(): void
             $selectedSession = $matchingSessions[0];
         }
 
-        if ($sessionId !== null) {
-            $rosterStmt = $pdo->prepare(
-                "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.year_level,
-                        r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
-                        r.verification_method, r.time_recorded, r.override_reason, r.override_at
-                 FROM enrollments e
-                 JOIN students s ON s.student_id = e.student_id
-                 LEFT JOIN attendance_records r
-                   ON r.enrollment_id = e.enrollment_id
-                  AND r.attendance_session_id = ?
-                  AND r.session_date = ?
-                 WHERE e.cs_id = ? AND LOWER(e.status) = 'active'
-                 ORDER BY s.last_name, s.first_name, e.enrollment_id"
-            );
-            $rosterStmt->execute([$sessionId, $worksheetDate, $csId]);
-        } elseif ($selectedSession !== null) {
+        if ($selectedSession !== null) {
             $rosterStmt = $pdo->prepare(
                 "SELECT e.enrollment_id, s.student_id, s.student_number, s.first_name, s.middle_name, s.last_name, s.year_level,
                         r.record_id, r.session_date, r.session_code, r.attendance_session_id, r.status,
@@ -4156,6 +4142,12 @@ function handle_faculty_attendance_get(): void
             },
             $rosterStmt->fetchAll(PDO::FETCH_ASSOC)
         );
+        $pendingStmt = $pdo->prepare("SELECT session_id, session_date, opening_time, class_end_time, session_code, status
+            FROM attendance_sessions WHERE cs_id = ? AND status IN ('scheduled', 'active') ORDER BY session_date, opening_time, session_id");
+        $pendingStmt->execute([$csId]);
+        $pendingSessions = array_map(static fn(array $row): array => ['sessionId' => (string) $row['session_id'],
+            'sessionDate' => $row['session_date'], 'openingTime' => isset($row['opening_time']) ? substr($row['opening_time'], 0, 5) : null,
+            'classEndTime' => isset($row['class_end_time']) ? substr($row['class_end_time'], 0, 5) : null, 'sessionCode' => $row['session_code'], 'status' => $row['status']], $pendingStmt->fetchAll(PDO::FETCH_ASSOC));
         json_response([
             'status' => 'ok',
             'worksheet' => [
@@ -4177,6 +4169,7 @@ function handle_faculty_attendance_get(): void
                 'attendanceSession' => $selectedSession !== null
                     ? faculty_attendance_session_payload($selectedSession)
                     : null,
+                'pendingSessions' => $pendingSessions,
                 'attendanceSessions' => array_map(
                     static fn(array $matchingSession): array => faculty_attendance_session_payload($matchingSession),
                     $matchingSessions
@@ -4217,7 +4210,7 @@ function handle_faculty_attendance_session_create(): void
         $subjectCode = strtoupper(trim((string) ($data['subjectCode'] ?? '')));
         $today = app_local_date($config, attendance_session_now_utc());
         $sessionDate = trim((string) ($data['sessionDate'] ?? ($data['date'] ?? $today)));
-        $sessionDate = faculty_attendance_validate_date($sessionDate, $config, 'sessionDate');
+        $sessionDate = attendance_session_creation_date($sessionDate, $config);
         $classStmt = $pdo->prepare(
             "SELECT cs.cs_id, cs.secretary_user_id
                FROM class_sections cs
@@ -4283,13 +4276,13 @@ function handle_faculty_attendance_session_create(): void
                 safe_error_response('Class section is not assigned to this Faculty member.', 403);
                 return;
             }
-            $active = $pdo->prepare("SELECT 1 FROM attendance_sessions WHERE cs_id = ? AND status = 'active' FOR UPDATE");
-            $active->execute([$csId]);
-            if ($active->fetchColumn() !== false) {
+            $conflict = attendance_session_booking_conflict($pdo, $csId, $sessionDate, $openingTime, $classEndTime);
+            if ($conflict !== null) {
                 $pdo->rollBack();
-                safe_error_response('An active attendance session already exists for this class section.', 409);
+                safe_error_response($conflict, 409);
                 return;
             }
+            $creationStatus = attendance_session_creation_status($sessionDate, $openingTime, $config);
             $secretaryUserId = $lockedClass['secretary_user_id'] !== null
                 ? (int) $lockedClass['secretary_user_id']
                 : (int) $authCtx['user_id'];
@@ -4298,20 +4291,20 @@ function handle_faculty_attendance_session_create(): void
                     cs_id, secretary_user_id, owner_user_id, session_date, session_code, room,
                     started_at, status, geofence_enabled, geofence_latitude, geofence_longitude,
                     geofence_radius_meters, biometric_required, opening_time, present_cutoff_time,
-                    late_cutoff_time, class_end_time, created_at, updated_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    late_cutoff_time, class_end_time, created_at, updated_at, created_by_role
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'faculty')
                  RETURNING session_id"
             );
             $insert->execute([
                 $csId, $secretaryUserId, $authCtx['user_id'], $sessionDate, $sessionCode, $room,
-                $nowSql, $geofenceEnabled ? 1 : 0, $latitude, $longitude, $radius, $biometricRequired ? 1 : 0,
+                $nowSql, $creationStatus, $geofenceEnabled ? 1 : 0, $latitude, $longitude, $radius, $biometricRequired ? 1 : 0,
                 $openingTime, $presentCutoff, $lateCutoff, $classEndTime, $nowSql, $nowSql,
             ]);
             $sessionId = (int) $insert->fetchColumn();
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_started', $sessionId, $csId,
                 "Created attendance session '{$sessionCode}' for class section #{$csId}.", null, null,
-                ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => 'active', 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff, 'class_end_time' => $classEndTime]
+                ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => $creationStatus, 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff, 'class_end_time' => $classEndTime]
             );
             $pdo->commit();
         } catch (PDOException $e) {
@@ -4378,7 +4371,7 @@ function handle_faculty_attendance_session_revoke(): void
                 safe_error_response('Past school-year classes are view-only.', 409);
                 return;
             }
-            if (strtolower((string) $session['status']) !== 'active') {
+            if (!in_array(strtolower((string) $session['status']), ['active', 'scheduled'], true)) {
                 $pdo->rollBack();
                 safe_error_response('Attendance session is not active.', 409);
                 return;
@@ -4387,13 +4380,13 @@ function handle_faculty_attendance_session_revoke(): void
                 "UPDATE attendance_sessions
                     SET status = 'revoked', revoked_at = ?, revoked_by_user_id = ?,
                         revocation_reason = ?, updated_at = ?
-                  WHERE session_id = ? AND status = 'active'"
+                  WHERE session_id = ? AND status IN ('active', 'scheduled')"
             );
             $update->execute([$nowSql, $authCtx['user_id'], $reason, $nowSql, $sessionId]);
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_revoked', $sessionId, (int) $session['cs_id'],
                 "Revoked attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.", $reason,
-                ['session_id' => $sessionId, 'status' => 'active'],
+                ['session_id' => $sessionId, 'status' => $session['status']],
                 ['session_id' => $sessionId, 'status' => 'revoked', 'revoked_at' => $nowSql]
             );
             $pdo->commit();
@@ -4563,14 +4556,24 @@ function handle_faculty_excused_request_decide(): void
             $recordId = null;
             $previousStatus = null;
             if ($decision === 'approve') {
+                if ($request['attendance_session_id'] !== null) {
+                    $sessionState = $pdo->prepare('SELECT status FROM attendance_sessions WHERE session_id = ? FOR UPDATE');
+                    $sessionState->execute([(int) $request['attendance_session_id']]);
+                    if (in_array($sessionState->fetchColumn(), ['scheduled', 'revoked'], true)) {
+                        $pdo->rollBack();
+                        safe_error_response('The session must be open or ended before Excused attendance can be approved.', 409);
+                        return;
+                    }
+                }
                 $recordStmt = $pdo->prepare(
                     "SELECT r.record_id, r.status FROM attendance_records r
                       LEFT JOIN attendance_sessions rs ON rs.session_id = r.attendance_session_id
                       WHERE r.enrollment_id = ? AND r.session_date = ? AND (rs.session_id IS NULL OR rs.status <> 'revoked')
+                        AND (r.attendance_session_id = ? OR r.attendance_session_id IS NULL)
                       ORDER BY CASE WHEN r.record_id = ? THEN 0 ELSE 1 END, r.record_id DESC
                       LIMIT 1 FOR UPDATE OF r"
                 );
-                $recordStmt->execute([(int) $request['enrollment_id'], $request['session_date'], (int) ($request['record_id'] ?? 0)]);
+                $recordStmt->execute([(int) $request['enrollment_id'], $request['session_date'], $request['attendance_session_id'], (int) ($request['record_id'] ?? 0)]);
                 $record = $recordStmt->fetch(PDO::FETCH_ASSOC);
                 $approvalReason = 'Excused request approved: ' . $request['reason'];
                 if ($record !== false) {
@@ -4649,6 +4652,7 @@ function handle_faculty_attendance_override(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
 
         $body = request_body();
         if (!$body['has_body']) {
@@ -4860,6 +4864,16 @@ function handle_faculty_attendance_override(): void
         // A new manual mark made while the class has a live session for that
         // date belongs to that session, so a later check-in or End does not
         // add a second record.
+        if ($recordId <= 0 && $requestedSessionId === null) {
+            $pendingOnly = $pdo->prepare("SELECT EXISTS (SELECT 1 FROM attendance_sessions WHERE cs_id = ? AND session_date = ? AND status = 'scheduled')
+                AND NOT EXISTS (SELECT 1 FROM attendance_sessions WHERE cs_id = ? AND session_date = ? AND status = 'active')");
+            $pendingOnly->execute([$csId, $requestedDate, $csId, $requestedDate]);
+            if (attendance_session_bool($pendingOnly->fetchColumn())) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance has not opened for the scheduled session. Choose a session when it opens.', 409, 'attendance_not_open');
+                return;
+            }
+        }
         if ($target['record_id'] === null && $requestedSessionId === null) {
             $liveSessionStmt = $pdo->prepare(
                 "SELECT session_id FROM attendance_sessions
@@ -4875,7 +4889,7 @@ function handle_faculty_attendance_override(): void
 
         if ($requestedSessionId !== null) {
             $sessionStmt = $pdo->prepare(
-                "SELECT session_id, cs_id, session_date, session_code
+                "SELECT session_id, cs_id, session_date, session_code, status, opening_time
                  FROM attendance_sessions
                  WHERE session_id = ? AND cs_id = ? AND session_date = ?"
             );
@@ -4884,6 +4898,11 @@ function handle_faculty_attendance_override(): void
             if ($requestedSession === null) {
                 $pdo->rollBack();
                 faculty_attendance_error_response('Attendance session does not belong to the selected class and date.', 422, 'ATTENDANCE_SESSION_MISMATCH');
+                return;
+            }
+            if ($requestedSession['status'] === 'scheduled') {
+                $pdo->rollBack();
+                faculty_attendance_error_response('Attendance has not opened for this scheduled session.', 409, 'attendance_not_open');
                 return;
             }
             if ($target['record_id'] !== null
@@ -6537,6 +6556,7 @@ function handle_faculty_classes_get(): void
                 cs.block,
                 cs.status,
                 cs.created_at,
+                cs.meetings_recorded,
                 c.course_code,
                 COALESCE(cs.course_title, c.name) AS course_name,
                 c.name AS catalog_course_name,
@@ -6558,7 +6578,8 @@ function handle_faculty_classes_get(): void
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
         $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $mapped = array_map(function ($cls) use ($currentSchoolYear, $authCtx) {
+        $mapped = array_map(function ($cls) use ($currentSchoolYear, $authCtx, $pdo) {
+            $meetings = class_meetings_read($pdo, $cls);
             return [
                 'id' => (string) $cls['cs_id'],
                 'csId' => (int) $cls['cs_id'],
@@ -6585,8 +6606,9 @@ function handle_faculty_classes_get(): void
                 // The current class-section schema stores rooms, not schedules.
                 // Keep this compatibility key without conflating either room with a schedule.
                 'schedule' => null,
-                'labRoom' => $cls['lab_room'] ?? '',
-                'lecRoom' => $cls['lec_room'] ?? '',
+                'meetings' => $meetings,
+                'labRoom' => filter_var($cls['meetings_recorded'], FILTER_VALIDATE_BOOLEAN) ? class_meetings_display($meetings, 'Laboratory', $cls['lab_room'] ?? '') : ($cls['lab_room'] ?? ''),
+                'lecRoom' => filter_var($cls['meetings_recorded'], FILTER_VALIDATE_BOOLEAN) ? class_meetings_display($meetings, 'Lecture', $cls['lec_room'] ?? '') : ($cls['lec_room'] ?? ''),
                 'enrolledCount' => (int) ($cls['enrolled_count'] ?? 0),
                 'instructorName' => $cls['instructor_name'] ?? 'Faculty Instructor',
                 'status' => $cls['status'] ?? 'Active',
@@ -6638,121 +6660,12 @@ function handle_faculty_courses_get(): void
     }
 }
 
-function faculty_check_schedule_conflict(PDO $pdo, string $schoolYear, int $instructorId, ?string $lecRoom, ?string $labRoom, int $excludeCsId = 0): ?string
+function faculty_check_schedule_conflict(PDO $pdo, string $schoolYear, int $instructorId, ?string $lecRoom, ?string $labRoom, int $excludeCsId = 0, ?array $meetings = null): ?string
 {
-    if (empty($lecRoom) && empty($labRoom)) {
-        return null;
-    }
-
-    $daysList = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    $parseSession = function (?string $text) use ($daysList): ?array {
-        if (!$text) return null;
-        if (!preg_match('/(\d{1,2}:\d{2}\s*(?:AM|PM))\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM))/i', $text, $tm)) {
-            return null;
-        }
-
-        $toMinutes = function (string $ts): ?int {
-            if (!preg_match('/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i', trim($ts), $m)) return null;
-            $h = (int) $m[1];
-            $min = (int) $m[2];
-            $mer = strtoupper($m[3]);
-            if ($mer === 'PM' && $h < 12) $h += 12;
-            if ($mer === 'AM' && $h === 12) $h = 0;
-            return $h * 60 + $min;
-        };
-
-        $start = $toMinutes($tm[1]);
-        $end = $toMinutes($tm[2]);
-        if ($start === null || $end === null || $start >= $end) return null;
-
-        $foundDays = [];
-        foreach ($daysList as $d) {
-            if (preg_match('/\b' . $d . '\b/i', $text)) {
-                $foundDays[] = $d;
-            }
-        }
-        if (empty($foundDays)) return null;
-
-        $room = '';
-        if (preg_match('/^([^(]+)\s*\(/', $text, $rm)) {
-            $room = trim($rm[1]);
-        }
-
-        return ['room' => strtolower($room), 'days' => $foundDays, 'start' => $start, 'end' => $end, 'raw' => $text];
-    };
-
-    $proposed = [];
-    $pLec = $parseSession($lecRoom);
-    if ($pLec) {
-        if (empty($pLec['room']) && !empty($lecRoom)) $pLec['room'] = strtolower(trim($lecRoom));
-        $proposed[] = $pLec;
-    }
-    $pLab = $parseSession($labRoom);
-    if ($pLab) {
-        if (empty($pLab['room']) && !empty($labRoom)) $pLab['room'] = strtolower(trim($labRoom));
-        $proposed[] = $pLab;
-    }
-
-    if (empty($proposed)) {
-        return null;
-    }
-
-    $stmt = $pdo->prepare("
-        SELECT cs_id, cs_name, instructor_user_id, lec_room, lab_room
-          FROM class_sections
-         WHERE school_year = ?
-           AND status = 'Active'
-    ");
-    $stmt->execute([$schoolYear]);
-    $existing = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    foreach ($existing as $row) {
-        if ($excludeCsId > 0 && (int) $row['cs_id'] === $excludeCsId) {
-            continue;
-        }
-
-        $existSessions = [];
-        $eLec = $parseSession($row['lec_room']);
-        if ($eLec) {
-            if (empty($eLec['room']) && !empty($row['lec_room'])) $eLec['room'] = strtolower(trim($row['lec_room']));
-            $existSessions[] = $eLec;
-        }
-        $eLab = $parseSession($row['lab_room']);
-        if ($eLab) {
-            if (empty($eLab['room']) && !empty($row['lab_room'])) $eLab['room'] = strtolower(trim($row['lab_room']));
-            $existSessions[] = $eLab;
-        }
-
-        foreach ($proposed as $prop) {
-            foreach ($existSessions as $ex) {
-                $common = array_intersect(array_map('strtolower', $prop['days']), array_map('strtolower', $ex['days']));
-                if (empty($common)) continue;
-
-                $overlap = $prop['start'] < $ex['end'] && $ex['start'] < $prop['end'];
-                if (!$overlap) continue;
-
-                // Room conflict
-                if (!empty($prop['room']) && !empty($ex['room']) && $prop['room'] === $ex['room']) {
-                    $conflictRoom = !empty($row['lec_room']) ? $row['lec_room'] : $row['lab_room'];
-                    return "Room conflict: '{$conflictRoom}' is already booked on " . implode('/', $common) . " by {$row['cs_name']}.";
-                }
-
-                // Instructor conflict
-                if ((int) $row['instructor_user_id'] === $instructorId) {
-                    return "Instructor schedule conflict: You already have class '{$row['cs_name']}' scheduled on " . implode('/', $common) . " at this time.";
-                }
-            }
-        }
-    }
-
-    return null;
+    $proposed = $meetings ?? array_merge(class_meetings_legacy($lecRoom, 'Lecture'), class_meetings_legacy($labRoom, 'Laboratory'));
+    return class_meetings_conflict($pdo, $schoolYear, $instructorId, $proposed, $excludeCsId);
 }
 
-/**
- * Parse optional lecture/laboratory units. Returns [lecture, lab] where each
- * is null (component not offered / not given) or a positive number.
- */
 function faculty_parse_component_units(array $data): array
 {
     $parse = static function (string $field) use ($data): ?float {
@@ -6920,6 +6833,7 @@ function handle_faculty_class_create(): void
         $block = validate_optional_string($data, 'block', 1, 50) ?? 'A';
         $labRoom = validate_optional_string($data, 'labRoom', 1, 100);
         $lecRoom = validate_optional_string($data, 'lecRoom', 1, 100);
+        $meetings = array_key_exists('meetings', $data) ? class_meetings_validate($data['meetings']) : null;
         [$lectureUnits, $labUnits] = faculty_parse_component_units($data);
         if (mb_strlen($courseCode) > 50) {
             throw new ValidationException(['courseCode' => 'Course code must be at most 50 characters.']);
@@ -6950,7 +6864,7 @@ function handle_faculty_class_create(): void
             return;
         }
 
-        $conflictErr = faculty_check_schedule_conflict($pdo, $schoolYear, (int) $authCtx['user_id'], $lecRoom, $labRoom);
+        $conflictErr = faculty_check_schedule_conflict($pdo, $schoolYear, (int) $authCtx['user_id'], $lecRoom, $labRoom, 0, $meetings);
         if ($conflictErr !== null) {
             $pdo->rollBack();
             safe_error_response($conflictErr, 422);
@@ -6969,6 +6883,7 @@ function handle_faculty_class_create(): void
                 $csName, $courseId, $courseTitle, $authCtx['user_id'], $semester, $schoolYear, $yearLevel, $labRoom, $lecRoom, $block, $termCode
             ]);
             $newCsId = (int) $stmt->fetchColumn();
+            if ($meetings !== null) class_meetings_save($pdo, $newCsId, $meetings);
 
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
@@ -6991,7 +6906,7 @@ function handle_faculty_class_create(): void
                 'request_id' => $context['request_id'],
                 'ip_address' => $context['ip_address'],
                 'user_agent' => $context['user_agent'],
-            ], $macKey);
+            ], $macKey, null, ['csId' => $newCsId, 'meetings' => $meetings ?? array_merge(class_meetings_legacy($lecRoom, 'Lecture'), class_meetings_legacy($labRoom, 'Laboratory'))]);
 
             $pdo->commit();
         } catch (\Throwable $e) {
@@ -7067,7 +6982,7 @@ function handle_faculty_class_update(): void
             }
         }
 
-        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear', 'lectureUnits', 'labUnits'];
+        $allowedFields = ['csId', 'csName', 'block', 'yearLevel', 'lecRoom', 'labRoom', 'courseCode', 'courseName', 'semester', 'schoolYear', 'lectureUnits', 'labUnits', 'meetings'];
         foreach (array_keys($data) as $field) {
             if (!in_array($field, $allowedFields, true) && !array_key_exists($field, $protectedFields)) {
                 $errors[$field] = 'This field is not editable through the class-section contract.';
@@ -7077,6 +6992,7 @@ function handle_faculty_class_update(): void
             throw new ValidationException($errors);
         }
 
+        $meetings = array_key_exists('meetings', $data) ? class_meetings_validate($data['meetings']) : null;
         $updates = [];
         $params = [];
         if (array_key_exists('csName', $data)) {
@@ -7124,7 +7040,7 @@ function handle_faculty_class_update(): void
         }
         $hasCourseUpdates = array_key_exists('courseCode', $data) || array_key_exists('courseName', $data);
         $hasUnitUpdates = array_key_exists('lectureUnits', $data) || array_key_exists('labUnits', $data);
-        if ($updates === [] && !$hasCourseUpdates && $termFieldsRequested === [] && !$hasUnitUpdates) {
+        if ($updates === [] && !$hasCourseUpdates && $termFieldsRequested === [] && !$hasUnitUpdates && $meetings === null) {
             throw new ValidationException(['fields' => 'At least one editable class-section field is required.']);
         }
 
@@ -7133,7 +7049,7 @@ function handle_faculty_class_update(): void
             $select = $pdo->prepare("
                 SELECT cs_id, cs_name, course_id, course_title, instructor_user_id, semester, school_year,
                        year_level, lab_room, lec_room, block, status, term_code,
-                       term_start_date, term_end_date
+                       term_start_date, term_end_date, meetings_recorded
                 FROM class_sections
                 WHERE cs_id = ? AND instructor_user_id = ?
                 FOR UPDATE
@@ -7230,7 +7146,30 @@ function handle_faculty_class_update(): void
 
             $checkLec = array_key_exists('lecRoom', $data) ? $data['lecRoom'] : ($before['lec_room'] ?? null);
             $checkLab = array_key_exists('labRoom', $data) ? $data['labRoom'] : ($before['lab_room'] ?? null);
-            $conflictErr = faculty_check_schedule_conflict($pdo, (string) $before['school_year'], (int) $authCtx['user_id'], $checkLec, $checkLab, $csId);
+            $before['meetings'] = class_meetings_read($pdo, $before);
+            // Older clients can still edit a room without resending meeting times.
+            if ($meetings === null && (array_key_exists('lecRoom', $data) || array_key_exists('labRoom', $data))) {
+                if (filter_var($before['meetings_recorded'], FILTER_VALIDATE_BOOLEAN)) {
+                    $meetings = $before['meetings'];
+                    foreach (['lecRoom' => 'Lecture', 'labRoom' => 'Laboratory'] as $field => $component) {
+                        if (!array_key_exists($field, $data)) continue;
+                        $room = trim((string) ($data[$field] ?? ''));
+                        $parsed = class_meetings_legacy($room, $component);
+                        if ($parsed !== [] || $room === '') {
+                            $meetings = array_merge(array_values(array_filter($meetings, static fn(array $row): bool => $row['component'] !== $component)), $parsed);
+                        } else {
+                            foreach ($meetings as &$row) {
+                                if ($row['component'] === $component) $row['room'] = $room;
+                            }
+                            unset($row);
+                        }
+                    }
+                    $meetings = class_meetings_validate($meetings);
+                } else {
+                    $meetings = array_merge(class_meetings_legacy($checkLec, 'Lecture'), class_meetings_legacy($checkLab, 'Laboratory'));
+                }
+            }
+            $conflictErr = faculty_check_schedule_conflict($pdo, (string) $before['school_year'], (int) $authCtx['user_id'], $checkLec, $checkLab, $csId, $meetings ?? $before['meetings']);
             if ($conflictErr !== null) {
                 $pdo->rollBack();
                 safe_error_response($conflictErr, 422);
@@ -7244,12 +7183,14 @@ function handle_faculty_class_update(): void
                 $update->execute(array_merge($params, [$csId, $authCtx['user_id']]));
             }
 
+            if ($meetings !== null) class_meetings_save($pdo, $csId, $meetings);
             $select->execute([$csId, $authCtx['user_id']]);
             $after = $select->fetch(PDO::FETCH_ASSOC);
             if (!$after) {
                 throw new RuntimeException('Updated class section could not be reloaded.');
             }
 
+            $after['meetings'] = class_meetings_read($pdo, $after);
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
             $auditCtx = audit_begin_operation($pdo);
             audit_finish_operation($pdo, $auditCtx, [

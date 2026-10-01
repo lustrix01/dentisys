@@ -1,3 +1,4 @@
+import { filterPersonNameInput, preventInvalidPersonNameKey } from '../utils/personNameValidation';
 import React, { useState, useRef } from 'react';
 import {
   Upload,
@@ -358,14 +359,14 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                             type="text"
                             value={st.firstName}
                             placeholder="First"
-                            onChange={(e) => handleUpdateStudentField(st.tempKey, 'firstName', e.target.value)}
+                            onChange={event => handleUpdateStudentField(st.tempKey, 'firstName', filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'firstName', filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                             className="w-24 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium text-xs"
                           />
                           <input
                             type="text"
                             value={st.lastName}
                             placeholder="Last"
-                            onChange={(e) => handleUpdateStudentField(st.tempKey, 'lastName', e.target.value)}
+                            onChange={event => handleUpdateStudentField(st.tempKey, 'lastName', filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'lastName', filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                             className="w-24 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium text-xs"
                           />
                         </div>

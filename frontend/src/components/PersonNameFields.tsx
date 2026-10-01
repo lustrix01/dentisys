@@ -1,4 +1,4 @@
-import { personNameFieldError } from '../utils/personNameValidation';
+import { filterPersonNameInput, personNameFieldError, preventInvalidPersonNameKey } from '../utils/personNameValidation';
 
 export interface PersonNameParts {
   prefix: string;
@@ -20,7 +20,9 @@ export function PersonNameFields({ value, onChange }: { value: PersonNameParts; 
       const errorId = `person-name-${key}-error`;
       return (
         <label key={key} className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}{(key === 'firstName' || key === 'lastName') && ' *'}
-          <input value={value[key]} onChange={e => onChange({ ...value, [key]: e.target.value })} required={key === 'firstName' || key === 'lastName'} maxLength={key === 'prefix' || key === 'suffix' ? 50 : 100}
+          <input value={value[key]} onChange={e => onChange({ ...value, [key]: filterPersonNameInput(key, e.target.value, (e.nativeEvent as InputEvent).isComposing) })} required={key === 'firstName' || key === 'lastName'} maxLength={key === 'prefix' || key === 'suffix' ? 50 : 100}
+            onKeyDown={event => preventInvalidPersonNameKey(key, event)}
+            onCompositionEnd={event => onChange({ ...value, [key]: filterPersonNameInput(key, event.currentTarget.value) })}
             ref={element => element?.setCustomValidity(error ?? '')}
             aria-invalid={error !== null}
             aria-describedby={error ? errorId : undefined}

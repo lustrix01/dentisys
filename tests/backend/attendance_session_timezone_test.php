@@ -42,9 +42,14 @@ assert_same(
     secretary_attendance_session_date(['sessionDate' => '2026-09-22'], $boundaryUtc, $config),
     'The current Asia/Manila date is accepted'
 );
+assert_same(
+    '2026-09-23',
+    secretary_attendance_session_date(['sessionDate' => '2026-09-23'], $boundaryUtc, $config),
+    'The following Asia/Manila date is accepted for scheduling'
+);
 assert_validation_failure(
-    static fn() => secretary_attendance_session_date(['sessionDate' => '2026-09-23'], $boundaryUtc, $config),
-    'The following Asia/Manila date is rejected as future'
+    static fn() => secretary_attendance_session_date(['sessionDate' => '2026-09-21'], $boundaryUtc, $config),
+    'A previous Asia/Manila date is rejected'
 );
 assert_same(
     '2026-09-21T17:00:00.000000Z',

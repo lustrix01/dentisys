@@ -142,8 +142,8 @@ test.describe('Auth Module E2E Tests', () => {
         return;
       }
       const body = route.request().postDataJSON() as { firstName: string; lastName: string; email: string };
-      if (body.firstName.includes(',')) {
-        await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ status: 'error', code: 'VALIDATION_ERROR', message: 'Validation failed.', errors: [{ field: 'firstName', message: 'Name can only contain letters, spaces, hyphens, apostrophes, and periods.' }] }) });
+      if (body.email === 'invalid.faculty@bicol-u.edu.ph') {
+        await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ status: 'error', code: 'VALIDATION_ERROR', message: 'Validation failed.', errors: [{ field: 'email', message: 'This Faculty email cannot be invited.' }] }) });
         return;
       }
       const existing = invitations.find(invitation => invitation.email === body.email);
@@ -166,10 +166,11 @@ test.describe('Auth Module E2E Tests', () => {
     await page.goto('/admin/faculty-invite');
     await expect(page.getByRole('main').getByRole('heading', { name: 'Faculty Invitations' })).toBeVisible();
     await page.getByLabel('First name *').fill('Maria,');
+    await expect(page.getByLabel('First name *')).toHaveValue('Maria');
     await page.getByLabel('Last name *').fill('Invalid');
     await page.getByLabel('Institutional email').fill('invalid.faculty@bicol-u.edu.ph');
     await page.getByRole('button', { name: 'Send invite' }).click();
-    await expect(page.getByRole('alert')).toContainText(/Name can only contain letters/i);
+    await expect(page.getByRole('alert')).toContainText(/This Faculty email cannot be invited/i);
     await page.getByLabel('First name *').fill('Test');
     await page.getByLabel('Last name *').fill('Faculty');
     await page.getByLabel('Institutional email').fill('test.faculty@bicol-u.edu.ph');
