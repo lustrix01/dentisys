@@ -245,9 +245,8 @@ test.describe('Workflow Characterization (mocked UI only)', () => {
 
     test('Workflow: Manual Attendance Overrides', async ({ page }) => {
       await page.click('a[href="/secretary/attendance"]');
-      await page.click('a[href="/secretary/override"]');
-      await expect(page).toHaveURL('/secretary/override');
-      await expect(page.locator('body')).toContainText(/Override|Manual|Correction|Status/i);
+      await expect(page).toHaveURL('/secretary/attendance');
+      await expect(page.locator('body')).toContainText(/Override|Attendance/i);
     });
 
     test('Workflow: Attendance Override Logs', async ({ page }) => {

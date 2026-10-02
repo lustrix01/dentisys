@@ -2,7 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CalendarDays, Camera, CheckCircle2, Clock, Clock3, History, MapPin, Pencil, Play, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
-import { getSecretaryAttendanceApi, getSecretaryProfileApi } from '../../services/apiClient';
+import { Modal } from '../../components/Modal';
+import {
+  getSecretaryAttendanceApi,
+  getSecretaryProfileApi,
+  overrideSecretaryAttendanceApi,
+  createSecretaryExcusedRequestApi,
+} from '../../services/apiClient';
 
 type AttendanceItem = Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['records'][number];
 type SessionItem = NonNullable<Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['sessions']>[number];
@@ -74,6 +80,12 @@ export const AttendanceList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [selectedRecord, setSelectedRecord] = useState<AttendanceItem | null>(null);
+  const [overrideStatus, setOverrideStatus] = useState<'present' | 'late' | 'absent' | 'excused'>('present');
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   const activePanel = searchParams.get('view') === 'history' ? 'history' : 'rollcall';
 
   const load = async () => {
@@ -87,12 +99,92 @@ export const AttendanceList: React.FC = () => {
       setRecords(attendance.records || []);
       setSessions(attendance.sessions || []);
       setClassName(profile.profile.assignedClassName);
+      const studentParam = searchParams.get('student');
+      if (studentParam) {
+        setQuery(studentParam);
+      }
     } catch (requestError) {
       setRecords([]);
       setSessions([]);
       setError(requestError instanceof Error ? requestError.message : 'Unable to load attendance.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenOverride = (record: AttendanceItem) => {
+    setSelectedRecord(record);
+    const validStatuses = ['present', 'late', 'absent', 'excused'];
+    setOverrideStatus((validStatuses.includes(record.status) ? record.status : 'present') as 'present' | 'late' | 'absent' | 'excused');
+    setReason(record.overrideReason || '');
+    setFeedback(null);
+  };
+
+  const handleSaveOverride = async () => {
+    if (!selectedRecord) return;
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) {
+      setFeedback({ type: 'error', text: 'A reason is required to submit an attendance override.' });
+      return;
+    }
+
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const targetSessionId = selectedRecord.attendanceSessionId ? Number(selectedRecord.attendanceSessionId) : undefined;
+      if (overrideStatus === 'excused') {
+        const response = await createSecretaryExcusedRequestApi({
+          studentId: selectedRecord.studentId,
+          recordId: selectedRecord.id || undefined,
+          sessionId: targetSessionId,
+          reason: trimmedReason,
+        });
+        setFeedback({ type: 'success', text: response.message || 'Excused request sent to Faculty for approval.' });
+        setTimeout(() => {
+          setSelectedRecord(null);
+          setReason('');
+          setFeedback(null);
+        }, 1500);
+        return;
+      }
+
+      const response = await overrideSecretaryAttendanceApi({
+        studentId: selectedRecord.studentId,
+        recordId: selectedRecord.id,
+        sessionId: targetSessionId,
+        date: selectedRecord.date,
+        status: overrideStatus,
+        reason: trimmedReason,
+      });
+
+      setRecords((current) =>
+        current.map((r) =>
+          (r.id && r.id === selectedRecord.id) || (!r.id && r.studentId === selectedRecord.studentId && r.date === selectedRecord.date)
+            ? {
+                ...r,
+                id: response.record?.id ?? r.id,
+                status: overrideStatus,
+                overrideReason: trimmedReason,
+                overrideAt: response.record?.overrideAt || new Date().toISOString(),
+                verificationMethod: 'manual_secretary',
+              }
+            : r
+        )
+      );
+
+      setFeedback({ type: 'success', text: response.message || 'Attendance override applied successfully.' });
+      setTimeout(() => {
+        setSelectedRecord(null);
+        setReason('');
+        setFeedback(null);
+      }, 1200);
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Attendance override was rejected.',
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -150,7 +242,6 @@ export const AttendanceList: React.FC = () => {
           <button type="button" onClick={() => setSearchParams({})} className={`whitespace-nowrap border-b-2 px-4 py-3 text-xs font-extrabold ${activePanel === 'rollcall' ? 'border-blue-600 text-blue-700 dark:text-blue-300' : 'border-transparent text-slate-400'}`}>Daily Roll Call</button>
           <button type="button" onClick={() => setSearchParams({ view: 'history' })} className={`inline-flex whitespace-nowrap items-center gap-1.5 border-b-2 px-4 py-3 text-xs font-extrabold ${activePanel === 'history' ? 'border-blue-600 text-blue-700 dark:text-blue-300' : 'border-transparent text-slate-400'}`}><History className="h-3.5 w-3.5" /> Session History</button>
         </div>
-        <Link to="/secretary/override" className="mb-2 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-100 px-3.5 py-2 text-[11px] font-bold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">Manual attendance override <span aria-hidden="true">→</span></Link>
       </div>
 
       <Card className="border border-slate-200 p-4 shadow-xs dark:border-slate-800">
@@ -192,7 +283,7 @@ export const AttendanceList: React.FC = () => {
                 ) : (
                   filtered.map((record) => (
                     <tr
-                      key={record.id}
+                      key={record.id || `${record.studentId}-${record.date}`}
                       className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
                     >
                       {/* Column 1: STUDENT DETAILS */}
@@ -241,13 +332,14 @@ export const AttendanceList: React.FC = () => {
 
                       {/* Column 5: ACTIONS */}
                       <td className="px-6 py-4 text-right">
-                        <Link
-                          to={`/secretary/override?student=${encodeURIComponent(record.studentNumber)}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all"
+                        <button
+                          type="button"
+                          onClick={() => handleOpenOverride(record)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer"
                         >
                           <Pencil className="w-3.5 h-3.5 text-slate-500" />
                           <span>Override</span>
-                        </Link>
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -259,8 +351,141 @@ export const AttendanceList: React.FC = () => {
       ) : (
         <Card className="overflow-hidden border border-slate-200 p-0 shadow-xs dark:border-slate-800">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800"><div><h2 className="font-heading text-sm font-extrabold text-slate-800 dark:text-slate-100">Class Sessions History & Management</h2><p className="mt-1 text-[11px] text-slate-400">Review created attendance sessions for your authorized class section.</p></div><Link to="/secretary/start-session" className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-extrabold text-white hover:bg-blue-700"><Play className="h-3.5 w-3.5 fill-white" /> New session</Link></div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">{loading ? <div className="px-5 py-12 text-center text-slate-400">Loading session history…</div> : filteredSessions.length === 0 ? <div className="px-5 py-12 text-center text-slate-400">No sessions match this filter.</div> : filteredSessions.map((session) => <div key={session.sessionId} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-slate-800 dark:text-slate-100">{session.subjectCode} · {session.className}</span><span className={`rounded-lg px-2 py-1 text-[10px] font-extrabold capitalize ${sessionStatusClass[session.status] || sessionStatusClass.ended}`}>{session.status}</span></div><p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400"><CalendarDays className="h-3.5 w-3.5" /> {session.date}<Clock3 className="ml-1 h-3.5 w-3.5" /> {formatSessionTime(session.startedAt)} {session.room && <><MapPin className="ml-1 h-3.5 w-3.5" /> {session.room}</>}</p><p className="mt-1 text-[10px] font-mono text-slate-400">Session code: {session.sessionCode}</p></div><div className="flex items-center gap-2"><Link to="/secretary/override" className="rounded-lg bg-slate-100 px-3 py-1.5 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Edit attendance</Link><Link to="/secretary/start-session" className="rounded-lg border border-blue-200 px-3 py-1.5 text-[10px] font-bold text-blue-700 dark:border-blue-900 dark:text-blue-300">View control</Link></div></div>)}</div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">{loading ? <div className="px-5 py-12 text-center text-slate-400">Loading session history…</div> : filteredSessions.length === 0 ? <div className="px-5 py-12 text-center text-slate-400">No sessions match this filter.</div> : filteredSessions.map((session) => <div key={session.sessionId} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-slate-800 dark:text-slate-100">{session.subjectCode} · {session.className}</span><span className={`rounded-lg px-2 py-1 text-[10px] font-extrabold capitalize ${sessionStatusClass[session.status] || sessionStatusClass.ended}`}>{session.status}</span></div><p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400"><CalendarDays className="h-3.5 w-3.5" /> {session.date}<Clock3 className="ml-1 h-3.5 w-3.5" /> {formatSessionTime(session.startedAt)} {session.room && <><MapPin className="ml-1 h-3.5 w-3.5" /> {session.room}</>}</p><p className="mt-1 text-[10px] font-mono text-slate-400">Session code: {session.sessionCode}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => { setDate(session.date); setSubject(session.subjectCode); setSearchParams({}); }} className="rounded-lg bg-slate-100 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer">View roll call</button><Link to="/secretary/start-session" className="rounded-lg border border-blue-200 px-3 py-1.5 text-[10px] font-bold text-blue-700 dark:border-blue-900 dark:text-blue-300">View control</Link></div></div>)}</div>
         </Card>
+      )}
+
+      {selectedRecord && (
+        <Modal
+          isOpen={Boolean(selectedRecord)}
+          onClose={() => {
+            if (!submitting) {
+              setSelectedRecord(null);
+              setFeedback(null);
+            }
+          }}
+          title="Manual Attendance Override"
+        >
+          <div className="space-y-5">
+            {/* Student info header */}
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                    {selectedRecord.studentName}
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {selectedRecord.studentNumber} · {selectedRecord.subjectCode} · {selectedRecord.date}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Current:</span>
+                  <span className={`rounded-lg px-2.5 py-1 text-xs font-extrabold capitalize ${statusClass[selectedRecord.status] || 'bg-slate-100 text-slate-600'}`}>
+                    {selectedRecord.status || 'Not recorded'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Status selection */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                Target Status
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(
+                  [
+                    { key: 'present', label: 'Present' },
+                    { key: 'late', label: 'Late' },
+                    { key: 'absent', label: 'Absent' },
+                    { key: 'excused', label: 'Request Excused' },
+                  ] as const
+                ).map((opt) => {
+                  const isSelected = overrideStatus === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setOverrideStatus(opt.key)}
+                      className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-extrabold transition-all cursor-pointer ${
+                        isSelected
+                          ? opt.key === 'present'
+                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                            : opt.key === 'late'
+                            ? 'border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                            : opt.key === 'absent'
+                            ? 'border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                            : 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}
+                    >
+                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                      <span>{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {overrideStatus === 'excused' && (
+              <div className="rounded-xl border border-sky-200 bg-sky-50/80 p-3 text-xs text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+                <p className="font-semibold">Excused needs Faculty approval</p>
+                <p className="mt-0.5 text-[11px] text-sky-700 dark:text-sky-300">
+                  Submitting will create an excused absence request for the assigned faculty to review.
+                </p>
+              </div>
+            )}
+
+            {/* Reason */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Required Correction Reason
+              </label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="State the reason for this attendance override (e.g., Medical certificate verified, technical camera delay, authorized official business)..."
+                rows={3}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800 outline-none focus:border-blue-500 focus:bg-white dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-100 dark:focus:bg-slate-800"
+              />
+            </div>
+
+            {feedback && (
+              <div
+                className={`rounded-xl p-3 text-xs font-semibold ${
+                  feedback.type === 'success'
+                    ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                }`}
+              >
+                {feedback.text}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedRecord(null);
+                  setFeedback(null);
+                }}
+                disabled={submitting}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveOverride()}
+                disabled={submitting || !reason.trim()}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+              >
+                {submitting ? 'Saving…' : overrideStatus === 'excused' ? 'Send request' : 'Confirm override'}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

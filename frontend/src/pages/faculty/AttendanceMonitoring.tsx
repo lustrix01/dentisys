@@ -13,6 +13,7 @@ import {
   Play,
   Navigation,
   Camera,
+  Pencil,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { LocationPicker } from '../../components/LocationPicker';
@@ -39,12 +40,6 @@ const STATUS_LABELS: Record<SupportedStatus, string> = {
   late: 'Late',
   absent: 'Absent',
   excused: 'Excused',
-};
-const STATUS_BUTTON_ACTIVE: Record<SupportedStatus, string> = {
-  present: 'border-emerald-500 bg-emerald-600 text-white',
-  late: 'border-amber-500 bg-amber-500 text-white',
-  absent: 'border-rose-500 bg-rose-600 text-white',
-  excused: 'border-sky-500 bg-sky-600 text-white',
 };
 
 const formatCheckInTime = (value?: string | null) => {
@@ -279,71 +274,12 @@ export const AttendanceMonitoring: React.FC = () => {
     return () => clearInterval(timer);
   }, [selectedCsId, selectedDate, worksheet?.pendingSessions?.length, loadWorksheet]);
 
-  // Handle Status Button Click
-  const handleStatusClick = async (
-    item: FacultyAttendanceWorksheetRosterItem,
-    newStatus: SupportedStatus
-  ) => {
-    // Rule 1 / Rule 4: No-op if selecting the identical persisted status
-    if (worksheetIsReadOnly || item.status === newStatus) {
-      return;
-    }
-
-    const csIdNum = parseInt(selectedCsId, 10);
-    const enrollmentIdNum = parseInt(item.enrollmentId, 10);
-
-    // Initial entry (status: null / Not recorded): no reason required
-    if (item.status === null) {
-      setSavingStudentId(item.enrollmentId);
-      const writeScope = beginWorksheetMutation();
-      try {
-        const res = await recordFacultyInitialAttendanceApi({
-          csId: csIdNum,
-          enrollmentId: enrollmentIdNum,
-          sessionDate: selectedDate,
-          sessionId: worksheet?.attendanceSession?.sessionId ? Number(worksheet.attendanceSession.sessionId) : undefined,
-          status: newStatus,
-        });
-
-        // Update local worksheet state
-        setWorksheet(prev => {
-          if (worksheetScope.current !== writeScope) return prev;
-          if (!prev) return null;
-          return {
-            ...prev,
-            roster: prev.roster.map(r =>
-              r.enrollmentId === item.enrollmentId
-                ? {
-                    ...r,
-                    id: res.recordId || r.id,
-                    status: newStatus,
-                    date: selectedDate,
-                  }
-                : r
-            ),
-          };
-        });
-
-        setNotification({
-          type: 'success',
-          message: `Recorded ${item.studentName} as ${newStatus}.`,
-        });
-      } catch (err) {
-        setNotification({
-          type: 'error',
-          message: err instanceof Error ? err.message : 'Failed to record attendance.',
-        });
-      } finally {
-        setSavingStudentId(null);
-        finishWorksheetMutation(writeScope);
-      }
-      return;
-    }
-
-    // Existing record: status change requires non-empty reason via modal
+  // Open Manual Override Modal (matches Secretary pattern)
+  const handleOpenOverride = (item: FacultyAttendanceWorksheetRosterItem) => {
     setCorrectionTarget(item);
-    setTargetStatus(newStatus);
-    setCorrectionReason('');
+    const validStatuses: SupportedStatus[] = ['present', 'late', 'absent', 'excused'];
+    setTargetStatus((item.status && validStatuses.includes(item.status as SupportedStatus) ? item.status : 'present') as SupportedStatus);
+    setCorrectionReason(item.overrideReason || '');
     setCorrectionError(null);
     setIsCorrectionModalOpen(true);
   };
@@ -1145,30 +1081,17 @@ export const AttendanceMonitoring: React.FC = () => {
                           )}
                         </td>
 
-                        {/* Column 5: ACTIONS — one click records a first entry; changing a saved status asks for a reason. */}
+                        {/* Column 5: ACTIONS */}
                         <td className="py-4 px-6 text-right">
-                          <div className="inline-flex flex-wrap justify-end gap-1" role="group" aria-label={`Attendance status for ${item.studentName}`}>
-                            {STATUS_ORDER.map(status => {
-                              const isCurrent = item.status === status;
-                              return (
-                                <button
-                                  key={status}
-                                  type="button"
-                                  onClick={() => { void handleStatusClick(item, status); }}
-                                  disabled={worksheetIsReadOnly || isSaving || bulkMarking}
-                                  aria-pressed={isCurrent}
-                                  title={item.status && !isCurrent ? `Change to ${STATUS_LABELS[status]} (reason required)` : `Mark ${STATUS_LABELS[status]}`}
-                                  className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                                    isCurrent
-                                      ? STATUS_BUTTON_ACTIVE[status]
-                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60'
-                                  }`}
-                                >
-                                  {STATUS_LABELS[status]}
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenOverride(item)}
+                            disabled={worksheetIsReadOnly || isSaving || bulkMarking}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200 text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-slate-500" />
+                            <span>Override</span>
+                          </button>
                         </td>
                       </tr>
                     );
@@ -1303,7 +1226,7 @@ export const AttendanceMonitoring: React.FC = () => {
             setCorrectionReason('');
             setCorrectionError(null);
           }}
-          title="Attendance Correction"
+          title="Manual Attendance Override"
         >
           <form onSubmit={handleCorrectionSubmit} className="space-y-4 text-xs">
             {correctionError && (
@@ -1342,7 +1265,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 New Attendance Status <span className="text-rose-500">*</span>
               </label>
               <div className="grid grid-cols-4 gap-2">
-                {(['present', 'late', 'absent', 'excused'] as const).map(st => (
+                {STATUS_ORDER.map(st => (
                   <button
                     key={st}
                     type="button"
@@ -1373,7 +1296,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 rows={3}
                 value={correctionReason}
                 onChange={(e) => setCorrectionReason(e.target.value)}
-                placeholder="Enter justification for manual attendance correction..."
+                placeholder="Enter justification for attendance override..."
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium focus:outline-none focus:border-emerald-500"
               />
               <span className="text-[10px] text-slate-400 block mt-1">
@@ -1401,7 +1324,7 @@ export const AttendanceMonitoring: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
               >
                 {submittingCorrection && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>Save Correction</span>
+                <span>Save Override</span>
               </button>
             </div>
           </form>

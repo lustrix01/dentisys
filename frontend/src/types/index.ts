@@ -369,6 +369,10 @@ export interface StudentAcademicClass {
   semester: string;
   schoolYear: string;
   yearLevel: number | null;
+  instructorName?: string;
+  lecRoom?: string | null;
+  labRoom?: string | null;
+  block?: string | null;
   dateEnrolled: string | null;
   grade: number | null;
   percentage: number | null;
@@ -377,6 +381,16 @@ export interface StudentAcademicClass {
   remedial: Record<string, unknown> | null;
   remedialProgression?: RemedialProgression;
   clinicHoursCompleted: number;
+  isCurrent?: boolean;
+  isPast?: boolean;
+  midtermEvaluation?: MidtermEvaluation;
+}
+
+export interface MidtermEvaluation {
+  complete: boolean;
+  percentage: number | null;
+  grade: number | null;
+  isAtRisk: boolean;
 }
 
 export type RemedialProgressionStage =
@@ -427,6 +441,7 @@ export interface StudentAcademicProfileResponse {
 
 export interface StudentAcademicClassesResponse {
   status: string;
+  currentSchoolYear?: string;
   classes: StudentAcademicClass[];
 }
 
@@ -435,6 +450,8 @@ export interface StudentAcademicRetentionResponse {
   retention: {
     records: StudentAcademicClass[];
     atRiskCount: number;
+    midtermAtRiskCount?: number;
+    hasMidtermWarning?: boolean;
     hasPendingGrades: boolean;
   };
 }

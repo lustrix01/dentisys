@@ -194,22 +194,13 @@ export const RealStudentDashboard: React.FC = () => {
           <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100 mt-0.5">Academic Progress Overview</h2>
         </div>
       {/* Summary KPI Cards (Preserves nulls without converting to 0!) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
           <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
             Enrolled Classes
           </span>
           <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">
             {summary.classCount}
-          </span>
-        </Card>
-
-        <Card className="p-4 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
-            Overall GWA
-          </span>
-          <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1">
-            {typeof summary.gwa === 'number' ? summary.gwa.toFixed(2) : '—'}
           </span>
         </Card>
 
@@ -275,7 +266,7 @@ export const RealStudentDashboard: React.FC = () => {
               onClick={() => navigate('/student/classes')}
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
             >
-              View Full Grades →
+              View Classes →
             </button>
           </div>
         </CardHeader>
@@ -293,7 +284,6 @@ export const RealStudentDashboard: React.FC = () => {
                     <th className="py-3 px-4">Section</th>
                     <th className="py-3 px-4 text-center">Units</th>
                     <th className="py-3 px-4 text-center">Grade</th>
-                    <th className="py-3 px-4 text-center">Score %</th>
                     <th className="py-3 px-4 text-center">Retention Standing</th>
                   </tr>
                 </thead>
@@ -319,9 +309,6 @@ export const RealStudentDashboard: React.FC = () => {
                           {cls.grade !== null ? cls.grade.toFixed(2) : (
                             <span className="text-slate-400 font-normal">Pending</span>
                           )}
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono">
-                          {cls.percentage !== null ? `${cls.percentage}%` : '—'}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span
