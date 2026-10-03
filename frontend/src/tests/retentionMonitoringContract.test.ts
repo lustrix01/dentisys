@@ -47,7 +47,7 @@ test('Retention actions never submit synthetic identifiers or fabricated academi
   assert.doesNotMatch(retentionPage, /CLIN401|CLIN402/);
   assert.doesNotMatch(retentionPage, /yearLevel/);
   assert.doesNotMatch(retentionPage, /originalGrade: [^\n]*(\|\||\?\?)/);
-  assert.match(retentionPage, /GWA unavailable/);
+  assert.match(retentionPage, /Grade unavailable/);
   assert.match(retentionPage, /Student number unavailable/);
   assert.match(retentionPage, /record\.state !== 'archived'/);
   assert.match(retentionPage, /pendingExams/);

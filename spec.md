@@ -453,6 +453,14 @@ Faculty may send At-Risk and Privacy Consent notices to their students using the
 
 ---
 
+## NTF-001 - Class enrollment notifications
+
+**Status: APPROVED**
+
+When authorized Faculty creates or reactivates a class enrollment, DentiSys creates a persisted in-app notice for each active Student/Secretary account canonically linked to that Student. An email match does not establish a recipient. Enrollment, audit and notification commit or roll back together. An already-active enrollment creates no new notice. Each class/account pair receives at most one enrollment notice, including subsequent reactivations. A Student without an active linked account receives no notice, and account activation does not replay missed notices.
+
+---
+
 The following capabilities are currently part of DentiSys and MUST NOT be removed as incidental scope.
 
 | Capability                              | Status   |
@@ -855,6 +863,8 @@ Owner decision (2026-09-28): For the professional-course final-grade trigger, 1.
 Owner-approved amendment (2026-09-26): Each of the first two remedial exams passes at 50% or higher. Failure of the first permits the second; failure of the second requires cost recovery. Remedial outcomes do not replace the original course grade. DentiSys records the first and second attempts separately, derives Pass/Fail from the stored percentage, and does not offer a third remedial attempt. Cost-recovery scoring, completion, and final-failure rules remain outside this amendment. The 50% remedial pass mark is the current policy and may change later by amendment.
 
 Owner decision (2026-09-29) — Risk levels (Faculty Retention Monitoring and Midterm Watchlist): Risk shows how close a student is to needing remediation. It is recalculated for the current grading period (Midterm, or the running overall grade after Midterm): (1) take the student's completed assessments in the period; (2) add assumed future assessments one at a time, each the size of the student's average completed assessment in that period and scored 75%, a below-passing score (below 82%); (3) count how many are needed before the period grade reaches 2.50 or worse. High = 1-2 assumed assessments, or the grade is already 2.50 or worse; At Risk = 3-4; Low = 5 or more. Risk is informational and never creates remediation. Warning and Critical remain separate, manually set retention states. The assumed score and the bands are current policy and may change by amendment.
+
+Owner-approved amendment (2026-10-03): The Student midterm advisory uses the existing server-calculated Faculty Midterm Watchlist risk projection. High and At Risk results show an informational advisory; Low does not. Missing or insufficient assessment data remains Pending/Unavailable. A manual watchlist unlock changes visibility only. This advisory never assigns remediation or changes the final-grade 2.50 trigger.
 
 ## UI-004 - Email and invitations (PDF pages 5, 7-8)
 

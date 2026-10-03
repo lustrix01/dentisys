@@ -35,5 +35,6 @@ $legacy = class_meetings_legacy('Room 101 (Mon/Wed 08:00 AM - 10:00 AM); Room 10
 schedule_assert(count($legacy) === 3 && $legacy[2]['startTime'] === '15:00', 'Complete legacy schedule groups preserve each day and time');
 schedule_assert(class_meetings_legacy('Room 101 (Mon 08:00 AM -', 'Lecture') === [], 'Truncated legacy text is never guessed');
 schedule_assert(class_meetings_display([], 'Lecture', 'Room 101 (Mon 08:00 AM - 10:00 AM)') === 'Room 101', 'Removed recorded meetings retain room labels without resurrecting legacy times');
+schedule_assert(class_meetings_display([], 'Lecture', 'Legacy Room (Mon 08:00 AM - 10:00 AM); Unfinished Room (Tue 03:00 PM -') === 'Legacy Room', 'Cleared mixed legacy schedule display contains rooms without removed meeting times');
 $session = ['status' => 'scheduled', 'session_date' => '2026-10-03', 'opening_time' => '08:00', 'present_cutoff_time' => '09:00', 'late_cutoff_time' => '10:00'];
 schedule_assert(attendance_session_timing_decision($session, $now, $config)['code'] === 'attendance_not_open', 'Queued sessions never accept attendance before opening');

@@ -643,6 +643,34 @@ function handle_faculty_student_create(): void
             "Registered Student {$studentNumber} and enrolled them in {$className}.",
             ['scope_cs_id' => $csId, 'after' => ['studentNumber' => $studentNumber, 'enrollmentId' => $enrollmentId]]
         );
+
+        $studentUserStmt = $pdo->prepare('
+            SELECT DISTINCT u.user_id
+              FROM user_accounts u
+             WHERE EXISTS (
+                 SELECT 1 FROM students s WHERE s.student_id = ?
+                   AND ((s.student_account_user_id = u.user_id AND u.role IN (\'student\', \'secretary\'))
+                     OR (s.user_id = u.user_id AND u.role = \'secretary\'))
+             ) AND LOWER(u.status) = \'active\'
+        ');
+        $studentUserStmt->execute([$newId]);
+        $recipientUserIds = $studentUserStmt->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($recipientUserIds as $rUid) {
+            $targetUid = (int) $rUid;
+            if ($targetUid > 0) {
+                notification_create_idempotent(
+                    $pdo,
+                    $targetUid,
+                    'class_enrollment',
+                    'Enrolled in ' . $className,
+                    "{$authCtx['display_name']} has added you to {$className}.",
+                    'class_section',
+                    (string) $csId,
+                    "class_enrollment:{$csId}:{$targetUid}"
+                );
+            }
+        }
+
         $pdo->commit();
 
         $fullName = normalize_person_name(trim(implode(' ', array_filter(
@@ -7359,6 +7387,27 @@ function handle_faculty_class_enroll_students(): void
 
             $enrolledCount = 0;
             $studentExists = $pdo->prepare("SELECT 1 FROM students WHERE student_id = ? AND LOWER(status) = 'active'");
+            $classDetailsStmt = $pdo->prepare('
+                SELECT cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name
+                  FROM class_sections cs
+                  LEFT JOIN courses c ON c.course_id = cs.course_id
+                 WHERE cs.cs_id = ?
+            ');
+            $classDetailsStmt->execute([$csId]);
+            $classDetails = $classDetailsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $className = $classDetails['course_name'] ?? $classDetails['course_code'] ?? $classDetails['cs_name'] ?? "Class #{$csId}";
+            $facultyName = (string) ($authCtx['display_name'] ?? 'Faculty');
+
+            $studentUserStmt = $pdo->prepare('
+                SELECT DISTINCT u.user_id
+                  FROM user_accounts u
+                 WHERE EXISTS (
+                 SELECT 1 FROM students s WHERE s.student_id = ?
+                   AND ((s.student_account_user_id = u.user_id AND u.role IN (\'student\', \'secretary\'))
+                     OR (s.user_id = u.user_id AND u.role = \'secretary\'))
+             ) AND LOWER(u.status) = \'active\'
+            ');
+
             foreach ($studentIds as $sId) {
                 $stId = (int) $sId;
                 if ($stId > 0) {
@@ -7370,16 +7419,39 @@ function handle_faculty_class_enroll_students(): void
                     }
                     $existingStmt->execute([$stId, $csId]);
                     $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
+                    $didEnroll = false;
                     if (is_array($existing)) {
                         $reviveStmt->execute([(int) $existing['enrollment_id']]);
                         if ($reviveStmt->rowCount() > 0) {
                             $enrolledCount++;
+                            $didEnroll = true;
                         }
-                        continue;
+                    } else {
+                        $insertStmt->execute([$stId, $csId]);
+                        if ($insertStmt->fetchColumn() !== false) {
+                            $enrolledCount++;
+                            $didEnroll = true;
+                        }
                     }
-                    $insertStmt->execute([$stId, $csId]);
-                    if ($insertStmt->fetchColumn() !== false) {
-                        $enrolledCount++;
+
+                    if ($didEnroll) {
+                        $studentUserStmt->execute([$stId]);
+                        $recipientUserIds = $studentUserStmt->fetchAll(PDO::FETCH_COLUMN);
+                        foreach ($recipientUserIds as $rUid) {
+                            $targetUid = (int) $rUid;
+                            if ($targetUid > 0) {
+                                notification_create_idempotent(
+                                    $pdo,
+                                    $targetUid,
+                                    'class_enrollment',
+                                    'Enrolled in ' . $className,
+                                    "{$facultyName} has added you to {$className} ({$classDetails['cs_name']}).",
+                                    'class_section',
+                                    (string) $csId,
+                                    "class_enrollment:{$csId}:{$targetUid}"
+                                );
+                            }
+                        }
                     }
                 }
             }

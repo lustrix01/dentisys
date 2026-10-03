@@ -207,9 +207,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     }
 
     if (currentUser.role === 'student') {
-      const items: NavItem[] = linkedStudentView ? [] : [
-        { name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard },
-      ];
+      const items: NavItem[] = [];
+      if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'dashboard')) {
+        items.push({ name: 'Dashboard', path: '/student/dashboard', icon: LayoutDashboard });
+      }
       if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'attendance')) {
         items.push({ name: 'Daily Attendance', path: '/student/attendance', icon: Camera });
       }
@@ -219,16 +220,13 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'face')) {
         items.push({ name: 'Face Registration', path: '/student/face-registration', icon: UserCheck });
       }
-      // Academic self-service is backed by the Student-role endpoints. Keep
-      // it visible for canonical Student accounts in every real auth mode;
-      // development mock Students remain gated by the prototype predicate.
-      if (user?.role === 'student' && (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'academic'))) {
+      if (canAccessAuthoritativeStudentBiometrics(user) || isStudentPrototypeAllowed(user, config, 'academic')) {
         items.push(
           { name: 'My Classes', path: '/student/classes', icon: BookOpen },
           { name: 'Retention Monitoring', path: '/student/retention', icon: AlertTriangle },
+          { name: 'My Profile', path: user?.role === 'secretary' ? '/secretary/profile' : '/student/profile', icon: UserCircle },
         );
       }
-      items.push({ name: 'My Profile', path: linkedStudentView ? '/secretary/profile' : '/student/profile', icon: UserCircle });
       return items;
     }
     
@@ -455,9 +453,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
     } else if (path === '/secretary/start-session') {
       crumbs.push({ name: 'Start Class Session', path: '/secretary/start-session' });
     } else if (path === '/secretary/attendance') {
-      crumbs.push({ name: 'Attendance List', path: '/secretary/attendance' });
-    } else if (path === '/secretary/override') {
-      crumbs.push({ name: 'Manual Override', path: '/secretary/override' });
+      crumbs.push({ name: 'Attendance Monitoring', path: '/secretary/attendance' });
     } else if (path === '/secretary/audit-trail') {
       crumbs.push({ name: 'My Activity Log', path: '/secretary/audit-trail' });
     } else if (path === '/faculty/audit-trail') {
@@ -581,7 +577,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
                   {currentUser.role === 'secretary' && user?.student && (
                     <Link
-                      to="/student/attendance"
+                      to="/student/dashboard"
                       onClick={() => setIsProfileOpen(false)}
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-semibold transition-all"
                     >
@@ -661,6 +657,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           <div className="mb-5 rounded-xl bg-slate-200/60 dark:bg-slate-800 p-1 flex gap-1" aria-label="Account view">
             <Link
               to="/secretary/attendance"
+              onClick={() => setIsSidebarOpen(false)}
               aria-current={!linkedStudentView ? 'page' : undefined}
               title="Secretary view"
               className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold ${!linkedStudentView ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500'}`}
@@ -672,7 +669,10 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
               disabled={!user.student}
               aria-pressed={linkedStudentView}
               title={user.student ? 'Your linked Student view' : 'A linked Student identity is required'}
-              onClick={() => navigate('/student/attendance')}
+              onClick={() => {
+                setIsSidebarOpen(false);
+                navigate('/student/dashboard');
+              }}
               className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed ${linkedStudentView ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500'}`}
             >
               <User className="w-3.5 h-3.5" />{!isSidebarCollapsed && 'Student'}
@@ -781,7 +781,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             {currentUser.role === 'secretary' && user?.student && (
               <button
                 type="button"
-                onClick={() => navigate('/student/attendance')}
+                onClick={() => navigate('/student/dashboard')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-500/20 transition-all cursor-pointer"
                 title="Switch to Linked Student Self-Service"
               >
@@ -871,7 +871,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-slate-650 hover:bg-slate-100/50 dark:hover:bg-slate-900/50 hover:text-slate-850 dark:hover:text-slate-100 text-xs font-semibold transition-all"
                     >
                       <User className="w-4 h-4 text-slate-400" />
-                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : currentUser.role === 'secretary' ? 'My Secretary Profile' : currentUser.role === 'student' ? 'My Profile' : 'My Faculty Profile'}</span>
+                      <span>{currentUser.role === 'admin' ? 'My Dean Profile' : (user?.role === 'secretary' || currentUser.role === 'student') ? 'My Profile' : 'My Faculty Profile'}</span>
                     </Link>
 
                     {currentUser.role !== 'student' && (
@@ -887,7 +887,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
                     {currentUser.role === 'secretary' && user?.student && (
                       <Link
-                        to="/student/attendance"
+                        to="/student/dashboard"
                         onClick={() => setIsProfileOpen(false)}
                         className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-semibold transition-all"
                       >

@@ -508,7 +508,9 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   const initialOverridePromise = page.waitForResponse(
     response => response.url().includes('/api/faculty/attendance/override') && response.request().method() === 'POST'
   );
-  await studentRow.getByRole('button', { name: 'Present' }).click();
+  await studentRow.getByRole('button', { name: 'Override', exact: true }).click();
+  await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
+  await page.getByRole('button', { name: 'Save Override', exact: true }).click();
 
   const initialOverrideRes = await initialOverridePromise;
   expect(initialOverrideRes.status()).toBe(200);
@@ -518,7 +520,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   expect(initialOverrideData.recordId).toBeTruthy();
 
   // Toast appears and row status updates to Present
-  await expect(page.getByText(new RegExp(`Recorded ${studentFullName} as present`, 'i'))).toBeVisible();
+  await expect(page.getByText(new RegExp(`Attendance updated for ${studentFullName}`, 'i'))).toBeVisible();
   await expect(studentRow.getByTestId('attendance-status').getByText('Present', { exact: true })).toBeVisible();
 
   // Verify localStorage does not store this student's attendance override
@@ -541,14 +543,15 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   await expect(studentRowAfterReload.getByTestId('attendance-status').getByText('Present', { exact: true })).toBeVisible();
 
   // 8. Correction workflow: change status to Late
-  await studentRowAfterReload.getByRole('button', { name: 'Late' }).click();
+  await studentRowAfterReload.getByRole('button', { name: 'Override', exact: true }).click();
+  await page.locator('form').getByRole('button', { name: 'late', exact: true }).click();
 
   // Modal appears
-  await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Manual Attendance Override' })).toBeVisible();
   await expect(page.getByText(/PRESENT → LATE/i)).toBeVisible();
 
   // Submitting without reason triggers in-app validation error
-  await page.getByRole('button', { name: 'Save Correction' }).click();
+  await page.getByRole('button', { name: 'Save Override' }).click();
   await expect(page.getByText(/justification reason is required/i)).toBeVisible();
 
   // Enter valid reason and submit correction
@@ -558,7 +561,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   const correctionPromise = page.waitForResponse(
     response => response.url().includes('/api/faculty/attendance/override') && response.request().method() === 'POST'
   );
-  await page.getByRole('button', { name: 'Save Correction' }).click();
+  await page.getByRole('button', { name: 'Save Override' }).click();
 
   const correctionRes = await correctionPromise;
   expect(correctionRes.status()).toBe(200);
@@ -567,7 +570,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   expect(correctionData.operation).toBe('updated');
 
   // Modal closes, toast appears, row status updates to Late
-  await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Manual Attendance Override' })).toHaveCount(0);
   await expect(page.getByText(new RegExp(`Attendance corrected for ${studentFullName}`, 'i'))).toBeVisible();
   await expect(studentRowAfterReload.getByTestId('attendance-status').getByText('Late', { exact: true })).toBeVisible();
 
@@ -587,8 +590,9 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
       overrideCalledAgain = true;
     }
   });
-  await studentRowAfterCorrectionReload.getByRole('button', { name: 'Late' }).click();
-  await page.waitForTimeout(500);
+  await studentRowAfterCorrectionReload.getByRole('button', { name: 'Override', exact: true }).click();
+  await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+  await expect(page.getByText('Choose a different attendance status.')).toBeVisible();
   expect(overrideCalledAgain).toBe(false);
 
   console.log('LIVE FACULTY ATTENDANCE MONITORING WORKFLOW VALIDATED SUCCESSFULLY FOR STUDENT:', studentFullName);

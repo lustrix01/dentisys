@@ -38,4 +38,25 @@ assert_faculty_class_contract(str_contains($handler, 'academic_require_current_s
 assert_faculty_class_contract(str_contains($handler, 'course_title = ?') && !str_contains($handler, 'UPDATE courses SET name'), 'Course titles are per class and never rename the shared catalog course');
 assert_faculty_class_contract(str_contains($controller, "'schedule' => null"), 'Class reads do not derive schedule from room values');
 
+// Recipient selection must never turn an email match into an identity link.
+foreach (['handle_faculty_student_create', 'handle_faculty_class_enroll_students'] as $name) {
+    $start = strpos($controller, 'function ' . $name . '(): void');
+    assert_faculty_class_contract($start !== false, $name . ' handler exists');
+    $end = strpos($controller, "\nfunction ", $start + 1);
+    $source = $end === false ? substr($controller, $start) : substr($controller, $start, $end - $start);
+    $queryStart = strpos($source, '$studentUserStmt =');
+    assert_faculty_class_contract($queryStart !== false, $name . ' selects canonical recipients');
+    $queryEnd = strpos($source, '$recipientUserIds', $queryStart);
+    $recipientSelection = substr($source, $queryStart, $queryEnd - $queryStart);
+    assert_faculty_class_contract(
+        str_contains($recipientSelection, 's.student_account_user_id = u.user_id')
+        && str_contains($recipientSelection, 's.user_id = u.user_id')
+        && str_contains($recipientSelection, 'u.role')
+        && str_contains($recipientSelection, 'LOWER(u.status)')
+        && !str_contains($recipientSelection, 'login_email')
+        && !str_contains($recipientSelection, 'bu_email'),
+        $name . ' enrollment notices use active canonical accounts, never matching emails'
+    );
+}
+
 echo "ALL FACULTY CLASS CONTRACT TESTS PASSED\n";

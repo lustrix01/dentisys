@@ -1,33 +1,93 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  ShieldCheck, 
-  CalendarDays, 
-  AlertOctagon,
+import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import {
+  BookOpen,
+  CalendarDays,
+  Clock,
+  MapPin,
+  User,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  ShieldCheck,
+  GraduationCap,
+  Building,
+  Archive
 } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card } from '../../components/Card';
-import { canAccessAuthoritativeStudentBiometrics } from './studentGates';
+import { canAccessAuthoritativeStudentBiometrics, isStudentPrototypeAllowed } from './studentGates';
+import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
+import { useApp } from '../../context/AppContext';
+import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAcademicClassesApi } from '../../services/apiClient';
 import type { StudentAcademicClass } from '../../types';
+
+interface ParsedSchedule {
+  room: string;
+  schedule: string;
+  days: ('Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat')[];
+  time: string;
+}
+
+function parseRoomAndSchedule(rawRoom: string | null | undefined): ParsedSchedule {
+  if (!rawRoom || !rawRoom.trim()) {
+    return { room: 'To be announced', schedule: 'Schedule TBA', days: [], time: '' };
+  }
+  const match = rawRoom.match(/^(.*?)\s*\((.*?)\)$/);
+  if (match) {
+    const room = match[1].trim() || 'To be announced';
+    const schedule = match[2].trim();
+    const timeMatch = schedule.match(/^([A-Za-z/,\s]+?)\s+(\d{1,2}:\d{2}\s*(?:AM|PM)\s*-\s*\d{1,2}:\d{2}\s*(?:AM|PM))$/i);
+    if (timeMatch) {
+      const daysPart = timeMatch[1];
+      const timePart = timeMatch[2];
+      const dayTokens = daysPart.split(/[/,\s]+/).map(d => d.trim().toLowerCase());
+      const days: ('Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat')[] = [];
+      if (dayTokens.some(d => d.startsWith('mo'))) days.push('Mon');
+      if (dayTokens.some(d => d.startsWith('tu'))) days.push('Tue');
+      if (dayTokens.some(d => d.startsWith('we'))) days.push('Wed');
+      if (dayTokens.some(d => d.startsWith('th'))) days.push('Thu');
+      if (dayTokens.some(d => d.startsWith('fr'))) days.push('Fri');
+      if (dayTokens.some(d => d.startsWith('sa'))) days.push('Sat');
+      return { room, schedule, days, time: timePart };
+    }
+    return { room, schedule, days: [], time: schedule };
+  }
+  return { room: rawRoom.trim(), schedule: 'Schedule TBA', days: [], time: '' };
+}
+
+// ATT-001: calculate attendance rate counting present, late, and excused as attended
+const classSchedule = (cls: StudentAcademicClass, component: 'Lecture' | 'Laboratory'): ParsedSchedule => {
+  const meetings = cls.meetings?.filter(meeting => meeting.component === component) ?? [];
+  if (meetings.length > 0) {
+    return {
+      room: Array.from(new Set(meetings.map(meeting => meeting.room))).join('; '),
+      schedule: meetings.map(meeting => `${meeting.day} ${meeting.startTime} - ${meeting.endTime} (${meeting.room})`).join('; '),
+      days: [], time: '',
+    };
+  }
+  const legacy = parseRoomAndSchedule(component === 'Lecture' ? cls.lecRoom : cls.labRoom);
+  return cls.meetingsRecorded ? { ...legacy, schedule: 'Schedule TBA', days: [], time: '' } : legacy;
+};
+
+export const calculateClassAttendanceRate = (records: Array<{ status: string }>): number | null => {
+  if (records.length === 0) return null;
+  const attendedCount = records.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
+  return Math.round((attendedCount / records.length) * 100);
+};
 
 export const Classes: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { students, attendanceRecords, settings } = useApp();
 
+  const config = useRuntimeConfig();
   const isAuthoritative = canAccessAuthoritativeStudentBiometrics(user);
 
   const [dbClasses, setDbClasses] = useState<StudentAcademicClass[]>([]);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(isAuthoritative);
   const [error, setError] = useState<string | null>(null);
-
-  const retentionThreshold = typeof settings?.retentionThreshold === 'number'
-    ? settings.retentionThreshold
-    : null;
+  const [activeTab, setActiveTab] = useState<'current' | 'archived'>('current');
 
   useEffect(() => {
     if (!isAuthoritative) return;
@@ -36,6 +96,7 @@ export const Classes: React.FC = () => {
     getStudentAcademicClassesApi()
       .then((res) => {
         setDbClasses(res.classes);
+        setCurrentSchoolYear(res.currentSchoolYear ?? null);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Unable to load course enrollments.');
@@ -45,20 +106,50 @@ export const Classes: React.FC = () => {
       });
   }, [isAuthoritative]);
 
-  // Fallback for development mock students only
-  const currentMockStudent = students.find(
-    s => s.email.toLowerCase() === user?.login_email.toLowerCase() || s.id === '1'
-  ) || students[0];
+  const studentNumber = user?.student?.student_number || 'Unavailable';
 
-  const studentNumber = isAuthoritative
-    ? (user?.student?.student_number || '—')
-    : (currentMockStudent?.studentId || '2024-DENT-0004');
+  // Partition classes into current school year vs past/archived
+  const { currentClasses, archivedClasses, otherClasses } = useMemo(() => {
+    const current: StudentAcademicClass[] = [];
+    const archived: StudentAcademicClass[] = [];
+    const other: StudentAcademicClass[] = [];
+
+    dbClasses.forEach((cls) => {
+      const isPast = cls.isPast ?? (cls.schoolYear && currentSchoolYear ? cls.schoolYear < currentSchoolYear : false);
+      const isCurrent = cls.isCurrent ?? (currentSchoolYear !== null && cls.schoolYear === currentSchoolYear);
+
+      if (isCurrent && !isPast) {
+        current.push(cls);
+      } else if (isPast) {
+        archived.push(cls);
+      } else {
+        other.push(cls);
+      }
+    });
+
+    return { currentClasses: current, archivedClasses: archived, otherClasses: other };
+  }, [dbClasses, currentSchoolYear]);
+
+  // Compute total units for current classes
+  const currentUnits = useMemo(() => {
+    return currentClasses.reduce((acc, c) => acc + (c.units || 0), 0);
+  }, [currentClasses]);
+
+  // Compute total units for archived classes
+  const archivedUnits = useMemo(() => {
+    return archivedClasses.reduce((acc, c) => acc + (c.units || 0), 0);
+  }, [archivedClasses]);
+
+  if (!isAuthoritative) {
+    return isStudentPrototypeAllowed(user, config, 'academic')
+      ? <DevelopmentClasses /> : <StudentUnavailable title="Student Classes unavailable" />;
+  }
 
   if (loading) {
     return (
       <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
         <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
-        Loading enrolled classes and grades…
+        Loading enrolled classes and schedule…
       </div>
     );
   }
@@ -78,7 +169,7 @@ export const Classes: React.FC = () => {
                   setLoading(true);
                   setError(null);
                   getStudentAcademicClassesApi()
-                    .then(res => setDbClasses(res.classes))
+                    .then(res => { setDbClasses(res.classes); setCurrentSchoolYear(res.currentSchoolYear ?? null); })
                     .catch(e => setError(e instanceof Error ? e.message : 'Failed to reload.'))
                     .finally(() => setLoading(false));
                 }}
@@ -93,28 +184,16 @@ export const Classes: React.FC = () => {
     );
   }
 
-  const failingAuthClasses = dbClasses.filter(cls =>
-    ['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()),
-  );
-
-  const mockFailing = retentionThreshold === null
-    ? []
-    : (currentMockStudent?.enrolledSubjects || []).filter(
-      subj => subj.isClinical && subj.grade >= retentionThreshold,
-    );
-
-  const failingCount = isAuthoritative ? failingAuthClasses.length : mockFailing.length;
-
   return (
-    <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
-      {/* 1. Clean Top Header */}
+    <div className="space-y-6 max-w-7xl mx-auto animate-fade-in pb-12">
+      {/* 1. Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
-            My Enrolled Classes & Retention Standing
+            My Enrolled Classes & Schedule
           </h1>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Review enrolled dentistry subjects, midterm grades, attendance rates, and retention limit compliance.
+            Official study load, assigned classroom rooms, and weekly schedule timetable for Dental Medicine.
           </p>
         </div>
 
@@ -134,205 +213,339 @@ export const Classes: React.FC = () => {
         </div>
       </div>
 
-      {/* RETENTION WARNING BANNER IF AT RISK */}
-      {failingCount > 0 && (
-        <div className="rounded-2xl border-2 border-rose-500/40 bg-rose-50 dark:bg-rose-950/40 p-5 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-md">
-              <AlertOctagon className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <span className="px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[9px] font-extrabold uppercase tracking-wider">
-                Retention Standing Warning
-              </span>
-              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5">
-                You have {failingCount} clinical course(s) requiring server retention review.
-              </h3>
-            </div>
-          </div>
-          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pl-13">
-            The server retention state is authoritative. Review the course record or contact Faculty when a retention review is shown.
-          </p>
-        </div>
+      <p className="text-xs text-slate-500">Course grades and retention status come from saved academic records. Missing grades remain Pending. Review Retention Standing or contact Faculty for an actionable warning.</p>
+      {currentClasses.some(cls => ['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase())) && (
+        <div role="status" className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs font-semibold">Retention Standing Warning: review your flagged courses with Faculty.</div>
       )}
 
-      {/* Enrolled Subjects Detailed Cards */}
-      <div className="space-y-4">
-        {isAuthoritative ? (
-          dbClasses.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
-              No active course enrollments registered.
+      {/* 2. Top Stats & Navigation Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+        <div className="flex flex-wrap items-center gap-4 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+              <BookOpen className="w-4 h-4" />
             </div>
-          ) : (
-            dbClasses.map(cls => {
-              const retentionState = cls.retentionState?.toLowerCase();
-              const isFailing = ['warning', 'critical', 'remedial'].includes(retentionState);
-              const isPending = cls.grade === null;
-              const hasRetentionState = Boolean(retentionState);
-              const isAtRisk = ['warning', 'critical', 'remedial'].includes(retentionState);
+            <div>
+              <p className="text-[10px] uppercase font-bold text-slate-400">Current Enrolled</p>
+              <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{currentClasses.length} Subjects</p>
+            </div>
+          </div>
 
-              return (
-                <Card key={cls.enrollmentId} className="p-5 sm:p-6 overflow-hidden">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                    <div className="space-y-2 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-clinical-50 text-clinical-700 dark:bg-clinical-950/40 dark:text-clinical-300">
-                          {cls.courseCode}
-                        </span>
-                        <h3 className="text-lg font-extrabold text-slate-800 dark:text-slate-100">
-                          {cls.courseName}
-                        </h3>
-                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                          !isPending && isFailing
-                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                            : hasRetentionState && !isPending
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                              : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                        }`}>
-                          {isPending
-                            ? '⏳ Retention state pending'
-                            : isAtRisk
-                              ? `⚠️ ${cls.retentionState}`
-                              : hasRetentionState
-                                ? '✓ Retention Compliant'
-                                : 'Retention state unavailable'}
-                        </span>
-                      </div>
+          <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
 
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {cls.units} Academic Units • Section {cls.className} • {cls.semester} {cls.schoolYear}
-                        {cls.isClinical ? ' • Clinical Dentistry Practical' : ''}
-                      </p>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+              <GraduationCap className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase font-bold text-slate-400">Academic Load</p>
+              <p className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{currentUnits} Units</p>
+            </div>
+          </div>
 
-                      <div className="flex flex-wrap gap-2 pt-2 text-[11px]">
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          Clinical Hours Completed: <strong className="text-slate-800 dark:text-slate-100">{cls.clinicHoursCompleted} hrs</strong>
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          Overall Percentage: <strong className="text-slate-800 dark:text-slate-100">{cls.percentage !== null ? `${cls.percentage}%` : '—'}</strong>
-                        </span>
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 capitalize">
-                          Status: <strong className="text-slate-800 dark:text-slate-100">{isPending ? 'Pending' : cls.retentionState || 'Unavailable'}</strong>
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-6 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800 pt-4 lg:pt-0 lg:pl-6">
-                      <div className="text-center min-w-[90px]">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Score %</p>
-                        <p className="text-xl font-extrabold font-mono mt-0.5 text-slate-800 dark:text-slate-100">
-                          {cls.percentage !== null ? `${cls.percentage}%` : '—'}
-                        </p>
-                      </div>
-
-                      <div className="text-center min-w-[90px]">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Computed GWA</p>
-                        <p className={`text-2xl font-extrabold font-mono mt-0.5 ${
-                          isPending ? 'text-slate-400' : isFailing ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'
-                        }`}>
-                          {isPending ? 'Pending' : cls.grade?.toFixed(2)}
-                        </p>
-                        <p className="text-[9px] text-slate-400">Server retention state</p>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })
-          )
-        ) : (
-          (currentMockStudent?.enrolledSubjects || []).map(subject => {
-            const isFailingRetention = retentionThreshold !== null && subject.isClinical && subject.grade >= retentionThreshold;
-            const subjectRecords = attendanceRecords.filter(
-              r => r.studentId === currentMockStudent?.id && r.subjectCode === subject.code
-            );
-            const totalAtt = subjectRecords.length;
-            const presentAtt = subjectRecords.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
-            const attRate = totalAtt > 0 ? Math.round((presentAtt / totalAtt) * 100) : null;
-
-            return (
-              <Card key={subject.code} className="p-5 sm:p-6 overflow-hidden">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  <div className="space-y-2 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-clinical-50 text-clinical-700 dark:bg-clinical-950/40 dark:text-clinical-300">
-                        {subject.code}
-                      </span>
-                      <h3 className="text-lg font-extrabold text-slate-800 dark:text-slate-100">
-                        {subject.name}
-                      </h3>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                        isFailingRetention ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                      }`}>
-                        {isFailingRetention ? '⚠️ Retention Review' : '✓ Retention Compliant'}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {subject.units} Academic Units • Required Clinical Dentistry Practical Course
-                    </p>
-
-                    <div className="flex flex-wrap gap-2 pt-2 text-[11px]">
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        Quizzes ({subject.components.quizzes}%): <strong className="text-slate-800 dark:text-slate-100">Unavailable</strong>
-                      </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        Exams ({subject.components.exams}%): <strong className="text-slate-800 dark:text-slate-100">Unavailable</strong>
-                      </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        Practicum ({subject.components.practicum}%): <strong className="text-slate-800 dark:text-slate-100">Unavailable</strong>
-                      </span>
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        Attendance: <strong className="text-slate-800 dark:text-slate-100">{attRate !== null ? `${attRate}%` : '—'}</strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800 pt-4 lg:pt-0 lg:pl-6">
-                    <div className="text-center min-w-[90px]">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Attendance</p>
-                      <p className="text-xl font-extrabold font-mono mt-0.5 text-slate-800 dark:text-slate-100">
-                        {attRate !== null ? `${attRate}%` : '—'}
-                      </p>
-                      <p className="text-[9px] text-slate-400">Recorded sessions only</p>
-                    </div>
-
-                    <div className="text-center min-w-[90px]">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Computed GWA</p>
-                      <p className={`text-2xl font-extrabold font-mono mt-0.5 ${isFailingRetention ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'}`}>
-                        {subject.grade.toFixed(2)}
-                      </p>
-                      <p className="text-[9px] text-slate-400">Retention threshold unavailable</p>
-                    </div>
-                  </div>
+          {archivedClasses.length > 0 && (
+            <>
+              <div className="h-8 w-px bg-slate-200 dark:bg-slate-800" />
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center font-bold">
+                  <Archive className="w-4 h-4" />
                 </div>
-              </Card>
-            );
-          })
-        )}
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Archived History</p>
+                  <p className="text-sm font-extrabold text-slate-700 dark:text-slate-300">{archivedClasses.length} Subjects</p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          {/* Subtle link to Retention Standing */}
+          <Link
+            to="/student/retention"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-bold text-slate-650 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+            <span>View Retention Standing →</span>
+          </Link>
+        </div>
       </div>
 
-      {/* Program Retention Policy Reference Card */}
-      <Card className="p-5 space-y-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-100">
-          <ShieldCheck className="w-4.5 h-4.5 text-clinical-600" />
-          Bicol University Dental Medicine Retention Policy Guidelines
+      {/* 3. Tab Filter: Current vs Archived Classes */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('current')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === 'current'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Current Classes ({currentSchoolYear ?? 'School year unavailable'})</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                activeTab === 'current'
+                  ? 'bg-white/25 text-white'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              {currentClasses.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('archived')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              activeTab === 'archived'
+                ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-md'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            <span>Archived Classes</span>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                activeTab === 'archived'
+                  ? 'bg-white/25 dark:bg-slate-900/30 text-white dark:text-slate-900'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              {archivedClasses.length}
+            </span>
+          </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600 dark:text-slate-300">
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] uppercase">1. Server retention state</span>
-            <p>The authoritative course retention state determines whether review is required.</p>
-          </div>
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] uppercase">2. Attendance</span>
-            <p>Attendance values are shown when authoritative attendance data is available.</p>
-          </div>
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 text-[11px] uppercase">3. Remedial Evaluation</span>
-            <p>Students flagged by the server retention state may require approved Faculty remedial review.</p>
-          </div>
-        </div>
-      </Card>
+
+        <p className="text-[11px] text-slate-400 font-medium">
+          {activeTab === 'current'
+            ? `Showing active classes enrolled for School Year ${currentSchoolYear ?? 'unavailable'}`
+            : 'Historical classes from previous academic school years'}
+        </p>
+      </div>
+
+      {/* 4. Course Cards Section */}
+      <div className="space-y-4">
+        {activeTab === 'current' ? (
+          currentClasses.length === 0 ? (
+            <div className="p-10 text-center text-xs text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
+              <BookOpen className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+              <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">{currentSchoolYear ? `No Active Classes for S.Y. ${currentSchoolYear}` : 'Current school year unavailable'}</p>
+              <p className="text-[11px] text-slate-400">
+                You do not have any registered enrollments for the current academic year. Check the Archived Classes tab for past coursework.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {currentClasses.map((cls) => {
+                const lecSched = classSchedule(cls, 'Lecture');
+                const labSched = cls.labRoom || cls.meetings?.some(meeting => meeting.component === 'Laboratory') ? classSchedule(cls, 'Laboratory') : null;
+
+                return (
+                  <Card key={cls.enrollmentId} className="p-5 sm:p-6 hover:border-blue-300 dark:hover:border-blue-800/80 transition-all flex flex-col justify-between">
+                    <div className="space-y-3.5">
+                      {/* Course Code & Units */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/80 dark:border-blue-900">
+                            {cls.courseCode}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            {cls.units} Academic Units
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          Section {cls.className}
+                        </span>
+                      </div>
+
+                      {/* Course Title */}
+                      <div>
+                        <h3 className="text-base sm:text-lg font-extrabold text-slate-800 dark:text-slate-100 leading-snug">
+                          {cls.courseName}
+                        </h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {cls.semester} Semester • School Year {cls.schoolYear}
+                        </p>
+                      </div>
+
+                      {/* Details Box: Instructor & Schedule */}
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+                        {/* Instructor */}
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                          <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span className="font-semibold text-slate-400 text-[11px]">Instructor:</span>
+                          <span className="font-bold">{cls.instructorName || 'Faculty Member'}</span>
+                        </div>
+
+                        {/* Lecture Schedule & Room */}
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                          <Clock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="font-semibold text-slate-400 text-[11px]">Lecture:</span>
+                          <span className="font-bold font-mono text-[11px]">{lecSched.schedule}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                          <MapPin className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span className="font-semibold text-slate-400 text-[11px]">Room:</span>
+                          <span className="font-bold">{lecSched.room}</span>
+                        </div>
+
+                        {/* Laboratory if present */}
+                        {labSched && (
+                          <div className="pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 space-y-1.5">
+                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                              <Building className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              <span className="font-semibold text-slate-400 text-[11px]">Lab:</span>
+                              <span className="font-bold font-mono text-[11px]">{labSched.schedule}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                              <MapPin className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                              <span className="font-semibold text-slate-400 text-[11px]">Lab Room:</span>
+                              <span className="font-bold">{labSched.room}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-x-4 gap-y-2 text-xs">
+                      <span>Course Grade: <strong>{typeof cls.grade === 'number' ? cls.grade.toFixed(2) : 'Pending'}</strong></span>
+                      <span>Score %: <strong>{typeof cls.percentage === 'number' ? `${cls.percentage.toFixed(2)}%` : 'Pending'}</strong></span>
+                      <span>Clinical Hours Completed: <strong>{typeof cls.clinicHoursCompleted === 'number' ? `${cls.clinicHoursCompleted} hrs` : 'Unavailable'}</strong></span>
+                      <span className={['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()) ? 'text-amber-700 dark:text-amber-300 font-bold' : ''}>Retention: <strong>{['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()) ? cls.retentionState : cls.grade === null ? 'Pending' : cls.retentionState || 'Unavailable'}</strong></span>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )
+        ) : (
+          archivedClasses.length === 0 ? (
+            <div className="p-10 text-center text-xs text-slate-400 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
+              <Archive className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600" />
+              <p className="font-bold text-slate-600 dark:text-slate-300 text-sm">No Archived Classes Found</p>
+              <p className="text-[11px] text-slate-400">
+                No enrollments from previous academic school years are available.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {archivedClasses.map((cls) => {
+                const lecSched = classSchedule(cls, 'Lecture');
+                const labSched = cls.labRoom || cls.meetings?.some(meeting => meeting.component === 'Laboratory') ? classSchedule(cls, 'Laboratory') : null;
+
+                return (
+                  <Card key={cls.enrollmentId} className="p-5 sm:p-6 opacity-90 hover:opacity-100 border-slate-200 dark:border-slate-800 transition-all flex flex-col justify-between bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="space-y-3.5">
+                      {/* Course Code & Archived Status */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-lg font-mono font-extrabold text-xs bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/80 dark:border-slate-700">
+                            {cls.courseCode}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
+                            Archived
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                            {cls.units} Units
+                          </span>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-lg font-bold text-[10px] uppercase bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50">
+                          S.Y. {cls.schoolYear}
+                        </span>
+                      </div>
+
+                      {/* Course Title */}
+                      <div>
+                        <h3 className="text-base sm:text-lg font-extrabold text-slate-700 dark:text-slate-200 leading-snug">
+                          {cls.courseName}
+                        </h3>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {cls.semester} Semester • Section {cls.className}
+                        </p>
+                      </div>
+
+                      {/* Details Box */}
+                      <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-2 text-xs">
+                        <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                          <span className="font-semibold text-slate-400 text-[11px]">Instructor:</span>
+                          <span className="font-bold">{cls.instructorName || 'Faculty Member'}</span>
+                        </div>
+
+                        {cls.grade !== null && (
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700">
+                            <span className="font-semibold text-slate-400 text-[11px]">Final Grade:</span>
+                            <span className="font-bold text-blue-600 dark:text-blue-400 font-mono">
+                              {cls.grade.toFixed(2)} {cls.percentage !== null ? `(${cls.percentage.toFixed(1)}%)` : ''}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700 text-[11px] text-slate-400">
+                          <span>Lecture Room:</span>
+                          <span className="font-medium text-slate-600 dark:text-slate-300">{lecSched.room}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
+                      <span>Historical record</span>
+                      <span className="font-medium">Read only</span>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-x-4 gap-y-2 text-xs">
+                      <span>Course Grade: <strong>{typeof cls.grade === 'number' ? cls.grade.toFixed(2) : 'Pending'}</strong></span>
+                      <span>Score %: <strong>{typeof cls.percentage === 'number' ? `${cls.percentage.toFixed(2)}%` : 'Pending'}</strong></span>
+                      <span>Clinical Hours Completed: <strong>{typeof cls.clinicHoursCompleted === 'number' ? `${cls.clinicHoursCompleted} hrs` : 'Unavailable'}</strong></span>
+                      <span className={['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()) ? 'text-amber-700 dark:text-amber-300 font-bold' : ''}>Retention: <strong>{['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()) ? cls.retentionState : cls.grade === null ? 'Pending' : cls.retentionState || 'Unavailable'}</strong></span>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )
+        )}
+      </div>
+      {otherClasses.length > 0 && <Card className="p-5 space-y-3">
+        <h2 className="font-bold text-sm">Other School-Year Enrollments</h2>
+        <p className="text-xs text-slate-500">These records are outside the configured current year or their school-year classification is unavailable.</p>
+        <div className="overflow-x-auto"><table className="w-full text-left text-xs">
+          <thead><tr><th className="p-2">Course</th><th className="p-2">School Year</th><th className="p-2">Grade</th><th className="p-2">Score %</th><th className="p-2">Clinical Hours</th><th className="p-2">Retention</th></tr></thead>
+          <tbody>{otherClasses.map(cls => <tr key={cls.enrollmentId}>
+            <td className="p-2">{cls.courseCode} · {cls.courseName} · {cls.className}</td>
+            <td className="p-2">{cls.schoolYear || 'Unavailable'}</td>
+            <td className="p-2">{cls.grade === null ? 'Pending' : cls.grade.toFixed(2)}</td>
+            <td className="p-2">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</td>
+            <td className="p-2">{cls.clinicHoursCompleted} hrs</td>
+            <td className="p-2">{cls.retentionState || 'Unavailable'}</td>
+          </tr>)}</tbody>
+        </table></div>
+      </Card>}
+    </div>
+  );
+};
+
+// The prototype is available only after the provenance/runtime gate above.
+// Its browser fixture values never replace failed authoritative API reads.
+const DevelopmentClasses: React.FC = () => {
+  const { user } = useAuth();
+  const { students, attendanceRecords } = useApp();
+  const student = students.find(item => item.email.toLowerCase() === user?.login_email.toLowerCase()) || students[0];
+  return (
+    <div className="space-y-4 max-w-7xl mx-auto">
+      <h1 className="text-2xl font-bold">My Enrolled Classes & Schedule</h1>
+      <div role="status" className="p-4 rounded-xl bg-amber-50 text-amber-900 border border-amber-200">Development-only Classes prototype — sample data, not official academic records.</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {(student?.enrolledSubjects ?? []).map(subject => {
+          const rate = calculateClassAttendanceRate(attendanceRecords.filter(record => record.studentId === student?.id && record.subjectCode === subject.code));
+          return <Card key={subject.code} className="p-5 space-y-2">
+            <h2 className="font-bold">{subject.code} · {subject.name}</h2>
+            <p>{subject.units} Academic Units · Sample grade: {subject.grade.toFixed(2)}</p>
+            <p>Sample attendance: {rate === null ? 'Unavailable' : `${rate}%`}</p>
+          </Card>;
+        })}
+      </div>
     </div>
   );
 };

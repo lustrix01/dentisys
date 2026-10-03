@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { AlertCircle, AlertTriangle, Calendar, Clock, RefreshCw, CheckCircle2, ChevronDown, ChevronUp, BookOpen, History } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { canAccessAuthoritativeStudentBiometrics } from './studentGates';
+import { canAccessAuthoritativeStudentBiometrics, isStudentPrototypeAllowed } from './studentGates';
+import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
+import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAcademicRetentionApi } from '../../services/apiClient';
 import type { Student, StudentAcademicClass } from '../../types';
 
@@ -106,21 +108,6 @@ const attemptStatus = (progression: RemedialProgressionView, attemptNumber: 1 | 
   return 'not_started';
 };
 
-const stageLabel = (stage: RemedialStage): string => {
-  switch (stage) {
-    case 'none': return 'No remedial attempt assigned';
-    case 'attempt_1_pending': return 'Attempt 1 pending';
-    case 'attempt_2_available': return 'Attempt 2 available';
-    case 'attempt_2_pending': return 'Attempt 2 pending';
-    case 'passed': return 'Cleared (passed remedial)';
-    case 'cost_recovery_required': return 'Cost recovery required';
-    case 'cost_recovery_passed': return 'Cleared (passed cost recovery)';
-    case 'cost_recovery_failed': return 'Failed (did not pass cost recovery)';
-    case 'legacy_unclassified': return 'Legacy / unclassified';
-    default: return 'Progression unavailable';
-  }
-};
-
 const attemptStatusLabel = (status: RemedialAttemptStatus | 'available' | 'not_started'): string => {
   switch (status) {
     case 'pending': return 'Pending';
@@ -128,24 +115,52 @@ const attemptStatusLabel = (status: RemedialAttemptStatus | 'available' | 'not_s
     case 'failed': return 'Failed';
     case 'available': return 'Available';
     case 'not_started': return 'Not started';
-    default: return 'Unavailable';
+    default: return '—';
   }
+};
+
+const GradePill: React.FC<{ grade: number | null }> = ({ grade }) => {
+  if (grade === null) {
+    return <span className="text-slate-400 italic text-xs">Pending</span>;
+  }
+  const isSafe = grade < 2.5;
+  const isLimit = grade === 2.5;
+
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className={`font-mono font-bold text-sm ${
+        isSafe ? 'text-emerald-600 dark:text-emerald-400' : isLimit ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
+      }`}>
+        {grade.toFixed(2)}
+      </span>
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+        isSafe
+          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+          : isLimit
+            ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+            : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+      }`}>
+        {isSafe ? 'Passing' : isLimit ? 'Cutoff' : 'Deficient'}
+      </span>
+    </div>
+  );
 };
 
 export const RetentionMonitoring: React.FC = () => {
   const { user } = useAuth();
   const { students = [], settings } = useApp();
 
+  const config = useRuntimeConfig();
   const isAuthoritative = canAccessAuthoritativeStudentBiometrics(user);
 
   const [authRecords, setAuthRecords] = useState<StudentAcademicClass[]>([]);
   const [atRiskCount, setAtRiskCount] = useState<number>(0);
+  const [midtermAtRiskCount, setMidtermAtRiskCount] = useState<number>(0);
+  const [currentSchoolYear, setCurrentSchoolYear] = useState<string | null>(null);
+  const [hasPendingGrades, setHasPendingGrades] = useState(true);
+  const [activeTab, setActiveTab] = useState<'current' | 'remedials' | 'midterm' | 'past'>('current');
   const [loading, setLoading] = useState<boolean>(isAuthoritative);
   const [error, setError] = useState<string | null>(null);
-
-  const threshold = typeof settings?.retentionThreshold === 'number'
-    ? settings.retentionThreshold
-    : null;
 
   useEffect(() => {
     if (!isAuthoritative) return;
@@ -155,6 +170,9 @@ export const RetentionMonitoring: React.FC = () => {
       .then((res) => {
         setAuthRecords(res.retention.records);
         setAtRiskCount(res.retention.atRiskCount);
+        setMidtermAtRiskCount(res.retention.midtermAtRiskCount ?? 0);
+        setCurrentSchoolYear(res.retention.currentSchoolYear ?? null);
+        setHasPendingGrades(res.retention.hasPendingGrades);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Unable to load retention monitoring data.');
@@ -164,7 +182,6 @@ export const RetentionMonitoring: React.FC = () => {
       });
   }, [isAuthoritative]);
 
-  // Fallback for development mock students
   const currentMockStudent = students.find(s =>
     s.email.toLowerCase() === (user?.login_email || '').toLowerCase() ||
     s.studentId.toLowerCase() === (user?.login_email || '').toLowerCase()
@@ -178,368 +195,589 @@ export const RetentionMonitoring: React.FC = () => {
     ? (user?.student?.student_number || '—')
     : (currentMockStudent?.studentId || '2024-DENT-0004');
 
-  // Standing comes from the course records (worst state first). The account's
-  // student status is always "active" for a signed-in Student, so it cannot
-  // describe retention standing.
-  const worstRetentionState = (): string => {
-    const rank: Record<string, number> = { critical: 5, remedial: 4, warning: 3, cleared: 2, active: 1 };
-    let worst = 'active';
-    for (const record of authRecords) {
-      const state = (record.retentionState || '').toLowerCase();
-      if ((rank[state] ?? 0) > (rank[worst] ?? 0)) worst = state;
-    }
-    return worst;
-  };
-  const status = isAuthoritative
-    ? worstRetentionState()
-    : (currentMockStudent?.status || 'active');
+  // Active School Year vs Past
+  const { currentRecords, pastRecords } = useMemo(() => {
+    const current: StudentAcademicClass[] = [];
+    const past: StudentAcademicClass[] = [];
+    authRecords.forEach(r => {
+      if (r.isPast === true) {
+        past.push(r);
+      } else if (r.isCurrent === true || (r.isCurrent === undefined && currentSchoolYear !== null && r.schoolYear === currentSchoolYear)) {
+        current.push(r);
+      }
+    });
+    return {
+      currentRecords: current,
+      pastRecords: past,
+    };
+  }, [authRecords, currentSchoolYear]);
 
-  const requiresRetentionReview = (subject: { grade: number; isClinical?: boolean }) => (
-    subject.isClinical === true
-    && threshold !== null
-    && subject.grade >= threshold
-  );
+  // Deficient Records with Remedials
+  const deficientRecords = useMemo(() => {
+    return authRecords.filter(r => {
+      const prog = readRemedialProgression(r);
+      const state = (r.retentionState || '').toLowerCase();
+      const isDeficient = ['warning', 'critical', 'remedial'].includes(state);
+      return prog.stage !== 'none' || isDeficient;
+    });
+  }, [authRecords]);
 
-  const getStatusBadge = (st: Student['status'] | string) => {
-    const norm = (st || 'active').toLowerCase();
-    const isWarn = norm === 'warning';
-    const isCrit = norm === 'critical';
-    const isRem = norm === 'remedial';
-    const isCleared = norm === 'cleared';
+  // Manual retention warnings do not assign an exam. Only the server's
+  // classified progression can establish active remedial work.
+  const remedialReviewRecords = deficientRecords.filter(record =>
+    ['none', 'legacy_unclassified'].includes(readRemedialProgression(record).stage));
+  const activeRemedialRecords = deficientRecords.filter(record => currentRecords.includes(record)
+    && !['none', 'legacy_unclassified', 'passed', 'cost_recovery_passed'].includes(readRemedialProgression(record).stage));
+  const remedialHistoryRecords = deficientRecords.filter(record =>
+    !remedialReviewRecords.includes(record) && !activeRemedialRecords.includes(record));
+  const remedialRecordCount = activeRemedialRecords.length + remedialHistoryRecords.length;
 
-    if (isCrit) {
-      return (
-        <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60">
-          CRITICAL WATCHLIST
-        </span>
-      );
-    }
-    if (isWarn) {
-      return (
-        <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60">
-          RETENTION WARNING • AT RISK
-        </span>
-      );
-    }
-    if (isRem) {
-      return (
-        <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60">
-          REMEDIAL EXAM ASSIGNED
-        </span>
-      );
-    }
-    if (isCleared) {
-      return (
-        <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 border border-teal-200/60">
-          CLEARED • REMEDIAL REQUIREMENT PASSED
-        </span>
-      );
-    }
-    return (
-      <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
-        ACTIVE STANDING • CLEARED
-      </span>
+  // Midterm Risk Records
+  const midtermRiskRecords = useMemo(() => {
+    return currentRecords.filter(r =>
+      Boolean(r.midtermEvaluation?.isAtRisk)
     );
+  }, [currentRecords]);
+
+  // Group past records by school year & semester
+  const pastSemesters = useMemo(() => {
+    const groups: Record<string, { schoolYear: string; semester: string; records: StudentAcademicClass[] }> = {};
+    pastRecords.forEach(r => {
+      const sy = r.schoolYear || 'Historical';
+      const sem = r.semester || 'Semester';
+      const key = `${sy}__${sem}`;
+      if (!groups[key]) {
+        groups[key] = { schoolYear: sy, semester: sem, records: [] };
+      }
+      groups[key].records.push(r);
+    });
+    return Object.entries(groups).map(([key, data]) => ({
+      key,
+      schoolYear: data.schoolYear,
+      semester: data.semester,
+      records: data.records,
+    }));
+  }, [pastRecords]);
+
+  const [expandedSemesters, setExpandedSemesters] = useState<Record<string, boolean>>({});
+
+  const toggleSemester = (key: string) => {
+    setExpandedSemesters(prev => ({
+      ...prev,
+      [key]: prev[key] === undefined ? false : !prev[key],
+    }));
   };
 
-  if (loading) {
+  if (!isAuthoritative) {
+    if (!isStudentPrototypeAllowed(user, config, 'academic')) return <StudentUnavailable title="Retention Monitoring unavailable" />;
+    const threshold = typeof settings?.retentionThreshold === 'number' ? settings.retentionThreshold : null;
+    const sampleSubjects = currentMockStudent?.enrolledSubjects ?? [];
     return (
-      <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
-        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
-        Loading retention monitoring data…
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-3xl mx-auto pt-6 animate-fade-in" role="alert">
-        <Card className="p-6 border-rose-200 dark:border-rose-900 bg-rose-50/50 dark:bg-rose-950/20">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-6 h-6 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
-            <div className="space-y-2">
-              <h2 className="font-bold text-base text-rose-950 dark:text-rose-100">Unable to load Retention Records</h2>
-              <p className="text-xs text-rose-800 dark:text-rose-300">{error}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoading(true);
-                  setError(null);
-                  getStudentAcademicRetentionApi()
-                    .then(res => {
-                      setAuthRecords(res.retention.records);
-                      setAtRiskCount(res.retention.atRiskCount);
-                    })
-                    .catch(e => setError(e instanceof Error ? e.message : 'Failed to reload.'))
-                    .finally(() => setLoading(false));
-                }}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-              >
-                Retry
-              </button>
-            </div>
+      <div className="space-y-4 max-w-7xl mx-auto">
+        <h1 className="text-2xl font-bold">Clinical Retention Standing</h1>
+        <div role="status" className="p-4 rounded-xl bg-amber-50 text-amber-900 border border-amber-200">Development-only Retention prototype — sample data, not official academic decisions.</div>
+        <Card className="p-5 space-y-3">
+          <h2 className="font-bold">Course Performance Breakdown ({sampleSubjects.length} Enrolled)</h2>
+          <p className="text-xs">Sample retention threshold: {threshold === null ? 'Unavailable' : threshold.toFixed(2)}</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead><tr><th className="p-2">Course</th><th className="p-2">Sample Grade</th><th className="p-2">Sample Standing</th></tr></thead>
+              <tbody>{sampleSubjects.length === 0 && <tr><td colSpan={3} className="p-2">No sample courses available.</td></tr>}{sampleSubjects.map(subject => <tr key={subject.code}>
+                <td className="p-2">{subject.code} · {subject.name}</td>
+                <td className="p-2 font-mono">{subject.grade.toFixed(2)}</td>
+                <td className="p-2">{threshold === null ? 'Unavailable' : subject.isClinical && subject.grade >= threshold ? 'Sample retention review' : 'No sample retention review'}</td>
+              </tr>)}</tbody>
+            </table>
           </div>
         </Card>
       </div>
     );
   }
 
-  const deficientCount = isAuthoritative
-    ? atRiskCount
-      : threshold === null
-        ? 0
-      : (currentMockStudent?.enrolledSubjects || []).filter(requiresRetentionReview).length;
+  if (loading) {
+    return (
+      <div className="min-h-[300px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
+        <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-600" />
+        Loading retention data…
+      </div>
+    );
+  }
 
-  const isAtRisk = isAuthoritative
-    ? (atRiskCount > 0 || deficientCount > 0)
-    : (status === 'warning' || status === 'critical' || deficientCount > 0);
-  // No course has a grade yet: the standing cannot be evaluated.
-  const evaluationPending = isAuthoritative && !isAtRisk && authRecords.every(record => record.grade === null);
+  if (error) {
+    return (
+      <div className="max-w-xl mx-auto pt-6" role="alert">
+        <Card className="p-5 border-rose-200 bg-rose-50/60 dark:bg-rose-950/20 text-center space-y-3">
+          <AlertCircle className="w-6 h-6 text-rose-600 mx-auto" />
+          <p className="text-sm font-bold text-rose-900 dark:text-rose-100">{error}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+          >
+            Retry
+          </button>
+        </Card>
+      </div>
+    );
+  }
+
+  const isStandingAtRisk = atRiskCount > 0;
+  const standingPending = hasPendingGrades || currentRecords.length === 0 || currentRecords.some(record => record.grade === null);
 
   return (
-    <div className="space-y-6">
-      
-      {/* 1. Clean Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+    <div className="space-y-5">
+      {/* 1. Header Bar: Simple & Direct */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100">
             Retention Risk Monitoring
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Track your per-subject course grades, retention standing, and scheduled remedial exams.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Student: <strong className="text-slate-700 dark:text-slate-200">{studentName}</strong> ({studentId})
           </p>
         </div>
 
-        <div className="text-right hidden sm:block">
-          <span className="text-[11px] font-mono font-bold text-slate-400 block">STUDENT ID</span>
-          <span className="text-sm font-extrabold font-mono text-slate-800 dark:text-slate-100">{studentId}</span>
+        {/* Status Pill & Limit */}
+        <div className="flex items-center gap-3">
+          <span className={`px-3 py-1.5 rounded-xl text-xs font-bold ${
+            isStandingAtRisk
+              ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60'
+              : midtermAtRiskCount > 0
+                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60'
+                : standingPending ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
+          }`}>
+            {isStandingAtRisk ? 'Retention Warning' : midtermAtRiskCount > 0 ? 'Midterm Advisory' : standingPending ? 'Standing Pending' : 'Active Standing · Cleared'}
+          </span>
+          <span className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl font-bold text-slate-600 dark:text-slate-300">
+            Limit: 2.50
+          </span>
         </div>
       </div>
 
-      {/* 2. Primary Standing Summary Card */}
-      <Card className="p-6 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              {evaluationPending ? (
-                <span className="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60">
-                  PENDING EVALUATION
-                </span>
-              ) : getStatusBadge(status)}
-              <span className="text-xs text-slate-400 font-medium">Evaluation Period</span>
-            </div>
-            
-            <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100">
-              {studentName}
-            </h2>
-            
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
-              {isAtRisk 
-                ? `You have ${deficientCount} subject(s) requiring Faculty retention review. Please review your authoritative subject records below.`
-                : evaluationPending
-                  ? 'Your standing is pending evaluation until course grades are recorded.'
-                  : 'Your authoritative retention records currently show good standing.'
-              }
-            </p>
-          </div>
+      {/* 2. Simple Tabs */}
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 dark:border-slate-800 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('current')}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'current'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>Active Courses</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+            activeTab === 'current' ? 'bg-blue-500 text-white' : 'bg-slate-200 dark:bg-slate-700'
+          }`}>
+            {currentRecords.length}
+          </span>
+        </button>
 
-          <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shrink-0">
-            <div className="text-center px-3 border-r border-slate-200 dark:border-slate-700">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">
-                Deficient Subjects
-              </span>
-              <span className={`text-2xl font-extrabold font-mono ${deficientCount > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {deficientCount}
-              </span>
-            </div>
+        <button
+          type="button"
+          onClick={() => setActiveTab('remedials')}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'remedials'
+              ? 'bg-rose-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          <span>Remedial Exams</span>
+          {remedialRecordCount > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+              activeTab === 'remedials' ? 'bg-rose-500 text-white' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200'
+            }`}>
+              {remedialRecordCount}
+            </span>
+          )}
+        </button>
 
-            <div className="text-center px-3">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block mb-0.5">
-                Subject Grade Limit
-              </span>
-              <span className="text-2xl font-extrabold font-mono text-slate-700 dark:text-slate-200">
-                {isAuthoritative ? 'Server state' : threshold !== null ? threshold.toFixed(2) : 'Unavailable'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </Card>
+        <button
+          type="button"
+          onClick={() => setActiveTab('midterm')}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'midterm'
+              ? 'bg-amber-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <AlertTriangle className="w-3.5 h-3.5" />
+          <span>Midterm Risk</span>
+          {midtermAtRiskCount > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+              activeTab === 'midterm' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
+            }`}>
+              {midtermAtRiskCount}
+            </span>
+          )}
+        </button>
 
-      {/* 3. Enrolled Subjects Performance Breakdown */}
-      <Card className="p-6">
-        <div className="mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-          <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-            Course Performance Breakdown ({isAuthoritative ? authRecords.length : (currentMockStudent?.enrolledSubjects || []).length} Enrolled)
-          </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Per-subject grades, clinical status, and retention standing.
-          </p>
-        </div>
+        {pastRecords.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('past')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'past'
+                ? 'bg-slate-700 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <History className="w-3.5 h-3.5" />
+            <span>Past Courses</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+              activeTab === 'past' ? 'bg-slate-600 text-white' : 'bg-slate-200 dark:bg-slate-700'
+            }`}>
+              {pastRecords.length}
+            </span>
+          </button>
+        )}
+      </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-4">Subject Code & Title</th>
-                <th className="py-3 px-4 text-center">Score %</th>
-                <th className="py-3 px-4 text-center">Grade</th>
-                <th className="py-3 px-4">Course Type</th>
-                <th className="py-3 px-4">Remedial progression</th>
-                <th className="py-3 px-4 text-right">Standing</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-              {isAuthoritative ? (
-                authRecords.length === 0 ? (
+      {/* 3. Content Views */}
+
+      {/* --- TAB 1: ACTIVE COURSES --- */}
+      {activeTab === 'current' && (
+        <Card className="overflow-hidden border border-slate-200 dark:border-slate-800">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
+                  <th className="py-3 px-4">Course</th>
+                  <th className="py-3 px-4 text-center">Midterm</th>
+                  <th className="py-3 px-4 text-center">Final Grade</th>
+                  <th className="py-3 px-4">Standing</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                {currentRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-slate-400">
-                      No course records registered.
+                    <td colSpan={4} className="py-10 text-center text-slate-400">
+                      No courses enrolled for the active term.
                     </td>
                   </tr>
                 ) : (
-                  authRecords.map(cls => {
+                  currentRecords.map(cls => {
                     const isPending = cls.grade === null;
-                    const retentionState = cls.retentionState?.toLowerCase();
-                    const isAtRiskRow = ['warning', 'critical', 'remedial'].includes(retentionState);
-                    const hasRetentionState = Boolean(retentionState);
-                    const isPassing = !isPending && hasRetentionState && !isAtRiskRow;
-                    const progression = readRemedialProgression(cls);
+                    const retentionState = (cls.retentionState || '').toLowerCase();
+                    const isAtRisk = ['warning', 'critical', 'remedial'].includes(retentionState);
+                    const prog = readRemedialProgression(cls);
+                    const hasRemedial = prog.stage !== 'none';
+                    const manualReviewLabel = prog.stage === 'none'
+                      ? retentionState === 'warning' ? 'Warning · Review required'
+                        : retentionState === 'critical' ? 'Critical · Review required' : null
+                      : null;
 
                     return (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
-                          {cls.courseCode}
-                          <span className="block text-[10px] text-slate-400 font-normal">{cls.courseName}</span>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center font-mono font-bold">
-                          {cls.percentage !== null ? `${cls.percentage.toFixed(2)}%` : '—'}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center font-extrabold font-mono text-sm">
-                          {isPending ? (
-                            <span className="text-slate-400 font-normal">Pending</span>
-                          ) : (
-                            <span className={isPassing ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-                              {cls.grade?.toFixed(2)}
-                            </span>
-                          )}
-                        </td>
-
                         <td className="py-3.5 px-4">
-                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
-                            {cls.isClinical ? 'Clinical Lab Course' : 'Lecture Course'}
-                          </span>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <div className="min-w-[190px] space-y-1.5">
-                            <span className={`inline-flex rounded-lg border px-2 py-1 text-[10px] font-extrabold ${progression.stage === 'passed' || progression.stage === 'cost_recovery_passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : progression.stage === 'cost_recovery_required' || progression.stage === 'cost_recovery_failed' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>
-                              {stageLabel(progression.stage)}
+                          <div className="space-y-0.5">
+                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-sm mr-2">
+                              {cls.courseCode}
                             </span>
-                            {progression.stage !== 'none' && progression.stage !== 'legacy_unclassified' && ([1, 2] as const).map(attemptNumber => {
-                              const attempt = progression.attempts.find(item => item.attemptNumber === attemptNumber);
-                              const statusLabel = attemptStatusLabel(attemptStatus(progression, attemptNumber));
-                              return <p key={attemptNumber} className="text-[10px] text-slate-500 dark:text-slate-400">Attempt {attemptNumber}: {statusLabel}{typeof attempt?.percentage === 'number' ? ` · ${attempt.percentage.toFixed(2)}%` : ''}{attempt?.scheduledDate ? ` · ${attempt.scheduledDate}` : ''}</p>;
-                            })}
+                            <span className="text-slate-800 dark:text-slate-100 font-semibold">
+                              {cls.courseName}
+                            </span>
+                            <div className="text-[10px] text-slate-400">
+                              {cls.isClinical ? 'Clinical Lab' : 'Lecture'} · {cls.units} Units · {cls.instructorName || 'Faculty'}
+                            </div>
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4 text-right">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                            !isPending && isAtRiskRow
-                              ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60'
-                              : hasRetentionState && !isPending
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
-                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60'
-                          }`}>
-                            {isPending ? 'Pending' : cls.retentionState || 'State unavailable'}
-                          </span>
+                        <td className="py-3.5 px-4 text-center">
+                          {cls.midtermEvaluation?.complete ? (
+                            <div className="inline-flex flex-col items-center">
+                              <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
+                                {cls.midtermEvaluation.percentage !== null ? `${cls.midtermEvaluation.percentage.toFixed(1)}%` : '—'}
+                              </span>
+                              {cls.midtermEvaluation.isAtRisk && (
+                                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                                  At Risk
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic">Pending</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-center">
+                          <GradePill grade={cls.grade} />
+                        </td>
+
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              !isPending && isAtRisk
+                                ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                                : !isPending
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                            }`}>
+                              {manualReviewLabel ?? (isPending ? 'In Progress' : isAtRisk ? 'Deficient' : 'Cleared')}
+                            </span>
+                            {hasRemedial && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveTab('remedials')}
+                                className="text-[10px] font-bold text-rose-600 underline cursor-pointer"
+                              >
+                                View Exam
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
                   })
-                )
-              ) : (
-                (currentMockStudent?.enrolledSubjects || []).map(subj => {
-                  const isPassing = !requiresRetentionReview(subj);
-                  return (
-                    <tr key={subj.code} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
-                        {subj.code}
-                        <span className="block text-[10px] text-slate-400 font-normal">{subj.name}</span>
-                      </td>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
-                      <td className="py-3.5 px-4 text-center font-mono font-bold">
-                        {subj.components?.exams ? `${subj.components.exams}%` : '—'}
-                      </td>
+      {/* --- TAB 2: REMEDIAL EXAMS (CARDS) --- */}
+      {activeTab === 'remedials' && (
+        deficientRecords.length === 0 ? (
+          <Card className="p-8 text-center space-y-2 border border-slate-200 dark:border-slate-800">
+            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{standingPending ? 'Remedial Requirements Pending' : 'No Remedial Exams Required'}</h3>
+            <p className="text-xs text-slate-400">{standingPending ? 'Final grades are pending; remedial requirements cannot yet be confirmed.' : 'No remedial requirements are recorded.'}</p>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {remedialReviewRecords.length > 0 && <h3 className="md:col-span-2 font-bold text-sm">Retention Review / Unassigned</h3>}
+            {remedialReviewRecords.map(cls => <Card key={cls.enrollmentId} className="p-4 border border-slate-200 dark:border-slate-800 space-y-2">
+              <h4 className="text-xs font-bold"><span className="font-mono text-blue-600 mr-2">{cls.courseCode}</span>{cls.courseName}</h4>
+              <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : cls.grade.toFixed(2)}</p>
+              <p className="text-xs">Retention: {cls.retentionState || 'State unavailable'}</p>
+              <p className="text-[10px] text-slate-500">{cls.semester} · {cls.schoolYear}</p>
+              <p className="text-xs font-semibold">{readRemedialProgression(cls).stage === 'none' ? 'No remedial attempt assigned.' : 'Remedial progression needs Faculty review.'}</p>
+            </Card>)}
+            {[...activeRemedialRecords, ...remedialHistoryRecords].map((cls, index) => {
+              const progression = readRemedialProgression(cls);
+              const attempt1 = progression.attempts.find(a => a.attemptNumber === 1);
+              const attempt2 = progression.attempts.find(a => a.attemptNumber === 2);
+              const activeAttemptNumber = progression.passedAttempt ?? (progression.stage === 'attempt_2_available' || progression.stage === 'attempt_2_pending' ? 2 : 1);
+              const activeAttempt = activeAttemptNumber === 2 ? attempt2 : attempt1;
+              const isCostRecovery = progression.stage === 'cost_recovery_required' || progression.stage === 'cost_recovery_failed' || progression.stage === 'cost_recovery_passed';
 
-                      <td className="py-3.5 px-4 text-center font-extrabold font-mono text-sm">
-                        <span className={isPassing ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
-                          {subj.grade.toFixed(2)}
-                        </span>
-                      </td>
+              return (
+                <React.Fragment key={cls.enrollmentId}>
+                {(index === 0 || index === activeRemedialRecords.length) && <h3 className="md:col-span-2 font-bold text-sm">{index < activeRemedialRecords.length ? 'Active Remediation' : 'Completed / Historical Remediation'}</h3>}
+                <Card className="p-4 border border-slate-200 dark:border-slate-800 space-y-3">
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                    <div>
+                      <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-sm">
+                        {cls.courseCode}
+                      </span>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">
+                        {cls.courseName}
+                      </h4>
+                      <p className="text-[10px] text-slate-400">Instructor: {cls.instructorName || 'Faculty'}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                      Grade: {cls.grade !== null ? cls.grade.toFixed(2) : '—'}
+                    </span>
+                  </div>
 
-                      <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
-                          {subj.isClinical ? 'Clinical Lab Course' : 'Lecture Course'}
-                        </span>
-                      </td>
+                  <p className="text-[10px] text-slate-500">{cls.semester} · {cls.schoolYear} · {progression.stage.replaceAll('_', ' ')}</p>
+                  {/* Scheduled Exam Date */}
+                  <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-blue-600 shrink-0" />
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 block">
+                        {progression.stage === 'passed' ? 'Passed Exam Date' : isCostRecovery ? 'Remedial Exam History' : activeAttempt?.status === 'pending' ? 'Scheduled Exam Date' : 'Exam Schedule'}
+                      </span>
+                      <span className="text-sm font-mono font-extrabold text-blue-950 dark:text-blue-100">
+                        {isCostRecovery ? 'Both remedial attempts completed' : progression.stage === 'passed' ? activeAttempt?.scheduledDate || 'Date unavailable' : activeAttempt?.status === 'pending' ? activeAttempt.scheduledDate || 'Schedule to be announced by faculty' : 'Schedule to be announced by faculty'}
+                      </span>
+                    </div>
+                  </div>
 
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex rounded-lg border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">
-                          Authoritative progression unavailable
-                        </span>
-                      </td>
+                  {/* Attempts Progression */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {([1, 2] as const).map(attemptNum => {
+                      const att = progression.attempts.find(item => item.attemptNumber === attemptNum);
+                      const attStatus = attemptStatus(progression, attemptNum);
+                      const attLabel = attemptStatusLabel(attStatus);
 
-                      <td className="py-3.5 px-4 text-right">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          isPassing 
-                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60'
-                            : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60'
-                        }`}>
-                          {isPassing ? 'Passing' : 'Midterm Deficient'}
-                        </span>
+                      return (
+                        <div
+                          key={attemptNum}
+                          className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30"
+                        >
+                          <div className="flex items-center justify-between text-[11px] font-bold mb-1">
+                            <span className="text-slate-600 dark:text-slate-300">
+                              {attemptNum === 1 ? 'Attempt 1' : 'Attempt 2'}
+                            </span>
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                              attStatus === 'passed'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : attStatus === 'failed'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : attStatus === 'pending'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-slate-200 text-slate-600'
+                            }`}>
+                              {attLabel}
+                            </span>
+                          </div>
+                          <span className="font-mono text-[10px] text-slate-500 block">
+                            {typeof att?.percentage === 'number' ? `Score: ${att.percentage.toFixed(1)}%` : 'No score yet'}
+                            {att?.scheduledDate && <span className="block">Exam date: {att.scheduledDate}</span>}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Cost Recovery Warning */}
+                  {isCostRecovery && (
+                    <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-xs font-semibold">
+                      {progression.stage === 'cost_recovery_passed' ? 'Cost recovery passed · Course cleared.' : progression.stage === 'cost_recovery_failed' ? 'Cost recovery failed · Course remains unresolved.' : 'Cost recovery required (Both remedial attempts completed without passing).'}
+                    </div>
+                  )}
+                </Card>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* --- TAB 3: MIDTERM RISK (NO REMEDIAL EXAM, JUST REMINDER) --- */}
+      {activeTab === 'midterm' && (
+        <div className="space-y-3">
+          {currentRecords.some(record => !record.midtermEvaluation?.risk) && <p role="status" className="text-xs text-slate-500">Advisory Pending/Unavailable for courses without sufficient assessment data.</p>}
+          <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 text-amber-900 dark:text-amber-200 text-xs">
+            <strong>Advisory Reminder:</strong> Remedial exams are not held at midterm. This is an early notification to consult your instructors before final exams.
+          </div>
+
+          <Card className="overflow-hidden border border-slate-200 dark:border-slate-800">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-50/50 dark:bg-slate-800/40">
+                    <th className="py-3 px-4">Course</th>
+                    <th className="py-3 px-4 text-center">Midterm Score</th>
+                    <th className="py-3 px-4 text-center">Midterm Grade</th>
+                    <th className="py-3 px-4">Recommendation</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  {midtermRiskRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+                        {currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : currentRecords.some(record => !record.midtermEvaluation?.risk) ? 'Assessment data is pending or unavailable.' : 'No courses flagged at risk for midterm.'}
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ) : (
+                    midtermRiskRecords.map(cls => (
+                      <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3.5 px-4">
+                          <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-sm mr-2">
+                            {cls.courseCode}
+                          </span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-100">
+                            {cls.courseName}
+                          </span>
+                          <div className="text-[10px] text-slate-400">
+                            Instructor: {cls.instructorName || 'Faculty'}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-800 dark:text-slate-100">
+                          {typeof cls.midtermEvaluation?.percentage === 'number' ? `${cls.midtermEvaluation.percentage.toFixed(1)}%` : 'Pending'}
+                        </td>
+                        <td className="py-3.5 px-4 text-center font-mono font-extrabold text-amber-600 dark:text-amber-400">
+                          {typeof cls.midtermEvaluation?.grade === 'number' ? cls.midtermEvaluation.grade.toFixed(2) : 'Pending'}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-500">
+                          <span className="block font-bold">{cls.midtermEvaluation?.risk?.level ?? 'Advisory'} · {cls.midtermEvaluation?.risk?.period ?? 'Midterm'} projection</span>
+                          Review lessons and consult instructor before finals.
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
-      </Card>
+      )}
 
-      {/* 4. Policy & Retention Rules Guide */}
-      <Card className="p-6 bg-slate-50/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800">
-        <h3 className="text-sm font-bold font-heading text-slate-800 dark:text-slate-100 mb-3">
-          Bicol University CDM Academic Retention Guidelines
-        </h3>
+      {/* --- TAB 4: PAST COURSES --- */}
+      {activeTab === 'past' && (
+        pastSemesters.length === 0 ? (
+          <Card className="p-8 text-center text-xs text-slate-400">
+            No past course history available.
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {pastSemesters.map(sem => {
+              const isExpanded = expandedSemesters[sem.key] ?? true;
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">1. Server retention state</span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              The authoritative retention state determines whether a course requires review.
-            </p>
+              return (
+                <div
+                  key={sem.key}
+                  className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleSemester(sem.key)}
+                    className="w-full flex items-center justify-between p-3.5 bg-slate-50/70 hover:bg-slate-100/70 dark:bg-slate-800/40 text-left cursor-pointer"
+                  >
+                    <div>
+                      <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100">
+                        S.Y. {sem.schoolYear} · {sem.semester}
+                      </h4>
+                      <p className="text-[10px] text-slate-400">
+                        {sem.records.length} Courses
+                      </p>
+                    </div>
+                    {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  </button>
+
+                  {isExpanded && (
+                    <div className="p-3 border-t border-slate-100 dark:border-slate-800 overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                            <th className="py-2 px-3">Course</th>
+                            <th className="py-2 px-3 text-center">Grade</th>
+                            <th className="py-2 px-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                          {sem.records.map(cls => (
+                            <tr key={cls.enrollmentId}>
+                              <td className="py-2.5 px-3">
+                                <span className="font-mono font-bold text-blue-600 mr-2">{cls.courseCode}</span>
+                                <span>{cls.courseName}</span>
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <GradePill grade={cls.grade} />
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                                  {cls.retentionState || 'State unavailable'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-
-          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">2. Remedial review</span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Faculty records up to two server-authorized remedial attempts. A pass changes progression readiness only; your original course grade remains unchanged.
-            </p>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
-            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">3. Clinical Attendance</span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Attendance values are shown when authoritative attendance data is available.
-            </p>
-          </div>
-        </div>
-      </Card>
-
+        )
+      )}
     </div>
   );
 };

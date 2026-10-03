@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/remedial_attempts.php';
+require_once __DIR__ . '/FacultyController.php';
 
 function student_academic_verify_auth(PDO $pdo, array $config): array
 {
@@ -99,18 +100,21 @@ function student_academic_profile(PDO $pdo, int $studentId): ?array
 function student_academic_class_rows(PDO $pdo, int $studentId): array
 {
     $stmt = $pdo->prepare(
-        'SELECT e.enrollment_id, e.cs_id, e.status AS enrollment_status, e.date_enrolled,
+        'SELECT e.enrollment_id, e.cs_id, e.student_id, e.status AS enrollment_status, e.date_enrolled,
                 COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
                 COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                 e.grade_components_json,
                 COALESCE(egb.retention_state, e.retention_state) AS retention_state,
                 e.remedial_state_json, e.clinic_hours_completed,
                 cs.cs_name, cs.semester, cs.school_year, cs.year_level AS class_year_level,
+                cs.lec_room, cs.lab_room, cs.block, cs.meetings_recorded,
+                u.display_name AS instructor_name,
                 c.course_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_name, c.units, c.is_clinical
            FROM enrollments e
            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
            JOIN class_sections cs ON cs.cs_id = e.cs_id
            JOIN courses c ON c.course_id = cs.course_id
+           LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
           WHERE e.student_id = ?
             AND LOWER(e.status) = \'active\'
             AND LOWER(cs.status) = \'active\'
@@ -131,6 +135,10 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
     $rows = [];
     foreach ($dbRows as $row) {
         $enrollmentId = (int) $row['enrollment_id'];
+        $meetings = class_meetings_read($pdo, $row);
+        $midterm = faculty_watchlist_midterm($pdo, $row);
+        $risk = academic_school_year_is_current($pdo, (string) $row['school_year'])
+            ? faculty_risk_projection($pdo, $row) : null;
         $rows[] = [
             'enrollmentId' => (string) $enrollmentId,
             'classId' => (string) $row['cs_id'],
@@ -138,6 +146,12 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'courseId' => (string) $row['course_id'],
             'courseCode' => (string) $row['course_code'],
             'courseName' => (string) $row['course_name'],
+            'instructorName' => $row['instructor_name'] !== null ? (string) $row['instructor_name'] : null,
+            'lecRoom' => $row['lec_room'] !== null ? class_meetings_display($meetings, 'Lecture', (string) $row['lec_room']) : null,
+            'labRoom' => $row['lab_room'] !== null ? class_meetings_display($meetings, 'Laboratory', (string) $row['lab_room']) : null,
+            'block' => $row['block'] !== null ? (string) $row['block'] : null,
+            'meetings' => $meetings,
+            'meetingsRecorded' => filter_var($row['meetings_recorded'], FILTER_VALIDATE_BOOLEAN),
             'units' => (float) $row['units'],
             'isClinical' => (bool) $row['is_clinical'],
             'semester' => (string) $row['semester'],
@@ -149,12 +163,22 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'gradeComponents' => $row['grade_components_json'] !== null
                 ? json_decode((string) $row['grade_components_json'], true)
                 : null,
+            'midtermEvaluation' => [
+                'complete' => (bool) $midterm['complete'],
+                'percentage' => $midterm['percentage'] !== null ? round((float) $midterm['percentage'], 2) : null,
+                'grade' => $midterm['complete'] && $midterm['percentage'] !== null
+                    ? faculty_percentage_to_gwa((float) $midterm['percentage']) : null,
+                'isAtRisk' => in_array($risk['level'] ?? null, ['High', 'At Risk'], true),
+                'risk' => $risk,
+            ],
             // A passed remedial attempt or cost recovery clears the Student for
             // the course; the recorded grade itself is unchanged.
             'retentionState' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
             'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
             'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
             'clinicHoursCompleted' => (int) $row['clinic_hours_completed'],
+            'isCurrent' => academic_school_year_is_current($pdo, (string) $row['school_year']),
+            'isPast' => academic_school_year_is_past($pdo, (string) $row['school_year']),
         ];
     }
     return $rows;
@@ -186,6 +210,7 @@ function handle_student_classes_get(): void
         $authCtx = student_academic_verify_auth($pdo, $config);
         json_response([
             'status' => 'ok',
+            'currentSchoolYear' => academic_current_school_year($pdo),
             'classes' => student_academic_class_rows($pdo, (int) $authCtx['student_id']),
         ], 200);
     } catch (Throwable $e) {
@@ -201,16 +226,21 @@ function handle_student_retention_get(): void
         $pdo = create_pdo($config);
         $authCtx = student_academic_verify_auth($pdo, $config);
         $classes = student_academic_class_rows($pdo, (int) $authCtx['student_id']);
+        $currentClasses = array_values(array_filter($classes, static fn(array $row): bool => $row['isCurrent']));
         $atRisk = array_values(array_filter(
-            $classes,
+            $currentClasses,
             static fn(array $row): bool => in_array($row['retentionState'], ['warning', 'critical', 'remedial'], true)
         ));
+        $midtermAtRisk = array_values(array_filter($currentClasses, static fn(array $row): bool => $row['midtermEvaluation']['isAtRisk']));
         json_response([
             'status' => 'ok',
             'retention' => [
                 'records' => $classes,
+                'currentSchoolYear' => academic_current_school_year($pdo),
                 'atRiskCount' => count($atRisk),
-                'hasPendingGrades' => count(array_filter($classes, static fn(array $row): bool => $row['grade'] === null)) > 0,
+                'midtermAtRiskCount' => count($midtermAtRisk),
+                'hasMidtermWarning' => count($midtermAtRisk) > 0,
+                'hasPendingGrades' => count(array_filter($currentClasses, static fn(array $row): bool => $row['grade'] === null)) > 0,
             ],
         ], 200);
     } catch (Throwable $e) {

@@ -705,7 +705,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Class section').selectOption('4');
     await expect(page.getByText('Past school-year attendance is view-only.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start Attendance Session', exact: true })).toBeDisabled();
-    await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByRole('button', { name: 'Present', exact: true })).toBeDisabled();
+    await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByRole('button', { name: 'Override', exact: true })).toBeDisabled();
     await page.getByLabel('Attendance school year').selectOption('current');
     await expect(page.getByLabel('Assigned course')).toHaveValue('');
     await expect(page.getByLabel('Class section')).toHaveValue('');
@@ -976,11 +976,12 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
         await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
       } else {
-        await row.getByRole('button', { name: operation === 'correction' ? 'Absent' : 'Present', exact: true }).click();
+        await row.getByRole('button', { name: 'Override', exact: true }).click();
+        await page.locator('form').getByRole('button', { name: operation === 'correction' ? 'absent' : 'present', exact: true }).click();
         if (operation === 'correction') {
           await page.locator('textarea').fill('Student was absent due to illness');
-          await page.getByRole('button', { name: 'Save Correction', exact: true }).click();
         }
+        await page.getByRole('button', { name: 'Save Override', exact: true }).click();
       }
       await expect.poll(() => writing).toBe(true);
       await expect(page.getByLabel('Assigned course', { exact: true })).toBeDisabled();
@@ -991,7 +992,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.clock.runFor(100);
       expect(reads).toBe(readsBefore);
       releaseWrite();
-      await expect(page.getByText(operation === 'bulk' ? 'Marked 1 student as present.' : operation === 'correction' ? 'Attendance corrected for Bob White (absent).' : 'Recorded Alice Green as present.', { exact: true })).toBeVisible();
+      await expect(page.getByText(operation === 'bulk' ? 'Marked 1 student as present.' : operation === 'correction' ? 'Attendance corrected for Bob White (absent).' : 'Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
     });
   }
 
@@ -1021,7 +1022,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
       await page.getByLabel('Class section', { exact: true }).selectOption('1');
       const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
-      await alice.getByRole('button', { name: 'Present', exact: true }).click();
+      await alice.getByRole('button', { name: 'Override', exact: true }).click();
+    await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
+    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
       await expect.poll(() => writing).toBe(true);
       if (newerRead !== 'refresh') {
         await expect(page.getByLabel('Attendance school year', { exact: true })).toBeDisabled();
@@ -1030,7 +1033,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await expect(page.locator('input[type="date"]')).toBeDisabled();
         if (newerRead === 'same session') await expect(page.getByRole('button', { name: /Open.*SAME-SESSION/ })).toBeDisabled();
         releaseWrite();
-        await expect(page.getByText('Recorded Alice Green as present.', { exact: true })).toBeVisible();
+        await expect(page.getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
         await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
         await expect(page.locator('input[type="date"]')).toBeEnabled();
         await expect(page.getByLabel('Class section', { exact: true })).toBeEnabled();
@@ -1039,7 +1042,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       }
       await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeDisabled();
       releaseWrite();
-      await expect(page.getByText('Recorded Alice Green as present.', { exact: true })).toBeVisible();
+      await expect(page.getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeEnabled();
       await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
       expect(reads).toBe(1);
@@ -1128,7 +1131,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
     const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
-    await alice.getByRole('button', { name: 'Present', exact: true }).click();
+    await alice.getByRole('button', { name: 'Override', exact: true }).click();
+    await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
+    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
     await expect.poll(() => writing).toBe(true);
     await page.getByRole('region', { name: 'Excused requests' }).getByRole('button', { name: 'Approve', exact: true }).click();
     await expect(page.getByText('Bob approval saved.', { exact: true })).toBeVisible();
@@ -1175,9 +1180,11 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     // Alice Green has status null. Click 'Present'
     const aliceRow = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
-    await aliceRow.getByRole('button', { name: 'Present' }).click();
+    await aliceRow.getByRole('button', { name: 'Override', exact: true }).click();
+    await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
+    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
 
-    await expect(page.getByText(/Recorded Alice Green as present/i)).toBeVisible();
+    await expect(page.getByText(/Attendance updated for Alice Green \(present\)/i)).toBeVisible();
     expect(overridePayload).not.toBeNull();
     expect(overridePayload?.csId).toBe(1);
     expect(overridePayload?.enrollmentId).toBe(10);
@@ -1196,7 +1203,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'ok', worksheet: mockWorksheetSectionA }),
+        body: JSON.stringify({ status: 'ok', worksheet: { ...mockWorksheetSectionA,
+          roster: mockWorksheetSectionA.roster.map(item => item.id === '50'
+            ? { ...item, overrideReason: 'Previous correction justification', overrideAt: '2026-09-20 09:00:00' } : item),
+        } }),
       });
     });
 
@@ -1219,33 +1229,107 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     // Bob White currently has 'present'. Click 'Absent'
     const bobRow = page.locator('tbody tr').filter({ hasText: 'Bob White' });
-    await bobRow.getByRole('button', { name: 'Absent' }).click();
+    await bobRow.getByRole('button', { name: 'Override', exact: true }).click();
+    await expect(page.locator('textarea')).toHaveValue('');
+    await page.locator('form').getByRole('button', { name: 'absent', exact: true }).click();
 
     // Modal should appear
-    await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Manual Attendance Override' })).toBeVisible();
     await expect(page.locator('form').getByText('Bob White')).toBeVisible();
     await expect(page.getByText(/PRESENT → ABSENT/i)).toBeVisible();
 
     // Try submitting without reason
-    await page.getByRole('button', { name: 'Save Correction' }).click();
+    await page.getByRole('button', { name: 'Save Override' }).click();
     await expect(page.getByText(/justification reason is required/i)).toBeVisible();
     expect(overridePayload).toBeNull();
 
     // Cancel modal
+    await page.locator('textarea').fill('Abandoned correction draft');
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Manual Attendance Override' })).toHaveCount(0);
     expect(overridePayload).toBeNull();
 
     // Click Absent again and provide valid reason
-    await bobRow.getByRole('button', { name: 'Absent' }).click();
+    await bobRow.getByRole('button', { name: 'Override', exact: true }).click();
+    await expect(page.locator('textarea')).toHaveValue('');
+    await page.locator('form').getByRole('button', { name: 'absent', exact: true }).click();
     await page.fill('textarea', 'Student was absent due to illness');
-    await page.getByRole('button', { name: 'Save Correction' }).click();
+    await page.getByRole('button', { name: 'Save Override' }).click();
 
     await expect(page.getByText(/Attendance corrected for Bob White \(absent\)/i)).toBeVisible();
     expect(overridePayload).not.toBeNull();
     expect(overridePayload?.recordId).toBe('50');
     expect(overridePayload?.status).toBe('absent');
     expect(overridePayload?.reason).toBe('Student was absent due to illness');
+  });
+
+  test('Faculty correction preserves a failed save for retry without changing the recorded status', async ({ page }) => {
+    const payloads: Array<Record<string, unknown>> = [];
+    await page.route('**/api/faculty/attendance?*csId=1*', route => route.fulfill({
+      json: { status: 'ok', worksheet: mockWorksheetSectionA },
+    }));
+    await page.route('**/api/faculty/attendance/override', route => {
+      payloads.push(route.request().postDataJSON());
+      return payloads.length === 1
+        ? route.fulfill({ status: 500, json: { status: 'error', message: 'Attendance save failed; please retry.' } })
+        : route.fulfill({ json: { status: 'ok', operation: 'updated', recordId: '50' } });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
+    const row = page.locator('tbody tr').filter({ hasText: 'Bob White' });
+    await row.getByRole('button', { name: 'Override', exact: true }).click();
+    await page.locator('form').getByRole('button', { name: 'absent', exact: true }).click();
+    await page.locator('textarea').fill('  Verified absence with the Student  ');
+    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await expect(page.getByText('A server error occurred. Please try again later.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toBeVisible();
+    await expect(page.locator('textarea')).toHaveValue('  Verified absence with the Student  ');
+    await expect(row.getByTestId('attendance-status')).toHaveText(/Present$/);
+    await expect(page.getByText('Attendance corrected for Bob White (absent).', { exact: true })).toHaveCount(0);
+    expect(payloads).toEqual([{ recordId: '50', status: 'absent', reason: 'Verified absence with the Student' }]);
+    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await expect(page.getByText('Attendance corrected for Bob White (absent).', { exact: true })).toBeVisible();
+    await expect(row.getByTestId('attendance-status')).toHaveText(/Absent$/);
+    await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toHaveCount(0);
+    expect(payloads).toEqual([payloads[0], payloads[0]]);
+  });
+
+  test('Faculty initial entry targets the selected same-day session and sends its optional reason', async ({ page }) => {
+    const sessions = [
+      { sessionId: '41', sessionDate: '2026-09-20', sessionCode: 'MORNING-41', status: 'ended', openingTime: '08:00', classEndTime: '10:00', room: 'Room 101' },
+      { sessionId: '42', sessionDate: '2026-09-20', sessionCode: 'AFTERNOON-42', status: 'ended', openingTime: '13:00', classEndTime: '15:00', room: 'Room 102' },
+    ];
+    const payloads: Array<Record<string, unknown>> = [];
+    await page.route('**/api/faculty/attendance?*csId=1*', route => {
+      const sessionId = new URL(route.request().url()).searchParams.get('sessionId');
+      return route.fulfill({ json: { status: 'ok', worksheet: {
+        ...mockWorksheetSectionA, date: '2026-09-20', attendanceSessions: sessions,
+        attendanceSession: sessions.find(session => session.sessionId === sessionId) ?? null,
+        roster: mockWorksheetSectionA.roster.map(item => ({ ...item, attendanceSessionId: sessionId,
+          sessionCode: sessions.find(session => session.sessionId === sessionId)?.sessionCode ?? null })),
+      } } });
+    });
+    await page.route('**/api/faculty/attendance/override', route => {
+      payloads.push(route.request().postDataJSON());
+      return route.fulfill({ json: { status: 'ok', operation: 'created', recordId: '999' } });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
+    await page.locator('input[type="date"]').fill('2026-09-20');
+    const row = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
+    await expect(row.getByRole('button', { name: 'Override', exact: true })).toBeDisabled();
+    await page.getByRole('combobox', { name: 'Attendance session', exact: true }).selectOption('42');
+    await row.getByRole('button', { name: 'Override', exact: true }).click();
+    await expect(page.getByText('Initial Entry Reason (Optional)', { exact: true })).toBeVisible();
+    await page.locator('form').getByRole('button', { name: 'late', exact: true }).click();
+    await page.locator('textarea').fill('  Verified arrival for the afternoon session  ');
+    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await expect(page.getByText('Attendance updated for Alice Green (late).', { exact: true })).toBeVisible();
+    expect(payloads).toEqual([{ csId: 1, enrollmentId: 10, sessionDate: '2026-09-20', sessionId: 42,
+      status: 'late', reason: 'Verified arrival for the afternoon session' }]);
+    await expect(row.getByTestId('attendance-status')).toHaveText(/Late$/);
   });
 
   test('no-op: selecting the same status that is already persisted does not call API', async ({ page }) => {
@@ -1269,10 +1353,13 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     // Bob White is already 'present'. Click 'Present'
     const bobRow = page.locator('tbody tr').filter({ hasText: 'Bob White' });
-    await bobRow.getByRole('button', { name: 'Present' }).click();
+    await bobRow.getByRole('button', { name: 'Override', exact: true }).click();
+    await page.getByRole('button', { name: 'Save Override', exact: true }).click();
+    await expect(page.getByText('Choose a different attendance status.')).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
     // Modal should not open and API should not be called
-    await expect(page.getByRole('heading', { name: 'Attendance Correction' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Manual Attendance Override' })).toHaveCount(0);
     expect(overrideCalled).toBe(false);
   });
 

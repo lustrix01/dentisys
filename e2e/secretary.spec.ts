@@ -61,11 +61,10 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await expect(page.locator('body')).toContainText(/Attendance|List|Students|Check-in/i);
   });
 
-  test('secretary can navigate to Manual Attendance Override page', async ({ page }) => {
+  test('secretary can access Attendance Monitoring with override actions', async ({ page }) => {
     await page.click('a[href="/secretary/attendance"]');
-    await page.click('a[href="/secretary/override"]');
-    await expect(page).toHaveURL('/secretary/override');
-    await expect(page.locator('body')).toContainText(/Override|Manual|Correction|Status/i);
+    await expect(page).toHaveURL('/secretary/attendance');
+    await expect(page.locator('body')).toContainText(/Override|Attendance/i);
   });
 
   test('secretary navigation does not claim a CCTV integration', async ({ page }) => {
@@ -91,12 +90,11 @@ test.describe('Class Secretary Module E2E Tests', () => {
       requestPayload = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Excused request sent to Faculty for approval.', request: null }) });
     });
-    await page.goto('/secretary/override');
-    await page.getByRole('row').filter({ hasText: 'Request Student' }).getByRole('button', { name: 'Select' }).click();
+    await page.goto('/secretary/attendance');
+    await page.getByRole('row').filter({ hasText: 'Request Student' }).getByRole('button', { name: 'Override' }).click();
     await page.getByRole('button', { name: 'Request Excused' }).click();
     await expect(page.getByText(/Excused needs Faculty approval/)).toBeVisible();
     await page.locator('textarea').fill('Medical certificate given to the Secretary');
-    await page.getByRole('button', { name: 'Review and Apply Override' }).click();
     await page.getByRole('button', { name: 'Send request' }).click();
     await expect.poll(() => requestPayload).toEqual({ studentId: '42', recordId: '501', sessionId: 900, reason: 'Medical certificate given to the Secretary' });
     await expect(page.getByText('Excused request sent to Faculty for approval.')).toBeVisible();

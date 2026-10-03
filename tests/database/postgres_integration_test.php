@@ -31,6 +31,7 @@ require_once $root . '/backend/controllers/FacultyInvitationController.php';
 require_once $root . '/backend/controllers/StudentAuthController.php';
 require_once $root . '/backend/controllers/HealthController.php';
 require_once $root . '/backend/controllers/FacultyController.php';
+require_once $root . '/backend/controllers/StudentAcademicController.php';
 
 /**
  * Remove disposable fixture classes and courses. Audit events are immutable
@@ -2467,9 +2468,63 @@ expect_same('26', (string) ($studentProfileBody['profile']['id'] ?? ''), 'Studen
 [$studentClassesStatus, $studentClassesBody] = integration_http_get_json('/api/student/classes?studentId=1', $studentCredentials['access_token']);
 expect_same(200, $studentClassesStatus, 'Student class read returns HTTP 200');
 expect_true(is_array($studentClassesBody['classes'] ?? null), 'Student class read returns a canonical classes array');
+foreach ($studentClassesBody['classes'] as $academicClass) {
+    $academicClassStmt = $pdo->prepare('SELECT cs_id, lec_room, lab_room, meetings_recorded FROM class_sections WHERE cs_id = ?');
+    $academicClassStmt->execute([(int) $academicClass['classId']]);
+    expect_same(class_meetings_read($pdo, $academicClassStmt->fetch(PDO::FETCH_ASSOC)), $academicClass['meetings'] ?? null, 'Student schedules match authoritative class meetings');
+}
+// A recorded empty canonical schedule supersedes mixed legacy times without erasing storage.
+$clearedScheduleClassId = (int) $studentClassesBody['classes'][0]['classId'];
+$pdo->beginTransaction();
+try {
+    $mixedLegacySchedule = 'Legacy Room (Mon 08:00 AM - 10:00 AM); Unfinished Room (Tue 03:00 PM -';
+    $pdo->prepare('UPDATE class_sections SET lec_room = ?, meetings_recorded = TRUE WHERE cs_id = ?')->execute([$mixedLegacySchedule, $clearedScheduleClassId]);
+    $pdo->prepare('DELETE FROM class_meetings WHERE cs_id = ?')->execute([$clearedScheduleClassId]);
+    $clearedStudentRow = array_values(array_filter(student_academic_class_rows($pdo, 26), static fn(array $row): bool => (int) $row['classId'] === $clearedScheduleClassId))[0];
+    expect_same([], $clearedStudentRow['meetings'], 'Cleared Student schedule has no canonical meetings');
+    expect_same('Legacy Room', $clearedStudentRow['lecRoom'], 'Student room display does not reintroduce cleared mixed legacy times');
+    expect_same(true, $clearedStudentRow['meetingsRecorded'], 'Student cleared-schedule flag stays authoritative');
+    $legacyStorage = $pdo->prepare('SELECT lec_room FROM class_sections WHERE cs_id = ?');
+    $legacyStorage->execute([$clearedScheduleClassId]);
+    expect_same($mixedLegacySchedule, $legacyStorage->fetchColumn(), 'Cleared-schedule display preserves original text in storage');
+} finally {
+    $pdo->rollBack();
+}
+
+[$studentRetentionStatus, $studentRetentionBody] = integration_http_get_json('/api/student/retention', $studentCredentials['access_token']);
+expect_same(200, $studentRetentionStatus, 'Student retention remains readable with live midterm computation');
+$currentAcademicRows = array_values(array_filter($studentRetentionBody['retention']['records'], static fn(array $row): bool => $row['isCurrent'] === true));
+expect_same(academic_current_school_year($pdo), $studentRetentionBody['retention']['currentSchoolYear'] ?? null, 'Student retention exposes the configured current year');
+expect_same(count(array_filter($currentAcademicRows, static fn(array $row): bool => in_array($row['retentionState'], ['warning', 'critical', 'remedial'], true))), $studentRetentionBody['retention']['atRiskCount'], 'Student final warning count excludes historical courses');
+expect_same(count(array_filter($currentAcademicRows, static fn(array $row): bool => !empty($row['midtermEvaluation']['isAtRisk']))), $studentRetentionBody['retention']['midtermAtRiskCount'], 'Student advisory count uses current courses only');
+foreach ($studentRetentionBody['retention']['records'] as $academicRow) {
+    $expectedRisk = $academicRow['isCurrent'] ? faculty_risk_projection($pdo, [
+        'enrollment_id' => (int) $academicRow['enrollmentId'], 'cs_id' => (int) $academicRow['classId'], 'student_id' => 26,
+    ]) : null;
+    expect_same($expectedRisk, $academicRow['midtermEvaluation']['risk'] ?? null, 'Student advisory agrees with the existing Faculty projection');
+    expect_same(in_array($expectedRisk['level'] ?? null, ['High', 'At Risk'], true), $academicRow['midtermEvaluation']['isAtRisk'], 'Student advisory uses High/At Risk only, with unavailable risk unresolved');
+}
+
 [$studentDashboardStatus, $studentDashboardBody] = integration_http_get_json('/api/student/dashboard', $studentCredentials['access_token']);
 expect_same(200, $studentDashboardStatus, 'Student dashboard read returns HTTP 200');
 expect_same('26', (string) ($studentDashboardBody['student']['id'] ?? ''), 'Student dashboard resolves the authenticated Student identity');
+foreach (['profile', 'classes', 'retention', 'dashboard'] as $ownStudentSurface) {
+    [$secretaryAcademicStatus, $secretaryAcademicBody] = integration_http_get_json('/api/student/' . $ownStudentSurface . '?studentId=26', $secretaryAccessToken);
+    expect_same(200, $secretaryAcademicStatus, 'BIO-010 Secretary retains own academic ' . $ownStudentSurface);
+    if ($ownStudentSurface === 'profile') {
+        expect_same('24', (string) ($secretaryAcademicBody['profile']['id'] ?? ''), 'Secretary profile ignores another Student query id');
+    } elseif ($ownStudentSurface === 'dashboard') {
+        expect_same('24', (string) ($secretaryAcademicBody['student']['id'] ?? ''), 'Secretary dashboard ignores another Student query id');
+    } else {
+        $ownAcademicRows = $ownStudentSurface === 'classes' ? $secretaryAcademicBody['classes'] : $secretaryAcademicBody['retention']['records'];
+        foreach ($ownAcademicRows as $ownAcademicRow) {
+            $ownAcademicIdentityStmt = $pdo->prepare('SELECT student_id FROM enrollments WHERE enrollment_id = ?');
+            $ownAcademicIdentityStmt->execute([(int) $ownAcademicRow['enrollmentId']]);
+            expect_same(24, (int) $ownAcademicIdentityStmt->fetchColumn(), 'Secretary academic records belong only to their linked Student');
+        }
+    }
+}
+
 // ATT-001: a record of a revoked session is left out of every attendance
 // feed, rate and report; the record itself stays in the database.
 $revokedFeedClass = $pdo->query(
@@ -3580,12 +3635,61 @@ $rosterAvailable = array_values(array_filter(
     static fn(array $row): bool => (string) ($row['id'] ?? '') === (string) $rosterStudentId
 ));
 expect_same(1, count($rosterAvailable), 'Archived roster Student becomes available for re-enrollment');
+// Email equality does not establish notification identity.
+$rosterNoticeAccount = $pdo->prepare("INSERT INTO user_accounts (login_email, password_hash, role, display_name, status) VALUES (?, ?, 'secretary', 'Roster Notice Fixture', 'Active') RETURNING user_id");
+$rosterNoticeAccount->execute([$rosterStudentEmail, password_hash('LocalNoticeFixture123!', PASSWORD_DEFAULT)]);
+$rosterNoticeUserId = (int) $rosterNoticeAccount->fetchColumn();
+$rosterNoticeCount = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ? AND notification_type = 'class_enrollment' AND entity_id = ?");
 [$rosterRestoreStatus, $rosterRestoreBody] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, [
     'csId' => (string) $classEditOwnedId,
     'studentIds' => [(string) $rosterStudentId],
 ]);
 expect_same(200, $rosterRestoreStatus, 'Faculty can re-enroll an archived roster Student');
 expect_same(1, (int) ($rosterRestoreBody['enrolledCount'] ?? 0), 'Roster re-enrollment reports one revived membership');
+$rosterNoticeCount->execute([$rosterNoticeUserId, (string) $classEditOwnedId]);
+expect_same(0, (int) $rosterNoticeCount->fetchColumn(), 'Unlinked matching-email account receives no enrollment notice');
+$pdo->prepare('UPDATE students SET student_account_user_id = ? WHERE student_id = ?')->execute([$rosterNoticeUserId, $rosterStudentId]);
+$pdo->prepare("UPDATE enrollments SET status = 'Archived' WHERE enrollment_id = ?")->execute([$rosterEnrollmentId]);
+$noticeEnrollPayload = ['csId' => (string) $classEditOwnedId, 'studentIds' => [(string) $rosterStudentId]];
+[$noticeEnrollStatus] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, $noticeEnrollPayload);
+expect_same(200, $noticeEnrollStatus, 'Canonically linked roster Student can be reactivated');
+$rosterNoticeCount->execute([$rosterNoticeUserId, (string) $classEditOwnedId]);
+expect_same(1, (int) $rosterNoticeCount->fetchColumn(), 'Canonical recipient receives one enrollment notice');
+[$noticeRepeatStatus, $noticeRepeatBody] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, $noticeEnrollPayload);
+expect_same(200, $noticeRepeatStatus, 'Duplicate enrollment request succeeds without another mutation');
+expect_same(0, (int) ($noticeRepeatBody['enrolledCount'] ?? -1), 'Duplicate enrollment reports no new membership');
+$rosterNoticeCount->execute([$rosterNoticeUserId, (string) $classEditOwnedId]);
+expect_same(1, (int) $rosterNoticeCount->fetchColumn(), 'Duplicate enrollment creates no second notice');
+
+$noticeSecondClassStmt = $pdo->prepare('SELECT cs_id FROM class_sections WHERE cs_name = ? AND instructor_user_id = ?');
+$noticeSecondClassStmt->execute([$componentCode . '-B', $userId]);
+$noticeSecondClassId = (int) $noticeSecondClassStmt->fetchColumn();
+expect_true($noticeSecondClassId > 0, 'Notification fixture resolves a second owned current class');
+$noticeSecondPayload = ['csId' => (string) $noticeSecondClassId, 'studentIds' => [(string) $rosterStudentId]];
+$pdo->prepare("UPDATE user_accounts SET status = 'Disabled' WHERE user_id = ?")->execute([$rosterNoticeUserId]);
+[$noticeInactiveStatus, $noticeInactiveBody] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, $noticeSecondPayload);
+expect_same(200, $noticeInactiveStatus, 'Inactive recipient does not block roster enrollment');
+expect_same(1, (int) ($noticeInactiveBody['enrolledCount'] ?? 0), 'New enrollment remains supported for inactive recipients');
+$rosterNoticeCount->execute([$rosterNoticeUserId, (string) $noticeSecondClassId]);
+expect_same(0, (int) $rosterNoticeCount->fetchColumn(), 'Disabled canonical recipient receives no enrollment notice');
+$pdo->prepare("UPDATE user_accounts SET status = 'Active' WHERE user_id = ?")->execute([$rosterNoticeUserId]);
+$pdo->prepare("UPDATE enrollments SET status = 'Archived' WHERE student_id = ? AND cs_id = ?")->execute([$rosterStudentId, $noticeSecondClassId]);
+[$noticeRollbackStatus] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, ['csId' => (string) $noticeSecondClassId, 'studentIds' => [(string) $rosterStudentId, '2147483647']]);
+expect_same(422, $noticeRollbackStatus, 'Invalid later member rejects the whole enrollment batch');
+$noticeSecondEnrollmentStmt = $pdo->prepare('SELECT status FROM enrollments WHERE student_id = ? AND cs_id = ?');
+$noticeSecondEnrollmentStmt->execute([$rosterStudentId, $noticeSecondClassId]);
+expect_same('Archived', $noticeSecondEnrollmentStmt->fetchColumn(), 'Rejected batch rolls back its earlier reactivation');
+$rosterNoticeCount->execute([$rosterNoticeUserId, (string) $noticeSecondClassId]);
+expect_same(0, (int) $rosterNoticeCount->fetchColumn(), 'Rejected batch rolls back its newly inserted notification');
+[$noticeReactivationStatus] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, $noticeSecondPayload);
+expect_same(200, $noticeReactivationStatus, 'Valid reactivation succeeds after a rolled-back batch');
+$rosterNoticeCount->execute([$rosterNoticeUserId, (string) $noticeSecondClassId]);
+expect_same(1, (int) $rosterNoticeCount->fetchColumn(), 'Active canonical recipient receives a persisted notice after commit');
+$pdo->prepare("UPDATE enrollments SET status = 'Archived' WHERE student_id = ? AND cs_id = ?")->execute([$rosterStudentId, $noticeSecondClassId]);
+[$noticeAgainStatus] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, $noticeSecondPayload);
+expect_same(200, $noticeAgainStatus, 'Repeated reactivation remains supported');
+$rosterNoticeCount->execute([$rosterNoticeUserId, (string) $noticeSecondClassId]);
+expect_same(1, (int) $rosterNoticeCount->fetchColumn(), 'Repeated reactivation preserves notification idempotency');
 $rosterArchivedStmt->execute([$rosterEnrollmentId]);
 $rosterRestored = $rosterArchivedStmt->fetch(PDO::FETCH_ASSOC);
 expect_same('Active', $rosterRestored['status'] ?? null, 'Roster re-enrollment revives the same enrollment row');
@@ -3593,6 +3697,36 @@ expect_same((string) $rosterEnrollmentId, (string) ($rosterRestored['enrollment_
 expect_same('88.00', (string) ($rosterRestored['final_percentage'] ?? ''), 'Roster re-enrollment preserves grade history');
 $rosterAttendanceCheckStmt->execute([$rosterAttendanceId]);
 expect_same('1', (string) ($rosterAttendanceCheckStmt->fetchColumn() ?: ''), 'Roster re-enrollment leaves historical attendance intact');
+
+// A Secretary recipient is valid through the legacy link or both canonical
+// links to their same account. Fresh sections ensure old notices cannot mask
+// a recipient-selection regression.
+$secretaryNoticeClass = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, status)
+     SELECT ?, course_id, instructor_user_id, semester, school_year, 'Active'
+       FROM class_sections WHERE cs_id = ? RETURNING cs_id"
+);
+foreach (['legacy' => null, 'both' => $rosterNoticeUserId] as $linkCase => $canonicalAccountId) {
+    $pdo->prepare('UPDATE students SET user_id = ?, student_account_user_id = ? WHERE student_id = ?')
+        ->execute([$rosterNoticeUserId, $canonicalAccountId, $rosterStudentId]);
+    $secretaryNoticeClass->execute(['Secretary Notice ' . $linkCase . ' ' . $rosterFixtureSuffix, $noticeSecondClassId]);
+    $secretaryNoticeClassId = (int) $secretaryNoticeClass->fetchColumn();
+    expect_true($secretaryNoticeClassId > 0, 'Secretary notice fixture creates a fresh ' . $linkCase . '-link section');
+    $secretaryNoticePayload = ['csId' => (string) $secretaryNoticeClassId, 'studentIds' => [(string) $rosterStudentId]];
+    [$secretaryNoticeStatus, $secretaryNoticeBody] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, $secretaryNoticePayload);
+    expect_same(200, $secretaryNoticeStatus, 'Secretary ' . $linkCase . '-link enrollment succeeds');
+    expect_same(1, (int) ($secretaryNoticeBody['enrolledCount'] ?? 0), 'Secretary ' . $linkCase . '-link enrollment creates one membership');
+    $rosterNoticeCount->execute([$rosterNoticeUserId, (string) $secretaryNoticeClassId]);
+    expect_same(1, (int) $rosterNoticeCount->fetchColumn(), 'Secretary ' . $linkCase . '-link account receives exactly one persisted notice');
+    [$secretaryRepeatStatus, $secretaryRepeatBody] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, $secretaryNoticePayload);
+    expect_same(200, $secretaryRepeatStatus, 'Repeated Secretary ' . $linkCase . '-link request succeeds');
+    expect_same(0, (int) ($secretaryRepeatBody['enrolledCount'] ?? -1), 'Repeated Secretary ' . $linkCase . '-link request is a membership no-op');
+    $rosterNoticeCount->execute([$rosterNoticeUserId, (string) $secretaryNoticeClassId]);
+    expect_same(1, (int) $rosterNoticeCount->fetchColumn(), 'Repeated Secretary ' . $linkCase . '-link request creates no duplicate notice');
+    integration_retire_fixture_classes($pdo, [$secretaryNoticeClassId], []);
+}
+$pdo->prepare('UPDATE students SET user_id = NULL, student_account_user_id = ? WHERE student_id = ?')
+    ->execute([$rosterNoticeUserId, $rosterStudentId]);
 
 // Authoritative Faculty Attendance Monitoring worksheet coverage. This uses
 // isolated real enrollments and sections so the read/mutation contract can be

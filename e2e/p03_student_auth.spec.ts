@@ -237,7 +237,7 @@ test.describe('P03 Student identity and authentication', () => {
       ['/student/attendance', 'Daily Class Check-In'],
       ['/student/attendance-logs', 'My Session Attendance Logs'],
       ['/student/face-registration', 'Facial Recognition Registration'],
-      ['/student/classes', 'My Enrolled Classes & Retention Standing'],
+      ['/student/classes', 'My Enrolled Classes & Schedule'],
       ['/student/retention', 'Retention Risk Monitoring'],
     ];
     for (const [path, title] of authoritativeRoutes) {

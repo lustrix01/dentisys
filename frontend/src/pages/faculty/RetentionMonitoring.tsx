@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, CheckCircle2, ChevronRight, Lock, Pencil, Plus, Search, Unlock } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronRight, Pencil, Plus, Search, Calculator, Filter } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
@@ -298,6 +298,7 @@ export const RetentionMonitoring: React.FC = () => {
   const syInitializedRef = useRef(false);
   const [activeTab, setActiveTab] = useState<'watchlist' | 'midterm' | 'remedials'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showAtRiskOnly, setShowAtRiskOnly] = useState(false);
 
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [selectedScheduleEnrollmentId, setSelectedScheduleEnrollmentId] = useState('');
@@ -396,6 +397,11 @@ export const RetentionMonitoring: React.FC = () => {
     return Array.from(labels.entries()).sort(([left], [right]) => left.localeCompare(right));
   }, [recordsForSchoolYear]);
 
+  const selectedClassName = useMemo(() => {
+    if (selectedClassId === 'all') return '';
+    return classOptions.find(([id]) => id === selectedClassId)?.[1] || '';
+  }, [selectedClassId, classOptions]);
+
   useEffect(() => {
     if (selectedClassId !== 'all') {
       const exists = classOptions.some(([cid]) => cid === selectedClassId);
@@ -432,6 +438,19 @@ export const RetentionMonitoring: React.FC = () => {
     () => filteredRecords.filter(record => record.state !== 'active' && record.state !== 'cleared'),
     [filteredRecords],
   );
+
+  const atRiskMidtermCount = useMemo(() => {
+    return filteredRecords.filter(record => {
+      return record.risk?.level === 'High' || record.risk?.level === 'At Risk';
+    }).length;
+  }, [filteredRecords]);
+
+  const midtermDisplayRecords = useMemo(() => {
+    if (!showAtRiskOnly) return filteredRecords;
+    return filteredRecords.filter(record => {
+      return record.risk?.level === 'High' || record.risk?.level === 'At Risk';
+    });
+  }, [filteredRecords, showAtRiskOnly]);
 
   const currentAttentionStudents = useMemo(() => new Set(usableRecords.filter(record => record.schoolYear === currentSchoolYear
     && ['warning', 'critical', 'remedial'].includes(record.state)).map(record => record.studentId)).size, [usableRecords, currentSchoolYear]);
@@ -728,15 +747,35 @@ export const RetentionMonitoring: React.FC = () => {
     setIsPolicyOpen(true);
   };
 
-  const handleManualWatchlistUnlock = async () => {
-    if (selectedClassId === 'all' || isSubmitting || selectedClassIsPastYear) return;
+  const handleComputeMidtermRisk = async () => {
+    if (isSubmitting || selectedClassIsPastYear || selectedClassId === 'all') return;
     setIsSubmitting(true);
     try {
       await unlockFacultyWatchlistApi(selectedClassId);
       await refreshRetention();
-      setNotification({ type: 'success', message: 'Midterm Watchlist unlocked for every student in the selected class. Grades are unchanged.' });
+      setNotification({
+        type: 'success',
+        message: 'Midterm watchlist unlocked for the selected class section.',
+      });
     } catch (error) {
-      showFeedback(error instanceof Error ? error.message : 'Unable to unlock the watchlist.', 'error');
+      showFeedback(error instanceof Error ? error.message : 'Unable to unlock the midterm watchlist.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleComputeClassRisk = async (classId: string) => {
+    if (!classId || classId === 'all' || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await unlockFacultyWatchlistApi(classId);
+      await refreshRetention();
+      setNotification({
+        type: 'success',
+        message: 'Midterm watchlist unlocked for the selected class section.',
+      });
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : 'Unable to unlock the class midterm watchlist.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -777,14 +816,63 @@ export const RetentionMonitoring: React.FC = () => {
         <div className="p-4 rounded-2xl bg-slate-500/10 border border-slate-500/20 text-slate-700 dark:text-slate-300 text-xs font-semibold">{unavailableRecordCount} retention record(s) are unavailable because the server did not provide all persisted identifiers required for actions.</div>
       )}
 
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit overflow-x-auto">
-          <button type="button" onClick={() => setActiveTab('midterm')} className={`px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap ${activeTab === 'midterm' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Midterm Watchlist</button>
-          <button type="button" onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'watchlist' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Retention Watchlist ({watchlistRecords.length})</button>
-          <button type="button" onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }} className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === 'remedials' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}`}>Remedial Exams ({pendingExams} Pending)</button>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl">
+          <button
+            type="button"
+            onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'watchlist'
+                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <span>Watchlist</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+              activeTab === 'watchlist' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+            }`}>
+              {watchlistRecords.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'remedials'
+                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <span>Remedials</span>
+            {pendingExams > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeTab === 'remedials' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+              }`}>
+                {pendingExams}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('midterm'); setSearchQuery(''); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'midterm'
+                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <span>Midterm Risk</span>
+            {atRiskMidtermCount > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeTab === 'midterm' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+              }`}>
+                {atRiskMidtermCount}
+              </span>
+            )}
+          </button>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
           {/* School Year Selector Filter Pill (Defaults to Current School Year) */}
           <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
             <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -821,6 +909,22 @@ export const RetentionMonitoring: React.FC = () => {
         </div>
       </div>
 
+      {selectedSchoolYear !== currentSchoolYear && currentSchoolYear && selectedSchoolYear !== 'all' && (
+        <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+            <CalendarDays className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>You are viewing archived records for <strong>S.Y. {selectedSchoolYear}</strong>. Historical classes are view-only.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); }}
+            className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+          >
+            Switch to Current S.Y. ({currentSchoolYear})
+          </button>
+        </div>
+      )}
+
       {!isLoading && !loadError && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
         <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : `S.Y. ${selectedSchoolYear}`}</p>
         <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear || 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
@@ -831,25 +935,128 @@ export const RetentionMonitoring: React.FC = () => {
 
       {activeTab === 'midterm' && (
         <Card className="p-6 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Midterm Watchlist</h2><p className="mt-1 text-xs text-slate-500">Access opens as each student's midterm grades become complete. Manual unlock covers the selected class.</p></div>
-            <button type="button" disabled={selectedClassId === 'all' || isSubmitting || isLoading || selectedClassIsPastYear} title={selectedClassIsPastYear ? 'Past school-year classes are view-only.' : undefined} onClick={() => void handleManualWatchlistUnlock()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"><Unlock className="h-4 w-4" />{isSubmitting ? 'Unlocking...' : 'Unlock selected class'}</button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                Midterm Standing & Risk Evaluation
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Review server-calculated risk. Unlocking the selected class changes watchlist visibility only; missing assessment data remains incomplete.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAtRiskOnly(prev => !prev)}
+                aria-pressed={showAtRiskOnly}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  showAtRiskOnly
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span>Show At-Risk Only</span>
+                {atRiskMidtermCount > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    showAtRiskOnly ? 'bg-amber-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}>
+                    {atRiskMidtermCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                disabled={isSubmitting || isLoading || selectedClassIsPastYear || selectedClassId === 'all'}
+                title={selectedClassIsPastYear ? 'Past school-year classes are view-only.' : selectedClassId === 'all' ? 'Select one class section to unlock its watchlist.' : undefined}
+                onClick={() => void handleComputeMidtermRisk()}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-40 cursor-pointer"
+              >
+                <Calculator className="h-4 w-4" />
+                <span>{isSubmitting ? 'Unlocking...' : 'Unlock Midterm Watchlist'}</span>
+              </button>
+            </div>
           </div>
-          {selectedClassId === 'all' && <p className="text-xs text-amber-700 dark:text-amber-400">Choose one class above to unlock its watchlist.</p>}
-          <div className="overflow-x-auto"><table className="w-full text-left text-xs">
-            <thead className="text-[10px] uppercase text-slate-400"><tr><th className="p-3">Student</th><th className="p-3">Class</th><th className="p-3">Midterm score</th><th className="p-3">Risk</th><th className="p-3">Access</th></tr></thead>
-            <tbody>{filteredRecords.map(record => {
-              const accessible = record.midtermComplete === true || record.watchlistUnlocked === true;
-              return <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800">
-                <td className="p-3 font-bold">{record.studentName}<span className="block text-[10px] font-normal text-slate-400">{record.studentNumber}</span></td>
-                <td className="p-3">{record.className}</td>
-                <td className="p-3">{!accessible ? 'Locked' : isFiniteNumber(record.midtermPercentage) ? `${record.midtermPercentage.toFixed(2)}%` : 'Grades incomplete'}</td>
-                <td className="p-3"><RiskBadge risk={record.risk} /></td>
-                <td className="p-3"><span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${accessible ? 'bg-emerald-500/10 text-emerald-700' : 'bg-amber-500/10 text-amber-700'}`}>{accessible ? <Unlock className="h-3 w-3" /> : <Lock className="h-3 w-3" />}{record.watchlistUnlocked ? 'Class manually unlocked' : record.midtermComplete ? 'Grades complete' : 'Grades incomplete'}</span></td>
-              </tr>;
-            })}</tbody>
-          </table></div>
-          {filteredRecords.length === 0 && <p className="py-8 text-center text-xs text-slate-400">{isLoading ? 'Loading watchlist...' : 'No students match these filters.'}</p>}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="text-[10px] uppercase text-slate-400">
+                <tr>
+                  <th className="p-3">Student</th>
+                  <th className="p-3">Class</th>
+                  <th className="p-3">Midterm Grade</th>
+                  <th className="p-3">Risk Standing</th>
+                  <th className="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {midtermDisplayRecords.map(record => {
+                  const isComputed = record.midtermComplete === true;
+                  return (
+                    <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <td className="p-3 font-bold">
+                        {record.studentName}
+                        <span className="block text-[10px] font-normal text-slate-400">{record.studentNumber}</span>
+                      </td>
+                      <td className="p-3">{record.className}</td>
+                      <td className="p-3">
+                        {!isComputed ? (
+                          <span className="text-slate-400 italic">Assessments incomplete</span>
+                        ) : isFiniteNumber(record.midtermPercentage) ? (
+                          <span className="font-mono font-bold">{record.midtermPercentage.toFixed(2)}%</span>
+                        ) : (
+                          <span className="text-slate-400 italic">Incomplete assessments</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <RiskBadge risk={record.risk} />
+                      </td>
+                      <td className="p-3">
+                        {isComputed || record.watchlistUnlocked ? (
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
+                            {isComputed ? 'Computed · Ready' : 'Unlocked · Assessments incomplete'}
+                          </span>
+                        ) : isPastYearRecord(record) ? (
+                          <span className="text-[10px] text-slate-400 italic">Archived (view-only)</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleComputeClassRisk(record.classId)}
+                            disabled={isSubmitting}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer"
+                            title="Unlock the midterm watchlist for this class"
+                          >
+                            <Calculator className="w-3 h-3" />
+                            <span>Unlock watchlist</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {midtermDisplayRecords.length === 0 && (
+            <div className="py-8 text-center text-xs text-slate-400 space-y-1">
+              {showAtRiskOnly ? (
+                <>
+                  <p className="font-semibold text-slate-600 dark:text-slate-300">No students are currently flagged at risk for midterm.</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAtRiskOnly(false)}
+                    className="text-emerald-600 hover:underline font-bold"
+                  >
+                    Show all students
+                  </button>
+                </>
+              ) : (
+                <p>{isLoading ? 'Loading records...' : 'No students match these filters.'}</p>
+              )}
+            </div>
+          )}
           <p className="text-[11px] text-slate-500">Midterm scores provide an early review. Final retention decisions remain in Retention Watchlist.</p>
         </Card>
       )}
@@ -861,7 +1068,7 @@ export const RetentionMonitoring: React.FC = () => {
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Persisted GWA / %</th><th className="py-3 px-4">State</th><th className="py-3 px-4">Risk</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4">Risk</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {watchlistRecords.length === 0 ? <tr><td colSpan={8} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No persisted retention records match the selected filters.'}</td></tr> : watchlistRecords.map(record => (
                   <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -869,7 +1076,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
                     <td className="py-3.5 px-4 font-mono">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
                     <td className="py-3.5 px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
-                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? record.gwa.toFixed(2) : 'GWA unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
+                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? record.gwa.toFixed(2) : 'Grade unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
                     <td className="py-3.5 px-4"><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button>{record.manualOverride && <span className="ml-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400" title="Set by Faculty. Kept until the student's course grade changes.">Manual</span>}</td>
                     <td className="py-3.5 px-4"><RiskBadge risk={record.risk} /></td>
                     <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button><button type="button" onClick={() => openOverride(record)} disabled={!canOverrideRecord(record) || isPastYearRecord(record)} title={isPastYearRecord(record) ? 'Past school-year classes are view-only.' : !canOverrideRecord(record) ? (record.state === 'archived' ? 'Status override unavailable for archived enrollments.' : 'Status override unavailable: persisted identifiers are missing.') : 'Override retention status'} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 text-[11px] font-bold"><Pencil className="w-3.5 h-3.5" /></button></div></td>
@@ -894,7 +1101,7 @@ export const RetentionMonitoring: React.FC = () => {
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? row.record.gwa.toFixed(2) : <span className="text-[10px] font-medium text-slate-400">GWA unavailable</span>}</td>
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? row.record.gwa.toFixed(2) : <span className="text-[10px] font-medium text-slate-400">Grade unavailable</span>}</td>
                     <td className="py-3.5 px-4"><div className="space-y-1.5">{([1, 2] as AllowedAttempt[]).map(attemptNumber => { const attempt = row.progression.attempts.find(item => item.attemptNumber === attemptNumber); const status = attemptStatus(row.progression, attemptNumber); const statusClass = status === 'passed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : status === 'failed' ? 'bg-rose-50 text-rose-700 border-rose-200/60' : status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200/60' : status === 'available' ? 'bg-sky-50 text-sky-700 border-sky-200/60' : 'bg-slate-100 text-slate-600 border-slate-200'; return <div key={attemptNumber} className="flex flex-wrap items-center gap-1.5"><span className="font-bold text-slate-700 dark:text-slate-300">Attempt {attemptNumber}</span><span className={`rounded-lg border px-2 py-1 text-[10px] font-bold ${statusClass}`}>{attemptStatusLabel(status)}{isFiniteNumber(attempt?.percentage) ? ` · ${attempt.percentage.toFixed(2)}%` : ''}</span>{attempt?.scheduledDate && <span className="text-[10px] text-slate-400">{attempt.scheduledDate}</span>}{attempt?.notes && <span className="basis-full text-[10px] italic text-slate-500 dark:text-slate-400">{attempt.notes}</span>}</div>; })}</div></td>
                     <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : row.progression.stage === 'cost_recovery_required' || row.progression.stage === 'cost_recovery_failed' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : row.progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>{stageLabel(row.progression.stage)}</span>{row.progression.clearedAt && <span className="text-[10px] text-emerald-700 dark:text-emerald-400">Cleared {new Date(row.progression.clearedAt).toLocaleDateString()}</span>}{row.progression.legacyUnclassified && <span className="text-[10px] text-slate-500">{legacyEvidenceLabel((row.record as unknown as { remedial?: unknown }).remedial) ?? 'Outcome unavailable pending reconciliation.'}</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current remedial progression">Details <ChevronRight className="h-3 w-3" /></button></div></td>
                     <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{canScheduleRecord(row.record) && !isPastYearRecord(row.record) && <button type="button" onClick={() => openSchedule(row.record)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Schedule Attempt {allowedAttemptNumbers(row.progression)[0]}</button>}{pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Attempt {pendingAttemptNumber(row.progression)}</button>}{row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && <button type="button" onClick={() => openCostRecovery(row)} className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Record Cost Recovery</button>}{typeof row.progression.costRecoveryGrade === 'number' && <span className="text-[10px] text-slate-500">Cost recovery grade {row.progression.costRecoveryGrade.toFixed(2)}</span>}{row.progression.legacyUnclassified && <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">Legacy / unclassified</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
