@@ -28,6 +28,14 @@ import { getAdminReportsSummaryApi, getAdminSettingsApi, revokeStudentBiometricA
 import { Modal } from '../../components/Modal';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 
+const csvEscapeField = (value: unknown) => {
+  const text = String(value ?? '—');
+  // Spreadsheet formula detection must recognize control characters before a formula marker.
+  // eslint-disable-next-line no-control-regex
+  const safeText = /^[\s\u0000-\u001f\u007f-\u009f]*[=+\-@]/u.test(text) ? `'${text}` : text;
+  return `"${safeText.replace(/"/g, '""')}"`;
+};
+
 export const DeanReports: React.FC = () => {
   const [retentionThreshold, setRetentionThreshold] = useState(2.5);
   const [loading, setLoading] = useState(true);
@@ -123,7 +131,7 @@ export const DeanReports: React.FC = () => {
       csv = `Dean's Student Summary Report\nGenerated: ${ts}\n\nStudent ID,Name,Class,Year Level,GWA,Status,Face Enrolled\n`;
       csv += filtered.map(s => {
         const gwaStr = s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : 'N/A';
-        return `${s.studentId},"${s.name}",${s.classId || '-'},${s.yearLevel},${gwaStr},${s.status},${s.faceEnrolled ? 'Yes' : 'No'}`;
+        return `${s.studentId},"${s.name}",${csvEscapeField(s.className || '—')},${s.yearLevel},${gwaStr},${s.status},${s.faceEnrolled ? 'Yes' : 'No'}`;
       }).join('\n');
       fileName = `Student_Summary_${ts.replace(/[: ]/g, '-')}.csv`;
 
@@ -142,7 +150,7 @@ export const DeanReports: React.FC = () => {
       csv += filtered.map((s: any) => {
         const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
         const gwaStr = s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : 'N/A';
-        return `${s.studentId},"${s.name}",${s.classId || '-'},${gwaStr},${s.status},${pendingRem}`;
+        return `${s.studentId},"${s.name}",${csvEscapeField(s.className || '—')},${gwaStr},${s.status},${pendingRem}`;
       }).join('\n');
       fileName = `Retention_Report_${ts.replace(/[: ]/g, '-')}.csv`;
 
@@ -373,7 +381,7 @@ export const DeanReports: React.FC = () => {
                     <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                       <td className="py-3 px-3 font-mono text-slate-500">{s.studentId}</td>
                       <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
-                      <td className="py-3 px-3 text-slate-500">{s.classId || s.className || '-'}</td>
+                      <td className="py-3 px-3 text-slate-500">{s.className || '—'}</td>
                       <td className="py-3 px-3 text-slate-500">Year {s.yearLevel}</td>
                       <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">
                         {s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—'}
@@ -534,7 +542,7 @@ export const DeanReports: React.FC = () => {
                       return (
                         <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                           <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
-                          <td className="py-3 px-3 text-slate-500">{s.classId}</td>
+                          <td className="py-3 px-3 text-slate-500">{s.className || '—'}</td>
                           <td className={`py-3 px-3 font-extrabold ${['warning', 'critical', 'remedial'].includes(String(s.status || '').toLowerCase()) ? 'text-rose-600' : 'text-emerald-600'}`}>
                             {s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—'}
                           </td>
@@ -631,7 +639,7 @@ export const DeanReports: React.FC = () => {
                           <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                             <td className="py-2.5 px-3 font-mono text-slate-500">{r.date}</td>
                             <td className="py-2.5 px-3 font-bold text-slate-800 dark:text-slate-200">{s?.name || '—'}</td>
-                            <td className="py-2.5 px-3 text-slate-500">{s?.classId || '—'}</td>
+                            <td className="py-2.5 px-3 text-slate-500">{r.className || '—'}</td>
                             <td className="py-2.5 px-3 font-mono text-slate-500">{r.subjectCode}</td>
                             <td className="py-2.5 px-3">
                               <span className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${badgeMap[r.status] || ''}`}>{r.status}</span>

@@ -37,13 +37,15 @@ import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { effectiveAssessmentPercentage, gwaToDescription } from '../../utils/gradeHelper';
-import { extractPeriodEvaluation } from '../../utils/periodGradingHelper';
+import { extractPeriodEvaluation, type PeriodComponentEvaluation } from '../../utils/periodGradingHelper';
 
 import {
   getFacultyReportsSummaryApi,
   getFacultyClassesApi,
+  getFacultyGradingConfigApi,
   getFacultyRetentionApi,
   getFacultyAttendanceWorksheetApi,
+  type FacultyGradingConfiguration,
   type FacultyRetentionRecord,
   type FacultyAttendanceWorksheetRosterItem,
 } from '../../services/apiClient';
@@ -62,6 +64,7 @@ export const Reports: React.FC = () => {
   const [error, setError] = useState('');
   const [dbStudents, setDbStudents] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
+  const [selectedGradingConfiguration, setSelectedGradingConfiguration] = useState<FacultyGradingConfiguration | null>(null);
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [retentionLoading, setRetentionLoading] = useState(true);
   const [retentionLoadError, setRetentionLoadError] = useState(false);
@@ -221,6 +224,28 @@ export const Reports: React.FC = () => {
     [classesForSchoolYear, selectedClassId],
   );
 
+  useEffect(() => {
+    if (!selectedClass?.courseId || !selectedClass.semester || !selectedClass.schoolYear) {
+      setSelectedGradingConfiguration(null);
+      return;
+    }
+
+    let ignore = false;
+    setSelectedGradingConfiguration(null);
+    getFacultyGradingConfigApi({
+      courseId: selectedClass.courseId,
+      semester: String(selectedClass.semester),
+      schoolYear: String(selectedClass.schoolYear),
+    })
+      .then(response => {
+        if (!ignore) setSelectedGradingConfiguration(response.configuration);
+      })
+      .catch(() => {
+        if (!ignore) setSelectedGradingConfiguration(null);
+      });
+    return () => { ignore = true; };
+  }, [selectedClass?.courseId, selectedClass?.semester, selectedClass?.schoolYear]);
+
   const assignedClasses = useMemo(() => {
     return availableClasses.map(c => String(c.csId || c.id));
   }, [availableClasses]);
@@ -356,8 +381,29 @@ export const Reports: React.FC = () => {
 
   // Midterm %, Final % and the course grade come from the server breakdown.
   // A course without a complete grade is Pending, never PASS.
-  const courseEvaluation = (subj: any) => extractPeriodEvaluation(subj ?? null, null, null);
   const formatPercent = (value: number | null) => (value === null ? '—' : `${value.toFixed(1)}%`);
+  const courseEvaluation = (subj: any) => extractPeriodEvaluation(
+    subj ?? null,
+    null,
+    selectedGradingConfiguration?.schemaMode ?? null,
+  );
+  const formatCourseGrade = (evaluation: ReturnType<typeof courseEvaluation>) =>
+    evaluation.overallGwa !== null
+      ? evaluation.overallGwa.toFixed(2)
+      : evaluation.historicalGwa !== null
+        ? `Prior: ${evaluation.historicalGwa.toFixed(2)} (Historical)`
+        : 'Pending';
+  const formatComponentResult = (
+    component: PeriodComponentEvaluation | undefined,
+    periodStatus: ReturnType<typeof courseEvaluation>['midtermStatus'],
+  ): string => {
+    if (component?.percentage !== null && component?.percentage !== undefined) {
+      return formatPercent(component.percentage);
+    }
+    if (periodStatus === 'pending' || component?.status === 'pending') return 'Pending';
+    if (component) return component.reasons.length > 0 ? `Incomplete (${component.reasons[0]})` : 'Incomplete';
+    return 'Unavailable (recompute required)';
+  };
   const courseRemark = (student: any, subj: any): string => {
     const grade = subj ? courseEvaluation(subj).overallGwa : null;
     if (grade === null) return 'PENDING';
@@ -429,6 +475,14 @@ export const Reports: React.FC = () => {
     });
   }, [facultyStudents, selectedSubjectCode, selectedClassId, selectedClass, selectedSchoolYear]);
 
+  const isLectureLaboratoryMode = useMemo(() =>
+    selectedGradingConfiguration?.componentMode === 'lecture_laboratory'
+      || studentsInSelectedSubject.some(student => {
+        const evaluation = courseEvaluation(subjectForSelection(student));
+        return Boolean(evaluation.midtermComponents || evaluation.finalComponents);
+      }),
+  [selectedGradingConfiguration?.componentMode, studentsInSelectedSubject, selectedClassId, selectedSubjectCode]);
+
   const paginatedStudentsInSubject = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return studentsInSelectedSubject.slice(start, start + pageSize);
@@ -447,14 +501,31 @@ export const Reports: React.FC = () => {
     let fileName = '';
 
     if (type === 'academic') {
-      headers = 'Student ID,Name,Course Code,Midterm %,Final %,Grade,Remarks\n';
+      headers = isLectureLaboratoryMode
+        ? 'Student ID,Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks\n'
+        : 'Student ID,Name,Course Code,Midterm %,Final %,Grade,Remarks\n';
       rows = studentsInSelectedSubject.map((student: any) => {
         const subj = subjectForSelection(student);
         const evaluation = courseEvaluation(subj);
         const midterm = evaluation.midtermPercentage !== null ? evaluation.midtermPercentage.toFixed(1) : 'N/A';
         const final = evaluation.finalPercentage !== null ? evaluation.finalPercentage.toFixed(1) : 'N/A';
-        const grade = evaluation.overallGwa !== null ? evaluation.overallGwa.toFixed(2) : 'Pending';
-        return [student.studentId, student.name, selectedSubjectCode, midterm, final, grade, courseRemark(student, subj)].map(csvCell).join(',');
+        const grade = formatCourseGrade(evaluation);
+        const values = isLectureLaboratoryMode
+          ? [
+              student.studentId,
+              student.name,
+              selectedSubjectCode,
+              formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus),
+              formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus),
+              midterm,
+              formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus),
+              formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus),
+              final,
+              grade,
+              courseRemark(student, subj),
+            ]
+          : [student.studentId, student.name, selectedSubjectCode, midterm, final, grade, courseRemark(student, subj)];
+        return values.map(csvCell).join(',');
       }).join('\n');
       fileName = `${selectedSubjectCode || 'Course'}_Academic_Report.csv`;
     } else if (type === 'retention') {
@@ -747,8 +818,12 @@ export const Reports: React.FC = () => {
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
+                  {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Lecture</th>}
+                  {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Midterm Laboratory</th>}
                   <th className="px-5 py-3 text-center">Midterm</th>
-                  <th className="px-5 py-3 text-center">Final</th>
+                  {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Finals Lecture</th>}
+                  {isLectureLaboratoryMode && <th className="px-5 py-3 text-center">Finals Laboratory</th>}
+                  <th className="px-5 py-3 text-center">{isLectureLaboratoryMode ? 'Finals' : 'Final'}</th>
                   <th className="px-5 py-3 text-center">Grade</th>
                   <th className="px-5 py-3">Remarks</th>
                 </tr>
@@ -756,7 +831,7 @@ export const Reports: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs font-medium text-slate-750">
                 {paginatedStudentsInSubject.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center text-slate-400 font-semibold">
+                    <td colSpan={isLectureLaboratoryMode ? 9 : 5} className="px-5 py-12 text-center text-slate-400 font-semibold">
                       No student records found for the selected course and class section.
                     </td>
                   </tr>
@@ -772,10 +847,14 @@ export const Reports: React.FC = () => {
                           <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
                           <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
                         </td>
+                        {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)}</td>}
+                        {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)}</td>}
                         <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.midtermPercentage)}</td>
+                        {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)}</td>}
+                        {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
                         <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.finalPercentage)}</td>
                         <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                          {evaluation.overallGwa !== null ? evaluation.overallGwa.toFixed(2) : 'Pending'}
+                          {formatCourseGrade(evaluation)}
                         </td>
                         <td className="px-5 py-3.5">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
@@ -1116,8 +1195,12 @@ export const Reports: React.FC = () => {
                 <tr className="bg-slate-100 text-left font-bold uppercase">
                   <th className="border border-slate-300 px-3 py-2">Student ID</th>
                   <th className="border border-slate-300 px-3 py-2">Student Name</th>
+                  {isLectureLaboratoryMode && <th className="border border-slate-300 px-3 py-2 text-center">Midterm Lecture %</th>}
+                  {isLectureLaboratoryMode && <th className="border border-slate-300 px-3 py-2 text-center">Midterm Laboratory %</th>}
                   <th className="border border-slate-300 px-3 py-2 text-center">Midterm</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Final</th>
+                  {isLectureLaboratoryMode && <th className="border border-slate-300 px-3 py-2 text-center">Finals Lecture %</th>}
+                  {isLectureLaboratoryMode && <th className="border border-slate-300 px-3 py-2 text-center">Finals Laboratory %</th>}
+                  <th className="border border-slate-300 px-3 py-2 text-center">{isLectureLaboratoryMode ? 'Finals' : 'Final'}</th>
                   <th className="border border-slate-300 px-3 py-2 text-center">Grade</th>
                   <th className="border border-slate-300 px-3 py-2">Remarks</th>
                 </tr>
@@ -1130,9 +1213,13 @@ export const Reports: React.FC = () => {
                     <tr key={student.id}>
                       <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
                       <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
+                      {isLectureLaboratoryMode && <td className="border border-slate-300 px-3 py-1.5 text-center">{formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)}</td>}
+                      {isLectureLaboratoryMode && <td className="border border-slate-300 px-3 py-1.5 text-center">{formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)}</td>}
                       <td className="border border-slate-300 px-3 py-1.5 text-center">{formatPercent(evaluation.midtermPercentage)}</td>
+                      {isLectureLaboratoryMode && <td className="border border-slate-300 px-3 py-1.5 text-center">{formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)}</td>}
+                      {isLectureLaboratoryMode && <td className="border border-slate-300 px-3 py-1.5 text-center">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
                       <td className="border border-slate-300 px-3 py-1.5 text-center">{formatPercent(evaluation.finalPercentage)}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{evaluation.overallGwa !== null ? evaluation.overallGwa.toFixed(2) : 'Pending'}</td>
+                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{formatCourseGrade(evaluation)}</td>
                       <td className="border border-slate-300 px-3 py-1.5">{courseRemark(student, subj)}</td>
                     </tr>
                   );

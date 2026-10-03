@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { readFile } from 'node:fs/promises';
 
 test.describe('Faculty Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
@@ -1477,14 +1478,19 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByTestId('weights-sections-note')).toContainText('2 sections of this course (CLIN401-A, CLIN401-B)');
 
       // Suggested starting preset indicator
-      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
-      await expect(page.getByText(/Period Grading/i)).toBeVisible();
+      await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
+      await expect(page.getByText('Period Grading', { exact: true })).toBeVisible();
 
-      // Term ratio inputs: Midterm 40% and Finals 60%
+      // Mandatory split preset and term weights appear without an optional action.
+      await expect(page.getByRole('tab', { name: 'Lecture Categories' })).toBeVisible();
+      await expect(page.getByLabel('Lecture contribution (%)')).toHaveValue('60');
+      await expect(page.getByLabel('Laboratory contribution (%)')).toHaveValue('40');
+      await expect(page.locator('#period-component-mode')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Apply syllabus example/i })).toHaveCount(0);
       const midtermRatioInput = page.locator('#midterm-ratio-input');
       const finalRatioInput = page.locator('#final-ratio-input');
-      await expect(midtermRatioInput).toHaveValue('40');
-      await expect(finalRatioInput).toHaveValue('60');
+      await expect(midtermRatioInput).toHaveValue('30');
+      await expect(finalRatioInput).toHaveValue('70');
 
       // Save Initial Schema button
       await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeVisible();
@@ -1500,26 +1506,27 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
+      await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
 
-      // In starting preset, Midterm tab has 4 categories (Quiz 25, Activity 25, Midterm Exam 40, Attendance 10)
+      // The default Lecture list for Midterm is already populated and totals 100%.
       const nameInputs = page.locator('input[placeholder*="Category name"]');
       const weightInputs = page.locator('input[placeholder="0"]');
 
-      await expect(nameInputs.nth(0)).toHaveValue('Quiz');
-      await expect(weightInputs.nth(0)).toHaveValue('25');
+      await expect(nameInputs).toHaveCount(4);
+      await expect(nameInputs.nth(0)).toHaveValue('Term Exam');
+      await expect(weightInputs.nth(0)).toHaveValue('50');
 
       // Check sum shows 100% and valid initially
       await expect(page.getByText(/Valid 100%/i).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
 
-      // Update Quiz weight to 35 -> sum is 110% (invalid)
-      await weightInputs.nth(0).fill('35');
+      // Update Term Exam weight to 60 -> sum is 110% (invalid)
+      await weightInputs.nth(0).fill('60');
       await expect(page.getByText(/Must equal 100%/i).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeDisabled();
 
-      // Update Activity weight to 15 -> sum returns to 100% (valid)
-      await weightInputs.nth(1).fill('15');
+      // Reduce Quiz to 10 -> sum returns to 100% (valid)
+      await weightInputs.nth(1).fill('10');
       await expect(page.getByText(/Valid 100%/i).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
 
@@ -1538,14 +1545,25 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByText(/Must equal 100%/i).first()).toBeVisible();
       await weightInputs.nth(3).fill('5');
 
-      // Test reordering: move category 0 (Quiz) down
+      // Test decimal precision across the four defaults and a fifth category.
+      await weightInputs.nth(0).fill('30.3333');
+      await weightInputs.nth(1).fill('30.3333');
+      await weightInputs.nth(2).fill('29.3334');
+      await weightInputs.nth(3).fill('5');
+      await weightInputs.nth(4).fill('5');
+      await expect(page.getByText(/Valid 100%/i).first()).toBeVisible();
+      await weightInputs.nth(3).fill('0');
+      await expect(page.getByText(/Must equal 100%/i).first()).toBeVisible();
+      await weightInputs.nth(3).fill('5');
+
+      // Test reordering: move category 0 down
       await page.locator('button[aria-label^="Move category"]').nth(1).click();
-      await expect(nameInputs.nth(0)).toHaveValue('Activity');
-      await expect(nameInputs.nth(1)).toHaveValue('Quiz');
+      await expect(nameInputs.nth(0)).toHaveValue('Quiz');
+      await expect(nameInputs.nth(1)).toHaveValue('Term Exam');
 
       // Switch to Finals period tab
       await page.getByRole('button', { name: /Finals Categories/i }).click();
-      await expect(page.locator('input[placeholder*="Category name"]').first()).toHaveValue('Quiz');
+      await expect(page.locator('input[placeholder*="Category name"]').first()).toHaveValue('Term Exam');
     });
 
     test('first save sends canonical payload omitting version and category IDs', async ({ page }) => {
@@ -1574,20 +1592,15 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
                 schoolYear: '2026-2027',
                 version: 1,
                 schemaMode: 'periods',
-                termRatio: { midterm: 40, final: 60 },
-                midtermCategories: [
-                  { id: 100, name: 'Quiz', weight: '25', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: false },
-                  { id: 101, name: 'Activity', weight: '25', sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: false },
-                  { id: 102, name: 'Midterm Exam', weight: '40', sortOrder: 3, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: false },
-                  { id: 103, name: 'Attendance', weight: '10', sortOrder: 4, gradingPeriod: 'Midterm', sourceKind: 'attendance', inUse: false },
-                ],
-                finalCategories: [
-                  { id: 104, name: 'Quiz', weight: '20', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
-                  { id: 105, name: 'Activity', weight: '20', sortOrder: 2, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
-                  { id: 106, name: 'Laboratory', weight: '20', sortOrder: 3, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
-                  { id: 107, name: 'Final Exam', weight: '30', sortOrder: 4, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
-                  { id: 108, name: 'Attendance', weight: '10', sortOrder: 5, gradingPeriod: 'Final', sourceKind: 'attendance', inUse: false },
-                ],
+                componentMode: putPayload.componentMode,
+                componentWeights: putPayload.componentWeights,
+                termRatio: putPayload.termRatio,
+                midtermCategories: putPayload.midtermCategories.map((category: Record<string, any>, idx: number) => ({
+                  ...category, id: 100 + idx, inUse: false,
+                })),
+                finalCategories: putPayload.finalCategories.map((category: Record<string, any>, idx: number) => ({
+                  ...category, id: 200 + idx, inUse: false,
+                })),
                 attendanceDateRanges: {
                   midterm: { startDate: '2026-08-01', endDate: '2026-10-15' },
                   final: { startDate: '2026-10-16', endDate: '2026-12-20' },
@@ -1599,7 +1612,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       });
 
       await page.goto('/grades?tab=components');
-      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
+      await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
 
       // Fill attendance date inputs
       await page.locator('#midterm-start-date').fill('2026-08-01');
@@ -1618,11 +1631,19 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(putPayload.schoolYear).toBe('2026-2027');
       expect(putPayload.schemaMode).toBe('periods');
       expect(putPayload.version).toBeUndefined();
-      expect(putPayload.termRatio).toEqual({ midterm: 40, final: 60 });
-      expect(putPayload.midtermCategories).toHaveLength(4);
-      expect(putPayload.finalCategories).toHaveLength(5);
+      expect(putPayload.componentMode).toBe('lecture_laboratory');
+      expect(putPayload.componentWeights).toEqual({ lecture: 60, laboratory: 40 });
+      expect(putPayload.termRatio).toEqual({ midterm: 30, final: 70 });
+      expect(putPayload.midtermCategories).toHaveLength(8);
+      expect(putPayload.finalCategories).toHaveLength(8);
       expect(putPayload.midtermCategories[0].id).toBeUndefined();
       expect(putPayload.finalCategories[0].id).toBeUndefined();
+      for (const categories of [putPayload.midtermCategories, putPayload.finalCategories]) {
+        expect(categories.filter((category: Record<string, any>) => category.component === 'Lecture').map((category: Record<string, any>) => category.name))
+          .toEqual(['Term Exam', 'Quiz', 'Outputs', 'Participation']);
+        expect(categories.filter((category: Record<string, any>) => category.component === 'Laboratory').map((category: Record<string, any>) => category.name))
+          .toEqual(['Practical Exam', 'Laboratory Exercises', 'Quiz', 'Recitation']);
+      }
       expect(putPayload.attendanceDateRanges).toEqual({
         midterm: { startDate: '2026-08-01', endDate: '2026-10-15' },
         final: { startDate: '2026-10-16', endDate: '2026-12-20' },
@@ -1854,14 +1875,14 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       // 422 warning banner appears
-      await expect(page.getByText(/Existing Assessments Require Matching Categories/i)).toBeVisible();
+      await expect(page.getByText(/Existing Assessments Require Category Mappings/i)).toBeVisible();
       await expect(page.getByText('Practical Exam 1')).toBeVisible();
       await expect(page.getByText('Dental Radiography Lab')).toBeVisible();
       await expect(page.getByText('Laboratory').first()).toBeVisible();
 
       // Local row remains intact and wasn't cleared
-      await expect(nameInputs.nth(0)).toHaveValue('Quiz');
-      await expect(weightInputs.nth(0)).toHaveValue('25');
+      await expect(nameInputs.nth(0)).toHaveValue('Term Exam');
+      await expect(weightInputs.nth(0)).toHaveValue('50');
     });
 
     test('422 unmatched assessments can be assigned to a category by hand and are sent on the next save', async ({ page }) => {
@@ -1891,15 +1912,76 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const picker = page.getByRole('combobox', { name: 'Category for Practical Exam 1' });
       await expect(picker).toBeVisible();
       const options = await picker.locator('option').allTextContents();
-      expect(options).toEqual(['Choose category…', 'Quiz', 'Activity', 'Midterm Exam']);
+      expect(options).toEqual([
+        'Choose category…',
+        'Lecture · Term Exam', 'Lecture · Quiz', 'Lecture · Outputs', 'Lecture · Participation',
+        'Laboratory · Practical Exam', 'Laboratory · Laboratory Exercises', 'Laboratory · Quiz', 'Laboratory · Recitation',
+      ]);
       expect(putPayloads[0].assessmentAssignments).toBeUndefined();
 
-      await picker.selectOption('Activity');
+      await picker.selectOption({ label: 'Laboratory · Practical Exam' });
       await page.getByRole('button', { name: /Save Initial Schema/i }).click();
       // Saving asks for confirmation first.
       await page.getByRole('button', { name: 'Confirm', exact: true }).click();
       await expect.poll(() => putPayloads.length).toBe(2);
-      expect(putPayloads[1].assessmentAssignments).toEqual([{ assessmentId: 42, categoryName: 'Activity' }]);
+      expect(putPayloads[1].assessmentAssignments).toEqual([{
+        assessmentId: 42, categoryName: 'Practical Exam', gradingPeriod: 'Midterm', component: 'Laboratory',
+      }]);
+    });
+
+    test('legacy assessments without a period can be explicitly mapped to either grouped period', async ({ page }) => {
+      const putPayloads: Array<Record<string, any>> = [];
+      await page.route('**/api/faculty/grading-config?*', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: null }) });
+      });
+      await page.route('**/api/faculty/grading-config', async route => {
+        if (route.request().method() !== 'PUT') return route.continue();
+        const payload = route.request().postDataJSON() as Record<string, any>;
+        putPayloads.push(payload);
+        if (putPayloads.length === 1) {
+          await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({
+            status: 'error', code: 'GRADING_COMPONENT_MAPPING_REQUIRED',
+            message: 'Existing assessments require Lecture/Laboratory mappings.',
+            assessments: [{ assessmentId: 45, title: 'Unperioded Legacy Quiz', legacyType: 'Quiz', gradingPeriod: null }],
+          }) });
+          return;
+        }
+        const withIds = (rows: Array<Record<string, any>>, period: string, firstId: number) => rows.map((row, index) => ({
+          ...row, id: firstId + index, gradingPeriod: period, inUse: false,
+        }));
+        const midtermCategories = withIds(payload.midtermCategories, 'Midterm', 100);
+        const finalCategories = withIds(payload.finalCategories, 'Final', 200);
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: {
+          id: 'grouped-legacy-mapping', course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+          semester: '1st Semester', schoolYear: '2026-2027', version: 1, schemaMode: 'periods',
+          componentMode: payload.componentMode, componentWeights: payload.componentWeights, termRatio: payload.termRatio,
+          attendanceDateRanges: payload.attendanceDateRanges, midtermCategories, finalCategories,
+          categories: [...midtermCategories, ...finalCategories],
+        } }) });
+      });
+
+      await page.goto('/grades?tab=components');
+      await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
+      await expect(page.locator('#period-component-mode')).toHaveCount(0);
+      await expect(page.getByRole('tab', { name: 'Lecture Categories' })).toBeVisible();
+      await expect(page.locator('input[placeholder*="Category name"]')).toHaveCount(4);
+      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+
+      const picker = page.getByRole('combobox', { name: 'Category for Unperioded Legacy Quiz' });
+      await expect(picker).toBeVisible();
+      await expect(page.getByText('Choose period', { exact: true })).toBeVisible();
+      const finalLectureOption = picker.locator('option').filter({ hasText: /Final.*Lecture.*Quiz/ });
+      await expect(finalLectureOption).toHaveCount(1);
+      await picker.selectOption((await finalLectureOption.getAttribute('value'))!);
+      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+
+      expect(putPayloads).toHaveLength(2);
+      expect(putPayloads[1].assessmentAssignments).toEqual([{
+        assessmentId: 45, categoryName: 'Quiz', gradingPeriod: 'Final', component: 'Lecture',
+      }]);
     });
 
     test('confirms before discarding unsaved changes when switching course offerings', async ({ page }) => {
@@ -1917,7 +1999,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.goto('/grades?tab=components');
       const offeringSelect = page.getByRole('main').locator('select').first();
-      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
+      await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
 
       // Edit a category name to make it dirty
       const nameInputs = page.locator('input[placeholder*="Category name"]');
@@ -1968,7 +2050,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(page.getByText('IsolatedLegacyCat')).toHaveCount(0);
     });
 
-    test('legacy conversion preserves existing IDs/names, displays proposed mapping in modal, and sends convertFromOverall: true with preserved IDs', async ({ page }) => {
+    test('legacy overall conversion requires split category mapping and preserves existing IDs/names/weights', async ({ page }) => {
       let putPayload: any = null;
 
       await page.route('**/api/faculty/grading-config?*', async (route) => {
@@ -2009,17 +2091,12 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
                 schoolYear: '2026-2027',
                 version: 5,
                 schemaMode: 'periods',
+                componentMode: 'lecture_laboratory',
+                componentWeights: { lecture: 60, laboratory: 40 },
                 termRatio: { midterm: 40, final: 60 },
-                midtermCategories: [
-                  { id: 301, name: 'Quizzes', weight: '30', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: true },
-                  { id: 302, name: 'Major Exams', weight: '60', sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: true },
-                  { id: 303, name: 'Attendance', weight: '10', sortOrder: 3, gradingPeriod: 'Midterm', sourceKind: 'attendance', inUse: false },
-                ],
-                finalCategories: [
-                  { id: 301, name: 'Quizzes', weight: '30', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: true },
-                  { id: 302, name: 'Major Exams', weight: '60', sortOrder: 2, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: true },
-                  { id: 303, name: 'Attendance', weight: '10', sortOrder: 3, gradingPeriod: 'Final', sourceKind: 'attendance', inUse: false },
-                ],
+                midtermCategories: putPayload.midtermCategories,
+                finalCategories: putPayload.finalCategories,
+                categories: [...putPayload.midtermCategories, ...putPayload.finalCategories],
               },
             }),
           });
@@ -2044,18 +2121,55 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(modal.getByText('Attendance').first()).toBeVisible();
       await expect(modal.getByText('(#303)').first()).toBeVisible();
 
-      // Confirm conversion
-      await page.getByRole('button', { name: /Confirm Conversion/i }).click();
+      // Continue into the editable split draft; conversion is saved only after every list totals 100%.
+      await page.getByRole('button', { name: 'Continue to Lecture/Laboratory Mapping', exact: true }).click();
+      await expect(page.getByTestId('unassigned-component-categories')).toBeVisible();
+
+      const assignCurrentPeriodCategoriesToLecture = async () => {
+        const componentSelects = page.getByTestId('unassigned-component-categories').getByRole('combobox');
+        while (await componentSelects.count()) await componentSelects.first().selectOption('Lecture');
+      };
+      const addLaboratoryCategory = async (period: 'Midterm' | 'Final') => {
+        await page.getByRole('tab', { name: 'Laboratory Categories', exact: true }).click();
+        await page.getByRole('button', {
+          name: period === 'Midterm' ? 'Add Midterm Category' : 'Add Finals Category', exact: true,
+        }).click();
+        const names = page.locator('input[placeholder*="Category name"]');
+        const weights = page.locator('input[placeholder="0"]');
+        const newIndex = (await names.count()) - 1;
+        await names.nth(newIndex).fill('Laboratory Exercises');
+        await weights.nth(newIndex).fill('100');
+      };
+
+      await assignCurrentPeriodCategoriesToLecture();
+      await addLaboratoryCategory('Midterm');
+      await page.getByRole('button', { name: /Finals Categories/i }).click();
+      await assignCurrentPeriodCategoriesToLecture();
+      await addLaboratoryCategory('Final');
+      await page.getByRole('tab', { name: 'Lecture Categories', exact: true }).click();
+      await expect(page.getByRole('button', { name: /Save Grade Weights/i })).toBeEnabled();
+
+      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      await expect(page.getByText(/Confirm forward grading conversion/i)).toBeVisible();
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 
       await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
       expect(putPayload).not.toBeNull();
       expect(putPayload.convertFromOverall).toBe(true);
+      expect(putPayload.convertToLectureLaboratory).toBe(true);
       expect(putPayload.schemaMode).toBe('periods');
       expect(putPayload.version).toBe(4);
-      expect(putPayload.midtermCategories).toHaveLength(3);
-      expect(putPayload.finalCategories).toHaveLength(3);
-      expect(putPayload.midtermCategories.map((c: any) => c.id)).toEqual([301, 302, 303]);
-      expect(putPayload.finalCategories.map((c: any) => c.id)).toEqual([301, 302, 303]);
+      expect(putPayload.componentMode).toBe('lecture_laboratory');
+      expect(putPayload.componentWeights).toEqual({ lecture: 60, laboratory: 40 });
+      for (const categories of [putPayload.midtermCategories, putPayload.finalCategories]) {
+        expect(categories).toHaveLength(4);
+        expect(categories.slice(0, 3).map((category: any) => category.id)).toEqual([301, 302, 303]);
+        expect(categories.slice(0, 3).map((category: any) => category.weight)).toEqual(['30', '60', '10']);
+        expect(categories.slice(0, 3).every((category: any) => category.component === 'Lecture')).toBeTruthy();
+        expect(categories[3]).toEqual(expect.objectContaining({
+          name: 'Laboratory Exercises', weight: '100', component: 'Laboratory', sourceKind: 'assessment',
+        }));
+      }
     });
 
     test('direct navigation to /grades?tab=summary loads canonical period configuration independently of components tab', async ({ page }) => {
@@ -2521,12 +2635,16 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
               schoolYear: '2026-2027',
               version: 2,
               schemaMode: 'periods',
+              componentMode: 'lecture_laboratory',
+              componentWeights: { lecture: 60, laboratory: 40 },
               termRatio: { midterm: 40, final: 60 },
               midtermCategories: [
-                { id: 401, name: 'Quizzes', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' },
+                { id: 401, name: 'Quizzes', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Lecture' },
+                { id: 403, name: 'Practical Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Laboratory' },
               ],
               finalCategories: [
-                { id: 402, name: 'Final Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment' },
+                { id: 402, name: 'Final Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', component: 'Lecture' },
+                { id: 404, name: 'Practical Exam', weight: '100', sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', component: 'Laboratory' },
               ],
             },
           }),
@@ -2774,6 +2892,58 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(getAssessmentsCallCount).toBeGreaterThan(initialGetCount);
     });
 
+    test('switching assessment period preserves its selected component when category names repeat', async ({ page }) => {
+      let postedAssessment: Record<string, any> | null = null;
+      const categories = [
+        { id: 101, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Lecture' },
+        { id: 102, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', component: 'Laboratory' },
+        { id: 103, name: 'Quiz', weight: 100, sortOrder: 2, gradingPeriod: 'Final', sourceKind: 'assessment', component: 'Lecture' },
+      ];
+      await page.route('**/api/faculty/grading-config?*', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: {
+          id: 'grouped-period-switch', course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+          semester: '1st Semester', schoolYear: '2026-2027', version: 1, schemaMode: 'periods',
+          componentMode: 'lecture_laboratory', componentWeights: { lecture: 60, laboratory: 40 },
+          termRatio: { midterm: 30, final: 70 }, categories,
+          midtermCategories: categories.filter(category => category.gradingPeriod === 'Midterm'),
+          finalCategories: categories.filter(category => category.gradingPeriod === 'Final'),
+        } }) });
+      });
+      await page.route('**/api/faculty/assessments', async route => {
+        if (route.request().method() === 'POST') {
+          const [payload] = route.request().postDataJSON() as Record<string, any>[];
+          postedAssessment = payload;
+          await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+            status: 'ok', message: 'Assessment saved.', assessments: [{ id: 'ass-period-switch', classId: payload.classId, title: payload.title }],
+          }) });
+          return;
+        }
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+      });
+
+      await page.goto('/grades?tab=components');
+      await expect(page.getByRole('tab', { name: 'Lecture Categories' })).toBeVisible();
+      await page.getByRole('button', { name: /Finals Categories/ }).click();
+      await expect(page.getByLabel('Component for Quiz')).toHaveValue('Lecture');
+      // The active editor draft now conflicts with the saved picker configuration.
+      await page.getByLabel('Component for Quiz').selectOption('Laboratory');
+      await page.getByRole('button', { name: 'Assessments Manager' }).click();
+      await page.getByRole('button', { name: 'Add Assessment' }).click();
+      const modalForm = page.locator('form').last();
+      const categorySelect = modalForm.locator('select').first();
+      await expect(categorySelect).toContainText('Lecture · Quiz (100%)');
+      await categorySelect.selectOption('101');
+      await modalForm.locator('select').nth(1).selectOption('Final');
+      await expect(categorySelect).toHaveValue('103');
+      await expect(categorySelect.locator('option:checked')).toContainText('Lecture · Quiz');
+
+      await modalForm.locator('input[type="text"]').first().fill('Final Lecture Quiz');
+      await modalForm.getByRole('button', { name: 'Confirm Assessment' }).click();
+      await expect(page.getByText('Assessment saved.')).toBeVisible();
+      expect(postedAssessment?.gradingCategoryId).toBe(103);
+      expect(postedAssessment?.gradingPeriod).toBe('Final');
+    });
+
     test('edit resolves category by stable ID, shows renamed category name, and preserves stable ID on save', async ({ page }) => {
       let postedAssessmentPayload: Record<string, any> | null = null;
       let assessmentsList = [
@@ -2954,7 +3124,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       await page.getByRole('button', { name: 'Go to Grade Weights' }).click();
       await expect(page.getByRole('heading', { name: 'Set up grade weights first' })).toHaveCount(0);
-      await expect(page.getByText(/Suggested starting preset — unsaved/i).first()).toBeVisible();
+      await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeVisible();
       expect(postCount).toBe(0);
     });
@@ -3289,6 +3459,357 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(row).toBeVisible();
       await expect(row.getByText('Renamed Comprehensive Quizzes')).toBeVisible();
       await expect(row.getByText('Legacy Stale Category Name')).toHaveCount(0);
+    });
+
+    test('mandatory split defaults stay an unsaved draft until save and send both Quiz categories distinctly', async ({ page }) => {
+      const puts: Array<Record<string, any>> = [];
+      await page.route('**/api/faculty/grading-config?*', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: null }) });
+      });
+      await page.route('**/api/faculty/grading-config', async route => {
+        if (route.request().method() !== 'PUT') return route.continue();
+        const payload = route.request().postDataJSON() as Record<string, any>;
+        puts.push(payload);
+        const withIds = (rows: Array<Record<string, any>>, period: string, startId: number) => rows.map((row, index) => ({
+          ...row,
+          id: startId + index,
+          gradingPeriod: period,
+          inUse: false,
+        }));
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'ok',
+            configuration: {
+              id: 'grouped-draft',
+              course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+              semester: '1st Semester', schoolYear: '2026-2027', version: 1,
+              schemaMode: 'periods', componentMode: payload.componentMode,
+              componentWeights: payload.componentWeights, termRatio: payload.termRatio,
+              attendanceDateRanges: payload.attendanceDateRanges,
+              midtermCategories: withIds(payload.midtermCategories, 'Midterm', 100),
+              finalCategories: withIds(payload.finalCategories, 'Final', 200),
+            },
+          }),
+        });
+      });
+
+      await page.goto('/grades?tab=components');
+      await expect(page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first()).toBeVisible();
+      await expect(page.locator('#period-component-mode')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Apply syllabus example/i })).toHaveCount(0);
+
+      await expect(page.getByRole('tab', { name: 'Lecture Categories' })).toBeVisible();
+      await expect(page.locator('input[placeholder*="Category name"]')).toHaveCount(4);
+      await expect(page.getByLabel('Source for Participation')).toHaveValue('assessment');
+      await expect(page.getByLabel('Lecture contribution (%)')).toHaveValue('60');
+      await expect(page.getByLabel('Laboratory contribution (%)')).toHaveValue('40');
+      await expect(page.locator('#midterm-ratio-input')).toHaveValue('30');
+      await expect(page.locator('#final-ratio-input')).toHaveValue('70');
+      const lectureNames = page.locator('input[placeholder*="Category name"]');
+      const firstLectureCategory = await lectureNames.nth(0).inputValue();
+      const secondLectureCategory = await lectureNames.nth(1).inputValue();
+      await page.locator('button[aria-label^="Move category"][aria-label$=" down"]').first().click();
+      await expect(lectureNames.nth(0)).toHaveValue(secondLectureCategory);
+      await expect(lectureNames.nth(1)).toHaveValue(firstLectureCategory);
+      await page.getByRole('tab', { name: 'Laboratory Categories' }).click();
+      await expect(page.locator('input[placeholder*="Category name"]')).toHaveCount(4);
+      await expect(page.locator('input[placeholder*="Category name"]').nth(0)).toHaveValue('Practical Exam');
+      await expect(page.locator('input[placeholder*="Category name"]').nth(2)).toHaveValue('Quiz');
+      await page.getByRole('tab', { name: 'Lecture Categories' }).click();
+      await page.getByLabel('Source for Participation').selectOption('attendance');
+      await page.getByRole('tab', { name: 'Laboratory Categories' }).click();
+      await page.getByLabel('Source for Recitation').selectOption('attendance');
+      await expect(page.getByText('Each period may contain only one authoritative Attendance category.')).toBeVisible();
+      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeDisabled();
+      await page.getByLabel('Source for Recitation').selectOption('assessment');
+      await page.getByRole('tab', { name: 'Lecture Categories' }).click();
+      await page.getByLabel('Source for Participation').selectOption('assessment');
+      await expect(page.getByText('Each period may contain only one authoritative Attendance category.')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Save Initial Schema/i })).toBeEnabled();
+
+      // Defaults are editable and unsaved until the Faculty explicitly saves them.
+      expect(puts).toHaveLength(0);
+      await page.getByRole('button', { name: /Save Initial Schema/i }).click();
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+
+      expect(puts).toHaveLength(1);
+      const payload = puts[0];
+      expect(payload.schemaMode).toBe('periods');
+      expect(payload.componentMode).toBe('lecture_laboratory');
+      expect(payload.componentWeights).toEqual({ lecture: 60, laboratory: 40 });
+      expect(payload.termRatio).toEqual({ midterm: 30, final: 70 });
+      expect(payload.convertToLectureLaboratory).toBeUndefined();
+      for (const [period, categories] of [['Midterm', payload.midtermCategories], ['Final', payload.finalCategories]] as const) {
+        expect(categories).toHaveLength(8);
+        const lecture = categories.filter((category: Record<string, any>) => category.component === 'Lecture');
+        const laboratory = categories.filter((category: Record<string, any>) => category.component === 'Laboratory');
+        expect(lecture.reduce((total: number, category: Record<string, any>) => total + Number(category.weight), 0)).toBe(100);
+        expect(laboratory.reduce((total: number, category: Record<string, any>) => total + Number(category.weight), 0)).toBe(100);
+        expect(lecture.map((category: Record<string, any>) => category.name)).toEqual(period === 'Midterm'
+          ? ['Quiz', 'Term Exam', 'Outputs', 'Participation']
+          : ['Term Exam', 'Quiz', 'Outputs', 'Participation']);
+        expect(lecture.map((category: Record<string, any>) => category.sortOrder)).toEqual(lecture.map((_: Record<string, any>, index: number) => index + 1));
+        expect(laboratory.map((category: Record<string, any>) => category.sortOrder)).toEqual(laboratory.map((_: Record<string, any>, index: number) => index + 1));
+        expect(lecture.some((category: Record<string, any>) => category.name === 'Quiz')).toBeTruthy();
+        expect(laboratory.some((category: Record<string, any>) => category.name === 'Quiz')).toBeTruthy();
+        expect(categories.every((category: Record<string, any>) => category.gradingPeriod === period)).toBeTruthy();
+        expect(categories.filter((category: Record<string, any>) => category.sourceKind === 'attendance')).toEqual([]);
+      }
+    });
+
+    test('grouped grade summaries show four distinct component columns and export all four values', async ({ page }) => {
+      const groupedCategories = [
+        { id: 101, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Lecture', inUse: true },
+        { id: 102, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Laboratory', inUse: true },
+        { id: 103, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', component: 'Lecture', inUse: true },
+        { id: 104, name: 'Quiz', weight: 100, sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', component: 'Laboratory', inUse: true },
+      ];
+      await page.route('**/api/faculty/grading-config?*', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+          status: 'ok', configuration: {
+            id: 'grouped-summaries', course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+            semester: '1st Semester', schoolYear: '2026-2027', version: 1,
+            schemaMode: 'periods', componentMode: 'lecture_laboratory', componentWeights: { lecture: 60, laboratory: 40 },
+            termRatio: { midterm: 30, final: 70 }, categories: groupedCategories,
+            midtermCategories: groupedCategories.filter(category => category.gradingPeriod === 'Midterm'),
+            finalCategories: groupedCategories.filter(category => category.gradingPeriod === 'Final'),
+            attendanceDateRanges: { midterm: { startDate: null, endDate: null }, final: { startDate: null, endDate: null } },
+          },
+        }) });
+      });
+      await page.route('**/api/faculty/students', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{
+          id: '701', studentId: 'DENT-007', name: 'Alice Reyes', email: 'alice@bicol-u.edu.ph', yearLevel: 2, status: 'active',
+          classSections: [{ classId: '1', className: 'CLIN401-A', enrollmentId: '801' }],
+          enrolledSubjects: [{
+            code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, classId: '1', enrollmentId: '801',
+            grade: null, isClinical: false, hasRemedial: false, components: null,
+          }],
+        }]) });
+      });
+      await page.route('**/api/faculty/grades/compute', async route => {
+        const component = (name: 'Lecture' | 'Laboratory', percentage: number) => ({ component: name, status: 'computed', percentage, categories: [], incomplete: [] });
+        const period = (name: 'Midterm' | 'Final', percentage: number, lecture: number, laboratory: number) => ({
+          period: name, status: 'computed', percentage, categories: [], incomplete: [],
+          attendanceDateRange: { startDate: null, endDate: null },
+          components: { lecture: component('Lecture', lecture), laboratory: component('Laboratory', laboratory) },
+        });
+        const midterm = period('Midterm', 87, 81, 91);
+        const final = period('Final', 89, 93, 83);
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', results: [{
+          status: 'computed', enrollmentId: '801', studentId: '701', percentage: 88.4, gwa: 1.65, retentionState: 'active',
+          periods: { midterm, final },
+          breakdown: { calculationMode: 'authoritative_periods', termRatio: { midterm: 30, final: 70 }, periods: { midterm, final }, retentionThreshold: 2.5 },
+        }] }) });
+      });
+
+      await page.goto('/grades?tab=summaries');
+      await expect(page.getByRole('heading', { name: 'Academic Grade Summaries' })).toBeVisible();
+      const recompute = page.getByRole('button', { name: 'Recompute Grades' });
+      await expect(recompute).toBeEnabled();
+      await recompute.click();
+      await page.getByRole('button', { name: 'Confirm Recomputation', exact: true }).click();
+
+      const row = page.locator('.no-print tbody tr').filter({ hasText: 'Alice Reyes' });
+      await expect(row).toContainText('81.00%');
+      await expect(row).toContainText('91.00%');
+      await expect(row).toContainText('93.00%');
+      await expect(row).toContainText('83.00%');
+      await expect(row).toContainText('1.65');
+      for (const label of ['Midterm Lecture %', 'Midterm Laboratory %', 'Finals Lecture %', 'Finals Laboratory %']) {
+        await expect(page.locator('.no-print table').getByRole('columnheader', { name: label, exact: true })).toHaveCount(1);
+      }
+
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export CSV Ledger' }).click();
+      const download = await downloadPromise;
+      const csv = await readFile((await download.path())!, 'utf8');
+      expect(csv).toContain('Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %');
+      expect(csv).toContain('"DENT-007","Alice Reyes","81.00%","91.00%","87.00%","93.00%","83.00%","89.00%","1.65","PASS"');
+    });
+
+    test('legacy combined period grading requires explicit forward conversion and preserves category IDs', async ({ page }) => {
+      const midtermCategories = [
+        { id: 101, name: 'Quiz', weight: 70, sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: false },
+        { id: 102, name: 'Outputs', weight: 30, sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'assessment', inUse: false },
+      ];
+      const finalCategories = [
+        { id: 103, name: 'Quiz', weight: 60, sortOrder: 1, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
+        { id: 104, name: 'Outputs', weight: 40, sortOrder: 2, gradingPeriod: 'Final', sourceKind: 'assessment', inUse: false },
+      ];
+      const saves: Array<Record<string, any>> = [];
+      let computeRequests = 0;
+      await page.route('**/api/faculty/grading-config?*', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: {
+          id: 'combined-period-config', course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+          semester: '1st Semester', schoolYear: '2026-2027', version: 8,
+          schemaMode: 'periods', termRatio: { midterm: 40, final: 60 }, midtermCategories, finalCategories,
+          categories: [...midtermCategories, ...finalCategories],
+          attendanceDateRanges: { midterm: { startDate: null, endDate: null }, final: { startDate: null, endDate: null } },
+        } }) });
+      });
+      await page.route('**/api/faculty/grading-config', async route => {
+        if (route.request().method() !== 'PUT') return route.continue();
+        const payload = route.request().postDataJSON() as Record<string, any>;
+        saves.push(payload);
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: {
+          id: 'combined-period-config', course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+          semester: '1st Semester', schoolYear: '2026-2027', version: 9, schemaMode: 'periods',
+          componentMode: payload.componentMode, componentWeights: payload.componentWeights, termRatio: payload.termRatio,
+          midtermCategories: payload.midtermCategories, finalCategories: payload.finalCategories,
+          categories: [...payload.midtermCategories, ...payload.finalCategories],
+          attendanceDateRanges: payload.attendanceDateRanges,
+        } }) });
+      });
+      await page.route('**/api/faculty/grades/compute', async route => {
+        computeRequests += 1;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', results: [] }) });
+      });
+
+      await page.goto('/grades?tab=components');
+      await expect(page.getByRole('heading', { name: 'Configure Grading Weights & Schema' })).toBeVisible();
+      await expect(page.getByText('Saved combined period grading')).toBeVisible();
+      await expect(page.locator('#period-component-mode')).toHaveCount(0);
+      await expect(page.getByLabel('Lecture contribution (%)')).toHaveCount(0);
+      const savedName = page.locator('input[placeholder*="Category name"]').first();
+      await expect(savedName).toBeDisabled();
+      await expect(savedName).toHaveValue('Quiz');
+      await expect(page.getByRole('button', { name: /Save Grade Weights/i })).toBeDisabled();
+      expect(saves).toHaveLength(0);
+
+      await page.getByRole('button', { name: 'Convert to Lecture/Laboratory' }).click();
+      await expect(page.getByTestId('unassigned-component-categories')).toBeVisible();
+      await page.getByLabel('Component for Quiz').selectOption('Lecture');
+      await page.getByLabel('Component for Outputs').selectOption('Laboratory');
+      await page.locator('input[placeholder="0"]').fill('100');
+      await page.getByRole('tab', { name: 'Laboratory Categories' }).click();
+      await page.locator('input[placeholder="0"]').fill('100');
+
+      await page.getByRole('button', { name: /Finals Categories/ }).click();
+      const finalUnassigned = page.getByTestId('unassigned-component-categories');
+      await finalUnassigned.getByLabel('Component for Quiz').selectOption('Lecture');
+      await finalUnassigned.getByLabel('Component for Outputs').selectOption('Laboratory');
+      await page.getByRole('tab', { name: 'Lecture Categories' }).click();
+      await page.locator('input[placeholder="0"]').fill('100');
+      await page.getByRole('tab', { name: 'Laboratory Categories' }).click();
+      await page.locator('input[placeholder="0"]').fill('100');
+      await expect(page.locator('#midterm-ratio-input')).toHaveValue('40');
+      await expect(page.locator('#final-ratio-input')).toHaveValue('60');
+      await expect(page.getByRole('button', { name: /Save Grade Weights/i })).toBeEnabled();
+
+      await page.getByRole('button', { name: /Save Grade Weights/i }).click();
+      await expect(page.getByText(/Confirm forward grading conversion/i)).toBeVisible();
+      await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+      await expect(page.getByText(/Grade weights saved successfully/i)).toBeVisible();
+
+      expect(saves).toHaveLength(1);
+      const payload = saves[0];
+      expect(payload.convertToLectureLaboratory).toBe(true);
+      expect(payload).not.toHaveProperty('convertToCombined');
+      expect(payload.componentMode).toBe('lecture_laboratory');
+      expect(payload.componentWeights).toEqual({ lecture: 60, laboratory: 40 });
+      expect(payload.termRatio).toEqual({ midterm: 40, final: 60 });
+      expect(payload.midtermCategories.map((category: Record<string, any>) => category.id)).toEqual([101, 102]);
+      expect(payload.finalCategories.map((category: Record<string, any>) => category.id)).toEqual([103, 104]);
+      for (const categories of [payload.midtermCategories, payload.finalCategories]) {
+        expect(categories.find((category: Record<string, any>) => category.name === 'Quiz')).toMatchObject({ component: 'Lecture', weight: '100' });
+        expect(categories.find((category: Record<string, any>) => category.name === 'Outputs')).toMatchObject({ component: 'Laboratory', weight: '100' });
+      }
+      expect(computeRequests).toBe(0);
+    });
+
+    test('Faculty Reports uses saved grouped results in its table, print layout, and CSV', async ({ page }) => {
+      const groupedComponents = (lecture: number, laboratory: number) => ({
+        lecture: { component: 'Lecture', status: 'computed', percentage: lecture, categories: [], incomplete: [] },
+        laboratory: { component: 'Laboratory', status: 'computed', percentage: laboratory, categories: [], incomplete: [] },
+      });
+      const groupedPeriod = (name: 'Midterm' | 'Final', percentage: number, lecture: number, laboratory: number) => ({
+        period: name, status: 'computed', percentage, categories: [], incomplete: [],
+        components: groupedComponents(lecture, laboratory),
+      });
+      const oldPeriod = (name: 'Midterm' | 'Final', percentage: number) => ({
+        period: name, status: 'computed', percentage, categories: [], incomplete: [],
+      });
+      const savedGroupResult = {
+        calculationMode: 'authoritative_periods', termRatio: { midterm: 30, final: 70 },
+        periods: { midterm: groupedPeriod('Midterm', 87, 81, 91), final: groupedPeriod('Final', 89, 93, 83) },
+        percentage: 88.4, gwa: 1.65, retentionState: 'active',
+      };
+      const olderCombinedResult = {
+        calculationMode: 'authoritative_periods', termRatio: { midterm: 40, final: 60 },
+        periods: { midterm: oldPeriod('Midterm', 72), final: oldPeriod('Final', 84) },
+        percentage: 79.2, gwa: 2.15, retentionState: 'active',
+      };
+      await page.route('**/api/faculty/reports/summary', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', reports: {
+          currentSchoolYear: '2026-2027', students: [
+            { id: '701', studentId: 'DENT-007', name: 'Alice Reyes', status: 'active', classId: '1', schoolYear: '2026-2027', enrolledSubjects: [
+              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 1.65, components: savedGroupResult },
+            ] },
+            { id: '702', studentId: 'DENT-008', name: 'Bea Santos', status: 'active', classId: '1', schoolYear: '2026-2027', enrolledSubjects: [
+              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 2.15, components: olderCombinedResult },
+            ] },
+            { id: '703', studentId: 'DENT-009', name: 'Caleb Reyes', status: 'active', classId: '1', schoolYear: '2026-2027', enrolledSubjects: [
+              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 2.45, components: {
+                calculationMode: 'authoritative_categories', categories: [{ categoryId: 17, name: 'Quizzes', contribution: 23.5 }],
+              } },
+            ] },
+          ],
+          summary: { totalStudents: 2, averageGWA: 1.9, atRiskCount: 0, retentionPassRate: 100 },
+        } }) });
+      });
+      await page.route('**/api/faculty/classes', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [
+          { id: '1', csId: 1, csName: 'CLIN401-A', courseId: 101, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', semester: '1st Semester', schoolYear: '2026-2027', block: 'A' },
+        ] }) });
+      });
+      await page.route('**/api/faculty/retention', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', retention: [] }) });
+      });
+      await page.route('**/api/faculty/grading-config?*', async route => {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: {
+          id: 'saved-grouped-report', course: { id: 101, code: 'CLIN401', name: 'Clinical Dentistry I' },
+          semester: '1st Semester', schoolYear: '2026-2027', version: 3, schemaMode: 'periods',
+          componentMode: 'lecture_laboratory', componentWeights: { lecture: 60, laboratory: 40 },
+          termRatio: { midterm: 30, final: 70 }, categories: [], midtermCategories: [], finalCategories: [],
+        } }) });
+      });
+
+      await page.goto('/reports');
+      await expect(page.getByRole('heading', { name: 'Class Course Grade Reports' })).toBeVisible();
+      await expect(page.getByRole('columnheader', { name: 'Midterm Lecture', exact: true })).toBeVisible();
+      await expect(page.getByRole('columnheader', { name: 'Midterm Laboratory', exact: true })).toBeVisible();
+      await expect(page.getByRole('columnheader', { name: 'Finals Lecture', exact: true })).toBeVisible();
+      await expect(page.getByRole('columnheader', { name: 'Finals Laboratory', exact: true })).toBeVisible();
+      const groupedRow = page.locator('.no-print tbody tr').filter({ hasText: 'Alice Reyes' });
+      await expect(groupedRow).toContainText('81.0%');
+      await expect(groupedRow).toContainText('91.0%');
+      const oldRow = page.locator('.no-print tbody tr').filter({ hasText: 'Bea Santos' });
+      await expect(oldRow).toContainText('Unavailable (recompute required)');
+      await expect(oldRow).toContainText('72.0%');
+      await expect(oldRow).toContainText('84.0%');
+      await expect(oldRow).toContainText('2.15');
+      const legacyOverallRow = page.locator('.no-print tbody tr').filter({ hasText: 'Caleb Reyes' });
+      await expect(legacyOverallRow).toContainText('Prior: 2.45 (Historical)');
+      await expect(legacyOverallRow).toContainText('PENDING');
+
+      const printTable = page.locator('.print-only table').first();
+      await expect(printTable.getByRole('columnheader', { name: 'Midterm Lecture %', exact: true })).toBeAttached();
+      await expect(printTable.getByRole('columnheader', { name: 'Finals Laboratory %', exact: true })).toBeAttached();
+      await expect(printTable.getByRole('row').filter({ hasText: 'Bea Santos' })).toContainText('Unavailable (recompute required)');
+      await expect(printTable.getByRole('row').filter({ hasText: 'Caleb Reyes' })).toContainText('Prior: 2.45 (Historical)');
+
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export CSV' }).click();
+      const download = await downloadPromise;
+      const csv = await readFile((await download.path())!, 'utf8');
+      expect(csv).toContain('Student ID,Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks');
+      expect(csv).toContain('"DENT-007","Alice Reyes","CLIN401","81.0%","91.0%","87.0","93.0%","83.0%","89.0","1.65"');
+      expect(csv).toContain('"DENT-008","Bea Santos","CLIN401","Unavailable (recompute required)","Unavailable (recompute required)","72.0","Unavailable (recompute required)","Unavailable (recompute required)","84.0","2.15"');
+      expect(csv).toContain('"DENT-009","Caleb Reyes","CLIN401","Pending","Pending","N/A","Pending","Pending","N/A","Prior: 2.45 (Historical)","PENDING"');
     });
   });
 });

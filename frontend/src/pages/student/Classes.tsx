@@ -76,6 +76,50 @@ export const calculateClassAttendanceRate = (records: Array<{ status: string }>)
   return Math.round((attendedCount / records.length) * 100);
 };
 
+const getComponentGradeText = (
+  cls: StudentAcademicClass,
+  period: 'midterm' | 'final',
+  component: 'lecture' | 'laboratory',
+): string => {
+  const components = (cls.gradeComponents?.periods as Record<string, unknown> | undefined)?.[period] as Record<string, unknown> | undefined;
+  const breakdown = (components?.components as Record<string, unknown> | undefined)?.[component] as Record<string, unknown> | undefined;
+  if (typeof breakdown?.percentage === 'number') return `${breakdown.percentage.toFixed(2)}%`;
+  if (breakdown?.status === 'pending') return 'Pending';
+  if (Array.isArray(breakdown?.incomplete) && breakdown.incomplete.length > 0) {
+    const firstIncomplete = breakdown.incomplete[0] as { reason?: unknown };
+    const reason = typeof firstIncomplete?.reason === 'string'
+      ? firstIncomplete.reason.replace(/_/g, ' ')
+      : '';
+    return reason ? `Incomplete (${reason})` : 'Incomplete';
+  }
+  if (cls.gradeComponents || typeof cls.grade === 'number') return 'Unavailable (recompute required)';
+  return 'Pending';
+};
+
+const hasSavedComponentBreakdown = (cls: StudentAcademicClass): boolean => {
+  const periods = cls.gradeComponents?.periods as Record<string, unknown> | undefined;
+  return (['midterm', 'final'] as const).some(period => {
+    const evaluation = periods?.[period] as Record<string, unknown> | undefined;
+    const components = evaluation?.components as Record<string, unknown> | undefined;
+    return Boolean(components && (components.lecture || components.laboratory));
+  });
+};
+
+const StudentComponentGradeSummary: React.FC<{ cls: StudentAcademicClass }> = ({ cls }) => {
+  if (cls.gradingComponentMode !== 'lecture_laboratory' && !hasSavedComponentBreakdown(cls)) return null;
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3" aria-label="Lecture and Laboratory grade components">
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Lecture / Laboratory breakdown</p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+        <span>Midterm Lecture: <strong>{getComponentGradeText(cls, 'midterm', 'lecture')}</strong></span>
+        <span>Midterm Laboratory: <strong>{getComponentGradeText(cls, 'midterm', 'laboratory')}</strong></span>
+        <span>Finals Lecture: <strong>{getComponentGradeText(cls, 'final', 'lecture')}</strong></span>
+        <span>Finals Laboratory: <strong>{getComponentGradeText(cls, 'final', 'laboratory')}</strong></span>
+      </div>
+    </div>
+  );
+};
+
 export const Classes: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -416,6 +460,7 @@ export const Classes: React.FC = () => {
                       <span>Clinical Hours Completed: <strong>{typeof cls.clinicHoursCompleted === 'number' ? `${cls.clinicHoursCompleted} hrs` : 'Unavailable'}</strong></span>
                       <span className={['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()) ? 'text-amber-700 dark:text-amber-300 font-bold' : ''}>Retention: <strong>{['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()) ? cls.retentionState : cls.grade === null ? 'Pending' : cls.retentionState || 'Unavailable'}</strong></span>
                     </div>
+                    <StudentComponentGradeSummary cls={cls} />
                   </Card>
                 );
               })}
@@ -500,6 +545,7 @@ export const Classes: React.FC = () => {
                       <span>Clinical Hours Completed: <strong>{typeof cls.clinicHoursCompleted === 'number' ? `${cls.clinicHoursCompleted} hrs` : 'Unavailable'}</strong></span>
                       <span className={['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()) ? 'text-amber-700 dark:text-amber-300 font-bold' : ''}>Retention: <strong>{['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase()) ? cls.retentionState : cls.grade === null ? 'Pending' : cls.retentionState || 'Unavailable'}</strong></span>
                     </div>
+                    <StudentComponentGradeSummary cls={cls} />
                   </Card>
                 );
               })}

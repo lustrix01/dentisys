@@ -251,6 +251,9 @@ FROM (
 
     & (Join-Path $PSScriptRoot 'smoke.ps1') -BackendUrl $backendBaseUrl
 
+    # Isolate grouped grading's live mutations from the existing demo offering.
+    Invoke-Compose @('exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'dentisys', '-v', 'ON_ERROR_STOP=1', '-f', '/postgres/test-fixtures/grouped-grading-live.sql')
+
     $env:E2E_BASE_URL = $frontendBaseUrl
     $env:E2E_MAILPIT_BASE_URL = "http://127.0.0.1:$MailpitUiPort"
     & npm run test:e2e:live

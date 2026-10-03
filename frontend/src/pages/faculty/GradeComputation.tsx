@@ -62,10 +62,13 @@ import type {
   FacultyGradingCategoryPeriodMappingRequiredItem,
   FacultyGradingConfigSavePayload,
   FacultyGradeComputeResult,
-  GradingSourceKindEnum
+  GradingSourceKindEnum,
+  GradingComponentEnum,
+  FacultyGradingComponentMappingRequiredItem
 } from '../../services/apiClient';
 import {
   buildDefaultPeriodDraft,
+  buildDefaultLectureLaboratoryCategories,
   buildRowCompositeKey,
   validateDateRanges,
   normalizeDateRangesForPayload,
@@ -76,7 +79,8 @@ import {
 } from '../../utils/periodGradingHelper';
 import type {
   PeriodDraftState,
-  PeriodCategoryDraftRow
+  PeriodCategoryDraftRow,
+  PeriodComponentEvaluation
 } from '../../utils/periodGradingHelper';
 
 export interface EditorCategoryRow {
@@ -87,6 +91,52 @@ export interface EditorCategoryRow {
   sortOrder: number;
   inUse: boolean;
 }
+
+interface CategoryWeightSummary {
+  sumUnits: number;
+  allValid: boolean;
+  isExact100: boolean;
+  displayPercent: string;
+}
+
+const categoryOptionKey = (category: {
+  id?: number | string | null;
+  name: string;
+  gradingPeriod?: 'Midterm' | 'Final' | null;
+  component?: GradingComponentEnum | null;
+}, fallbackPeriod: 'Midterm' | 'Final') => category.id
+  ? String(category.id)
+  : `${category.gradingPeriod ?? fallbackPeriod}:${category.component ?? 'unassigned'}:${category.name}`;
+
+const calculateCategoryWeightSummary = (rows: PeriodCategoryDraftRow[]): CategoryWeightSummary => {
+  let sumUnits = 0;
+  let allValid = true;
+  for (const row of rows) {
+    const units = parseWeightUnits(row.weight.trim());
+    if (units === null) {
+      allValid = false;
+    } else {
+      sumUnits += units;
+    }
+  }
+  return {
+    sumUnits,
+    allValid,
+    isExact100: allValid && sumUnits === TOTAL_WEIGHT_UNITS,
+    displayPercent: formatWeightUnitsToPercent(sumUnits),
+  };
+};
+
+const formatComponentResultCell = (
+  component: PeriodComponentEvaluation | undefined,
+  periodStatus: 'computed' | 'incomplete' | 'unconfigured' | 'pending'
+) => {
+  if (component?.percentage !== null && component?.percentage !== undefined) return `${component.percentage.toFixed(2)}%`;
+  if (component?.status === 'pending' || periodStatus === 'pending') return 'Pending';
+  if (component?.reasons.length) return `Incomplete (${component.reasons[0]})`;
+  if (periodStatus === 'computed') return 'Unavailable (recompute required)';
+  return periodStatus === 'incomplete' ? 'Incomplete' : '—';
+};
 
 export const GradeComputation: React.FC = () => {
   const { user } = useAuth();
@@ -273,6 +323,11 @@ export const GradeComputation: React.FC = () => {
   const [selectedOfferingKey, setSelectedOfferingKey] = useState<string>('');
   const [loadedConfig, setLoadedConfig] = useState<FacultyGradingConfiguration | null>(null);
   const [schemaMode, setSchemaMode] = useState<'overall' | 'periods'>('periods');
+  const [componentMode, setComponentMode] = useState<'combined' | 'lecture_laboratory'>('lecture_laboratory');
+  const [savedComponentMode, setSavedComponentMode] = useState<'combined' | 'lecture_laboratory'>('lecture_laboratory');
+  const [componentWeights, setComponentWeights] = useState<{ lecture: string; laboratory: string }>({ lecture: '60', laboratory: '40' });
+  const [savedComponentWeights, setSavedComponentWeights] = useState<{ lecture: string; laboratory: string }>({ lecture: '60', laboratory: '40' });
+  const [activeComponentEditorTab, setActiveComponentEditorTab] = useState<GradingComponentEnum>('Lecture');
   const [isPresetDraft, setIsPresetDraft] = useState<boolean>(false);
   const [activePeriodEditorTab, setActivePeriodEditorTab] = useState<'Midterm' | 'Final'>('Midterm');
 
@@ -421,90 +476,12 @@ export const GradeComputation: React.FC = () => {
         setModalConfig(res.configuration);
         setModalConfigStatus('configured');
         return res.configuration;
-      } else if (res.defaults) {
-        // Build synthetic configuration using the offering's defaults
-        const syntheticCategories: any[] = [];
-        let idCounter = 1;
-        if (Array.isArray(res.defaults.midtermCategories)) {
-          res.defaults.midtermCategories.forEach((c: any) => {
-            syntheticCategories.push({
-              id: undefined,
-              name: c.name,
-              weight: c.weight,
-              sortOrder: c.sortOrder ?? idCounter++,
-              gradingPeriod: 'Midterm',
-              sourceKind: c.sourceKind || (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
-            });
-          });
-        }
-        if (Array.isArray(res.defaults.finalCategories)) {
-          res.defaults.finalCategories.forEach((c: any) => {
-            syntheticCategories.push({
-              id: undefined,
-              name: c.name,
-              weight: c.weight,
-              sortOrder: c.sortOrder ?? idCounter++,
-              gradingPeriod: 'Final',
-              sourceKind: c.sourceKind || (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
-            });
-          });
-        }
-        const syntheticConfig: FacultyGradingConfiguration = {
-          id: String(offering.courseId),
-          course: {
-            id: offering.courseId,
-            code: offering.courseCode,
-            name: offering.courseName,
-          },
-          semester: offering.canonicalSemester,
-          schoolYear: offering.canonicalSchoolYear,
-          version: 1,
-          schemaMode: 'periods',
-          termRatio: res.defaults.termRatio,
-          categories: syntheticCategories,
-          attendanceDateRanges: res.defaults.attendanceDateRanges,
-        };
-        setModalConfig(syntheticConfig);
-        setModalConfigStatus('unconfigured');
-        return syntheticConfig;
       } else {
-        const fallback = buildDefaultPeriodDraft();
-        const syntheticCategories: any[] = [
-          ...fallback.midtermCategories.map((c) => ({
-            id: undefined,
-            name: c.name,
-            weight: Number(c.weight),
-            sortOrder: c.sortOrder,
-            gradingPeriod: 'Midterm',
-            sourceKind: c.sourceKind,
-          })),
-          ...fallback.finalCategories.map((c) => ({
-            id: undefined,
-            name: c.name,
-            weight: Number(c.weight),
-            sortOrder: c.sortOrder,
-            gradingPeriod: 'Final',
-            sourceKind: c.sourceKind,
-          })),
-        ];
-        const syntheticConfig: FacultyGradingConfiguration = {
-          id: String(offering.courseId),
-          course: {
-            id: offering.courseId,
-            code: offering.courseCode,
-            name: offering.courseName,
-          },
-          semester: offering.canonicalSemester,
-          schoolYear: offering.canonicalSchoolYear,
-          version: 1,
-          schemaMode: 'periods',
-          termRatio: { midterm: 40, final: 60 },
-          categories: syntheticCategories,
-          attendanceDateRanges: fallback.attendanceDateRanges,
-        };
-        setModalConfig(syntheticConfig);
+        // Keep an unconfigured offering unconfigured. Defaults are draft choices only;
+        // the assessment save guard requires an actual server configuration.
+        setModalConfig(null);
         setModalConfigStatus('unconfigured');
-        return syntheticConfig;
+        return null;
       }
     } catch (err) {
       setModalConfig(null);
@@ -514,7 +491,14 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
-  const modalEligibleCategories = useMemo(() => {
+  const modalEligibleCategories = useMemo<Array<{
+    id?: number | null;
+    name: string;
+    weight: string;
+    gradingPeriod?: 'Midterm' | 'Final' | null;
+    sourceKind?: GradingSourceKindEnum | null;
+    component?: GradingComponentEnum | null;
+  }>>(() => {
     const targetClass = facultyClasses.find(c => c.id === assClassId);
     const targetOffering = targetClass ? getOfferingForClass(targetClass) : currentAssessmentOffering;
 
@@ -528,6 +512,7 @@ export const GradeComputation: React.FC = () => {
           weight: String(c.weight),
           gradingPeriod: c.gradingPeriod,
           sourceKind: c.sourceKind,
+          component: c.component,
         }));
     }
 
@@ -543,6 +528,7 @@ export const GradeComputation: React.FC = () => {
             weight: String(r.weight),
             gradingPeriod: assPeriod,
             sourceKind: r.sourceKind,
+            component: r.component,
           }));
         }
       } else {
@@ -572,6 +558,7 @@ export const GradeComputation: React.FC = () => {
           weight: String(c.weight),
           gradingPeriod: c.gradingPeriod,
           sourceKind: c.sourceKind,
+          component: c.component,
         }));
       }
     }
@@ -589,6 +576,7 @@ export const GradeComputation: React.FC = () => {
           weight: String(c.weight),
           gradingPeriod: c.gradingPeriod,
           sourceKind: c.sourceKind,
+          component: c.component,
         }));
       }
     }
@@ -604,6 +592,7 @@ export const GradeComputation: React.FC = () => {
           weight: String(r.weight),
           gradingPeriod: assPeriod,
           sourceKind: r.sourceKind,
+          component: r.component,
         }));
       }
     } else if (categoryRows.length > 0) {
@@ -628,6 +617,7 @@ export const GradeComputation: React.FC = () => {
       weight: String(r.weight),
       gradingPeriod: assPeriod,
       sourceKind: r.sourceKind,
+      component: r.component,
     }));
   }, [
     modalConfig,
@@ -649,8 +639,14 @@ export const GradeComputation: React.FC = () => {
     const targetClass = facultyClasses.find(c => c.id === assClassId);
     const targetOffering = targetClass ? getOfferingForClass(targetClass) : currentAssessmentOffering;
 
-    let nextEligible: Array<{ id?: number | string | null; name: string; weight: string | number }> = [];
-    if (targetOffering && selectedOfferingKey === targetOffering.key && schemaMode === 'periods') {
+    let nextEligible: Array<{ id?: number | string | null; name: string; weight: string | number; component?: GradingComponentEnum | null }> = [];
+    if (modalConfigStatus === 'configured' && modalConfig?.schemaMode === 'periods' && Array.isArray(modalConfig.categories)) {
+      // Period changes in this modal must use the same saved categories shown by its picker.
+      // The editor may contain unsaved component reassignment drafts for this offering.
+      nextEligible = modalConfig.categories.filter(
+        c => (c.gradingPeriod === newPeriod || !c.gradingPeriod) && c.sourceKind !== 'attendance'
+      );
+    } else if (targetOffering && selectedOfferingKey === targetOffering.key && schemaMode === 'periods') {
       const rows = newPeriod === 'Final' ? finalCategories : midtermCategories;
       nextEligible = rows.filter(c => c.sourceKind !== 'attendance' && c.name.trim() !== '');
     } else if (modalConfig && modalConfig.schemaMode === 'periods') {
@@ -663,17 +659,36 @@ export const GradeComputation: React.FC = () => {
       nextEligible = rows.filter(c => c.sourceKind !== 'attendance');
     }
 
-    const currentMatches = nextEligible.find(
-      c => (assGradingCategoryId && String(c.id) === String(assGradingCategoryId)) || c.name === assType
+    const selectedCurrentCategory = modalEligibleCategories.find(c =>
+      assGradingCategoryId && (String(c.id) === assGradingCategoryId || categoryOptionKey(c, assPeriod) === assGradingCategoryId)
     );
+    const usesGroupedCategories = modalConfigStatus === 'configured' && modalConfig
+      ? modalConfig.componentMode === 'lecture_laboratory'
+      : Boolean(targetOffering && selectedOfferingKey === targetOffering.key && schemaMode === 'periods' && componentMode === 'lecture_laboratory');
+    const preferredComponent = usesGroupedCategories ? selectedCurrentCategory?.component : undefined;
+    const currentMatches = preferredComponent
+      ? nextEligible.find(c => c.name === assType && c.component === preferredComponent)
+        ?? nextEligible.find(c => assGradingCategoryId && (String(c.id) === assGradingCategoryId || categoryOptionKey(c, newPeriod) === assGradingCategoryId) && c.component === preferredComponent)
+      : nextEligible.find(
+        c => (assGradingCategoryId && String(c.id) === String(assGradingCategoryId)) || c.name === assType
+      );
     if (currentMatches) {
       setAssGradingCategoryId(currentMatches.id ? String(currentMatches.id) : '');
       setAssType(currentMatches.name);
       setModalCategoryWarning(false);
     } else if (nextEligible.length > 0) {
-      setAssGradingCategoryId(nextEligible[0].id ? String(nextEligible[0].id) : '');
-      setAssType(nextEligible[0].name);
-      setModalCategoryWarning(false);
+      const fallbackCategory = preferredComponent
+        ? nextEligible.find(c => c.component === preferredComponent)
+        : nextEligible[0];
+      if (fallbackCategory) {
+        setAssGradingCategoryId(fallbackCategory.id ? String(fallbackCategory.id) : '');
+        setAssType(fallbackCategory.name);
+        setModalCategoryWarning(false);
+      } else {
+        setAssGradingCategoryId('');
+        setAssType('');
+        setModalCategoryWarning(true);
+      }
     } else {
       setAssGradingCategoryId('');
       setAssType('');
@@ -1240,6 +1255,7 @@ export const GradeComputation: React.FC = () => {
   // Categories Faculty pick by hand for existing assessments that could not be linked by name.
   const [assessmentAssignments, setAssessmentAssignments] = useState<Record<number, string>>({});
   const [conversionMappingError, setConversionMappingError] = useState<FacultyGradingCategoryPeriodMappingRequiredItem[] | null>(null);
+  const [componentMappingError, setComponentMappingError] = useState<FacultyGradingComponentMappingRequiredItem[] | null>(null);
   const [isConversionModalOpen, setIsConversionModalOpen] = useState(false);
   const [isRecomputeConfirmOpen, setIsRecomputeConfirmOpen] = useState(false);
 
@@ -1274,6 +1290,18 @@ export const GradeComputation: React.FC = () => {
     setIsConversionModalOpen(true);
   };
 
+  const handlePrepareOverallPeriodConversion = () => {
+    setSchemaMode('periods');
+    setComponentMode('lecture_laboratory');
+    setSavedComponentMode('lecture_laboratory');
+    setComponentWeights({ lecture: '60', laboratory: '40' });
+    setSavedComponentWeights({ lecture: '60', laboratory: '40' });
+    setActiveComponentEditorTab('Lecture');
+    setActivePeriodEditorTab('Midterm');
+    setIsPresetDraft(false);
+    setIsConversionModalOpen(false);
+  };
+
   // Keep selected offering key synchronized with the active course filter
   useEffect(() => {
     if (facultyOfferings.length === 0) return;
@@ -1297,6 +1325,7 @@ export const GradeComputation: React.FC = () => {
     setConflictError(false);
     setFirstSaveAssignmentError(null);
     setConversionMappingError(null);
+    setComponentMappingError(null);
     try {
       const res = await getFacultyGradingConfigApi({
         courseId: offering.courseId,
@@ -1307,9 +1336,17 @@ export const GradeComputation: React.FC = () => {
       if (res.configuration === null) {
         // Unconfigured offering: populate editable unsaved starting preset
         setSchemaMode('periods');
-        setIsPresetDraft(true);
         const defaults = res.defaults;
         const fallback = buildDefaultPeriodDraft();
+        setComponentMode(defaults?.componentMode ?? 'lecture_laboratory');
+        setSavedComponentMode(defaults?.componentMode ?? 'lecture_laboratory');
+        const initialComponentWeights = defaults?.componentWeights
+          ? { lecture: String(defaults.componentWeights.lecture), laboratory: String(defaults.componentWeights.laboratory) }
+          : fallback.componentWeights;
+        setComponentWeights(initialComponentWeights);
+        setSavedComponentWeights(initialComponentWeights);
+        setActiveComponentEditorTab('Lecture');
+        setIsPresetDraft(true);
 
         const initialRatio = defaults?.termRatio
           ? { midterm: String(defaults.termRatio.midterm), final: String(defaults.termRatio.final) }
@@ -1326,7 +1363,8 @@ export const GradeComputation: React.FC = () => {
             weight: String(c.weight),
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Midterm' as const,
-            sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            sourceKind: c.sourceKind ?? 'assessment',
+            component: c.component,
             inUse: false,
           }))
           : fallback.midtermCategories;
@@ -1342,7 +1380,8 @@ export const GradeComputation: React.FC = () => {
             weight: String(c.weight),
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Final' as const,
-            sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            sourceKind: c.sourceKind ?? 'assessment',
+            component: c.component,
             inUse: false,
           }))
           : fallback.finalCategories;
@@ -1358,6 +1397,16 @@ export const GradeComputation: React.FC = () => {
         setIsPresetDraft(false);
         const mode = res.configuration.schemaMode ?? 'overall';
         setSchemaMode(mode);
+        const loadedComponentMode = res.configuration.componentMode ?? 'combined';
+        setComponentMode(loadedComponentMode);
+        setSavedComponentMode(loadedComponentMode);
+        const loadedComponentWeights = {
+          lecture: String(res.configuration.componentWeights?.lecture ?? 60),
+          laboratory: String(res.configuration.componentWeights?.laboratory ?? 40),
+        };
+        setComponentWeights(loadedComponentWeights);
+        setSavedComponentWeights(loadedComponentWeights);
+        setActiveComponentEditorTab('Lecture');
 
         if (mode === 'overall') {
           if (Array.isArray(res.configuration.categories) && res.configuration.categories.length > 0) {
@@ -1457,6 +1506,7 @@ export const GradeComputation: React.FC = () => {
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Midterm' as const,
             sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            component: c.component ?? undefined,
             inUse: Boolean(c.inUse),
           }));
           setMidtermCategories(mRows);
@@ -1475,6 +1525,7 @@ export const GradeComputation: React.FC = () => {
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Final' as const,
             sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+            component: c.component ?? undefined,
             inUse: Boolean(c.inUse),
           }));
           setFinalCategories(fRows);
@@ -1515,6 +1566,8 @@ export const GradeComputation: React.FC = () => {
   }, [categoryRows, savedCategoryRows]);
 
   const isPeriodDirty = useMemo(() => {
+    if (componentMode !== savedComponentMode) return true;
+    if (componentMode === 'lecture_laboratory' && (componentWeights.lecture !== savedComponentWeights.lecture || componentWeights.laboratory !== savedComponentWeights.laboratory)) return true;
     if (termRatio.midterm !== savedTermRatio.midterm || termRatio.final !== savedTermRatio.final) return true;
     if (
       attendanceDateRanges.midterm.startDate !== savedAttendanceDateRanges.midterm.startDate ||
@@ -1528,7 +1581,7 @@ export const GradeComputation: React.FC = () => {
     for (let i = 0; i < midtermCategories.length; i++) {
       const c = midtermCategories[i];
       const s = savedMidtermCategories[i];
-      if (c.name !== s.name || c.weight !== s.weight || c.sortOrder !== s.sortOrder || c.id !== s.id || c.sourceKind !== s.sourceKind) {
+      if (c.name !== s.name || c.weight !== s.weight || c.sortOrder !== s.sortOrder || c.id !== s.id || c.sourceKind !== s.sourceKind || (componentMode === 'lecture_laboratory' && c.component !== s.component)) {
         return true;
       }
     }
@@ -1536,14 +1589,18 @@ export const GradeComputation: React.FC = () => {
     for (let i = 0; i < finalCategories.length; i++) {
       const c = finalCategories[i];
       const s = savedFinalCategories[i];
-      if (c.name !== s.name || c.weight !== s.weight || c.sortOrder !== s.sortOrder || c.id !== s.id || c.sourceKind !== s.sourceKind) {
+      if (c.name !== s.name || c.weight !== s.weight || c.sortOrder !== s.sortOrder || c.id !== s.id || c.sourceKind !== s.sourceKind || (componentMode === 'lecture_laboratory' && c.component !== s.component)) {
         return true;
       }
     }
     return false;
-  }, [termRatio, savedTermRatio, attendanceDateRanges, savedAttendanceDateRanges, midtermCategories, savedMidtermCategories, finalCategories, savedFinalCategories]);
+  }, [componentMode, savedComponentMode, componentWeights, savedComponentWeights, termRatio, savedTermRatio, attendanceDateRanges, savedAttendanceDateRanges, midtermCategories, savedMidtermCategories, finalCategories, savedFinalCategories]);
 
   const isDirty = schemaMode === 'overall' ? isOverallDirty : isPeriodDirty;
+  const isLegacyCombinedPeriodConfig = loadedConfig?.schemaMode === 'periods'
+    && loadedConfig.componentMode !== 'lecture_laboratory'
+    && componentMode === 'combined';
+  const isOverallPeriodConversionDraft = loadedConfig?.schemaMode === 'overall' && schemaMode === 'periods';
 
   const handleSelectOffering = async (newKey: string): Promise<boolean> => {
     if (newKey === selectedOfferingKey) return true;
@@ -1562,10 +1619,16 @@ export const GradeComputation: React.FC = () => {
     setSavedMidtermCategories([]);
     setFinalCategories([]);
     setSavedFinalCategories([]);
+    setComponentMode('lecture_laboratory');
+    setSavedComponentMode('lecture_laboratory');
+    setComponentWeights({ lecture: '60', laboratory: '40' });
+    setSavedComponentWeights({ lecture: '60', laboratory: '40' });
+    setActiveComponentEditorTab('Lecture');
     setAttendanceDateRanges({ midterm: { startDate: '', endDate: '' }, final: { startDate: '', endDate: '' } });
     setSavedAttendanceDateRanges({ midterm: { startDate: '', endDate: '' }, final: { startDate: '', endDate: '' } });
     setFirstSaveAssignmentError(null);
     setConversionMappingError(null);
+    setComponentMappingError(null);
     setConflictError(false);
     setSelectedOfferingKey(newKey);
     return true;
@@ -1703,6 +1766,29 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
+  const handleUpdateComponentWeight = (field: 'lecture' | 'laboratory', val: string) => {
+    const num = Number(val);
+    if (val.trim() !== '' && Number.isFinite(num) && num >= 0 && num <= 100) {
+      const other = Math.round((100 - num) * 10000) / 10000;
+      setComponentWeights(field === 'lecture'
+        ? { lecture: val, laboratory: String(other) }
+        : { lecture: String(other), laboratory: val });
+    } else {
+      setComponentWeights(prev => ({ ...prev, [field]: val }));
+    }
+  };
+
+  const handleStartLectureLaboratoryConversion = () => {
+    if (!isLegacyCombinedPeriodConfig) return;
+    setComponentMode('lecture_laboratory');
+    setActiveComponentEditorTab('Lecture');
+    // Existing category records keep their names, IDs, and weights; component mapping is explicit.
+    setMidtermCategories(rows => rows.map(row => ({ ...row, component: undefined })));
+    setFinalCategories(rows => rows.map(row => ({ ...row, component: undefined })));
+    setComponentMappingError(null);
+    setAssessmentAssignments({});
+  };
+
   const handleUpdateDateRange = (period: 'midterm' | 'final', field: 'startDate' | 'endDate', val: string) => {
     setAttendanceDateRanges(prev => ({
       ...prev,
@@ -1714,6 +1800,10 @@ export const GradeComputation: React.FC = () => {
   };
 
   const handleAddPeriodCategory = (period: 'Midterm' | 'Final') => {
+    const periodRows = period === 'Midterm' ? midtermCategories : finalCategories;
+    const sameComponentRows = componentMode === 'lecture_laboratory'
+      ? periodRows.filter(row => row.component === activeComponentEditorTab)
+      : periodRows;
     const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const newRow: PeriodCategoryDraftRow = {
       compositeKey: buildRowCompositeKey(period, null, tempId),
@@ -1721,9 +1811,10 @@ export const GradeComputation: React.FC = () => {
       name: '',
       weight: '',
       defaultMax: '50',
-      sortOrder: (period === 'Midterm' ? midtermCategories.length : finalCategories.length) + 1,
+      sortOrder: sameComponentRows.length + 1,
       gradingPeriod: period,
       sourceKind: 'assessment',
+      ...(componentMode === 'lecture_laboratory' ? { component: activeComponentEditorTab } : {}),
       inUse: false,
     };
     if (period === 'Midterm') {
@@ -1752,15 +1843,49 @@ export const GradeComputation: React.FC = () => {
     }
   };
 
+  const handleUpdatePeriodCategoryComponent = (period: 'Midterm' | 'Final', compositeKey: string, component: GradingComponentEnum | '') => {
+    const updateList = (list: PeriodCategoryDraftRow[]) => list.map(row => {
+      if (row.compositeKey !== compositeKey) return row;
+      return { ...row, component: component || undefined };
+    });
+    if (period === 'Midterm') setMidtermCategories(updateList);
+    else setFinalCategories(updateList);
+  };
+
+  const handleUpdatePeriodCategorySourceKind = (period: 'Midterm' | 'Final', compositeKey: string, sourceKind: GradingSourceKindEnum) => {
+    const updateList = (list: PeriodCategoryDraftRow[]) => list.map(row => {
+      if (row.compositeKey !== compositeKey) return row;
+      return { ...row, sourceKind };
+    });
+    if (period === 'Midterm') setMidtermCategories(updateList);
+    else setFinalCategories(updateList);
+  };
+
   const handleMovePeriodCategory = (period: 'Midterm' | 'Final', index: number, direction: 'up' | 'down') => {
     const list = period === 'Midterm' ? midtermCategories : finalCategories;
+    const reorderable = componentMode === 'lecture_laboratory'
+      ? list.filter(row => row.component === activeComponentEditorTab)
+      : list;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= list.length) return;
-    const next = [...list];
-    const item = next[index];
-    next[index] = next[targetIndex];
-    next[targetIndex] = item;
-    const reordered = next.map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
+    if (targetIndex < 0 || targetIndex >= reorderable.length) return;
+    const firstKey = reorderable[index].compositeKey;
+    const secondKey = reorderable[targetIndex].compositeKey;
+    const next = [...reorderable];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    const newSortOrder = new Map(next.map((row, idx) => [row.compositeKey, idx + 1]));
+    let reordered: PeriodCategoryDraftRow[];
+    if (componentMode === 'lecture_laboratory') {
+      let componentIndex = 0;
+      reordered = list.map(row => {
+        if (row.component !== activeComponentEditorTab) return row;
+        const reorderedRow = next[componentIndex++];
+        return { ...reorderedRow, sortOrder: newSortOrder.get(reorderedRow.compositeKey)! };
+      });
+    } else {
+      reordered = next.map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
+    }
+    // Keep unassigned rows and the other component's ordering unchanged.
+    if (firstKey === secondKey) return;
     if (period === 'Midterm') {
       setMidtermCategories(reordered);
     } else {
@@ -1777,7 +1902,7 @@ export const GradeComputation: React.FC = () => {
       return;
     }
     if (!await requestConfirmation(`Remove the "${target.name || 'unnamed'}" ${period} category? It is removed when you save the grade weights.`, 'Remove category')) return;
-    const filtered = list.filter(r => r.compositeKey !== compositeKey).map((row, idx) => ({ ...row, sortOrder: idx + 1 }));
+    const filtered = list.filter(r => r.compositeKey !== compositeKey);
     if (period === 'Midterm') {
       setMidtermCategories(filtered);
     } else {
@@ -1786,46 +1911,30 @@ export const GradeComputation: React.FC = () => {
   };
 
   const midtermCalc = useMemo(() => {
-    let sumUnits = 0;
-    let allValid = true;
-    for (const row of midtermCategories) {
-      const trimmed = row.weight.trim();
-      if (trimmed === '') {
-        allValid = false;
-        continue;
-      }
-      const units = parseWeightUnits(trimmed);
-      if (units === null) {
-        allValid = false;
-      } else {
-        sumUnits += units;
-      }
-    }
-    const isExact100 = allValid && sumUnits === TOTAL_WEIGHT_UNITS;
-    const displayPercent = formatWeightUnitsToPercent(sumUnits);
-    return { sumUnits, allValid, isExact100, displayPercent };
-  }, [midtermCategories]);
+    if (componentMode === 'combined') return calculateCategoryWeightSummary(midtermCategories);
+    const lecture = calculateCategoryWeightSummary(midtermCategories.filter(row => row.component === 'Lecture'));
+    const laboratory = calculateCategoryWeightSummary(midtermCategories.filter(row => row.component === 'Laboratory'));
+    const hasUnassigned = midtermCategories.some(row => !row.component);
+    return {
+      sumUnits: lecture.sumUnits + laboratory.sumUnits,
+      allValid: lecture.allValid && laboratory.allValid && !hasUnassigned,
+      isExact100: lecture.isExact100 && laboratory.isExact100 && !hasUnassigned,
+      displayPercent: `Lecture ${lecture.displayPercent} / Laboratory ${laboratory.displayPercent}`,
+    };
+  }, [componentMode, midtermCategories]);
 
   const finalCalc = useMemo(() => {
-    let sumUnits = 0;
-    let allValid = true;
-    for (const row of finalCategories) {
-      const trimmed = row.weight.trim();
-      if (trimmed === '') {
-        allValid = false;
-        continue;
-      }
-      const units = parseWeightUnits(trimmed);
-      if (units === null) {
-        allValid = false;
-      } else {
-        sumUnits += units;
-      }
-    }
-    const isExact100 = allValid && sumUnits === TOTAL_WEIGHT_UNITS;
-    const displayPercent = formatWeightUnitsToPercent(sumUnits);
-    return { sumUnits, allValid, isExact100, displayPercent };
-  }, [finalCategories]);
+    if (componentMode === 'combined') return calculateCategoryWeightSummary(finalCategories);
+    const lecture = calculateCategoryWeightSummary(finalCategories.filter(row => row.component === 'Lecture'));
+    const laboratory = calculateCategoryWeightSummary(finalCategories.filter(row => row.component === 'Laboratory'));
+    const hasUnassigned = finalCategories.some(row => !row.component);
+    return {
+      sumUnits: lecture.sumUnits + laboratory.sumUnits,
+      allValid: lecture.allValid && laboratory.allValid && !hasUnassigned,
+      isExact100: lecture.isExact100 && laboratory.isExact100 && !hasUnassigned,
+      displayPercent: `Lecture ${lecture.displayPercent} / Laboratory ${laboratory.displayPercent}`,
+    };
+  }, [componentMode, finalCategories]);
 
   const termRatioCalc = useMemo(() => {
     const midUnits = parseWeightUnits(termRatio.midterm.trim());
@@ -1842,55 +1951,62 @@ export const GradeComputation: React.FC = () => {
       return `Term ratio weights must equal 100% (Current: ${termRatioCalc.displayPercent}).`;
     }
 
-    if (midtermCategories.length === 0) {
-      return 'At least one Midterm category is required.';
-    }
-    const mNames = midtermCategories.map(r => r.name.trim());
-    if (mNames.some(n => !n)) {
-      return 'All Midterm category names must be filled out.';
-    }
-    const mLower = mNames.map(n => n.toLowerCase());
-    if (new Set(mLower).size !== mLower.length) {
-      return 'Midterm category names must be unique.';
-    }
-    const mAttendanceCount = midtermCategories.filter(r => r.sourceKind === 'attendance').length;
-    if (mAttendanceCount > 1) {
-      return 'Each period may contain only one authoritative Attendance category.';
-    }
-    for (const row of midtermCategories) {
-      const units = parseWeightUnits(row.weight.trim());
-      if (units === null) {
-        return `Invalid Midterm weight "${row.weight}". Enter a number between 0 and 100 with up to 4 decimal places.`;
+    if (componentMode === 'lecture_laboratory') {
+      const lectureUnits = parseWeightUnits(componentWeights.lecture.trim());
+      const laboratoryUnits = parseWeightUnits(componentWeights.laboratory.trim());
+      if (lectureUnits === null || laboratoryUnits === null || lectureUnits + laboratoryUnits !== TOTAL_WEIGHT_UNITS) {
+        return 'Lecture and Laboratory contribution weights must be positive and total exactly 100%.';
       }
-    }
-    if (!midtermCalc.isExact100) {
-      return `Midterm category weights must equal 100% (Current: ${midtermCalc.displayPercent}).`;
     }
 
-    if (finalCategories.length === 0) {
-      return 'At least one Finals category is required.';
-    }
-    const fNames = finalCategories.map(r => r.name.trim());
-    if (fNames.some(n => !n)) {
-      return 'All Finals category names must be filled out.';
-    }
-    const fLower = fNames.map(n => n.toLowerCase());
-    if (new Set(fLower).size !== fLower.length) {
-      return 'Finals category names must be unique.';
-    }
-    const fAttendanceCount = finalCategories.filter(r => r.sourceKind === 'attendance').length;
-    if (fAttendanceCount > 1) {
-      return 'Each period may contain only one authoritative Attendance category.';
-    }
-    for (const row of finalCategories) {
-      const units = parseWeightUnits(row.weight.trim());
-      if (units === null) {
-        return `Invalid Finals weight "${row.weight}". Enter a number between 0 and 100 with up to 4 decimal places.`;
+    const validateCategories = (
+      label: 'Midterm' | 'Finals',
+      rows: PeriodCategoryDraftRow[],
+      calculation: CategoryWeightSummary
+    ): string | null => {
+      if (rows.length === 0) return `At least one ${label} category is required.`;
+      if (rows.some(row => !row.name.trim())) return `All ${label} category names must be filled out.`;
+      if (rows.filter(row => row.sourceKind === 'attendance').length > 1) {
+        return 'Each period may contain only one authoritative Attendance category.';
       }
-    }
-    if (!finalCalc.isExact100) {
-      return `Finals category weights must equal 100% (Current: ${finalCalc.displayPercent}).`;
-    }
+
+      const groups: Array<{ label: string; rows: PeriodCategoryDraftRow[]; calculation: CategoryWeightSummary }> = componentMode === 'lecture_laboratory'
+        ? (['Lecture', 'Laboratory'] as const).map(component => {
+          const componentRows = rows.filter(row => row.component === component);
+          return {
+            label: `${label} ${component}`,
+            rows: componentRows,
+            calculation: calculateCategoryWeightSummary(componentRows),
+          };
+        })
+        : [{ label, rows, calculation }];
+
+      if (componentMode === 'lecture_laboratory' && rows.some(row => !row.component)) {
+        return `Assign every existing ${label} category to Lecture or Laboratory before saving.`;
+      }
+
+      for (const group of groups) {
+        if (group.rows.length === 0) return `At least one ${group.label} category is required.`;
+        const names = group.rows.map(row => row.name.trim().toLowerCase());
+        if (new Set(names).size !== names.length) {
+          return `${group.label} category names must be unique within this component and period.`;
+        }
+        for (const row of group.rows) {
+          if (parseWeightUnits(row.weight.trim()) === null) {
+            return `Invalid ${group.label} weight "${row.weight}". Enter a positive number between 0 and 100 with up to 4 decimal places.`;
+          }
+        }
+        if (!group.calculation.isExact100) {
+          return `${group.label} category weights must equal 100% (Current: ${group.calculation.displayPercent}).`;
+        }
+      }
+      return null;
+    };
+
+    const midtermError = validateCategories('Midterm', midtermCategories, midtermCalc);
+    if (midtermError) return midtermError;
+    const finalError = validateCategories('Finals', finalCategories, finalCalc);
+    if (finalError) return finalError;
 
     const dateVal = validateDateRanges(attendanceDateRanges);
     if (!dateVal.valid) {
@@ -1898,14 +2014,98 @@ export const GradeComputation: React.FC = () => {
     }
 
     return null;
-  }, [termRatioCalc, midtermCategories, finalCategories, midtermCalc, finalCalc, attendanceDateRanges]);
+  }, [termRatioCalc, componentMode, componentWeights, midtermCategories, finalCategories, midtermCalc, finalCalc, attendanceDateRanges]);
 
-  const handleSaveGradingConfig = async (e?: React.FormEvent, options?: { convertFromOverall?: boolean }) => {
+  const categoriesForPeriod = (period: 'Midterm' | 'Final') => period === 'Midterm' ? midtermCategories : finalCategories;
+
+  const assignmentSelectionForItem = (item: { assessmentId: number; gradingPeriod?: 'Midterm' | 'Final' | null; categoryId?: number | null; component?: GradingComponentEnum | null }) => {
+    const chosen = assessmentAssignments[item.assessmentId];
+    if (chosen) return chosen;
+    if (!item.gradingPeriod) return '';
+    if (componentMode === 'lecture_laboratory' && item.categoryId && item.component) {
+      return categoriesForPeriod(item.gradingPeriod === 'Final' ? 'Final' : 'Midterm')
+        .find(row => row.id === item.categoryId && row.component === item.component)?.compositeKey ?? '';
+    }
+    return '';
+  };
+
+  const assignmentOptionsForItem = (item: { gradingPeriod?: 'Midterm' | 'Final' | null }) => {
+    if (schemaMode === 'overall') {
+      return categoryRows.filter(row => row.name.trim()).map(row => ({ value: row.name.trim(), label: row.name.trim() }));
+    }
+    const periods: Array<'Midterm' | 'Final'> = item.gradingPeriod
+      ? [item.gradingPeriod]
+      : ['Midterm', 'Final'];
+    const categories = periods.flatMap(period => categoriesForPeriod(period)
+      .filter(row => row.name.trim() && row.sourceKind !== 'attendance')
+      .map(row => ({ row, period })));
+    if (componentMode === 'lecture_laboratory') {
+      return categories.filter(({ row }) => row.component).map(({ row, period }) => ({
+        value: item.gradingPeriod ? row.compositeKey : `period:${period}:${row.compositeKey}`,
+        label: `${item.gradingPeriod ? '' : `${period} · `}${row.component} · ${row.name.trim()}`,
+      }));
+    }
+    return categories.map(({ row, period }) => ({
+      value: item.gradingPeriod ? row.name.trim() : `period:${period}:${row.compositeKey}`,
+      label: item.gradingPeriod ? row.name.trim() : `${period} · ${row.name.trim()}`,
+    }));
+  };
+
+  const getPendingAssessmentAssignments = (): NonNullable<FacultyGradingConfigSavePayload['assessmentAssignments']> => {
+    const itemsById = new Map<number, FacultyGradingCategoryAssignmentRequiredItem | FacultyGradingComponentMappingRequiredItem>();
+    for (const item of [...(firstSaveAssignmentError ?? []), ...(componentMappingError ?? [])]) itemsById.set(item.assessmentId, item);
+    const assignments: NonNullable<FacultyGradingConfigSavePayload['assessmentAssignments']> = [];
+    for (const item of itemsById.values()) {
+      const selection = assignmentSelectionForItem(item);
+      if (!selection) continue;
+      if (componentMode !== 'lecture_laboratory') {
+        if (!item.gradingPeriod) {
+          const parsed = selection.match(/^period:(Midterm|Final):(.*)$/);
+          if (!parsed) continue;
+          const period = parsed[1] as 'Midterm' | 'Final';
+          const target = categoriesForPeriod(period).find(row => row.compositeKey === parsed[2]);
+          if (!target) continue;
+          assignments.push({ assessmentId: item.assessmentId, categoryName: target.name.trim(), gradingPeriod: period });
+        } else {
+          assignments.push({ assessmentId: item.assessmentId, categoryName: selection });
+        }
+        continue;
+      }
+      let period: 'Midterm' | 'Final' = item.gradingPeriod === 'Final' ? 'Final' : 'Midterm';
+      let targetSelection = selection;
+      if (!item.gradingPeriod) {
+        const parsed = selection.match(/^period:(Midterm|Final):(.*)$/);
+        if (!parsed) continue;
+        period = parsed[1] as 'Midterm' | 'Final';
+        targetSelection = parsed[2];
+      }
+      const target = categoriesForPeriod(period).find(row => row.compositeKey === targetSelection);
+      if (!target?.component) continue;
+      assignments.push({
+        assessmentId: item.assessmentId,
+        ...(target.id ? { categoryId: target.id } : { categoryName: target.name.trim() }),
+        gradingPeriod: period,
+        component: target.component,
+      });
+    }
+    return assignments;
+            };
+
+  const assessmentMappingItems = [
+    ...(firstSaveAssignmentError ?? []),
+    ...(componentMappingError ?? []),
+  ];
+
+  const handleSaveGradingConfig = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!currentOffering) return;
     if (configSaving) return;
+    if (isLegacyCombinedPeriodConfig) {
+      showFeedback('Choose Convert to Lecture/Laboratory before changing this saved period configuration.', 'error');
+      return;
+    }
 
-    if (schemaMode === 'overall' && !options?.convertFromOverall) {
+    if (schemaMode === 'overall') {
       if (validationError) {
         showFeedback(validationError, 'error');
         return;
@@ -1917,26 +2117,31 @@ export const GradeComputation: React.FC = () => {
       }
     }
 
-    if (!options?.convertFromOverall) {
-      const confirmed = await requestConfirmation(
-        'Save these grade weights? Grades for this course are computed with the saved weights.',
-        'Save grade weights'
-      );
-      if (!confirmed) return;
-    }
+    const isForwardGroupedConversion = loadedConfig?.schemaMode === 'periods'
+      && loadedConfig.componentMode !== 'lecture_laboratory'
+      && componentMode === 'lecture_laboratory';
+    const isOverallConversion = isOverallPeriodConversionDraft;
+    const confirmed = await requestConfirmation(
+      isForwardGroupedConversion
+        ? 'Convert this saved combined period configuration to Lecture/Laboratory grading? Existing category IDs, assessment links, scores, history, and saved grades will be preserved. Assign every category to a component, set both component lists to 100%, and resolve any assessment mappings. This conversion cannot be reversed.'
+        : isOverallConversion
+          ? 'Convert this saved overall configuration to Lecture/Laboratory period grading? Existing category IDs, scores, history, and saved grades will be preserved. Assign every category to a component and set both component lists to 100% before saving.'
+          : 'Save these grade weights? Grades for this course are computed with the saved weights.',
+      isForwardGroupedConversion || isOverallConversion ? 'Confirm forward grading conversion' : 'Save grade weights'
+    );
+    if (!confirmed) return;
 
     setConfigSaving(true);
     setConfigError(null);
     setConflictError(false);
-    const pendingAssignments = (firstSaveAssignmentError ?? [])
-      .filter(item => (assessmentAssignments[item.assessmentId] ?? '') !== '')
-      .map(item => ({ assessmentId: item.assessmentId, categoryName: assessmentAssignments[item.assessmentId] }));
+    const pendingAssignments = getPendingAssessmentAssignments();
     setFirstSaveAssignmentError(null);
     setConversionMappingError(null);
+    setComponentMappingError(null);
 
     let payload: FacultyGradingConfigSavePayload;
 
-    if (schemaMode === 'overall' && !options?.convertFromOverall) {
+    if (schemaMode === 'overall') {
       payload = {
         courseId: currentOffering.courseId,
         semester: currentOffering.canonicalSemester,
@@ -1966,28 +2171,47 @@ export const GradeComputation: React.FC = () => {
           ...(c.id ? { id: c.id } : {}),
           name: c.name.trim(),
           weight: c.weight.trim(),
-          sortOrder: idx + 1,
+          sortOrder: componentMode === 'lecture_laboratory'
+            ? midtermCategories.filter(row => row.component === c.component).findIndex(row => row.compositeKey === c.compositeKey) + 1
+            : idx + 1,
           gradingPeriod: 'Midterm',
           sourceKind: c.sourceKind,
+          ...(componentMode === 'lecture_laboratory' && c.component ? { component: c.component } : {}),
         })),
         finalCategories: finalCategories.map((c, idx) => ({
           ...(c.id ? { id: c.id } : {}),
           name: c.name.trim(),
           weight: c.weight.trim(),
-          sortOrder: idx + 1,
+          sortOrder: componentMode === 'lecture_laboratory'
+            ? finalCategories.filter(row => row.component === c.component).findIndex(row => row.compositeKey === c.compositeKey) + 1
+            : idx + 1,
           gradingPeriod: 'Final',
           sourceKind: c.sourceKind,
+          ...(componentMode === 'lecture_laboratory' && c.component ? { component: c.component } : {}),
         })),
         attendanceDateRanges: normalizeDateRangesForPayload(attendanceDateRanges),
+        ...(componentMode === 'lecture_laboratory' ? {
+          componentMode,
+          componentWeights: {
+            lecture: Number(componentWeights.lecture),
+            laboratory: Number(componentWeights.laboratory),
+          },
+        } : {}),
       };
       if (loadedConfig?.version !== undefined && loadedConfig.version !== null) {
         payload.version = loadedConfig.version;
       }
-      if (options?.convertFromOverall) {
+      if (isOverallConversion) {
         payload.convertFromOverall = true;
       }
+      if (componentMode === 'lecture_laboratory' && (
+        loadedConfig?.schemaMode === 'overall'
+        || (loadedConfig?.schemaMode === 'periods' && loadedConfig.componentMode !== 'lecture_laboratory')
+      )) {
+        payload.convertToLectureLaboratory = true;
+      }
     }
-    if (!loadedConfig && pendingAssignments.length > 0) {
+    if (pendingAssignments.length > 0) {
       payload.assessmentAssignments = pendingAssignments;
     }
 
@@ -1996,6 +2220,15 @@ export const GradeComputation: React.FC = () => {
       setLoadedConfig(res.configuration);
       setIsPresetDraft(false);
       setSchemaMode(res.configuration.schemaMode ?? 'periods');
+      const persistedComponentMode = res.configuration.schemaMode === 'periods' ? 'lecture_laboratory' : 'combined';
+      setComponentMode(persistedComponentMode);
+      setSavedComponentMode(persistedComponentMode);
+      const persistedComponentWeights = {
+        lecture: String(res.configuration.componentWeights?.lecture ?? 60),
+        laboratory: String(res.configuration.componentWeights?.laboratory ?? 40),
+      };
+      setComponentWeights(persistedComponentWeights);
+      setSavedComponentWeights(persistedComponentWeights);
 
       if (res.configuration.schemaMode === 'overall') {
         const updatedRows: EditorCategoryRow[] = res.configuration.categories.map((cat, idx) => ({
@@ -2041,6 +2274,7 @@ export const GradeComputation: React.FC = () => {
           sortOrder: c.sortOrder ?? (idx + 1),
           gradingPeriod: 'Midterm',
           sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+          component: c.component ?? undefined,
           inUse: Boolean(c.inUse),
         }));
         setMidtermCategories(mRows);
@@ -2058,16 +2292,18 @@ export const GradeComputation: React.FC = () => {
           sortOrder: c.sortOrder ?? (idx + 1),
           gradingPeriod: 'Final',
           sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
+          component: c.component ?? undefined,
           inUse: Boolean(c.inUse),
         }));
         setFinalCategories(fRows);
         setSavedFinalCategories(fRows);
 
-        if (options?.convertFromOverall) {
+        if (isOverallConversion) {
           setIsConversionModalOpen(false);
         }
       }
       setAssessmentAssignments({});
+      setComponentMappingError(null);
       showFeedback('Grade weights saved successfully.', 'success');
     } catch (err) {
       if (err instanceof ApiError) {
@@ -2095,6 +2331,10 @@ export const GradeComputation: React.FC = () => {
           const assessments = (Array.isArray(err.details?.assessments) ? err.details.assessments : []) as FacultyGradingCategoryAssignmentRequiredItem[];
           setFirstSaveAssignmentError(assessments);
           showFeedback(err.message || 'Existing assessments require matching category assignments.', 'error');
+        } else if (err.status === 422 && err.code === 'GRADING_COMPONENT_MAPPING_REQUIRED') {
+          const assessments = (Array.isArray(err.details?.assessments) ? err.details.assessments : []) as FacultyGradingComponentMappingRequiredItem[];
+          setComponentMappingError(assessments);
+          showFeedback(err.message || 'Existing assessments require Lecture/Laboratory category mappings.', 'error');
         } else if (err.status === 422 && err.code === 'GRADING_CATEGORY_PERIOD_MAPPING_REQUIRED') {
           const refs = (Array.isArray(err.details?.assessmentReferences) ? err.details.assessmentReferences : []) as FacultyGradingCategoryPeriodMappingRequiredItem[];
           setConversionMappingError(refs);
@@ -2151,6 +2391,20 @@ export const GradeComputation: React.FC = () => {
     }
     return false;
   }, [loadedConfig, assessmentConfig, activeStudents, selectedSubjectCode, computeResultsByEnrollment]);
+
+  const isLectureLaboratoryMode = useMemo(() => {
+    if (loadedConfig?.componentMode === 'lecture_laboratory' || assessmentConfig?.componentMode === 'lecture_laboratory') return true;
+    for (const result of computeResultsByEnrollment.values()) {
+      if (isPeriodComputeResult(result) && (result.periods.midterm.components || result.periods.final.components)) return true;
+    }
+    return activeStudents.some(student => {
+      const subject = student.enrolledSubjects.find(item => item.code === selectedSubjectCode);
+      const periods = (subject?.components as Record<string, unknown> | undefined)?.periods as Record<string, unknown> | undefined;
+      const midterm = periods?.midterm as Record<string, unknown> | undefined;
+      const final = periods?.final as Record<string, unknown> | undefined;
+      return Boolean(midterm?.components || final?.components);
+    });
+  }, [loadedConfig, assessmentConfig, computeResultsByEnrollment, activeStudents, selectedSubjectCode]);
 
   const sortedSummaryStudents = useMemo(() => {
     const filtered = activeStudents.filter(s =>
@@ -2251,7 +2505,8 @@ export const GradeComputation: React.FC = () => {
       sortedSummaryStudents,
       selectedSubjectCode,
       isPeriodMode,
-      computeResultsByEnrollment
+      computeResultsByEnrollment,
+      isLectureLaboratoryMode ? 'lecture_laboratory' : 'combined'
     );
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -2352,6 +2607,15 @@ export const GradeComputation: React.FC = () => {
     if (status === 'remedial') return 'bg-accent-50 text-accent-600 dark:bg-accent-950/20';
     return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20';
   };
+
+  const activePeriodCategories = activePeriodEditorTab === 'Midterm' ? midtermCategories : finalCategories;
+  const activePeriodVisibleCategories = componentMode === 'lecture_laboratory'
+    ? activePeriodCategories.filter(row => row.component === activeComponentEditorTab)
+    : activePeriodCategories;
+  const activePeriodUnassignedCategories = componentMode === 'lecture_laboratory'
+    ? activePeriodCategories.filter(row => !row.component)
+    : [];
+  const activeComponentCategoryCalc = calculateCategoryWeightSummary(activePeriodVisibleCategories);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
@@ -2888,7 +3152,7 @@ export const GradeComputation: React.FC = () => {
                             if (matchedCategory) {
                               return (
                                 <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-450 uppercase text-[9px] tracking-wide">
-                                  {matchedCategory.name}
+                        {matchedCategory.component ? `${matchedCategory.component} · ${matchedCategory.name}` : matchedCategory.name}
                                 </span>
                               );
                             }
@@ -3054,14 +3318,16 @@ export const GradeComputation: React.FC = () => {
             )}
 
             {/* First-Save Unmapped Assessment Alert (422) */}
-            {firstSaveAssignmentError && firstSaveAssignmentError.length > 0 && (
+            {assessmentMappingItems.length > 0 && (
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 space-y-3 text-xs">
                 <div className="flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <div>
-                    <div className="font-bold">Existing Assessments Require Matching Categories</div>
+                    <div className="font-bold">Existing Assessments Require Category Mappings</div>
                     <div className="text-[11px] mt-0.5">
-                      Existing assessments were linked to your new categories by name where possible. The ones below had no matching category: choose a category for each (or rename a category to match), then save again.
+                      {componentMode === 'lecture_laboratory'
+                        ? 'Choose the exact Lecture or Laboratory category for each assessment. Existing category IDs and scores remain attached to their current records.'
+                        : 'Existing assessments were linked to your new categories by name where possible. Choose a category for each unmatched assessment, then save again.'}
                     </div>
                   </div>
                 </div>
@@ -3072,11 +3338,12 @@ export const GradeComputation: React.FC = () => {
                         <th className="px-3 py-2">Assessment ID</th>
                         <th className="px-3 py-2">Title</th>
                         <th className="px-3 py-2">Required Legacy Type</th>
+                        {componentMode === 'lecture_laboratory' && <th className="px-3 py-2">Period</th>}
                         <th className="px-3 py-2">Assign To Category</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-amber-500/20">
-                      {firstSaveAssignmentError.map(item => (
+                      {assessmentMappingItems.map(item => (
                         <tr key={item.assessmentId}>
                           <td className="px-3 py-1.5 font-mono text-[11px]">{item.assessmentId}</td>
                           <td className="px-3 py-1.5 font-semibold text-slate-800 dark:text-slate-100">{item.title}</td>
@@ -3085,23 +3352,20 @@ export const GradeComputation: React.FC = () => {
                               {item.legacyType}
                             </span>
                           </td>
+                          {componentMode === 'lecture_laboratory' && (
+                            <td className="px-3 py-1.5 font-semibold text-slate-800 dark:text-slate-100">{item.gradingPeriod ?? 'Choose period'}</td>
+                          )}
                           <td className="px-3 py-1.5">
                             <select
                               aria-label={`Category for ${item.title}`}
-                              value={assessmentAssignments[item.assessmentId] ?? ''}
+                              value={assignmentSelectionForItem(item)}
                               onChange={(e) => setAssessmentAssignments(prev => ({ ...prev, [item.assessmentId]: e.target.value }))}
                               className="px-2 py-1 rounded-lg border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 text-xs font-semibold"
                             >
                               <option value="">Choose category…</option>
-                              {(schemaMode === 'overall'
-                                ? categoryRows.map(r => r.name)
-                                : (item.gradingPeriod === 'Final' ? finalCategories : midtermCategories)
-                                  .filter(r => r.sourceKind !== 'attendance')
-                                  .map(r => r.name))
-                                .filter(name => name.trim() !== '')
-                                .map(name => (
-                                  <option key={name} value={name.trim()}>{name.trim()}</option>
-                                ))}
+                              {assignmentOptionsForItem(item).map(option => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
                             </select>
                           </td>
                         </tr>
@@ -3316,6 +3580,60 @@ export const GradeComputation: React.FC = () => {
               /* PERIOD GRADING VIEW (MIDTERM & FINALS) */
               <div className="space-y-6">
                 <form onSubmit={handleSaveGradingConfig} className="space-y-6">
+                  <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/40 space-y-4">
+                    {isLegacyCombinedPeriodConfig ? (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 p-4">
+                        <div className="space-y-1">
+                          <h3 className="text-xs font-extrabold text-amber-900 dark:text-amber-200">Saved combined period grading</h3>
+                          <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80">
+                            This saved setup remains active until you save a validated conversion. Recorded grades stay unchanged until recomputation. Assign every existing category to a component and set both lists to valid totals before saving.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleStartLectureLaboratoryConversion}
+                          disabled={configSaving}
+                          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white font-bold text-xs"
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          Convert to Lecture/Laboratory
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-3">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Lecture and Laboratory each have a separate editable category list for Midterm and Finals.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="lecture-component-weight" className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
+                              LECTURE CONTRIBUTION (%)
+                            </label>
+                            <input
+                              id="lecture-component-weight"
+                              type="text"
+                              value={componentWeights.lecture}
+                              onChange={event => handleUpdateComponentWeight('lecture', event.target.value)}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="laboratory-component-weight" className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
+                              LABORATORY CONTRIBUTION (%)
+                            </label>
+                            <input
+                              id="laboratory-component-weight"
+                              type="text"
+                              value={componentWeights.laboratory}
+                              onChange={event => handleUpdateComponentWeight('laboratory', event.target.value)}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* OVERALL TERM RATIO (MIDTERM VS FINAL) */}
                   <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/40 space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -3349,6 +3667,7 @@ export const GradeComputation: React.FC = () => {
                           min="0"
                           max="100"
                           value={termRatio.midterm}
+                          disabled={isLegacyCombinedPeriodConfig}
                           onChange={(e) => handleUpdateTermRatio('midterm', e.target.value)}
                           className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
@@ -3363,6 +3682,7 @@ export const GradeComputation: React.FC = () => {
                           min="0"
                           max="100"
                           value={termRatio.final}
+                          disabled={isLegacyCombinedPeriodConfig}
                           onChange={(e) => handleUpdateTermRatio('final', e.target.value)}
                           className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
@@ -3394,19 +3714,40 @@ export const GradeComputation: React.FC = () => {
                     </button>
                   </div>
 
+                  {componentMode === 'lecture_laboratory' && (
+                    <div className="flex gap-3 border-b border-slate-200 dark:border-slate-800" role="tablist" aria-label="Grading component categories">
+                      {(['Lecture', 'Laboratory'] as const).map(component => (
+                        <button
+                          key={component}
+                          type="button"
+                          role="tab"
+                          aria-selected={activeComponentEditorTab === component}
+                          onClick={() => setActiveComponentEditorTab(component)}
+                          className={`pb-2.5 px-1 text-xs font-extrabold border-b-2 transition-all ${activeComponentEditorTab === component
+                            ? 'border-clinical-600 text-clinical-700 dark:text-clinical-400'
+                            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
+                        >
+                          {component} Categories
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Requirement Banner */}
                   <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/30 flex items-center justify-between gap-3">
                     <div className="text-xs text-amber-900 dark:text-amber-200">
-                      Category weights for <strong className="font-extrabold">{activePeriodEditorTab === 'Midterm' ? 'Midterm Period' : 'Final Period'}</strong> must sum to exactly <strong className="font-extrabold">100%</strong>.
+                      {componentMode === 'lecture_laboratory'
+                        ? <>{activeComponentEditorTab} category weights for <strong className="font-extrabold">{activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'}</strong> must sum to exactly <strong className="font-extrabold">100%</strong>.</>
+                        : <>Category weights for <strong className="font-extrabold">{activePeriodEditorTab === 'Midterm' ? 'Midterm Period' : 'Final Period'}</strong> must sum to exactly <strong className="font-extrabold">100%</strong>.</>}
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
-                      <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${(activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100)
+                      <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${(componentMode === 'lecture_laboratory' ? activeComponentCategoryCalc.isExact100 : activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100)
                           ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
                           : 'bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300'
                         }`}>
-                        {(activePeriodEditorTab === 'Midterm' ? midtermCalc.displayPercent : finalCalc.displayPercent)} / 100%
+                        {(componentMode === 'lecture_laboratory' ? activeComponentCategoryCalc.displayPercent : activePeriodEditorTab === 'Midterm' ? midtermCalc.displayPercent : finalCalc.displayPercent)} / 100%
                       </span>
-                      {(activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100) ? (
+                      {(componentMode === 'lecture_laboratory' ? activeComponentCategoryCalc.isExact100 : activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100) ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
                           <CheckCircle className="w-3 h-3" />
                           Valid 100%
@@ -3429,8 +3770,31 @@ export const GradeComputation: React.FC = () => {
                   )}
 
                   {/* Category Cards List */}
+                  {componentMode === 'lecture_laboratory' && activePeriodUnassignedCategories.length > 0 && (
+                    <div className="p-4 rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 space-y-3" data-testid="unassigned-component-categories">
+                      <div>
+                        <h4 className="text-xs font-extrabold text-amber-900 dark:text-amber-200">Assign existing categories to a component</h4>
+                        <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 mt-0.5">Category IDs and linked assessment history are retained when you choose Lecture or Laboratory.</p>
+                      </div>
+                      {activePeriodUnassignedCategories.map(row => (
+                        <div key={row.compositeKey} className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-amber-300/50 dark:border-amber-900/50 bg-white/70 dark:bg-slate-900/60 p-2.5">
+                          <span className="flex-1 text-xs font-bold text-slate-800 dark:text-slate-100">{row.name || 'Unnamed category'}{row.id ? ` (#${row.id})` : ''}</span>
+                          <select
+                            aria-label={`Component for ${row.name || 'unnamed category'}`}
+                            value=""
+                            onChange={event => handleUpdatePeriodCategoryComponent(activePeriodEditorTab, row.compositeKey, event.target.value as GradingComponentEnum | '')}
+                            className="px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 text-xs font-semibold"
+                          >
+                            <option value="">Choose component…</option>
+                            <option value="Lecture">Lecture</option>
+                            <option value="Laboratory">Laboratory</option>
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="space-y-3">
-                    {(activePeriodEditorTab === 'Midterm' ? midtermCategories : finalCategories).map((row, index, list) => (
+                    {activePeriodVisibleCategories.map((row, index, list) => (
                       <div
                         key={row.compositeKey}
                         className="p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
@@ -3441,7 +3805,7 @@ export const GradeComputation: React.FC = () => {
                             type="button"
                             aria-label={`Move category ${row.name || 'unnamed'} up`}
                             onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'up')}
-                            disabled={index === 0}
+                            disabled={isLegacyCombinedPeriodConfig || index === 0}
                             className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ChevronUp className="w-3.5 h-3.5" />
@@ -3450,7 +3814,7 @@ export const GradeComputation: React.FC = () => {
                             type="button"
                             aria-label={`Move category ${row.name || 'unnamed'} down`}
                             onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'down')}
-                            disabled={index === list.length - 1}
+                            disabled={isLegacyCombinedPeriodConfig || index === list.length - 1}
                             className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
                           >
                             <ChevronDown className="w-3.5 h-3.5" />
@@ -3466,6 +3830,7 @@ export const GradeComputation: React.FC = () => {
                               type="text"
                               value={row.name}
                               placeholder="Category name (e.g. Quiz)"
+                              disabled={isLegacyCombinedPeriodConfig}
                               onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'name', e.target.value)}
                               className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             />
@@ -3477,16 +3842,50 @@ export const GradeComputation: React.FC = () => {
                           </div>
                         </div>
 
+                        {componentMode === 'lecture_laboratory' && (
+                          <div className="w-full sm:w-32 shrink-0">
+                            <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">COMPONENT</label>
+                            <select
+                              aria-label={`Component for ${row.name || 'unnamed category'}`}
+                              value={row.component ?? ''}
+                              onChange={event => handleUpdatePeriodCategoryComponent(activePeriodEditorTab, row.compositeKey, event.target.value as GradingComponentEnum | '')}
+                              className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-semibold"
+                            >
+                              <option value="">Unassigned</option>
+                              <option value="Lecture">Lecture</option>
+                              <option value="Laboratory">Laboratory</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {componentMode === 'lecture_laboratory' && (
+                          <div className="w-full sm:w-32 shrink-0">
+                            <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">SOURCE</label>
+                            <select
+                              aria-label={`Source for ${row.name || 'unnamed category'}`}
+                              value={row.sourceKind}
+                              disabled={row.inUse}
+                              onChange={event => handleUpdatePeriodCategorySourceKind(activePeriodEditorTab, row.compositeKey, event.target.value as GradingSourceKindEnum)}
+                              className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-semibold disabled:opacity-50"
+                            >
+                              <option value="assessment">Assessment</option>
+                              <option value="attendance">Attendance</option>
+                            </select>
+                            {row.inUse && <p className="mt-1 text-[9px] leading-tight text-slate-400">In-use category source is fixed to protect linked records.</p>}
+                          </div>
+                        )}
+
                         {/* WEIGHT (%) */}
                         <div className="w-full sm:w-28 shrink-0">
                           <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
                             WEIGHT (%)
                           </label>
-                          <input
-                            type="text"
-                            value={row.weight}
-                            placeholder="0"
-                            onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
+                            <input
+                              type="text"
+                              value={row.weight}
+                              placeholder="0"
+                              disabled={isLegacyCombinedPeriodConfig}
+                              onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
                             className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
                         </div>
@@ -3500,6 +3899,7 @@ export const GradeComputation: React.FC = () => {
                             type="text"
                             value={row.defaultMax ?? ''}
                             placeholder="50"
+                            disabled={isLegacyCombinedPeriodConfig}
                             onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'defaultMax', e.target.value)}
                             className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
                           />
@@ -3510,8 +3910,8 @@ export const GradeComputation: React.FC = () => {
                           <button
                             type="button"
                             aria-label={`Delete category ${row.name || 'unnamed'}`}
-                            onClick={() => handleRemovePeriodCategory(activePeriodEditorTab, row.compositeKey)}
-                            disabled={row.inUse}
+                              onClick={() => handleRemovePeriodCategory(activePeriodEditorTab, row.compositeKey)}
+                              disabled={isLegacyCombinedPeriodConfig || row.inUse}
                             title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
                             className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
                           >
@@ -3527,6 +3927,7 @@ export const GradeComputation: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
+                      disabled={isLegacyCombinedPeriodConfig}
                       className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-extrabold text-xs transition-colors shadow-2xs cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -3565,6 +3966,7 @@ export const GradeComputation: React.FC = () => {
                                 id="midterm-start-date"
                                 type="date"
                                 value={attendanceDateRanges.midterm.startDate}
+                                disabled={isLegacyCombinedPeriodConfig}
                                 onChange={(e) => handleUpdateDateRange('midterm', 'startDate', e.target.value)}
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                               />
@@ -3575,6 +3977,7 @@ export const GradeComputation: React.FC = () => {
                                 id="midterm-end-date"
                                 type="date"
                                 value={attendanceDateRanges.midterm.endDate}
+                                disabled={isLegacyCombinedPeriodConfig}
                                 onChange={(e) => handleUpdateDateRange('midterm', 'endDate', e.target.value)}
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                               />
@@ -3591,6 +3994,7 @@ export const GradeComputation: React.FC = () => {
                                 id="final-start-date"
                                 type="date"
                                 value={attendanceDateRanges.final.startDate}
+                                disabled={isLegacyCombinedPeriodConfig}
                                 onChange={(e) => handleUpdateDateRange('final', 'startDate', e.target.value)}
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                               />
@@ -3601,6 +4005,7 @@ export const GradeComputation: React.FC = () => {
                                 id="final-end-date"
                                 type="date"
                                 value={attendanceDateRanges.final.endDate}
+                                disabled={isLegacyCombinedPeriodConfig}
                                 onChange={(e) => handleUpdateDateRange('final', 'endDate', e.target.value)}
                                 className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                               />
@@ -3630,7 +4035,7 @@ export const GradeComputation: React.FC = () => {
                     <div>
                       <button
                         type="submit"
-                        disabled={configSaving || periodValidationError !== null}
+                        disabled={configSaving || periodValidationError !== null || isLegacyCombinedPeriodConfig}
                         className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
                       >
                         <Save className="w-4 h-4" />
@@ -3700,9 +4105,7 @@ export const GradeComputation: React.FC = () => {
                 Convert Course Offering to Period Grading
               </div>
               <p className="text-[11px] leading-relaxed">
-                Converting will switch this course offering from legacy single-list grading to separate <strong>Midterm</strong> and <strong>Finals</strong> grading periods.
-                Once converted, existing assessments will be associated with their corresponding period categories.
-                Conversion cannot be undone once saved.
+                This starts a draft for mandatory <strong>Lecture</strong> and <strong>Laboratory</strong> grading. Existing categories retain their IDs and weights; assign each category to a component and rebalance both component lists before saving. Existing scores and saved grades remain as recorded until an authorized recomputation.
               </p>
             </div>
 
@@ -3796,10 +4199,10 @@ export const GradeComputation: React.FC = () => {
               <button
                 type="button"
                 disabled={configSaving}
-                onClick={() => handleSaveGradingConfig(undefined, { convertFromOverall: true })}
+                onClick={handlePrepareOverallPeriodConversion}
                 className="px-5 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 disabled:opacity-50 text-white font-bold text-xs shadow-md"
               >
-                {configSaving ? 'Converting...' : 'Confirm Conversion'}
+                Continue to Lecture/Laboratory Mapping
               </button>
             </div>
           </div>
@@ -3927,6 +4330,12 @@ export const GradeComputation: React.FC = () => {
             </div>
           )}
 
+          {isPeriodMode && isLectureLaboratoryMode && (
+            <p role="note" className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+              Lecture and Laboratory results are available after recomputation with the saved component setup. Older combined period results remain historical; unavailable component values are not derived from the new weights.
+            </p>
+          )}
+
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
@@ -3939,8 +4348,21 @@ export const GradeComputation: React.FC = () => {
                   </th>
                   {isPeriodMode ? (
                     <>
-                      <th className="px-5 py-3 text-center">Midterm %</th>
-                      <th className="px-5 py-3 text-center">Final %</th>
+                      {isLectureLaboratoryMode ? (
+                        <>
+                          <th className="px-5 py-3 text-center">Midterm Lecture %</th>
+                          <th className="px-5 py-3 text-center">Midterm Laboratory %</th>
+                          <th className="px-5 py-3 text-center">Midterm %</th>
+                          <th className="px-5 py-3 text-center">Finals Lecture %</th>
+                          <th className="px-5 py-3 text-center">Finals Laboratory %</th>
+                          <th className="px-5 py-3 text-center">Finals %</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="px-5 py-3 text-center">Midterm %</th>
+                          <th className="px-5 py-3 text-center">Final %</th>
+                        </>
+                      )}
                     </>
                   ) : (
                     <>
@@ -3962,7 +4384,7 @@ export const GradeComputation: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-xs">
                 {sortedSummaryStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={isPeriodMode ? 5 : 7} className="px-5 py-8 text-center text-slate-400">
+                    <td colSpan={isPeriodMode ? (isLectureLaboratoryMode ? 9 : 5) : 7} className="px-5 py-8 text-center text-slate-400">
                       No matching student grade summaries found.
                     </td>
                   </tr>
@@ -3984,6 +4406,12 @@ export const GradeComputation: React.FC = () => {
                             <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
                             <span className="text-[10px] text-slate-400">{student.studentId}</span>
                           </td>
+                          {isLectureLaboratoryMode && (
+                            <>
+                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
+                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus)}</td>
+                            </>
+                          )}
                           <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
                             {evalResult.midtermPercentage !== null ? (
                               `${evalResult.midtermPercentage.toFixed(2)}%`
@@ -3997,6 +4425,12 @@ export const GradeComputation: React.FC = () => {
                               <span className="text-slate-400 font-sans">—</span>
                             )}
                           </td>
+                          {isLectureLaboratoryMode && (
+                            <>
+                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus)}</td>
+                              <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus)}</td>
+                            </>
+                          )}
                           <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">
                             {evalResult.finalPercentage !== null ? (
                               `${evalResult.finalPercentage.toFixed(2)}%`
@@ -4211,8 +4645,21 @@ export const GradeComputation: React.FC = () => {
               <tr className="bg-slate-100 text-left font-bold uppercase">
                 <th className="border border-slate-300 px-4 py-2">Student ID</th>
                 <th className="border border-slate-300 px-4 py-2">Student Name</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Midterm %</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Final %</th>
+                {isLectureLaboratoryMode ? (
+                  <>
+                    <th className="border border-slate-300 px-4 py-2 text-center">Midterm Lecture %</th>
+                    <th className="border border-slate-300 px-4 py-2 text-center">Midterm Laboratory %</th>
+                    <th className="border border-slate-300 px-4 py-2 text-center">Midterm %</th>
+                    <th className="border border-slate-300 px-4 py-2 text-center">Finals Lecture %</th>
+                    <th className="border border-slate-300 px-4 py-2 text-center">Finals Laboratory %</th>
+                    <th className="border border-slate-300 px-4 py-2 text-center">Finals %</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="border border-slate-300 px-4 py-2 text-center">Midterm %</th>
+                    <th className="border border-slate-300 px-4 py-2 text-center">Final %</th>
+                  </>
+                )}
                 <th className="border border-slate-300 px-4 py-2 text-center">Overall GWA</th>
                 <th className="border border-slate-300 px-4 py-2 text-center">Remarks</th>
               </tr>
@@ -4274,7 +4721,19 @@ export const GradeComputation: React.FC = () => {
                   <tr key={student.id}>
                     <td className="border border-slate-300 px-4 py-2 font-mono">{student.studentId}</td>
                     <td className="border border-slate-300 px-4 py-2 font-bold">{student.name}</td>
+                    {isLectureLaboratoryMode && (
+                      <>
+                        <td className="border border-slate-300 px-4 py-2 text-center font-mono">{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
+                        <td className="border border-slate-300 px-4 py-2 text-center font-mono">{formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus)}</td>
+                      </>
+                    )}
                     <td className="border border-slate-300 px-4 py-2 text-center font-mono">{midtermStr}</td>
+                    {isLectureLaboratoryMode && (
+                      <>
+                        <td className="border border-slate-300 px-4 py-2 text-center font-mono">{formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus)}</td>
+                        <td className="border border-slate-300 px-4 py-2 text-center font-mono">{formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus)}</td>
+                      </>
+                    )}
                     <td className="border border-slate-300 px-4 py-2 text-center font-mono">{finalStr}</td>
                     <td className="border border-slate-300 px-4 py-2 text-center font-extrabold">{gwaStr}</td>
                     <td className="border border-slate-300 px-4 py-2 text-center font-bold text-[10px]">{remarksStr}</td>
@@ -4394,12 +4853,14 @@ export const GradeComputation: React.FC = () => {
                     </div>
                   )}
                   <select
-                    value={assGradingCategoryId ? String(assGradingCategoryId) : assType}
+                    value={assGradingCategoryId || assType}
                     onChange={(e) => {
                       const selectedVal = e.target.value;
-                      const found = modalEligibleCategories.find(c => String(c.id) === String(selectedVal) || c.name === selectedVal);
+                      const found = modalEligibleCategories.find(c =>
+                        String(c.id) === selectedVal || categoryOptionKey(c, assPeriod) === selectedVal
+                      );
                       if (found) {
-                        setAssGradingCategoryId(found.id ? String(found.id) : '');
+                        setAssGradingCategoryId(categoryOptionKey(found, assPeriod));
                         setAssType(found.name);
                       } else {
                         setAssGradingCategoryId('');
@@ -4412,8 +4873,8 @@ export const GradeComputation: React.FC = () => {
                   >
                     <option value="">Select grading category</option>
                     {modalEligibleCategories.map(cat => (
-                      <option key={String(cat.id ?? cat.name)} value={String(cat.id ?? cat.name)}>
-                        {cat.name} ({cat.weight}%)
+                      <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
+                        {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
                       </option>
                     ))}
                   </select>

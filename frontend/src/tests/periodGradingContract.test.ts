@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildDefaultPeriodDraft,
+  buildDefaultLectureLaboratoryCategories,
   validateDateRanges,
   normalizeDateRangesForPayload,
   formatPeriodIncompleteReason,
@@ -25,34 +26,40 @@ test('Faculty grade views use the inclusive authoritative retention boundary', (
   assert.equal((gradeComputation.match(/>= settings\.retentionThreshold/g) ?? []).length, 4);
 });
 
-test('Period Draft: buildDefaultPeriodDraft produces the exact approved starting preset', () => {
+test('Period Draft: buildDefaultPeriodDraft produces the mandatory Lecture/Laboratory defaults', () => {
   const draft = buildDefaultPeriodDraft();
-  assert.equal(draft.termRatio.midterm, '40');
-  assert.equal(draft.termRatio.final, '60');
-  assert.equal(draft.midtermCategories.length, 4);
-  assert.equal(draft.finalCategories.length, 5);
-
-  // Midterm categories: Quiz 25, Activity 25, Midterm Exam 40, Attendance 10
+  assert.deepEqual(draft.componentWeights, { lecture: '60', laboratory: '40' });
+  assert.equal(draft.termRatio.midterm, '30');
+  assert.equal(draft.termRatio.final, '70');
+  for (const categories of [draft.midtermCategories, draft.finalCategories]) {
+    assert.equal(categories.length, 8);
+    const lecture = categories.filter(category => category.component === 'Lecture');
+    const laboratory = categories.filter(category => category.component === 'Laboratory');
+    assert.deepEqual(
+      lecture.map(({ name, weight }) => ({ name, weight })),
+      [
+        { name: 'Term Exam', weight: '50' },
+        { name: 'Quiz', weight: '20' },
+        { name: 'Outputs', weight: '20' },
+        { name: 'Participation', weight: '10' },
+      ]
+    );
+    assert.deepEqual(
+      laboratory.map(({ name, weight }) => ({ name, weight })),
+      [
+        { name: 'Practical Exam', weight: '50' },
+        { name: 'Laboratory Exercises', weight: '30' },
+        { name: 'Quiz', weight: '10' },
+        { name: 'Recitation', weight: '10' },
+      ]
+    );
+    assert.equal(lecture.reduce((total, category) => total + Number(category.weight), 0), 100);
+    assert.equal(laboratory.reduce((total, category) => total + Number(category.weight), 0), 100);
+    assert.ok(categories.every(category => category.sourceKind === 'assessment'));
+  }
   assert.deepEqual(
-    draft.midtermCategories.map(c => ({ name: c.name, weight: c.weight, sourceKind: c.sourceKind })),
-    [
-      { name: 'Quiz', weight: '25', sourceKind: 'assessment' },
-      { name: 'Activity', weight: '25', sourceKind: 'assessment' },
-      { name: 'Midterm Exam', weight: '40', sourceKind: 'assessment' },
-      { name: 'Attendance', weight: '10', sourceKind: 'attendance' },
-    ]
-  );
-
-  // Finals categories: Quiz 20, Activity 20, Laboratory 20, Final Exam 30, Attendance 10
-  assert.deepEqual(
-    draft.finalCategories.map(c => ({ name: c.name, weight: c.weight, sourceKind: c.sourceKind })),
-    [
-      { name: 'Quiz', weight: '20', sourceKind: 'assessment' },
-      { name: 'Activity', weight: '20', sourceKind: 'assessment' },
-      { name: 'Laboratory', weight: '20', sourceKind: 'assessment' },
-      { name: 'Final Exam', weight: '30', sourceKind: 'assessment' },
-      { name: 'Attendance', weight: '10', sourceKind: 'attendance' },
-    ]
+    draft.midtermCategories.map(({ name, component }) => [name, component]),
+    draft.finalCategories.map(({ name, component }) => [name, component])
   );
 
   // Date ranges are blank by default
@@ -72,6 +79,25 @@ test('Composite Row Keying: generates distinct keys for categories across period
 
   const newKey = buildRowCompositeKey('Midterm', null, 'temp-99');
   assert.equal(newKey, 'Midterm:temp-99');
+});
+
+test('Default Lecture/Laboratory categories keep repeated names distinct by component', () => {
+  for (const period of ['Midterm', 'Final'] as const) {
+    const categories = buildDefaultLectureLaboratoryCategories(period);
+    const lecture = categories.filter(category => category.component === 'Lecture');
+    const laboratory = categories.filter(category => category.component === 'Laboratory');
+    const sum = (rows: typeof categories) => rows.reduce((total, row) => total + Number(row.weight), 0);
+
+    assert.equal(lecture.length, 4);
+    assert.equal(laboratory.length, 4);
+    assert.equal(sum(lecture), 100);
+    assert.equal(sum(laboratory), 100);
+    assert.equal(lecture.find(category => category.name === 'Quiz')?.weight, '20');
+    assert.equal(laboratory.find(category => category.name === 'Quiz')?.weight, '10');
+    assert.notEqual(lecture.find(category => category.name === 'Quiz')?.compositeKey, laboratory.find(category => category.name === 'Quiz')?.compositeKey);
+    assert.ok(categories.every(category => category.gradingPeriod === period && category.sourceKind === 'assessment'));
+    assert.equal(categories.filter(category => category.sourceKind === 'attendance').length, 0);
+  }
 });
 
 test('Date Ranges Validation: accepts valid non-overlapping ranges and allowed gaps', () => {
@@ -392,6 +418,27 @@ test('Evaluation Extraction: uncomputed period mode shows pending state and hide
   assert.equal(evaluation.statusText, 'PENDING');
 });
 
+test('Evaluation Extraction: a saved overall-category grade remains historical while period grading is pending', () => {
+  const legacySubj = {
+    code: 'CLIN401',
+    name: 'Clinical Dentistry I',
+    units: 3,
+    grade: 1.75,
+    components: {
+      calculationMode: 'authoritative_categories',
+      categories: [{ categoryId: 10, name: 'Quizzes', contribution: 22.5 }],
+    },
+  };
+
+  const evaluation = extractPeriodEvaluation(legacySubj as any, null, 'periods');
+  assert.equal(evaluation.isPeriodMode, true);
+  assert.equal(evaluation.midtermStatus, 'pending');
+  assert.equal(evaluation.finalStatus, 'pending');
+  assert.equal(evaluation.overallGwa, null);
+  assert.equal(evaluation.historicalGwa, 1.75);
+  assert.equal(evaluation.statusText, 'PENDING');
+});
+
 test('Evaluation Extraction: incomplete result without confirmed persisted grade does NOT fall back to subj.grade', () => {
   const legacySubj = {
     code: 'CLIN401',
@@ -706,4 +753,166 @@ test('CSV Generation: legacy mode exports accurately labeled overall columns wit
   const lines = csv.trim().split('\n');
   assert.equal(lines[0], 'Student ID,Name,Quizzes,Practicum,Exams,Attendance,Overall GWA,Remarks');
   assert.equal(lines[1], 'DENT-004,"David Lim",85.0%,90.0%,88.0%,95.0%,1.50,PASS');
+});
+
+test('Lecture/Laboratory evaluation exposes all four period components and grouped CSV headers', () => {
+  const component = (name: 'Lecture' | 'Laboratory', percentage: number) => ({
+    component: name,
+    status: 'computed' as const,
+    percentage,
+    categories: [],
+    incomplete: [],
+  });
+  const period = (name: 'Midterm' | 'Final', percentage: number, lecture: number, laboratory: number) => ({
+    period: name,
+    status: 'computed' as const,
+    percentage,
+    categories: [],
+    incomplete: [],
+    attendanceDateRange: { startDate: null, endDate: null },
+    components: { lecture: component('Lecture', lecture), laboratory: component('Laboratory', laboratory) },
+  });
+  const groupedResult: FacultyPeriodModeComputedResult = {
+    status: 'computed',
+    enrollmentId: '801',
+    studentId: '701',
+    percentage: 88.4,
+    gwa: 1.65,
+    retentionState: 'active',
+    periods: {
+      midterm: period('Midterm', 87, 81, 91),
+      final: period('Final', 89, 93, 83),
+    },
+    breakdown: {
+      calculationMode: 'authoritative_periods',
+      termRatio: { midterm: 30, final: 70 },
+      periods: {
+        midterm: period('Midterm', 87, 81, 91),
+        final: period('Final', 89, 93, 83),
+      },
+      retentionThreshold: 2.5,
+    },
+  };
+  const student = {
+    id: 'student-701',
+    studentId: '=DENT-007',
+    name: 'Alice Reyes',
+    email: '',
+    yearLevel: 2 as const,
+    status: 'active' as const,
+    enrolledSubjects: [{
+      code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, enrollmentId: '801',
+      grade: 1.65, isClinical: false, hasRemedial: false,
+    }],
+    clinicHoursCompleted: 0,
+    overallGWA: 1.65,
+    remedialExams: [],
+    classSections: [],
+  };
+
+  const evaluation = extractPeriodEvaluation(student.enrolledSubjects[0] as any, groupedResult);
+  assert.equal(evaluation.midtermComponents?.lecture.percentage, 81);
+  assert.equal(evaluation.midtermComponents?.laboratory.percentage, 91);
+  assert.equal(evaluation.finalComponents?.lecture.percentage, 93);
+  assert.equal(evaluation.finalComponents?.laboratory.percentage, 83);
+
+  const csv = generateGradeSummaryCSV([student] as any, 'CLIN401', true, new Map([['801', groupedResult]]), 'lecture_laboratory');
+  const lines = csv.trim().split('\n');
+  assert.equal(lines[0], 'Student ID,Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status');
+  assert.equal(lines[1], "\"'=DENT-007\",\"Alice Reyes\",\"81.00%\",\"91.00%\",\"87.00%\",\"93.00%\",\"83.00%\",\"89.00%\",\"1.65\",\"PASS\"");
+
+  const groupedResultWithoutComponents: FacultyPeriodModeComputedResult = {
+    ...groupedResult,
+    periods: {
+      midterm: { ...groupedResult.periods.midterm, components: undefined },
+      final: { ...groupedResult.periods.final, components: undefined },
+    },
+  };
+  const missingComponentCsv = generateGradeSummaryCSV(
+    [student] as unknown as Parameters<typeof generateGradeSummaryCSV>[0],
+    'CLIN401',
+    true,
+    new Map([['801', groupedResultWithoutComponents]]),
+    'lecture_laboratory'
+  );
+  const missingComponentRow = missingComponentCsv.trim().split('\n')[1];
+  assert.equal(
+    missingComponentRow,
+    '"\'=DENT-007","Alice Reyes","Unavailable (recompute required)","Unavailable (recompute required)","87.00%","Unavailable (recompute required)","Unavailable (recompute required)","89.00%","1.65","PASS"'
+  );
+});
+
+test('Lecture/Laboratory CSV quotes embedded text and neutralizes formula-leading cells', () => {
+  const incompleteResult: FacultyPeriodModeIncompleteResult = {
+    status: 'incomplete_period',
+    enrollmentId: '802',
+    studentId: '702',
+    periods: {
+      midterm: {
+        period: 'Midterm', status: 'incomplete', percentage: null, categories: [],
+        incomplete: [{ reason: 'missing_assessment_score' }],
+        attendanceDateRange: { startDate: null, endDate: null },
+        components: {
+          lecture: { component: 'Lecture', status: 'incomplete', percentage: null, categories: [], incomplete: [{ reason: 'missing "lab", score\nplease' as 'missing_assessment_score' }] },
+          laboratory: { component: 'Laboratory', status: 'incomplete', percentage: null, categories: [], incomplete: [] },
+        },
+      },
+      final: {
+        period: 'Final', status: 'computed', percentage: 95, categories: [], incomplete: [],
+        attendanceDateRange: { startDate: null, endDate: null },
+        components: {
+          lecture: { component: 'Lecture', status: 'computed', percentage: 93, categories: [], incomplete: [] },
+          laboratory: { component: 'Laboratory', status: 'computed', percentage: 83, categories: [], incomplete: [] },
+        },
+      },
+    },
+    breakdown: {
+      calculationMode: 'authoritative_periods', termRatio: { midterm: 30, final: 70 },
+      periods: {
+        midterm: {
+          period: 'Midterm', status: 'incomplete', percentage: null, categories: [],
+          incomplete: [{ reason: 'missing_assessment_score' }],
+          attendanceDateRange: { startDate: null, endDate: null },
+          components: {
+            lecture: { component: 'Lecture', status: 'incomplete', percentage: null, categories: [], incomplete: [{ reason: 'missing "lab", score\nplease' as 'missing_assessment_score' }] },
+            laboratory: { component: 'Laboratory', status: 'incomplete', percentage: null, categories: [], incomplete: [] },
+          },
+        },
+        final: {
+          period: 'Final', status: 'computed', percentage: 95, categories: [], incomplete: [],
+          attendanceDateRange: { startDate: null, endDate: null },
+          components: {
+            lecture: { component: 'Lecture', status: 'computed', percentage: 93, categories: [], incomplete: [] },
+            laboratory: { component: 'Laboratory', status: 'computed', percentage: 83, categories: [], incomplete: [] },
+          },
+        },
+      },
+      retentionThreshold: 2.5,
+    },
+    previouslyPersisted: true,
+    previousPercentage: 88,
+    previousGwa: 2,
+  };
+  const student = {
+    id: 'student-702',
+    studentId: '@DENT-008',
+    name: '=Dana, "Quoted"\nStudent',
+    email: '',
+    yearLevel: 2 as const,
+    status: 'active' as const,
+    enrolledSubjects: [{
+      code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, enrollmentId: '802',
+      grade: 2, isClinical: false, hasRemedial: false,
+    }],
+    clinicHoursCompleted: 0,
+    overallGWA: 2,
+    remedialExams: [],
+    classSections: [],
+  };
+
+  const csv = generateGradeSummaryCSV([student] as any, 'CLIN401', true, new Map([['802', incompleteResult]]), 'lecture_laboratory');
+  assert.equal(csv, [
+    'Student ID,Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status',
+    '"\'@DENT-008","\'=Dana, ""Quoted""\nStudent","Incomplete (missing ""lab"", score\nplease)","Incomplete","Incomplete (Missing Assessment Score)","93.00%","83.00%","95.00%","Prior: 2.00 (Historical)","INCOMPLETE"',
+  ].join('\n'));
 });

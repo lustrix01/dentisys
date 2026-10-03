@@ -109,12 +109,18 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
                 cs.cs_name, cs.semester, cs.school_year, cs.year_level AS class_year_level,
                 cs.lec_room, cs.lab_room, cs.block, cs.meetings_recorded,
                 u.display_name AS instructor_name,
-                c.course_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_name, c.units, c.is_clinical
+                c.course_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_name, c.units, c.is_clinical,
+                gc.component_mode AS grading_component_mode
            FROM enrollments e
            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
            JOIN class_sections cs ON cs.cs_id = e.cs_id
            JOIN courses c ON c.course_id = cs.course_id
            LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
+           LEFT JOIN grading_configs gc
+                  ON gc.faculty_user_id = cs.instructor_user_id
+                 AND gc.course_id = cs.course_id
+                 AND gc.semester = UPPER(cs.semester)
+                 AND gc.school_year = UPPER(cs.school_year)
           WHERE e.student_id = ?
             AND LOWER(e.status) = \'active\'
             AND LOWER(cs.status) = \'active\'
@@ -139,7 +145,18 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
         $midterm = faculty_watchlist_midterm($pdo, $row);
         $risk = academic_school_year_is_current($pdo, (string) $row['school_year'])
             ? faculty_risk_projection($pdo, $row) : null;
-        $rows[] = [
+        $midtermEvaluation = [
+            'complete' => (bool) $midterm['complete'],
+            'percentage' => $midterm['percentage'] !== null ? round((float) $midterm['percentage'], 2) : null,
+            'grade' => $midterm['complete'] && $midterm['percentage'] !== null
+                ? faculty_percentage_to_gwa((float) $midterm['percentage']) : null,
+            'isAtRisk' => in_array($risk['level'] ?? null, ['High', 'At Risk'], true),
+            'risk' => $risk,
+        ];
+        if (isset($midterm['components'])) {
+            $midtermEvaluation['components'] = $midterm['components'];
+        }
+        $classRow = [
             'enrollmentId' => (string) $enrollmentId,
             'classId' => (string) $row['cs_id'],
             'className' => (string) $row['cs_name'],
@@ -163,14 +180,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'gradeComponents' => $row['grade_components_json'] !== null
                 ? json_decode((string) $row['grade_components_json'], true)
                 : null,
-            'midtermEvaluation' => [
-                'complete' => (bool) $midterm['complete'],
-                'percentage' => $midterm['percentage'] !== null ? round((float) $midterm['percentage'], 2) : null,
-                'grade' => $midterm['complete'] && $midterm['percentage'] !== null
-                    ? faculty_percentage_to_gwa((float) $midterm['percentage']) : null,
-                'isAtRisk' => in_array($risk['level'] ?? null, ['High', 'At Risk'], true),
-                'risk' => $risk,
-            ],
+            'midtermEvaluation' => $midtermEvaluation,
             // A passed remedial attempt or cost recovery clears the Student for
             // the course; the recorded grade itself is unchanged.
             'retentionState' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
@@ -180,6 +190,10 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'isCurrent' => academic_school_year_is_current($pdo, (string) $row['school_year']),
             'isPast' => academic_school_year_is_past($pdo, (string) $row['school_year']),
         ];
+        if (($row['grading_component_mode'] ?? 'combined') === 'lecture_laboratory') {
+            $classRow['gradingComponentMode'] = 'lecture_laboratory';
+        }
+        $rows[] = $classRow;
     }
     return $rows;
 }

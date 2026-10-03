@@ -64,8 +64,42 @@ assert_faculty_grading(
 
 $periodDefaults = faculty_grading_default_period_template();
 assert_faculty_grading($periodDefaults['schemaMode'] === 'periods', 'Unconfigured grading defaults use period mode');
-assert_faculty_grading($periodDefaults['termRatio']['midterm'] === 40 && $periodDefaults['termRatio']['final'] === 60, 'Faculty default term ratio is 40/60');
-assert_faculty_grading(count($periodDefaults['midtermCategories']) === 4 && count($periodDefaults['finalCategories']) === 5, 'Faculty default period category templates are populated');
+assert_faculty_grading(
+    $periodDefaults['componentMode'] === 'lecture_laboratory'
+        && $periodDefaults['componentWeights'] === ['lecture' => 60, 'laboratory' => 40],
+    'Unconfigured grading defaults use the mandatory 60/40 component split'
+);
+assert_faculty_grading(
+    $periodDefaults['termRatio'] === ['midterm' => 30, 'final' => 70],
+    'Faculty default term ratio is 30/70'
+);
+$expectedDefaultCategories = [
+    ['Term Exam', 50, 1, 'Lecture'],
+    ['Quiz', 20, 2, 'Lecture'],
+    ['Outputs', 20, 3, 'Lecture'],
+    ['Participation', 10, 4, 'Lecture'],
+    ['Practical Exam', 50, 1, 'Laboratory'],
+    ['Laboratory Exercises', 30, 2, 'Laboratory'],
+    ['Quiz', 10, 3, 'Laboratory'],
+    ['Recitation', 10, 4, 'Laboratory'],
+];
+$defaultCategoryRows = static fn(array $categories): array => array_map(
+    static fn(array $category): array => [
+        $category['name'], $category['weight'], $category['sortOrder'], $category['component'],
+    ],
+    $categories
+);
+assert_faculty_grading(
+    $defaultCategoryRows($periodDefaults['midtermCategories']) === $expectedDefaultCategories
+        && $defaultCategoryRows($periodDefaults['finalCategories']) === $expectedDefaultCategories
+        && array_reduce(
+            [...$periodDefaults['midtermCategories'], ...$periodDefaults['finalCategories']],
+            static fn(bool $allAssessmentSources, array $category): bool => $allAssessmentSources
+                && $category['sourceKind'] === 'assessment',
+            true
+        ),
+    'Both periods receive the approved category lists with assessment-score sources'
+);
 assert_faculty_grading(faculty_grading_normalize_term_ratio(['midterm' => 40, 'final' => 60])['final'] === '60.0000', 'Term ratio normalizes to fixed precision');
 assert_faculty_grading(faculty_grading_normalize_period_categories([
     ['name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1],

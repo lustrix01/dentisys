@@ -42,4 +42,108 @@ $withAttendance = [
 assert_risk(abs(faculty_risk_period_percentage($withAttendance, 50.0, 0) - 90.0) < 1e-9, 'Unknown attendance is left out and the other weights renormalize');
 assert_risk(faculty_risk_level(static fn(int $n): ?float => null) === null, 'No computable grade gives no risk');
 
+// Reusing completeness inputs must distinguish an entered zero from a missing
+// score. Missing assessments are not assumed completed in the risk projection.
+class RiskCachedInputsPDO extends PDO
+{
+    public function __construct() {}
+    public function prepare(string $query, array $options = []): PDOStatement|false
+    {
+        throw new RuntimeException('Fully loaded risk inputs should not query again.');
+    }
+}
+$cachedGrading = ['periodMemberships' => ['Midterm' => [
+    ['category_id' => 1, 'source_kind' => 'assessment', 'weight' => 100],
+]]];
+$cachedAssessment = [
+    'grading_category_id' => 1, 'max_score' => 100, 'transmutation_enabled' => false,
+    'transmutation_minimum_percentage' => 50, 'transmutation_maximum_percentage' => 100,
+    'linked_attendance_status' => null,
+];
+$cachedInputs = ['assessments' => [
+    20 => ['Midterm' => [
+        $cachedAssessment + ['score' => 0, '_has_score' => true],
+        $cachedAssessment + ['score' => null, '_has_score' => false],
+    ]],
+    21 => ['Midterm' => [$cachedAssessment + ['score' => 95, '_has_score' => true]]],
+]];
+$cachedZero = faculty_risk_period_inputs(new RiskCachedInputsPDO(), ['enrollment_id' => 20], $cachedGrading, 'Midterm', $cachedInputs);
+assert_risk($cachedZero[0][0]['earned'] === 0.0 && $cachedZero[0][0]['possible'] === 100.0, 'Cached risk retains an entered zero and excludes the missing score');
+assert_risk($cachedZero[1] === [100.0], 'Missing scores do not increase the completed assessment sizes');
+$cachedOther = faculty_risk_period_inputs(new RiskCachedInputsPDO(), ['enrollment_id' => 21], $cachedGrading, 'Midterm', $cachedInputs);
+assert_risk($cachedOther[0][0]['earned'] === 95.0, 'Cached assessment inputs remain isolated by enrollment');
+
+// Grouped components flatten into the saved offering contribution before the
+// existing informational-risk calculation. A recorded zero remains present;
+// a missing Laboratory assessment follows the existing risk renormalization.
+$groupedRiskGrading = [
+    'component_mode' => 'lecture_laboratory',
+    'component_lecture_weight' => 60,
+    'component_laboratory_weight' => 40,
+    'periodMemberships' => ['Midterm' => [
+        ['category_id' => 11, 'source_kind' => 'assessment', 'weight' => 100, 'component' => 'Lecture'],
+        ['category_id' => 12, 'source_kind' => 'assessment', 'weight' => 100, 'component' => 'Laboratory'],
+    ]],
+];
+$groupedRiskCachedInputs = ['assessments' => [
+    30 => ['Midterm' => [
+        array_replace($cachedAssessment, [
+            'assessment_id' => 301,
+            'grading_category_id' => 11,
+            'score' => 80,
+            '_has_score' => true,
+        ]),
+        array_replace($cachedAssessment, [
+            'assessment_id' => 302,
+            'grading_category_id' => 12,
+            'score' => 0,
+            '_has_score' => true,
+        ]),
+    ]],
+    31 => ['Midterm' => [
+        array_replace($cachedAssessment, [
+            'assessment_id' => 311,
+            'grading_category_id' => 11,
+            'score' => 100,
+            '_has_score' => true,
+        ]),
+        array_replace($cachedAssessment, [
+            'assessment_id' => 312,
+            'grading_category_id' => 12,
+            'score' => null,
+            '_has_score' => false,
+        ]),
+    ]],
+]];
+$groupedRiskZero = faculty_risk_period_inputs(
+    new RiskCachedInputsPDO(),
+    ['enrollment_id' => 30],
+    $groupedRiskGrading,
+    'Midterm',
+    $groupedRiskCachedInputs
+);
+assert_risk(
+    $groupedRiskZero[0][0]['weight'] === 60.0
+        && $groupedRiskZero[0][1]['weight'] === 40.0
+        && $groupedRiskZero[0][1]['possible'] === 100.0,
+    'Grouped risk applies the saved component ratio and keeps an entered Laboratory zero'
+);
+assert_risk(
+    abs(faculty_risk_period_percentage($groupedRiskZero[0], 100.0, 0) - 48.0) < 1e-9,
+    'Grouped risk combines Lecture and Laboratory at their saved 60/40 contributions'
+);
+$groupedRiskMissing = faculty_risk_period_inputs(
+    new RiskCachedInputsPDO(),
+    ['enrollment_id' => 31],
+    $groupedRiskGrading,
+    'Midterm',
+    $groupedRiskCachedInputs
+);
+assert_risk(
+    $groupedRiskMissing[0][0]['earned'] === 100.0
+        && $groupedRiskMissing[0][1]['possible'] === 0.0
+        && abs(faculty_risk_period_percentage($groupedRiskMissing[0], 100.0, 0) - 100.0) < 1e-9,
+    'Grouped risk excludes a missing category under the existing risk projection rules'
+);
+
 echo "ALL RISK PROJECTION TESTS PASSED.\n";

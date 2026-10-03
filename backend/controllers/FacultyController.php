@@ -1162,7 +1162,7 @@ function faculty_grading_category_match_key(mixed $value): string
     return $key;
 }
 
-/** Faculty-chosen categories for existing assessments: [assessmentId => category name]. */
+/** Faculty-chosen categories for existing assessments, optionally disambiguated by ID, period and component. */
 function faculty_grading_assessment_assignments(mixed $raw): array
 {
     if ($raw === null) {
@@ -1181,10 +1181,31 @@ function faculty_grading_assessment_assignments(mixed $raw): array
             $assessmentId = (int) $assessmentId;
         }
         $categoryName = is_array($item) ? trim((string) ($item['categoryName'] ?? '')) : '';
-        if (!is_int($assessmentId) || $assessmentId <= 0 || $categoryName === '') {
-            throw new FacultyGradingConfigurationException('Each assessment assignment needs an assessmentId and a categoryName.');
+        $categoryId = is_array($item) ? faculty_grading_category_id($item['categoryId'] ?? null) : null;
+        $gradingPeriod = is_array($item) ? ($item['gradingPeriod'] ?? null) : null;
+        if (is_string($gradingPeriod)) {
+            $gradingPeriod = ucfirst(strtolower(trim($gradingPeriod)));
         }
-        $assignments[$assessmentId] = $categoryName;
+        $component = is_array($item) ? ($item['component'] ?? null) : null;
+        if (is_string($component)) {
+            $component = ucfirst(strtolower(trim($component)));
+        }
+        if (!is_int($assessmentId) || $assessmentId <= 0
+            || ($categoryName === '' && $categoryId === null)
+            || ($gradingPeriod !== null && !in_array($gradingPeriod, ['Midterm', 'Final'], true))
+            || ($component !== null && !in_array($component, ['Combined', 'Lecture', 'Laboratory'], true))) {
+            throw new FacultyGradingConfigurationException(
+                'Each assessment assignment needs a valid assessmentId and category target.',
+                422,
+                'GRADING_ASSESSMENT_ASSIGNMENT_INVALID'
+            );
+        }
+        $assignments[$assessmentId] = [
+            'categoryName' => $categoryName,
+            'categoryId' => $categoryId,
+            'gradingPeriod' => $gradingPeriod,
+            'component' => $component,
+        ];
     }
     return $assignments;
 }
@@ -1206,7 +1227,52 @@ function faculty_grading_source_kind(mixed $value, mixed $categoryName = null): 
     return (string) $value;
 }
 
-function faculty_grading_normalize_categories(mixed $value): array
+function faculty_grading_normalize_component_mode(mixed $value): string
+{
+    if ($value === null || $value === '') {
+        return 'combined';
+    }
+    if (!is_string($value) || !in_array($value, ['combined', 'lecture_laboratory'], true)) {
+        throw new FacultyGradingConfigurationException(
+            'componentMode must be combined or lecture_laboratory.',
+            422,
+            'GRADING_COMPONENT_CATEGORY_INVALID'
+        );
+    }
+    return $value;
+}
+
+function faculty_grading_normalize_component_weights(mixed $value): array
+{
+    if ($value instanceof \stdClass) {
+        $value = get_object_vars($value);
+    }
+    if (!is_array($value)) {
+        throw new FacultyGradingConfigurationException(
+            'componentWeights with positive lecture and laboratory contributions is required.',
+            422,
+            'GRADING_COMPONENT_WEIGHTS_INVALID'
+        );
+    }
+    $lecture = faculty_grading_percentage_basis_points($value['lecture'] ?? null);
+    $laboratory = faculty_grading_percentage_basis_points($value['laboratory'] ?? null);
+    if ($lecture === null || $laboratory === null || $lecture <= 0 || $laboratory <= 0
+        || $lecture + $laboratory !== 1000000) {
+        throw new FacultyGradingConfigurationException(
+            'Lecture and Laboratory contributions must be positive and total exactly 100%.',
+            422,
+            'GRADING_COMPONENT_WEIGHTS_INVALID'
+        );
+    }
+    return [
+        'lecture' => number_format($lecture / 10000, 4, '.', ''),
+        'laboratory' => number_format($laboratory / 10000, 4, '.', ''),
+        'lectureBasisPoints' => $lecture,
+        'laboratoryBasisPoints' => $laboratory,
+    ];
+}
+
+function faculty_grading_normalize_categories(mixed $value, string $componentMode = 'combined'): array
 {
     if (!is_array($value) || $value === []) {
         throw new FacultyGradingConfigurationException('At least one grading category is required.');
@@ -1217,6 +1283,7 @@ function faculty_grading_normalize_categories(mixed $value): array
     $names = [];
     $sortOrders = [];
     $totalBasisPoints = 0;
+    $componentTotals = ['Lecture' => 0, 'Laboratory' => 0];
 
     foreach (array_values($value) as $index => $rawCategory) {
         if ($rawCategory instanceof \stdClass) {
@@ -1236,25 +1303,67 @@ function faculty_grading_normalize_categories(mixed $value): array
 
         $name = faculty_grading_required_text($rawCategory['name'] ?? '', 'Category name', 255);
         $nameKey = faculty_grading_category_name_key($name);
-        if (isset($names[$nameKey])) {
-            throw new FacultyGradingConfigurationException('Category names must be unique.');
+        $componentValue = $rawCategory['component'] ?? null;
+        if ($componentMode === 'lecture_laboratory') {
+            if (!is_string($componentValue) || !in_array($componentValue, ['Lecture', 'Laboratory'], true)) {
+                throw new FacultyGradingConfigurationException(
+                    'Each grouped category must identify Lecture or Laboratory.',
+                    422,
+                    'GRADING_COMPONENT_CATEGORY_INVALID'
+                );
+            }
+            $component = $componentValue;
+        } else {
+            if ($componentValue !== null && $componentValue !== '' && $componentValue !== 'Combined') {
+                throw new FacultyGradingConfigurationException(
+                    'Combined categories cannot be assigned to Lecture or Laboratory.',
+                    422,
+                    'GRADING_COMPONENT_CATEGORY_INVALID'
+                );
+            }
+            $component = 'Combined';
         }
-        $names[$nameKey] = true;
+        $nameScope = $componentMode === 'lecture_laboratory' ? $component . ':' . $nameKey : $nameKey;
+        if (isset($names[$nameScope])) {
+            throw new FacultyGradingConfigurationException(
+                'Category names must be unique within their component and grading period.',
+                422,
+                $componentMode === 'lecture_laboratory'
+                    ? 'GRADING_COMPONENT_CATEGORY_INVALID'
+                    : 'GRADING_CONFIGURATION_INVALID'
+            );
+        }
+        $names[$nameScope] = true;
 
         $weightBasisPoints = faculty_grading_weight_basis_points($rawCategory['weight'] ?? null);
         if ($weightBasisPoints === null) {
-            throw new FacultyGradingConfigurationException('Category weights must be positive numbers between 0 and 100.');
+            throw new FacultyGradingConfigurationException(
+                'Category weights must be positive numbers between 0 and 100.',
+                422,
+                $componentMode === 'lecture_laboratory'
+                    ? 'GRADING_COMPONENT_CATEGORY_INVALID'
+                    : 'GRADING_CONFIGURATION_INVALID'
+            );
         }
         $totalBasisPoints += $weightBasisPoints;
+        if ($componentMode === 'lecture_laboratory') {
+            $componentTotals[$component] += $weightBasisPoints;
+        }
 
         $sortOrder = $rawCategory['sortOrder'] ?? ($index + 1);
         if (is_string($sortOrder) && ctype_digit($sortOrder)) {
             $sortOrder = (int) $sortOrder;
         }
-        if (!is_int($sortOrder) || $sortOrder <= 0 || isset($sortOrders[$sortOrder])) {
+        if (!is_int($sortOrder) || $sortOrder <= 0) {
             throw new FacultyGradingConfigurationException('Category sortOrder values must be unique positive integers.');
         }
-        $sortOrders[$sortOrder] = true;
+        $sortScope = $componentMode === 'lecture_laboratory'
+            ? $component . ':' . $sortOrder
+            : (string) $sortOrder;
+        if (isset($sortOrders[$sortScope])) {
+            throw new FacultyGradingConfigurationException('Category sortOrder values must be unique positive integers.');
+        }
+        $sortOrders[$sortScope] = true;
 
         $categories[] = [
             'id' => $categoryId,
@@ -1263,10 +1372,22 @@ function faculty_grading_normalize_categories(mixed $value): array
             'weightBasisPoints' => $weightBasisPoints,
             'sortOrder' => $sortOrder,
             'sourceKind' => faculty_grading_source_kind($rawCategory['sourceKind'] ?? null, $name),
+            'sourceKindExplicit' => array_key_exists('sourceKind', $rawCategory)
+                && $rawCategory['sourceKind'] !== null
+                && $rawCategory['sourceKind'] !== '',
+            'component' => $component,
         ];
     }
 
-    if ($totalBasisPoints !== 1000000) {
+    if ($componentMode === 'lecture_laboratory') {
+        if ($componentTotals['Lecture'] !== 1000000 || $componentTotals['Laboratory'] !== 1000000) {
+            throw new FacultyGradingConfigurationException(
+                'Each component category list must total exactly 100%.',
+                422,
+                'GRADING_COMPONENT_CATEGORY_INVALID'
+            );
+        }
+    } elseif ($totalBasisPoints !== 1000000) {
         throw new FacultyGradingConfigurationException('Category weights must total exactly 100%.');
     }
 
@@ -1275,25 +1396,29 @@ function faculty_grading_normalize_categories(mixed $value): array
 
 function faculty_grading_default_period_template(): array
 {
+    $categories = [
+        ['name' => 'Term Exam', 'weight' => 50, 'sortOrder' => 1, 'sourceKind' => 'assessment', 'component' => 'Lecture'],
+        ['name' => 'Quiz', 'weight' => 20, 'sortOrder' => 2, 'sourceKind' => 'assessment', 'component' => 'Lecture'],
+        ['name' => 'Outputs', 'weight' => 20, 'sortOrder' => 3, 'sourceKind' => 'assessment', 'component' => 'Lecture'],
+        ['name' => 'Participation', 'weight' => 10, 'sortOrder' => 4, 'sourceKind' => 'assessment', 'component' => 'Lecture'],
+        ['name' => 'Practical Exam', 'weight' => 50, 'sortOrder' => 1, 'sourceKind' => 'assessment', 'component' => 'Laboratory'],
+        ['name' => 'Laboratory Exercises', 'weight' => 30, 'sortOrder' => 2, 'sourceKind' => 'assessment', 'component' => 'Laboratory'],
+        ['name' => 'Quiz', 'weight' => 10, 'sortOrder' => 3, 'sourceKind' => 'assessment', 'component' => 'Laboratory'],
+        ['name' => 'Recitation', 'weight' => 10, 'sortOrder' => 4, 'sourceKind' => 'assessment', 'component' => 'Laboratory'],
+    ];
     return [
         'schemaMode' => 'periods',
+        'componentMode' => 'lecture_laboratory',
+        'componentWeights' => [
+            'lecture' => 60,
+            'laboratory' => 40,
+        ],
         'termRatio' => [
-            'midterm' => 40,
-            'final' => 60,
+            'midterm' => 30,
+            'final' => 70,
         ],
-        'midtermCategories' => [
-            ['name' => 'Quiz', 'weight' => 25, 'sortOrder' => 1, 'sourceKind' => 'assessment'],
-            ['name' => 'Activity', 'weight' => 25, 'sortOrder' => 2, 'sourceKind' => 'assessment'],
-            ['name' => 'Midterm Exam', 'weight' => 40, 'sortOrder' => 3, 'sourceKind' => 'assessment'],
-            ['name' => 'Attendance', 'weight' => 10, 'sortOrder' => 4, 'sourceKind' => 'attendance'],
-        ],
-        'finalCategories' => [
-            ['name' => 'Quiz', 'weight' => 20, 'sortOrder' => 1, 'sourceKind' => 'assessment'],
-            ['name' => 'Activity', 'weight' => 20, 'sortOrder' => 2, 'sourceKind' => 'assessment'],
-            ['name' => 'Laboratory', 'weight' => 20, 'sortOrder' => 3, 'sourceKind' => 'assessment'],
-            ['name' => 'Final Exam', 'weight' => 30, 'sortOrder' => 4, 'sourceKind' => 'assessment'],
-            ['name' => 'Attendance', 'weight' => 10, 'sortOrder' => 5, 'sourceKind' => 'attendance'],
-        ],
+        'midtermCategories' => $categories,
+        'finalCategories' => $categories,
         'attendanceDateRanges' => [
             'midterm' => ['startDate' => null, 'endDate' => null],
             'final' => ['startDate' => null, 'endDate' => null],
@@ -1339,9 +1464,9 @@ function faculty_grading_percentage_basis_points(mixed $value): ?int
     return $basisPoints >= 0 && $basisPoints <= 1000000 ? $basisPoints : null;
 }
 
-function faculty_grading_normalize_period_categories(mixed $value, string $period): array
+function faculty_grading_normalize_period_categories(mixed $value, string $period, string $componentMode = 'combined'): array
 {
-    $categories = faculty_grading_normalize_categories($value);
+    $categories = faculty_grading_normalize_categories($value, $componentMode);
     foreach ($categories as &$category) {
         $category['gradingPeriod'] = $period;
     }
@@ -1493,6 +1618,7 @@ function faculty_grading_find_config(PDO $pdo, array $offering, bool $forUpdate 
 {
     $sql = "SELECT config_id, faculty_user_id, course_id, semester, school_year, version,
                    schema_mode, term_midterm_weight, term_final_weight,
+                   component_mode, component_lecture_weight, component_laboratory_weight,
                    midterm_start_date, midterm_end_date, final_start_date, final_end_date,
                    created_at, updated_at, updated_by_user_id
               FROM grading_configs
@@ -1539,10 +1665,11 @@ function faculty_grading_offering_for_class(PDO $pdo, int $facultyId, int $csId)
 function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): array
 {
     $schemaMode = (string) ($configRow['schema_mode'] ?? 'overall');
+    $componentMode = (string) ($configRow['component_mode'] ?? 'combined');
     if ($schemaMode === 'periods') {
         $stmt = $pdo->prepare(
             "SELECT gcp.category_id, gcp.name, gcp.weight, gcp.sort_order, gcp.grading_period,
-                    gcp.source_kind,
+                    gcp.source_kind, gcp.component,
                     EXISTS (
                         SELECT 1
                           FROM assessments a
@@ -1569,7 +1696,7 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
     } else {
         $stmt = $pdo->prepare(
             "SELECT gc.category_id, gc.name, gc.weight, gc.sort_order, gc.grading_period,
-                    NULL AS source_kind,
+                    NULL AS source_kind, NULL AS component,
                     EXISTS (
                         SELECT 1
                           FROM assessments a
@@ -1592,15 +1719,21 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
             (int) $configRow['config_id'],
         ]);
     }
-    $categories = array_map(static fn(array $row): array => [
-        'id' => (int) $row['category_id'],
-        'name' => $row['name'],
-        'weight' => (float) $row['weight'],
-        'sortOrder' => (int) $row['sort_order'],
-        'gradingPeriod' => $row['grading_period'] !== null ? (string) $row['grading_period'] : null,
-        'sourceKind' => $row['source_kind'] !== null ? (string) $row['source_kind'] : null,
-        'inUse' => filter_var($row['in_use'], FILTER_VALIDATE_BOOLEAN),
-    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+    $categories = array_map(static function (array $row) use ($componentMode): array {
+        $category = [
+            'id' => (int) $row['category_id'],
+            'name' => $row['name'],
+            'weight' => (float) $row['weight'],
+            'sortOrder' => (int) $row['sort_order'],
+            'gradingPeriod' => $row['grading_period'] !== null ? (string) $row['grading_period'] : null,
+            'sourceKind' => $row['source_kind'] !== null ? (string) $row['source_kind'] : null,
+            'inUse' => filter_var($row['in_use'], FILTER_VALIDATE_BOOLEAN),
+        ];
+        if ($componentMode === 'lecture_laboratory') {
+            $category['component'] = (string) ($row['component'] ?? 'Combined');
+        }
+        return $category;
+    }, $stmt->fetchAll(PDO::FETCH_ASSOC));
 
     $snapshot = [
         'id' => (string) $configRow['config_id'],
@@ -1621,6 +1754,13 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
             'midterm' => (float) $configRow['term_midterm_weight'],
             'final' => (float) $configRow['term_final_weight'],
         ];
+        if ($componentMode === 'lecture_laboratory') {
+            $snapshot['componentMode'] = $componentMode;
+            $snapshot['componentWeights'] = [
+                'lecture' => (float) $configRow['component_lecture_weight'],
+                'laboratory' => (float) $configRow['component_laboratory_weight'],
+            ];
+        }
         $snapshot['attendanceDateRanges'] = faculty_grading_date_ranges_from_row($configRow);
         $snapshot['midtermCategories'] = array_values(array_filter(
             $categories,
@@ -1637,17 +1777,6 @@ function faculty_grading_snapshot(PDO $pdo, array $offering, array $configRow): 
 
 function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, array $categories, array $assignments = []): array
 {
-    $categoryIndexesByName = [];
-    $categoryIndexesByMatchKey = [];
-    foreach ($categories as $index => $category) {
-        $period = $category['gradingPeriod'] ?? null;
-        $prefix = ($period === null ? '*' : $period) . ':';
-        $categoryIndexesByName[$prefix . faculty_grading_category_name_key($category['name'])] = $index;
-        if (($category['sourceKind'] ?? 'assessment') !== 'attendance') {
-            $categoryIndexesByMatchKey[$prefix . faculty_grading_category_match_key($category['name'])] ??= $index;
-        }
-    }
-
     // Lock the offering sections before inspecting assessments. New assessment
     // inserts reference these rows and therefore cannot race the first-save
     // transition into an uncategorized authoritative state.
@@ -1670,7 +1799,7 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
     ]);
 
     $assessmentStmt = $pdo->prepare(
-        "SELECT a.assessment_id, a.title, a.type, a.grading_period
+        "SELECT a.assessment_id, a.title, a.type, a.grading_category_id, a.grading_period
            FROM assessments a
            JOIN class_sections cs ON cs.cs_id = a.cs_id
           WHERE cs.instructor_user_id = ?
@@ -1679,7 +1808,7 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
             AND UPPER(cs.school_year) = ?
             AND cs.status = 'Active'
             AND a.status <> 'Archived'
-            AND a.grading_category_id IS NULL
+            AND (a.grading_category_id IS NULL OR a.grading_period IS NULL)
           ORDER BY a.assessment_id
           FOR UPDATE OF a"
     );
@@ -1696,36 +1825,98 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
         $assessmentId = (int) $assessment['assessment_id'];
         $legacyType = (string) ($assessment['type'] ?? '');
         $legacyPeriod = (string) ($assessment['grading_period'] ?? '');
-        if (array_key_exists($assessmentId, $assignments)) {
-            // Faculty picked the category for this assessment by hand.
-            $chosen = faculty_grading_category_name_key($assignments[$assessmentId]);
-            $categoryIndex = $categoryIndexesByName[$legacyPeriod . ':' . $chosen]
-                ?? $categoryIndexesByName['*:' . $chosen]
-                ?? null;
-            if ($categoryIndex === null) {
-                throw new FacultyGradingConfigurationException(
-                    'The category chosen for an existing assessment is not in this configuration for its grading period.',
-                    422,
-                    'GRADING_ASSESSMENT_ASSIGNMENT_INVALID',
-                    ['assessmentId' => $assessmentId]
-                );
-            }
-        } else {
-            $categoryIndex = $categoryIndexesByName[$legacyPeriod . ':' . faculty_grading_category_name_key($legacyType)]
-                ?? $categoryIndexesByName['*:' . faculty_grading_category_name_key($legacyType)]
-                ?? $categoryIndexesByMatchKey[$legacyPeriod . ':' . faculty_grading_category_match_key($legacyType)]
-                ?? $categoryIndexesByMatchKey['*:' . faculty_grading_category_match_key($legacyType)]
-                ?? null;
+        $linkedCategoryId = $assessment['grading_category_id'] !== null
+            ? (int) $assessment['grading_category_id']
+            : null;
+        $assignment = $assignments[$assessmentId] ?? null;
+        $explicit = $assignment !== null;
+        if ($linkedCategoryId !== null && $legacyPeriod === '' && !$explicit) {
+            $unmatched[] = [
+                'assessmentId' => $assessmentId,
+                'title' => (string) $assessment['title'],
+                'legacyType' => $assessment['type'],
+                'gradingPeriod' => null,
+                'mappingReason' => 'linked_category_period_missing',
+            ];
+            continue;
         }
-        if ($categoryIndex === null) {
+        if ($linkedCategoryId !== null
+            && ($assignment['categoryId'] ?? null) !== null
+            && (int) $assignment['categoryId'] !== $linkedCategoryId) {
+            throw new FacultyGradingConfigurationException(
+                'An existing assessment category link cannot be changed during period conversion.',
+                422,
+                'GRADING_ASSESSMENT_ASSIGNMENT_INVALID',
+                ['assessmentId' => $assessmentId]
+            );
+        }
+        $chosenName = $explicit
+            ? (string) ($assignment['categoryName'] ?? '')
+            : $legacyType;
+        $candidates = [];
+        foreach ($categories as $index => $category) {
+            if ($linkedCategoryId !== null && (int) ($category['id'] ?? 0) !== $linkedCategoryId) {
+                continue;
+            }
+            $categoryPeriod = (string) ($category['gradingPeriod'] ?? '');
+            if ($categoryPeriod !== '' && $legacyPeriod !== '' && $categoryPeriod !== $legacyPeriod) {
+                continue;
+            }
+            if ($explicit && ($assignment['gradingPeriod'] ?? null) !== null
+                && (string) $assignment['gradingPeriod'] !== $categoryPeriod) {
+                continue;
+            }
+            if ($explicit && ($assignment['component'] ?? null) !== null
+                && (string) $assignment['component'] !== (string) ($category['component'] ?? 'Combined')) {
+                continue;
+            }
+            if ($explicit && ($assignment['categoryId'] ?? null) !== null) {
+                if ((int) ($category['id'] ?? 0) !== (int) $assignment['categoryId']) {
+                    continue;
+                }
+            } elseif (faculty_grading_category_name_key($category['name']) !== faculty_grading_category_name_key($chosenName)) {
+                if ($explicit
+                    || ($category['sourceKind'] ?? 'assessment') === 'attendance'
+                    || faculty_grading_category_match_key($category['name']) !== faculty_grading_category_match_key($chosenName)) {
+                    continue;
+                }
+            }
+            $candidates[] = (int) $index;
+        }
+        if (count($candidates) > 1) {
             $unmatched[] = [
                 'assessmentId' => $assessmentId,
                 'title' => (string) $assessment['title'],
                 'legacyType' => $assessment['type'],
                 'gradingPeriod' => $legacyPeriod !== '' ? $legacyPeriod : null,
+                'mappingReason' => 'ambiguous_component_mapping',
+                'candidates' => array_map(static fn(int $index): array => [
+                    'categoryId' => $categories[$index]['id'] ?? null,
+                    'categoryName' => $categories[$index]['name'],
+                    'component' => $categories[$index]['component'] ?? 'Combined',
+                ], $candidates),
             ];
             continue;
         }
+        if ($candidates === []) {
+            if ($explicit) {
+                throw new FacultyGradingConfigurationException(
+                    'The category chosen for an existing assessment is not in this configuration for its grading period and component.',
+                    422,
+                    'GRADING_ASSESSMENT_ASSIGNMENT_INVALID',
+                    ['assessmentId' => $assessmentId]
+                );
+            }
+            $unmatched[] = [
+                'assessmentId' => $assessmentId,
+                'title' => (string) $assessment['title'],
+                'legacyType' => $assessment['type'],
+                'gradingPeriod' => $legacyPeriod !== '' ? $legacyPeriod : null,
+                'mappingReason' => 'no_matching_category',
+            ];
+            continue;
+        }
+        $categoryIndex = $candidates[0];
         if (($categories[$categoryIndex]['sourceKind'] ?? 'assessment') === 'attendance') {
             throw new FacultyGradingConfigurationException(
                 'An existing assessment cannot be assigned to the authoritative Attendance category.',
@@ -1736,15 +1927,22 @@ function faculty_grading_legacy_assessment_mappings(PDO $pdo, array $offering, a
         }
         $mappings[] = [
             'assessmentId' => (int) $assessment['assessment_id'],
+            'existingCategoryId' => $linkedCategoryId,
             'categoryIndex' => $categoryIndex,
+            'gradingPeriod' => $categories[$categoryIndex]['gradingPeriod'] ?? null,
         ];
     }
 
     if ($unmatched !== []) {
+        $groupedMapping = array_filter(
+            $unmatched,
+            static fn(array $item): bool => ($item['mappingReason'] ?? '') === 'ambiguous_component_mapping'
+        ) !== [] || array_filter($categories, static fn(array $category): bool => isset($category['component'])
+            && $category['component'] !== 'Combined') !== [];
         throw new FacultyGradingConfigurationException(
             'Existing assessments require matching grading categories before this configuration can be activated.',
             422,
-            'GRADING_CATEGORY_ASSIGNMENT_REQUIRED',
+            $groupedMapping ? 'GRADING_COMPONENT_MAPPING_REQUIRED' : 'GRADING_CATEGORY_ASSIGNMENT_REQUIRED',
             ['assessments' => $unmatched]
         );
     }
@@ -1760,9 +1958,10 @@ function faculty_grading_apply_legacy_assessment_mappings(PDO $pdo, array $mappi
 
     $update = $pdo->prepare(
         'UPDATE assessments
-            SET grading_category_id = ?
+            SET grading_category_id = COALESCE(grading_category_id, ?),
+                grading_period = COALESCE(?, grading_period)
           WHERE assessment_id = ?
-            AND grading_category_id IS NULL'
+            AND grading_category_id IS NOT DISTINCT FROM ?'
     );
     foreach ($mappings as $mapping) {
         $categoryId = $categoryIds[$mapping['categoryIndex']] ?? null;
@@ -1771,7 +1970,20 @@ function faculty_grading_apply_legacy_assessment_mappings(PDO $pdo, array $mappi
                 'Existing assessments could not be linked to the new grading categories.'
             );
         }
-        $update->execute([$categoryId, $mapping['assessmentId']]);
+        if (($mapping['existingCategoryId'] ?? null) !== null && $categoryId !== (int) $mapping['existingCategoryId']) {
+            throw new FacultyGradingConfigurationException(
+                'An existing assessment category link cannot be changed during period conversion.',
+                422,
+                'GRADING_ASSESSMENT_ASSIGNMENT_INVALID',
+                ['assessmentId' => (int) $mapping['assessmentId']]
+            );
+        }
+        $update->execute([
+            $categoryId,
+            $mapping['gradingPeriod'] ?? null,
+            $mapping['assessmentId'],
+            $mapping['existingCategoryId'] ?? null,
+        ]);
         if ($update->rowCount() !== 1) {
             throw new FacultyGradingConfigurationException(
                 'Existing assessments changed while the grading configuration was being created.'
@@ -1790,6 +2002,11 @@ function faculty_grading_audit_state(array $snapshot): array
     if (isset($auditState['termRatio']) && is_array($auditState['termRatio'])) {
         foreach ($auditState['termRatio'] as $key => $value) {
             $auditState['termRatio'][$key] = number_format((float) $value, 4, '.', '');
+        }
+    }
+    if (isset($auditState['componentWeights']) && is_array($auditState['componentWeights'])) {
+        foreach ($auditState['componentWeights'] as $key => $value) {
+            $auditState['componentWeights'][$key] = number_format((float) $value, 4, '.', '');
         }
     }
     foreach (['midtermCategories', 'finalCategories'] as $periodKey) {
@@ -1857,11 +2074,29 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
         if (!in_array($schemaMode, ['overall', 'periods'], true)) {
             throw new FacultyGradingConfigurationException('schemaMode must be overall or periods.');
         }
+        $componentMode = faculty_grading_normalize_component_mode($data['componentMode'] ?? null);
+        if ($schemaMode === 'periods' && $componentMode !== 'lecture_laboratory') {
+            throw new FacultyGradingConfigurationException(
+                'Period grading requires the separate Lecture/Laboratory structure.',
+                422,
+                'GRADING_COMPONENT_MODE_REQUIRED'
+            );
+        }
+        if ($componentMode === 'lecture_laboratory' && $schemaMode !== 'periods') {
+            throw new FacultyGradingConfigurationException(
+                'Lecture/Laboratory grading requires period categories.',
+                422,
+                'GRADING_COMPONENT_CATEGORY_INVALID'
+            );
+        }
+        $componentWeights = $componentMode === 'lecture_laboratory'
+            ? faculty_grading_normalize_component_weights($data['componentWeights'] ?? null)
+            : null;
         $termRatio = null;
         if ($schemaMode === 'periods') {
             $termRatio = faculty_grading_normalize_term_ratio($data['termRatio'] ?? null);
-            $midtermCategories = faculty_grading_normalize_period_categories($data['midtermCategories'] ?? null, 'Midterm');
-            $finalCategories = faculty_grading_normalize_period_categories($data['finalCategories'] ?? null, 'Final');
+            $midtermCategories = faculty_grading_normalize_period_categories($data['midtermCategories'] ?? null, 'Midterm', $componentMode);
+            $finalCategories = faculty_grading_normalize_period_categories($data['finalCategories'] ?? null, 'Final', $componentMode);
             $categories = array_merge($midtermCategories, $finalCategories);
         } else {
             $categories = faculty_grading_normalize_categories($data['categories'] ?? null);
@@ -1892,6 +2127,7 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                 );
             }
             $existingSchemaMode = (string) ($existing['schema_mode'] ?? 'overall');
+            $existingComponentMode = (string) ($existing['component_mode'] ?? 'combined');
             if ($existingSchemaMode !== $schemaMode) {
                 if ($existingSchemaMode === 'overall' && $schemaMode === 'periods') {
                     if (($data['convertFromOverall'] ?? false) !== true) {
@@ -1906,6 +2142,29 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                         'An existing period configuration cannot be changed back to overall categories.',
                         409,
                         'GRADING_SCHEMA_MODE_CONFLICT'
+                    );
+                }
+            }
+            if ($existingComponentMode !== $componentMode) {
+                if ($existingComponentMode === 'combined' && $componentMode === 'lecture_laboratory') {
+                    if (($data['convertToLectureLaboratory'] ?? false) !== true) {
+                        throw new FacultyGradingConfigurationException(
+                            'Converting combined period categories to Lecture/Laboratory grading requires explicit confirmation.',
+                            409,
+                            'GRADING_COMPONENT_CONVERSION_REQUIRED'
+                        );
+                    }
+                } elseif ($existingComponentMode === 'lecture_laboratory' && $componentMode === 'combined') {
+                    throw new FacultyGradingConfigurationException(
+                        'Period grading requires the separate Lecture/Laboratory structure.',
+                        422,
+                        'GRADING_COMPONENT_MODE_REQUIRED'
+                    );
+                } else {
+                    throw new FacultyGradingConfigurationException(
+                        'Lecture/Laboratory grading cannot be changed back to combined categories.',
+                        409,
+                        'GRADING_COMPONENT_MODE_CONFLICT'
                     );
                 }
             }
@@ -1935,12 +2194,15 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
             }
         }
 
-        $legacyAssessmentMappings = $existing === null
+        $assessmentAssignments = faculty_grading_assessment_assignments($data['assessmentAssignments'] ?? null);
+        $legacyAssessmentMappings = ($existing === null
+            || $componentMode === 'lecture_laboratory'
+            || (($existing['component_mode'] ?? 'combined') === 'lecture_laboratory' && $componentMode === 'combined'))
             ? faculty_grading_legacy_assessment_mappings(
                 $pdo,
                 $offering,
                 $categories,
-                faculty_grading_assessment_assignments($data['assessmentAssignments'] ?? null)
+                $assessmentAssignments
             )
             : [];
 
@@ -1949,12 +2211,14 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                 "INSERT INTO grading_configs
                     (faculty_user_id, course_id, semester, school_year, version,
                      schema_mode, term_midterm_weight, term_final_weight,
+                     component_mode, component_lecture_weight, component_laboratory_weight,
                      midterm_start_date, midterm_end_date, final_start_date, final_end_date,
                      updated_by_user_id)
-                 VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+                 VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT (faculty_user_id, course_id, semester, school_year) DO NOTHING
                  RETURNING config_id, faculty_user_id, course_id, semester, school_year,
                            version, schema_mode, term_midterm_weight, term_final_weight,
+                           component_mode, component_lecture_weight, component_laboratory_weight,
                            midterm_start_date, midterm_end_date, final_start_date, final_end_date,
                            created_at, updated_at, updated_by_user_id"
             );
@@ -1966,6 +2230,9 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                 $schemaMode,
                 $termRatio['midterm'] ?? null,
                 $termRatio['final'] ?? null,
+                $componentMode,
+                $componentWeights['lecture'] ?? null,
+                $componentWeights['laboratory'] ?? null,
                 $dateRanges['midterm']['startDate'] ?? null,
                 $dateRanges['midterm']['endDate'] ?? null,
                 $dateRanges['final']['startDate'] ?? null,
@@ -2129,7 +2396,7 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
 
         if ($schemaMode === 'periods') {
             $existingMembershipStmt = $pdo->prepare(
-                'SELECT gcp.category_period_id, gcp.category_id, gcp.grading_period, gcp.source_kind
+                'SELECT gcp.category_period_id, gcp.category_id, gcp.grading_period, gcp.source_kind, gcp.component
                    FROM grading_category_period_memberships gcp
                    JOIN grading_categories gc ON gc.category_id = gcp.category_id
                   WHERE gc.config_id = ?'
@@ -2142,12 +2409,18 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     'categoryId' => (int) $row['category_id'],
                     'gradingPeriod' => (string) $row['grading_period'],
                     'sourceKind' => (string) $row['source_kind'],
+                    'component' => (string) ($row['component'] ?? 'Combined'),
                 ];
             }
 
             $incomingMemberships = [];
+            $sourceKindChanges = [];
             $newCategoryIndex = 0;
             $assessmentMembershipKeys = [];
+            $mappedLegacyAssessmentIds = array_fill_keys(
+                array_map(static fn(array $mapping): int => (int) $mapping['assessmentId'], $legacyAssessmentMappings),
+                true
+            );
             if (!$isCreate && (string) ($existing['schema_mode'] ?? 'overall') === 'overall') {
                 $assessmentMembershipStmt = $pdo->prepare(
                     "SELECT DISTINCT a.grading_category_id, a.grading_period
@@ -2178,8 +2451,16 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     : (int) $insertedCategoryIds[$newCategoryIndex++];
                 $membershipKey = $categoryId . ':' . $category['gradingPeriod'];
                 $existingMembership = $existingMemberships[$membershipKey] ?? null;
-                $sourceKind = $existingMembership['sourceKind']
-                    ?? faculty_grading_source_kind($category['sourceKind'] ?? null, $category['name']);
+                $requestedSourceKind = faculty_grading_source_kind($category['sourceKind'] ?? null, $category['name']);
+                $sourceKind = $existingMembership !== null && !($category['sourceKindExplicit'] ?? false)
+                    ? $existingMembership['sourceKind']
+                    : $requestedSourceKind;
+                if ($existingMembership !== null && $sourceKind !== $existingMembership['sourceKind']) {
+                    $sourceKindChanges[] = [
+                        'categoryId' => $categoryId,
+                        'gradingPeriod' => $category['gradingPeriod'],
+                    ];
+                }
                 if ($existingMembership === null
                     && $sourceKind === 'attendance'
                     && isset($assessmentMembershipKeys[$membershipKey])) {
@@ -2195,6 +2476,7 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     'weight' => $category['weight'],
                     'sortOrder' => $category['sortOrder'],
                     'sourceKind' => $sourceKind,
+                    'component' => $category['component'] ?? 'Combined',
                 ];
             }
 
@@ -2247,6 +2529,46 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                 }
             }
 
+            if ($sourceKindChanges !== []) {
+                $assessmentMembershipChangeInUse = $pdo->prepare(
+                    "SELECT 1
+                       FROM assessments a
+                       JOIN class_sections cs ON cs.cs_id = a.cs_id
+                      WHERE a.grading_category_id = ?
+                        AND a.grading_period = ?
+                        AND cs.instructor_user_id = ?
+                        AND cs.course_id = ?
+                        AND UPPER(cs.semester) = ?
+                        AND UPPER(cs.school_year) = ?
+                      LIMIT 1"
+                );
+                foreach ($sourceKindChanges as $sourceKindChange) {
+                    // The Attendance-source validation above retains its
+                    // established error for assessment-backed memberships.
+                    $membership = $incomingMemberships[
+                        $sourceKindChange['categoryId'] . ':' . $sourceKindChange['gradingPeriod']
+                    ];
+                    if ($membership['sourceKind'] === 'attendance') {
+                        continue;
+                    }
+                    $assessmentMembershipChangeInUse->execute([
+                        $sourceKindChange['categoryId'],
+                        $sourceKindChange['gradingPeriod'],
+                        $offering['facultyUserId'],
+                        $offering['courseId'],
+                        $offering['semester'],
+                        $offering['schoolYear'],
+                    ]);
+                    if ($assessmentMembershipChangeInUse->fetchColumn()) {
+                        throw new FacultyGradingConfigurationException(
+                            'A category source cannot be changed while assessments use that category and period.',
+                            409,
+                            'GRADING_CATEGORY_SOURCE_IN_USE'
+                        );
+                    }
+                }
+            }
+
             if (!$isCreate && (string) ($existing['schema_mode'] ?? 'overall') === 'overall') {
                 $assessmentRefsStmt = $pdo->prepare(
                     "SELECT a.assessment_id, a.grading_category_id, a.grading_period, a.status
@@ -2266,6 +2588,9 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                 ]);
                 $missingAssessmentRefs = [];
                 foreach ($assessmentRefsStmt->fetchAll(PDO::FETCH_ASSOC) as $assessmentRef) {
+                    if (isset($mappedLegacyAssessmentIds[(int) $assessmentRef['assessment_id']])) {
+                        continue;
+                    }
                     $categoryId = $assessmentRef['grading_category_id'] !== null
                         ? (int) $assessmentRef['grading_category_id']
                         : null;
@@ -2289,6 +2614,29 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     }
                 }
                 if ($missingAssessmentRefs !== []) {
+                    if ($componentMode === 'lecture_laboratory') {
+                        throw new FacultyGradingConfigurationException(
+                            'Every existing assessment must resolve to one Lecture or Laboratory category for its grading period.',
+                            422,
+                            'GRADING_COMPONENT_MAPPING_REQUIRED',
+                            ['assessments' => array_map(static fn(array $reference): array => [
+                                'assessmentId' => $reference['assessmentId'],
+                                'title' => null,
+                                'legacyType' => null,
+                                'gradingPeriod' => $reference['gradingPeriod'] !== '' ? $reference['gradingPeriod'] : null,
+                                'categoryId' => $reference['categoryId'],
+                                'mappingReason' => 'category_component_missing',
+                                'candidates' => array_values(array_map(static fn(array $membership): array => [
+                                    'categoryId' => $membership['categoryId'],
+                                    'categoryName' => $membership['name'],
+                                    'component' => $membership['component'],
+                                ], array_filter($incomingMemberships, static fn(array $membership): bool =>
+                                    $membership['gradingPeriod'] === $reference['gradingPeriod']
+                                    && ($reference['categoryId'] === null || $membership['categoryId'] === $reference['categoryId'])
+                                ))),
+                            ], $missingAssessmentRefs)]
+                        );
+                    }
                     throw new FacultyGradingConfigurationException(
                         'Every existing assessment must have a category mapping for its grading period during conversion.',
                         422,
@@ -2356,13 +2704,14 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
             // relation synchronized without a circular trigger path.
             $upsertMembership = $pdo->prepare(
                 "INSERT INTO grading_category_period_memberships
-                    (category_id, grading_period, name, weight, sort_order, source_kind)
-                 VALUES (?, ?, ?, ?, ?, ?)
+                    (category_id, grading_period, name, weight, sort_order, source_kind, component)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT (category_id, grading_period) DO UPDATE
                  SET name = EXCLUDED.name,
                      weight = EXCLUDED.weight,
                      sort_order = EXCLUDED.sort_order,
                      source_kind = EXCLUDED.source_kind,
+                     component = EXCLUDED.component,
                      updated_at = CURRENT_TIMESTAMP(6)"
             );
             foreach ($incomingMemberships as $membership) {
@@ -2373,18 +2722,45 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
                     $membership['weight'],
                     $membership['sortOrder'],
                     $membership['sourceKind'],
+                    $membership['component'],
                 ]);
             }
         }
 
-        if ($isCreate) {
-            faculty_grading_apply_legacy_assessment_mappings($pdo, $legacyAssessmentMappings, $categoryIds);
+        if ($legacyAssessmentMappings !== []) {
+            $newCategoryIdByIdentity = [];
+            foreach ($categoriesForSave as $saveIndex => $category) {
+                if ($category['id'] !== null) {
+                    continue;
+                }
+                $identity = implode(':', [
+                    (string) ($category['gradingPeriod'] ?? ''),
+                    (string) ($category['component'] ?? 'Combined'),
+                    faculty_grading_category_name_key($category['name']),
+                ]);
+                $newCategoryIdByIdentity[$identity] = (int) $categoryIds[$saveIndex];
+            }
+            $categoryIdsByInputIndex = [];
+            foreach ($categories as $index => $category) {
+                if ($category['id'] !== null) {
+                    $categoryIdsByInputIndex[$index] = (int) $category['id'];
+                    continue;
+                }
+                $identity = implode(':', [
+                    (string) ($category['gradingPeriod'] ?? ''),
+                    (string) ($category['component'] ?? 'Combined'),
+                    faculty_grading_category_name_key($category['name']),
+                ]);
+                $categoryIdsByInputIndex[$index] = $newCategoryIdByIdentity[$identity] ?? null;
+            }
+            faculty_grading_apply_legacy_assessment_mappings($pdo, $legacyAssessmentMappings, $categoryIdsByInputIndex);
         }
 
         $newVersion = $isCreate ? 1 : ((int) $existing['version'] + 1);
         $updateConfig = $pdo->prepare(
             "UPDATE grading_configs
                 SET version = ?, schema_mode = ?, term_midterm_weight = ?, term_final_weight = ?,
+                    component_mode = ?, component_lecture_weight = ?, component_laboratory_weight = ?,
                     midterm_start_date = ?, midterm_end_date = ?, final_start_date = ?, final_end_date = ?,
                     updated_by_user_id = ?, updated_at = CURRENT_TIMESTAMP(6)
               WHERE config_id = ? AND version = ?"
@@ -2395,6 +2771,9 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
             $schemaMode,
             $termRatio['midterm'] ?? null,
             $termRatio['final'] ?? null,
+            $componentMode,
+            $componentWeights['lecture'] ?? null,
+            $componentWeights['laboratory'] ?? null,
             $dateRanges['midterm']['startDate'] ?? null,
             $dateRanges['midterm']['endDate'] ?? null,
             $dateRanges['final']['startDate'] ?? null,
@@ -2600,7 +2979,8 @@ function faculty_period_attendance_summary(
     int $csId,
     int $enrollmentId,
     ?string $startDate,
-    ?string $endDate
+    ?string $endDate,
+    ?array $preloadedRows = null
 ): array {
     if ($startDate === null || $endDate === null) {
         return [
@@ -2611,47 +2991,53 @@ function faculty_period_attendance_summary(
         ];
     }
 
-    $recordStmt = $pdo->prepare(
-        "SELECT COALESCE(r.attendance_session_id, 0) AS session_id,
-                r.session_date, r.session_code, r.status AS attendance_status,
-                COALESCE(s.status, 'recorded') AS session_status
-           FROM attendance_records r
-           JOIN enrollments e ON e.enrollment_id = r.enrollment_id
-           LEFT JOIN attendance_sessions s
-             ON s.session_id = r.attendance_session_id
-          WHERE r.enrollment_id = ?
-            AND e.cs_id = ?
-            AND r.session_date BETWEEN ? AND ?
-            AND (s.session_id IS NULL OR s.status <> 'revoked')
-          ORDER BY r.session_date, r.record_id"
-    );
-    $recordStmt->execute([$enrollmentId, $csId, $startDate, $endDate]);
-    $rows = $recordStmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($preloadedRows !== null) {
+        $rows = array_values(array_filter($preloadedRows, static fn(array $row): bool =>
+            $row['session_date'] >= $startDate && $row['session_date'] <= $endDate
+        ));
+    } else {
+        $recordStmt = $pdo->prepare(
+            "SELECT COALESCE(r.attendance_session_id, 0) AS session_id,
+                    r.session_date, r.session_code, r.status AS attendance_status,
+                    COALESCE(s.status, 'recorded') AS session_status
+               FROM attendance_records r
+               JOIN enrollments e ON e.enrollment_id = r.enrollment_id
+               LEFT JOIN attendance_sessions s
+                 ON s.session_id = r.attendance_session_id
+              WHERE r.enrollment_id = ?
+                AND e.cs_id = ?
+                AND r.session_date BETWEEN ? AND ?
+                AND (s.session_id IS NULL OR s.status <> 'revoked')
+              ORDER BY r.session_date, r.record_id"
+        );
+        $recordStmt->execute([$enrollmentId, $csId, $startDate, $endDate]);
+        $rows = $recordStmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // A created/ended session with no attendance record is an
-    // unresolved expected result. Include it alongside direct/manual records.
-    $sessionStmt = $pdo->prepare(
-        "SELECT s.session_id, s.session_date, s.session_code,
-                s.status AS session_status, NULL AS attendance_status
-           FROM attendance_sessions s
-          WHERE s.cs_id = ?
-            AND s.session_date BETWEEN ? AND ?
-            AND s.status <> 'revoked'
-            AND NOT EXISTS (
-                SELECT 1
-                  FROM attendance_records r
-                 WHERE r.enrollment_id = ?
-                   AND (
-                       r.attendance_session_id = s.session_id
-                       OR (r.attendance_session_id IS NULL
-                           AND r.session_date = s.session_date
-                           AND COALESCE(r.session_code, '') = COALESCE(s.session_code, ''))
-                   )
-            )
-          ORDER BY s.session_date, s.session_id"
-    );
-    $sessionStmt->execute([$csId, $startDate, $endDate, $enrollmentId]);
-    $rows = array_merge($rows, $sessionStmt->fetchAll(PDO::FETCH_ASSOC));
+        // A created/ended session with no attendance record is an
+        // unresolved expected result. Include it alongside direct/manual records.
+        $sessionStmt = $pdo->prepare(
+            "SELECT s.session_id, s.session_date, s.session_code,
+                    s.status AS session_status, NULL AS attendance_status
+               FROM attendance_sessions s
+              WHERE s.cs_id = ?
+                AND s.session_date BETWEEN ? AND ?
+                AND s.status <> 'revoked'
+                AND NOT EXISTS (
+                    SELECT 1
+                      FROM attendance_records r
+                     WHERE r.enrollment_id = ?
+                       AND (
+                           r.attendance_session_id = s.session_id
+                           OR (r.attendance_session_id IS NULL
+                               AND r.session_date = s.session_date
+                               AND COALESCE(r.session_code, '') = COALESCE(s.session_code, ''))
+                       )
+                )
+              ORDER BY s.session_date, s.session_id"
+        );
+        $sessionStmt->execute([$csId, $startDate, $endDate, $enrollmentId]);
+        $rows = array_merge($rows, $sessionStmt->fetchAll(PDO::FETCH_ASSOC));
+    }
     usort($rows, static fn(array $left, array $right): int => strcmp(
         (string) $left['session_date'] . ':' . (string) $left['session_id'],
         (string) $right['session_date'] . ':' . (string) $right['session_id']
@@ -2710,21 +3096,27 @@ function faculty_period_attendance_summary(
     ];
 }
 
-function faculty_compute_period_result(PDO $pdo, array $group, string $period): array
+function faculty_compute_period_result(PDO $pdo, array $group, string $period, ?array $memberships = null, ?array $attendanceSummary = null): array
 {
-    $membershipStmt = $pdo->prepare(
-        'SELECT gcp.category_id, gcp.name, gcp.weight, gcp.sort_order, gcp.source_kind
+    if ($memberships === null) {
+        $membershipStmt = $pdo->prepare(
+            'SELECT gcp.category_id, gcp.name, gcp.weight, gcp.sort_order, gcp.source_kind, gcp.component
            FROM grading_category_period_memberships gcp
            JOIN grading_categories gc ON gc.category_id = gcp.category_id
           WHERE gc.config_id = ? AND gcp.grading_period = ?
           ORDER BY gcp.sort_order, gcp.category_period_id'
-    );
-    $membershipStmt->execute([(int) $group['configId'], $period]);
-    $memberships = $membershipStmt->fetchAll(PDO::FETCH_ASSOC);
+        );
+        $membershipStmt->execute([(int) $group['configId'], $period]);
+        $memberships = $membershipStmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+    if (($group['componentMode'] ?? 'combined') === 'lecture_laboratory') {
+        return faculty_compute_grouped_period_result($pdo, $group, $period, $memberships, $attendanceSummary);
+    }
     $dateKey = strtolower($period);
     $range = $group['attendanceDateRanges'][$dateKey] ?? ['startDate' => null, 'endDate' => null];
     $categories = [];
     $incomplete = [];
+    $unroundedContributions = [];
 
     $attendanceMemberships = array_values(array_filter(
         $memberships,
@@ -2754,7 +3146,7 @@ function faculty_compute_period_result(PDO $pdo, array $group, string $period): 
         $sourceKind = (string) ($membership['source_kind'] ?? 'assessment');
         $weight = (float) $membership['weight'];
         if ($sourceKind === 'attendance') {
-            $attendance = faculty_period_attendance_summary(
+            $attendance = $attendanceSummary ?? faculty_period_attendance_summary(
                 $pdo,
                 (int) $group['csId'],
                 (int) $group['enrollmentId'],
@@ -2773,6 +3165,7 @@ function faculty_compute_period_result(PDO $pdo, array $group, string $period): 
             }
             $ratio = ((float) $attendance['percentage']) / 100;
             $contribution = $ratio * $weight;
+            $unroundedContributions[] = $contribution;
             $categories[] = [
                 'categoryId' => $categoryId,
                 'name' => (string) $membership['name'],
@@ -2848,6 +3241,7 @@ function faculty_compute_period_result(PDO $pdo, array $group, string $period): 
         }
         $ratio = $earnedPoints / $possiblePoints;
         $contribution = $ratio * $weight;
+        $unroundedContributions[] = $contribution;
         $categories[] = [
             'categoryId' => $categoryId,
             'name' => (string) $membership['name'],
@@ -2872,6 +3266,7 @@ function faculty_compute_period_result(PDO $pdo, array $group, string $period): 
         return [
             'status' => 'incomplete',
             'percentage' => null,
+            'unroundedPercentage' => null,
             'breakdown' => $periodBreakdown,
         ];
     }
@@ -2880,6 +3275,117 @@ function faculty_compute_period_result(PDO $pdo, array $group, string $period): 
     return [
         'status' => 'computed',
         'percentage' => $percentage,
+        'unroundedPercentage' => array_sum($unroundedContributions),
+        'breakdown' => $periodBreakdown,
+    ];
+}
+
+/** Compute a period from its independently normalized Lecture and Laboratory lists. */
+function faculty_compute_grouped_period_result(
+    PDO $pdo,
+    array $group,
+    string $period,
+    array $memberships,
+    ?array $attendanceSummary = null
+): array {
+    $componentWeights = $group['componentWeights'] ?? [];
+    $weights = [
+        'lecture' => (float) ($componentWeights['lecture'] ?? 0),
+        'laboratory' => (float) ($componentWeights['laboratory'] ?? 0),
+    ];
+    $attendanceMemberships = array_values(array_filter(
+        $memberships,
+        static fn(array $membership): bool => (string) ($membership['source_kind'] ?? 'assessment') === 'attendance'
+    ));
+    $duplicateAttendance = count($attendanceMemberships) > 1;
+    $componentResults = [];
+    $periodCategories = [];
+    $periodIncomplete = [];
+    $unroundedPercentage = 0.0;
+
+    foreach (['lecture' => 'Lecture', 'laboratory' => 'Laboratory'] as $key => $component) {
+        $componentMemberships = array_values(array_filter(
+            $memberships,
+            static fn(array $membership): bool => (string) ($membership['component'] ?? 'Combined') === $component
+        ));
+        if ($componentMemberships === []) {
+            $componentResult = [
+                'status' => 'incomplete',
+                'percentage' => null,
+                'unroundedPercentage' => null,
+                'breakdown' => ['categories' => [], 'incomplete' => [[
+                    'reason' => 'missing_component_categories',
+                    'component' => $component,
+                ]]],
+            ];
+        } else {
+            $componentGroup = $group;
+            $componentGroup['componentMode'] = 'combined';
+            $componentResult = faculty_compute_period_result(
+                $pdo,
+                $componentGroup,
+                $period,
+                $componentMemberships,
+                $attendanceSummary
+            );
+        }
+
+        $componentCategories = array_map(static function (array $category) use ($component): array {
+            $category['component'] = $component;
+            return $category;
+        }, $componentResult['breakdown']['categories'] ?? []);
+        $componentIncomplete = array_map(static function (array $reason) use ($component): array {
+            $reason['component'] = $component;
+            return $reason;
+        }, $componentResult['breakdown']['incomplete'] ?? []);
+        $componentStatus = $componentResult['status'];
+        $componentPercentage = $componentStatus === 'computed'
+            ? round((float) $componentResult['unroundedPercentage'], 2)
+            : null;
+        if ($duplicateAttendance) {
+            $componentStatus = 'incomplete';
+            $componentPercentage = null;
+            $componentIncomplete[] = [
+                'name' => 'Attendance',
+                'sourceKind' => 'attendance',
+                'reason' => 'duplicate_attendance_sources',
+                'component' => $component,
+                'categoryIds' => array_map(
+                    static fn(array $membership): int => (int) $membership['category_id'],
+                    $attendanceMemberships
+                ),
+            ];
+        }
+        $componentResults[$key] = [
+            'component' => $component,
+            'status' => $componentStatus,
+            'percentage' => $componentPercentage,
+            'categories' => $componentCategories,
+            'incomplete' => $componentIncomplete,
+        ];
+        $periodCategories = array_merge($periodCategories, $componentCategories);
+        $periodIncomplete = array_merge($periodIncomplete, $componentIncomplete);
+        if ($componentStatus === 'computed') {
+            $unroundedPercentage += (float) $componentResult['unroundedPercentage'] * $weights[$key] / 100;
+        }
+    }
+
+    $range = $group['attendanceDateRanges'][strtolower($period)] ?? ['startDate' => null, 'endDate' => null];
+    $status = $periodIncomplete === [] ? 'computed' : 'incomplete';
+    $periodBreakdown = [
+        'period' => $period,
+        'status' => $status,
+        'percentage' => $status === 'computed' ? round($unroundedPercentage, 2) : null,
+        'categories' => $periodCategories,
+        'incomplete' => $periodIncomplete,
+        'attendanceDateRange' => $range,
+        'components' => $componentResults,
+        'componentWeights' => $weights,
+    ];
+    return [
+        'status' => $status,
+        'percentage' => $periodBreakdown['percentage'],
+        'unroundedPercentage' => $status === 'computed' ? $unroundedPercentage : null,
         'breakdown' => $periodBreakdown,
     ];
 }
@@ -2897,35 +3403,50 @@ function handle_faculty_assessments_get(): void
                     a.transmutation_enabled, a.transmutation_minimum_percentage,
                     a.transmutation_maximum_percentage, a.attendance_session_date,
                     a.attendance_session_code,
-                    cs.cs_id, cs.cs_name, c.course_code
+                    cs.cs_id, cs.cs_name, c.course_code,
+                    gc.component_mode, gcp.component
              FROM assessments a
              JOIN class_sections cs ON cs.cs_id = a.cs_id
              JOIN courses c ON c.course_id = cs.course_id
+             LEFT JOIN grading_configs gc
+                    ON gc.faculty_user_id = cs.instructor_user_id
+                   AND gc.course_id = cs.course_id
+                   AND gc.semester = UPPER(cs.semester)
+                   AND gc.school_year = UPPER(cs.school_year)
+             LEFT JOIN grading_category_period_memberships gcp
+                    ON gcp.category_id = a.grading_category_id
+                   AND gcp.grading_period = a.grading_period
              WHERE cs.instructor_user_id = ?
              ORDER BY a.created_at DESC, a.assessment_id DESC"
         );
         $stmt->execute([$authCtx['user_id']]);
-        $assessments = array_map(static fn(array $row): array => [
-            'id' => (string) $row['assessment_id'],
-            'title' => $row['title'],
-            'type' => $row['type'],
-            'gradingCategoryId' => $row['grading_category_id'] !== null ? (string) $row['grading_category_id'] : null,
-            'gradingPeriod' => $row['grading_period'],
-            'maxScore' => (float) $row['max_score'],
-            'weight' => $row['weight'] !== null ? (float) $row['weight'] : null,
-            'dueDate' => $row['due_date'],
-            'instructions' => $row['instructions'],
-            'status' => $row['status'],
-            'transmutationEnabled' => filter_var($row['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN),
-            'transmutationMinimumPercentage' => (float) $row['transmutation_minimum_percentage'],
-            'transmutationMaximumPercentage' => (float) $row['transmutation_maximum_percentage'],
-            'attendanceSessionDate' => $row['attendance_session_date'],
-            'attendanceSessionCode' => $row['attendance_session_code'],
-            'classId' => (string) $row['cs_id'],
-            'className' => $row['cs_name'],
-            'subjectCode' => $row['course_code'],
-            'createdAt' => $row['created_at'],
-        ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+        $assessments = array_map(static function (array $row): array {
+            $assessment = [
+                'id' => (string) $row['assessment_id'],
+                'title' => $row['title'],
+                'type' => $row['type'],
+                'gradingCategoryId' => $row['grading_category_id'] !== null ? (string) $row['grading_category_id'] : null,
+                'gradingPeriod' => $row['grading_period'],
+                'maxScore' => (float) $row['max_score'],
+                'weight' => $row['weight'] !== null ? (float) $row['weight'] : null,
+                'dueDate' => $row['due_date'],
+                'instructions' => $row['instructions'],
+                'status' => $row['status'],
+                'transmutationEnabled' => filter_var($row['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN),
+                'transmutationMinimumPercentage' => (float) $row['transmutation_minimum_percentage'],
+                'transmutationMaximumPercentage' => (float) $row['transmutation_maximum_percentage'],
+                'attendanceSessionDate' => $row['attendance_session_date'],
+                'attendanceSessionCode' => $row['attendance_session_code'],
+                'classId' => (string) $row['cs_id'],
+                'className' => $row['cs_name'],
+                'subjectCode' => $row['course_code'],
+                'createdAt' => $row['created_at'],
+            ];
+            if (($row['component_mode'] ?? 'combined') === 'lecture_laboratory') {
+                $assessment['component'] = $row['component'] !== null ? (string) $row['component'] : null;
+            }
+            return $assessment;
+        }, $stmt->fetchAll(PDO::FETCH_ASSOC));
 
         json_response($assessments, 200);
     } catch (\Throwable $e) {
@@ -3600,6 +4121,7 @@ function handle_faculty_grades_compute(): void
                        a.transmutation_minimum_percentage, a.transmutation_maximum_percentage,
                        a.attendance_session_date, a.attendance_session_code,
                        gc.config_id, gc.schema_mode, gc.term_midterm_weight, gc.term_final_weight,
+                       gc.component_mode, gc.component_lecture_weight, gc.component_laboratory_weight,
                        gc.midterm_start_date, gc.midterm_end_date,
                        gc.final_start_date, gc.final_end_date,
                        gcat.name AS grading_category_name,
@@ -3608,6 +4130,7 @@ function handle_faculty_grades_compute(): void
                        gcp.weight AS period_category_weight,
                        gcp.grading_period AS period_category_period,
                        gcp.source_kind AS period_category_source_kind,
+                       gcp.component AS period_category_component,
                        sc.score_id, sc.score,
                        " . faculty_linked_attendance_sql('e.enrollment_id') . " AS linked_attendance_status,
                        att.attendance_percentage
@@ -3662,6 +4185,11 @@ function handle_faculty_grades_compute(): void
                         'csId' => (int) $row['cs_id'],
                         'configId' => $row['config_id'] !== null ? (int) $row['config_id'] : null,
                         'schemaMode' => $row['schema_mode'] !== null ? (string) $row['schema_mode'] : 'overall',
+                        'componentMode' => $row['component_mode'] !== null ? (string) $row['component_mode'] : 'combined',
+                        'componentWeights' => [
+                            'lecture' => $row['component_lecture_weight'] !== null ? (float) $row['component_lecture_weight'] : null,
+                            'laboratory' => $row['component_laboratory_weight'] !== null ? (float) $row['component_laboratory_weight'] : null,
+                        ],
                         'termRatio' => [
                             'midterm' => $row['term_midterm_weight'] !== null ? (float) $row['term_midterm_weight'] : null,
                             'final' => $row['term_final_weight'] !== null ? (float) $row['term_final_weight'] : null,
@@ -3741,10 +4269,12 @@ function handle_faculty_grades_compute(): void
                     continue;
                 }
                 $midtermPercentage = $midterm['percentage'] !== null
-                    ? (float) $midterm['percentage']
+                    ? (float) (($group['componentMode'] ?? 'combined') === 'lecture_laboratory'
+                        ? $midterm['unroundedPercentage'] : $midterm['percentage'])
                     : 0.0;
                 $finalPercentage = $final['percentage'] !== null
-                    ? (float) $final['percentage']
+                    ? (float) (($group['componentMode'] ?? 'combined') === 'lecture_laboratory'
+                        ? $final['unroundedPercentage'] : $final['percentage'])
                     : 0.0;
                 $percentage = round(
                     ($midtermPercentage * $midtermWeight / 100)
@@ -5219,37 +5749,40 @@ function faculty_risk_level(callable $percentageAfter): ?array
  * Categories and completed assessments of one period for the risk projection.
  * Returns [categories, completedSizes] or null without a period configuration.
  */
-function faculty_risk_period_inputs(PDO $pdo, array $enrollment, array $grading, string $period): ?array
+function faculty_risk_period_inputs(PDO $pdo, array $enrollment, array $grading, string $period, array &$readCache): ?array
 {
-    $memberships = $pdo->prepare(
-        'SELECT gcp.category_id, gcp.weight, gcp.source_kind
-           FROM grading_category_period_memberships gcp
-           JOIN grading_categories gc ON gc.category_id = gcp.category_id
-          WHERE gc.config_id = ? AND gcp.grading_period = ?'
-    );
-    $memberships->execute([(int) $grading['config_id'], $period]);
-    $rows = $memberships->fetchAll(PDO::FETCH_ASSOC);
+    $rows = $grading['periodMemberships'][$period] ?? [];
     if ($rows === []) {
         return null;
     }
-    $assessments = $pdo->prepare(
-        "SELECT a.assessment_id, a.grading_category_id, a.max_score, a.transmutation_enabled,
+    $enrollmentId = (int) $enrollment['enrollment_id'];
+    if (isset($readCache['assessments'][$enrollmentId][$period])) {
+        // Watchlist completeness needs every assessment; risk uses only scored work.
+        $assessmentRows = array_values(array_filter(
+            $readCache['assessments'][$enrollmentId][$period],
+            static fn(array $assessment): bool => $assessment['_has_score']
+        ));
+    } else {
+        $assessments = $pdo->prepare(
+            "SELECT a.assessment_id, a.grading_category_id, a.max_score, a.transmutation_enabled,
                 a.transmutation_minimum_percentage, a.transmutation_maximum_percentage, sc.score,
                 " . faculty_linked_attendance_sql('CAST(:enrollment_id AS INTEGER)') . " AS linked_attendance_status
            FROM assessments a
            JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = :student_id
           WHERE a.cs_id = :cs_id AND a.grading_period = :period AND a.status <> 'Archived'"
-    );
-    $assessments->execute([
-        ':enrollment_id' => $enrollment['enrollment_id'],
-        ':student_id' => $enrollment['student_id'],
-        ':cs_id' => $enrollment['cs_id'],
-        ':period' => $period,
-    ]);
+        );
+        $assessments->execute([
+            ':enrollment_id' => $enrollment['enrollment_id'],
+            ':student_id' => $enrollment['student_id'],
+            ':cs_id' => $enrollment['cs_id'],
+            ':period' => $period,
+        ]);
+        $assessmentRows = $assessments->fetchAll(PDO::FETCH_ASSOC);
+    }
     $earned = [];
     $possible = [];
     $sizes = [];
-    foreach ($assessments->fetchAll(PDO::FETCH_ASSOC) as $assessment) {
+    foreach ($assessmentRows as $assessment) {
         $effective = faculty_effective_assessment_percentage(
             (float) $assessment['score'],
             (float) $assessment['max_score'],
@@ -5270,19 +5803,73 @@ function faculty_risk_period_inputs(PDO $pdo, array $enrollment, array $grading,
     $categories = [];
     foreach ($rows as $row) {
         if ((string) $row['source_kind'] === 'attendance') {
-            $attendance = faculty_period_attendance_summary(
+            $attendance = $readCache['attendance'][$enrollmentId][$period] ??= faculty_period_attendance_summary(
                 $pdo, (int) $enrollment['cs_id'], (int) $enrollment['enrollment_id'],
-                $grading[$key . '_start_date'] ?? null, $grading[$key . '_end_date'] ?? null
+                $grading[$key . '_start_date'] ?? null, $grading[$key . '_end_date'] ?? null,
+                $readCache['attendanceRows'][$enrollmentId] ?? null
             );
-            $categories[] = ['kind' => 'attendance', 'weight' => (float) $row['weight'],
+            $categoryWeight = (float) $row['weight'];
+            $component = (string) ($row['component'] ?? 'Combined');
+            if (($grading['component_mode'] ?? 'combined') === 'lecture_laboratory') {
+                $componentWeight = $component === 'Lecture'
+                    ? (float) $grading['component_lecture_weight']
+                    : (float) $grading['component_laboratory_weight'];
+                $categoryWeight = $categoryWeight * $componentWeight / 100;
+            }
+            $categories[] = ['kind' => 'attendance', 'weight' => $categoryWeight, 'component' => $component,
                 'percentage' => $attendance['status'] === 'computed' ? (float) $attendance['percentage'] : null];
             continue;
         }
         $categoryId = (int) $row['category_id'];
-        $categories[] = ['kind' => 'assessment', 'weight' => (float) $row['weight'],
+        $categoryWeight = (float) $row['weight'];
+        $component = (string) ($row['component'] ?? 'Combined');
+        if (($grading['component_mode'] ?? 'combined') === 'lecture_laboratory') {
+            $componentWeight = $component === 'Lecture'
+                ? (float) $grading['component_lecture_weight']
+                : (float) $grading['component_laboratory_weight'];
+            $categoryWeight = $categoryWeight * $componentWeight / 100;
+        }
+        $categories[] = ['kind' => 'assessment', 'weight' => $categoryWeight, 'component' => $component,
             'earned' => $earned[$categoryId] ?? 0.0, 'possible' => $possible[$categoryId] ?? 0.0];
     }
     return [$categories, $sizes];
+}
+
+/**
+ * Reuse class grading inputs only within the caller's current retention read.
+ */
+function faculty_retention_read_config(PDO $pdo, int $classId, array &$readCache): ?array
+{
+    if (array_key_exists($classId, $readCache['configs'] ?? [])) {
+        return $readCache['configs'][$classId];
+    }
+    $config = $pdo->prepare(
+        "SELECT gc.config_id, gc.term_midterm_weight, gc.term_final_weight,
+                gc.component_mode, gc.component_lecture_weight, gc.component_laboratory_weight,
+                gc.midterm_start_date, gc.midterm_end_date, gc.final_start_date, gc.final_end_date
+           FROM grading_configs gc JOIN class_sections cs
+             ON gc.faculty_user_id = cs.instructor_user_id AND gc.course_id = cs.course_id
+            AND gc.semester = UPPER(cs.semester) AND gc.school_year = UPPER(cs.school_year)
+          WHERE cs.cs_id = ? AND gc.schema_mode = 'periods'"
+    );
+    $config->execute([$classId]);
+    $grading = $config->fetch(PDO::FETCH_ASSOC);
+    if (!$grading) {
+        return $readCache['configs'][$classId] = null;
+    }
+    $memberships = $pdo->prepare(
+        'SELECT gcp.category_id, gcp.name, gcp.weight, gcp.sort_order, gcp.source_kind, gcp.grading_period, gcp.component
+           FROM grading_category_period_memberships gcp
+           JOIN grading_categories gc ON gc.category_id = gcp.category_id
+          WHERE gc.config_id = ?
+          ORDER BY gcp.sort_order, gcp.category_period_id'
+    );
+    $memberships->execute([(int) $grading['config_id']]);
+    $grading['periodMemberships'] = [];
+    foreach ($memberships->fetchAll(PDO::FETCH_ASSOC) as $membership) {
+        $grading['periodMemberships'][$membership['grading_period']][] = $membership;
+    }
+    return $readCache['configs'][$classId] = $grading;
 }
 
 /**
@@ -5290,23 +5877,15 @@ function faculty_risk_period_inputs(PDO $pdo, array $enrollment, array $grading,
  * the running overall grade once Final-period work is scored. Informational
  * only; it never changes a retention state.
  */
-function faculty_risk_projection(PDO $pdo, array $enrollment): ?array
+function faculty_risk_projection(PDO $pdo, array $enrollment, ?array &$readCache = null): ?array
 {
-    $config = $pdo->prepare(
-        "SELECT gc.config_id, gc.term_midterm_weight, gc.term_final_weight,
-                gc.midterm_start_date, gc.midterm_end_date, gc.final_start_date, gc.final_end_date
-           FROM grading_configs gc JOIN class_sections cs
-             ON gc.faculty_user_id = cs.instructor_user_id AND gc.course_id = cs.course_id
-            AND gc.semester = UPPER(cs.semester) AND gc.school_year = UPPER(cs.school_year)
-          WHERE cs.cs_id = ? AND gc.schema_mode = 'periods'"
-    );
-    $config->execute([$enrollment['cs_id']]);
-    $grading = $config->fetch(PDO::FETCH_ASSOC);
-    if (!$grading) {
+    $readCache ??= [];
+    $grading = faculty_retention_read_config($pdo, (int) $enrollment['cs_id'], $readCache);
+    if ($grading === null) {
         return null;
     }
-    $midterm = faculty_risk_period_inputs($pdo, $enrollment, $grading, 'Midterm');
-    $final = faculty_risk_period_inputs($pdo, $enrollment, $grading, 'Final');
+    $midterm = faculty_risk_period_inputs($pdo, $enrollment, $grading, 'Midterm', $readCache);
+    $final = faculty_risk_period_inputs($pdo, $enrollment, $grading, 'Final', $readCache);
     if ($midterm === null) {
         return null;
     }
@@ -5337,48 +5916,120 @@ function faculty_risk_projection(PDO $pdo, array $enrollment): ?array
     return $risk === null ? null : $risk + ['period' => 'Midterm'];
 }
 
-function faculty_watchlist_midterm(PDO $pdo, array $enrollment): array
+/** Batch read inputs for the enrollment list already authorized by the retention handler. */
+function faculty_retention_preload(PDO $pdo, array $enrollments, array &$readCache): void
+{
+    if ($enrollments === []) return;
+    $ids = array_map(static fn(array $row): int => (int) $row['enrollment_id'], $enrollments);
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    foreach ($ids as $id) {
+        $readCache['assessments'][$id] = ['Midterm' => [], 'Final' => []];
+        $readCache['attendanceRows'][$id] = [];
+    }
+    $assessments = $pdo->prepare(
+        "SELECT a.*, sc.score_id, sc.score, e.enrollment_id AS projection_enrollment_id,
+                " . faculty_linked_attendance_sql('e.enrollment_id') . " AS linked_attendance_status
+           FROM enrollments e
+           JOIN assessments a ON a.cs_id = e.cs_id
+           LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = e.student_id
+          WHERE e.enrollment_id IN ($placeholders)
+            AND a.grading_period IN ('Midterm', 'Final') AND a.status <> 'Archived'"
+    );
+    $assessments->execute($ids);
+    foreach ($assessments->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $id = (int) $row['projection_enrollment_id'];
+        unset($row['projection_enrollment_id']);
+        $row['_has_score'] = $row['score_id'] !== null;
+        $readCache['assessments'][$id][$row['grading_period']][] = $row;
+    }
+    // Include both recorded attendance and unresolved expected sessions. Period
+    // date filtering and the existing completeness/points calculation stay in
+    // faculty_period_attendance_summary, shared with standalone callers.
+    $attendance = $pdo->prepare(
+        "SELECT r.enrollment_id AS projection_enrollment_id, 0 AS projection_source,
+                r.record_id AS projection_sort_id, COALESCE(r.attendance_session_id, 0) AS session_id,
+                r.session_date, r.session_code, r.status AS attendance_status,
+                COALESCE(s.status, 'recorded') AS session_status
+           FROM attendance_records r
+           JOIN enrollments e ON e.enrollment_id = r.enrollment_id
+           LEFT JOIN attendance_sessions s ON s.session_id = r.attendance_session_id
+          WHERE e.enrollment_id IN ($placeholders)
+            AND (s.session_id IS NULL OR s.status <> 'revoked')
+          UNION ALL
+         SELECT e.enrollment_id, 1, s.session_id, s.session_id,
+                s.session_date, s.session_code, NULL, s.status
+           FROM enrollments e
+           JOIN attendance_sessions s ON s.cs_id = e.cs_id
+          WHERE e.enrollment_id IN ($placeholders) AND s.status <> 'revoked'
+            AND NOT EXISTS (
+                SELECT 1 FROM attendance_records r WHERE r.enrollment_id = e.enrollment_id
+                  AND (r.attendance_session_id = s.session_id
+                       OR (r.attendance_session_id IS NULL AND r.session_date = s.session_date
+                           AND COALESCE(r.session_code, '') = COALESCE(s.session_code, '')))
+            )
+          ORDER BY projection_enrollment_id, projection_source, session_date, projection_sort_id"
+    );
+    $attendance->execute(array_merge($ids, $ids));
+    foreach ($attendance->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $id = (int) $row['projection_enrollment_id'];
+        unset($row['projection_enrollment_id'], $row['projection_source'], $row['projection_sort_id']);
+        $readCache['attendanceRows'][$id][] = $row;
+    }
+}
+
+function faculty_watchlist_midterm(PDO $pdo, array $enrollment, ?array &$readCache = null): array
 {
     // Recompute the existing period calculation read-only so a newly added or
     // cleared score cannot leave the watchlist open from a stale saved result.
-    $config = $pdo->prepare(
-        "SELECT gc.config_id, gc.midterm_start_date, gc.midterm_end_date
-           FROM grading_configs gc JOIN class_sections cs
-             ON gc.faculty_user_id = cs.instructor_user_id AND gc.course_id = cs.course_id
-            AND gc.semester = UPPER(cs.semester) AND gc.school_year = UPPER(cs.school_year)
-          WHERE cs.cs_id = ? AND gc.schema_mode = 'periods'
-            AND EXISTS (
-                SELECT 1
-                  FROM grading_category_period_memberships gcp
-                  JOIN grading_categories gc_period ON gc_period.category_id = gcp.category_id
-                 WHERE gc_period.config_id = gc.config_id
-                   AND gcp.grading_period = 'Midterm'
-            )"
-    );
-    $config->execute([$enrollment['cs_id']]);
-    $grading = $config->fetch(PDO::FETCH_ASSOC);
-    if (!$grading) return ['complete' => false, 'percentage' => null];
-    $assessments = $pdo->prepare(
-        "SELECT a.*, sc.score_id, sc.score,
-                " . faculty_linked_attendance_sql('CAST(:enrollment_id AS INTEGER)') . " AS linked_attendance_status
-           FROM assessments a
-           LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = :student_id
-          WHERE a.cs_id = :cs_id AND a.grading_period = 'Midterm' AND a.status <> 'Archived'"
-    );
-    $assessments->execute([
-        ':student_id' => $enrollment['student_id'],
-        ':enrollment_id' => $enrollment['enrollment_id'],
-        ':cs_id' => $enrollment['cs_id'],
-    ]);
-    $rows = $assessments->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($rows as &$assessment) $assessment['_has_score'] = $assessment['score_id'] !== null;
-    unset($assessment);
+    $readCache ??= [];
+    $grading = faculty_retention_read_config($pdo, (int) $enrollment['cs_id'], $readCache);
+    if ($grading === null) return ['complete' => false, 'percentage' => null];
+    $memberships = $grading['periodMemberships']['Midterm'] ?? [];
+    if ($memberships === []) return ['complete' => false, 'percentage' => null];
+    $enrollmentId = (int) $enrollment['enrollment_id'];
+    if (isset($readCache['assessments'][$enrollmentId]['Midterm'])) {
+        $rows = $readCache['assessments'][$enrollmentId]['Midterm'];
+    } else {
+        $assessments = $pdo->prepare(
+            "SELECT a.*, sc.score_id, sc.score,
+                    " . faculty_linked_attendance_sql('CAST(:enrollment_id AS INTEGER)') . " AS linked_attendance_status
+               FROM assessments a
+               LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = :student_id
+              WHERE a.cs_id = :cs_id AND a.grading_period = 'Midterm' AND a.status <> 'Archived'"
+        );
+        $assessments->execute([
+            ':student_id' => $enrollment['student_id'],
+            ':enrollment_id' => $enrollment['enrollment_id'],
+            ':cs_id' => $enrollment['cs_id'],
+        ]);
+        $rows = $assessments->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$assessment) $assessment['_has_score'] = $assessment['score_id'] !== null;
+        unset($assessment);
+        $readCache['assessments'][$enrollmentId]['Midterm'] = $rows;
+    }
+    $attendance = null;
+    if (count(array_filter($memberships, static fn(array $membership): bool => $membership['source_kind'] === 'attendance')) === 1) {
+        $attendance = $readCache['attendance'][$enrollmentId]['Midterm'] = faculty_period_attendance_summary(
+            $pdo, (int) $enrollment['cs_id'], $enrollmentId,
+            $grading['midterm_start_date'], $grading['midterm_end_date'],
+            $readCache['attendanceRows'][$enrollmentId] ?? null
+        );
+    }
     $result = faculty_compute_period_result($pdo, [
         'configId' => $grading['config_id'], 'csId' => $enrollment['cs_id'],
         'enrollmentId' => $enrollment['enrollment_id'], 'assessments' => $rows,
+        'componentMode' => $grading['component_mode'] ?? 'combined',
+        'componentWeights' => [
+            'lecture' => (float) ($grading['component_lecture_weight'] ?? 0),
+            'laboratory' => (float) ($grading['component_laboratory_weight'] ?? 0),
+        ],
         'attendanceDateRanges' => ['midterm' => ['startDate' => $grading['midterm_start_date'], 'endDate' => $grading['midterm_end_date']]],
-    ], 'Midterm');
-    return ['complete' => $result['status'] === 'computed', 'percentage' => $result['percentage']];
+    ], 'Midterm', $memberships, $attendance);
+    $summary = ['complete' => $result['status'] === 'computed', 'percentage' => $result['percentage']];
+    if (($grading['component_mode'] ?? 'combined') === 'lecture_laboratory') {
+        $summary['components'] = $result['breakdown']['components'] ?? [];
+    }
+    return $summary;
 }
 
 function handle_faculty_retention_get(): void
@@ -5425,9 +6076,13 @@ function handle_faculty_retention_get(): void
         $currentSchoolYear = academic_current_school_year($pdo);
         $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
 
-        $retention = array_map(static function (array $row) use ($pdo, $progressions, $legacyByEnrollment, $currentSchoolYear, $retentionThreshold): array {
+        // This cache lives for this read only. Subsequent requests must observe
+        // newly saved scores, weights and attendance, including incomplete work.
+        $readCache = [];
+        faculty_retention_preload($pdo, $dbRows, $readCache);
+        $retention = array_map(static function (array $row) use ($pdo, $progressions, $legacyByEnrollment, $currentSchoolYear, $retentionThreshold, &$readCache): array {
             $enrollmentId = (int) $row['enrollment_id'];
-            $midterm = faculty_watchlist_midterm($pdo, $row);
+            $midterm = faculty_watchlist_midterm($pdo, $row, $readCache);
             $gwa = $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null;
             $isCurrentYear = strtoupper(trim((string) $row['school_year'])) === strtoupper(trim((string) $currentSchoolYear));
             // Same gates the remedial save endpoint enforces, so the page only
@@ -5438,31 +6093,35 @@ function handle_faculty_retention_get(): void
                 && $isCurrentYear
                 && !($legacyByEnrollment[$enrollmentId] ?? false)
                 && in_array($stage, ['none', 'attempt_1_pending', 'attempt_2_available', 'attempt_2_pending'], true);
-            return [
-            'enrollmentId' => (string) $enrollmentId,
-            'studentId' => (string) $row['student_id'],
-            'studentNumber' => $row['student_number'],
-            'studentName' => trim($row['first_name'] . ' ' . ($row['middle_name'] ? $row['middle_name'] . ' ' : '') . $row['last_name']),
-            'classId' => (string) $row['cs_id'],
-            'className' => $row['cs_name'],
-            'subjectCode' => $row['course_code'],
-            'percentage' => $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null,
-            'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
-            'state' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
-            'storedState' => $row['retention_state'],
-            // A Faculty override stays until the course grade changes.
-            'manualOverride' => $row['retention_override_state'] !== null,
-            'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
-            'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
-            'watchlistUnlocked' => $row['unlocked_at'] !== null,
-            'unlockedAt' => $row['unlocked_at'],
-            'schoolYear' => $row['school_year'],
-            'midtermComplete' => $midterm['complete'],
-            'midtermPercentage' => $midterm['percentage'],
-            // UI-003: informational risk for current-year classes only.
-            'risk' => $isCurrentYear ? faculty_risk_projection($pdo, $row) : null,
-            'remedialEligible' => $remedialEligible,
-        ];
+            $retentionRow = [
+                'enrollmentId' => (string) $enrollmentId,
+                'studentId' => (string) $row['student_id'],
+                'studentNumber' => $row['student_number'],
+                'studentName' => trim($row['first_name'] . ' ' . ($row['middle_name'] ? $row['middle_name'] . ' ' : '') . $row['last_name']),
+                'classId' => (string) $row['cs_id'],
+                'className' => $row['cs_name'],
+                'subjectCode' => $row['course_code'],
+                'percentage' => $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null,
+                'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
+                'state' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
+                'storedState' => $row['retention_state'],
+                // A Faculty override stays until the course grade changes.
+                'manualOverride' => $row['retention_override_state'] !== null,
+                'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
+                'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
+                'watchlistUnlocked' => $row['unlocked_at'] !== null,
+                'unlockedAt' => $row['unlocked_at'],
+                'schoolYear' => $row['school_year'],
+                'midtermComplete' => $midterm['complete'],
+                'midtermPercentage' => $midterm['percentage'],
+                // UI-003: informational risk for current-year classes only.
+                'risk' => $isCurrentYear ? faculty_risk_projection($pdo, $row, $readCache) : null,
+                'remedialEligible' => $remedialEligible,
+            ];
+            if (isset($midterm['components'])) {
+                $retentionRow['midtermComponents'] = $midterm['components'];
+            }
+            return $retentionRow;
         }, $dbRows);
         json_response([
             'status' => 'ok',
@@ -7590,5 +8249,3 @@ function handle_faculty_class_unenroll_student(): void
         safe_error_response('Internal server error.', 500);
     }
 }
-
-

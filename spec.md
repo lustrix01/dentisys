@@ -419,11 +419,16 @@ Absent attendance produces an effective percentage of 0%. While the linked sessi
 
 Faculty grading configurations remain scoped to the Faculty member, course, semester, and school year.
 
-New, unconfigured offerings present an editable, unsaved starting preset. The initial contribution ratio is 40% Midterm and 60% Finals, editable by Faculty.
+New, unconfigured offerings present an editable, unsaved Lecture/Laboratory
+period grading preset defined in GRD-003. Preset values become authoritative
+only after a successful server save; Faculty may customize all weights and
+categories within the required separate Lecture/Laboratory structure.
 
-The Midterm preset contains Quiz 25%, Activity 25%, Midterm Exam 40%, and Attendance 10%. The Finals preset contains Quiz 20%, Activity 20%, Laboratory 20%, Final Exam 30%, and Attendance 10%.
-
-Faculty may customize each period's categories and weights. Each period must total exactly 100%, using the existing supported decimal precision. The two period contributions must also total exactly 100%.
+Faculty may customize each component's categories and weights for each period.
+All new or updated period grading configurations must use the separate
+Lecture/Laboratory structure defined in GRD-003. Each component-period category
+list, the Lecture/Laboratory contributions, and the Midterm/Finals contributions
+must each total exactly 100%, using the existing supported decimal precision.
 
 Preset values become authoritative only after a successful server save. Existing saved configurations must never be replaced automatically by preset values.
 
@@ -437,11 +442,90 @@ Owner decision (2026-09-28): Every class offering must have a saved grade-weight
 
 Saving configuration does not automatically rewrite persisted grade results. An authorized recomputation applies the saved configuration while preserving raw scores and GRD-001 transmutation behavior.
 
-In period configurations, the preset Attendance category uses authoritative attendance data and replaces the additional independent attendance contribution, preventing double-counting. Assessment-linked transmutation remains governed separately by GRD-001.
+In period configurations, any authoritative Attendance-source category uses
+authoritative attendance data and replaces the additional independent attendance
+contribution, preventing double-counting. Assessment-linked transmutation remains
+governed separately by GRD-001. The default categories in GRD-003 use assessment
+scores; they do not add an authoritative Attendance-source category automatically.
 
 Faculty defines one inclusive attendance date range for Midterm and one for Finals for each offering. Each start date must be on or before its end date; Midterm must end before Finals starts. Gaps are allowed. Attendance is assigned using its recorded session date, and records outside both ranges do not contribute to period attendance. Missing ranges or unresolved attendance keep the affected result incomplete. Saving changed dates does not rewrite recorded results; changes apply through explicit recomputation.
 
 Grade displays and exports must distinguish authoritative Midterm, Finals, and overall results. Unavailable period results must not be replaced with the overall grade.
+
+---
+
+## GRD-003 - Separate Lecture and Laboratory grading
+
+**Status: APPROVED**
+
+Separate Lecture/Laboratory grading is mandatory for all new or updated period
+grading configurations on authorized current-year offerings. Grade Weights must
+not offer a combined/split structure selector or conversion back to combined
+period lists. The configuration remains shared by its sections and scoped to the
+Faculty member, course, semester and school year.
+
+Grouped grading has Lecture and Laboratory components. Faculty sets positive
+contribution percentages totaling exactly 100%. One offering-level component
+ratio applies to both Midterm and Finals. Course units do not determine this
+ratio. Existing Midterm/Final contributions remain separately editable.
+
+Each component has its own Faculty-editable category list for each period.
+Each component-period list must total exactly 100%, and each category weight
+must be positive. Category names may repeat across components; names must be
+unique within a component and period. Assessments reference a valid category
+and resolve unambiguously to its component and period.
+
+A component percentage uses the existing category assessment and transmutation
+calculations within that component. Each period percentage is its Lecture
+percentage multiplied by the Lecture contribution plus its Laboratory
+percentage multiplied by the Laboratory contribution. Overall percentage is
+the resulting Midterm and Finals percentages combined using the saved term
+contributions. Grouped calculations use unrounded intermediate values for
+weighted combinations and the existing precision for displayed/persisted
+results. Ungrouped calculation behavior remains unchanged.
+
+Missing results in a positively weighted category, component or period keep
+the dependent grade incomplete. Missing grades must never become zero or cause
+renormalization. Existing GRD-001 transmutation, attendance completeness,
+retention thresholds and manual override rules remain unchanged. Informational
+risk uses the saved grouped weights and existing risk rules; it must not
+redefine retention policy.
+
+Authoritative Attendance retains its existing course-wide records and inclusive
+period date ranges. At most one authoritative Attendance-source category is
+permitted across both components in a period, preventing double-counting.
+Participation and Recitation are assessment-source categories unless Faculty
+explicitly selects the supported Attendance source. Separate Lecture/Laboratory
+attendance calculations are outside this amendment.
+
+Existing overall and ungrouped period configurations, assessment and category
+identifiers, raw scores, history and saved grades remain preserved. Existing
+configurations continue their saved calculation until explicitly converted;
+historical offerings remain view-only. Updating an existing ungrouped period
+configuration requires explicit validated conversion to Lecture/Laboratory
+grading. Faculty must assign existing categories and resolve ambiguous assessment
+mappings before conversion can be saved; the system must not guess mappings,
+replace existing categories with defaults, or rescale saved weights automatically.
+Saving or converting a configuration must not rewrite recorded grades; explicit
+authorized recomputation applies the saved configuration. Conversion from grouped
+grading back to combined period lists is no longer supported.
+
+Grade Weights, assessment selection, server computations, Faculty/Student
+ledgers and applicable grade exports must identify Lecture and Laboratory
+component results separately from Midterm, Finals and overall results. GWA
+conversion remains at the existing course-result level; no new independent
+Lecture/Laboratory transcript GWA is introduced.
+
+The supplied syllabus defines the editable, unsaved default for new,
+unconfigured offerings: Lecture 60%, Laboratory 40%; Lecture categories Term Exam
+50%, Quiz 20%, Outputs 20%, Participation 10%; Laboratory categories Practical Exam
+50%, Laboratory Exercises 30%, Quiz 10%, Recitation 10%; Midterm 30%, Finals 70%.
+The same starting component category lists apply to both Midterm and Finals.
+Faculty may edit these values while preserving the separate component structure
+and all three 100% totals. Defaults are shown automatically without an Apply
+syllabus example action. Existing saved configurations and recorded grades must
+never be replaced automatically by default values.
+
 
 ---
 

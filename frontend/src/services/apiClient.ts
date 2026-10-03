@@ -1714,6 +1714,7 @@ export function formatWeightUnitsToPercent(units: number): string {
 
 export type GradingPeriodEnum = 'Midterm' | 'Final';
 export type GradingSourceKindEnum = 'assessment' | 'attendance';
+export type GradingComponentEnum = 'Lecture' | 'Laboratory';
 
 export interface FacultyAttendanceDateRange {
   startDate: string | null;
@@ -1737,6 +1738,7 @@ export interface FacultyGradingCategoryItem {
   sortOrder?: number;
   gradingPeriod?: GradingPeriodEnum | null;
   sourceKind?: GradingSourceKindEnum | null;
+  component?: GradingComponentEnum | null;
   inUse?: boolean;
 }
 
@@ -1753,6 +1755,8 @@ export interface FacultyGradingConfiguration {
   schoolYear: string;
   version: number;
   schemaMode?: 'overall' | 'periods';
+  componentMode?: 'combined' | 'lecture_laboratory';
+  componentWeights?: { lecture: number; laboratory: number };
   termRatio?: FacultyTermRatio;
   attendanceDateRanges?: FacultyAttendanceDateRanges;
   categories: FacultyGradingCategoryItem[];
@@ -1762,9 +1766,11 @@ export interface FacultyGradingConfiguration {
 
 export interface FacultyGradingConfigDefaults {
   schemaMode: 'periods';
+  componentMode: 'lecture_laboratory';
+  componentWeights: { lecture: number; laboratory: number };
   termRatio: { midterm: number; final: number };
-  midtermCategories: Array<{ name: string; weight: number; sortOrder: number; sourceKind: GradingSourceKindEnum }>;
-  finalCategories: Array<{ name: string; weight: number; sortOrder: number; sourceKind: GradingSourceKindEnum }>;
+  midtermCategories: Array<{ name: string; weight: number; sortOrder: number; sourceKind: GradingSourceKindEnum; component: GradingComponentEnum }>;
+  finalCategories: Array<{ name: string; weight: number; sortOrder: number; sourceKind: GradingSourceKindEnum; component: GradingComponentEnum }>;
   attendanceDateRanges: FacultyAttendanceDateRanges;
 }
 
@@ -1779,6 +1785,17 @@ export interface FacultyGradingCategoryAssignmentRequiredItem {
   title: string;
   legacyType: string;
   gradingPeriod?: 'Midterm' | 'Final' | null;
+  categoryId?: number | null;
+  component?: GradingComponentEnum | null;
+}
+
+export interface FacultyGradingComponentMappingRequiredItem {
+  assessmentId: number;
+  title: string;
+  legacyType: string;
+  gradingPeriod: 'Midterm' | 'Final';
+  categoryId?: number | null;
+  component?: GradingComponentEnum | null;
 }
 
 export interface FacultyGradingPeriodMappingRequiredItem {
@@ -1796,8 +1813,18 @@ export interface FacultyGradingConfigSavePayload {
   version?: number;
   schemaMode?: 'overall' | 'periods';
   convertFromOverall?: boolean;
+  /** Explicitly converts an existing combined period configuration to grouped grading. */
+  convertToLectureLaboratory?: boolean;
   /** First save only: categories Faculty picked for existing assessments that could not be linked by name. */
-  assessmentAssignments?: Array<{ assessmentId: number; categoryName: string }>;
+  assessmentAssignments?: Array<{
+    assessmentId: number;
+    categoryId?: number;
+    categoryName?: string;
+    gradingPeriod?: GradingPeriodEnum;
+    component?: GradingComponentEnum;
+  }>;
+  componentMode?: 'lecture_laboratory';
+  componentWeights?: { lecture: number | string; laboratory: number | string };
   termRatio?: { midterm: number | string; final: number | string };
   attendanceDateRanges?: {
     midterm?: { startDate?: string | null; endDate?: string | null };
@@ -1809,6 +1836,7 @@ export interface FacultyGradingConfigSavePayload {
     weight: number | string;
     sortOrder?: number;
     sourceKind?: GradingSourceKindEnum;
+    component?: GradingComponentEnum;
   }>;
   finalCategories?: Array<{
     id?: number | null;
@@ -1816,6 +1844,7 @@ export interface FacultyGradingConfigSavePayload {
     weight: number | string;
     sortOrder?: number;
     sourceKind?: GradingSourceKindEnum;
+    component?: GradingComponentEnum;
   }>;
   categories?: Array<{
     id?: number | null;
@@ -1880,6 +1909,18 @@ export interface FacultyPeriodBreakdown {
   categories: FacultyPeriodCategoryDetail[];
   incomplete: FacultyPeriodIncompleteItem[];
   attendanceDateRange: FacultyAttendanceDateRange;
+  components?: {
+    lecture: FacultyPeriodComponentBreakdown;
+    laboratory: FacultyPeriodComponentBreakdown;
+  };
+}
+
+export interface FacultyPeriodComponentBreakdown {
+  component: GradingComponentEnum;
+  status: 'computed' | 'incomplete';
+  percentage: number | null;
+  categories: FacultyPeriodCategoryDetail[];
+  incomplete: FacultyPeriodIncompleteItem[];
 }
 
 export interface FacultyPeriodModeComputedResult {

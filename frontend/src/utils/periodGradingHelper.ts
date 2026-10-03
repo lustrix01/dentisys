@@ -7,6 +7,7 @@ import type {
   PeriodIncompleteReason,
   FacultyPeriodModeComputedResult,
   FacultyPeriodModeIncompleteResult,
+  GradingComponentEnum,
 } from '../services/apiClient.ts';
 import type { Student, EnrolledSubject } from '../types/index.ts';
 
@@ -26,10 +27,12 @@ export interface PeriodCategoryDraftRow {
   sortOrder: number;
   gradingPeriod: GradingPeriodEnum;
   sourceKind: GradingSourceKindEnum;
+  component?: GradingComponentEnum;
   inUse: boolean;
 }
 
 export interface PeriodDraftState {
+  componentWeights: { lecture: string; laboratory: string };
   termRatio: { midterm: string; final: string };
   midtermCategories: PeriodCategoryDraftRow[];
   finalCategories: PeriodCategoryDraftRow[];
@@ -45,115 +48,45 @@ export function buildRowCompositeKey(period: GradingPeriodEnum, id?: number | nu
 
 export function buildDefaultPeriodDraft(): PeriodDraftState {
   return {
-    termRatio: { midterm: '40', final: '60' },
-    midtermCategories: [
-      {
-        compositeKey: 'Midterm:preset-m-1',
-        tempId: 'preset-m-1',
-        name: 'Quiz',
-        weight: '25',
-        defaultMax: '50',
-        sortOrder: 1,
-        gradingPeriod: 'Midterm',
-        sourceKind: 'assessment',
-        inUse: false,
-      },
-      {
-        compositeKey: 'Midterm:preset-m-2',
-        tempId: 'preset-m-2',
-        name: 'Activity',
-        weight: '25',
-        defaultMax: '50',
-        sortOrder: 2,
-        gradingPeriod: 'Midterm',
-        sourceKind: 'assessment',
-        inUse: false,
-      },
-      {
-        compositeKey: 'Midterm:preset-m-3',
-        tempId: 'preset-m-3',
-        name: 'Midterm Exam',
-        weight: '40',
-        defaultMax: '100',
-        sortOrder: 3,
-        gradingPeriod: 'Midterm',
-        sourceKind: 'assessment',
-        inUse: false,
-      },
-      {
-        compositeKey: 'Midterm:preset-m-4',
-        tempId: 'preset-m-4',
-        name: 'Attendance',
-        weight: '10',
-        defaultMax: '100',
-        sortOrder: 4,
-        gradingPeriod: 'Midterm',
-        sourceKind: 'attendance',
-        inUse: false,
-      },
-    ],
-    finalCategories: [
-      {
-        compositeKey: 'Final:preset-f-1',
-        tempId: 'preset-f-1',
-        name: 'Quiz',
-        weight: '20',
-        defaultMax: '50',
-        sortOrder: 1,
-        gradingPeriod: 'Final',
-        sourceKind: 'assessment',
-        inUse: false,
-      },
-      {
-        compositeKey: 'Final:preset-f-2',
-        tempId: 'preset-f-2',
-        name: 'Activity',
-        weight: '20',
-        defaultMax: '50',
-        sortOrder: 2,
-        gradingPeriod: 'Final',
-        sourceKind: 'assessment',
-        inUse: false,
-      },
-      {
-        compositeKey: 'Final:preset-f-3',
-        tempId: 'preset-f-3',
-        name: 'Laboratory',
-        weight: '20',
-        defaultMax: '100',
-        sortOrder: 3,
-        gradingPeriod: 'Final',
-        sourceKind: 'assessment',
-        inUse: false,
-      },
-      {
-        compositeKey: 'Final:preset-f-4',
-        tempId: 'preset-f-4',
-        name: 'Final Exam',
-        weight: '30',
-        defaultMax: '100',
-        sortOrder: 4,
-        gradingPeriod: 'Final',
-        sourceKind: 'assessment',
-        inUse: false,
-      },
-      {
-        compositeKey: 'Final:preset-f-5',
-        tempId: 'preset-f-5',
-        name: 'Attendance',
-        weight: '10',
-        defaultMax: '100',
-        sortOrder: 5,
-        gradingPeriod: 'Final',
-        sourceKind: 'attendance',
-        inUse: false,
-      },
-    ],
+    componentWeights: { lecture: '60', laboratory: '40' },
+    termRatio: { midterm: '30', final: '70' },
+    midtermCategories: buildDefaultLectureLaboratoryCategories('Midterm'),
+    finalCategories: buildDefaultLectureLaboratoryCategories('Final'),
     attendanceDateRanges: {
       midterm: { startDate: '', endDate: '' },
       final: { startDate: '', endDate: '' },
     },
   };
+}
+
+export function buildDefaultLectureLaboratoryCategories(period: GradingPeriodEnum): PeriodCategoryDraftRow[] {
+  const categories: Array<{ component: GradingComponentEnum; name: string; weight: string }> = [
+    { component: 'Lecture', name: 'Term Exam', weight: '50' },
+    { component: 'Lecture', name: 'Quiz', weight: '20' },
+    { component: 'Lecture', name: 'Outputs', weight: '20' },
+    { component: 'Lecture', name: 'Participation', weight: '10' },
+    { component: 'Laboratory', name: 'Practical Exam', weight: '50' },
+    { component: 'Laboratory', name: 'Laboratory Exercises', weight: '30' },
+    { component: 'Laboratory', name: 'Quiz', weight: '10' },
+    { component: 'Laboratory', name: 'Recitation', weight: '10' },
+  ];
+  const positions: Record<GradingComponentEnum, number> = { Lecture: 0, Laboratory: 0 };
+  return categories.map(category => {
+    positions[category.component] += 1;
+    const tempId = `sample-${period.toLowerCase()}-${category.component.toLowerCase()}-${positions[category.component]}`;
+    return {
+      compositeKey: buildRowCompositeKey(period, null, tempId),
+      tempId,
+      name: category.name,
+      weight: category.weight,
+      defaultMax: '100',
+      sortOrder: positions[category.component],
+      gradingPeriod: period,
+      sourceKind: 'assessment',
+      component: category.component,
+      inUse: false,
+    };
+  });
 }
 
 export function isValidCalendarDate(dateStr: string): boolean {
@@ -248,14 +181,42 @@ export interface StudentPeriodEvaluation {
   midtermStatus: 'computed' | 'incomplete' | 'unconfigured' | 'pending';
   midtermPercentage: number | null;
   midtermReasons: string[];
+  midtermComponents?: Record<'lecture' | 'laboratory', PeriodComponentEvaluation>;
   finalStatus: 'computed' | 'incomplete' | 'unconfigured' | 'pending';
   finalPercentage: number | null;
   finalReasons: string[];
+  finalComponents?: Record<'lecture' | 'laboratory', PeriodComponentEvaluation>;
   overallGwa: number | null;
   overallPercentage: number | null;
   historicalGwa: number | null;
   isIncomplete: boolean;
   statusText: string;
+}
+
+export interface PeriodComponentEvaluation {
+  status: 'computed' | 'incomplete' | 'pending';
+  percentage: number | null;
+  reasons: string[];
+}
+
+function extractPeriodComponents(period: FacultyPeriodBreakdown | Record<string, unknown> | undefined) {
+  const components = period && typeof period === 'object'
+    ? (period as { components?: Record<string, unknown> }).components
+    : undefined;
+  if (!components || typeof components !== 'object') return undefined;
+
+  const toEvaluation = (key: 'lecture' | 'laboratory'): PeriodComponentEvaluation => {
+    const component = components[key] as { status?: unknown; percentage?: unknown; incomplete?: unknown } | undefined;
+    const percentage = typeof component?.percentage === 'number' ? component.percentage : null;
+    const incomplete = Array.isArray(component?.incomplete) ? component.incomplete as Array<{ reason?: string }> : [];
+    return {
+      status: percentage !== null ? 'computed' : component?.status === 'pending' ? 'pending' : 'incomplete',
+      percentage,
+      reasons: incomplete.map(item => formatPeriodIncompleteReason(item.reason ?? '')),
+    };
+  };
+
+  return { lecture: toEvaluation('lecture'), laboratory: toEvaluation('laboratory') };
 }
 
 export function extractPeriodEvaluation(
@@ -305,9 +266,11 @@ export function extractPeriodEvaluation(
       midtermStatus: midtermBreakdown?.status ?? 'incomplete',
       midtermPercentage,
       midtermReasons,
+      midtermComponents: extractPeriodComponents(midtermBreakdown),
       finalStatus: finalBreakdown?.status ?? 'incomplete',
       finalPercentage,
       finalReasons,
+      finalComponents: extractPeriodComponents(finalBreakdown),
       overallGwa,
       overallPercentage,
       historicalGwa,
@@ -351,9 +314,11 @@ export function extractPeriodEvaluation(
         midtermStatus: (mid?.status as 'computed' | 'incomplete') ?? 'incomplete',
         midtermPercentage,
         midtermReasons,
+        midtermComponents: extractPeriodComponents(mid),
         finalStatus: (fin?.status as 'computed' | 'incomplete') ?? 'incomplete',
         finalPercentage,
         finalReasons,
+        finalComponents: extractPeriodComponents(fin),
         overallGwa,
         overallPercentage,
         historicalGwa,
@@ -365,17 +330,27 @@ export function extractPeriodEvaluation(
 
   // Finding 1: If configured in period mode but no period computation has run yet
   if (isPeriodConfigured) {
+    const savedComponents = subj?.components && typeof subj.components === 'object'
+      ? subj.components as Record<string, unknown>
+      : null;
+    const savedLegacyGwa = savedComponents?.calculationMode === 'authoritative_categories'
+      && typeof subj?.grade === 'number'
+      && subj.grade > 0
+      ? subj.grade
+      : null;
     return {
       isPeriodMode: true,
       midtermStatus: 'pending',
       midtermPercentage: null,
       midtermReasons: ['Pending Computation'],
+      midtermComponents: undefined,
       finalStatus: 'pending',
       finalPercentage: null,
       finalReasons: ['Pending Computation'],
+      finalComponents: undefined,
       overallGwa: null,
       overallPercentage: null,
-      historicalGwa: null,
+      historicalGwa: savedLegacyGwa,
       isIncomplete: true,
       statusText: 'PENDING',
     };
@@ -388,9 +363,11 @@ export function extractPeriodEvaluation(
     midtermStatus: 'unconfigured',
     midtermPercentage: null,
     midtermReasons: [],
+    midtermComponents: undefined,
     finalStatus: 'unconfigured',
     finalPercentage: null,
     finalReasons: [],
+    finalComponents: undefined,
     overallGwa: legacyGrade,
     overallPercentage: null,
     historicalGwa: null,
@@ -403,10 +380,18 @@ export function generateGradeSummaryCSV(
   students: Student[],
   selectedSubjectCode: string,
   isPeriodMode: boolean,
-  computeResultsByEnrollment?: Map<string, FacultyGradeComputeResult>
+  computeResultsByEnrollment?: Map<string, FacultyGradeComputeResult>,
+  componentMode: 'combined' | 'lecture_laboratory' = 'combined'
 ): string {
+  const groupedCsvCell = (value: string): string => {
+    const formulaSafe = /^[\t\r\n ]*[=+\-@]/.test(value) ? `'${value}` : value;
+    return `"${formulaSafe.replace(/"/g, '""')}"`;
+  };
+
   if (isPeriodMode) {
-    const headers = 'Student ID,Name,Midterm %,Final %,Overall GWA,Status\n';
+    const headers = componentMode === 'lecture_laboratory'
+      ? 'Student ID,Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status\n'
+      : 'Student ID,Name,Midterm %,Final %,Overall GWA,Status\n';
     const rows = students
       .map(student => {
         const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
@@ -442,6 +427,33 @@ export function generateGradeSummaryCSV(
             : 'Incomplete';
         const statusVal = evalResult.statusText;
 
+        if (componentMode === 'lecture_laboratory') {
+          const componentValue = (component: PeriodComponentEvaluation | undefined, periodStatus: StudentPeriodEvaluation['midtermStatus']) => {
+            if (component?.percentage !== null && component?.percentage !== undefined) return `${component.percentage.toFixed(2)}%`;
+            if (component?.status === 'pending' || periodStatus === 'pending') return 'Pending';
+            return component?.reasons.length
+              ? `Incomplete (${component.reasons[0]})`
+              : periodStatus === 'computed'
+                ? 'Unavailable (recompute required)'
+              : 'Incomplete';
+          };
+          const midtermLecture = componentValue(evalResult.midtermComponents?.lecture, evalResult.midtermStatus);
+          const midtermLaboratory = componentValue(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus);
+          const finalLecture = componentValue(evalResult.finalComponents?.lecture, evalResult.finalStatus);
+          const finalLaboratory = componentValue(evalResult.finalComponents?.laboratory, evalResult.finalStatus);
+          return [
+            student.studentId,
+            student.name,
+            midtermLecture,
+            midtermLaboratory,
+            midtermVal,
+            finalLecture,
+            finalLaboratory,
+            finalVal,
+            gwaVal,
+            statusVal,
+          ].map(groupedCsvCell).join(',');
+        }
         return `${student.studentId},"${student.name}",${midtermVal},${finalVal},${gwaVal},${statusVal}`;
       })
       .join('\n');

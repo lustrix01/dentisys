@@ -282,6 +282,7 @@ $expectedMigrations = [
     '042_secretary_same_student_account.sql',
     '043_class_meetings.sql',
     '044_scheduled_attendance_sessions.sql',
+    '045_lecture_laboratory_grading.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -492,7 +493,18 @@ expect_true($secretarySessionClassId > 0, 'Seeded Secretary has an active assign
 $sessionConfig = app_config();
 $sessionNowUtc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 $sessionLocalTimezone = new DateTimeZone($sessionConfig['app']['operational_timezone']);
+$sessionNowLocal = $sessionNowUtc->setTimezone($sessionLocalTimezone);
 $sessionDate = app_local_date($sessionConfig, $sessionNowUtc);
+$sessionOpeningTime = '00:00';
+$sessionMinuteOfDay = (int) $sessionNowLocal->format('H') * 60 + (int) $sessionNowLocal->format('i');
+if ($sessionMinuteOfDay <= 21 * 60) {
+    $sessionPresentCutoff = $sessionNowLocal->modify('+1 hour')->format('H:i');
+    $sessionLateCutoff = $sessionNowLocal->modify('+2 hours')->format('H:i');
+} else {
+    // Keep both cutoffs and the class end on the session date late in the day.
+    $sessionPresentCutoff = '23:56';
+    $sessionLateCutoff = '23:58';
+}
 [$activeBeforeStatus, $activeBeforeBody] = integration_http_get_json(
     '/api/secretary/attendance/session/active?csId=' . $secretarySessionClassId,
     $secretaryAccessToken
@@ -508,9 +520,9 @@ $sessionCode = 'INTEGRATION-SESSION-' . strtoupper(bin2hex(random_bytes(4)));
     'sessionCode' => $sessionCode,
     'room' => 'Integration Attendance Room',
     'biometricRequired' => true,
-    'openingTime' => '08:00',
-    'presentCutoff' => '09:00',
-    'lateCutoff' => '10:00',
+    'openingTime' => $sessionOpeningTime,
+    'presentCutoff' => $sessionPresentCutoff,
+    'lateCutoff' => $sessionLateCutoff,
     'geofenceEnabled' => true,
     'geofenceLatitude' => 13.1436,
     'geofenceLongitude' => 123.7438,
@@ -784,9 +796,9 @@ $secondSessionCode = 'INTEGRATION-SESSION-OLDER-' . strtoupper(bin2hex(random_by
     'sessionCode' => $secondSessionCode,
     'room' => 'Integration Older Session Room',
     'biometricRequired' => true,
-    'openingTime' => '08:00',
-    'presentCutoff' => '09:00',
-    'lateCutoff' => '10:00',
+    'openingTime' => $sessionOpeningTime,
+    'presentCutoff' => $sessionPresentCutoff,
+    'lateCutoff' => $sessionLateCutoff,
     'geofenceEnabled' => true,
     'geofenceLatitude' => 13.1436,
     'geofenceLongitude' => 123.7438,
@@ -5069,16 +5081,38 @@ $weightConfigPath = '/api/faculty/grading-config?' . http_build_query([
 expect_same(200, $weightInitialGetStatus, 'Unconfigured Faculty offering returns HTTP 200');
 expect_same(null, $weightInitialGetBody['configuration'] ?? null, 'Unconfigured Faculty offering is explicit rather than fabricated');
 expect_same('periods', $weightInitialGetBody['defaults']['schemaMode'] ?? null, 'Unconfigured Faculty offering exposes editable period defaults');
-expect_same(40, $weightInitialGetBody['defaults']['termRatio']['midterm'] ?? null, 'Unconfigured Faculty defaults use a 40 percent Midterm contribution');
-expect_same(60, $weightInitialGetBody['defaults']['termRatio']['final'] ?? null, 'Unconfigured Faculty defaults use a 60 percent Final contribution');
-expect_same(4, count($weightInitialGetBody['defaults']['midtermCategories'] ?? []), 'Unconfigured Faculty defaults include Midterm categories');
-expect_same(5, count($weightInitialGetBody['defaults']['finalCategories'] ?? []), 'Unconfigured Faculty defaults include Final categories');
+expect_same('lecture_laboratory', $weightInitialGetBody['defaults']['componentMode'] ?? null, 'Unconfigured Faculty defaults require separate components');
+expect_same(['lecture' => 60, 'laboratory' => 40], $weightInitialGetBody['defaults']['componentWeights'] ?? null, 'Unconfigured Faculty defaults use a 60/40 component ratio');
+expect_same(['midterm' => 30, 'final' => 70], $weightInitialGetBody['defaults']['termRatio'] ?? null, 'Unconfigured Faculty defaults use a 30/70 period ratio');
+$weightDefaultCategoryRows = static fn(array $categories): array => array_map(
+    static fn(array $category): array => [
+        $category['name'] ?? null,
+        $category['weight'] ?? null,
+        $category['component'] ?? null,
+        $category['sourceKind'] ?? null,
+    ],
+    $categories
+);
+$expectedWeightDefaultCategoryRows = [
+    ['Term Exam', 50, 'Lecture', 'assessment'],
+    ['Quiz', 20, 'Lecture', 'assessment'],
+    ['Outputs', 20, 'Lecture', 'assessment'],
+    ['Participation', 10, 'Lecture', 'assessment'],
+    ['Practical Exam', 50, 'Laboratory', 'assessment'],
+    ['Laboratory Exercises', 30, 'Laboratory', 'assessment'],
+    ['Quiz', 10, 'Laboratory', 'assessment'],
+    ['Recitation', 10, 'Laboratory', 'assessment'],
+];
+expect_same($expectedWeightDefaultCategoryRows, $weightDefaultCategoryRows($weightInitialGetBody['defaults']['midtermCategories'] ?? []), 'Unconfigured Faculty Midterm defaults match the supplied component syllabus');
+expect_same($expectedWeightDefaultCategoryRows, $weightDefaultCategoryRows($weightInitialGetBody['defaults']['finalCategories'] ?? []), 'Unconfigured Faculty Finals defaults match the supplied component syllabus');
 
 [$weightInvalidRatioStatus] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, [
     'courseId' => $weightCourseId,
     'semester' => '1st',
     'schoolYear' => '2027-2028',
     'schemaMode' => 'periods',
+    'componentMode' => 'lecture_laboratory',
+    'componentWeights' => ['lecture' => 60, 'laboratory' => 40],
     'termRatio' => true,
     'midtermCategories' => [
         ['name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1],
@@ -5329,14 +5363,18 @@ expect_same('GRADING_CATEGORY_IN_USE', $weightDeleteInUseBody['code'] ?? null, '
     'schoolYear' => '2027-2028',
     'version' => $weightConfigVersion,
     'schemaMode' => 'periods',
+    'componentMode' => 'lecture_laboratory',
+    'componentWeights' => ['lecture' => 60, 'laboratory' => 40],
     'termRatio' => ['midterm' => 40, 'final' => 60],
     'midtermCategories' => [
-        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1],
-        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2],
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2, 'component' => 'Lecture'],
+        ['name' => 'Laboratory Exercises', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Laboratory'],
     ],
     'finalCategories' => [
-        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1],
-        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2],
+        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2, 'component' => 'Lecture'],
+        ['name' => 'Laboratory Exercises', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Laboratory'],
     ],
 ]);
 expect_same(409, $weightConversionRequiredStatus, 'Overall-to-period conversion requires an explicit flag');
@@ -5359,26 +5397,31 @@ $weightCategorylessConversionBeforeGrade = $weightCategorylessConversionBeforeGr
     'schoolYear' => '2027-2028',
     'version' => $weightConfigVersion,
     'schemaMode' => 'periods',
+    'componentMode' => 'lecture_laboratory',
+    'componentWeights' => ['lecture' => 60, 'laboratory' => 40],
+    'convertToLectureLaboratory' => true,
     'convertFromOverall' => true,
     'termRatio' => ['midterm' => 40, 'final' => 60],
     'midtermCategories' => [
-        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1],
-        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2],
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2, 'component' => 'Lecture'],
+        ['name' => 'Laboratory Exercises', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Laboratory'],
     ],
     'finalCategories' => [
-        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1],
-        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2],
+        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2, 'component' => 'Lecture'],
+        ['name' => 'Laboratory Exercises', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Laboratory'],
     ],
 ]);
 expect_same(422, $weightCategorylessConversionStatus, 'Conversion rejects an active categoryless assessment');
-expect_same('GRADING_CATEGORY_PERIOD_MAPPING_REQUIRED', $weightCategorylessConversionBody['code'] ?? null, 'Active categoryless conversion rejection uses the mapping-required code');
-$weightCategorylessRefs = array_values(array_filter(
-    $weightCategorylessConversionBody['assessmentReferences'] ?? [],
-    static fn(array $reference): bool => (int) ($reference['assessmentId'] ?? 0) === $weightLegacyAssessmentId
-        && array_key_exists('categoryId', $reference)
-        && $reference['categoryId'] === null
+expect_same('GRADING_COMPONENT_MAPPING_REQUIRED', $weightCategorylessConversionBody['code'] ?? null, 'Active categoryless grouped conversion requires a component mapping');
+$weightCategorylessMappings = array_values(array_filter(
+    $weightCategorylessConversionBody['assessments'] ?? [],
+    static fn(array $assessment): bool => (int) ($assessment['assessmentId'] ?? 0) === $weightLegacyAssessmentId
 ));
-expect_same(1, count($weightCategorylessRefs), 'Mapping-required details identify the active categoryless assessment');
+expect_same(1, count($weightCategorylessMappings), 'Component-mapping details identify the active categoryless assessment');
+expect_same('Midterm', $weightCategorylessMappings[0]['gradingPeriod'] ?? null, 'Component-mapping details preserve the assessment period');
+expect_same('no_matching_category', $weightCategorylessMappings[0]['mappingReason'] ?? null, 'Component-mapping details explain why the legacy assessment needs a faculty choice');
 $weightCategorylessConversionAfterConfigStmt = $pdo->prepare(
     'SELECT schema_mode, version FROM grading_configs WHERE config_id = ?'
 );
@@ -5404,19 +5447,30 @@ $weightConversionMissingMappingBefore = $weightConversionMissingMappingBeforeStm
     'schoolYear' => '2027-2028',
     'version' => $weightConfigVersion,
     'schemaMode' => 'periods',
+    'componentMode' => 'lecture_laboratory',
+    'componentWeights' => ['lecture' => 60, 'laboratory' => 40],
+    'convertToLectureLaboratory' => true,
     'convertFromOverall' => true,
     'termRatio' => ['midterm' => 40, 'final' => 60],
     'midtermCategories' => [
-        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1],
-        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2],
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2, 'component' => 'Lecture'],
+        ['name' => 'Laboratory Exercises', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Laboratory'],
     ],
     'finalCategories' => [
-        ['name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1],
-        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2],
+        ['name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2, 'component' => 'Lecture'],
+        ['name' => 'Laboratory Exercises', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Laboratory'],
     ],
 ]);
-expect_same(422, $weightMissingMappingStatus, 'Conversion rejects an existing assessment reference missing from its period mapping');
-expect_same('GRADING_CATEGORY_PERIOD_MAPPING_REQUIRED', $weightMissingMappingBody['code'] ?? null, 'Missing period mapping returns an explicit conversion error');
+expect_same(422, $weightMissingMappingStatus, 'Conversion rejects an existing assessment reference without a component membership');
+expect_same('GRADING_COMPONENT_MAPPING_REQUIRED', $weightMissingMappingBody['code'] ?? null, 'Missing component membership returns the explicit grouped mapping error');
+$weightMissingComponentMappings = array_values(array_filter(
+    $weightMissingMappingBody['assessments'] ?? [],
+    static fn(array $assessment): bool => (int) ($assessment['assessmentId'] ?? 0) === $weightLegacyFinalAssessmentId
+));
+expect_same(1, count($weightMissingComponentMappings), 'Grouped mapping details identify the existing Finals assessment');
+expect_same('category_component_missing', $weightMissingComponentMappings[0]['mappingReason'] ?? null, 'Grouped mapping details identify the missing Lecture/Laboratory membership');
 $weightConversionMissingMappingAfterStmt = $pdo->prepare('SELECT grading_category_id FROM assessments WHERE assessment_id = ?');
 $weightConversionMissingMappingAfterStmt->execute([$weightLegacyFinalAssessmentId]);
 expect_same((string) $weightConversionMissingMappingBefore, (string) $weightConversionMissingMappingAfterStmt->fetchColumn(), 'Rejected conversion preserves the existing assessment category reference');
@@ -5427,26 +5481,38 @@ expect_same((string) $weightConversionMissingMappingBefore, (string) $weightConv
     'schoolYear' => '2027-2028',
     'version' => $weightConfigVersion,
     'schemaMode' => 'periods',
+    'componentMode' => 'lecture_laboratory',
+    'componentWeights' => ['lecture' => 60, 'laboratory' => 40],
+    'convertToLectureLaboratory' => true,
     'convertFromOverall' => true,
     'termRatio' => ['midterm' => 40, 'final' => 60],
     'midtermCategories' => [
-        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1],
-        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2],
+        ['id' => $weightQuizCategoryId, 'name' => 'Short Quiz', 'weight' => 25, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $weightExamCategoryId, 'name' => 'Exam', 'weight' => 75, 'sortOrder' => 2, 'component' => 'Lecture'],
+        ['name' => 'Laboratory Exercises', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Laboratory'],
     ],
     'finalCategories' => [
-        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1],
-        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2],
+        ['id' => $weightQuizCategoryId, 'name' => 'Final Quiz', 'weight' => 20, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $weightExamCategoryId, 'name' => 'Final Exam', 'weight' => 80, 'sortOrder' => 2, 'component' => 'Lecture'],
+        ['name' => 'Laboratory Exercises', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Laboratory'],
     ],
 ]);
 expect_same(200, $weightConversionStatus, 'Overall-to-period conversion succeeds when explicitly confirmed');
 expect_same('periods', $weightConversionBody['configuration']['schemaMode'] ?? null, 'Converted configuration reports period mode');
+expect_same('lecture_laboratory', $weightConversionBody['configuration']['componentMode'] ?? null, 'Converted period configuration uses the mandatory grouped structure');
 expect_same(40, $weightConversionBody['configuration']['termRatio']['midterm'] ?? null, 'Converted configuration preserves the requested Midterm ratio');
-expect_same((string) $weightQuizCategoryId, (string) (($weightConversionBody['configuration']['midtermCategories'][0]['id'] ?? 0)), 'Conversion preserves existing category references');
-expect_same(25.0, (float) ($weightConversionBody['configuration']['midtermCategories'][0]['weight'] ?? -1), 'Legacy Midterm category receives its independent converted weight');
-expect_same('Final Quiz', $weightConversionBody['configuration']['finalCategories'][0]['name'] ?? null, 'Legacy Final category receives its independent converted name');
-expect_same(20.0, (float) ($weightConversionBody['configuration']['finalCategories'][0]['weight'] ?? -1), 'Legacy Final category receives its independent converted weight');
-expect_same(2, count($weightConversionBody['configuration']['midtermCategories'] ?? []), 'Converted Midterm snapshot contains only its memberships');
-expect_same(2, count($weightConversionBody['configuration']['finalCategories'] ?? []), 'Converted Final snapshot contains only its memberships');
+$weightConvertedMidtermCategories = $weightConversionBody['configuration']['midtermCategories'] ?? [];
+$weightConvertedFinalCategories = $weightConversionBody['configuration']['finalCategories'] ?? [];
+$weightConvertedQuiz = array_values(array_filter($weightConvertedMidtermCategories, static fn(array $category): bool => (int) ($category['id'] ?? 0) === $weightQuizCategoryId));
+$weightConvertedFinalQuiz = array_values(array_filter($weightConvertedFinalCategories, static fn(array $category): bool => (int) ($category['id'] ?? 0) === $weightQuizCategoryId));
+expect_same(3, count($weightConvertedMidtermCategories), 'Converted Midterm includes both required component lists');
+expect_same(3, count($weightConvertedFinalCategories), 'Converted Finals includes both required component lists');
+expect_same(1, count($weightConvertedQuiz), 'Conversion preserves the existing Midterm category reference');
+expect_same(25.0, (float) ($weightConvertedQuiz[0]['weight'] ?? -1), 'Conversion preserves the existing category weight within its assigned component');
+expect_same('Lecture', $weightConvertedQuiz[0]['component'] ?? null, 'Conversion reports the explicit component assignment');
+expect_same(1, count($weightConvertedFinalQuiz), 'Conversion preserves the existing Finals category reference');
+expect_same('Final Quiz', $weightConvertedFinalQuiz[0]['name'] ?? null, 'Legacy Finals category keeps its converted name');
+expect_same(20.0, (float) ($weightConvertedFinalQuiz[0]['weight'] ?? -1), 'Conversion preserves the existing Finals category weight');
 $weightConfigVersion = (int) ($weightConversionBody['configuration']['version'] ?? 0);
 
 $lockPdo = create_pdo([
@@ -5533,14 +5599,16 @@ $periodCreatePayload = array_merge([
     'semester' => '1st',
     'schoolYear' => '2027-2028',
     'schemaMode' => 'periods',
+    'componentMode' => 'lecture_laboratory',
+    'componentWeights' => ['lecture' => 50, 'laboratory' => 50],
     'termRatio' => ['midterm' => 40, 'final' => 60],
     'midtermCategories' => [
-        ['name' => 'Quiz', 'weight' => 50, 'sortOrder' => 1],
-        ['name' => 'Attendance', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+        ['name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['name' => 'Attendance', 'weight' => 100, 'sortOrder' => 1, 'sourceKind' => 'attendance', 'component' => 'Laboratory'],
     ],
     'finalCategories' => [
-        ['name' => 'Exam', 'weight' => 50, 'sortOrder' => 1],
-        ['name' => 'Attendance', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+        ['name' => 'Exam', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['name' => 'Attendance', 'weight' => 100, 'sortOrder' => 1, 'sourceKind' => 'attendance', 'component' => 'Laboratory'],
     ],
 ], $periodDateRangesPayload);
 [$periodCreateStatus, $periodCreateBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodCreatePayload);
@@ -5549,6 +5617,8 @@ $periodConfiguration = $periodCreateBody['configuration'] ?? [];
 $periodConfigId = (int) ($periodConfiguration['id'] ?? 0);
 $periodConfigVersion = (int) ($periodConfiguration['version'] ?? 0);
 expect_true($periodConfigId > 0 && $periodConfigVersion === 1, 'Period date configuration has an authoritative ID and version');
+expect_same($periodCreatePayload['componentMode'], $periodConfiguration['componentMode'] ?? null, 'Period fixture persists its grouped component mode');
+expect_same($periodCreatePayload['componentWeights'], $periodConfiguration['componentWeights'] ?? null, 'Period fixture persists its standalone grouped component weights');
 $periodConfigDatesStmt = $pdo->prepare(
     'SELECT midterm_start_date, midterm_end_date, final_start_date, final_end_date FROM grading_configs WHERE config_id = ?'
 );
@@ -5718,15 +5788,17 @@ $periodRenamePayload = array_merge([
     'semester' => '1st',
     'schoolYear' => '2027-2028',
     'schemaMode' => 'periods',
+    'componentMode' => 'lecture_laboratory',
+    'componentWeights' => ['lecture' => 50, 'laboratory' => 50],
     'version' => $periodConfigVersion,
     'termRatio' => ['midterm' => 40, 'final' => 60],
     'midtermCategories' => [
-        ['id' => $periodMidtermQuizId, 'name' => 'Quiz', 'weight' => 50, 'sortOrder' => 1],
-        ['id' => $periodMidtermAttendanceId, 'name' => 'Participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+        ['id' => $periodMidtermQuizId, 'name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $periodMidtermAttendanceId, 'name' => 'Participation', 'weight' => 100, 'sortOrder' => 1, 'sourceKind' => 'attendance', 'component' => 'Laboratory'],
     ],
     'finalCategories' => [
-        ['id' => $periodFinalExamId, 'name' => 'Exam', 'weight' => 50, 'sortOrder' => 1],
-        ['id' => $periodFinalAttendanceId, 'name' => 'Participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+        ['id' => $periodFinalExamId, 'name' => 'Exam', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $periodFinalAttendanceId, 'name' => 'Participation', 'weight' => 100, 'sortOrder' => 1, 'sourceKind' => 'attendance', 'component' => 'Laboratory'],
     ],
 ], $periodDateRangesPayload);
 [$periodRenameStatus, $periodRenameBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodRenamePayload);
@@ -5763,15 +5835,17 @@ $periodOmittedPayload = [
     'semester' => '1st',
     'schoolYear' => '2027-2028',
     'schemaMode' => 'periods',
+    'componentMode' => 'lecture_laboratory',
+    'componentWeights' => ['lecture' => 50, 'laboratory' => 50],
     'version' => $periodConfigVersion,
     'termRatio' => ['midterm' => 40, 'final' => 60],
     'midtermCategories' => [
-        ['id' => $periodMidtermQuizId, 'name' => 'Quiz', 'weight' => 50, 'sortOrder' => 1],
-        ['id' => $periodMidtermAttendanceId, 'name' => 'Participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+        ['id' => $periodMidtermQuizId, 'name' => 'Quiz', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $periodMidtermAttendanceId, 'name' => 'Participation', 'weight' => 100, 'sortOrder' => 1, 'sourceKind' => 'attendance', 'component' => 'Laboratory'],
     ],
     'finalCategories' => [
-        ['id' => $periodFinalExamId, 'name' => 'Exam', 'weight' => 50, 'sortOrder' => 1],
-        ['id' => $periodFinalAttendanceId, 'name' => 'Participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance'],
+        ['id' => $periodFinalExamId, 'name' => 'Exam', 'weight' => 100, 'sortOrder' => 1, 'component' => 'Lecture'],
+        ['id' => $periodFinalAttendanceId, 'name' => 'Participation', 'weight' => 100, 'sortOrder' => 1, 'sourceKind' => 'attendance', 'component' => 'Laboratory'],
     ],
 ];
 [$periodOmittedStatus, $periodOmittedBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodOmittedPayload);
@@ -5784,9 +5858,9 @@ expect_same(
 );
 
 $periodDuplicateAttendancePayload = array_merge($periodOmittedPayload, ['version' => $periodConfigVersion]);
-$periodDuplicateAttendancePayload['midtermCategories'][1]['weight'] = 25;
+$periodDuplicateAttendancePayload['midtermCategories'][0]['weight'] = 50;
 $periodDuplicateAttendancePayload['midtermCategories'][] = [
-    'name' => 'Duplicate participation', 'weight' => 25, 'sortOrder' => 3, 'sourceKind' => 'attendance',
+    'name' => 'Duplicate participation', 'weight' => 50, 'sortOrder' => 2, 'sourceKind' => 'attendance', 'component' => 'Lecture',
 ];
 [$periodDuplicateStatus, $periodDuplicateBody] = integration_http_put_json('/api/faculty/grading-config', $facultyAccessToken, $periodDuplicateAttendancePayload);
 expect_same(422, $periodDuplicateStatus, 'A second authoritative attendance category in the same period is rejected');
@@ -5978,6 +6052,42 @@ expect_same(83.75, integration_period_percentage($periodInitialComplete ?? [], '
 expect_same(83.75, integration_period_percentage($periodInitialComplete ?? [], 'Midterm'), 'Revoked attendance sessions do not contribute to period attendance');
 expect_same(90.0, integration_period_percentage($periodInitialComplete ?? [], 'Final'), 'Final category/attendance math is independent of Midterm math');
 expect_same(87.5, (float) ($periodInitialComplete['percentage'] ?? -1), 'Overall term ratio combines distinct Midterm and Final results');
+$periodReadRowA = ['enrollment_id' => $periodEnrollmentA, 'student_id' => $periodStudentA, 'cs_id' => $periodClassId];
+$periodReadRowB = ['enrollment_id' => $periodEnrollmentB, 'student_id' => $periodStudentB, 'cs_id' => $periodClassId];
+$periodReadCache = [];
+faculty_retention_preload($pdo, [$periodReadRowA, $periodReadRowB], $periodReadCache);
+foreach ([$periodReadRowA, $periodReadRowB] as $periodReadRow) {
+    foreach ([['2027-01-01', '2027-12-31'], ['2027-08-15', '2027-09-30'], ['1900-01-01', '1900-01-02'], [null, null]] as [$periodReadStart, $periodReadEnd]) {
+        expect_same(
+            faculty_period_attendance_summary($pdo, $periodClassId, (int) $periodReadRow['enrollment_id'], $periodReadStart, $periodReadEnd),
+            faculty_period_attendance_summary($pdo, $periodClassId, (int) $periodReadRow['enrollment_id'], $periodReadStart, $periodReadEnd, $periodReadCache['attendanceRows'][$periodReadRow['enrollment_id']]),
+            'Batched attendance preserves standalone records, unresolved sessions, date boundaries and missing ranges'
+        );
+    }
+}
+$periodInitialWatchlistCached = faculty_watchlist_midterm($pdo, $periodReadRowA, $periodReadCache);
+$periodInitialWatchlistUncached = faculty_watchlist_midterm($pdo, $periodReadRowA);
+expect_same($periodInitialWatchlistUncached, $periodInitialWatchlistCached, 'Shared retention read inputs preserve the exact grouped Midterm result with or without batch caching');
+expect_same(
+    ['complete' => true, 'percentage' => 83.75],
+    array_intersect_key($periodInitialWatchlistCached, ['complete' => true, 'percentage' => true]),
+    'Shared retention read inputs preserve exact complete Midterm status and math'
+);
+expect_same(77.5, $periodInitialWatchlistCached['components']['lecture']['percentage'] ?? null, 'Shared retention read uses the saved Lecture category math');
+expect_same(90.0, $periodInitialWatchlistCached['components']['laboratory']['percentage'] ?? null, 'Shared retention read uses the saved Laboratory attendance math');
+expect_same(faculty_risk_projection($pdo, $periodReadRowA), faculty_risk_projection($pdo, $periodReadRowA, $periodReadCache), 'Risk reusing watchlist inputs preserves linked transmutation and separate Final math');
+$periodIncompleteWatchlistCached = faculty_watchlist_midterm($pdo, $periodReadRowB, $periodReadCache);
+$periodIncompleteWatchlistUncached = faculty_watchlist_midterm($pdo, $periodReadRowB);
+expect_same($periodIncompleteWatchlistUncached, $periodIncompleteWatchlistCached, 'Grouped Midterm incompleteness matches with or without batch caching');
+expect_same(
+    ['complete' => false, 'percentage' => null],
+    array_intersect_key($periodIncompleteWatchlistCached, ['complete' => true, 'percentage' => true]),
+    'The next enrollment does not inherit another Student attendance completeness or receive a fabricated percentage'
+);
+expect_same('computed', $periodIncompleteWatchlistCached['components']['lecture']['status'] ?? null, 'The ended GRD-001 linked session resolves the Lecture component');
+expect_same(40.0, $periodIncompleteWatchlistCached['components']['lecture']['percentage'] ?? null, 'The ended linked session contributes zero while the regular Quiz remains scored');
+expect_same('incomplete', $periodIncompleteWatchlistCached['components']['laboratory']['status'] ?? null, 'The unresolved attendance leaves the Laboratory component incomplete');
+expect_same(faculty_risk_projection($pdo, $periodReadRowB), faculty_risk_projection($pdo, $periodReadRowB, $periodReadCache), 'Cached risk preserves unresolved attendance for the next enrollment');
 $periodMidtermAttendanceCategories = array_values(array_filter(
     $periodInitialComplete['periods']['midterm']['categories'] ?? [],
     static fn(array $category): bool => ($category['sourceKind'] ?? null) === 'attendance'
@@ -6058,6 +6168,37 @@ $pdo->prepare('UPDATE attendance_records SET status = ? WHERE enrollment_id = ? 
 $periodPersistedBeforeCorrectionStmt->execute([$periodEnrollmentA]);
 $periodPersistedAfterAttendanceEdit = $periodPersistedBeforeCorrectionStmt->fetch(PDO::FETCH_ASSOC);
 expect_same((string) $periodPersistedBeforeCorrection['final_percentage'], (string) ($periodPersistedAfterAttendanceEdit['final_percentage'] ?? ''), 'Attendance corrections do not rewrite persisted grades before explicit recomputation');
+$periodFreshReadCache = [];
+faculty_retention_preload($pdo, [$periodReadRowA], $periodFreshReadCache);
+$periodCorrectedWatchlistCached = faculty_watchlist_midterm($pdo, $periodReadRowA, $periodFreshReadCache);
+$periodCorrectedWatchlistUncached = faculty_watchlist_midterm($pdo, $periodReadRowA);
+expect_same($periodCorrectedWatchlistUncached, $periodCorrectedWatchlistCached, 'A fresh grouped retention read matches with or without batch caching after attendance correction');
+expect_same(
+    ['complete' => true, 'percentage' => 88.75],
+    array_intersect_key($periodCorrectedWatchlistCached, ['complete' => true, 'percentage' => true]),
+    'A fresh retention read observes an attendance correction without carrying the previous read cache'
+);
+expect_same(77.5, $periodCorrectedWatchlistCached['components']['lecture']['percentage'] ?? null, 'Attendance correction leaves Lecture math unchanged');
+expect_same(100.0, $periodCorrectedWatchlistCached['components']['laboratory']['percentage'] ?? null, 'Attendance correction updates Laboratory math');
+$pdo->beginTransaction();
+try {
+    $pdo->prepare('UPDATE assessment_scores SET score = 0 WHERE assessment_id = ? AND student_id = ?')->execute([$periodRegularAssessmentId, $periodStudentA]);
+    $periodFreshReadCache = [];
+    faculty_retention_preload($pdo, [$periodReadRowA], $periodFreshReadCache);
+    $freshScoreRead = faculty_watchlist_midterm($pdo, $periodReadRowA, $periodFreshReadCache);
+    $freshScoreReadUncached = faculty_watchlist_midterm($pdo, $periodReadRowA);
+    // Quiz and attendance each weigh 50%: ((75 + 0) / 200) * 50 + 100 * .5.
+    expect_same($freshScoreReadUncached, $freshScoreRead, 'A fresh grouped zero-score read matches with or without batch caching');
+    expect_same(
+        ['complete' => true, 'percentage' => 68.75],
+        array_intersect_key($freshScoreRead, ['complete' => true, 'percentage' => true]),
+        'A new retention read observes a saved zero score instead of the old assessment inputs'
+    );
+    expect_same(37.5, $freshScoreRead['components']['lecture']['percentage'] ?? null, 'An entered zero updates the Lecture component rather than becoming a missing score');
+    expect_same(100.0, $freshScoreRead['components']['laboratory']['percentage'] ?? null, 'The Laboratory component remains complete after the Lecture zero');
+} finally {
+    $pdo->rollBack();
+}
 
 [$periodCorrectedComputeStatus, $periodCorrectedComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
     'classId' => (string) $periodClassId,
@@ -6575,28 +6716,163 @@ foreach ([
     expect_true($auditCount($expectedAuditAction) > 0, "{$expectedAuditLabel} is audited ({$expectedAuditAction})");
 }
 
-// Every active class must have grade weights. bin/bootstrap-grade-weights.php
-// gives the offerings that have none (for example freshly seeded demo data) a
-// starting configuration and links their existing assessments.
+// The bootstrap creates the grouped syllabus default for an unconfigured
+// offering with no assessments. An offering with an ambiguous Quiz assessment
+// stays unconfigured until Faculty supplies its period and component mapping.
+$bootstrapFixtureSuffix = strtoupper(bin2hex(random_bytes(4)));
+$bootstrapSyllabusCourseCode = 'BS' . $bootstrapFixtureSuffix;
+$bootstrapSyllabusCourseStmt = $pdo->prepare(
+    "INSERT INTO courses (course_code, name, units, semester, grading_config)
+     VALUES (?, 'Bootstrap Syllabus Course', 3.0, '1ST', '{}'::jsonb)
+     RETURNING course_id"
+);
+$bootstrapSyllabusCourseStmt->execute([$bootstrapSyllabusCourseCode]);
+$bootstrapSyllabusCourseId = (int) $bootstrapSyllabusCourseStmt->fetchColumn();
+$bootstrapClassStmt = $pdo->prepare(
+    "INSERT INTO class_sections (cs_name, course_id, instructor_user_id, semester, school_year, status)
+     VALUES (?, ?, ?, '1st', '2027-2028', 'Active')
+     RETURNING cs_id"
+);
+$bootstrapClassStmt->execute(['Bootstrap Syllabus ' . $bootstrapFixtureSuffix, $bootstrapSyllabusCourseId, $userId]);
+$bootstrapSyllabusClassId = (int) $bootstrapClassStmt->fetchColumn();
+
+$bootstrapAmbiguousCourseCode = 'BA' . $bootstrapFixtureSuffix;
+$bootstrapAmbiguousCourseStmt = $pdo->prepare(
+    "INSERT INTO courses (course_code, name, units, semester, grading_config)
+     VALUES (?, 'Bootstrap Ambiguous Course', 3.0, '1ST', '{}'::jsonb)
+     RETURNING course_id"
+);
+$bootstrapAmbiguousCourseStmt->execute([$bootstrapAmbiguousCourseCode]);
+$bootstrapAmbiguousCourseId = (int) $bootstrapAmbiguousCourseStmt->fetchColumn();
+$bootstrapClassStmt->execute(['Bootstrap Ambiguous ' . $bootstrapFixtureSuffix, $bootstrapAmbiguousCourseId, $userId]);
+$bootstrapAmbiguousClassId = (int) $bootstrapClassStmt->fetchColumn();
+$bootstrapStudentStmt = $pdo->prepare(
+    "INSERT INTO students (student_number, first_name, last_name, bu_email, status)
+     VALUES (?, 'Bootstrap', 'Student', ?, 'active')
+     RETURNING student_id"
+);
+$bootstrapStudentStmt->execute([
+    'BS-' . $bootstrapFixtureSuffix,
+    'bootstrap-' . strtolower($bootstrapFixtureSuffix) . '@bicol-u.edu.ph',
+]);
+$bootstrapStudentId = (int) $bootstrapStudentStmt->fetchColumn();
+$pdo->prepare(
+    "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled)
+     VALUES (?, ?, 'Active', CURRENT_DATE)"
+)->execute([$bootstrapStudentId, $bootstrapAmbiguousClassId]);
+$bootstrapAmbiguousAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments
+        (cs_id, title, type, grading_category_id, grading_period, max_score, weight, status,
+         transmutation_enabled, transmutation_minimum_percentage, transmutation_maximum_percentage,
+         attendance_session_date, attendance_session_code)
+     VALUES (?, ?, 'Quiz', NULL, 'Midterm', 10, 1, 'Active', false, 0, 100, NULL, NULL)
+     RETURNING assessment_id"
+);
+$bootstrapAmbiguousAssessmentStmt->execute([
+    $bootstrapAmbiguousClassId,
+    'Ambiguous Quiz ' . $bootstrapFixtureSuffix,
+]);
+$bootstrapAmbiguousAssessmentId = (int) $bootstrapAmbiguousAssessmentStmt->fetchColumn();
+$pdo->prepare(
+    'INSERT INTO assessment_scores (assessment_id, student_id, score, submitted_at, remarks)
+     VALUES (?, ?, 8, CURRENT_TIMESTAMP(6), ?)'
+)->execute([$bootstrapAmbiguousAssessmentId, $bootstrapStudentId, 'Bootstrap preservation sentinel']);
+
+$bootstrapExistingConfigSnapshotStmt = $pdo->prepare(
+    'SELECT config_id, version, schema_mode, component_mode, term_midterm_weight, term_final_weight,
+            component_lecture_weight, component_laboratory_weight
+       FROM grading_configs WHERE config_id = ANY (CAST(? AS INTEGER[])) ORDER BY config_id'
+);
+$bootstrapExistingConfigSnapshotStmt->execute(['{' . implode(',', [$weightConfigId, $periodConfigId]) . '}']);
+$bootstrapExistingConfigSnapshot = $bootstrapExistingConfigSnapshotStmt->fetchAll(PDO::FETCH_ASSOC);
+$bootstrapExistingCategorySnapshotStmt = $pdo->prepare(
+    'SELECT gc.config_id, gc.category_id, gc.name, gc.weight, gcp.grading_period, gcp.component, gcp.source_kind
+       FROM grading_categories gc
+       LEFT JOIN grading_category_period_memberships gcp ON gcp.category_id = gc.category_id
+      WHERE gc.config_id = ANY (CAST(? AS INTEGER[]))
+      ORDER BY gc.config_id, gc.category_id, gcp.grading_period'
+);
+$bootstrapExistingCategorySnapshotStmt->execute(['{' . implode(',', [$weightConfigId, $periodConfigId]) . '}']);
+$bootstrapExistingCategorySnapshot = $bootstrapExistingCategorySnapshotStmt->fetchAll(PDO::FETCH_ASSOC);
+$bootstrapAmbiguousAssessmentBeforeStmt = $pdo->prepare(
+    'SELECT a.grading_category_id, a.grading_period, a.max_score, a.weight, sc.score
+       FROM assessments a JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id
+      WHERE a.assessment_id = ? AND sc.student_id = ?'
+);
+$bootstrapAmbiguousAssessmentBeforeStmt->execute([$bootstrapAmbiguousAssessmentId, $bootstrapStudentId]);
+$bootstrapAmbiguousAssessmentBefore = $bootstrapAmbiguousAssessmentBeforeStmt->fetch(PDO::FETCH_ASSOC);
+
 $bootstrapCommand = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(__DIR__ . '/../../backend/bin/bootstrap-grade-weights.php');
 exec($bootstrapCommand . ' 2>&1', $bootstrapOutput, $bootstrapExit);
-expect_same(0, $bootstrapExit, 'Grade-weight bootstrap succeeds: ' . implode(' | ', array_slice($bootstrapOutput, -5)));
-$offeringsWithoutWeights = (int) $pdo->query(
-    "SELECT COUNT(*) FROM class_sections cs
-      WHERE cs.status = 'Active'
-        AND NOT EXISTS (SELECT 1 FROM grading_configs gc
-                         WHERE gc.faculty_user_id = cs.instructor_user_id AND gc.course_id = cs.course_id
-                           AND gc.semester = UPPER(cs.semester) AND gc.school_year = UPPER(cs.school_year))"
-)->fetchColumn();
-expect_same(0, $offeringsWithoutWeights, 'After the bootstrap every active class has grade weights');
-$unlinkedAfterBootstrap = (int) $pdo->query(
-    "SELECT COUNT(*) FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id
-      WHERE cs.status = 'Active' AND a.status <> 'Archived' AND a.grading_category_id IS NULL"
-)->fetchColumn();
-expect_same(0, $unlinkedAfterBootstrap, 'After the bootstrap every active assessment belongs to a grading category');
+$bootstrapOutputText = implode("\n", $bootstrapOutput);
+expect_same(1, $bootstrapExit, 'Bootstrap reports unresolved grouped assessment mappings instead of guessing');
+expect_true(str_contains($bootstrapOutputText, $bootstrapAmbiguousCourseCode), 'Bootstrap identifies the unconfigured offering that needs an explicit mapping');
+expect_true(str_contains($bootstrapOutputText, 'explicit assessment, period, and component mapping'), 'Bootstrap explains how an ambiguous Quiz must be resolved');
+$bootstrapSyllabusConfigStmt = $pdo->prepare(
+    'SELECT config_id, schema_mode, component_mode, term_midterm_weight, term_final_weight,
+            component_lecture_weight, component_laboratory_weight
+       FROM grading_configs WHERE faculty_user_id = ? AND course_id = ? AND semester = ? AND school_year = ?'
+);
+$bootstrapSyllabusConfigStmt->execute([$userId, $bootstrapSyllabusCourseId, '1ST', '2027-2028']);
+$bootstrapSyllabusConfig = $bootstrapSyllabusConfigStmt->fetch(PDO::FETCH_ASSOC);
+expect_true(is_array($bootstrapSyllabusConfig), 'Bootstrap creates the grouped default when the new offering has no assessments');
+expect_same('periods', $bootstrapSyllabusConfig['schema_mode'] ?? null, 'Bootstrap stores period defaults');
+expect_same('lecture_laboratory', $bootstrapSyllabusConfig['component_mode'] ?? null, 'Bootstrap never creates a new combined period configuration');
+expect_same(30.0, (float) ($bootstrapSyllabusConfig['term_midterm_weight'] ?? 0), 'Bootstrap stores the default Midterm contribution');
+expect_same(70.0, (float) ($bootstrapSyllabusConfig['term_final_weight'] ?? 0), 'Bootstrap stores the default Finals contribution');
+expect_same(60.0, (float) ($bootstrapSyllabusConfig['component_lecture_weight'] ?? 0), 'Bootstrap stores the default Lecture contribution');
+expect_same(40.0, (float) ($bootstrapSyllabusConfig['component_laboratory_weight'] ?? 0), 'Bootstrap stores the default Laboratory contribution');
+$bootstrapMembershipStmt = $pdo->prepare(
+    'SELECT gcp.grading_period, gcp.name, gcp.weight, gcp.sort_order, gcp.component, gcp.source_kind
+       FROM grading_category_period_memberships gcp
+       JOIN grading_categories gc ON gc.category_id = gcp.category_id
+      WHERE gc.config_id = ? ORDER BY gcp.grading_period, gcp.component, gcp.sort_order'
+);
+$bootstrapMembershipStmt->execute([(int) $bootstrapSyllabusConfig['config_id']]);
+$bootstrapMemberships = $bootstrapMembershipStmt->fetchAll(PDO::FETCH_ASSOC);
+expect_same(16, count($bootstrapMemberships), 'Bootstrap saves the eight approved assessment categories in both periods');
+expect_same(
+    ['Laboratory', 'Lecture'],
+    array_values(array_unique(array_map(static fn(array $row): string => (string) $row['component'], $bootstrapMemberships))),
+    'Bootstrap saves categories for both separate components'
+);
+$bootstrapAmbiguousConfigCountStmt = $pdo->prepare(
+    'SELECT COUNT(*) FROM grading_configs WHERE faculty_user_id = ? AND course_id = ? AND semester = ? AND school_year = ?'
+);
+$bootstrapAmbiguousConfigCountStmt->execute([$userId, $bootstrapAmbiguousCourseId, '1ST', '2027-2028']);
+expect_same(0, (int) $bootstrapAmbiguousConfigCountStmt->fetchColumn(), 'Bootstrap does not save a configuration when an assessment has two Quiz components');
+$bootstrapAmbiguousAssessmentAfterStmt = $pdo->prepare(
+    'SELECT a.grading_category_id, a.grading_period, a.max_score, a.weight, sc.score
+       FROM assessments a JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id
+      WHERE a.assessment_id = ? AND sc.student_id = ?'
+);
+$bootstrapAmbiguousAssessmentAfterStmt->execute([$bootstrapAmbiguousAssessmentId, $bootstrapStudentId]);
+expect_same($bootstrapAmbiguousAssessmentBefore, $bootstrapAmbiguousAssessmentAfterStmt->fetch(PDO::FETCH_ASSOC), 'Bootstrap preserves an ambiguous assessment mapping, period, maximum and raw score');
+$bootstrapExistingConfigSnapshotStmt->execute(['{' . implode(',', [$weightConfigId, $periodConfigId]) . '}']);
+expect_same($bootstrapExistingConfigSnapshot, $bootstrapExistingConfigSnapshotStmt->fetchAll(PDO::FETCH_ASSOC), 'Bootstrap leaves existing saved grading configurations unchanged');
+$bootstrapExistingCategorySnapshotStmt->execute(['{' . implode(',', [$weightConfigId, $periodConfigId]) . '}']);
+expect_same($bootstrapExistingCategorySnapshot, $bootstrapExistingCategorySnapshotStmt->fetchAll(PDO::FETCH_ASSOC), 'Bootstrap preserves existing saved category identifiers, weights and memberships');
+$bootstrapUnknownPeriodAssessmentTitle = 'Unspecified Period Outputs ' . $bootstrapFixtureSuffix;
+$bootstrapUnknownPeriodAssessmentStmt = $pdo->prepare(
+    "INSERT INTO assessments
+        (cs_id, title, type, grading_category_id, grading_period, max_score, weight, status)
+     VALUES (?, ?, 'Outputs', NULL, NULL, 10, 1, 'Active')
+     RETURNING assessment_id"
+);
+$bootstrapUnknownPeriodAssessmentStmt->execute([$bootstrapSyllabusClassId, $bootstrapUnknownPeriodAssessmentTitle]);
+$bootstrapUnknownPeriodAssessmentId = (int) $bootstrapUnknownPeriodAssessmentStmt->fetchColumn();
 exec($bootstrapCommand . ' 2>&1', $secondBootstrapOutput, $secondBootstrapExit);
-expect_same(0, $secondBootstrapExit, 'Running the bootstrap again is harmless');
-expect_true(in_array('Every active class offering already has grade weights.', $secondBootstrapOutput, true), 'A second bootstrap run has nothing left to create');
+expect_same(1, $secondBootstrapExit, 'A repeated bootstrap leaves unresolved grouped assessment mapping visible');
+$secondBootstrapOutputText = implode("\n", $secondBootstrapOutput);
+expect_true(str_contains($secondBootstrapOutputText, $bootstrapAmbiguousCourseCode), 'Repeated bootstrap still identifies the unresolved offering');
+expect_true(str_contains($secondBootstrapOutputText, $bootstrapUnknownPeriodAssessmentTitle), 'Grouped bootstrap identifies an assessment with no period');
+expect_true(str_contains($secondBootstrapOutputText, 'explicit Midterm/Final period and Lecture/Laboratory category mapping'), 'Grouped bootstrap requires a period instead of guessing Midterm');
+$bootstrapUnknownPeriodAfterStmt = $pdo->prepare('SELECT grading_category_id, grading_period FROM assessments WHERE assessment_id = ?');
+$bootstrapUnknownPeriodAfterStmt->execute([$bootstrapUnknownPeriodAssessmentId]);
+expect_same(['grading_category_id' => null, 'grading_period' => null], $bootstrapUnknownPeriodAfterStmt->fetch(PDO::FETCH_ASSOC), 'Grouped bootstrap preserves an unknown period and leaves its assessment unlinked');
+$bootstrapSyllabusConfigStmt->execute([$userId, $bootstrapSyllabusCourseId, '1ST', '2027-2028']);
+$bootstrapSyllabusConfigAfterSecondRun = $bootstrapSyllabusConfigStmt->fetch(PDO::FETCH_ASSOC);
+expect_same($bootstrapSyllabusConfig, $bootstrapSyllabusConfigAfterSecondRun, 'A repeated bootstrap never rewrites its saved grouped default');
 
 // REG-006 / BIO-010: a Class Secretary is a Student appointed with their own
 // account. The demo Student (account 10) is appointed to a fresh section,
@@ -6651,5 +6927,7 @@ expect_same('student', $appointRole()['role'] ?? null, 'The ended appointment re
 $endedAuditStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code IN ('secretary_appointed', 'secretary_appointment_ended') AND target_id = '10'");
 $endedAuditStmt->execute();
 expect_true((int) $endedAuditStmt->fetchColumn() >= 4, 'Appointments and their end are audited');
+
+require __DIR__ . '/grouped_grading_integration.php';
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

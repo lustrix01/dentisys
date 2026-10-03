@@ -201,7 +201,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                 <React.Fragment key={period.key}>
                   {groups[period.key].map(group => (
                     <th key={`${period.key}-${group.category.id}`} className={th} colSpan={group.assessments.length + 2}>
-                      {group.category.name} ({weightLabel(group.category.weight)})
+                      {group.category.component ? `${group.category.component} · ` : ''}{group.category.name} ({weightLabel(group.category.weight)})
                     </th>
                   ))}
                   <th className={th} rowSpan={2}>{period.totalLabel}<div className="font-normal normal-case">(100%)</div></th>
