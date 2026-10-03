@@ -26,6 +26,12 @@
 - Do not refactor, split, reorganize, or rewrite working code merely because it is large or theoretically cleaner. Add dependencies only for a concrete current need; “future-proofing” alone is not scope justification.
 - Keep validation proportional to the files, subsystem, and behavior changed. Treat active runtime files and current documentation as authoritative; inspect archived or historical material only when the task requires it.
 
+## Regression prevention
+
+- Do not introduce regressions in existing functionality, data integrity, security, permissions, API contracts, calculations, routes, workflows, or desktop/mobile behavior unless the Owner explicitly approves the specific regression in advance. Approval to add, refactor, or transfer a feature does not itself permit regressions.
+- Compare changes against the working baseline and preserve existing capabilities and safeguards. If a proposed change requires degraded or removed behavior, explain the exact impact and obtain explicit Owner approval before implementing it; existing specification change-control rules still apply.
+- Any unapproved regression introduced by the change blocks completion, commit, merge, and push. Fix it or obtain explicit Owner approval for that specific exception. Never conceal regressions or weaken meaningful tests to make checks pass.
+
 ## Collaboration workflow
 
 - Start each feature with a stable contract: agree on fields, errors, and examples before implementation. Luna XHigh owns backend and frontend functional implementation, focused tests, integration, and tools. Gemini is limited to a presentation pass: visual JSX/CSS, layout, styles, presentational labels, contrast, and other non-authoritative visual accessibility polish. Gemini must not change event handlers, API clients/routes/types, state, validation, calculations, authentication, persistence, roles/permissions, business logic, or authoritative business wording. Luna owns functional accessibility and interaction behavior as needed. Visual JSX/CSS may overlap functional files, so the parent assigns exclusive ownership and coordinates conflicts; Gemini reports a conflict instead of resolving functional code. The user manually relays Gemini's UI prompt, while the parent owns detailed dispatch and waits without routine supervision.
