@@ -916,6 +916,30 @@ Retention and grading decisions remain server-authoritative through the existing
 
 ---
 
+## IMP-001 - Provisional Student roster imports
+**Status: APPROVED**
+
+Faculty may import Student roster records into an existing assigned current-year
+class using a provisional supported layout. The interface MUST state "Official
+format not confirmed"; a sample does not establish official Registrar compatibility.
+Preserve complete Student numbers and supplied identity/contact values. Do not
+invent missing emails or year levels, silently resolve ambiguous name splits,
+overwrite existing Student identities, or create classes from imported headers.
+Require preview and target-class confirmation before saving. Flag possible
+crossed-out rows and leave them unselected until reviewed; marking detection is
+best effort and the Faculty must review the source. Resolve existing Students
+through server identities and preserve permissions, historical-class restrictions,
+audit history, account eligibility and separate invitation authority. Process the
+original file locally and send only selected Student fields to existing APIs.
+Official Registrar compatibility and grade-sheet importing remain unconfirmed.
+
+Each selected import row MUST supply a complete Student number, first name,
+last name and a valid institutional email from the server-configured allowed
+domains. Extract supplied emails from supported source files; missing or
+invalid emails MUST block that row until corrected in preview. Never fabricate
+an email or overwrite an existing Student's email; invitation sending remains
+a separate authorized action.
+
 # 9B. UI and normalized-data amendment - 2026-09-24
 
 **Status: APPROVED by the Owner's explicit request to amend the specification using UI Changes.pdf. Implementation pending.**

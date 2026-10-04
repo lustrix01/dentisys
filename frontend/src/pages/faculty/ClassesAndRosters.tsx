@@ -164,7 +164,6 @@ export const ClassesAndRosters: React.FC = () => {
   // Selected Class & Modals
   const [selectedClass, setSelectedClass] = useState<FacultyClassItem | null>(null);
   const [isCreateClassOpen, setIsCreateClassOpen] = useState(false);
-  const [isImportIctoOpen, setIsImportIctoOpen] = useState(false);
 
   // Student Enrollment Modal States
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
@@ -311,8 +310,6 @@ export const ClassesAndRosters: React.FC = () => {
       .join(' ');
   }, [studentPrefix, studentFirstName, studentMiddleName, studentLastName, studentSuffix]);
 
-  // Form States: Import iBU File Data
-  const [ictoFileText, setIctoFileText] = useState('');
 
   // Notification Banner
   const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
@@ -1055,13 +1052,6 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
-  // Handler: Import iBU Class List File - Externally Blocked (Batch X1)
-  const handleImportIctoFile = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsImportIctoOpen(false);
-    showFeedback('Registrar/iBU roster import is externally blocked awaiting official University file layout specification (Batch X1). Automated parsing is disabled.', 'info');
-  };
-
   // Handler: Send Email Invitation to Student
   const invitationClassId = (student: Student): string | null => {
     if (!/^\d+$/.test(student.id)) return null;
@@ -1156,7 +1146,7 @@ export const ClassesAndRosters: React.FC = () => {
             My Classes & Student Rosters
           </h1>
           <p className="text-xs text-slate-400 mt-1 max-w-xl">
-            Create classes, import iBU student rosters (PDF/CSV), manage students, and send email invitations.
+            Create classes, import provisional student rosters (PDF/CSV), manage students, and send email invitations. Official import format not confirmed.
           </p>
           <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
             {newSchoolYear ? `Current school year: ${newSchoolYear}. Past school-year classes are view-only.` : 'Current school year is unavailable. Class creation is disabled.'}
@@ -1175,11 +1165,11 @@ export const ClassesAndRosters: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setIsImportIctoOpen(true)}
+            onClick={() => setIsImportRosterOpen(true)}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
           >
             <Upload className="w-4 h-4" />
-            <span>Import iBU Roster</span>
+            <span>Import Roster (Provisional)</span>
           </button>
         </div>
       </div>
@@ -2595,60 +2585,6 @@ export const ClassesAndRosters: React.FC = () => {
         </Modal>
       )}
 
-      {/* Modal: Import iBU Class List File - Blocked (Batch X1) */}
-      {isImportIctoOpen && (
-        <Modal isOpen={isImportIctoOpen} onClose={() => setIsImportIctoOpen(false)} title="Import iBU Class Roster File (Batch X1 Blocked)">
-          <form onSubmit={handleImportIctoFile} className="space-y-4 text-xs">
-            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 rounded-xl text-amber-800 dark:text-amber-200 space-y-1.5">
-              <span className="font-bold flex items-center gap-1.5 text-amber-900 dark:text-amber-100">
-                <AlertCircle className="w-4 h-4 text-amber-600" />
-                Registrar/iBU Import Blocked (Batch X1)
-              </span>
-              <p className="text-amber-700 dark:text-amber-300 leading-relaxed">
-                Automated roster import is externally blocked awaiting official University / Registrar file layout specification (exact headers, Student identifier format, course/section columns, and encoding). Browser-only file parsing is disabled to protect database integrity.
-              </p>
-            </div>
-
-            <div>
-              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">Select PDF or CSV File</label>
-              <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-5 text-center bg-slate-50/50 dark:bg-slate-900/50">
-                <Upload className="w-7 h-7 text-slate-400 mx-auto mb-2" />
-                <span className="font-bold text-slate-600 dark:text-slate-400 block text-xs">
-                  Official roster file upload is pending format specification
-                </span>
-                <span className="text-[11px] text-slate-400 block mt-0.5 mb-2">
-                  Awaiting Registrar format guidelines
-                </span>
-                <input
-                  type="file"
-                  accept=".pdf, .csv, .txt"
-                  disabled
-                  className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-400 cursor-not-allowed"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsImportIctoOpen(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
-              >
-                Close
-              </button>
-              <button
-                type="submit"
-                disabled
-                className="px-5 py-2 rounded-xl bg-slate-300 dark:bg-slate-700 text-slate-500 font-bold cursor-not-allowed"
-                title="Awaiting University/Registrar file specification (Batch X1)"
-              >
-                Import Blocked (Pending Registrar Layout)
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
       {/* Modal: Import Student Roster from Registrar (CSV or PDF) */}
       {isImportRosterOpen && (
         <RosterImportModal
@@ -2656,7 +2592,8 @@ export const ClassesAndRosters: React.FC = () => {
           onClose={() => setIsImportRosterOpen(false)}
           classes={classes}
           defaultClassId={selectedClassFilterId !== 'all' ? Number(selectedClassFilterId) : (classes.find(c => !isHistoricalClass(c))?.csId || 0)}
-          existingStudentIds={new Set(studentsList.map(s => s.studentId))}
+          currentSchoolYear={newSchoolYear}
+          existingStudents={studentsList}
           onSuccess={fetchData}
         />
       )}

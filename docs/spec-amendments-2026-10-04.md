@@ -148,3 +148,19 @@ conversion-back decision. The six approved replacements are recorded below.
 > and all three 100% totals. Defaults are shown automatically without an Apply
 > syllabus example action. Existing saved configurations and recorded grades must
 > never be replaced automatically by default values.
+# Provisional Student roster import
+
+The Owner separately approved the exact IMP-001 rule in
+[the provisional roster proposal](proposals/provisional-roster-import.md) on
+2026-10-04. Added it before section 9B without changing unaffected rules.
+The importer remains explicitly provisional: official format not confirmed.
+The private sample and its personal records are not repository fixtures.
+
+# Institutional email required for provisional imports
+
+The Owner requested mandatory institutional email and parsing of supplied emails,
+then separately approved the exact additional IMP-001 paragraph in
+docs/proposals/provisional-roster-import.md on 2026-10-04. Every selected import
+row requires a valid email from the server-configured allowed domains. Missing
+or invalid email blocks that row until corrected; no email is fabricated and
+existing Student emails are not overwritten. Invitations remain separate.

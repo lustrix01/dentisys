@@ -1,8 +1,6 @@
-/**
- * Roster Import Helper
- * Parses CSV, TSV, text, and PDF registrar roster exports for student enrollment.
- */
+import { personNameFieldError } from './personNameValidation.ts';
 
+/** Provisional roster data only; no official Registrar format is confirmed. */
 export interface ParsedRosterStudent {
   tempKey: string;
   studentId: string;
@@ -12,511 +10,233 @@ export interface ParsedRosterStudent {
   middleName?: string;
   lastName: string;
   email: string;
-  yearLevel: number;
+  contact?: string;
+  yearLevel: number | null;
   sex?: string;
+  originalName?: string;
+  sourcePage?: number;
+  sourceRow?: string;
+  possibleCrossedOut?: boolean;
+  requiresNameReview: boolean;
+  reviewed: boolean;
+  included: boolean;
   status: 'valid' | 'warning' | 'error';
   validationMessage?: string;
-  isExistingInDirectory?: boolean;
 }
 
-/**
- * Normalizes full name into split names (First, Middle, Last, Suffix)
- * Handles "LASTNAME, FIRSTNAME MIDDLE" or "FIRSTNAME MIDDLE LASTNAME"
- */
-export function splitFullName(rawName: string): {
-  firstName: string;
-  middleName: string;
-  lastName: string;
-  suffix?: string;
-} {
-  const cleaned = rawName.trim().replace(/\s+/g, ' ');
-  if (!cleaned) {
-    return { firstName: '', middleName: '', lastName: '' };
-  }
-
-  // Common suffixes
-  const suffixes = ['JR', 'JR.', 'SR', 'SR.', 'II', 'III', 'IV', 'V'];
-  let detectedSuffix = '';
-
-  // Format 1: "Dela Cruz, Juan Pedro M." or "Santos, Maria Clara Jr."
-  if (cleaned.includes(',')) {
-    const parts = cleaned.split(',').map(p => p.trim());
-    const lastNamePart = parts[0] || '';
-    let rest = parts.slice(1).join(' ').trim();
-
-    // Check for suffix in rest or lastName
-    for (const suf of suffixes) {
-      const regex = new RegExp(`\\b${suf}\\b`, 'i');
-      if (regex.test(rest)) {
-        detectedSuffix = suf.replace('.', '');
-        rest = rest.replace(regex, '').trim().replace(/\s+/g, ' ');
-      }
-    }
-
-    const restWords = rest.split(' ').filter(Boolean);
-    let firstName = '';
-    let middleName = '';
-
-    if (restWords.length === 1) {
-      firstName = restWords[0];
-    } else if (restWords.length > 1) {
-      const lastToken = restWords[restWords.length - 1];
-      // If last token is 1-2 chars or has a dot (e.g. "M." or "M"), treat as middle name/initial
-      if (lastToken.length <= 2 || lastToken.endsWith('.')) {
-        middleName = lastToken.replace('.', '');
-        firstName = restWords.slice(0, -1).join(' ');
-      } else {
-        firstName = restWords.join(' ');
-      }
-    }
-
-    return {
-      lastName: lastNamePart,
-      firstName,
-      middleName,
-      suffix: detectedSuffix || undefined,
-    };
-  }
-
-  // Format 2: "Juan Pedro M. Dela Cruz"
-  const tokens = cleaned.split(' ').filter(Boolean);
-  if (tokens.length === 1) {
-    return { firstName: tokens[0], middleName: '', lastName: '' };
-  }
-
-  // Check if last token is a suffix
-  if (suffixes.map(s => s.toLowerCase()).includes(tokens[tokens.length - 1].toLowerCase())) {
-    detectedSuffix = tokens.pop()!.replace('.', '');
-  }
-
-  if (tokens.length === 2) {
-    return {
-      firstName: tokens[0],
-      middleName: '',
-      lastName: tokens[1],
-      suffix: detectedSuffix || undefined,
-    };
-  }
-
-  // If 3 or more tokens, check if middle token is middle initial (e.g., "M.")
-  const middleCandidate = tokens[tokens.length - 2];
-  if (middleCandidate.length <= 2 || middleCandidate.endsWith('.')) {
-    return {
-      firstName: tokens.slice(0, tokens.length - 2).join(' '),
-      middleName: middleCandidate.replace('.', ''),
-      lastName: tokens[tokens.length - 1],
-      suffix: detectedSuffix || undefined,
-    };
-  }
-
-  return {
-    firstName: tokens.slice(0, -1).join(' '),
-    middleName: '',
-    lastName: tokens[tokens.length - 1],
-    suffix: detectedSuffix || undefined,
-  };
+/** Keep ambiguous given names together for explicit preview reconciliation. */
+export function splitFullName(rawName: string) {
+  const cleaned = rawName.normalize('NFC').trim().replace(/\s+/g, ' ');
+  const comma = cleaned.indexOf(',');
+  return comma < 0
+    ? { firstName: cleaned, middleName: '', lastName: '' }
+    : { firstName: cleaned.slice(comma + 1).trim(), middleName: '', lastName: cleaned.slice(0, comma).trim() };
 }
 
-/**
- * Generate default institutional email if missing
- */
-export function generateInstitutionalEmail(studentId: string, firstName: string, lastName: string): string {
-  const cleanFirst = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanLast = lastName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (cleanFirst && cleanLast) {
-    return `${cleanFirst}.${cleanLast}@bicol-u.edu.ph`;
-  }
-  const cleanId = studentId.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return `${cleanId || 'student'}@bicol-u.edu.ph`;
+export function parseRosterYear(value: string): number | null {
+  if (!value.trim()) return null;
+  const match = value.trim().match(/^([1-6])(?:st|nd|rd|th)?(?:\s*year)?$/i);
+  return match ? Number(match[1]) : Number.NaN;
 }
 
-/**
- * Parse CSV or TSV string into student records
- */
-export function parseCSVText(
-  text: string,
-  existingStudentIds: Set<string> = new Set()
-): ParsedRosterStudent[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(l => l.length > 0);
+// The existing Student API stores sex as a single-character code.
+function normalizeRosterSex(value: string): string {
+  const trimmed = value.trim();
+  if (/^(female|f)$/i.test(trimmed)) return 'F';
+  if (/^(male|m)$/i.test(trimmed)) return 'M';
+  return trimmed;
+}
 
-  if (lines.length === 0) return [];
-
-  // Detect delimiter
-  const firstLine = lines[0];
-  const commaCount = (firstLine.match(/,/g) || []).length;
-  const tabCount = (firstLine.match(/\t/g) || []).length;
-  const semiCount = (firstLine.match(/;/g) || []).length;
-  const delimiter = tabCount > commaCount && tabCount > semiCount ? '\t' : (semiCount > commaCount ? ';' : ',');
-
-  const splitLine = (line: string): string[] => {
-    // Regex for CSV with quoted strings
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === delimiter && !inQuotes) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
+export function validateRosterStudents(rows: ParsedRosterStudent[], allowedDomains: string[]): ParsedRosterStudent[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.studentId.trim().toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return rows.map(row => {
+    const errors: string[] = [];
+    if (row.studentId.trim().length < 3) errors.push('Student number must contain at least 3 characters.');
+    if (row.studentId.trim().length > 50) errors.push('Student number must contain at most 50 characters.');
+    if ((row.contact?.trim().length ?? 0) > 50) errors.push('Contact must contain at most 50 characters.');
+    const sex = normalizeRosterSex(row.sex ?? '');
+    if (sex.length > 1) errors.push('Gender must be Male, Female, a one-character code, or blank. Review the source value.');
+    if ((counts.get(row.studentId.trim().toLowerCase()) ?? 0) > 1) errors.push('Duplicate student number in this file.');
+    for (const key of ['prefix', 'firstName', 'middleName', 'lastName', 'suffix'] as const) {
+      const raw = row[key] ?? '';
+      const error = personNameFieldError(key, raw);
+      if (error) errors.push(error);
+      const affix = key === 'prefix' || key === 'suffix';
+      const normalized = affix ? raw.trim() : raw.trim().replace(/\s+/g, ' ').replace(/(^| )(jr|sr)\.?(?= |$)/gi, '$1$2.');
+      const maxBytes = affix ? 50 : 100;
+      const label = { prefix: 'Prefix', firstName: 'First name', middleName: 'Middle name', lastName: 'Last name', suffix: 'Suffix' }[key];
+      if (new TextEncoder().encode(normalized).length > maxBytes) errors.push(`${label} must contain at most ${maxBytes} UTF-8 bytes.`);
     }
-    result.push(current.trim());
-    return result.map(s => s.replace(/^"|"$/g, '').trim());
-  };
-
-  const headerTokens = splitLine(firstLine).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
-  let hasHeader = false;
-  let idCol = -1;
-  let nameCol = -1;
-  let firstCol = -1;
-  let lastCol = -1;
-  let middleCol = -1;
-  let emailCol = -1;
-  let yearCol = -1;
-  let sexCol = -1;
-
-  headerTokens.forEach((tok, idx) => {
-    if (tok.includes('id') || tok.includes('number') || tok.includes('studentno')) {
-      idCol = idx;
-      hasHeader = true;
-    } else if (tok.includes('first')) {
-      firstCol = idx;
-      hasHeader = true;
-    } else if (tok.includes('last') || tok.includes('surname')) {
-      lastCol = idx;
-      hasHeader = true;
-    } else if (tok.includes('middle')) {
-      middleCol = idx;
-      hasHeader = true;
-    } else if (tok.includes('name') && firstCol === -1 && lastCol === -1) {
-      nameCol = idx;
-      hasHeader = true;
-    } else if (tok.includes('email') || tok.includes('mail')) {
-      emailCol = idx;
-      hasHeader = true;
-    } else if (tok.includes('year') || tok.includes('level')) {
-      yearCol = idx;
-      hasHeader = true;
-    } else if (tok.includes('sex') || tok.includes('gender')) {
-      sexCol = idx;
-      hasHeader = true;
+    if (!row.email.trim()) errors.push('Institutional email is required before this row can be imported.');
+    else {
+      const email = row.email.trim();
+      if (new TextEncoder().encode(email).length > 254) errors.push('Email must contain at most 254 UTF-8 bytes.');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Provide a complete institutional email address.');
+      else if (!allowedDomains.some(domain => domain.toLowerCase() === email.split('@')[1].toLowerCase())) errors.push('Email domain is not allowed by the server configuration.');
     }
+    if (row.yearLevel !== null && (!Number.isInteger(row.yearLevel) || row.yearLevel < 1 || row.yearLevel > 6)) errors.push('Year level must be between 1 and 6, or blank.');
+    const needsReview = !row.reviewed && (row.requiresNameReview || row.possibleCrossedOut);
+    return { ...row, sex, status: errors.length ? 'error' : needsReview ? 'warning' : 'valid', validationMessage: errors.length ? errors.join(' ') : needsReview ? 'Review the source and name fields before selecting this row.' : undefined };
   });
-
-  const dataLines = hasHeader ? lines.slice(1) : lines;
-  const results: ParsedRosterStudent[] = [];
-
-  for (let i = 0; i < dataLines.length; i++) {
-    const rawTokens = splitLine(dataLines[i]);
-    if (rawTokens.length < 2) continue;
-
-    let studentId = '';
-    let firstName = '';
-    let middleName = '';
-    let lastName = '';
-    let suffix = '';
-    let email = '';
-    let yearLevel = 4;
-    let sex = '';
-
-    if (hasHeader) {
-      studentId = idCol >= 0 ? rawTokens[idCol] || '' : '';
-      email = emailCol >= 0 ? rawTokens[emailCol] || '' : '';
-      if (yearCol >= 0) {
-        const parsedYear = parseInt(rawTokens[yearCol] || '4', 10);
-        if (!isNaN(parsedYear) && parsedYear >= 1 && parsedYear <= 6) {
-          yearLevel = parsedYear;
-        }
-      }
-      sex = sexCol >= 0 ? rawTokens[sexCol] || '' : '';
-
-      if (firstCol >= 0 && lastCol >= 0) {
-        firstName = rawTokens[firstCol] || '';
-        lastName = rawTokens[lastCol] || '';
-        middleName = middleCol >= 0 ? rawTokens[middleCol] || '' : '';
-      } else if (nameCol >= 0) {
-        const splitted = splitFullName(rawTokens[nameCol] || '');
-        firstName = splitted.firstName;
-        middleName = splitted.middleName;
-        lastName = splitted.lastName;
-        suffix = splitted.suffix || '';
-      }
-    } else {
-      // Guess columns without headers:
-      // Typically: [Student ID, Last, First, Middle, Email, Year] or [Student ID, Full Name, Email]
-      for (const token of rawTokens) {
-        if (!studentId && /^\d{4}[-\s]?\d{4,6}$/.test(token)) {
-          studentId = token;
-        } else if (!email && token.includes('@')) {
-          email = token;
-        } else if (/^[1-4]$/.test(token)) {
-          yearLevel = parseInt(token, 10);
-        } else if (!lastName && !firstName) {
-          if (token.includes(',')) {
-            const splitted = splitFullName(token);
-            firstName = splitted.firstName;
-            middleName = splitted.middleName;
-            lastName = splitted.lastName;
-          } else {
-            lastName = token;
-          }
-        } else if (lastName && !firstName) {
-          firstName = token;
-        } else if (lastName && firstName && !middleName) {
-          middleName = token;
-        }
-      }
-    }
-
-    if (!studentId && rawTokens[0]) {
-      studentId = rawTokens[0];
-    }
-    if (!lastName && rawTokens[1]) {
-      const splitted = splitFullName(rawTokens[1]);
-      firstName = splitted.firstName || 'Student';
-      lastName = splitted.lastName || rawTokens[1];
-    }
-
-    studentId = studentId.trim();
-    firstName = firstName.trim();
-    lastName = lastName.trim();
-
-    if (!email) {
-      email = generateInstitutionalEmail(studentId, firstName, lastName);
-    } else if (!email.includes('@')) {
-      email = `${email.trim()}@bicol-u.edu.ph`;
-    }
-
-    let status: 'valid' | 'warning' | 'error' = 'valid';
-    let validationMessage = '';
-
-    if (!studentId) {
-      status = 'error';
-      validationMessage = 'Missing student number.';
-    } else if (!firstName || !lastName) {
-      status = 'error';
-      validationMessage = 'First and last name are required.';
-    } else if (!email.includes('@')) {
-      status = 'warning';
-      validationMessage = 'Invalid institutional email format.';
-    }
-
-    const isExisting = existingStudentIds.has(studentId);
-
-    results.push({
-      tempKey: `row-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      studentId,
-      prefix: undefined,
-      suffix: suffix || undefined,
-      firstName,
-      middleName: middleName || undefined,
-      lastName,
-      email: email.toLowerCase(),
-      yearLevel,
-      sex: sex || undefined,
-      status,
-      validationMessage,
-      isExistingInDirectory: isExisting,
-    });
-  }
-
-  return results;
 }
 
-/**
- * Attempts to decompress flate stream bytes from PDF
- */
-async function decompressFlateBytes(bytes: Uint8Array): Promise<string> {
-  const DS = (globalThis as any).DecompressionStream;
-  if (DS) {
-    // Attempt standard deflate
-    try {
-      const stream = new Response(bytes as any).body?.pipeThrough(new DS('deflate'));
-      if (stream) {
-        const decompressed = await new Response(stream).arrayBuffer();
-        return new TextDecoder('utf-8', { fatal: false }).decode(decompressed);
-      }
-    } catch {
-      // Try raw deflate by slicing zlib 2-byte header and 4-byte checksum
-      try {
-        if (bytes.length > 6) {
-          const raw = bytes.slice(2, bytes.length - 4);
-          const stream = new Response(raw as any).body?.pipeThrough(new DS('deflate-raw'));
-          if (stream) {
-            const decompressed = await new Response(stream).arrayBuffer();
-            return new TextDecoder('utf-8', { fatal: false }).decode(decompressed);
-          }
-        }
-      } catch {
-        // Fallback
-      }
-    }
+/** Quoted fields, escaped quotes and embedded newlines stay in their cells. */
+function delimitedRows(text: string, delimiter: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [], field = '', quoted = false;
+  const pushRow = () => { row.push(field.trim()); if (row.some(Boolean)) rows.push(row); row = []; field = ''; };
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (quoted && text[i + 1] === '"') { field += '"'; i++; }
+      else if (quoted || !field.trim()) quoted = !quoted;
+      else field += char;
+    } else if (char === delimiter && !quoted) { row.push(field.trim()); field = ''; }
+    else if ((char === '\n' || char === '\r') && !quoted) { if (char === '\r' && text[i + 1] === '\n') i++; pushRow(); }
+    else field += char;
   }
-  return new TextDecoder('latin1').decode(bytes);
+  if (quoted) throw new Error('Unclosed quoted field in the roster file.');
+  pushRow();
+  return rows;
 }
 
-/**
- * Extracts raw textual lines from PDF ArrayBuffer
- */
-export async function extractTextFromPDF(buffer: ArrayBuffer): Promise<string[]> {
-  const uint8 = new Uint8Array(buffer);
-  const rawText = new TextDecoder('latin1').decode(uint8);
-  const extractedLines: string[] = [];
+const aliases: Record<string, string[]> = {
+  studentId: ['studentid', 'studentnumber', 'studentno', 'studentnum', 'id', 'idnumber'],
+  firstName: ['firstname', 'givenname'], lastName: ['lastname', 'surname', 'familyname'],
+  middleName: ['middlename', 'middleinitial'], originalName: ['name', 'fullname', 'studentname'],
+  email: ['email', 'emailaddress', 'institutionalemail', 'institutionalemailaddress', 'buemail', 'buemailaddress', 'studentemail', 'studentemailaddress'],
+  yearLevel: ['year', 'yearlevel', 'level'], sex: ['sex', 'gender'],
+  contact: ['contact', 'contactnumber', 'contactno', 'phone', 'phonenumber', 'mobile'],
+  prefix: ['prefix', 'nameprefix'], suffix: ['suffix', 'namesuffix'],
+};
 
-  // Match streams in the PDF
-  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = streamRegex.exec(rawText)) !== null) {
-    const streamContent = match[1];
-    const streamStartIndex = match.index + match[0].indexOf(streamContent);
-    const streamBytes = uint8.slice(streamStartIndex, streamStartIndex + streamContent.length);
-
-    let decoded = '';
-    // If stream looks compressed or has non-ascii
-    if (match[0].includes('/FlateDecode') || rawText.slice(Math.max(0, match.index - 150), match.index).includes('/FlateDecode')) {
-      decoded = await decompressFlateBytes(streamBytes);
-    } else {
-      decoded = streamContent;
+export function parseCSVText(text: string): ParsedRosterStudent[] {
+  const clean = text.replace(/^\uFEFF/, '');
+  // Detect separators outside quotes in the first non-empty logical row.
+  let quoted = false;
+  let hasValue = false;
+  const counts = new Map([ [',', 0], ['\t', 0], [';', 0] ]);
+  for (let i = 0; i < clean.length; i++) {
+    if (clean[i] === '"') { if (quoted && clean[i + 1] === '"') { i++; hasValue = true; } else quoted = !quoted; }
+    else if (!quoted && /[\r\n]/.test(clean[i])) {
+      if (hasValue) break;
+      for (const separator of counts.keys()) counts.set(separator, 0);
     }
-
-    // Extract text operators in PDF: (string) Tj or [(arr)] TJ
-    const tjRegex = /\((.*?)\)\s*Tj/g;
-    let tjMatch: RegExpExecArray | null;
-    let currentLineTokens: string[] = [];
-
-    while ((tjMatch = tjRegex.exec(decoded)) !== null) {
-      const cleanStr = tjMatch[1]
-        .replace(/\\([()\\])/g, '$1')
-        .replace(/\\n/g, '\n')
-        .replace(/\\r/g, '')
-        .replace(/\\t/g, ' ')
-        .trim();
-      if (cleanStr) currentLineTokens.push(cleanStr);
-    }
-
-    // Match array-based TJ operators: [ (str) 10 (str2) ] TJ
-    const arrayTjRegex = /\[(.*?)\]\s*TJ/g;
-    let arrMatch: RegExpExecArray | null;
-    while ((arrMatch = arrayTjRegex.exec(decoded)) !== null) {
-      const inner = arrMatch[1];
-      const strParts = inner.match(/\((.*?)\)/g);
-      if (strParts) {
-        const combined = strParts
-          .map(p => p.slice(1, -1).replace(/\\([()\\])/g, '$1'))
-          .join('')
-          .trim();
-        if (combined) currentLineTokens.push(combined);
-      }
-    }
-
-    if (currentLineTokens.length > 0) {
-      extractedLines.push(currentLineTokens.join(' '));
-    } else {
-      // Also look for plain text lines if uncompressed
-      const lines = decoded.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-      for (const line of lines) {
-        if (/^\d{4}[-\s]?\d{4,6}/.test(line) || line.includes('@bicol-u.edu.ph')) {
-          extractedLines.push(line);
-        }
-      }
-    }
+    else if (!quoted && counts.has(clean[i])) counts.set(clean[i], counts.get(clean[i])! + 1);
+    else if (/\S/.test(clean[i])) hasValue = true;
   }
-
-  // If no streams matched (some PDF generators store uncompressed text blocks)
-  if (extractedLines.length === 0) {
-    const fallbackLines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    for (const l of fallbackLines) {
-      if (/\b\d{4}[-\s]?\d{4,6}\b/.test(l)) {
-        extractedLines.push(l);
-      }
-    }
-  }
-
-  return extractedLines;
-}
-
-/**
- * Parses lines extracted from a registrar PDF into student records
- */
-export function parsePDFRosterLines(
-  lines: string[],
-  existingStudentIds: Set<string> = new Set()
-): ParsedRosterStudent[] {
-  const results: ParsedRosterStudent[] = [];
-  const studentIdRegex = /\b(\d{4}[-\s]?\d{4,6})\b/;
-  const emailRegex = /\b([A-Za-z0-9._%+-]+@bicol-u\.edu\.ph)\b/i;
-
-  lines.forEach((line, idx) => {
-    const idMatch = line.match(studentIdRegex);
-    if (!idMatch) return;
-
-    const studentId = idMatch[1].replace(/\s+/g, '-').trim();
-    let remaining = line.replace(idMatch[0], '').trim();
-
-    // Check for email
-    let email = '';
-    const emailMatch = remaining.match(emailRegex);
-    if (emailMatch) {
-      email = emailMatch[1].toLowerCase();
-      remaining = remaining.replace(emailMatch[0], '').trim();
-    }
-
-    // Check for year level (1 to 4)
-    let yearLevel = 4;
-    const yearMatch = remaining.match(/\b([1-4])\b/);
-    if (yearMatch) {
-      yearLevel = parseInt(yearMatch[1], 10);
-      remaining = remaining.replace(yearMatch[0], '').trim();
-    }
-
-    // Remaining text is student name (e.g. "Dela Cruz, Juan M." or "SANTOS, MARIA CLARA")
-    const cleanName = remaining.replace(/[^A-Za-z,\s.-]/g, '').trim();
-    const splitted = splitFullName(cleanName);
-
-    const firstName = splitted.firstName || 'Student';
-    const lastName = splitted.lastName || (cleanName || 'Registrar-Record');
-    const middleName = splitted.middleName;
-    const suffix = splitted.suffix;
-
-    if (!email) {
-      email = generateInstitutionalEmail(studentId, firstName, lastName);
-    }
-
-    const isExisting = existingStudentIds.has(studentId);
-
-    results.push({
-      tempKey: `pdf-${idx}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      studentId,
-      prefix: undefined,
-      suffix: suffix || undefined,
-      firstName,
-      middleName: middleName || undefined,
-      lastName,
-      email,
-      yearLevel,
-      status: 'valid',
-      isExistingInDirectory: isExisting,
-    });
+  const delimiter = [...counts].sort((a, b) => b[1] - a[1])[0][0];
+  const rows = delimitedRows(clean, delimiter);
+  if (!rows.length) return [];
+  const headers = rows[0].map(value => value.toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const columns = Object.fromEntries(Object.entries(aliases).map(([field, names]) => [field, headers.findIndex(header => names.includes(header))]));
+  const hasHeader = columns.studentId >= 0 || columns.firstName >= 0 || columns.originalName >= 0;
+  if (hasHeader && columns.studentId < 0) throw new Error('The roster needs a Student ID or Student No. column.');
+  return (hasHeader ? rows.slice(1) : rows).map((values, index) => {
+    const get = (field: string) => columns[field] >= 0 ? values[columns[field]] ?? '' : '';
+    const originalName = hasHeader ? get('originalName') : values[1] ?? '';
+    const structured = hasHeader && columns.firstName >= 0 && columns.lastName >= 0;
+    const positionalNames = !hasHeader && values.length >= 3 && !values[1]?.includes(',') && !values[2]?.includes('@') && !/^\d/.test(values[2] ?? '');
+    const names = structured
+      ? { firstName: get('firstName'), middleName: get('middleName'), lastName: get('lastName') }
+      : positionalNames
+        ? { firstName: values[2] ?? '', lastName: values[1] ?? '', middleName: values[3] && !values[3].includes('@') && !/^\d/.test(values[3]) ? values[3] : '' }
+        : splitFullName(originalName);
+    return {
+      tempKey: `csv-${index}`, studentId: (hasHeader ? get('studentId') : values[0] ?? '').trim(), ...names,
+      prefix: get('prefix') || undefined, suffix: get('suffix') || undefined,
+      email: (hasHeader ? get('email') : values.find(value => value.includes('@')) ?? '').trim().toLowerCase(),
+      contact: get('contact') || undefined, sex: get('sex') || undefined,
+      yearLevel: parseRosterYear(hasHeader ? get('yearLevel') : values.find(value => /^[1-6]$/.test(value)) ?? ''),
+      originalName: structured ? undefined : positionalNames ? [names.firstName, names.middleName, names.lastName].filter(Boolean).join(' ') : originalName,
+      sourceRow: String(index + (hasHeader ? 2 : 1)), requiresNameReview: !structured,
+      reviewed: structured, included: structured, status: 'valid' as const,
+    };
   });
-
-  return results;
 }
 
-/**
- * Generates sample CSV template content for professors
- */
+export interface RosterPDFTextItem { text: string; x: number; y: number; width: number; height: number }
+export interface RosterPDFPage { page: number; width: number; height: number; items: RosterPDFTextItem[]; redMarkBands: Array<{ top: number; bottom: number }> }
+
+/** Read the provisional sample table by geometry, never by student-ID regex. */
+export function parsePDFRosterPages(pages: RosterPDFPage[]): ParsedRosterStudent[] {
+  const students: ParsedRosterStudent[] = [];
+  for (const page of pages) {
+    const lines: Array<{ y: number; items: RosterPDFTextItem[] }> = [];
+    for (const item of [...page.items].sort((a, b) => a.y - b.y || a.x - b.x)) {
+      let line = lines.find(candidate => Math.abs(candidate.y - item.y) <= 3);
+      if (!line) { line = { y: item.y, items: [] }; lines.push(line); }
+      line.items.push(item);
+    }
+    const header = lines.find(line => {
+      const text = line.items.map(item => item.text).join(' ');
+      return /Student\s*(?:No\.?|Number|ID)/i.test(text) && /Name/i.test(text) && /Year\s*Level/i.test(text);
+    });
+    if (!header) throw new Error(`Page ${page.page}: unsupported PDF table layout. Use the provisional CSV template instead.`);
+    const labels = ['#', 'Student No.', 'Name', 'Gender', 'Year Level', 'Contact #'];
+    const headerItems = header.items.filter(item => item.text.trim());
+    const headers = labels.map(label => {
+      const item = headerItems.find(entry => entry.text.trim().toLowerCase() === label.toLowerCase());
+      if (!item) throw new Error(`Page ${page.page}: expected ${label} table header.`);
+      return item;
+    });
+    // Headers are centered in unequal-width cells. Use left text positions,
+    // rather than text centers (long names extend into the name column).
+    const boundaries = headers.slice(0, -1).map(item => item.x + item.width + 1);
+    const column = (item: RosterPDFTextItem) => { const idx = boundaries.findIndex(boundary => item.x < boundary); return idx < 0 ? 5 : idx; };
+    const below = page.items.filter(item => item.y > header.y + 3);
+    // A single visible identifier can arrive as several PDF.js text items.
+    // Join its same-line fragments before deriving one row anchor.
+    const numberLines: Array<{ y: number; items: RosterPDFTextItem[] }> = [];
+    for (const item of below.filter(item => column(item) === 1 && item.text.trim()).sort((a, b) => a.y - b.y || a.x - b.x)) {
+      let line = numberLines.find(candidate => Math.abs(candidate.y - item.y) <= 3);
+      if (!line) { line = { y: item.y, items: [] }; numberLines.push(line); }
+      line.items.push(item);
+    }
+    const ids = numberLines.map(line => ({ y: line.y, studentId: line.items.sort((a, b) => a.x - b.x).map(item => item.text.trim()).join('') }))
+      .filter(row => /^[A-Za-z0-9][A-Za-z0-9._/-]{2,}$/.test(row.studentId) && /\d/.test(row.studentId));
+    for (let i = 0; i < ids.length; i++) {
+      const anchor = ids[i];
+      const top = i ? (ids[i - 1].y + anchor.y) / 2 : header.y + 5;
+      const bottom = i + 1 < ids.length ? (anchor.y + ids[i + 1].y) / 2 : anchor.y + 16;
+      const rowItems = below.filter(item => item.y >= top && item.y < bottom).sort((a, b) => a.y - b.y || a.x - b.x);
+      const cell = (col: number) => {
+        const cellLines: Array<{ y: number; items: RosterPDFTextItem[] }> = [];
+        for (const item of rowItems.filter(item => column(item) === col)) {
+          let line = cellLines.find(candidate => Math.abs(candidate.y - item.y) <= 3);
+          if (!line) { line = { y: item.y, items: [] }; cellLines.push(line); }
+          line.items.push(item);
+        }
+        return cellLines.map(line => {
+          const fragments = line.items.sort((a, b) => a.x - b.x);
+          return fragments.map((item, index) => {
+            const previous = fragments[index - 1];
+            // Retain literal spaces; otherwise infer a space only from a
+            // visible gap, allowing one point for PDF coordinate rounding.
+            const gap = previous && item.x - (previous.x + previous.width) > 1;
+            return `${gap && !/\s$/.test(previous.text) && !/^\s/.test(item.text) ? ' ' : ''}${item.text}`;
+          }).join('');
+        }).join(' ').trim();
+      };
+      const nameCell = cell(2);
+      const email = nameCell.match(/[^\s@]+@[^\s@]+\.[^\s@]+/u)?.[0] ?? '';
+      const originalName = nameCell.replace(email, '').trim();
+      const possibleCrossedOut = page.redMarkBands.some(band => band.bottom >= top - 8 && band.top < bottom - 8);
+      students.push({
+        tempKey: `pdf-${page.page}-${i}`, studentId: anchor.studentId, ...splitFullName(originalName),
+        email: email.toLowerCase(), contact: cell(5) || undefined, sex: cell(3) || undefined,
+        yearLevel: parseRosterYear(cell(4)), originalName, sourcePage: page.page, sourceRow: cell(0),
+        possibleCrossedOut, requiresNameReview: true, reviewed: false, included: false, status: 'warning',
+      });
+    }
+  }
+  return students;
+}
+
 export function getSampleRegistrarCSV(): string {
-  return `Student ID,Last Name,First Name,Middle Name,Email,Year Level
-2021-00123,Santos,Maria,Clara,maria.santos@bicol-u.edu.ph,4
-2021-00124,Dela Cruz,Juan Pedro,M,juan.delacruz@bicol-u.edu.ph,4
-2021-00125,Reyes,Jose,P,jose.reyes@bicol-u.edu.ph,4
-2021-00126,Aquino,Benigno,S,benigno.aquino@bicol-u.edu.ph,4`;
+  return 'Student ID,Last Name,First Name,Middle Name,Email,Year Level,Gender,Contact #\n2099-1234-56789,Dela Cruz,Ana,Reyes,ana.fixture@bicol-u.edu.ph,4,Female,\n2099-01-12345,Peña,José,,jose.fixture@bicol-u.edu.ph,3,Male,';
 }

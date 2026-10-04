@@ -591,6 +591,14 @@ Preserve genuinely useful:
 
 Official Student/grade import-export behavior remains externally blocked until the University Registrar / Sir Ryan provides the actual required file layout.
 
+Owner-authorized provisional Student roster import (2026-10-04) uses a private
+semi-confirmed sample for local preview and existing-class enrollment. The UI
+states "Official format not confirmed". This does not confirm official
+compatibility or enable grade-sheet importing. See
+[the provisional contract](proposals/provisional-roster-import.md).
+Imported rows require parsed, valid institutional emails under the approved
+IMP-001 amendment; missing or invalid emails must be corrected before saving.
+
 Do not invent an official Registrar format.
 
 ---

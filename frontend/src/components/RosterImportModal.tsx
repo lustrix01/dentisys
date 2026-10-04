@@ -1,5 +1,5 @@
 import { filterPersonNameInput, preventInvalidPersonNameKey } from '../utils/personNameValidation';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Upload,
   FileText,
@@ -19,22 +19,25 @@ import { showFeedback } from './FeedbackCenter';
 import {
   ParsedRosterStudent,
   parseCSVText,
-  extractTextFromPDF,
-  parsePDFRosterLines,
+  validateRosterStudents,
   getSampleRegistrarCSV,
 } from '../utils/rosterImportHelper';
 import {
   createStudentApi,
   enrollStudentsInClassApi,
+  getAvailableStudentsForClassApi,
+  getFacultyStudentsApi,
   FacultyClassItem,
 } from '../services/apiClient';
+import { useRuntimeConfig } from '../context/RuntimeConfigContext';
 
 interface RosterImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   classes: FacultyClassItem[];
   defaultClassId?: number;
-  existingStudentIds?: Set<string>;
+  currentSchoolYear: string;
+  existingStudents: Array<{ id: string; studentId: string; classSections?: Array<{ classId: string }> }>;
   onSuccess: () => Promise<void>;
 }
 
@@ -43,7 +46,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   onClose,
   classes,
   defaultClassId,
-  existingStudentIds = new Set(),
+  currentSchoolYear,
+  existingStudents,
   onSuccess,
 }) => {
   const [selectedClassId, setSelectedClassId] = useState<number>(defaultClassId || classes[0]?.csId || 0);
@@ -54,34 +58,47 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const parseSequence = useRef(0);
+  const runtime = useRuntimeConfig();
+  const [targetReviewed, setTargetReviewed] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  useEffect(() => () => { parseSequence.current++; }, []);
 
   // Filter out historical classes
-  const activeClasses = classes.filter(c => !c.schoolYear?.includes('2024') && c.status === 'Active');
-  const availableClasses = activeClasses.length > 0 ? activeClasses : classes;
+  const availableClasses = classes.filter(c => currentSchoolYear && c.schoolYear === currentSchoolYear && c.status.toLowerCase() === 'active');
+  const validatedStudents = validateRosterStudents(parsedStudents, runtime.allowed_email_domains);
+  const readyStudents = validatedStudents.filter(student => student.included && student.reviewed && student.status === 'valid');
 
   const handleFileChange = async (selectedFile: File) => {
+    if (isImporting || isParsing) return;
+    const sequence = ++parseSequence.current;
     setFile(selectedFile);
     setIsParsing(true);
     setParsedStudents([]);
+    setTargetReviewed(false);
+    setImportErrors([]);
 
     try {
       const fileName = selectedFile.name.toLowerCase();
 
       if (fileName.endsWith('.pdf')) {
         const buffer = await selectedFile.arrayBuffer();
-        const extractedLines = await extractTextFromPDF(buffer);
-        const parsed = parsePDFRosterLines(extractedLines, existingStudentIds);
+        const { parseRosterPDF } = await import('../utils/rosterPDF');
+        const parsed = await parseRosterPDF(buffer);
+        if (sequence !== parseSequence.current) return;
 
         if (parsed.length === 0) {
-          showFeedback('No student records could be detected in this PDF. Please verify it is a registrar master list, or export to CSV.', 'error');
+          showFeedback('No student records detected. Use a text PDF with the provisional table layout, or CSV.', 'error');
         } else {
           setParsedStudents(parsed);
-          showFeedback(`Parsed ${parsed.length} student record(s) from PDF registrar list!`, 'success');
+          showFeedback(`Previewed ${parsed.length} student record(s). Review each PDF row before selecting it.`, 'info');
         }
       } else {
         // CSV / TSV / TXT
         const text = await selectedFile.text();
-        const parsed = parseCSVText(text, existingStudentIds);
+        if (!/\.(csv|tsv|txt)$/i.test(fileName)) throw new Error('Supported files are PDF, CSV, TSV and TXT.');
+        const parsed = parseCSVText(text);
+        if (sequence !== parseSequence.current) return;
 
         if (parsed.length === 0) {
           showFeedback('No student records found in the uploaded file.', 'error');
@@ -91,10 +108,10 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         }
       }
     } catch (err: any) {
-      console.error('File parsing error:', err);
+      if (sequence !== parseSequence.current) return;
       showFeedback(`Failed to parse file: ${err.message || 'Unknown format'}`, 'error');
     } finally {
-      setIsParsing(false);
+      if (sequence === parseSequence.current) setIsParsing(false);
     }
   };
 
@@ -104,7 +121,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'dentisys_registrar_roster_template.csv');
+    link.setAttribute('download', 'dentisys_provisional_roster_template.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -119,24 +136,19 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     setParsedStudents(prev => prev.map(s => {
       if (s.tempKey !== tempKey) return s;
       const updated = { ...s, [field]: value };
-      if (!updated.studentId || !updated.firstName || !updated.lastName) {
-        updated.status = 'error';
-        updated.validationMessage = 'Missing required field';
-      } else {
-        updated.status = 'valid';
-        updated.validationMessage = undefined;
-      }
+      if (field === 'included') updated.reviewed = Boolean(value);
+      else if (updated.requiresNameReview || updated.possibleCrossedOut) { updated.reviewed = false; updated.included = false; }
       return updated;
     }));
   };
 
   const handleExecuteImport = async () => {
-    if (!selectedClassId || selectedClassId <= 0) {
+    if (isImporting || runtime.loading || !targetReviewed || !availableClasses.some(cls => cls.csId === selectedClassId)) {
       showFeedback('Please select a target class section to import students into.', 'error');
       return;
     }
 
-    const validStudents = parsedStudents.filter(s => s.status !== 'error');
+    const validStudents = readyStudents;
     if (validStudents.length === 0) {
       showFeedback('No valid students to import. Please check for errors in the preview list.', 'error');
       return;
@@ -146,6 +158,18 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     let successCount = 0;
     let failCount = 0;
     const errors: string[] = [];
+    const completedKeys = new Set<string>();
+    setImportErrors([]);
+
+    // Student numbers are external identifiers, never numeric database IDs.
+    let available: Awaited<ReturnType<typeof getAvailableStudentsForClassApi>>['students'];
+    try {
+      available = (await getAvailableStudentsForClassApi(selectedClassId)).students;
+    } catch (error) {
+      setIsImporting(false);
+      setImportErrors([error instanceof Error ? error.message : 'Could not verify existing students. Nothing was imported.']);
+      return;
+    }
 
     for (let i = 0; i < validStudents.length; i++) {
       const student = validStudents[i];
@@ -156,34 +180,51 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
       });
 
       try {
-        // Attempt to create student with classId attached
+        const number = student.studentId.trim().toLowerCase();
+        const existing = available.find(row => row.studentId.trim().toLowerCase() === number)
+          ?? existingStudents.find(row => row.studentId.trim().toLowerCase() === number);
+        if (existing) {
+          // The cached roster can resolve an ID, but only the server's
+          // idempotent enrollment mutation can confirm current membership.
+          await enrollStudentsInClassApi({ csId: selectedClassId, studentIds: [Number(existing.id)] });
+          successCount++;
+          completedKeys.add(student.tempKey);
+          continue;
+        }
         await createStudentApi({
-          studentId: student.studentId,
+          studentId: student.studentId.trim(),
           prefix: student.prefix,
           suffix: student.suffix,
           firstName: student.firstName,
           middleName: student.middleName,
           lastName: student.lastName,
-          email: student.email,
-          yearLevel: student.yearLevel,
+          email: student.email.trim().toLowerCase(),
+          contact: student.contact?.trim() || undefined,
+          yearLevel: student.yearLevel ?? undefined,
           sex: student.sex,
           classId: String(selectedClassId),
         });
         successCount++;
+        completedKeys.add(student.tempKey);
       } catch (createErr: any) {
-        // If student already exists in database, fall back to enroll API
-        if (createErr.status === 409 || createErr.message?.includes('already exists') || student.isExistingInDirectory) {
+        // Resolve only the same student number after a race; a 409 may instead
+        // be an email/role conflict and must never enroll an unrelated record.
+        if (createErr.status === 409) {
           try {
-            const sid = Number(student.studentId);
-            if (!isNaN(sid) && sid > 0) {
+            const refreshed = await getAvailableStudentsForClassApi(selectedClassId);
+            const number = student.studentId.trim().toLowerCase();
+            const existing = refreshed.students.find(row => row.studentId.trim().toLowerCase() === number)
+              ?? (await getFacultyStudentsApi()).find(row => row.studentId.trim().toLowerCase() === number);
+            if (existing) {
               await enrollStudentsInClassApi({
                 csId: selectedClassId,
-                studentIds: [sid],
+                studentIds: [Number(existing.id)],
               });
               successCount++;
+              completedKeys.add(student.tempKey);
             } else {
               failCount++;
-              errors.push(`${student.studentId}: Numeric student database ID required for enrollment`);
+              errors.push(`${student.studentId}: ${createErr.message || 'Student identity conflict; review this row.'}`);
             }
           } catch (enrollErr: any) {
             failCount++;
@@ -198,17 +239,19 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
 
     setIsImporting(false);
     setImportProgress(null);
+    setImportErrors(errors);
+    setParsedStudents(previous => previous.filter(row => !completedKeys.has(row.tempKey)));
 
     if (successCount > 0) {
-      showFeedback(`Successfully imported and enrolled ${successCount} student(s)!`, 'success');
-      await onSuccess();
-      onClose();
+      showFeedback(`${successCount} student(s) enrolled or already enrolled. ${failCount} failed.`, failCount ? 'info' : 'success');
+      try { await onSuccess(); } catch { setImportErrors(previous => [...previous, 'Records were saved, but refreshing the roster failed. Reload the page.']); return; }
+      if (!failCount) onClose();
     } else {
       showFeedback(`Failed to import students. ${errors.slice(0, 2).join('; ')}`, 'error');
     }
   };
 
-  const filteredPreview = parsedStudents.filter(s => {
+  const filteredPreview = validatedStudents.filter(s => {
     if (!searchFilter.trim()) return true;
     const q = searchFilter.toLowerCase();
     return (
@@ -225,9 +268,15 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
       onClose={() => {
         if (!isImporting) onClose();
       }}
-      title="Import Student Roster from Registrar (CSV or PDF)"
+      title="Provisional Student Roster Import"
+      size="xl"
     >
       <div className="space-y-5 text-xs max-h-[80vh] overflow-y-auto pr-1">
+        <fieldset disabled={isImporting} className="space-y-5 min-w-0">
+        <div role="note" className="p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <strong>Official format not confirmed.</strong> This provisional importer supports the sample table layout and delimited text files. Review the source, name fields and selected class before saving. The original file stays in this browser; only selected student fields are sent to DentiSys. Invitations are sent separately.
+          <p className="mt-1">Required for each imported row: complete student number, first name, last name and a valid institutional email. Missing emails must be corrected in preview.</p>
+        </div>
         {/* Step 1: Target Class Section */}
         <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 space-y-2">
           <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
@@ -235,13 +284,15 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
           </label>
           <select
             value={selectedClassId}
-            onChange={(e) => setSelectedClassId(Number(e.target.value))}
+            aria-label="Target class section"
+            onChange={(e) => { setSelectedClassId(Number(e.target.value)); setTargetReviewed(false); }}
             disabled={isImporting}
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
           >
+            {!availableClasses.some(cls => cls.csId === selectedClassId) && <option value={0}>Select a current-year class</option>}
             {availableClasses.map(c => (
               <option key={c.csId} value={c.csId}>
-                {c.courseCode} - {c.courseName} ({c.block})
+                {c.courseCode} - {c.courseName} ({c.block}) — {c.semester}, {c.schoolYear}
               </option>
             ))}
           </select>
@@ -254,7 +305,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Registrar File (.csv, .tsv, .pdf)
+              Provisional File (.csv, .tsv, .txt, .pdf)
             </span>
             <button
               type="button"
@@ -274,6 +325,8 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               ref={fileInputRef}
               type="file"
               accept=".csv,.tsv,.txt,.pdf"
+              aria-label="Provisional roster file"
+              disabled={isParsing || isImporting}
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -287,10 +340,10 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               </div>
               <div>
                 <p className="font-extrabold text-sm text-slate-800 dark:text-slate-100">
-                  {file ? file.name : 'Click to select or drag & drop registrar file'}
+                  {file ? file.name : 'Click to select a roster file'}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Supports official Bicol University Registrar PDF rosters, CSV, and TSV spreadsheets
+                  Text PDFs matching the sample layout, CSV, TSV and TXT. Scans and Excel workbooks are not supported.
                 </p>
               </div>
             </div>
@@ -315,7 +368,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                   Parsed Students ({parsedStudents.length})
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold">
-                  {parsedStudents.filter(s => s.status === 'valid').length} Ready
+                  {readyStudents.length} Selected and ready
                 </span>
               </div>
 
@@ -331,50 +384,68 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               </div>
             </div>
 
-            <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <p className="text-amber-700 dark:text-amber-300">Selecting a row confirms you reviewed its source and name split. Possible red strike-throughs are flagged; markings in other colors may not be detected. Check the original PDF for exclusions.</p>
+            <div className="max-h-80 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-left text-xs border-collapse">
                 <thead className="bg-slate-100 dark:bg-slate-800/80 text-[10px] font-extrabold text-slate-500 uppercase tracking-wider sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
                   <tr>
+                    <th className="p-2.5">Include</th>
                     <th className="p-2.5">Student ID</th>
                     <th className="p-2.5">Full Name</th>
-                    <th className="p-2.5">Email</th>
+                    <th className="p-2.5">Institutional Email *</th>
                     <th className="p-2.5 text-center">Yr</th>
+                    <th className="p-2.5">Gender / Contact</th>
                     <th className="p-2.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredPreview.map((st) => (
                     <tr key={st.tempKey} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                      <td className="p-2.5">
+                        <input type="checkbox" aria-label={`Include student ${st.studentId}`} checked={st.included} disabled={st.status === 'error'} onChange={event => handleUpdateStudentField(st.tempKey, 'included', event.target.checked)} />
+                        {st.sourcePage && <div>Page {st.sourcePage}, row {st.sourceRow}</div>}
+                        {st.possibleCrossedOut && <div className="text-amber-700 dark:text-amber-300 font-bold">Possible crossed-out row</div>}
+                        {st.validationMessage && <div role="status" className={st.status === 'error' ? 'text-rose-600' : 'text-amber-700 dark:text-amber-300'}>{st.validationMessage}</div>}
+                      </td>
                       <td className="p-2.5 font-mono font-bold text-slate-800 dark:text-slate-200">
                         <input
                           type="text"
                           value={st.studentId}
+                          aria-label={`Student number row ${st.tempKey}`}
                           onChange={(e) => handleUpdateStudentField(st.tempKey, 'studentId', e.target.value)}
                           className="w-28 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono font-bold text-xs"
                         />
                       </td>
                       <td className="p-2.5">
+                        {st.originalName && <div className="mb-1">Source name: {st.originalName}</div>}
                         <div className="flex items-center gap-1.5">
+                          <input type="text" aria-label={`Prefix for ${st.studentId}`} placeholder="Prefix" value={st.prefix ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'prefix', filterPersonNameInput('prefix', event.target.value))} className="w-16 px-2 py-1 rounded-lg border dark:bg-slate-900" />
                           <input
                             type="text"
                             value={st.firstName}
                             placeholder="First"
+                            aria-label={`First name for ${st.studentId}`}
                             onChange={event => handleUpdateStudentField(st.tempKey, 'firstName', filterPersonNameInput('firstName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'firstName', filterPersonNameInput('firstName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('firstName', event)}
                             className="w-24 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium text-xs"
                           />
+                          <input type="text" aria-label={`Middle name for ${st.studentId}`} placeholder="Middle" value={st.middleName ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'middleName', filterPersonNameInput('middleName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'middleName', filterPersonNameInput('middleName', event.currentTarget.value))} className="w-24 px-2 py-1 rounded-lg border dark:bg-slate-900" />
                           <input
                             type="text"
                             value={st.lastName}
                             placeholder="Last"
+                            aria-label={`Last name for ${st.studentId}`}
                             onChange={event => handleUpdateStudentField(st.tempKey, 'lastName', filterPersonNameInput('lastName', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => handleUpdateStudentField(st.tempKey, 'lastName', filterPersonNameInput('lastName', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('lastName', event)}
                             className="w-24 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-medium text-xs"
                           />
+                          <input type="text" aria-label={`Suffix for ${st.studentId}`} placeholder="Suffix" value={st.suffix ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'suffix', filterPersonNameInput('suffix', event.target.value))} className="w-16 px-2 py-1 rounded-lg border dark:bg-slate-900" />
                         </div>
                       </td>
                       <td className="p-2.5">
                         <input
                           type="text"
                           value={st.email}
+                          aria-label={`Email for ${st.studentId}`}
+                          required
                           onChange={(e) => handleUpdateStudentField(st.tempKey, 'email', e.target.value)}
                           className="w-44 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px]"
                         />
@@ -384,15 +455,21 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
                           type="number"
                           min="1"
                           max="6"
-                          value={st.yearLevel}
-                          onChange={(e) => handleUpdateStudentField(st.tempKey, 'yearLevel', parseInt(e.target.value, 10) || 4)}
+                          value={st.yearLevel !== null && Number.isFinite(st.yearLevel) ? st.yearLevel : ''}
+                          aria-label={`Year level for ${st.studentId}`}
+                          onChange={(e) => handleUpdateStudentField(st.tempKey, 'yearLevel', e.target.value === '' ? null : Number(e.target.value))}
                           className="w-12 px-1 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-center font-bold text-xs"
                         />
+                      </td>
+                      <td className="p-2.5 space-y-1">
+                        <input type="text" aria-label={`Gender for ${st.studentId}`} value={st.sex ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'sex', event.target.value)} className="w-20 px-2 py-1 rounded-lg border dark:bg-slate-900" />
+                        <input type="text" aria-label={`Contact for ${st.studentId}`} value={st.contact ?? ''} onChange={event => handleUpdateStudentField(st.tempKey, 'contact', event.target.value)} className="w-28 px-2 py-1 rounded-lg border dark:bg-slate-900" />
                       </td>
                       <td className="p-2.5 text-right">
                         <button
                           type="button"
                           onClick={() => handleRemoveStudent(st.tempKey)}
+                          aria-label={`Remove student ${st.studentId} from preview`}
                           className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -405,6 +482,9 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
             </div>
           </div>
         )}
+
+        {parsedStudents.length > 0 && <label className="flex items-start gap-2"><input type="checkbox" checked={targetReviewed} onChange={event => setTargetReviewed(event.target.checked)} />I reviewed the source course, section, semester and school year against the selected target class.</label>}
+        {importErrors.length > 0 && <div role="alert" className="text-rose-600"><strong>Rows requiring correction</strong><ul>{importErrors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}
 
         {/* Progress Bar during import */}
         {isImporting && importProgress && (
@@ -441,17 +521,18 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
           <button
             type="button"
             onClick={handleExecuteImport}
-            disabled={isImporting || isParsing || parsedStudents.length === 0 || !selectedClassId}
+            disabled={isImporting || isParsing || runtime.loading || !readyStudents.length || !targetReviewed || !availableClasses.some(cls => cls.csId === selectedClassId)}
             className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>
               {isImporting
                 ? `Importing (${importProgress?.current || 0}/${importProgress?.total || 0})...`
-                : `Confirm & Import (${parsedStudents.filter(s => s.status === 'valid').length}) Students`}
+                : `Confirm & Import (${readyStudents.length}) Students`}
             </span>
           </button>
         </div>
+        </fieldset>
       </div>
     </Modal>
   );

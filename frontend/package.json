@@ -7,13 +7,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test src/tests/biometricAttendance.test.ts src/tests/guidedCapture.test.ts src/tests/retentionMonitoringContract.test.ts src/tests/periodGradingContract.test.ts src/tests/attendanceNormalization.test.ts src/tests/remedialProgressionContract.test.ts src/tests/personNameValidation.test.ts",
+    "test": "node --experimental-strip-types --test src/tests/biometricAttendance.test.ts src/tests/guidedCapture.test.ts src/tests/retentionMonitoringContract.test.ts src/tests/periodGradingContract.test.ts src/tests/attendanceNormalization.test.ts src/tests/remedialProgressionContract.test.ts src/tests/personNameValidation.test.ts src/tests/rosterImport.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.21.0",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.18.0",
