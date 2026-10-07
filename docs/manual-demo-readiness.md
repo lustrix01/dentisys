@@ -1,6 +1,6 @@
 # DentiSys Manual Demo Readiness
 
-> **UI migration status (2026-09-24):** Follow [the UI-first plan](ui-migration-plan.md). Visual parity, schema readiness, and fully wired functionality are separate milestones. Existing checklist results must not be carried forward as proof for changed screens. Temporary test deferral during UI copying does not mark these items passed.
+> **UI migration status (2026-09-24):** Follow [the UI-first plan](archive/ui-migration-plan.md). Visual parity, schema readiness, and fully wired functionality are separate milestones. Existing checklist results must not be carried forward as proof for changed screens. Temporary test deferral during UI copying does not mark these items passed.
 
 This is the living checklist for a human demonstration of the supported local DentiSys development stack. It complements automated validation; it is not a second automated QA suite. Deterministic logic, API contracts, database persistence, RBAC, and ordinary error branches should be established through the automated coverage referenced below and should not be re-proven manually unless a human-visible presentation is the purpose of the step.
 

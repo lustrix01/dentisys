@@ -1,6 +1,6 @@
 # Current continuation: UI migration and normalization on lighthal5
 
-> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](../HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../../spec.md). The content below is kept for history and may be out of date.
+> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../../spec.md). The content below is kept for history and may be out of date.
 
 ## QA fix rounds 1–2 — 2026-09-27 (branch lumbanglighthal)
 
@@ -63,7 +63,7 @@ This is the durable continuation note for the current local-demo work. It record
 
 ## Current Owner direction - 2026-09-24 priority reset
 
-Continue from [UI-first migration plan](../ui-migration-plan.md), not the older functional-first continuation prompt below. The Owner explicitly approved specification amendments based on UI Changes.pdf and prioritizes copying the entire `owhie_backend` UI into `lighthal5`, then normalizing the database to 3NF, then wiring and repairing tests. The current implementation batch refreshed and froze source UI at `e9ead0b3f8a4b0c49904a2274d3e80264203098b`; `bd5ab789cc537f1503fc78357ad5937e7926651a` is historical evidence only. Functional baseline: `67e16a0`.
+Continue from [UI-first migration plan](ui-migration-plan.md), not the older functional-first continuation prompt below. The Owner explicitly approved specification amendments based on UI Changes.pdf and prioritizes copying the entire `owhie_backend` UI into `lighthal5`, then normalizing the database to 3NF, then wiring and repairing tests. The current implementation batch refreshed and froze source UI at `e9ead0b3f8a4b0c49904a2274d3e80264203098b`; `bd5ab789cc537f1503fc78357ad5937e7926651a` is historical evidence only. Functional baseline: `67e16a0`.
 
 Docker recovery and newer validation supersede the outage described below. The plan records continuation-reported passing checks and all six unresolved live failures. Google and real-camera acceptance remain unverified/deferred. Preserve parked work, existing development volumes, and historical evidence. No UI migration or database normalization is claimed complete.
 

@@ -166,7 +166,7 @@ need a separate controlled rehearsal before claiming their manual acceptance.
 
 Existing accepted-tree validation remains applicable to unchanged runtime code:
 production build, 194 mocked browser tests, 68 unit tests, full PostgreSQL gate
-and nine live tests passed, as recorded in [the handoff](HANDOFF_2026-10-03.md).
+and nine live tests passed, as recorded in [the handoff](archive/HANDOFF_2026-10-03.md).
 Those tests do not replace this manual rehearsal or invalidate its new finding.
 
 ## Approved-fix verification

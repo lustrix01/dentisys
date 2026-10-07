@@ -21,7 +21,7 @@ database/
 
 ## Migration rules
 
-Current planned work follows [UI migration and 3NF plan](../docs/ui-migration-plan.md) and spec.md ID-002: copy the UI first, then audit its field/entity dependencies and normalize affected data. Five-part names and other composite inputs require explicit mappings, additive migrations, safe backfills, and compatibility handling. Existing structured-name migrations must be inspected and reused. No schema changes or full-3NF claim are made by this documentation update.
+The UI migration and normalization work of spec.md ID-002 was completed in `a7582d8` ([archived plan](../docs/archive/ui-migration-plan.md)): copy the UI first, then audit its field/entity dependencies and normalize affected data. Five-part names and other composite inputs require explicit mappings, additive migrations, safe backfills, and compatibility handling. Existing structured-name migrations must be inspected and reused. No schema changes or full-3NF claim are made by this documentation update.
 
 - Add a new, ordered `NNN_description.sql` file for every schema or reference-data change.
 - Never edit a migration that has been applied to a shared environment; create a follow-up migration instead.

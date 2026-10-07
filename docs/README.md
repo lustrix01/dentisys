@@ -11,10 +11,11 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 
 ## Current work
 
-- [Current handoff](HANDOFF_2026-10-01.md): current state, remaining work, and working rules.
-- [Product backlog](PRODUCT_BACKLOG.md)
-- [UI migration plan](ui-migration-plan.md): the Owner-approved delivery order.
-- [Roadmap](roadmap.md) and [implemented features](features.md): older snapshots; the handoff is more current.
+- [Current handoff](HANDOFF_2026-10-04.md): latest state, validation evidence, and next steps. Older handoffs are in the archive.
+- [Product backlog](PRODUCT_BACKLOG.md): requirements; item status is being re-checked against the code.
+- [Roadmap](roadmap.md) and [implemented features](features.md): outdated snapshots, to be rewritten from the backlog check; the handoff is more current.
+- [Local demo on lighthal7](local-demo-lighthal7.md) and [Lecture/Laboratory grading](lecture-laboratory-grading.md).
+- Approved specification amendment records: [2026-10-01](spec-amendments-2026-10-01.md), [2026-10-03](spec-amendments-2026-10-03.md), [2026-10-04](spec-amendments-2026-10-04.md); proposals in [proposals/](proposals/).
 
 ## Architecture and design
 

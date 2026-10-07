@@ -1,6 +1,6 @@
 # Implemented Features and Boundaries
 
-> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
+> **Historical document.** This list is out of date and will be rewritten from the backlog check against the code. The current state is in the [current handoff](HANDOFF_2026-10-04.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
 
 ## Current platform
 

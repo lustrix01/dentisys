@@ -1,6 +1,6 @@
 # DentiSys Product Backlog
 
-> **Owner amendment, 2026-09-24:** The current canonical UI is `owhie_backend` at `bd5ab789cc537f1503fc78357ad5937e7926651a`, supplemented by UI Changes.pdf. Delivery order is entire UI migration into `lighthal5`, 3NF/schema fit, then frontend/backend wiring and test repair. See [the current plan](ui-migration-plan.md) and spec.md section 9B. Earlier visual baselines and conflicting sequencing below are historical. Development ownership follows current AGENTS.md (Luna functional work; Gemini presentation only), superseding the older ownership section below.
+> **Note (2026-10-07):** The UI migration and normalization described in spec.md section 9B are complete (`a7582d8`; [archived plan](archive/ui-migration-plan.md)). Item status is being re-checked against the code; until then, treat spec.md as authoritative for behavior.
 
 > **Status:** Living Owner-approved product backlog  
 > **Canonical visual baseline:** `c58d3004db20280c8827dd10893e9c1058be2eaa` — `Restore canonical UI parity`
@@ -9,68 +9,7 @@
 
 # 1. Development Ownership Rules
 
-## Agent responsibilities
-
-### Gemini — Frontend Owner
-
-Gemini handles frontend work only:
-
-- React
-- TypeScript
-- client-side UI behavior
-- frontend API consumption
-- forms
-- tables
-- modals
-- responsive behavior
-- canonical DentiSys visual integration
-
-Gemini must not modify:
-
-- PHP backend code
-- backend routes/controllers/services
-- PostgreSQL
-- migrations
-- server-side authorization
-- server-side business rules
-
-If frontend work requires backend support, Gemini must produce a precise backend requirement for the Gatekeeper rather than implementing it.
-
-### Codex — Backend Owner
-
-Codex handles backend and authoritative data only:
-
-- PHP
-- API endpoints
-- server-side validation
-- authentication/authorization
-- RBAC
-- audit logging
-- PostgreSQL
-- migrations
-- database constraints
-- authoritative data
-- bootstrap/development data sets
-
-Codex must not redesign or implement React/UI to complete a backend feature.
-
-It must return the resulting API/data contract to the Gatekeeper so Gemini can integrate it.
-
-### Gatekeeper
-
-The Gatekeeper coordinates frontend/backend work.
-
-Cross-layer features should follow:
-
-1. Product behavior approved by Owner.
-2. Backend contract scoped for Codex when needed.
-3. Codex implements and validates backend.
-4. Gatekeeper reviews the resulting contract.
-5. Gemini integrates the frontend against that contract.
-6. Automated and live browser validation.
-7. Owner/Gatekeeper approval.
-
-Neither implementation agent should independently redefine behavior owned by the other layer.
+Who does which kind of work (functional vs presentation-only), contracts, and validation are defined in [AGENTS.md](../AGENTS.md). The tool-specific ownership rules that used to be here are retired.
 
 ---
 
@@ -93,7 +32,7 @@ Implementation agents must not treat this backlog as permission to infer unspeci
 
 When a meaningful product decision is unclear:
 
-**Return the decision to the Owner through the Gatekeeper.**
+**Return the decision to the Owner.**
 
 Do not guess.
 
@@ -1188,7 +1127,7 @@ Product behavior is approved:
 8. On removal, the account returns to normal Student role/context.
 9. At most one active/pending Secretary exists per Class Section.
 
-Before implementation, Codex must inspect the current authentication/RBAC model and determine the smallest safe implementation.
+Before implementation, inspect the current authentication/RBAC model and determine the smallest safe implementation.
 
 Specifically determine:
 
@@ -1201,7 +1140,7 @@ Specifically determine:
 
 Do not change the approved product behavior merely because the current implementation is inconvenient.
 
-Return technical options to the Gatekeeper if more than one reasonable implementation exists.
+Return technical options to the Owner if more than one reasonable implementation exists.
 
 ---
 
@@ -1335,7 +1274,7 @@ Expose Student academic functionality only after the underlying APIs/data are au
 - Registrar format
 - live Google manual verification/fixes
 
-The Gatekeeper may reorder these when dependencies or manual testing reveal a better sequence.
+The Owner may reorder these when dependencies or manual testing reveal a better sequence.
 
 ---
 
@@ -1373,4 +1312,4 @@ Do not interpret omissions as permission to invent behavior.
 
 When uncertain:
 
-**Ask the Owner through the Gatekeeper.**
+**Ask the Owner.**

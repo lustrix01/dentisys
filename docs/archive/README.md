@@ -19,6 +19,14 @@ These documents are kept for history. They describe past plans, handoffs, and ev
 - [Gemini grade-weights editor handoff](grade-weights-gemini-handoff.md)
 - [Spec amendments proposed 2026-09-29](spec-amendments-2026-09-29.md) (applied to spec.md)
 - [Requirements traceability, Phase 2/P03](requirements-traceability.md)
+- Handoffs [2026-09-29](HANDOFF_2026-09-29.md), [2026-10-01](HANDOFF_2026-10-01.md), [2026-10-03](HANDOFF_2026-10-03.md)
+- [UI migration and 3NF plan](ui-migration-plan.md) (completed in `a7582d8`)
+- [Schedule session contract (2026-10-01)](schedule-session-contract-2026-10-01.md)
+
+## Branch comparisons and transfers (2026-10-03)
+
+- [Branch comparison](branch-comparison-2026-10-03.md) and [manual branch comparison](manual-branch-comparison-2026-10-03.md)
+- [lumbang_final transfer review](lumbang-final-transfer-review.md) and [transfer contract](lumbang-transfer-contract-2026-10-03.md)
 
 ## UI migration evidence
 

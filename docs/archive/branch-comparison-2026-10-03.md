@@ -122,5 +122,5 @@ No source change rewrites the authoritative retention threshold or remediation e
 
 - [Detailed transfer and approval history](lumbang-final-transfer-review.md)
 - [Approved stable transfer contract](lumbang-transfer-contract-2026-10-03.md)
-- [Exact approved specification amendments](spec-amendments-2026-10-03.md)
+- [Exact approved specification amendments](../spec-amendments-2026-10-03.md)
 - [Final validation and working-tree handoff](HANDOFF_2026-10-03.md)

@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Historical document.** The current state, remaining work and working rules are in [HANDOFF_2026-09-29.md](HANDOFF_2026-09-29.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
+> **Historical document.** This roadmap is out of date (its "current priority", the UI migration, is complete) and will be rewritten from the backlog check against the code. The current state is in the [current handoff](HANDOFF_2026-10-04.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
 
 ## Current priority - Owner reset, 2026-09-24
 
@@ -9,7 +9,7 @@
 3. Wire frontend/backend, repair regressions, and complete persistence, permissions, audit, and consolidated validation.
 4. Resume remaining provider acceptance and external/policy blockers, then later deployment work.
 
-See [UI migration plan](ui-migration-plan.md) and spec.md section 9B for frozen sources, page traceability, acceptance gates, and unresolved details. The older items below remain scope context, not the execution order. Temporary test deferral does not waive final functional validation.
+See [UI migration plan](archive/ui-migration-plan.md) and spec.md section 9B for frozen sources, page traceability, acceptance gates, and unresolved details. The older items below remain scope context, not the execution order. Temporary test deferral does not waive final functional validation.
 
 ## Identity work
 
