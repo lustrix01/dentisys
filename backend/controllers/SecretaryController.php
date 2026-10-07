@@ -2355,56 +2355,15 @@ function handle_secretary_profile_update(): void
             return;
         }
 
-        $data = $body['data'];
-        // The login email is permanent (REG-009); if sent it must match the account.
-        $email = isset($data['email']) && trim((string) $data['email']) !== ''
-            ? validate_institutional_email($data['email'])
-            : null;
-
-        $nameParts = account_identity_name_parts($data);
-        if ($nameParts === null) {
-            throw new ValidationException([['field' => 'firstName', 'message' => 'Provide the separate name fields; combined names are not split automatically.']]);
-        }
-        $name = account_identity_composed_name($nameParts);
-
-        $pdo->beginTransaction();
-        try {
-            $identityStmt = $pdo->prepare(
-                'SELECT ua.person_id AS account_person_id, s.person_id AS student_person_id
-                   FROM user_accounts ua
-                   LEFT JOIN students s ON s.user_id = ua.user_id
-                  WHERE ua.user_id = ?
-                  FOR UPDATE OF ua'
-            );
-            $identityStmt->execute([(int) $authCtx['user_id']]);
-            $identities = $identityStmt->fetchAll(PDO::FETCH_ASSOC);
-            if (count($identities) !== 1) {
-                throw new DomainException('Secretary identity is unavailable.');
-            }
-            $identity = $identities[0];
-            if ($identity['student_person_id'] !== null) {
-                account_identity_require_same_person(
-                    $identity['account_person_id'] !== null ? (int) $identity['account_person_id'] : null,
-                    (int) $identity['student_person_id'],
-                    'Secretary profile cannot update a conflicting Student identity.'
-                );
-            }
-            update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
-            audit_record_action(
-                $pdo, $config, $authCtx, 'account', 'profile_updated', 'user_account', (string) $authCtx['user_id'],
-                'Updated own profile name.', ['after' => ['name' => $name]]
-            );
-            $pdo->commit();
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
-        }
-
-        json_response(['status' => 'ok', 'message' => 'Class Secretary profile updated successfully.'], 200);
+        // Older Secretary clients echo the composed name alongside its parts.
+        $result = account_identity_change_own_name($pdo, $config, $authCtx, $body['data'], true);
+        json_response(['status' => 'ok', 'message' => 'Class Secretary profile updated successfully.', ...$result], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
+    } catch (AccountIdentityStepUpException $e) {
+        emit_response(build_error_response($e->getMessage(), 403, $e->apiCode));
+    } catch (RateLimitException $e) {
+        emit_response(build_error_response('Too many requests.', 429, 'RATE_LIMITED'));
     } catch (DomainException $e) {
         safe_error_response($e->getMessage(), 409);
     } catch (\PDOException $e) {

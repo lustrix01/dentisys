@@ -21,7 +21,8 @@ assert_student_name_contract($components['lastName'] === 'Cruz', 'Legacy display
 
 $schema = file_get_contents(__DIR__ . '/../../database/migrations/001_baseline_schema.sql');
 $secretaryController = file_get_contents(__DIR__ . '/../../backend/controllers/SecretaryController.php');
-assert_student_name_contract(is_string($schema) && is_string($secretaryController), 'Student name contract sources are readable');
+$identityHelper = file_get_contents(__DIR__ . '/../../backend/app/account_identity.php');
+assert_student_name_contract(is_string($schema) && is_string($secretaryController) && is_string($identityHelper), 'Student name contract sources are readable');
 assert_student_name_contract(
     preg_match('/CREATE TABLE students \((.*?)\);/s', $schema, $studentTable) === 1
         && str_contains($studentTable[1], 'first_name')
@@ -31,6 +32,6 @@ assert_student_name_contract(
     'Canonical Student schema stores separate name components without a whole-name column'
 );
 assert_student_name_contract(str_contains($secretaryController, 'middle_name = ?'), 'Secretary profile persistence writes the middle name separately');
-assert_student_name_contract(str_contains($secretaryController, 'update_account_identity'), 'Legacy display-name compatibility remains on the account identity');
+assert_student_name_contract(str_contains($identityHelper, 'update_account_identity($pdo, $userId, $name, null, $parts)'), 'Self-service name changes use the canonical account identity updater');
 
 echo "ALL STUDENT NAME CONTRACT TESTS PASSED\n";

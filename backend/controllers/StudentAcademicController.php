@@ -216,6 +216,47 @@ function handle_student_profile_get(): void
     }
 }
 
+function handle_student_profile_update(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = student_academic_verify_auth($pdo, $config);
+        if (($authCtx['role'] ?? null) !== 'student') {
+            safe_error_response('Student profile name changes are only available to Student accounts.', 403);
+            return;
+        }
+
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+
+        $result = account_identity_change_own_name($pdo, $config, $authCtx, $body['data']);
+        json_response(['status' => 'ok', 'message' => 'Student profile updated successfully.', ...$result], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (AccountIdentityStepUpException $e) {
+        emit_response(build_error_response($e->getMessage(), 403, $e->apiCode));
+    } catch (RateLimitException $e) {
+        emit_response(build_error_response('Too many requests.', 429, 'RATE_LIMITED'));
+    } catch (DomainException $e) {
+        safe_error_response($e->getMessage(), 409);
+    } catch (PDOException $e) {
+        error_log('Student profile update database error: ' . get_class($e));
+        $sqlState = (string) $e->getCode();
+        if ($sqlState === '23514' || $sqlState === 'P0001') {
+            safe_error_response('Your profile could not be saved because your linked Student record does not match this account. Contact the administrator.', 409);
+        } else {
+            safe_error_response('Unable to save Student profile.', 500);
+        }
+    } catch (Throwable $e) {
+        error_log('Student profile update error: ' . get_class($e));
+        safe_error_response('Unable to save Student profile.', 500);
+    }
+}
+
 function handle_student_classes_get(): void
 {
     try {

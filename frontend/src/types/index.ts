@@ -97,6 +97,7 @@ export interface Student {
   consentStatus?: 'pending' | 'approved' | 'declined';
   /** Login account state from the Faculty roster API. Missing = treat as 'none'. */
   accountStatus?: 'none' | 'pending' | 'active' | 'secretary' | 'disabled';
+  accountActivated?: boolean;
   consentRespondedAt?: string;
   faceEnrollmentDetails?: { images: string[]; status: string; enrolledAt: string };
   retentionHistory?: RetentionLog[];

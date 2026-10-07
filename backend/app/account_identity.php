@@ -2,6 +2,14 @@
 
 declare(strict_types=1);
 
+final class AccountIdentityStepUpException extends RuntimeException
+{
+    public function __construct(string $message, public readonly string $apiCode)
+    {
+        parent::__construct($message);
+    }
+}
+
 /**
  * Updates the canonical account identity. The helper joins an existing
  * transaction so role-specific profile data can be updated atomically.
@@ -22,6 +30,166 @@ function account_identity_name_parts(array $data): ?array
 function account_identity_composed_name(array $parts): string
 {
     return implode(' ', array_filter([$parts['prefix'], $parts['firstName'], $parts['middleName'], $parts['lastName'], $parts['suffix']], static fn($part) => $part !== null && $part !== ''));
+}
+
+/** Parse and validate the dedicated self-service name-change request. */
+function account_identity_name_change_payload(array $data, string $currentEmail, bool $allowLegacyName = false): array
+{
+    $allowed = ['prefix', 'firstName', 'middleName', 'lastName', 'suffix', 'code', 'email'];
+    if ($allowLegacyName) {
+        $allowed[] = 'name';
+    }
+
+    $errors = [];
+    foreach (array_keys($data) as $field) {
+        if (!in_array($field, $allowed, true)) {
+            $errors[] = ['field' => (string) $field, 'message' => 'This field cannot be changed from your profile.'];
+        }
+    }
+    if (array_key_exists('email', $data)
+        && (!is_string($data['email'])
+            || !hash_equals(mb_strtolower($currentEmail), mb_strtolower(trim($data['email']))))) {
+        $errors[] = ['field' => 'email', 'message' => 'Your login email cannot be changed from your profile.'];
+    }
+    if ($errors !== []) {
+        throw new ValidationException($errors);
+    }
+
+    $parts = account_identity_name_parts($data);
+    if ($parts !== null) {
+        return ['name' => account_identity_composed_name($parts), 'parts' => $parts];
+    }
+    if ($allowLegacyName && array_key_exists('name', $data)) {
+        return ['name' => validate_person_name($data, 'name', 2, 255), 'parts' => null];
+    }
+
+    throw new ValidationException([[
+        'field' => 'firstName',
+        'message' => 'Provide the separate name fields; combined names are not split automatically.',
+    ]]);
+}
+
+function account_identity_name_change_rate_limit(array $config, int $userId): void
+{
+    $rateStorage = ['dir' => $config['rate_limit']['storage_dir']];
+    $userScope = bin2hex(hash('sha256', 'user:' . $userId, true));
+    rate_limit_check($rateStorage, $userScope, 'post_name_change', 300, 10);
+}
+
+function account_identity_name_change_is_unchanged(string $newName, string $currentName): bool
+{
+    return $newName === $currentName;
+}
+
+function account_identity_name_change_totp_code(mixed $value): string
+{
+    if ($value === null || (is_string($value) && trim($value) === '')) {
+        throw new AccountIdentityStepUpException(
+            'Enter your current authenticator code to change your name.',
+            'TWO_FACTOR_REQUIRED'
+        );
+    }
+    return is_string($value) ? trim($value) : 'invalid-code';
+}
+
+function account_identity_name_change_invalid_code(MfaException $e): AccountIdentityStepUpException
+{
+    return new AccountIdentityStepUpException(
+        'Invalid or already used authenticator code.',
+        'INVALID_TWO_FACTOR_CODE'
+    );
+}
+
+/**
+ * Save the authenticated user's own name through the single profile contract
+ * shared by Dean, Faculty, Secretary, and Student endpoints.
+ */
+function account_identity_change_own_name(PDO $pdo, array $config, array $authCtx, array $data, bool $allowLegacyName = false): array
+{
+    $userId = (int) ($authCtx['user_id'] ?? 0);
+    if ($userId <= 0) {
+        throw new DomainException('The account identity is unavailable.');
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $current = account_identity_fetch($pdo, $userId, true);
+        if ($current === null) {
+            throw new DomainException('The account identity is unavailable.');
+        }
+
+        if (($authCtx['role'] ?? null) === 'secretary') {
+            $identityStmt = $pdo->prepare(
+                'SELECT ua.person_id AS account_person_id, s.person_id AS student_person_id
+                   FROM user_accounts ua
+                   LEFT JOIN students s ON s.user_id = ua.user_id
+                  WHERE ua.user_id = ?
+                  FOR UPDATE OF ua'
+            );
+            $identityStmt->execute([$userId]);
+            $identities = $identityStmt->fetchAll(PDO::FETCH_ASSOC);
+            if (count($identities) !== 1) {
+                throw new DomainException('Secretary identity is unavailable.');
+            }
+            $identity = $identities[0];
+            if ($identity['student_person_id'] !== null) {
+                account_identity_require_same_person(
+                    $identity['account_person_id'] !== null ? (int) $identity['account_person_id'] : null,
+                    (int) $identity['student_person_id'],
+                    'Secretary profile cannot update a conflicting Student identity.'
+                );
+            }
+        }
+
+        $payload = account_identity_name_change_payload($data, (string) $current['login_email'], $allowLegacyName);
+        $parts = $payload['parts'];
+        $currentName = account_identity_display_name($current);
+        $name = (string) $payload['name'];
+
+        if ($parts === null && $name !== $currentName) {
+            throw new ValidationException([[
+                'field' => 'firstName',
+                'message' => 'Use the separate name fields to change your name.',
+            ]]);
+        }
+
+        if (account_identity_name_change_is_unchanged($name, $currentName)) {
+            $pdo->commit();
+            return ['name' => $currentName, ...account_identity_profile_parts($current)];
+        }
+
+        $mfaStmt = $pdo->prepare(
+            "SELECT token_id FROM security_tokens
+              WHERE user_id = ? AND purpose = 'mfa_credential'
+                AND mfa_status = 'enabled' AND revoked_at IS NULL
+              FOR UPDATE"
+        );
+        $mfaStmt->execute([$userId]);
+        $mfaCredentials = $mfaStmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($mfaCredentials !== []) {
+            $code = account_identity_name_change_totp_code($data['code'] ?? null);
+            account_identity_name_change_rate_limit($config, $userId);
+            try {
+                mfa_require_step_up($pdo, $config, $userId, $code);
+            } catch (MfaException $e) {
+                throw account_identity_name_change_invalid_code($e);
+            }
+        }
+
+        update_account_identity($pdo, $userId, $name, null, $parts);
+        audit_record_action(
+            $pdo, $config, $authCtx, 'account', 'profile_updated', 'user_account', (string) $userId,
+            'Updated own profile name.', ['after' => ['name' => $name]]
+        );
+        $pdo->commit();
+
+        return ['name' => $name, ...$parts];
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
 }
 
 function account_identity_profile_parts(array $row): array

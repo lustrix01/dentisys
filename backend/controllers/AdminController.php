@@ -536,30 +536,16 @@ function handle_admin_profile_update(): void
             return;
         }
 
-        $data = $body['data'];
-        $nameParts = account_identity_name_parts($data);
-        $name = $nameParts !== null ? account_identity_composed_name($nameParts) : validate_person_name($data, 'name', 2, 255);
-        // The login email is permanent (REG-009); if sent it must match the account.
-        $email = isset($data['email']) && trim((string) $data['email']) !== ''
-            ? validate_institutional_email($data['email'])
-            : null;
-
-        $pdo->beginTransaction();
-        try {
-            update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
-            audit_record_action(
-                $pdo, $config, $authCtx, 'account', 'profile_updated', 'user_account', (string) $authCtx['user_id'],
-                'Updated own profile name.', ['after' => ['name' => $name]]
-            );
-            $pdo->commit();
-        } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            throw $e;
-        }
-
-        json_response(['status' => 'ok', 'message' => 'Profile details updated successfully.'], 200);
+        $result = account_identity_change_own_name($pdo, $config, $authCtx, $body['data'], true);
+        json_response(['status' => 'ok', 'message' => 'Profile details updated successfully.', ...$result], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
+    } catch (AccountIdentityStepUpException $e) {
+        emit_response(build_error_response($e->getMessage(), 403, $e->apiCode));
+    } catch (RateLimitException $e) {
+        emit_response(build_error_response('Too many requests.', 429, 'RATE_LIMITED'));
+    } catch (DomainException $e) {
+        safe_error_response($e->getMessage(), 409);
     } catch (\PDOException $e) {
         error_log('Profile update database error: ' . sanitize_for_log($e));
         $sqlState = (string) $e->getCode();

@@ -1492,6 +1492,160 @@ expect_same(200, $facultyNameOnlyStatus, 'Faculty profile saves without an email
 $facultyEmailStmt->execute();
 expect_same($facultyAccountBefore, $facultyEmailStmt->fetch(PDO::FETCH_ASSOC), 'Faculty login email is unchanged after profile updates');
 
+// ID-002 self-service name changes use one strict profile contract for all roles.
+[$studentNameLoginStatus, $studentNameLoginBody] = integration_http_json('/api/auth/login', '', [
+    'email' => 'student@bicol-u.edu.ph',
+    'password' => $demoPasswords['student@bicol-u.edu.ph'],
+]);
+expect_same(200, $studentNameLoginStatus, 'Student name-change integration login succeeds');
+$studentNameAccessToken = (string) ($studentNameLoginBody['access_token'] ?? '');
+$profileNameCases = [
+    'Dean' => ['/api/admin/profile', $adminAccessToken, 'admin@bicol-u.edu.ph'],
+    'Faculty' => ['/api/faculty/profile', $facultyAccessToken, 'faculty@bicol-u.edu.ph'],
+    'Secretary' => ['/api/secretary/profile', $secretaryAccessToken, 'secretary@bicol-u.edu.ph'],
+    'Student' => ['/api/student/profile', $studentNameAccessToken, 'student@bicol-u.edu.ph'],
+];
+$profileNameSnapshots = [];
+$profileNameAccountStmt = $pdo->prepare(
+    'SELECT ua.user_id, ua.person_id, ua.login_email, ua.display_name, ua.name_prefix, ua.first_name, ua.middle_name, ua.last_name, ua.name_suffix,
+            pi.first_name AS canonical_first_name, pi.last_name AS canonical_last_name, pi.legacy_display_name
+       FROM user_accounts ua JOIN person_identities pi ON pi.person_id = ua.person_id
+      WHERE ua.login_email = ?'
+);
+$profileNameMfaCountStmt = $pdo->prepare(
+    "SELECT COUNT(*) FROM security_tokens
+      WHERE user_id = ? AND purpose = 'mfa_credential' AND mfa_status = 'enabled' AND revoked_at IS NULL"
+);
+$profileNameAuditCount = static function (int $userId) use ($pdo): int {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE action_code = 'profile_updated' AND target_type = 'user_account' AND target_id = ?");
+    $stmt->execute([(string) $userId]);
+    return (int) $stmt->fetchColumn();
+};
+foreach ($profileNameCases as $profileRole => [$profilePath, $profileToken, $profileEmail]) {
+    $profileNameAccountStmt->execute([$profileEmail]);
+    $snapshot = $profileNameAccountStmt->fetch(PDO::FETCH_ASSOC);
+    expect_true(is_array($snapshot), "{$profileRole} self-service name fixture exists");
+    $profileUserId = (int) $snapshot['user_id'];
+    $profileNameMfaCountStmt->execute([$profileUserId]);
+    expect_same(0, (int) $profileNameMfaCountStmt->fetchColumn(), "{$profileRole} begins with MFA disabled");
+    $profileNameSnapshots[$profileRole] = $snapshot;
+
+    $parts = [
+        'prefix' => '',
+        'firstName' => 'Change',
+        'middleName' => 'Name',
+        'lastName' => $profileRole,
+        'suffix' => '',
+    ];
+    $auditBefore = $profileNameAuditCount($profileUserId);
+    [$changeStatus, $changeBody] = integration_http_json($profilePath, $profileToken, $parts);
+    expect_same(200, $changeStatus, "{$profileRole} can change their own name without MFA");
+    expect_same('Change Name ' . $profileRole, $changeBody['name'] ?? null, "{$profileRole} change returns the composed display name");
+    expect_same('Change', $changeBody['firstName'] ?? null, "{$profileRole} change returns all five name parts");
+    expect_same($auditBefore + 1, $profileNameAuditCount($profileUserId), "{$profileRole} successful name change appends one profile audit event");
+}
+
+$studentProfileAccountId = (int) $profileNameSnapshots['Student']['user_id'];
+$studentNoopPersonStampStmt = $pdo->prepare(
+    'SELECT pi.updated_at FROM person_identities pi JOIN user_accounts ua ON ua.person_id = pi.person_id WHERE ua.user_id = ?'
+);
+$studentNoopPersonStampStmt->execute([$studentProfileAccountId]);
+$studentNameStampBefore = $studentNoopPersonStampStmt->fetchColumn();
+$studentNoopAuditBefore = $profileNameAuditCount($studentProfileAccountId);
+[$studentNoopStatus, $studentNoopBody] = integration_http_json('/api/student/profile', $studentNameAccessToken, [
+    'prefix' => '', 'firstName' => 'Change', 'middleName' => 'Name', 'lastName' => 'Student', 'suffix' => '',
+]);
+expect_same(200, $studentNoopStatus, 'Unchanged composed Student name returns HTTP 200');
+expect_same('Change Name Student', $studentNoopBody['name'] ?? null, 'Unchanged Student name response returns the current display name');
+$studentNoopPersonStampStmt->execute([$studentProfileAccountId]);
+expect_same($studentNameStampBefore, $studentNoopPersonStampStmt->fetchColumn(), 'Unchanged composed name does not write the canonical identity');
+expect_same($studentNoopAuditBefore, $profileNameAuditCount($studentProfileAccountId), 'Unchanged composed name does not append an audit event');
+
+[$identityKeyStatus, $identityKeyBody] = integration_http_json('/api/admin/profile', $adminAccessToken, [
+    'prefix' => '', 'firstName' => 'Blocked', 'middleName' => '', 'lastName' => 'Identity', 'suffix' => '', 'studentNumber' => '999999',
+]);
+expect_same(422, $identityKeyStatus, 'Self-service profile rejects identity-critical keys');
+expect_same('studentNumber', $identityKeyBody['errors'][0]['field'] ?? null, 'Identity-key rejection includes a studentNumber field error');
+
+// Exercise step-up using the production TOTP verifier and its one-time-step guard.
+$facultyProfileAccountId = (int) $profileNameSnapshots['Faculty']['user_id'];
+$facultyMfaSecret = mfa_generate_secret();
+$facultyMfaEncrypted = mfa_encrypt_secret($facultyMfaSecret, config_key_bytes_exact($config['mfa']['encryption_key_b64'], 32, 'MFA_ENCRYPTION_KEY'));
+$facultyMfaInsert = $pdo->prepare(
+    "INSERT INTO security_tokens
+        (purpose, user_id, ciphertext, nonce, auth_tag, enc_key_version, enc_algorithm,
+         totp_algorithm, digit_count, period_seconds, mfa_status, mfa_verified_at, issued_at)
+     VALUES ('mfa_credential', ?, ?, ?, ?, 1, 'AES-256-GCM', 'sha1', 6, 30, 'enabled', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
+     RETURNING token_id"
+);
+$facultyMfaInsert->bindValue(1, $facultyProfileAccountId, PDO::PARAM_INT);
+pdo_bind_binary($facultyMfaInsert, 2, $facultyMfaEncrypted['ciphertext']);
+pdo_bind_binary($facultyMfaInsert, 3, $facultyMfaEncrypted['nonce']);
+pdo_bind_binary($facultyMfaInsert, 4, $facultyMfaEncrypted['auth_tag']);
+$facultyMfaInsert->execute();
+$facultyMfaTokenId = (int) $facultyMfaInsert->fetchColumn();
+$facultyMfaPayload = ['prefix' => '', 'firstName' => 'Mfa', 'middleName' => 'Stepup', 'lastName' => 'Faculty', 'suffix' => ''];
+$facultyMfaAuditBefore = $profileNameAuditCount($facultyProfileAccountId);
+[$missingNameCodeStatus, $missingNameCodeBody] = integration_http_json('/api/faculty/profile', $facultyAccessToken, $facultyMfaPayload);
+expect_same(403, $missingNameCodeStatus, 'MFA-protected name change requires an authenticator code');
+expect_same('TWO_FACTOR_REQUIRED', $missingNameCodeBody['code'] ?? null, 'Missing name-change code uses TWO_FACTOR_REQUIRED');
+$currentNameStep = intdiv(time(), 30);
+$currentNameSteps = [$currentNameStep - 1, $currentNameStep, $currentNameStep + 1];
+$currentNameCodes = array_map(static fn(int $step): string => mfa_compute_totp($facultyMfaSecret, $step)['code'], $currentNameSteps);
+$wrongNameCode = '000000';
+while (in_array($wrongNameCode, $currentNameCodes, true)) {
+    $wrongNameCode = str_pad((string) (((int) $wrongNameCode + 1) % 1000000), 6, '0', STR_PAD_LEFT);
+}
+[$wrongNameCodeStatus, $wrongNameCodeBody] = integration_http_json('/api/faculty/profile', $facultyAccessToken, $facultyMfaPayload + ['code' => $wrongNameCode]);
+expect_same(403, $wrongNameCodeStatus, 'Wrong authenticator code blocks a name change');
+expect_same('INVALID_TWO_FACTOR_CODE', $wrongNameCodeBody['code'] ?? null, 'Wrong authenticator code uses INVALID_TWO_FACTOR_CODE');
+$facultyRecovery = mfa_generate_recovery_codes(1);
+$facultyRecoveryInsert = $pdo->prepare("INSERT INTO security_tokens (purpose, user_id, secret_hash, issued_at) VALUES ('mfa_recovery', ?, ?, CURRENT_TIMESTAMP(6))");
+$facultyRecoveryInsert->execute([$facultyProfileAccountId, $facultyRecovery['hashes'][0]]);
+[$recoveryNameCodeStatus, $recoveryNameCodeBody] = integration_http_json('/api/faculty/profile', $facultyAccessToken, $facultyMfaPayload + ['code' => $facultyRecovery['codes'][0]]);
+expect_same(403, $recoveryNameCodeStatus, 'Recovery code cannot confirm a name change');
+expect_same('INVALID_TWO_FACTOR_CODE', $recoveryNameCodeBody['code'] ?? null, 'Recovery code rejection uses INVALID_TWO_FACTOR_CODE');
+expect_same($facultyMfaAuditBefore, $profileNameAuditCount($facultyProfileAccountId), 'Missing, wrong, and recovery codes do not append profile audits');
+$facultyMfaCurrentName = $pdo->prepare('SELECT display_name FROM user_accounts WHERE user_id = ?');
+$facultyMfaCurrentName->execute([$facultyProfileAccountId]);
+expect_same('Change Name Faculty', $facultyMfaCurrentName->fetchColumn(), 'Failed MFA checks leave the name unchanged');
+$validNameCode = mfa_compute_totp($facultyMfaSecret, intdiv(time(), 30))['code'];
+[$validNameCodeStatus, $validNameCodeBody] = integration_http_json('/api/faculty/profile', $facultyAccessToken, $facultyMfaPayload + ['code' => $validNameCode]);
+expect_same(200, $validNameCodeStatus, 'Valid authenticator code permits a name change');
+expect_same('Mfa Stepup Faculty', $validNameCodeBody['name'] ?? null, 'Valid MFA name change returns the composed display name');
+[$reusedNameCodeStatus, $reusedNameCodeBody] = integration_http_json('/api/faculty/profile', $facultyAccessToken, [
+    'prefix' => '', 'firstName' => 'Mfa', 'middleName' => 'Replayed', 'lastName' => 'Faculty', 'suffix' => '', 'code' => $validNameCode,
+]);
+expect_same(403, $reusedNameCodeStatus, 'Accepted authenticator step cannot be reused for another name change');
+expect_same('INVALID_TWO_FACTOR_CODE', $reusedNameCodeBody['code'] ?? null, 'Reused authenticator step uses INVALID_TWO_FACTOR_CODE');
+$pdo->prepare("UPDATE security_tokens SET mfa_status = 'revoked', revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Name-change integration fixture complete' WHERE token_id = ?")
+    ->execute([$facultyMfaTokenId]);
+$pdo->prepare("UPDATE security_tokens SET revoked_at = CURRENT_TIMESTAMP(6), revocation_reason = 'Name-change integration fixture complete' WHERE user_id = ? AND purpose = 'mfa_recovery' AND used_at IS NULL AND revoked_at IS NULL")
+    ->execute([$facultyProfileAccountId]);
+
+foreach ($profileNameCases as $profileRole => [$profilePath, $profileToken]) {
+    $snapshot = $profileNameSnapshots[$profileRole];
+    if ($snapshot['canonical_first_name'] === null || $snapshot['canonical_last_name'] === null) {
+        // A legacy unsplit fixture name cannot be resubmitted through the
+        // structured Change Name contract; restore the preserved legacy value directly.
+        $pdo->prepare('UPDATE person_identities SET name_prefix = NULL, first_name = NULL, middle_name = NULL, last_name = NULL, name_suffix = NULL, legacy_display_name = ? WHERE person_id = ?')
+            ->execute([$snapshot['legacy_display_name'], (int) $snapshot['person_id']]);
+        $pdo->prepare('UPDATE user_accounts SET name_prefix = NULL, first_name = NULL, middle_name = NULL, last_name = NULL, name_suffix = NULL, display_name = ? WHERE user_id = ?')
+            ->execute([$snapshot['display_name'], (int) $snapshot['user_id']]);
+        $profileNameAccountStmt->execute([$snapshot['login_email']]);
+        expect_same($snapshot['display_name'], $profileNameAccountStmt->fetch(PDO::FETCH_ASSOC)['display_name'] ?? null, "{$profileRole} legacy test profile name is restored after coverage");
+        continue;
+    }
+    [$restoreStatus, $restoreBody] = integration_http_json($profilePath, $profileToken, [
+        'prefix' => $snapshot['name_prefix'] ?? '',
+        'firstName' => $snapshot['first_name'] ?? '',
+        'middleName' => $snapshot['middle_name'] ?? '',
+        'lastName' => $snapshot['last_name'] ?? '',
+        'suffix' => $snapshot['name_suffix'] ?? '',
+    ]);
+    expect_same(200, $restoreStatus, "{$profileRole} test profile identity is restored after coverage " . json_encode($restoreBody['errors'] ?? $restoreBody['message'] ?? null));
+}
+
 // Name rules: prefixes and suffixes contain letters (no "Dr2" or "123"), and a
 // middle name may be a single initial.
 foreach (['prefix' => 'Dr2', 'suffix' => '123'] as $badAffixField => $badAffixValue) {
@@ -2000,7 +2154,7 @@ expect_same((int) $pendingStudent['student_person_id'], (int) $pendingStudent['a
     'middleName' => 'Canonical',
     'lastName' => 'Student',
 ]);
-expect_same(200, $studentProfileUpdateStatus, 'Student profile update accepts a structured canonical name');
+expect_same(200, $studentProfileUpdateStatus, 'Faculty can rename a Student whose linked account is still Pending Activation');
 $studentProfileConsistencyStmt = $pdo->prepare(
     'SELECT pi.first_name AS canonical_first_name, pi.middle_name AS canonical_middle_name,
             pi.last_name AS canonical_last_name,
@@ -2092,6 +2246,31 @@ expect_same((int) $pendingStudent['user_id'], (int) $acceptedStudent['student_ac
 expect_same(200, $acceptedStudentLoginStatus, 'Activated Student can use password authentication');
 $acceptedStudentAccessToken = (string) ($acceptedStudentLoginBody['access_token'] ?? '');
 expect_true($acceptedStudentAccessToken !== '', 'Activated Student login returns an access token for identity-bound checks');
+
+[$activatedFacultyRenameStatus, $activatedFacultyRenameBody] = integration_http_put_json('/api/faculty/students/' . $invitedStudentId, $facultyAccessToken, [
+    'firstName' => 'Faculty Override',
+    'middleName' => 'Canonical',
+    'lastName' => 'Student',
+]);
+expect_same(409, $activatedFacultyRenameStatus, 'Faculty cannot change an activated Student name');
+expect_same('CONFLICT', $activatedFacultyRenameBody['code'] ?? null, 'Activated Student name change returns a conflict envelope');
+expect_true(str_contains((string) ($activatedFacultyRenameBody['message'] ?? ''), 'changes their name from their own profile'), 'Activated Student name conflict explains self-service ownership');
+$pdo->prepare("UPDATE user_accounts SET status = 'Disabled' WHERE user_id = ?")->execute([(int) $acceptedStudent['student_account_user_id']]);
+[$disabledFacultyRenameStatus, $disabledFacultyRenameBody] = integration_http_put_json('/api/faculty/students/' . $invitedStudentId, $facultyAccessToken, [
+    'firstName' => 'Disabled Override',
+    'middleName' => 'Canonical',
+    'lastName' => 'Student',
+]);
+$pdo->prepare("UPDATE user_accounts SET status = 'Active' WHERE user_id = ?")->execute([(int) $acceptedStudent['student_account_user_id']]);
+expect_same(409, $disabledFacultyRenameStatus, 'Faculty cannot rename a previously activated Student whose account is now disabled');
+expect_same('CONFLICT', $disabledFacultyRenameBody['code'] ?? null, 'Disabled previously activated Student name change returns a conflict envelope');
+[$activatedFacultyContactStatus] = integration_http_put_json('/api/faculty/students/' . $invitedStudentId, $facultyAccessToken, [
+    'firstName' => 'Invited Renamed',
+    'middleName' => 'Canonical',
+    'lastName' => 'Student',
+    'contact' => '555-0101',
+]);
+expect_same(200, $activatedFacultyContactStatus, 'Faculty can update other roster fields when activated Student names are unchanged');
 
 // A deliberately mismatched account/person link must fail closed for both
 // password authentication and biometric self-service. The temporary person
@@ -6903,6 +7082,13 @@ expect_same(201, $appointStatus, 'Faculty appoint a Student with an existing acc
 expect_same('Appointed', $appointBody['delivery_status'] ?? null, 'The existing account is appointed directly, without a second account');
 expect_same(['role' => 'secretary', 'user_id' => 10, 'student_account_user_id' => 10], $appointRole(), 'The Student\'s own account becomes the Secretary account');
 expect_same(10, (int) $pdo->query("SELECT secretary_user_id FROM class_sections WHERE cs_id = {$appointClassId}")->fetchColumn(), 'The section records the appointed account');
+[$secretaryLinkedRenameStatus, $secretaryLinkedRenameBody] = integration_http_put_json('/api/faculty/students/26', $seedFacultyAccessToken, [
+    'firstName' => 'Secretary Override',
+    'middleName' => 'Linked',
+    'lastName' => 'Student',
+]);
+expect_same(409, $secretaryLinkedRenameStatus, 'Faculty cannot rename a Secretary-linked Student');
+expect_same('CONFLICT', $secretaryLinkedRenameBody['code'] ?? null, 'Secretary-linked Student name change returns a conflict envelope');
 [$secondAppointStatus] = integration_http_json('/api/secretary/invite', $seedFacultyAccessToken, $appointPayload);
 expect_same(409, $secondAppointStatus, 'A section has at most one Class Secretary');
 [$appointedLoginStatus, $appointedLoginBody] = integration_http_json('/api/auth/login', '', ['email' => 'student@bicol-u.edu.ph', 'password' => $demoPasswords['student@bicol-u.edu.ph']]);

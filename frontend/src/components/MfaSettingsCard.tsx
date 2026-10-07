@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, KeyRound, RefreshCw, Smartphone } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
@@ -17,7 +17,11 @@ interface Enrollment {
   secret: string;
 }
 
-export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }> = () => {
+export const MfaSettingsCard: React.FC<{
+  userEmail?: string;
+  roleName?: string;
+  onAuthenticatorStatusChange?: (enabled: boolean) => void;
+}> = ({ onAuthenticatorStatusChange }) => {
   const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
   const [recoveryCount, setRecoveryCount] = useState(0);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -29,7 +33,7 @@ export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -42,19 +46,21 @@ export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }
         throw new Error('Unable to read the current 2FA settings.');
       }
       setAuthenticatorEnabled(twoFactor.authenticator_enabled);
+      onAuthenticatorStatusChange?.(twoFactor.authenticator_enabled);
       setRecoveryCount(twoFactor.recovery_code_count);
       setStatusAvailable(true);
     } catch (requestError) {
       setStatusAvailable(false);
       setAuthenticatorEnabled(false);
+      onAuthenticatorStatusChange?.(false);
       setRecoveryCount(0);
       setError(requestError instanceof Error ? requestError.message : 'Unable to load 2FA settings.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [onAuthenticatorStatusChange]);
 
-  useEffect(() => { void loadStatus(); }, []);
+  useEffect(() => { void loadStatus(); }, [loadStatus]);
 
   const beginAuthenticator = async () => {
     setWorking(true); setError(''); setSuccess('');
@@ -78,6 +84,7 @@ export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }
     try {
       const response = await confirmEnrollment(enrollment.confirmationToken, code);
       setAuthenticatorEnabled(true);
+      onAuthenticatorStatusChange?.(true);
       setRecoveryCodes(response.recovery_codes);
       setRecoveryCount(response.recovery_codes.length);
       setEnrollment(null); setCode('');
@@ -93,6 +100,7 @@ export const MfaSettingsCard: React.FC<{ userEmail?: string; roleName?: string }
     try {
       const response = await revokeMfaApi(code);
       setAuthenticatorEnabled(false); setRecoveryCount(0); setRecoveryCodes([]); setCode('');
+      onAuthenticatorStatusChange?.(false);
       setSuccess(response.message);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to disable authenticator.');

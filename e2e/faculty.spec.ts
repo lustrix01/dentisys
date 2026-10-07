@@ -392,6 +392,7 @@ test.describe('Faculty Module E2E Tests', () => {
 
   test('person names block digits while typing, sanitize paste and preserve accents, punctuation and IME', async ({ page }) => {
     await page.goto('/faculty/profile');
+    await page.getByRole('button', { name: 'Change Name' }).click();
     const first = page.getByRole('textbox', { name: /First name/ });
     await first.fill('Ana');
     await first.pressSequentially('123@#$');
@@ -436,27 +437,53 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByRole('row').filter({ hasText: 'Current Candidate' })).toHaveCount(2);
   });
 
-  test('faculty profile email is read-only and is not sent on save', async ({ page }) => {
+  test('faculty name dialog shows MFA, displays server errors, and sends no email', async ({ page }) => {
     let postedProfile: Record<string, unknown> | null = null;
+    let firstName = 'Jane';
     await page.route('**/api/faculty/profile', async (route) => {
       if (route.request().method() === 'POST') {
         postedProfile = route.request().postDataJSON() as Record<string, unknown>;
-        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Faculty profile updated successfully.' }) });
+        if (postedProfile.code !== '123456') {
+          await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({
+            status: 'error', code: 'INVALID_TWO_FACTOR_CODE', message: 'Invalid or already used authenticator code.', requestId: 'name-change-e2e',
+          }) });
+          return;
+        }
+        firstName = String(postedProfile.firstName);
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+          status: 'ok', message: 'Faculty profile updated successfully.',
+          name: `${firstName} Doe`, prefix: '', firstName, middleName: '', lastName: 'Doe', suffix: '',
+        }) });
         return;
       }
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'ok', profile: { name: 'Jane Doe', firstName: 'Jane', lastName: 'Doe', email: 'faculty@bicol-u.edu.ph' } }),
+        body: JSON.stringify({ status: 'ok', profile: { name: `${firstName} Doe`, firstName, lastName: 'Doe', email: 'faculty@bicol-u.edu.ph' } }),
       });
     });
+    await page.route('**/api/auth/mfa/settings', route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ status: 'ok', two_factor: { enabled: true, authenticator_enabled: true, recovery_code_count: 8 } }),
+    }));
     await page.click('a[href="/faculty/profile"]');
     const emailInput = page.locator('input[readonly]').first();
     await expect(emailInput).toHaveValue('faculty@bicol-u.edu.ph');
     await expect(page.getByText('Your login email cannot be changed.')).toBeVisible();
-    await page.getByRole('button', { name: /Save profile/i }).click();
+    await page.getByRole('button', { name: 'Change Name' }).click();
+    const saveName = page.getByRole('button', { name: 'Save name' });
+    await expect(saveName).toBeDisabled();
+    await expect(page.getByLabel('Authenticator code')).toHaveAttribute('autocomplete', 'one-time-code');
+    await page.getByLabel('First name *').fill('Janet');
+    await page.getByLabel('Authenticator code').fill('111111');
+    await saveName.click();
+    await expect(page.getByRole('alert')).toContainText('Invalid or already used authenticator code.');
+    await page.getByLabel('Authenticator code').fill('123456');
+    await saveName.click();
     await expect.poll(() => postedProfile).not.toBeNull();
     expect(postedProfile).not.toHaveProperty('email');
+    expect(postedProfile).toMatchObject({ prefix: '', firstName: 'Janet', middleName: '', lastName: 'Doe', suffix: '' });
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Janet Doe' })).toBeVisible();
   });
 
   test('faculty theme applies on click and is saved to the account', async ({ page }) => {

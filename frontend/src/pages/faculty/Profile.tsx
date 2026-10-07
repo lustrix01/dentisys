@@ -1,21 +1,20 @@
-import { PersonNameFields, emptyNameParts, composePersonName } from '../../components/PersonNameFields';
+import { emptyNameParts, type PersonNameParts } from '../../components/PersonNameFields';
 import React, { useEffect, useState } from 'react';
-import { BookOpen, CheckCircle2, Mail, Save, UserRound } from 'lucide-react';
+import { BookOpen, CheckCircle2, Mail, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { ChangeNameDialog, type NameChangeResponse } from '../../components/ChangeNameDialog';
 import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { useAuth } from '../../context/AuthContext';
-import { recordAudit } from '../../services/auditService';
 import { getFacultyProfileApi, updateFacultyProfileApi, getFacultyClassesApi } from '../../services/apiClient';
 
 export const Profile: React.FC = () => {
   const [nameParts, setNameParts] = useState(emptyNameParts);
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const [name, setName] = useState(user?.display_name || 'Faculty Member');
   const [email, setEmail] = useState(user?.login_email || '');
-  const [saved, setSaved] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
   const [subjects, setSubjects] = useState<string[]>([]);
 
   useEffect(() => {
@@ -39,21 +38,18 @@ export const Profile: React.FC = () => {
   }, []);
   const initials = name.split(' ').filter(Boolean).slice(0, 2).map((part: string) => part[0]).join('').toUpperCase() || 'F';
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setMessage(null);
-    try {
-      const normalizedName = composePersonName(nameParts);
-      await updateFacultyProfileApi({ ...nameParts, name: normalizedName });
-      setName(normalizedName);
-      recordAudit({ action: 'Updated profile', module: 'Profile', description: 'Updated faculty professional profile details.', status: 'Success' });
-      setSaved(true);
-      setMessage({ type: 'success', text: 'Profile saved successfully.' });
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      console.error('Failed to update faculty profile', err);
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update faculty profile.' });
-    }
+  const saveName = (parts: PersonNameParts, code?: string) => updateFacultyProfileApi({ ...parts, ...(code ? { code } : {}) });
+  const applyName = (response: NameChangeResponse) => {
+    const parts = {
+      prefix: response.prefix || '',
+      firstName: response.firstName || '',
+      middleName: response.middleName || '',
+      lastName: response.lastName || '',
+      suffix: response.suffix || '',
+    };
+    setName(response.name);
+    setNameParts(parts);
+    if (user) setUser({ ...user, display_name: response.name });
   };
 
   return (
@@ -64,15 +60,15 @@ export const Profile: React.FC = () => {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 space-y-5">
-          <Card className="p-0 overflow-hidden"><div className="h-20 bg-gradient-to-r from-clinical-600 to-accent-500" /><CardContent className="relative pt-0 pb-5"><div className="-mt-10 w-20 h-20 rounded-2xl bg-white dark:bg-slate-900 p-1 shadow-lg"><div className="w-full h-full rounded-xl bg-gradient-to-tr from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900 flex items-center justify-center text-xl font-extrabold text-clinical-700 dark:text-clinical-300">{initials}</div></div><h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2><p className="text-xs text-clinical-600 dark:text-clinical-400 font-semibold mt-0.5">{'Faculty Clinician'}</p></CardContent></Card>
+          <Card className="p-0 overflow-hidden"><div className="h-20 bg-gradient-to-r from-clinical-600 to-accent-500" /><CardContent className="relative pt-0 pb-5"><div className="-mt-10 w-20 h-20 rounded-2xl bg-white dark:bg-slate-900 p-1 shadow-lg"><div className="w-full h-full rounded-xl bg-gradient-to-tr from-clinical-200 to-accent-200 dark:from-clinical-800 dark:to-accent-900 flex items-center justify-center text-xl font-extrabold text-clinical-700 dark:text-clinical-300">{initials}</div></div><h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2><ChangeNameDialog currentParts={nameParts} authenticatorEnabled={authenticatorEnabled} onSave={saveName} onSuccess={applyName} /><p className="text-xs text-clinical-600 dark:text-clinical-400 font-semibold mt-0.5">{'Faculty Clinician'}</p></CardContent></Card>
           <Card><CardHeader><CardTitle className="flex items-center gap-2 text-sm"><BookOpen className="w-4.5 h-4.5 text-accent-500" />Assigned subjects</CardTitle></CardHeader><CardContent className="flex flex-wrap gap-2">{subjects.length === 0 ? <span className="text-xs text-slate-400">No assigned subjects.</span> : subjects.map((subject: string) => <span key={subject} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 text-[10px] font-extrabold text-slate-600 dark:text-slate-400">{subject}</span>)}</CardContent></Card>
         </div>
         <div className="lg:col-span-8 space-y-5">
           <Card className="p-0 overflow-hidden">
             <CardHeader className="border-b border-slate-100 dark:border-slate-800/80"><CardTitle className="flex items-center gap-2 text-sm"><UserRound className="w-4.5 h-4.5 text-clinical-550" />Professional information</CardTitle></CardHeader>
-            <CardContent className="p-5"><form onSubmit={save} className="space-y-5">{message && <div className={`p-3.5 rounded-xl text-xs font-semibold ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'}`}>{message.text}</div>}<div className="grid sm:grid-cols-2 gap-4"><div className="sm:col-span-2"><PersonNameFields value={nameParts} onChange={setNameParts} /></div><ReadOnlyEmail value={email} /></div><div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800"><button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white text-xs font-bold shadow-md shadow-clinical-500/10 transition-all"><Save className="w-4 h-4" />{saved ? 'Profile saved' : 'Save profile'}</button></div></form></CardContent>
+            <CardContent className="p-5"><ReadOnlyEmail value={email} /></CardContent>
           </Card>
-          <MfaSettingsCard userEmail={email || 'faculty@bicol-u.edu.ph'} roleName="Faculty Member" />
+          <MfaSettingsCard userEmail={email || 'faculty@bicol-u.edu.ph'} roleName="Faculty Member" onAuthenticatorStatusChange={setAuthenticatorEnabled} />
           <GoogleLinkCard />
           <PasswordChangeCard />
         </div>

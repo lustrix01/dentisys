@@ -85,5 +85,16 @@ assert_faculty_students($ana['status'] === 'critical', 'Aggregate status uses cr
 assert_faculty_students($students[1]['overallGWA'] === null, 'All-null enrollment grades remain null');
 $thresholdStudents = faculty_map_student_rows($rows, 2.75);
 assert_faculty_students($thresholdStudents[0]['retentionThreshold'] === 2.75, 'Faculty student payload carries the canonical configured retention threshold');
+$activationRows = [
+    array_merge($base, ['student_id' => 31, 'student_account_user_id' => 201, 'account_status' => 'Active', 'linked_secretary_user_id' => null, 'cs_id' => 11, 'cs_name' => 'CLINIC-4A', 'enrollment_id' => 301, 'final_gwa' => null, 'retention_state' => 'active', 'clinic_hours_completed' => 0, 'course_code' => 'CLIN401', 'course_name' => 'Clinical Dentistry I']),
+    array_merge($base, ['student_id' => 32, 'student_account_user_id' => 202, 'account_status' => 'Pending Activation', 'linked_secretary_user_id' => null, 'cs_id' => 11, 'cs_name' => 'CLINIC-4A', 'enrollment_id' => 302, 'final_gwa' => null, 'retention_state' => 'active', 'clinic_hours_completed' => 0, 'course_code' => 'CLIN401', 'course_name' => 'Clinical Dentistry I']),
+    array_merge($base, ['student_id' => 33, 'student_account_user_id' => 203, 'account_status' => 'Disabled', 'linked_secretary_user_id' => null, 'cs_id' => 11, 'cs_name' => 'CLINIC-4A', 'enrollment_id' => 303, 'final_gwa' => null, 'retention_state' => 'active', 'clinic_hours_completed' => 0, 'course_code' => 'CLIN401', 'course_name' => 'Clinical Dentistry I']),
+    array_merge($base, ['student_id' => 34, 'student_account_user_id' => null, 'account_status' => null, 'linked_secretary_user_id' => 204, 'cs_id' => 11, 'cs_name' => 'CLINIC-4A', 'enrollment_id' => 304, 'final_gwa' => null, 'retention_state' => 'active', 'clinic_hours_completed' => 0, 'course_code' => 'CLIN401', 'course_name' => 'Clinical Dentistry I']),
+];
+$activationStatuses = faculty_map_student_rows($activationRows);
+assert_faculty_students($activationStatuses[0]['accountActivated'] === true, 'An active linked Student account is locked from Faculty name edits');
+assert_faculty_students($activationStatuses[1]['accountActivated'] === false, 'A pending linked Student account remains editable by Faculty');
+assert_faculty_students($activationStatuses[2]['accountActivated'] === true, 'A disabled previously linked Student account stays locked from Faculty name edits');
+assert_faculty_students($activationStatuses[3]['accountActivated'] === true, 'A Secretary-linked Student stays locked from Faculty name edits');
 
 echo "ALL FACULTY STUDENT MAPPING TESTS PASSED\n";

@@ -747,6 +747,34 @@ export function getFacultyAttendanceActivityApi(limit = 100): Promise<{ status: 
   return request('GET', `/faculty/attendance-activity?limit=${boundedLimit}`);
 }
 
+export interface OwnProfileNameChangePayload {
+  prefix: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  suffix: string;
+  code?: string;
+  /** Retained for older Dean/Faculty clients. */
+  name?: string;
+  /** Retained for older clients that echo the unchanged login email. */
+  email?: string;
+}
+
+export interface OwnProfileNameChangeResponse {
+  status: string;
+  message: string;
+  name: string;
+  prefix: string | null;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  suffix: string | null;
+}
+
+function updateOwnProfileNameApi(path: string, data: OwnProfileNameChangePayload): Promise<OwnProfileNameChangeResponse> {
+  return request('POST', path, data);
+}
+
 export function getAdminProfileApi(): Promise<{
   status: string;
   profile: {
@@ -762,8 +790,8 @@ export function getAdminProfileApi(): Promise<{
   return request('GET', '/admin/profile');
 }
 
-export function updateAdminProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string }): Promise<{ status: string; message: string }> {
-  return request('POST', '/admin/profile', data);
+export function updateAdminProfileApi(data: OwnProfileNameChangePayload): Promise<OwnProfileNameChangeResponse> {
+  return updateOwnProfileNameApi('/admin/profile', data);
 }
 
 export function getAdminSettingsApi(): Promise<{
@@ -928,6 +956,7 @@ export function getFacultyStudentsApi(): Promise<Array<{
   faceEnrolled: boolean;
   consentStatus: string;
   accountStatus?: 'none' | 'pending' | 'active' | 'secretary' | 'disabled';
+  accountActivated?: boolean;
   classSections: Array<{ classId: string; className: string; enrollmentId: string }>;
   overallGWA?: number;
   retentionThreshold?: number;
@@ -1255,8 +1284,8 @@ export function getFacultyProfileApi(): Promise<{
   return request('GET', '/faculty/profile');
 }
 
-export function updateFacultyProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string }): Promise<{ status: string; message: string }> {
-  return request('POST', '/faculty/profile', data);
+export function updateFacultyProfileApi(data: OwnProfileNameChangePayload): Promise<OwnProfileNameChangeResponse> {
+  return updateOwnProfileNameApi('/faculty/profile', data);
 }
 
 export function getFacultySettingsApi(): Promise<{
@@ -1385,8 +1414,8 @@ export function getSecretaryProfileApi(): Promise<{
   return request('GET', '/secretary/profile');
 }
 
-export function updateSecretaryProfileApi(data: { prefix?: string; firstName?: string; middleName?: string; lastName?: string; suffix?: string; name: string }): Promise<{ status: string; message: string }> {
-  return request('POST', '/secretary/profile', data);
+export function updateSecretaryProfileApi(data: OwnProfileNameChangePayload): Promise<OwnProfileNameChangeResponse> {
+  return updateOwnProfileNameApi('/secretary/profile', data);
 }
 
 export function getSecretarySettingsApi(): Promise<{
@@ -2157,6 +2186,10 @@ export function getStudentAcademicDashboardApi(schoolYear?: string): Promise<Stu
 
 export function getStudentAcademicProfileApi(): Promise<StudentAcademicProfileResponse> {
   return request<StudentAcademicProfileResponse>('GET', '/student/profile');
+}
+
+export function updateStudentProfileApi(data: OwnProfileNameChangePayload): Promise<OwnProfileNameChangeResponse> {
+  return updateOwnProfileNameApi('/student/profile', data);
 }
 
 export function getStudentAcademicClassesApi(): Promise<StudentAcademicClassesResponse> {

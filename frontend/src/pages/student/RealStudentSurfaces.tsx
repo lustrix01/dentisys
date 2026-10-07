@@ -15,13 +15,16 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { ChangeNameDialog, type NameChangeResponse } from '../../components/ChangeNameDialog';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
 import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import {
   getStudentAcademicDashboardApi,
   getStudentAcademicProfileApi,
+  updateStudentProfileApi,
 } from '../../services/apiClient';
+import type { PersonNameParts } from '../../components/PersonNameFields';
 import type {
   StudentAcademicProfile,
 } from '../../types';
@@ -372,10 +375,11 @@ export const RealStudentDashboard: React.FC = () => {
 };
 
 export const RealStudentProfile: React.FC = () => {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const [profile, setProfile] = useState<StudentAcademicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
 
   const loadProfile = async () => {
     setLoading(true);
@@ -394,6 +398,19 @@ export const RealStudentProfile: React.FC = () => {
     void loadProfile();
   }, []);
 
+  const saveName = (parts: PersonNameParts, code?: string) => updateStudentProfileApi({ ...parts, ...(code ? { code } : {}) });
+  const applyName = (response: NameChangeResponse) => {
+    const parts = {
+      prefix: response.prefix || '',
+      firstName: response.firstName || '',
+      middleName: response.middleName || '',
+      lastName: response.lastName || '',
+      suffix: response.suffix || '',
+    };
+    setProfile(current => current ? { ...current, ...parts, name: response.name } : current);
+    if (user) setUser({ ...user, display_name: response.name });
+  };
+
   if (loading) {
     return (
       <div className="min-h-[400px] flex items-center justify-center p-8 text-center text-sm font-semibold text-slate-500">
@@ -410,6 +427,18 @@ export const RealStudentProfile: React.FC = () => {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           View your personal enrollment record and account security settings.
         </p>
+        {profile && <ChangeNameDialog
+          currentParts={{
+            prefix: profile.prefix || '',
+            firstName: profile.firstName || '',
+            middleName: profile.middleName || '',
+            lastName: profile.lastName || '',
+            suffix: profile.suffix || '',
+          }}
+          authenticatorEnabled={authenticatorEnabled}
+          onSave={saveName}
+          onSuccess={applyName}
+        />}
       </div>
 
       {error && (
@@ -462,7 +491,7 @@ export const RealStudentProfile: React.FC = () => {
         </div>
 
         <div className="lg:col-span-5 space-y-6">
-          <MfaSettingsCard userEmail={profile?.email || user?.login_email} roleName="Student" />
+          <MfaSettingsCard userEmail={profile?.email || user?.login_email} roleName="Student" onAuthenticatorStatusChange={setAuthenticatorEnabled} />
           <GoogleLinkCard />
           <PasswordChangeCard />
         </div>

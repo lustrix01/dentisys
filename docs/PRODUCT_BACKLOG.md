@@ -37,15 +37,11 @@ Maintain a realistic development dataset (Faculty, Students, courses, sections, 
 
 ## 3.1 Read-only profiles with a Change Name action
 
-**Status: Partial.** Dean, Faculty and Secretary can save a structured name through their profile update endpoints. Student has no name-update route. No role has a dedicated Change Name flow, and no test confirms that every role's profile rejects changes to identity-critical fields.
-
-Profiles are read-only apart from a dedicated **Change Name** action using the five-part name fields (spec ID-002). Self-service must not change institutional email, account ID, role, Student number, institutional identifiers, class or Faculty assignments, or other relationship-critical keys. The Secretary profile must not repeat information.
+**Status: Done.** All four roles use the shared Change Name action; self-service rejects identity-critical fields and activated Students own their name changes.
 
 ## 3.2 Authenticator confirmation for name changes
 
-**Status: Not started.** No 2FA challenge exists for a name change.
-
-When the user has authenticator-app 2FA enabled, a name change requires a 2FA confirmation before it is saved.
+**Status: Done.** Authenticator-app MFA requires a rate-limited, single-use TOTP confirmation; recovery codes are rejected.
 
 ---
 
@@ -152,6 +148,10 @@ Add filters for attendance status, overridden/original state and Student search,
 ## 8.1 Field validation and password controls
 
 **Status: Partial.** Activation, reset and login have validation, password visibility toggles and requirements that mirror the backend policy. The remaining data-entry fields have not been checked one by one.
+
+## 8.2 2FA settings confirmation hardening
+
+**Status: Not started.** Regenerating recovery codes and turning 2FA off confirm with an authenticator code but have no handler-level attempt limit, and recovery-code regeneration writes no audit event.
 
 ---
 

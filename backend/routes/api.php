@@ -511,6 +511,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/student/profile',
+        'handler' => 'handle_student_profile_update',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/student/classes',
         'handler' => 'handle_student_classes_get',

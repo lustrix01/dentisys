@@ -12,6 +12,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07.
 - Google Sign-In for existing accounts, linked only after password and 2FA confirmation, bound to a stable Google ID — AUTH-003, AUTH-010 — implemented, tests passing.
 - Five-part structured names (Prefix, First, Middle, Last, Suffix) for every person and invitation, with Unicode-aware validation — ID-002 — implemented, tests passing.
 - One canonical name source; a name change shows everywhere without rewriting business tables — ID-002 — implemented, tests passing.
+- Dean, Faculty, Secretary and Student can change only their own five-part name from a shared profile dialog; authenticator-app MFA requires a fresh TOTP code, while recovery codes are rejected. Profiles reject identity-critical fields, and Faculty cannot rename an activated Student — ID-002 — implemented, tests passing.
 
 ## Invitations and roles
 

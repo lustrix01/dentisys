@@ -2128,6 +2128,7 @@ export const ClassesAndRosters: React.FC = () => {
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <fieldset disabled={!!editingStudent.accountActivated} className="contents">
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300">
                 Prefix
                 <input value={editStudentPrefix} onChange={event => setEditStudentPrefix(filterPersonNameInput('prefix', event.target.value, (event.nativeEvent as InputEvent).isComposing))} onCompositionEnd={event => setEditStudentPrefix(filterPersonNameInput('prefix', event.currentTarget.value))} onKeyDown={event => preventInvalidPersonNameKey('prefix', event)} maxLength={50}
@@ -2164,6 +2165,12 @@ export const ClassesAndRosters: React.FC = () => {
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
                 />
               </label>
+              </fieldset>
+              {editingStudent.accountActivated && (
+                <p className="sm:col-span-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  The Student changes their name from their own profile.
+                </p>
+              )}
               <label className="space-y-1 font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
                 Institutional email *
                 <span className="flex items-center gap-2">

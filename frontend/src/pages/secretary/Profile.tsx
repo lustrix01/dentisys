@@ -1,19 +1,20 @@
-import { PersonNameFields, emptyNameParts, composePersonName } from '../../components/PersonNameFields';
+import { emptyNameParts, type PersonNameParts } from '../../components/PersonNameFields';
 import React, { useEffect, useState } from 'react';
-import { Camera, CheckCircle2, Mail, MapPin, Save, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
+import { Camera, CheckCircle2, Mail, MapPin, ShieldCheck, UserRound, Users, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/Card';
 import { MfaSettingsCard } from '../../components/MfaSettingsCard';
+import { ChangeNameDialog, type NameChangeResponse } from '../../components/ChangeNameDialog';
 import { GoogleLinkCard } from '../../components/GoogleLinkCard';
 import { PasswordChangeCard } from '../../components/PasswordChangeCard';
+import { useAuth } from '../../context/AuthContext';
 import { getSecretaryProfileApi, updateSecretaryProfileApi } from '../../services/apiClient';
-import { normalizePersonName } from '../../utils/nameNormalization';
 
 export const Profile: React.FC = () => {
   const [nameParts, setNameParts] = useState(emptyNameParts);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [authenticatorEnabled, setAuthenticatorEnabled] = useState(false);
+  const { user, setUser } = useAuth();
 
   const [profile, setProfile] = useState<{
     id: string;
@@ -31,8 +32,6 @@ export const Profile: React.FC = () => {
     classroomName: '',
   });
 
-  const [editName, setEditName] = useState(profile.name);
-
   useEffect(() => {
     setLoading(true);
     getSecretaryProfileApi()
@@ -40,7 +39,6 @@ export const Profile: React.FC = () => {
         if (res.profile) {
           setNameParts({ prefix: res.profile.prefix || '', firstName: res.profile.firstName || '', middleName: res.profile.middleName || '', lastName: res.profile.lastName || '', suffix: res.profile.suffix || '' });
           setProfile(res.profile);
-          setEditName(res.profile.name);
         }
       })
       .catch(err => {
@@ -49,27 +47,18 @@ export const Profile: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleUpdate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setMessage(null);
-
-    const trimmedName = composePersonName(nameParts);
-
-    if (trimmedName.length < 2) {
-      setMessage({ type: 'error', text: 'Name must be at least 2 characters long.' });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const res = await updateSecretaryProfileApi({ ...nameParts, name: trimmedName });
-      setProfile(prev => ({ ...prev, name: trimmedName }));
-      setMessage({ type: 'success', text: res.message || 'Profile updated successfully.' });
-    } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to update profile.' });
-    } finally {
-      setSaving(false);
-    }
+  const saveName = (parts: PersonNameParts, code?: string) => updateSecretaryProfileApi({ ...parts, ...(code ? { code } : {}) });
+  const applyName = (response: NameChangeResponse) => {
+    const parts = {
+      prefix: response.prefix || '',
+      firstName: response.firstName || '',
+      middleName: response.middleName || '',
+      lastName: response.lastName || '',
+      suffix: response.suffix || '',
+    };
+    setNameParts(parts);
+    setProfile(prev => ({ ...prev, name: response.name }));
+    if (user) setUser({ ...user, display_name: response.name });
   };
 
   const name = profile.name || 'Secretary';
@@ -128,6 +117,7 @@ export const Profile: React.FC = () => {
                   </div>
                 </div>
                 <h2 className="mt-3 text-base font-bold text-slate-800 dark:text-slate-100">{name}</h2>
+                <ChangeNameDialog currentParts={nameParts} authenticatorEnabled={authenticatorEnabled} onSave={saveName} onSuccess={applyName} />
                 <p className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-0.5">{profile.title}</p>
               </CardContent>
             </Card>
@@ -168,57 +158,6 @@ export const Profile: React.FC = () => {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <UserRound className="w-4.5 h-4.5 text-blue-500" />
-                  Update Profile Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleUpdate} className="space-y-4">
-                  {message && (
-                    <div className={`p-3.5 rounded-xl text-xs font-semibold ${
-                      message.type === 'success'
-                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
-                        : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
-                    }`}>
-                      {message.text}
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="sm:col-span-2"><PersonNameFields value={nameParts} onChange={setNameParts} /></div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Institutional Email</label>
-                      <input
-                        type="text"
-                        value={profile.email}
-                        readOnly
-                        aria-readonly="true"
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-sm text-slate-600 dark:text-slate-300 cursor-not-allowed focus:outline-none"
-                      />
-                      <p className="text-[11px] text-slate-400">Your login email cannot be changed.</p>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end">
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-500/10 disabled:opacity-50"
-                    >
-                      {saving ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <Save className="w-4 h-4" />
-                      )}
-                      {saving ? 'Saving...' : 'Save Profile Changes'}
-                    </button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
           </div>
         </div>
       )}
@@ -259,7 +198,7 @@ export const Profile: React.FC = () => {
 
       <PasswordChangeCard />
 
-      <MfaSettingsCard userEmail={profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" />
+      <MfaSettingsCard userEmail={profile.email || 'secretary@bicol-u.edu.ph'} roleName="Class Secretary" onAuthenticatorStatusChange={setAuthenticatorEnabled} />
       <GoogleLinkCard />
     </div>
   );

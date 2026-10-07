@@ -1000,6 +1000,8 @@ Normalize affected persistent data to 3NF: atomic attributes, declared candidate
 
 Use additive ordered migrations and explicit backfill/compatibility handling. Never guess an ambiguous legacy name split: preserve the original for reconciliation. Preserve identifiers, enrollment, raw scores, grades, attendance, audit history, and persisted volumes. No database reset or destructive cleanup is approved.
 
+**Self-service name changes.** Each role (Dean, Faculty, Secretary, Student) changes only its own five-part name, from its own profile, through a dedicated Change Name action; the rest of the profile is read-only. When authenticator-app MFA is enabled, a current authenticator code is required before the change is saved; recovery codes are not accepted for this confirmation, and failed attempts are rate limited. Self-service requests that include institutional email, account ID, role, Student number, institutional identifiers, class or Faculty assignments, or other relationship-critical keys are rejected rather than ignored; those remain changeable only through the authorized role's own management tools. After a Student account is activated, Faculty can no longer change that Student's name; before activation, Faculty may still correct it.
+
 ---
 
 # 10. Specification Change Protocol

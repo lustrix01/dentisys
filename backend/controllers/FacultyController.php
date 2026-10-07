@@ -352,6 +352,17 @@ function faculty_student_account_status(array $row): string
     };
 }
 
+function faculty_student_name_edit_locked(array $row): bool
+{
+    if (($row['linked_secretary_user_id'] ?? $row['user_id'] ?? null) !== null) {
+        return true;
+    }
+    if (($row['student_account_user_id'] ?? null) === null) {
+        return false;
+    }
+    return strtolower(trim((string) ($row['account_status'] ?? ''))) !== 'pending activation';
+}
+
 function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null): array
 {
     $byStudent = [];
@@ -385,6 +396,7 @@ function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null
                 'faceEnrolled' => (bool) ($row['face_enrolled'] ?? false),
                 'consentStatus' => strtolower($row['consent_status'] ?? 'pending'),
                 'accountStatus' => faculty_student_account_status($row),
+                'accountActivated' => faculty_student_name_edit_locked($row),
                 'overallGWA' => null,
                 'clinicHoursCompleted' => 0,
                 'classSections' => [],
@@ -775,8 +787,10 @@ function handle_faculty_student_update(array $params = []): void
         $select = $pdo->prepare(
             'SELECT s.student_id, s.student_number, s.person_id, s.name_prefix, s.first_name, s.middle_name, s.last_name, s.name_suffix,
                     s.bu_email, s.student_account_user_id, s.user_id, s.contact, s.sex, s.year_level, s.status,
+                    ua.status AS account_status,
                     s.admission_date, s.birthdate
                FROM students s
+               LEFT JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
               WHERE s.student_id = ?
                 AND EXISTS (
                     SELECT 1 FROM enrollments e
@@ -784,7 +798,7 @@ function handle_faculty_student_update(array $params = []): void
                     WHERE e.student_id = s.student_id
                       AND cs.instructor_user_id = ? AND UPPER(cs.school_year) = UPPER(?)
                 )
-              FOR UPDATE'
+              FOR UPDATE OF s'
         );
         $select->execute([$studentId, (int) $authCtx['user_id'], academic_current_school_year($pdo)]);
         $before = $select->fetch(PDO::FETCH_ASSOC);
@@ -878,6 +892,21 @@ function handle_faculty_student_update(array $params = []): void
                 }
                 $updates[] = $column . ' = ?';
                 $values[] = ($value === '' ? null : $value);
+            }
+        }
+        $studentAccountActivated = faculty_student_name_edit_locked($before);
+        if ($namePartsChanged && $studentAccountActivated) {
+            $nameColumns = [
+                'prefix' => 'name_prefix',
+                'firstName' => 'first_name',
+                'middleName' => 'middle_name',
+                'lastName' => 'last_name',
+                'suffix' => 'name_suffix',
+            ];
+            foreach ($nameColumns as $part => $column) {
+                if (!account_identity_parts_match($before[$column] ?? null, $nameParts[$part] ?? null)) {
+                    throw new DomainException('The Student changes their name from their own profile.');
+                }
             }
         }
         if ($updates === [] && !$namePartsChanged) {
@@ -6830,30 +6859,16 @@ function handle_faculty_profile_update(): void
             return;
         }
 
-        $data = $body['data'];
-        $nameParts = account_identity_name_parts($data);
-        $name = $nameParts !== null ? account_identity_composed_name($nameParts) : validate_person_name($data, 'name', 2, 255);
-        // The login email is permanent (REG-009); if sent it must match the account.
-        $email = isset($data['email']) && trim((string) $data['email']) !== ''
-            ? validate_institutional_email($data['email'])
-            : null;
-
-        $pdo->beginTransaction();
-        try {
-            update_account_identity($pdo, (int) $authCtx['user_id'], $name, $email, $nameParts);
-            audit_record_action(
-                $pdo, $config, $authCtx, 'account', 'profile_updated', 'user_account', (string) $authCtx['user_id'],
-                'Updated own profile name.', ['after' => ['name' => $name]]
-            );
-            $pdo->commit();
-        } catch (\Throwable $e) {
-            if ($pdo->inTransaction()) { $pdo->rollBack(); }
-            throw $e;
-        }
-
-        json_response(['status' => 'ok', 'message' => 'Faculty profile updated successfully.'], 200);
+        $result = account_identity_change_own_name($pdo, $config, $authCtx, $body['data'], true);
+        json_response(['status' => 'ok', 'message' => 'Faculty profile updated successfully.', ...$result], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
+    } catch (AccountIdentityStepUpException $e) {
+        emit_response(build_error_response($e->getMessage(), 403, $e->apiCode));
+    } catch (RateLimitException $e) {
+        emit_response(build_error_response('Too many requests.', 429, 'RATE_LIMITED'));
+    } catch (DomainException $e) {
+        safe_error_response($e->getMessage(), 409);
     } catch (\PDOException $e) {
         error_log('Profile update database error: ' . sanitize_for_log($e));
         $sqlState = (string) $e->getCode();
