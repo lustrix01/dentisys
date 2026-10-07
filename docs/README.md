@@ -11,7 +11,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 
 ## Current work
 
-- [Current handoff](HANDOFF_2026-10-04.md): latest state, validation evidence, and next steps. Older handoffs are in the archive.
+- [Last handoff](HANDOFF_2026-10-04.md): completed work and its validation history; the current state is in the backlog, roadmap and features below. Older handoffs are in the archive.
 - [Product backlog](PRODUCT_BACKLOG.md): open work only (Partial, Not started, Unclear), checked against the code on 2026-10-07.
 - [Roadmap](roadmap.md): what's next, in order. [Implemented features](features.md): what works today, with spec IDs.
 - [Local demo on lighthal7](local-demo-lighthal7.md) and [Lecture/Laboratory grading](lecture-laboratory-grading.md).
