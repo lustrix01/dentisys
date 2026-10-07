@@ -575,28 +575,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                     </Link>
                   )}
 
-                  {currentUser.role === 'secretary' && user?.student && (
-                    <Link
-                      to="/student/dashboard"
-                      onClick={() => setIsProfileOpen(false)}
-                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-semibold transition-all"
-                    >
-                      <UserCheck className="w-4 h-4 text-blue-500" />
-                      <span>Switch to Student View</span>
-                    </Link>
-                  )}
-
-                  {currentUser.role === 'student' && user?.role === 'secretary' && (
-                    <Link
-                      to="/"
-                      onClick={() => setIsProfileOpen(false)}
-                      className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-indigo-600 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 text-xs font-semibold transition-all"
-                    >
-                      <LayoutDashboard className="w-4 h-4 text-indigo-500" />
-                      <span>Return to Secretary View</span>
-                    </Link>
-                  )}
-
                   <button
                     onClick={handleLogout}
                     className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-xs font-bold transition-all border-t border-slate-100 dark:border-slate-800 pt-2 cursor-pointer"
@@ -777,30 +755,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           {/* Right Header Navigation Panel */}
           <div className="flex items-center space-x-3">
 
-            {/* Secretary / Student Linked Account Context Switch */}
-            {currentUser.role === 'secretary' && user?.student && (
-              <button
-                type="button"
-                onClick={() => navigate('/student/dashboard')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 text-xs font-bold border border-blue-500/20 transition-all cursor-pointer"
-                title="Switch to Linked Student Self-Service"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span className="hidden sm:inline">Student View</span>
-              </button>
-            )}
-            {currentUser.role === 'student' && user?.role === 'secretary' && (
-              <button
-                type="button"
-                onClick={() => navigate('/')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-500/20 transition-all cursor-pointer"
-                title="Return to Secretary Dashboard"
-              >
-                <LayoutDashboard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span className="hidden sm:inline">Secretary View</span>
-              </button>
-            )}
-            
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
@@ -882,28 +836,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                       >
                         <SettingsIcon className="w-4 h-4 text-slate-400" />
                         <span>{currentUser.role === 'admin' ? 'System Settings' : 'My Settings'}</span>
-                      </Link>
-                    )}
-
-                    {currentUser.role === 'secretary' && user?.student && (
-                      <Link
-                        to="/student/dashboard"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-xs font-semibold transition-all"
-                      >
-                        <UserCheck className="w-4 h-4 text-blue-500" />
-                        <span>Switch to Student View</span>
-                      </Link>
-                    )}
-
-                    {currentUser.role === 'student' && user?.role === 'secretary' && (
-                      <Link
-                        to="/"
-                        onClick={() => setIsProfileOpen(false)}
-                        className="flex items-center space-x-2.5 px-3 py-2 rounded-xl text-indigo-600 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 text-xs font-semibold transition-all"
-                      >
-                        <LayoutDashboard className="w-4 h-4 text-indigo-500" />
-                        <span>Return to Secretary View</span>
                       </Link>
                     )}
 

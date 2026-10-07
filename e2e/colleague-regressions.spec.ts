@@ -112,21 +112,31 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
     const header = page.locator('header').nth(phone ? 0 : 1);
     const openProfile = () => (phone ? header.getByTitle('Profile menu') : header.getByRole('button', { name: /Real Student/ })).click();
     await openProfile();
-    const studentView = header.getByRole('link', { name: 'Switch to Student View', exact: true });
-    await expect(studentView).toHaveAttribute('href', '/student/dashboard');
-    await studentView.click();
+    await expect(header.getByRole('link', { name: 'Switch to Student View', exact: true })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Return to Secretary View', exact: true })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: /My (Secretary )?Profile/, exact: true })).toBeVisible();
+    if (!phone) {
+      await expect(header.getByTitle('Switch to Linked Student Self-Service')).toHaveCount(0);
+      await expect(header.getByTitle('Return to Secretary Dashboard')).toHaveCount(0);
+    }
+    await openProfile();
+    if (phone) await page.locator('header').first().getByRole('button').last().click();
+    await toggle.getByRole('button', { name: 'Student', exact: true }).click();
     await expect(page).toHaveURL('/student/dashboard');
     await expect(page.getByRole('main')).toContainText('REAL-26');
+    await expect(toggle.getByRole('button', { name: 'Student', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await openProfile();
     await expect(header.getByRole('link', { name: 'My Profile', exact: true })).toHaveAttribute('href', '/secretary/profile');
-    await header.getByRole('link', { name: 'Return to Secretary View', exact: true }).click();
-    await expect(page).toHaveURL('/');
+    await expect(header.getByRole('link', { name: 'Switch to Student View', exact: true })).toHaveCount(0);
+    await expect(header.getByRole('link', { name: 'Return to Secretary View', exact: true })).toHaveCount(0);
     if (!phone) {
-      await header.getByTitle('Switch to Linked Student Self-Service').click();
-      await expect(page).toHaveURL('/student/dashboard');
-      await header.getByTitle('Return to Secretary Dashboard').click();
-      await expect(page).toHaveURL('/');
+      await expect(header.getByTitle('Switch to Linked Student Self-Service')).toHaveCount(0);
+      await expect(header.getByTitle('Return to Secretary Dashboard')).toHaveCount(0);
     }
+    await openProfile();
+    if (phone) await page.locator('header').first().getByRole('button').last().click();
+    await toggle.getByRole('link', { name: 'Secretary', exact: true }).click();
+    await expect(page).toHaveURL('/secretary/attendance');
     expect(identityReads).toBe(1);
     await page.goto('/student/profile');
     await expect(page).toHaveURL('/secretary/profile');

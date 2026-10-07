@@ -19,7 +19,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07.
 - Pending Faculty invitations can be edited, revoked and reissued; editing the email revokes the old token; an invitation counts as accepted only after the account is activated — REG-005 — implemented, tests passing.
 - Class Secretary on the Student's own account: Faculty invites, the Student accepts, at most one pending or active Secretary per section, removal restores normal Student access — REG-006, BIO-010 — implemented, tests passing.
 - Email Management shows whether each Student is an ordinary Student, has a pending Secretary invitation or is the active Secretary — REG-006 — implemented, tests passing.
-- A Secretary keeps their own Student context and can switch to it from the sidebar — BIO-010, UI-005 — implemented, tests passing (copies in the profile menus and desktop header are being removed; see the [roadmap](roadmap.md)).
+- A Secretary keeps their own Student context and switches between Secretary and Student views with the sidebar toggle only — BIO-010, UI-005 — implemented, tests passing.
 
 ## Grading and retention
 

@@ -119,12 +119,6 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 Build Email History from the email outbox/delivery records and relevant audit events, not a separate log.
 
-## 5.9 Student/Secretary switch placement
-
-**Status: Partial.** The switch works and keeps the same account and Student identity, but besides the sidebar toggle it also appears in the desktop and mobile profile menus and as a desktop header button. Spec BIO-010 and UI-005 place it in the sidebar only.
-
-Remove the profile-menu and header copies; keep the sidebar toggle. Do not add Student navigation to the Secretary sidebar.
-
 ---
 
 # 6. Student
