@@ -97,7 +97,7 @@ During Midterm, students may appear as **At Risk**; no remedial can be offered o
 
 ## 5.5 Attendance worksheet date
 
-**Status: Partial.** Session dates are validated on the server, but no test proves that a future worksheet date cannot be selected.
+**Status: Done.** Under ATT-001 (2026-10-01), a future Asia/Manila date may be selected to schedule or view sessions, but attendance cannot be recorded for it. Backend unit, PostgreSQL integration and mocked E2E tests cover this.
 
 ## 5.6 Large attendance lists
 

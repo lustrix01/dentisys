@@ -976,6 +976,64 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect.poll(() => capturedDateQuery).toBe('2026-09-18');
   });
 
+  test('future attendance worksheet is read-only until its Manila date', async ({ page }) => {
+    const manilaParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date());
+    const part = (type: string) => manilaParts.find(item => item.type === type)?.value ?? '';
+    const manilaToday = `${part('year')}-${part('month')}-${part('day')}`;
+    const futureDateValue = new Date(`${manilaToday}T00:00:00.000Z`);
+    futureDateValue.setUTCDate(futureDateValue.getUTCDate() + 2);
+    const futureDate = futureDateValue.toISOString().slice(0, 10);
+    const requestedDates: string[] = [];
+    let overrideRequests = 0;
+
+    await page.route('**/api/faculty/attendance?*', async route => {
+      const date = new URL(route.request().url()).searchParams.get('date') ?? '';
+      requestedDates.push(date);
+      const worksheet = date === futureDate
+        ? {
+          ...mockWorksheetSectionA,
+          date,
+          pendingSessions: [{
+            sessionId: '101', sessionDate: futureDate, sessionCode: 'FUTURE-101',
+            status: 'scheduled', openingTime: '08:00', classEndTime: '11:00',
+          }],
+        }
+        : { ...mockWorksheetSectionA, date: manilaToday, pendingSessions: [] };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet }) });
+    });
+    await page.route('**/api/faculty/attendance/override', async route => {
+      overrideRequests++;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok' }) });
+    });
+
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
+    const dateInput = page.locator('input[type="date"]');
+    await dateInput.fill(futureDate);
+
+    await expect.poll(() => requestedDates[requestedDates.length - 1]).toBe(futureDate);
+    await expect(page.getByText('Scheduled session: attendance opens at its chosen date/time in Asia/Manila.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: new RegExp(`${futureDate}.*Scheduled.*FUTURE-101`) })).toBeVisible();
+    const aliceRow = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
+    const overrideButton = aliceRow.getByRole('button', { name: 'Override', exact: true });
+    const bulkButton = page.getByRole('button', { name: 'Mark all unrecorded as Present', exact: true });
+    const overrideButtons = page.locator('tbody tr').getByRole('button', { name: 'Override', exact: true });
+    await expect(overrideButtons).toHaveCount(mockWorksheetSectionA.roster.length);
+    for (const button of await overrideButtons.all()) await expect(button).toBeDisabled();
+    await expect(bulkButton).toBeDisabled();
+    expect(overrideRequests).toBe(0);
+
+    await dateInput.fill(manilaToday);
+    await expect.poll(() => requestedDates[requestedDates.length - 1]).toBe(manilaToday);
+    await expect(page.getByText('Scheduled session: attendance opens at its chosen date/time in Asia/Manila.', { exact: true })).toHaveCount(0);
+    await expect(overrideButton).toBeEnabled();
+    await expect(bulkButton).toBeEnabled();
+    expect(overrideRequests).toBe(0);
+  });
+
   for (const operation of ['initial', 'correction', 'bulk'] as const) {
     test(`Faculty polling waits for the pending ${operation} attendance write`, async ({ page }) => {
       await page.clock.install();

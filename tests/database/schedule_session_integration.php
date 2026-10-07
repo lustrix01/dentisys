@@ -78,6 +78,21 @@ expect_same('scheduled', $queuedBody['session']['status'] ?? null, 'Future sessi
 $queuedId = (int) ($queuedBody['session']['sessionId'] ?? 0);
 [$futureFacultyMarkStatus] = integration_http_json('/api/faculty/attendance/override', $seedFacultyAccessToken, ['csId' => $meetingClassId, 'studentId' => 26, 'sessionId' => $queuedId, 'sessionDate' => $queueDate, 'status' => 'present']);
 expect_same(422, $futureFacultyMarkStatus, 'Faculty cannot enter attendance on a future date');
+[$futureFacultyWithoutSessionStatus, $futureFacultyWithoutSessionBody] = integration_http_json('/api/faculty/attendance/override', $seedFacultyAccessToken, ['csId' => $meetingClassId, 'studentId' => 26, 'sessionDate' => $queueDate, 'status' => 'present']);
+expect_same(422, $futureFacultyWithoutSessionStatus, 'Faculty cannot create attendance on a future date without a session ID');
+expect_same('VALIDATION_ERROR', $futureFacultyWithoutSessionBody['code'] ?? null, 'Future Faculty attendance without a session ID returns a validation error');
+expect_same(
+    [['field' => 'sessionDate', 'message' => 'Worksheet date cannot be in the future.']],
+    $futureFacultyWithoutSessionBody['errors'] ?? null,
+    'Future Faculty attendance returns the exact sessionDate validation message'
+);
+$futureEnrollment = $pdo->prepare('SELECT enrollment_id FROM enrollments WHERE cs_id = ? AND student_id = 26');
+$futureEnrollment->execute([$meetingClassId]);
+$futureEnrollmentId = $futureEnrollment->fetchColumn();
+expect_true($futureEnrollmentId !== false, 'Future attendance fixture enrollment exists');
+$futureAttendanceCount = $pdo->prepare('SELECT COUNT(*) FROM attendance_records WHERE enrollment_id = ? AND session_date = ?');
+$futureAttendanceCount->execute([$futureEnrollmentId, $queueDate]);
+expect_same(0, (int) $futureAttendanceCount->fetchColumn(), 'Neither future Faculty attempt creates an attendance record');
 [$futureSecretaryMarkStatus] = integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, ['studentId' => '26', 'sessionId' => $queuedId, 'status' => 'present', 'reason' => 'Scheduled fixture attempt']);
 expect_same(422, $futureSecretaryMarkStatus, 'Secretary cannot enter attendance before the queued session opens');
 [$futureExcuseStatus] = integration_http_json('/api/secretary/excused-requests', $secretaryAccessToken, ['studentId' => '26', 'sessionId' => $queuedId, 'reason' => 'Scheduled fixture attempt']);
