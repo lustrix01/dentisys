@@ -115,6 +115,8 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 Build Email History from the email outbox/delivery records and relevant audit events, not a separate log.
 
+Owner decisions (2026-10-08): include every email actually sent; each user sees only the emails they sent; one row per action that expands to its recipients with per-recipient delivery status; show only what is needed (action, recipients, status, time, failure reason), never the email body; view-only, no resend; emails sent before the outbox link existed are hidden. Open: whether purely automatic emails (no human sender) appear anywhere — proposed: not shown.
+
 ---
 
 # 6. Student
@@ -140,6 +142,8 @@ Remove redundant information and Quick Actions that repeat the sidebar; keep ope
 **Status: Partial.** Session selection exists; filtering by date, then session on that date, then records is not implemented, and no large-list test exists.
 
 Add filters for attendance status, overridden/original state and Student search, so users never scroll an unbounded list to reach a record.
+
+Owner decisions (2026-10-08): applies to both the Faculty and Secretary override screens; a single date, then a session on that date, then its records; Student search by name/surname or student number; filters for status, overridden/original and how attendance was recorded (biometric, Faculty manual, Secretary manual); revoked sessions are hidden by default, shown labelled Revoked and view-only when included, never overridable (check current behaviour first and ask before changing it); no pagination — a bounded scrolling list with a sticky header.
 
 ---
 
