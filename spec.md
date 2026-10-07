@@ -946,6 +946,8 @@ a separate authorized action.
 
 ## UI-001 - Canonical interface and priority
 
+**Status: Implemented.** The `owhie_backend` interface migration and the related normalization are complete (`a7582d8`). Later interface changes are governed by the requirement that covers them.
+
 The complete `owhie_backend` interface is the visual and interaction baseline to migrate into `lighthal5`, supplemented by the nine-page `UI Changes.pdf`. This replaces earlier visual baselines and functional-first priorities. Scope includes every role, route, navigation item, form, table, dialog, style, asset, and responsive state, not only the illustrated screens.
 
 Delivery order is (1) copy the entire UI, (2) normalize the database to third normal form and support the UI's data, (3) connect frontend and backend and repair regressions. Tests may fail during intermediate UI migration; retain the failures as tracked work. Visual parity is not functional completion or proof of persistence.

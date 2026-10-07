@@ -1,26 +1,11 @@
 # Roadmap
 
-> **Historical document.** This roadmap is out of date (its "current priority", the UI migration, is complete) and will be rewritten from the backlog check against the code. The current state is in the [current handoff](HANDOFF_2026-10-04.md); product behaviour is defined by [spec.md](../spec.md). The content below is kept for history and may be out of date.
+What's next, in order (Owner-set 2026-10-07). Each item is one feature: agree the contract, implement, run the gates, then start the next. Details and status are in the [product backlog](PRODUCT_BACKLOG.md); behaviour is defined by [spec.md](../spec.md); what already works is in [features.md](features.md).
 
-## Current priority - Owner reset, 2026-09-24
+1. **Student/Secretary switch in the sidebar only** — remove the copies in the profile menus and the desktop header; keep the sidebar toggle (spec BIO-010, UI-005; backlog 5.9).
+2. **Name changes with authenticator confirmation** — a read-only profile with a Change Name action for every role, including Students, and a 2FA confirmation when 2FA is enabled (ID-002; backlog 3.1, 3.2).
+3. **Test that future worksheet dates are blocked** in Attendance Monitoring (backlog 5.5).
+4. **Email History tied to the outbox** — each Email Management action linked to its delivery record (backlog 5.8).
+5. **Manual Override filtering** — date, then session on that date, then records, with status, override and Student filters (backlog 7.2).
 
-1. Copy the entire `owhie_backend` UI into `lighthal5`, incorporating UI Changes.pdf. Visual parity comes first; temporarily failing tests and missing wiring are recorded for later repair.
-2. Normalize affected database data to 3NF, including five-part names and all UI-required fields, using additive data-preserving migrations.
-3. Wire frontend/backend, repair regressions, and complete persistence, permissions, audit, and consolidated validation.
-4. Resume remaining provider acceptance and external/policy blockers, then later deployment work.
-
-See [UI migration plan](archive/ui-migration-plan.md) and spec.md section 9B for frozen sources, page traceability, acceptance gates, and unresolved details. The older items below remain scope context, not the execution order. Temporary test deferral does not waive final functional validation.
-
-## Identity work
-
-- Google Sign-In Phase 1 is implemented for existing institutional accounts with explicit password/MFA linking and multi-domain allowlisting.
-- Faculty onboarding is Admin-invitation only; the invitation is the approval and acceptance with a DentiSys password activates the account. Faculty invite Students from an owned class roster, and Student acceptance requires the canonical Student identity and active enrollment. Google is optional identity verification during either invitation acceptance.
-
-## Planned product work
-
-- Complete the facial-biometric feature, including consent, enrollment, storage, matching, attendance flow, auditability, and privacy controls.
-
-## Planned delivery work
-
-- Add image publishing and demonstration deployment handling modeled after `learningfullstack` when deployment authority and requirements are available.
-- Continue measured frontend, backend, and container optimizations without adding unnecessary infrastructure.
+After these, the Owner picks the next items from the backlog. Facial biometrics, image publishing and deployment remain planned work under spec BIO and DEL-001; the Registrar format and live Google verification are externally blocked (backlog 9.4, 9.5).

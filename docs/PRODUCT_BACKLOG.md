@@ -1,1315 +1,184 @@
 # DentiSys Product Backlog
 
-> **Note (2026-10-07):** The UI migration and normalization described in spec.md section 9B are complete (`a7582d8`; [archived plan](archive/ui-migration-plan.md)). Item status is being re-checked against the code; until then, treat spec.md as authoritative for behavior.
+> **Status:** Living Owner-approved backlog of open work, checked against the code on `lighthal7` on 2026-10-07.
 
-> **Status:** Living Owner-approved product backlog  
-> **Canonical visual baseline:** `c58d3004db20280c8827dd10893e9c1058be2eaa` — `Restore canonical UI parity`
+This file lists only work that is **Partial**, **Not started** or **Unclear**. Implemented behaviour is in [spec.md](../spec.md) and [features.md](features.md); the order of work is in the [roadmap](roadmap.md). Who does which kind of work, and how it is validated, is in [AGENTS.md](../AGENTS.md).
 
----
-
-# 1. Development Ownership Rules
-
-Who does which kind of work (functional vs presentation-only), contracts, and validation are defined in [AGENTS.md](../AGENTS.md). The tool-specific ownership rules that used to be here are retired.
+The backlog is not exhaustive. The Owner may add, clarify, remove or reprioritise requirements at any time, especially after manual testing. Omissions are not permission to invent behaviour: when uncertain, ask the Owner.
 
 ---
 
-# 2. Change-Control Note
+# 1. Standing rules
 
-This backlog is **not exhaustive**.
-
-The Owner may:
-
-- add requirements;
-- clarify requirements;
-- remove requirements;
-- change priorities;
-- discover missing workflows;
-- identify defects during manual testing.
-
-This is expected.
-
-Implementation agents must not treat this backlog as permission to infer unspecified product behavior.
-
-When a meaningful product decision is unclear:
-
-**Return the decision to the Owner.**
-
-Do not guess.
-
-Avoid overengineering.
-
-Prefer the smallest implementation that satisfies the approved requirement and preserves current functionality.
+- **Interface:** follow spec UI-001. New screens reuse the shared shell, sidebar/header, Card, table, modal, alert and form patterns; no role-specific shells, second design system or unrelated redesign.
+- **Authoritative data:** users, names, courses, sections, enrollments, assignments, invitations, grades, assessments, attendance, remedials, retention, notifications, audit events and operational settings come from the backend and PostgreSQL. Pure UI preferences (open/closed state, theme, collapsed sidebar) may stay in the browser. Mock fixtures stay isolated to automated tests, disposable integration environments and explicit development fixtures.
+- **Migrations:** ordered and additive, each tied to an approved requirement; no speculative or generic tables.
+- **Definition of done:** database-backed data, role and ownership permissions, approved validation, required audit events and notifications, passing automated and integration tests, desktop and mobile checks, and no change to unrelated behaviour. For data-changing workflows, confirm the database actually changed.
 
 ---
 
-# 3. Canonical UI Rule
+# 2. Data and environment
 
-Commit:
+## 2.1 Remove remaining browser and mock business data
 
-`c58d3004db20280c8827dd10893e9c1058be2eaa`
+**Status: Partial.** The main Faculty, Secretary and Student surfaces use server APIs. Gated prototype paths (`frontend/src/pages/student/studentGates.ts`) and development providers (`frontend/src/services/developmentProviders.ts`) remain.
 
-is the protected DentiSys visual baseline.
+Convert one feature at a time: find the browser or mock storage, the authoritative tables and the existing API; add the smallest backend contract needed; move the frontend to it; keep deterministic test fixtures. No site-wide rewrite.
 
-Future frontend work must reuse:
+## 2.2 Manual-test dataset
 
-- shared authenticated shell;
-- existing sidebar/header architecture;
-- canonical Card components;
-- existing table styles;
-- existing modal patterns;
-- existing alerts;
-- existing form/input styling;
-- current typography;
-- role colors;
-- spacing;
-- responsive drawer/navigation behavior.
+**Status: Partial.** The first-Dean bootstrap is implemented. Integration fixtures exist (`tests/fixtures/live-stack.sql`), but there is no maintained PostgreSQL dataset that covers manual browser testing across all roles.
 
-Do not create:
-
-- alternate role-specific shells;
-- a second design system;
-- custom page architecture that visibly diverges from DentiSys;
-- unrelated visual redesign while implementing functionality.
-
-New features must fit the existing UI.
+Maintain a realistic development dataset (Faculty, Students, courses, sections, assignments, enrollments, assessments, scores, attendance, invitation and retention states) so manual testing runs on database data and every action can be checked in PostgreSQL.
 
 ---
 
-# 4. Authoritative Data Rule
+# 3. Profiles and names (all roles)
 
-All authoritative application/business data must come from:
+## 3.1 Read-only profiles with a Change Name action
 
-**Backend + PostgreSQL**
+**Status: Partial.** Dean, Faculty and Secretary can save a structured name through their profile update endpoints. Student has no name-update route. No role has a dedicated Change Name flow, and no test confirms that every role's profile rejects changes to identity-critical fields.
 
-Browser-local state, hardcoded arrays, and mock fixtures must not act as production/runtime business truth.
+Profiles are read-only apart from a dedicated **Change Name** action using the five-part name fields (spec ID-002). Self-service must not change institutional email, account ID, role, Student number, institutional identifiers, class or Faculty assignments, or other relationship-critical keys. The Secretary profile must not repeat information.
 
-This includes:
+## 3.2 Authenticator confirmation for name changes
 
-- users;
-- names;
-- courses;
-- class sections;
-- enrollments;
-- Faculty assignments;
-- Secretary assignments;
-- invitations;
-- grades;
-- assessments;
-- grade schemas;
-- attendance;
-- remedials;
-- retention status;
-- notifications;
-- audit events;
-- operational settings.
+**Status: Not started.** No 2FA challenge exists for a name change.
 
-## Browser-local state that may remain
-
-Pure UI state may remain client-side when it has no operational/business meaning, for example:
-
-- temporary open/closed component state;
-- possibly theme preference;
-- possibly collapsed sidebar preference.
-
-Do not force harmless UI preferences into PostgreSQL merely to eliminate localStorage.
-
-## Development/test data
-
-Mock/test fixtures remain permitted when explicitly isolated to:
-
-- automated tests;
-- disposable integration environments;
-- explicit development fixtures.
-
-They must not silently become the normal application's authoritative data.
+When the user has authenticator-app 2FA enabled, a name change requires a 2FA confirmation before it is saved.
 
 ---
 
-# 5. Database Bootstrap & Manual-Test Dataset
+# 4. Dean / Admin
 
-A fresh database must support realistic manual testing without browser seed data.
+## 4.1 Dean My Activity
 
-Two concepts should remain separate.
+**Status: Not started.** Faculty and Secretary have My Activity endpoints; the Dean has none.
 
-## 5.1 Initial bootstrap
+The Dean gets My Activity limited to the Dean's own significant actions, separate from System Audit. Record significant actions only (create, update, revoke, accept, promote/demote, invitations, grade and attendance changes, remedials, name and security changes, 2FA enrolment, Google linking, biometric enrolment), never navigation or page reads, and never sensitive payloads such as biometric templates.
 
-Provide a controlled method to create the initial Dean/Admin account.
+## 4.2 Dean Dashboard
 
-After bootstrap, the intended trust chain is:
+**Status: Partial.** Metrics are server-backed; no test checks that the redundant items are gone.
 
-Dean → Faculty invitation → Faculty → Student / Secretary workflows.
+Keep meaningful at-a-glance information; remove Quick Action buttons that only repeat the sidebar.
 
-Do not require manually constructing many dependent SQL rows merely to initialize the application.
+## 4.3 Faculty invitation row actions
 
-## 5.2 Development/manual-test dataset
+**Status: Partial.** The invitation lifecycle is implemented. No test shows that View/Eye is the primary row action instead of Reissue, or that no token material reaches the browser.
 
-Maintain an explicit PostgreSQL development/testing dataset containing realistic:
+## 4.4 Dean Settings cleanup
 
-- Faculty;
-- Students;
-- Courses;
-- Class Sections;
-- Faculty assignments;
-- Student enrollments;
-- Assessments;
-- Scores;
-- Attendance;
-- invitation states;
-- retention states where useful.
+**Status: Partial.** No test shows that both settings are gone.
 
-Manual browser testing should operate on this database-backed data.
-
-Actions taken in the application must be verifiable against PostgreSQL.
+Remove **Course Component Ratios** and **Retention Standard**. Do not add replacement settings; the page may stay sparse.
 
 ---
 
-# 6. Identity & Name Model
+# 5. Faculty
 
-All person entities use the same structured name model.
+## 5.1 Faculty Dashboard
 
-Fields:
+**Status: Partial.** Server-backed; the class-count mismatch in 9.1 is still open.
 
-- Prefix — optional
-- First Name — required
-- Middle Name — optional
-- Last Name — required
-- Suffix — optional
+Remove Quick Actions that repeat the sidebar and duplicate Assigned/Total Classes figures; keep warnings, operational status and at-a-glance information.
 
-This applies to:
+## 5.2 Grade Computation confirmations
 
-- Dean/Admin
-- Faculty
-- Students
-- Secretaries
+**Status: Partial.** Save and discard of the grading schema are confirmed and tested. Confirmation on deleting a category, saving scores and recomputing grades, and the absence of confirmations on tabs, modals, course and filter selection and navigation, are not established.
 
-A Student may legitimately hold a title such as `Dr.` or suffix such as `Jr.`, `Sr.`, etc.
+Rule: confirm mutations, not interactions.
 
-## Validation
+## 5.3 Midterm Watchlist cannot assign remedial
 
-Names must reject incompatible characters such as numbers.
+**Status: Partial.** The server only allows remedial from final-grade eligibility. No test shows that the Midterm Watchlist itself offers no remedial action.
 
-Valid name characters should support legitimate names containing:
+During Midterm, students may appear as **At Risk**; no remedial can be offered or assigned.
 
-- Unicode letters;
-- spaces;
-- apostrophes;
-- typographic apostrophes;
-- hyphens;
-- periods where appropriate.
+## 5.4 Remedial record details
 
-Examples that should be valid:
+**Status: Partial.** Attempts and notes are stored. A complete record (Student, Course, Section, original course grade, date, score, pass/fail, status, Faculty notes, completion date) is not shown to be returned or displayed together.
 
-- `José Dela Cruz`
-- `Anne-Marie Santos`
-- `O'Connor`
-- `Dr.`
-- `Jr.`
+## 5.5 Attendance worksheet date
 
-Examples that should not be valid:
+**Status: Partial.** Session dates are validated on the server, but no test proves that a future worksheet date cannot be selected.
 
-- `John123`
-- `12345`
+## 5.6 Large attendance lists
 
-Do not aggressively block keyboard input.
+**Status: Partial.** Search and status filters exist; a sticky table header and a bounded scrolling area are not established.
 
-Preferred UX:
+Use search, filters, a sticky header, bounded scrolling and clear status controls. No virtualisation or pagination unless real data needs it.
 
-1. allow typing/paste;
-2. validate immediately;
-3. show valid/invalid state;
-4. prevent submission while invalid.
+## 5.7 Email Management filtering
 
-## Canonical name source
+**Status: Partial.** Search and roster filtering exist; filtering by Course, then Class Section, then Student is not established.
 
-Names should have one authoritative normalized source.
+## 5.8 Email History from the outbox
 
-Do not duplicate the user's mutable name throughout unrelated database tables merely so screens can display it.
+**Status: Partial.** The history screen exists, but each Email Management action is not shown to be linked to its outbox/delivery record.
 
-Related records should reference the appropriate user/entity identifier and resolve the current canonical name.
+Build Email History from the email outbox/delivery records and relevant audit events, not a separate log.
+
+## 5.9 Student/Secretary switch placement
+
+**Status: Partial.** The switch works and keeps the same account and Student identity, but besides the sidebar toggle it also appears in the desktop and mobile profile menus and as a desktop header button. Spec BIO-010 and UI-005 place it in the sidebar only.
+
+Remove the profile-menu and header copies; keep the sidebar toggle. Do not add Student navigation to the Secretary sidebar.
 
 ---
 
-# 7. Profile Editing Policy
+# 6. Student
 
-All entities may change their **name**.
+## 6.1 Student Dashboard data
 
-Ordinary self-service profile editing must not allow modification of identity-critical fields such as:
+**Status: Partial.** Dashboard, classes and retention read server data; gated prototype and development paths remain (see 2.1).
 
-- institutional email;
-- account ID;
-- role;
-- institutional identifiers;
-- class assignments;
-- Faculty assignments;
-- other relationship-critical keys.
-
-Profiles should therefore be primarily read-only, with a specific **Change Name** action rather than a fully editable profile form.
-
-## MFA confirmation
-
-If MFA is enabled, changing the user's name must require additional MFA confirmation before committing the change.
-
-## Name propagation
-
-A successful name change should automatically appear throughout the application wherever that identity is resolved.
-
-Do not perform brittle manual updates to every unrelated business table.
+Do not reintroduce mock classes, grades, attendance or retention information.
 
 ---
 
-# 8. Audit Model
+# 7. Secretary
 
-There are multiple audit views with different scopes.
+## 7.1 Secretary Dashboard
 
-## 8.1 My Activity
+**Status: Partial.** Server-backed status exists; no test checks that the redundant items are gone.
 
-Available to logged-in users.
+Remove redundant information and Quick Actions that repeat the sidebar; keep operational status, attendance information, alerts and pending work.
 
-My Activity records **significant actions performed by that account**.
+## 7.2 Manual Override filtering
 
-Examples:
+**Status: Partial.** Session selection exists; filtering by date, then session on that date, then records is not implemented, and no large-list test exists.
 
-- created;
-- updated;
-- deleted;
-- revoked;
-- accepted;
-- promoted/demoted;
-- issued invitation;
-- changed grades;
-- recomputed grades;
-- changed attendance;
-- performed manual override;
-- scheduled remedial;
-- recorded remedial result;
-- changed profile name;
-- changed security settings;
-- enrolled MFA;
-- linked Google account;
-- enrolled biometric credential.
-
-Do not log ordinary navigation, clicks, filters, or normal page reads.
-
-Sensitive security/privacy payloads must never be stored in audit records.
-
-Example:
-
-Allowed:
-
-`User enrolled biometric credential`
-
-Not allowed:
-
-the biometric template/vector itself.
-
-## 8.2 Dean/Admin — System Audit
-
-Dean/Admin retains a separate system-wide **System Audit** for authorized oversight.
-
-Do not replace System Audit with My Activity.
-
-Dean/Admin therefore has:
-
-- My Activity — own significant actions;
-- System Audit — authorized system-wide oversight.
-
-## 8.3 Course/Attendance Activity
-
-Where Faculty needs oversight of attendance activity performed by their Class Secretary, use a separate course-scoped activity view.
-
-Do not call this My Activity.
-
-It may contain significant attendance mutations performed by:
-
-- the logged-in Faculty;
-- Secretary assigned to the Faculty's applicable class.
-
-Audit information should identify:
-
-- actor;
-- Student;
-- Course;
-- Class Section;
-- Session;
-- previous status;
-- new status;
-- reason;
-- timestamp.
-
-## Actor identity integrity
-
-Audit records should retain:
-
-- immutable actor identifier;
-- display-name snapshot at the time of the event.
-
-This preserves historical meaning even if the user later changes their name.
+Add filters for attendance status, overridden/original state and Student search, so users never scroll an unbounded list to reach a record.
 
 ---
 
-# 9. Login / Authentication Backlog
+# 8. Login usability
 
-## Frontend usability
+## 8.1 Field validation and password controls
 
-- Ensure appropriate frontend formatting/validation for data-entry fields.
-- Names must reject inappropriate numeric/incompatible characters.
-- Add password visibility controls using eye icons where missing.
-- Add clear password requirements on password creation/reset surfaces.
-
-Password feedback must mirror the authoritative backend policy rather than inventing a separate frontend policy.
-
-## Google Sign-In
-
-Google Sign-In must ultimately work in a real browser.
-
-For now:
-
-- preserve existing implementation;
-- preserve existing account-linking flow;
-- improve frontend where necessary;
-- do not require live Google verification for unrelated frontend work.
-
-Live Google authentication remains Owner-controlled.
-
-### Existing-account linking rule
-
-Google must not silently replace DentiSys identity proof.
-
-For an existing account:
-
-1. Google identity email must correspond to the account.
-2. User confirms ownership with DentiSys password.
-3. Existing MFA is completed if enabled.
-4. Verified Google `sub` is bound.
-5. Future Google sign-ins use the bound identity.
-
-Google Sign-In must not independently manufacture a Dean account.
+**Status: Partial.** Activation, reset and login have validation, password visibility toggles and requirements that mirror the backend policy. The remaining data-entry fields have not been checked one by one.
 
 ---
 
-# 10. Dean / Admin Backlog
+# 9. Known issues and external blockers
 
-## 10.1 Dean Dashboard
+## 9.1 Faculty class counts
 
-Preserve meaningful at-a-glance information.
+**Status: Unclear.** Not reproduced in the audit. Reported: Classes & Rosters current-school-year count/filter mismatch, and Dashboard versus Classes & Rosters class-count mismatch. Decide by comparing both counts against the database for one Faculty account.
 
-Remove unnecessary redundancy when identified.
+## 9.2 Grade Computation tab strip on phones
 
-Do not duplicate permanent sidebar navigation with unnecessary Quick Action buttons.
+**Status: Unclear.** Reported as needing horizontal scrolling; no automated phone-width check exists. Decide with a mobile-width browser check.
 
----
+## 9.3 Build warnings
 
-## 10.2 Faculty Invitations
+**Status: Unclear (non-blocking).** The 2026-10-07 frontend build still warns about an ineffective dynamic import of `src/services/apiClient.ts` and a chunk larger than 500 kB. No Tailwind warning appeared. The Owner decides whether these need work.
 
-Route:
+## 9.4 Official Registrar import/export format
 
-`/admin/faculty-invite`
+**Status: Externally blocked.** The provisional roster import (spec IMP-001) is implemented and labelled "Official format not confirmed"; grade-sheet import is not enabled. Needed from the Registrar: file type, headers, Student identifier, course/section columns, grade encoding and output structure. Do not invent the official format.
 
-### Structured Faculty identity
+## 9.5 Live Google verification
 
-Replace the single Faculty-name field with:
-
-- Prefix
-- First Name
-- Middle Name
-- Last Name
-- Suffix
-
-Use the common person-name validation rules.
-
-### Institutional email validation
-
-Institutional email must be validated against the allowed institutional domains supplied by runtime/backend configuration.
-
-Do not hardcode the allowed domains separately in frontend code.
-
-As the Admin types:
-
-- show a check mark when valid;
-- show a cross/error when invalid;
-- explain why the email is invalid.
-
-Validation should update while typing rather than waiting for form submission.
-
-### Invitation lifecycle
-
-#### Pending
-
-Admin may:
-
-- View
-- Edit structured name
-- Edit institutional email
-- Revoke
-
-An accepted invitation must no longer be editable as an invitation.
-
-### Accepted definition
-
-An invitation becomes **Accepted only when the corresponding Faculty account is successfully created/activated and linked to that invitation/email**.
-
-Opening an invitation URL is not enough.
-
-### Editing a pending email
-
-Editing the target institutional email must not leave an old token valid for the previous identity.
-
-Backend implementation should safely invalidate/replace the previous token as necessary.
-
-This implementation detail should remain hidden behind the normal Edit workflow.
-
-### Actions
-
-Primary action presentation should emphasize a clean View/Eye interaction instead of making Reissue the dominant row action.
-
-The final action lifecycle should preserve security and auditability without exposing token hashes or sensitive token material.
-
----
-
-## 10.3 My Activity
-
-Dean receives My Activity scoped to the Dean's own significant actions.
-
----
-
-## 10.4 System Audit
-
-Dean/Admin retains system-wide authorized oversight separately from My Activity.
-
----
-
-## 10.5 Dean Settings
-
-Remove:
-
-- Course Component Ratios
-- Retention Standard
-
-Do not invent replacement settings merely to fill the page.
-
-The Settings page may remain sparse temporarily.
-
-Appropriate institutional settings can be added later when actually specified.
-
----
-
-## 10.6 Dean Profile
-
-Profile is predominantly read-only.
-
-Immutable in normal self-service:
-
-- institutional email;
-- role;
-- identity/assignment-critical data.
-
-Allow a dedicated structured-name change flow.
-
-If MFA is enabled, name change requires MFA confirmation.
-
----
-
-# 11. Faculty Backlog
-
-## 11.1 Faculty Dashboard
-
-Simplify the Dashboard.
-
-Remove redundant:
-
-- Quick Actions that merely duplicate sidebar navigation;
-- duplicate Assigned Classes / Total Classes style information.
-
-Preserve genuinely useful:
-
-- warnings;
-- operational status;
-- at-a-glance information.
-
-### Registrar import/export
-
-Official Student/grade import-export behavior remains externally blocked until the University Registrar / Sir Ryan provides the actual required file layout.
-
-Owner-authorized provisional Student roster import (2026-10-04) uses a private
-semi-confirmed sample for local preview and existing-class enrollment. The UI
-states "Official format not confirmed". This does not confirm official
-compatibility or enable grade-sheet importing. See
-[the provisional contract](proposals/provisional-roster-import.md).
-Imported rows require parsed, valid institutional emails under the approved
-IMP-001 amendment; missing or invalid emails must be corrected before saving.
-
-Do not invent an official Registrar format.
-
----
-
-## 11.2 Grade Computation
-
-"Make everything editable" specifically refers to the **Grade Weights Editor / grading schema**.
-
-Faculty should be able to:
-
-- add grading categories;
-- remove grading categories;
-- rename/configure categories;
-- adjust weights;
-- save grading schema.
-
-The sum of grading weights must equal exactly:
-
-**100%**
-
-Not more and not less.
-
-Computed outputs remain computed.
-
-Do not turn calculated grades/GWA into arbitrary manual-entry values.
-
-### Confirmations
-
-Use confirmation for consequential mutations such as:
-
-- Save grading schema
-- Delete grading category
-- Save scores
-- Recompute grades
-- other meaningful data changes
-
-Do not show confirmation dialogs merely for:
-
-- changing tabs;
-- opening a modal;
-- selecting a course;
-- selecting a filter;
-- ordinary navigation.
-
-Use the rule:
-
-**Confirm mutations, not interactions.**
-
----
-
-## 11.3 Retention Monitoring
-
-This surface must operate using real authoritative database data.
-
-It must load:
-
-- classes actually assigned to the logged-in Faculty;
-- students actually enrolled in those classes;
-- the Faculty's actual assessments/scores;
-- the student's current grade for that Faculty member's course.
-
-No hardcoded class IDs or fake student data.
-
-### Terminology
-
-Replace:
-
-`Midterm GWA`
-
-with:
-
-`Midterm Grade`
-
-A Faculty member is evaluating the grade for their course, not the Student's overall university GWA.
-
-### Risk levels
-
-Use the existing risk-level rules already defined by the application/page as the authoritative basis for:
-
-- Low Risk
-- Medium Risk
-- High Risk
-
-Do not invent new thresholds.
-
-Remove the obsolete **Midterm Evaluation Rules** presentation if separate from the actual approved risk-rule definitions.
-
-Risk evaluation must be based on the real computed course grade.
-
-### Midterm behavior
-
-During Midterm:
-
-- failing/at-risk students may appear on the Retention Watchlist;
-- status should be `At Risk`;
-- remedial must not be available;
-- no remedial assignment should occur.
-
-### Finals behavior
-
-Remedial applies only after Finals when the Student has failed the course.
-
-The row-level **Remedial** action is the canonical remedial action.
-
-Remove redundant separate "Schedule a Remedial" actions.
-
-### Remedial action
-
-When Faculty clicks Remedial on a Student row:
-
-Automatically derive and lock:
-
-- Student;
-- Course;
-- Class Section.
-
-These are read-only because the Faculty selected a specific Student from a specific class/course.
-
-The Faculty should not be able to switch to another Student or class inside that remedial form.
-
-### Remedial date
-
-Remedial date may be:
-
-- today;
-- future date.
-
-Past dates must not be selectable.
-
-### State transition
-
-Assigning a remedial changes the Student's relevant status to:
-
-`Remedial Assigned`
-
-### Passing rule
-
-Current approved rule (spec.md, Owner-approved amendment 2026-09-26; it replaces the earlier 75% rule):
-
-**Each of the first two remedial exams passes at 50% or higher.** Failing the first permits the second; failing the second requires cost recovery. Remedial results never replace the original course grade.
-
-### Remedial information
-
-Remedial records/results should clearly contain meaningful contextual information such as:
-
-- Student;
-- Course;
-- Section;
-- original course grade;
-- remedial date;
-- remedial score;
-- pass/fail result;
-- status;
-- Faculty notes where applicable;
-- completion/cleared date where applicable.
-
-### Student notification
-
-When a Student is assigned a remedial, they must receive a persistent in-app notification visible from the top-right notification system.
-
-Notification must be database-backed.
-
-Do not fake it using browser-local state.
-
----
-
-## 11.4 Attendance Monitoring
-
-Attendance Monitoring must be database-backed and based on real Faculty assignments.
-
-Selection hierarchy:
-
-1. **Assigned Course**
-2. **Class Section**
-3. **Worksheet Date**
-
-### Course restrictions
-
-Faculty may only select courses actually assigned to them.
-
-### Section restrictions
-
-After selecting a course, only Class Sections belonging to that course and Faculty assignment may be selected.
-
-Example:
-
-If `CLINIC102` is selected, do not show a `CLINIC101` section.
-
-### Worksheet date
-
-Future dates must not be selectable.
-
-There cannot yet be attendance records for dates that have not occurred.
-
-### Large-class usability
-
-Design for realistically large Student lists.
-
-Start with simple scalable patterns:
-
-- search;
-- filters;
-- sticky table header;
-- bounded scrollable content;
-- clear status controls.
-
-Do not introduce complex virtualization/pagination unless the actual dataset requires it.
-
-### Attendance Activity
-
-Historical attendance auditing visible to Faculty should be a course/attendance-scoped activity view, not My Activity.
-
-Faculty may see significant attendance changes made by:
-
-- themselves;
-- applicable Class Secretary.
-
-Include contextual information:
-
-- actor;
-- Student;
-- Course;
-- Class Section;
-- Session;
-- old value;
-- new value;
-- reason;
-- timestamp.
-
----
-
-## 11.5 Email Management / Class Secretary Management
-
-Support large Student lists with filtering.
-
-Filtering hierarchy should include:
-
-- Course
-- Class Section
-- Student/search as appropriate
-
-### Secretary visibility
-
-Clearly distinguish:
-
-- ordinary Student;
-- pending Secretary invitation;
-- active Class Secretary.
-
-The active Secretary should be visually obvious.
-
-Remove obsolete checkmark-style status if it conflicts with the new state model.
-
-### Current institutional assumption
-
-For now:
-
-- a Student belongs to one Class Section;
-- each Class Section has at most one Class Secretary.
-
-Do not overengineer for hypothetical future multi-section membership.
-
-If university policy changes later, the model can be revised.
-
-### Secretary invitation lifecycle
-
-Faculty initiates a Secretary invitation.
-
-The Student must **accept the invitation** before becoming Secretary.
-
-Do not instantly grant Secretary authority merely because Faculty clicked the invitation action.
-
-Only one active/pending Secretary invitation may exist for a Class Section at a time.
-
-#### Candidate state
-
-Action:
-
-`Invite as Secretary`
-
-#### Pending state
-
-Action:
-
-`Revoke Invitation`
-
-#### Accepted/active state
-
-Student becomes the active Secretary for that Class Section.
-
-Faculty may later:
-
-`Remove Secretary Role`
-
-### Role promotion
-
-When the Student accepts the Secretary invitation:
-
-- same underlying account/identity is retained;
-- account is promoted to Secretary according to the authoritative role/access model;
-- existing Student academic identity/record remains intact;
-- corresponding Class Section identifies them as its active Secretary.
-
-When the Secretary assignment is removed:
-
-- account returns to normal Student role/context;
-- Student academic record remains intact.
-
-The exact safest implementation against the current authentication/RBAC model requires backend technical investigation before implementation.
-
-### Student/Secretary context switching
-
-An accepted Secretary remains the same person and must still be able to use their Student side.
-
-Do not add Student navigation into the Secretary sidebar.
-
-Use a top-right context switch near the theme/profile controls.
-
-Conceptually:
-
-`Switch to Student`
-
-and, where appropriate:
-
-`Switch to Secretary`
-
-This changes application context, not identity.
-
----
-
-## 11.6 Email History
-
-Email History should not become a separate duplicate logging system.
-
-Use authoritative sources such as:
-
-- email outbox/delivery records;
-- relevant audit events.
-
-It should provide a useful history of actions performed through Email Management.
-
----
-
-## 11.7 Faculty Profile
-
-Profile should be primarily read-only.
-
-Do not allow self-service modification of:
-
-- institutional email;
-- account identity;
-- Faculty assignments;
-- other relationship-critical fields.
-
-Allow dedicated structured-name changes.
-
-Require MFA confirmation when MFA is enabled.
-
----
-
-# 12. Student Backlog
-
-## 12.1 Student Dashboard
-
-Canonical UI parity has already been restored.
-
-Do not reintroduce:
-
-- mock classes;
-- mock grades;
-- fake attendance;
-- fake retention information.
-
-Future Student academic information must come from authoritative backend/database APIs.
-
-The current shared DentiSys visual style must be preserved.
-
----
-
-## 12.2 Student Profile
-
-Student follows the same identity policy as other users.
-
-Allow a dedicated structured-name change flow.
-
-Do not allow self-service modification of:
-
-- institutional email;
-- Student number;
-- account IDs;
-- role/assignment-critical fields.
-
-Require MFA confirmation for name changes when MFA is enabled.
-
----
-
-# 13. Secretary Backlog
-
-## 13.1 Secretary Dashboard
-
-Remove redundant information and redundant Quick Actions that merely duplicate sidebar navigation.
-
-Preserve meaningful:
-
-- operational status;
-- attendance information;
-- alerts;
-- pending work.
-
----
-
-## 13.2 Manual Override
-
-Support large record sets.
-
-Filter hierarchy should include:
-
-1. Date
-2. Session on the selected date
-3. Records
-
-Additional useful filters may include:
-
-- attendance status;
-- overridden/original state;
-- Student search.
-
-Avoid forcing users to scroll through an unbounded list merely to reach relevant records.
-
-### Audit requirement
-
-Each meaningful override must record:
-
-- actor;
-- Student;
-- Course;
-- Class Section;
-- Session;
-- previous attendance state;
-- new attendance state;
-- reason;
-- timestamp.
-
-The Secretary sees the event in their My Activity.
-
-Applicable Faculty may see it in their Attendance/Course Activity view.
-
----
-
-## 13.3 My Activity
-
-Connect Secretary My Activity to PostgreSQL.
-
-It must show significant actions performed by the currently logged-in Secretary.
-
-Do not route Secretary to an Admin-wide audit endpoint.
-
-Do not show unrelated users' activity.
-
----
-
-## 13.4 Secretary Profile
-
-Remove duplicate information.
-
-Profile is primarily read-only.
-
-Do not allow self-service modification of:
-
-- institutional email;
-- assignment-critical fields;
-- account role directly.
-
-Allow dedicated structured-name changes.
-
-Require MFA confirmation when MFA is enabled.
-
----
-
-## 13.5 Secretary → Student Context
-
-Do not duplicate Student navigation inside the Secretary sidebar.
-
-Use a top-right context switch near theme/profile controls.
-
-The Secretary should be able to switch to their Student application context while remaining logged into the same identity.
-
-Backend authentication/RBAC must safely support this.
-
----
-
-# 14. Persistent Notifications
-
-Persistent application notifications should be database-backed.
-
-They must support at minimum:
-
-- recipient user;
-- notification type;
-- message/title;
-- related entity/reference where applicable;
-- created timestamp;
-- read/unread state;
-- read timestamp where applicable.
-
-Initial required use:
-
-- Student notification when a remedial is assigned.
-
-The existing notification bell should consume authoritative notification data rather than browser-local fake alerts.
-
-Do not store sensitive payloads unnecessarily.
-
----
-
-# 15. Data Modernization Backlog
-
-The application must be audited feature-by-feature for browser/mock production data.
-
-Priority candidates include:
-
-- Student lists;
-- Faculty assigned classes;
-- Courses;
-- Class Sections;
-- attendance;
-- grade/assessment data;
-- retention;
-- remedials;
-- Secretary assignments;
-- audit/activity;
-- notifications;
-- operational settings.
-
-For each candidate:
-
-1. identify current frontend/mock storage;
-2. identify authoritative database tables;
-3. identify existing API support;
-4. add the smallest backend contract required;
-5. migrate the frontend to the API;
-6. remove runtime dependence on browser/mock business data;
-7. preserve deterministic testing fixtures.
-
-Do not perform a blind site-wide rewrite.
-
-Convert features incrementally and validate each one.
-
----
-
-# 16. Database Migration Policy
-
-Database migrations are allowed when they move the system closer to the approved model.
-
-Do not avoid a necessary normalized schema change merely to keep migration count low.
-
-At the same time:
-
-- avoid speculative schema;
-- avoid generic abstraction tables with no current requirement;
-- reuse existing relationships where suitable;
-- prefer simple constraints that encode approved product rules.
-
-Potentially justified migrations include, subject to current schema inspection:
-
-- structured person-name fields;
-- persistent notifications;
-- Secretary invitation/assignment constraints;
-- audit actor display-name snapshot where not already available;
-- cleanup of obsolete operational settings.
-
-Every migration must have a concrete approved requirement.
-
----
-
-# 17. Secretary/Student Role Model — Technical Investigation Required
-
-Product behavior is approved:
-
-1. Student belongs to one Class Section under current university reality.
-2. Faculty sends Secretary invitation.
-3. Student accepts.
-4. Same account becomes Secretary for that section.
-5. Existing Student academic identity remains intact.
-6. User can switch between Student and Secretary application context.
-7. Faculty may later remove Secretary assignment.
-8. On removal, the account returns to normal Student role/context.
-9. At most one active/pending Secretary exists per Class Section.
-
-Before implementation, inspect the current authentication/RBAC model and determine the smallest safe implementation.
-
-Specifically determine:
-
-- whether `user_accounts.role` is currently the sole authorization source;
-- whether Secretary route guards require global `role = 'secretary'`;
-- how the same account can retain Student context while promoted;
-- what role/context claim should be issued during authentication;
-- how demotion returns authority safely;
-- how the existing `class_sections.secretary_user_id` relationship participates.
-
-Do not change the approved product behavior merely because the current implementation is inconvenient.
-
-Return technical options to the Owner if more than one reasonable implementation exists.
-
----
-
-# 18. Externally Blocked
-
-## Registrar / Sir Ryan import-export format
-
-Official Registrar import/export remains blocked until the actual file layout is supplied.
-
-Required information includes:
-
-- file type;
-- headers;
-- Student identifier;
-- course/section columns;
-- grading encoding;
-- required output structure.
-
-Do not invent the University's official format.
-
-## Live Google verification
-
-Existing Google implementation can continue to be tested automatically.
-
-Actual live Google authentication remains Owner-controlled.
-
-Do not request or store Owner credentials.
-
-If live testing identifies a real implementation defect, capture it and scope the appropriate frontend/backend fix.
-
----
-
-# 19. Known Baseline Issues
-
-Known issues that should not be silently conflated with unrelated backlog implementation:
-
-- Faculty Classes & Rosters current-school-year count/filter mismatch.
-- Faculty Dashboard versus Classes & Rosters class-count mismatch.
-- Faculty Grade Computation mobile tab strip requires horizontal scrolling.
-- Existing non-blocking Vite/Tailwind warnings.
-- Real Student academic routes remain gated until authoritative APIs/data are available.
-- Secretary attendance browser simulation remains intentionally disabled where authoritative session behavior is unavailable.
-- Live Google authentication still requires Owner-controlled manual verification.
-
-A future task may explicitly own one of these issues.
-
----
-
-# 20. Completed
-
-## Canonical UI parity
-
-Completed and checkpointed at:
-
-`c58d3004db20280c8827dd10893e9c1058be2eaa`
-
-Completed work includes:
-
-- restored canonical shared Student shell;
-- canonical Student Dashboard/Profile styling;
-- canonical Admin Faculty Invitations presentation;
-- fixed invalid Student `My Settings` route;
-- desktop/mobile parity validation;
-- automated validation;
-- live integration validation.
-
-The parity audit confirmed that no legitimate pre-parity frontend functionality needed to be reintroduced.
-
----
-
-# 21. Recommended Implementation Order
-
-This is a working order, not an irreversible commitment.
-
-## Foundation — Authoritative Data
-
-First establish enough database-backed development data and API correctness that manual browser testing can exercise real workflows.
-
-Prioritize replacing runtime mock/browser business data with authoritative PostgreSQL data feature-by-feature.
-
-This foundation should not become a giant rewrite.
-
-## Small frontend usability improvements
-
-Examples:
-
-- password eye controls;
-- password requirements;
-- live field validation.
-
-Frontend-only work can proceed where no backend contract is required.
-
-## Identity/name normalization
-
-Requires coordinated backend schema/API work followed by frontend integration.
-
-## Role-specific cleanup
-
-Examples:
-
-- dashboard redundancy;
-- read-only profiles plus Change Name;
-- Dean Settings cleanup;
-- Secretary Manual Override filtering.
-
-## Operational workflows
-
-Examples:
-
-- Faculty Invitation lifecycle;
-- Grade Weights schema editing;
-- Attendance course/section hierarchy;
-- Secretary invitation/acceptance/context;
-- Retention/remedial workflow.
-
-## Persistent cross-role systems
-
-Examples:
-
-- notifications;
-- comprehensive My Activity;
-- Admin System Audit;
-- course/attendance activity views.
-
-## Student authoritative academic surfaces
-
-Expose Student academic functionality only after the underlying APIs/data are authoritative.
-
-## External work
-
-- Registrar format
-- live Google manual verification/fixes
-
-The Owner may reorder these when dependencies or manual testing reveal a better sequence.
-
----
-
-# 22. Definition of Done for Future Features
-
-A feature is not complete merely because the UI renders.
-
-Where applicable it must:
-
-- use authoritative database-backed data;
-- enforce role/ownership permissions;
-- enforce approved validation;
-- preserve canonical UI;
-- update PostgreSQL correctly;
-- create required audit events;
-- use persistent notifications where specified;
-- pass automated tests;
-- pass integration tests;
-- pass desktop/mobile browser verification;
-- leave unrelated functionality unchanged.
-
-For data-mutating workflows, manual validation should verify that the expected database state actually changed.
-
----
-
-# 23. Final Reminder
-
-This backlog represents the best-known requirements at the current point in development.
-
-It is intentionally allowed to evolve.
-
-The Owner expects to discover additional changes while manually testing DentiSys.
-
-Do not interpret omissions as permission to invent behavior.
-
-When uncertain:
-
-**Ask the Owner.**
+**Status: Externally blocked.** Automated (mocked) Google tests pass; live sign-in in a real browser is Owner-controlled. Do not request or store Owner credentials. If live testing finds a defect, scope the fix then.
