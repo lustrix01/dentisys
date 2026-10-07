@@ -269,7 +269,7 @@ npx playwright install chromium
 
 | Command | What it runs | Needs |
 | --- | --- | --- |
-| `.\scripts\check.ps1` | Config, PHP and TypeScript checks, backend tests, frontend build, mocked browser tests | Docker running and the images built once by `start-dev.ps1` |
+| `.\scripts\check.ps1` | Config, PHP and TypeScript checks, backend tests, frontend build, frontend unit tests, mocked browser tests | Docker running and the images built once by `start-dev.ps1` |
 | `.\scripts\check-postgres.ps1` | Database integration tests and live browser tests in a separate, throw-away Docker project | Docker; it never touches your development database |
 | `npm run test:e2e -- e2e/<file>.spec.ts` | One mocked browser test file (all API calls are faked) | Only the Node packages above |
 
