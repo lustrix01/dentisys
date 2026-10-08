@@ -70,3 +70,37 @@ test('Subject-level risk rules do not fabricate client-derived decisions', () =>
   assert.doesNotMatch(retentionPage, /riskRuleResults/);
   assert.doesNotMatch(retentionPage, /computeSubjectGrade/);
 });
+
+test('Midterm watchlist visibility and risk remain server-owned', () => {
+  const eligible = retentionPage.match(/const eligibleMidtermRecords = useMemo\(\(\) => filteredRecords\.filter\(record =>([\s\S]*?)\), \[filteredRecords\]\)/)?.[1];
+  assert.ok(eligible);
+  const visible = new Function('record', 'isFiniteNumber', `return (${eligible});`);
+  const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+  for (const [record, expected] of [
+    [{ midtermComplete: true, gwa: null }, true],
+    [{ midtermComplete: false, watchlistUnlocked: true }, true],
+    [{ midtermComplete: false, watchlistUnlocked: false }, true],
+    [{ midtermComplete: true, gwa: 2.49 }, false],
+    [{ watchlistUnlocked: true, gwa: 3 }, false],
+  ] as const) assert.equal(visible(record, finite), expected);
+  assert.match(retentionPage, /record\.risk\?\.level === 'High' \|\| record\.risk\?\.level === 'At Risk'/);
+  assert.doesNotMatch(retentionPage, /isMidtermAtRisk|record\.risk \?\? \{/);
+  assert.match(retentionPage, /Unlocked .* Assessments incomplete/);
+  assert.match(retentionPage, /handleComputeMidtermRisk/);
+  assert.match(retentionPage, /handleComputeClassRisk/);
+  assert.match(retentionPage, /await unlockFacultyWatchlistApi/);
+});
+
+test('Remedial outcomes preserve entered scores and report partial success truthfully', () => {
+  const selector = retentionPage.match(/const handleSelectOutcome[\s\S]*?\n  };/)?.[0];
+  assert.ok(selector);
+  assert.doesNotMatch(selector, /setRemedialScore/);
+  assert.match(retentionPage, /if \(outcomeContradictsScore\)/);
+  assert.match(retentionPage, /percentage: score/);
+  assert.match(retentionPage, /notification\?\.created === true/);
+  assert.match(retentionPage, /Attempt 1 was saved but Attempt 2 could not be scheduled/);
+  const dashboard = fs.readFileSync(path.join(currentDirectory, '../pages/faculty/Dashboard.tsx'), 'utf8');
+  assert.match(dashboard, /if \(outcomeContradictsScore\)/);
+  assert.match(dashboard, /notification\?\.created === true/);
+  assert.match(dashboard, /Attempt 1 was saved but Attempt 2 could not be scheduled/);
+});

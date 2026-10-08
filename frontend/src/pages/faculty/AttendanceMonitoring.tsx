@@ -15,6 +15,8 @@ import {
   Camera,
   Pencil,
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { ClassAttendanceActivity } from './ClassAttendanceActivity';
 import { Card } from '../../components/Card';
 import { LocationPicker } from '../../components/LocationPicker';
 import { FacultyExcusedRequestsPanel } from '../../components/FacultyExcusedRequestsPanel';
@@ -80,6 +82,25 @@ const attendanceMethodLabel = (method?: string | null, overrideReason?: string |
 const manilaDateToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
 export const AttendanceMonitoring: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activityOpen = searchParams.get('tab') === 'activity';
+  return (
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div role="tablist" aria-label="Attendance Monitoring" className="flex gap-2">
+        {(['monitoring', 'activity'] as const).map(tab => (
+          <button key={tab} type="button" role="tab" aria-selected={activityOpen === (tab === 'activity')}
+            onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); if (tab === 'activity') next.set('tab', tab); else next.delete('tab'); return next; })}
+            className={`px-4 py-2 rounded-lg text-xs font-bold ${activityOpen === (tab === 'activity') ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+            {tab === 'activity' ? 'Class Attendance Activity' : 'Attendance Monitoring'}
+          </button>
+        ))}
+      </div>
+      {activityOpen ? <><p className="text-[10px] font-bold text-slate-400">Home / Attendance Monitoring / Class Attendance Activity</p><ClassAttendanceActivity /></> : <AttendanceWorksheet />}
+    </div>
+  );
+};
+
+const AttendanceWorksheet: React.FC = () => {
   // Assigned classes from API
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
   const [loadingClasses, setLoadingClasses] = useState<boolean>(true);

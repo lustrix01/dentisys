@@ -1,4 +1,5 @@
 import test from 'node:test';
+import ts from 'typescript';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,7 +15,8 @@ import {
   generateGradeSummaryCSV,
   isValidCalendarDate,
 } from '../utils/periodGradingHelper.ts';
-import type { FacultyPeriodModeComputedResult, FacultyPeriodModeIncompleteResult } from '../services/apiClient.ts';
+import { percentageToGWAExact } from '../utils/gradeHelper.ts';
+import type { FacultyLegacyComputedResult, FacultyPeriodModeComputedResult, FacultyPeriodModeIncompleteResult } from '../services/apiClient.ts';
 
 test('Faculty grade views use the inclusive authoritative retention boundary', () => {
   const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -22,8 +24,32 @@ test('Faculty grade views use the inclusive authoritative retention boundary', (
     path.join(currentDirectory, '../pages/faculty/GradeComputation.tsx'),
     'utf8'
   );
-  assert.equal((gradeComputation.match(/> settings\.retentionThreshold/g) ?? []).length, 0);
-  assert.equal((gradeComputation.match(/>= settings\.retentionThreshold/g) ?? []).length, 4);
+  assert.doesNotMatch(gradeComputation, /(?:overallGwa|subj\.grade)\s*>=?\s*settings\.retentionThreshold/);
+  const retentionRules = [...gradeComputation.matchAll(/const isFailsRetention = ([\s\S]*?);/g)];
+  assert.equal(retentionRules.length, 4, 'table and print views cover both period and legacy grades');
+  for (const [, expression] of retentionRules) {
+    assert.match(expression, /retentionState === 'remedial'/);
+    assert.match(expression, /percentageToGWAExact\(evalResult\.overallPercentage\) >= settings\.retentionThreshold/);
+    const failsRetention = new Function('subj', 'evalResult', 'percentageToGWAExact', 'settings', `return (${expression});`);
+    for (const [percentage, retentionState, expected] of [
+      [80.01, 'active', false],
+      [80, 'remedial', true],
+      [79.99, 'active', false],
+      [81, 'remedial', true],
+      [80.01, undefined, false],
+      [80, undefined, true],
+      [79.99, undefined, true],
+      [null, undefined, false],
+      [Number.NaN, undefined, false],
+    ] as const) {
+      assert.equal(failsRetention(
+        { isClinical: true },
+        { overallGwa: 2.5, overallPercentage: percentage, retentionState },
+        percentageToGWAExact,
+        { retentionThreshold: 2.5 },
+      ), expected, `percentage ${percentage}, server state ${retentionState}`);
+    }
+  }
 });
 
 test('Period Draft: buildDefaultPeriodDraft produces the mandatory Lecture/Laboratory defaults', () => {
@@ -264,6 +290,13 @@ test('Evaluation Extraction: handles complete period computed results', () => {
   assert.equal(evaluation.finalPercentage, 90.0);
   assert.equal(evaluation.overallGwa, 1.75);
   assert.equal(evaluation.statusText, 'PASS');
+  assert.equal(evaluation.retentionState, 'active');
+  const boundaryResult = { ...computedResult, percentage: 80.01, gwa: 2.5, retentionState: 'active' };
+  const boundaryEvaluation = extractPeriodEvaluation(null, boundaryResult);
+  assert.equal(boundaryEvaluation.overallGwa, 2.5);
+  assert.equal(boundaryEvaluation.overallPercentage, 80.01);
+  assert.equal(boundaryEvaluation.retentionState, 'active');
+
 });
 
 test('Evaluation Extraction: handles incomplete period with zero-weight without blocking overall', () => {
@@ -915,4 +948,166 @@ test('Lecture/Laboratory CSV quotes embedded text and neutralizes formula-leadin
     'Student ID,Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status',
     '"\'@DENT-008","\'=Dana, ""Quoted""\nStudent","Incomplete (missing ""lab"", score\nplease)","Incomplete","Incomplete (Missing Assessment Score)","93.00%","83.00%","95.00%","Prior: 2.00 (Historical)","INCOMPLETE"',
   ].join('\n'));
+});
+
+// Exercise the actual score handlers with controlled API promises.
+function scoreSaveHarness(mode: 'single' | 'matrix' = 'single') {
+  const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
+  const handlers = mode === 'single'
+    ? source.slice(source.indexOf('  const performSaveSingleScores'), source.indexOf('  // View Mode:'))
+    : source.slice(source.indexOf('  const performSaveMatrixScores'), source.indexOf('  // Helper stats'));
+  const initial = { student: { score: '10', remarks: '' } };
+  const calls: Array<Array<{ studentId: string; score: number | null }>> = [];
+  const statuses: string[] = [];
+  const confirmations: string[] = [];
+  let approve = true;
+  let save = async () => {};
+  const context = {
+    selectedClassId: 'class',
+    availableClasses: [],
+    activeAssessments: [{ id: 'assessment', maxScore: 100 }],
+    activeStudents: [{ id: 'student' }],
+    matrixSavingRef: { current: false },
+    matrixQueuedRef: { current: false },
+    matrixDirtyRef: { current: false },
+    matrixSavedRef: { current: { student: { assessment: '10' } } },
+    matrixScoresRef: { current: { student: { assessment: '10' } } },
+    matrixSaveRef: { current: async (_manual?: boolean) => {} },
+    setMatrixSaveStatus: (status: string) => statuses.push(status),
+    setMatrixScoresState: () => {},
+    setMatrixRefreshKey: () => {},
+    setIsMatrixSavedAlert: () => {},
+    saveFacultyScoreBatchesApi: async (batches: Array<{ scores: Array<{ studentId: string; score: number | null }> }>) => { calls.push(batches.flatMap(batch => batch.scores)); await save(); },
+    selectedAssessmentId: 'assessment',
+    activeAssessment: { classId: 'class', maxScore: 100, title: 'Quiz' },
+    autoSaveRef: { current: true },
+    singleSavingRef: { current: false },
+    singleQueuedRef: { current: false },
+    singleDirtyRef: { current: false },
+    singleSavedRef: { current: initial },
+    singleScoresRef: { current: initial },
+    singleSaveRef: { current: async (_manual?: boolean) => {} },
+    assessmentScores: [{ assessmentId: 'assessment', studentId: 'student', score: 10 }],
+    setSingleSaveStatus: (status: string) => statuses.push(status),
+    validateSingleScore: (value: string, max: number) => value === '' || (Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= max),
+    hasStoredScore: () => true,
+    requestConfirmation: async (message: string) => { confirmations.push(message); return approve; },
+    setScoresInputState: () => {},
+    saveFacultyAssessmentScoresApi: async (_id: string, scores: Array<{ studentId: string; score: number | null }>) => { calls.push(scores); await save(); },
+    saveAssessmentScores: () => {},
+    refreshPersistedGrades: async () => {},
+    setIsScoresSavedAlert: () => {},
+    showFeedback: () => {},
+  };
+  const compiled = ts.transpileModule(handlers, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exposed = mode === 'single' ? 'return { handleScoreChange, handleScoreBlur, handleManualSaveScores };'
+    : 'return { handleScoreChange: (_student, value) => handleMatrixScoreChange(_student, "assessment", value), handleScoreBlur: handleMatrixScoreBlur, handleManualSaveScores: handleSaveMatrixScores };';
+  const actions = new Function(...Object.keys(context), compiled + exposed)(...Object.values(context));
+  return { actions, context, calls, statuses, confirmations, setApprove: (value: boolean) => { approve = value; }, setSave: (next: () => Promise<void>) => { save = next; } };
+}
+
+test('Score entry saves on exit, respects Auto-save, and confirms manual Save', async () => {
+  const h = scoreSaveHarness();
+  h.actions.handleScoreChange('student', '20', 'score');
+  assert.equal(h.calls.length, 0, 'typing must not save');
+  h.context.autoSaveRef.current = false;
+  await h.actions.handleScoreBlur('student');
+  assert.equal(h.calls.length, 0, 'Auto-save off must not save on blur');
+  await h.actions.handleManualSaveScores();
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0][0].score, 20);
+  assert.equal(h.confirmations.length, 1);
+  assert.equal(h.context.singleDirtyRef.current, false);
+});
+
+test('Score entry queues the latest edit while a save is in flight', async () => {
+  const h = scoreSaveHarness();
+  let finish!: () => void;
+  h.setSave(() => new Promise<void>(resolve => { finish = resolve; }));
+  h.actions.handleScoreChange('student', '20', 'score');
+  const first = h.actions.handleScoreBlur('student');
+  h.actions.handleScoreChange('student', '10', 'score');
+  await h.actions.handleScoreBlur('student');
+  assert.equal(h.calls.length, 1);
+  h.setSave(async () => {});
+  finish();
+  await first;
+  // Drain the queued async API and recomputation microtasks.
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls[1][0].score, 10, 'reverting during save is still an edit against the in-flight value');
+  assert.equal(h.context.singleScoresRef.current.student.score, '10');
+  assert.equal(h.context.singleDirtyRef.current, false);
+});
+
+test('Declining a stored-score deletion restores the value and failed saves remain retryable', async () => {
+  const h = scoreSaveHarness();
+  h.setApprove(false);
+  h.actions.handleScoreChange('student', '', 'score');
+  await h.actions.handleScoreBlur('student');
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.context.singleScoresRef.current.student.score, '10');
+  assert.equal(h.context.singleDirtyRef.current, false);
+  h.setApprove(true);
+  h.setSave(async () => { throw new Error('Offline'); });
+  h.actions.handleScoreChange('student', '30', 'score');
+  await h.actions.handleScoreBlur('student');
+  assert.equal(h.statuses.at(-1), 'error');
+  assert.equal(h.context.singleDirtyRef.current, true);
+  h.setSave(async () => {});
+  await h.actions.handleManualSaveScores();
+  assert.equal(h.statuses.at(-1), 'saved');
+  assert.equal(h.calls.at(-1)?.[0].score, 30);
+});
+
+test('Matrix saves obey the toggle, confirm clearing, and queue the latest scores', async () => {
+  const h = scoreSaveHarness('matrix');
+  h.context.autoSaveRef.current = false;
+  h.actions.handleScoreChange('student', '20');
+  await h.actions.handleScoreBlur();
+  assert.equal(h.calls.length, 0);
+  await h.actions.handleManualSaveScores();
+  assert.match(h.confirmations[0], /All changes are saved together or not at all/);
+  assert.equal(h.calls[0][0].score, 20);
+
+  h.context.autoSaveRef.current = true;
+  let finish!: () => void;
+  h.setSave(() => new Promise<void>(resolve => { finish = resolve; }));
+  h.actions.handleScoreChange('student', '30');
+  const first = h.actions.handleScoreBlur();
+  h.actions.handleScoreChange('student', '40');
+  await h.actions.handleScoreBlur();
+  h.setSave(async () => {});
+  finish();
+  await first;
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.equal(h.calls.at(-1)?.[0].score, 40);
+  assert.equal(h.context.matrixDirtyRef.current, false);
+
+  const deletion = scoreSaveHarness('matrix');
+  deletion.setApprove(false);
+  deletion.actions.handleScoreChange('student', '');
+  await deletion.actions.handleScoreBlur();
+  assert.equal(deletion.calls.length, 0);
+  assert.equal(deletion.context.matrixScoresRef.current.student.assessment, '10');
+  assert.equal(deletion.context.matrixDirtyRef.current, false);
+});
+
+test('Evaluation Extraction: legacy results expose server retention state and exact percentage', () => {
+  const result: FacultyLegacyComputedResult = {
+    status: 'computed',
+    enrollmentId: '1',
+    studentId: '2',
+    percentage: 80.01,
+    gwa: 2.5,
+    retentionState: 'active',
+    breakdown: { calculationMode: 'raw_points', retentionThreshold: 2.5 },
+  };
+  const evaluation = extractPeriodEvaluation(null, result, 'overall');
+  assert.equal(evaluation.overallPercentage, 80.01);
+  assert.equal(evaluation.retentionState, 'active');
+  const { retentionState: _state, ...olderResult } = result;
+  const fallback = extractPeriodEvaluation(null, olderResult as FacultyLegacyComputedResult, 'overall');
+  assert.equal(fallback.overallPercentage, 80.01);
+  assert.equal(fallback.retentionState, null);
 });

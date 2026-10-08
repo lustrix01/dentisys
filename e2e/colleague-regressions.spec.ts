@@ -242,6 +242,7 @@ test('Faculty watchlist unlocking does not claim incomplete grades were computed
   });
   await page.goto('/faculty/retention');
   await page.getByRole('button', { name: /Midterm Risk/ }).click();
+  await page.getByRole('button', { name: /Show At-Risk Only/ }).click();
   await expect(page.getByRole('row').filter({ hasText: 'Incomplete Candidate' })).toContainText('Unlocked · Assessments incomplete');
   await expect(page.getByText('Computed · Ready', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Unlock Midterm Watchlist', exact: true })).toBeDisabled();
@@ -465,9 +466,11 @@ test('Faculty at-risk filter follows server projection without a percentage fall
   ] } }));
   await page.goto('/retention');
   await page.getByRole('button', { name: /Midterm Risk/ }).click();
-  await page.getByRole('button', { name: /Show At-Risk Only/ }).click();
+  await expect(page.getByRole('button', { name: /Show At-Risk Only/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('row').filter({ hasText: 'High Projection' })).toBeVisible();
   await expect(page.getByRole('row').filter({ hasText: 'Low Projection' })).toHaveCount(0);
+  await page.getByRole('button', { name: /Show At-Risk Only/ }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'Low Projection' })).toBeVisible();
 });
 
 

@@ -28,7 +28,6 @@ import { StartSession as SecretaryStartSession } from './pages/secretary/StartSe
 import { AttendanceList as SecretaryAttendanceList } from './pages/secretary/AttendanceList';
 import { AuditTrail as SecretaryAuditTrail } from './pages/secretary/AuditTrail';
 import { AuditTrail as FacultyAuditTrail } from './pages/faculty/AuditTrail';
-import { ClassAttendanceActivity } from './pages/faculty/ClassAttendanceActivity';
 
 // Student Page Imports
 import { Dashboard as StudentDashboard } from './pages/student/Dashboard';
@@ -223,7 +222,7 @@ function App() {
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/email-management" element={<EmailManagement />} />
                   <Route path="/faculty/audit-trail" element={<FacultyAuditTrail />} />
-                  <Route path="/faculty/attendance-activity" element={<ClassAttendanceActivity />} />
+                  <Route path="/faculty/attendance-activity" element={<Navigate to="/attendance?tab=activity" replace />} />
                   <Route path="/faculty/profile" element={<FacultyProfile />} />
                   <Route path="/faculty/settings" element={<FacultySettings />} />
                 </Route>

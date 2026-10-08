@@ -2903,7 +2903,7 @@ function handle_faculty_grading_config_save(): void
     }
 }
 
-function faculty_percentage_to_gwa(float $percentage): float
+function faculty_percentage_to_gwa_exact(float $percentage): float
 {
     if (!is_finite($percentage)) return 5.0;
     if ($percentage >= 97.0) return 1.0;
@@ -2928,11 +2928,18 @@ function faculty_percentage_to_gwa(float $percentage): float
         if ($percentage >= $low['pct'] && $percentage <= $high['pct']) {
             $fraction = ($percentage - $low['pct']) / ($high['pct'] - $low['pct']);
             $grade = $low['grade'] - $fraction * ($low['grade'] - $high['grade']);
-            return round($grade, 2);
+            return $grade;
         }
     }
 
     return 3.0;
+}
+
+function faculty_percentage_to_gwa(float $percentage): float
+{
+    // Keep decimal half-grade values stable when interpolation drifts below
+    // the midpoint in binary floating-point (for example, 87.34% -> 1.805).
+    return round(faculty_percentage_to_gwa_exact($percentage) + 1e-12, 2);
 }
 
 /**
@@ -4329,7 +4336,8 @@ function handle_faculty_grades_compute(): void
                     2
                 );
                 $gwa = faculty_percentage_to_gwa($percentage);
-                $retention = faculty_course_grade_retention_state($gwa, $retentionThreshold);
+                $exactGwa = faculty_percentage_to_gwa_exact($percentage);
+                $retention = faculty_course_grade_retention_state($exactGwa, $retentionThreshold);
                 if ($retention === null) {
                     throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
                 }
@@ -4424,7 +4432,8 @@ function handle_faculty_grades_compute(): void
                 }
                 $percentage = round($percentage, 2);
                 $gwa = faculty_percentage_to_gwa($percentage);
-                $retention = faculty_course_grade_retention_state($gwa, $retentionThreshold);
+                $exactGwa = faculty_percentage_to_gwa_exact($percentage);
+                $retention = faculty_course_grade_retention_state($exactGwa, $retentionThreshold);
                 if ($retention === null) {
                     throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
                 }
@@ -5775,7 +5784,7 @@ function faculty_risk_period_percentage(array $categories, float $size, int $n):
 
 /**
  * UI-003 risk level from a grade projection: how many assumed 75%
- * assessments until the grade is 2.50 or worse (below 82%).
+ * assessments until the grade is 2.50 or worse (80% or below).
  * High = already there or 1-2, At Risk = 3-4, Low = 5 or more.
  */
 function faculty_risk_level(callable $percentageAfter): ?array
@@ -5785,7 +5794,7 @@ function faculty_risk_level(callable $percentageAfter): ?array
         if ($percentage === null) {
             return null;
         }
-        if (faculty_percentage_to_gwa(round($percentage, 2)) >= RETENTION_GWA_TRIGGER) {
+        if (faculty_percentage_to_gwa_exact(round($percentage, 2)) >= RETENTION_GWA_TRIGGER) {
             return ['level' => $n <= 2 ? 'High' : 'At Risk', 'assumedAssessments' => $n];
         }
     }

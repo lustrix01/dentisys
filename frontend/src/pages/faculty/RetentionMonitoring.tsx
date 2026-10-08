@@ -8,6 +8,7 @@ import {
   saveFacultyRemedialApi,
   saveFacultyCostRecoveryApi,
   updateFacultyRetentionStatusApi,
+  unlockFacultyWatchlistApi,
 } from '../../services/apiClient';
 import { percentageToGWA } from '../../utils/gradeHelper';
 import type {
@@ -81,17 +82,6 @@ const isFiniteNumber = (value: number | null | undefined): value is number => (
   typeof value === 'number' && Number.isFinite(value)
 );
 
-const isMidtermAtRisk = (record: FacultyRetentionRecord): boolean => {
-  if (record.midtermComplete !== true || !isFiniteNumber(record.midtermPercentage)) {
-    return false;
-  }
-  // Once the final course grade is complete, student is removed from Midterm Risk
-  if (isFiniteNumber(record.gwa)) {
-    return false;
-  }
-  const gwa = percentageToGWA(record.midtermPercentage);
-  return gwa >= 2.5; // 2.5 midterm grade is already at risk
-};
 
 const hasPersistedIdentifiers = (record: FacultyRetentionRecord): boolean => (
   isPersistedText(record.enrollmentId)
@@ -453,23 +443,22 @@ export const RetentionMonitoring: React.FC = () => {
     [filteredRecords],
   );
 
-  const atRiskMidtermCount = useMemo(() => {
-    return filteredRecords.filter(isMidtermAtRisk).length;
-  }, [filteredRecords]);
+  const eligibleMidtermRecords = useMemo(() => filteredRecords.filter(record =>
+    !isFiniteNumber(record.gwa)), [filteredRecords]);
+
+  const atRiskMidtermCount = useMemo(() => eligibleMidtermRecords.filter(record =>
+    record.risk?.level === 'High' || record.risk?.level === 'At Risk').length,
+  [eligibleMidtermRecords]);
 
   const midtermDisplayRecords = useMemo(() => {
-    const computedRecords = filteredRecords.filter(
-      record => record.midtermComplete === true
-        && isFiniteNumber(record.midtermPercentage)
-        && !isFiniteNumber(record.gwa)
-    );
-    if (!showAtRiskOnly) return computedRecords;
-    return computedRecords.filter(isMidtermAtRisk);
-  }, [filteredRecords, showAtRiskOnly]);
+    if (!showAtRiskOnly) return eligibleMidtermRecords;
+    return eligibleMidtermRecords.filter(record => record.risk?.level === 'High' || record.risk?.level === 'At Risk');
+  }, [eligibleMidtermRecords, showAtRiskOnly]);
 
   const currentAttentionStudents = useMemo(() => new Set(usableRecords.filter(record => record.schoolYear === currentSchoolYear
     && ['warning', 'critical', 'remedial'].includes(record.state)).map(record => record.studentId)).size, [usableRecords, currentSchoolYear]);
-  const visibleStudentCount = useMemo(() => new Set(filteredRecords.map(record => record.studentId)).size, [filteredRecords]);
+  const visibleRecords = activeTab === 'midterm' ? midtermDisplayRecords : filteredRecords;
+  const visibleStudentCount = new Set(visibleRecords.map(record => record.studentId)).size;
 
   const remedialRows = useMemo<RetentionRemedialRow[]>(() => {
     const rows: RetentionRemedialRow[] = [];
@@ -660,16 +649,6 @@ export const RetentionMonitoring: React.FC = () => {
 
   const handleSelectOutcome = (outcome: 'pass' | 'fail') => {
     setResolveOutcome(outcome);
-    const num = Number(remedialScore);
-    if (outcome === 'pass') {
-      if (!Number.isFinite(num) || num < 50) {
-        setRemedialScore('80');
-      }
-    } else {
-      if (!Number.isFinite(num) || num >= 50) {
-        setRemedialScore('45');
-      }
-    }
   };
 
   const handleScoreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -684,6 +663,9 @@ export const RetentionMonitoring: React.FC = () => {
       }
     }
   };
+
+  const outcomeContradictsScore = remedialScore.trim() !== '' && Number.isFinite(Number(remedialScore))
+    && (Number(remedialScore) >= 50) !== (resolveOutcome === 'pass');
 
   const handleResolveRemedial = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -711,6 +693,11 @@ export const RetentionMonitoring: React.FC = () => {
       return;
     }
 
+    if (outcomeContradictsScore) {
+      showFeedback('The selected outcome contradicts the entered score. The pass mark is 50%.', 'error');
+      return;
+    }
+
     if (pendingAttemptNumber(selectedResolveProgression) !== resolveAttemptNumber) {
       showFeedback('This remedial attempt is no longer pending. Refresh the authoritative records and try again.', 'error');
       return;
@@ -718,7 +705,7 @@ export const RetentionMonitoring: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await saveFacultyRemedialApi({
+      const response = await saveFacultyRemedialApi({
         enrollmentId: selectedResolveRecord.enrollmentId,
         studentId: selectedResolveRecord.studentId,
         classId: selectedResolveRecord.classId,
@@ -727,9 +714,11 @@ export const RetentionMonitoring: React.FC = () => {
         notes: resolveNotes.trim().length > 0 ? resolveNotes.trim() : null,
       });
 
+      let scheduleError: string | null = null;
+      let studentNotified = response.notification?.created === true;
       if (resolveAttemptNumber === 1 && score < 50 && reattemptDate.trim().length > 0) {
         try {
-          await saveFacultyRemedialApi({
+          const scheduleResponse = await saveFacultyRemedialApi({
             enrollmentId: selectedResolveRecord.enrollmentId,
             studentId: selectedResolveRecord.studentId,
             classId: selectedResolveRecord.classId,
@@ -737,26 +726,29 @@ export const RetentionMonitoring: React.FC = () => {
             scheduledDate: reattemptDate.trim(),
             notes: 'Scheduled for Attempt 2 re-attempt',
           });
-        } catch {
-          // Attempt 1 was saved successfully
+          studentNotified = studentNotified || scheduleResponse.notification?.created === true;
+        } catch (error) {
+          scheduleError = `Attempt 1 was saved but Attempt 2 could not be scheduled: ${error instanceof Error ? error.message : 'Unknown scheduling error.'}`;
         }
       }
 
       const refreshed = await refreshRetention();
       resetResolveForm();
       const outcomeMsg = score >= 50
-        ? 'Remedial exam passed! Student cleared and notified in their portal account.'
+        ? 'Remedial exam passed! Student cleared.'
         : resolveAttemptNumber === 1
-          ? (reattemptDate.trim()
-              ? 'Attempt 1 marked for Re-attempt and Attempt 2 scheduled. Student notified in their portal account.'
-              : 'Attempt 1 marked for Re-attempt. Student notified in their portal account.')
-          : 'Attempt 2 recorded as not passed. Student moved to Cost Recovery and notified in their portal account.';
+          ? (reattemptDate.trim() && !scheduleError
+              ? 'Attempt 1 marked for Re-attempt and Attempt 2 scheduled.'
+              : 'Attempt 1 marked for Re-attempt.')
+          : 'Attempt 2 recorded as not passed. Student moved to Cost Recovery.';
 
+      if (scheduleError) showFeedback(scheduleError, 'error');
+      const message = outcomeMsg + (studentNotified ? ' Student notified.' : '');
       setNotification({
         type: refreshed ? 'success' : 'info',
         message: refreshed
-          ? outcomeMsg
-          : `${outcomeMsg} (authoritative list could not be refreshed)`,
+          ? message
+          : `${message} (authoritative list could not be refreshed)`,
       });
     } catch (requestError) {
       showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the remedial result.', 'error');
@@ -816,6 +808,41 @@ export const RetentionMonitoring: React.FC = () => {
   const openPolicyProgression = (record: FacultyRetentionRecord) => {
     setSelectedPolicyRecord(record);
     setIsPolicyOpen(true);
+  };
+
+  const handleComputeMidtermRisk = async () => {
+    if (isSubmitting || selectedClassIsPastYear || selectedClassId === 'all') return;
+    setIsSubmitting(true);
+    try {
+      await unlockFacultyWatchlistApi(selectedClassId);
+      await refreshRetention();
+      setNotification({
+        type: 'success',
+        message: 'Midterm watchlist unlocked for the selected class section.',
+      });
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : 'Unable to unlock the midterm watchlist.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleComputeClassRisk = async (classId: string) => {
+    if (!classId || classId === 'all' || isSubmitting
+      || usableRecords.some(record => record.classId === classId && isPastYearRecord(record))) return;
+    setIsSubmitting(true);
+    try {
+      await unlockFacultyWatchlistApi(classId);
+      await refreshRetention();
+      setNotification({
+        type: 'success',
+        message: 'Midterm watchlist unlocked for the selected class section.',
+      });
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : 'Unable to unlock the class midterm watchlist.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -899,7 +926,7 @@ export const RetentionMonitoring: React.FC = () => {
             }`}
           >
             <span>Midterm Risk</span>
-            {atRiskMidtermCount > 0 && (
+            {(
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === 'midterm' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
               }`}>
@@ -963,7 +990,7 @@ export const RetentionMonitoring: React.FC = () => {
       )}
 
       {!isLoading && !loadError && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-        <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : `S.Y. ${selectedSchoolYear}`}</p>
+        <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {visibleRecords.length} course enrollment{visibleRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : `S.Y. ${selectedSchoolYear}`}</p>
         <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear || 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
         {currentAttentionStudents > 0 && <button type="button" onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); setActiveTab('watchlist'); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">View current-year students needing attention</button>}
         {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Watchlist. Midterm Watchlist shows grade completeness and informational risk separately.</p>}
@@ -978,7 +1005,7 @@ export const RetentionMonitoring: React.FC = () => {
                 Midterm Standing & Risk Evaluation
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Review students with computed midterm standing at risk of retention (midterm grade 2.5 onwards). Students with completed final course grades are resolved in Retention Watchlist.
+                Review server-calculated risk. Unlocking the selected class changes watchlist visibility only; missing assessment data remains incomplete. Students with completed final course grades are handled in the remediation (Retention Watchlist) list.
               </p>
             </div>
 
@@ -995,13 +1022,23 @@ export const RetentionMonitoring: React.FC = () => {
               >
                 <Filter className="w-3.5 h-3.5" />
                 <span>Show At-Risk Only</span>
-                {atRiskMidtermCount > 0 && (
+                {(
                   <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
                     showAtRiskOnly ? 'bg-amber-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                   }`}>
                     {atRiskMidtermCount}
                   </span>
                 )}
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting || isLoading || selectedClassIsPastYear || selectedClassId === 'all'}
+                title={selectedClassIsPastYear ? 'Past school-year classes are view-only.' : selectedClassId === 'all' ? 'Select one class section to unlock its watchlist.' : undefined}
+                onClick={() => void handleComputeMidtermRisk()}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-40 cursor-pointer"
+              >
+                <Calculator className="h-4 w-4" />
+                <span>{isSubmitting ? 'Unlocking...' : 'Unlock Midterm Watchlist'}</span>
               </button>
             </div>
           </div>
@@ -1027,7 +1064,7 @@ export const RetentionMonitoring: React.FC = () => {
                       </td>
                       <td className="p-3">{record.className}</td>
                       <td className="p-3">
-                        {isFiniteNumber(record.midtermPercentage) ? (
+                        {record.midtermComplete === true && isFiniteNumber(record.midtermPercentage) ? (
                           <div className="font-mono">
                             <span className="font-bold">{record.midtermPercentage.toFixed(2)}%</span>
                             <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
@@ -1039,20 +1076,17 @@ export const RetentionMonitoring: React.FC = () => {
                         )}
                       </td>
                       <td className="p-3">
-                        <RiskBadge
-                          risk={
-                            record.risk ?? {
-                              level: isFiniteNumber(record.midtermPercentage) && percentageToGWA(record.midtermPercentage) >= 3.0 ? 'High' : 'At Risk',
-                              assumedAssessments: 0,
-                              period: 'Midterm',
-                            }
-                          }
-                        />
+                        {record.midtermComplete === true ? <RiskBadge risk={record.risk} /> : <span className="text-[10px] text-slate-400">Pending</span>}
                       </td>
                       <td className="p-3">
                         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
-                          Computed · Ready
+                          {record.midtermComplete === true ? 'Computed · Ready' : record.watchlistUnlocked === true ? 'Unlocked · Assessments incomplete' : 'Locked'}
                         </span>
+                        {record.midtermComplete !== true && !record.watchlistUnlocked && !isPastYearRecord(record) && (
+                          <button type="button" onClick={() => void handleComputeClassRisk(record.classId)} disabled={isSubmitting}
+                            className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                            title="Unlock the midterm watchlist for this class"><Calculator className="w-3 h-3" />Unlock watchlist</button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1064,17 +1098,17 @@ export const RetentionMonitoring: React.FC = () => {
             <div className="py-8 text-center text-xs text-slate-400 space-y-1">
               {showAtRiskOnly ? (
                 <>
-                  <p className="font-semibold text-slate-600 dark:text-slate-300">No students are currently flagged at risk for midterm (no computed grades worse than 2.5).</p>
+                  <p className="font-semibold text-slate-600 dark:text-slate-300">No visible students are currently flagged High or At Risk for midterm.</p>
                   <button
                     type="button"
                     onClick={() => setShowAtRiskOnly(false)}
                     className="text-emerald-600 hover:underline font-bold"
                   >
-                    Show all computed students
+                    Show all eligible students
                   </button>
                 </>
               ) : (
-                <p>{isLoading ? 'Loading records...' : 'No students have computed midterm grades matching these filters.'}</p>
+                <p>{isLoading ? 'Loading records...' : 'No students without final course grades match these filters.'}</p>
               )}
             </div>
           )}
@@ -1124,10 +1158,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? row.record.gwa.toFixed(2) : <span className="text-[10px] font-medium text-slate-400">Grade unavailable</span>}</td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      {(() => {
-                        const activeAttemptNumber = row.progression.attempts.length === 2
-                          ? 2
-                          : (row.progression.attempts[0]?.attemptNumber ?? 1);
+                      <div className="space-y-1.5">{([1, 2] as AllowedAttempt[]).map(activeAttemptNumber => {
                         const attempt = row.progression.attempts.find(item => item.attemptNumber === activeAttemptNumber);
                         const status = attemptStatus(row.progression, activeAttemptNumber);
                         const statusClass = status === 'passed'
@@ -1141,7 +1172,7 @@ export const RetentionMonitoring: React.FC = () => {
                                 : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300';
 
                         return (
-                          <div className="flex items-center gap-2">
+                          <div key={activeAttemptNumber} className="flex flex-wrap items-center gap-2">
                             <span className="font-bold text-slate-800 dark:text-slate-200">
                               Attempt {activeAttemptNumber}
                             </span>
@@ -1153,9 +1184,10 @@ export const RetentionMonitoring: React.FC = () => {
                                 {attempt.scheduledDate}
                               </span>
                             )}
+                            {attempt?.notes && <span className="basis-full text-[10px] italic text-slate-500 dark:text-slate-400">{attempt.notes}</span>}
                           </div>
                         );
-                      })()}
+                      })}</div>
                     </td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -1257,6 +1289,7 @@ export const RetentionMonitoring: React.FC = () => {
       {selectedResolveRecord && (
         <Modal isOpen={Boolean(selectedResolveRecord)} onClose={resetResolveForm} title="Grade Remedial Exam Result">
           <form onSubmit={handleResolveRemedial} className="space-y-4 text-xs">
+            {outcomeContradictsScore && <p role="alert" className="text-rose-600 dark:text-rose-400">The selected outcome contradicts the entered score. The pass mark is 50%.</p>}
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">

@@ -38,6 +38,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card'
 import { GradebookMatrix } from '../../components/GradebookMatrix';
 import { Modal } from '../../components/Modal';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
+import { percentageToGWAExact } from '../../utils/gradeHelper';
 import { recordAudit } from '../../services/auditService';
 
 import {
@@ -1030,12 +1031,30 @@ export const GradeComputation: React.FC = () => {
   // Auto-save status states
   const [singleSaveStatus, setSingleSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const singleDirtyRef = useRef(false);
-  const singleDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const singleSavingRef = useRef(false);
+  const singleQueuedRef = useRef(false);
+  const singleSavedRef = useRef<Record<string, { score: string; remarks: string }>>({});
+  const singleSaveRef = useRef<(manual?: boolean) => Promise<void>>(async () => {});
   const singleScoresRef = useRef<Record<string, { score: string; remarks: string }>>({});
 
   const [matrixSaveStatus, setMatrixSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const matrixDirtyRef = useRef(false);
-  const matrixDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matrixSavingRef = useRef(false);
+  const matrixQueuedRef = useRef(false);
+  const matrixSavedRef = useRef<Record<string, Record<string, string>>>({});
+  const matrixSaveRef = useRef<(manual?: boolean) => Promise<void>>(async () => {});
+  const autoSaveRef = useRef(autoSaveEnabled);
+  autoSaveRef.current = autoSaveEnabled;
+
+  useEffect(() => {
+    const warnUnsaved = (event: BeforeUnloadEvent) => {
+      if (!singleDirtyRef.current && !matrixDirtyRef.current && !singleSavingRef.current && !matrixSavingRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnUnsaved);
+    return () => window.removeEventListener('beforeunload', warnUnsaved);
+  }, []);
   const matrixScoresRef = useRef<Record<string, Record<string, string>>>({});
 
   const availableActivityTypes = useMemo(() => {
@@ -1077,6 +1096,7 @@ export const GradeComputation: React.FC = () => {
 
   // Set default assessment when subject/class or filter changes
   useEffect(() => {
+    if (singleDirtyRef.current || singleSavingRef.current) return;
     if (singleActivityFilteredAssessments.length > 0) {
       if (!singleActivityFilteredAssessments.some(a => a.id === selectedAssessmentId)) {
         setSelectedAssessmentId(singleActivityFilteredAssessments[0].id);
@@ -1090,7 +1110,7 @@ export const GradeComputation: React.FC = () => {
 
   // Load existing student scores
   useEffect(() => {
-    if (!selectedAssessmentId) return;
+    if (!selectedAssessmentId || singleDirtyRef.current || singleSavingRef.current) return;
     const initialInputs: Record<string, { score: string; remarks: string }> = {};
     activeStudents.forEach(student => {
       const match = assessmentScores.find(
@@ -1103,6 +1123,7 @@ export const GradeComputation: React.FC = () => {
     });
     setScoresInputState(initialInputs);
     singleScoresRef.current = initialInputs;
+    singleSavedRef.current = initialInputs;
     singleDirtyRef.current = false;
     setSingleSaveStatus('saved');
     setIsScoresSavedAlert(false);
@@ -1129,104 +1150,88 @@ export const GradeComputation: React.FC = () => {
   const hasStoredScore = (assessmentId: string, studentId: string): boolean =>
     assessmentScores.some(score => score.assessmentId === assessmentId && score.studentId === studentId);
 
-  // Single Assessment Saving Logic (Auto & Manual)
+  // Save on leaving a cell. Refs preserve edits made while a request is in flight.
   const performSaveSingleScores = async (isManual = false) => {
-    if (!selectedAssessmentId || !activeAssessment) return;
-    if (singleSaveStatus === 'saving') return;
-
-    let hasErrors = false;
-    const saveList: FacultyScoreEntry[] = [];
-    const currentScores = singleScoresRef.current;
-
-    Object.entries(currentScores).forEach(([studentId, val]) => {
-      if (val.score === '') {
-        if (hasStoredScore(selectedAssessmentId, studentId)) {
-          saveList.push({ studentId, score: null, remarks: val.remarks });
-        }
-        return;
-      }
-
-      const num = parseFloat(val.score);
-      if (isNaN(num) || num < 0 || num > activeAssessment.maxScore) {
-        hasErrors = true;
-      } else {
-        saveList.push({
-          studentId,
-          score: num,
-          remarks: val.remarks
-        });
-      }
-    });
-
-    if (hasErrors) {
-      if (isManual) {
-        showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
-      }
+    if (!selectedAssessmentId || !activeAssessment || (!isManual && !autoSaveRef.current)) return;
+    if (singleSavingRef.current) {
+      singleQueuedRef.current = true;
       return;
     }
-
-    if (saveList.length === 0) {
-      singleDirtyRef.current = false;
-      return;
-    }
-
+    singleSavingRef.current = true;
     setSingleSaveStatus('saving');
     try {
-      await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
-      saveAssessmentScores(selectedAssessmentId, saveList);
-      await refreshPersistedGrades(activeAssessment.classId);
-      singleDirtyRef.current = false;
-      setSingleSaveStatus('saved');
-      setIsScoresSavedAlert(true);
-      if (isManual) {
-        showFeedback(`Saved ${saveList.filter(e => e.score !== null).length} scores successfully!`, 'success');
+      const currentScores = singleScoresRef.current;
+      const saveList: FacultyScoreEntry[] = [];
+      for (const [studentId, val] of Object.entries(currentScores)) {
+        if (!validateSingleScore(val.score, activeAssessment.maxScore)) {
+          throw new Error('Some scores are invalid. Scores cannot exceed the assessment maximum.');
+        }
+        if (val.score !== '' || hasStoredScore(selectedAssessmentId, studentId)) {
+          saveList.push({ studentId, score: val.score === '' ? null : Number(val.score), remarks: val.remarks });
+        }
       }
-      setTimeout(() => setIsScoresSavedAlert(false), 2500);
+      const cleared = saveList.filter(entry => entry.score === null);
+      if (isManual || cleared.length > 0) {
+        const confirmed = await requestConfirmation(
+          `Save ${saveList.length - cleared.length} score(s)${cleared.length > 0 ? ` and clear ${cleared.length}` : ''} for ${activeAssessment.title}?`,
+          'Save scores'
+        );
+        if (!confirmed) {
+          const restored = { ...singleScoresRef.current };
+          cleared.forEach(entry => {
+            const stored = assessmentScores.find(score => score.assessmentId === selectedAssessmentId && score.studentId === entry.studentId);
+            if (stored && restored[entry.studentId]?.score === '') {
+              restored[entry.studentId] = { ...restored[entry.studentId], score: String(stored.score) };
+            }
+          });
+          singleScoresRef.current = restored;
+          setScoresInputState(restored);
+          singleDirtyRef.current = JSON.stringify(restored) !== JSON.stringify(singleSavedRef.current);
+          setSingleSaveStatus(singleDirtyRef.current ? 'idle' : 'saved');
+          return;
+        }
+      }
+      if (saveList.length > 0) {
+        await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
+        saveAssessmentScores(selectedAssessmentId, saveList);
+        await refreshPersistedGrades(activeAssessment.classId);
+      }
+      singleSavedRef.current = currentScores;
+      singleDirtyRef.current = JSON.stringify(singleScoresRef.current) !== JSON.stringify(currentScores);
+      setSingleSaveStatus(singleDirtyRef.current ? 'idle' : 'saved');
+      setIsScoresSavedAlert(!singleDirtyRef.current);
+      if (isManual) showFeedback(`Saved ${saveList.filter(entry => entry.score !== null).length} scores successfully!`, 'success');
     } catch (requestError) {
       setSingleSaveStatus('error');
-      if (isManual) {
-        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
+    } finally {
+      singleSavingRef.current = false;
+      if (singleQueuedRef.current) {
+        singleQueuedRef.current = false;
+        if (singleDirtyRef.current && autoSaveRef.current) void singleSaveRef.current();
       }
     }
   };
+  singleSaveRef.current = performSaveSingleScores;
 
   const handleScoreChange = (studentId: string, val: string, field: 'score' | 'remarks') => {
-    singleDirtyRef.current = true;
-    setScoresInputState(prev => {
-      const next = {
-        ...prev,
-        [studentId]: {
-          ...prev[studentId],
-          [field]: val
-        }
-      };
-      singleScoresRef.current = next;
-      return next;
-    });
+    const next = {
+      ...singleScoresRef.current,
+      [studentId]: { ...singleScoresRef.current[studentId], [field]: val },
+    };
+    singleScoresRef.current = next;
+    singleDirtyRef.current = JSON.stringify(next) !== JSON.stringify(singleSavedRef.current);
+    setScoresInputState(next);
+    if (!singleSavingRef.current) setSingleSaveStatus(singleDirtyRef.current ? 'idle' : 'saved');
     setIsScoresSavedAlert(false);
-
-    if (singleDebounceTimerRef.current) {
-      clearTimeout(singleDebounceTimerRef.current);
-    }
-    singleDebounceTimerRef.current = setTimeout(() => {
-      performSaveSingleScores(false);
-    }, 1000);
   };
 
   const handleScoreBlur = async (_studentId: string) => {
-    if (singleDirtyRef.current) {
-      if (singleDebounceTimerRef.current) {
-        clearTimeout(singleDebounceTimerRef.current);
-      }
-      performSaveSingleScores(false);
-    }
+    if (autoSaveRef.current && (singleDirtyRef.current || singleSavingRef.current)) await singleSaveRef.current();
   };
 
   const handleManualSaveScores = async () => {
-    if (singleDebounceTimerRef.current) {
-      clearTimeout(singleDebounceTimerRef.current);
-    }
-    performSaveSingleScores(true);
+    await singleSaveRef.current(true);
   };
 
   // View Mode: 'single' (Activity view) vs 'matrix' (Full gradebook grid view)
@@ -1237,7 +1242,7 @@ export const GradeComputation: React.FC = () => {
 
   // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
   useEffect(() => {
-    if (matrixDirtyRef.current) return;
+    if (matrixDirtyRef.current || matrixSavingRef.current) return;
     const matrix: Record<string, Record<string, string>> = {};
     activeStudents.forEach(student => {
       matrix[student.id] = {};
@@ -1248,119 +1253,102 @@ export const GradeComputation: React.FC = () => {
     });
     setMatrixScoresState(matrix);
     matrixScoresRef.current = matrix;
+    matrixSavedRef.current = matrix;
     matrixDirtyRef.current = false;
     setMatrixSaveStatus('saved');
   }, [activeStudents, activeAssessments, assessmentScores]);
 
-  // Matrix Assessment Saving Logic (Auto & Manual)
   const performSaveMatrixScores = async (isManual = false) => {
-    if (matrixSaveStatus === 'saving') return;
-
-    let hasErrors = false;
-    let saveCount = 0;
-    let clearedCount = 0;
-    const batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }> = [];
-    const currentScores = matrixScoresRef.current;
-
-    for (const ass of activeAssessments) {
-      const scores: FacultyScoreEntry[] = [];
-      activeStudents.forEach(student => {
-        const valStr = currentScores[student.id]?.[ass.id] ?? '';
-        const existingMatch = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
-        if (valStr === '') {
-          if (existingMatch) {
-            scores.push({ studentId: student.id, score: null, remarks: existingMatch.remarks || '' });
-            clearedCount++;
-          }
-          return;
-        }
-        const num = parseFloat(valStr);
-        if (isNaN(num) || num < 0 || num > ass.maxScore) {
-          hasErrors = true;
-        } else {
-          scores.push({ studentId: student.id, score: num, remarks: existingMatch?.remarks || '' });
-          saveCount++;
-        }
-      });
-      if (scores.length > 0) batches.push({ assessmentId: ass.id, scores });
-    }
-
-    if (hasErrors) {
-      if (isManual) {
-        showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
-      }
+    if (!isManual && !autoSaveRef.current) return;
+    if (matrixSavingRef.current) {
+      matrixQueuedRef.current = true;
       return;
     }
-    if (batches.length === 0) {
-      if (isManual) {
-        showFeedback('There are no scores to save.', 'info');
-      }
-      matrixDirtyRef.current = false;
-      return;
-    }
-
+    matrixSavingRef.current = true;
     setMatrixSaveStatus('saving');
     try {
-      await saveFacultyScoreBatchesApi(batches);
-      batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
-
-      const targetClassId = selectedClassId || availableClasses[0]?.id;
-      if (targetClassId) {
-        await refreshPersistedGrades(targetClassId);
+      const currentScores = matrixScoresRef.current;
+      let saveCount = 0;
+      const cleared: Array<{ studentId: string; assessmentId: string; score: string }> = [];
+      const batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }> = [];
+      for (const ass of activeAssessments) {
+        const scores: FacultyScoreEntry[] = [];
+        for (const student of activeStudents) {
+          const value = currentScores[student.id]?.[ass.id] ?? '';
+          const stored = assessmentScores.find(score => score.assessmentId === ass.id && score.studentId === student.id);
+          if (!validateSingleScore(value, ass.maxScore)) throw new Error('Some scores in the matrix are invalid (exceed max score or negative).');
+          if (value === '' && stored) {
+            scores.push({ studentId: student.id, score: null, remarks: stored.remarks || '' });
+            cleared.push({ studentId: student.id, assessmentId: ass.id, score: String(stored.score) });
+          } else if (value !== '') {
+            scores.push({ studentId: student.id, score: Number(value), remarks: stored?.remarks || '' });
+            saveCount++;
+          }
+        }
+        if (scores.length > 0) batches.push({ assessmentId: ass.id, scores });
       }
-      setMatrixRefreshKey(key => key + 1);
-      matrixDirtyRef.current = false;
-      setMatrixSaveStatus('saved');
-      setIsMatrixSavedAlert(true);
-      if (isManual) {
-        showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
+      if (isManual || cleared.length > 0) {
+        const confirmed = await requestConfirmation(
+          `Save ${saveCount} score(s)${cleared.length > 0 ? ` and clear ${cleared.length}` : ''} across ${batches.length} assessment(s)? All changes are saved together or not at all.`,
+          'Save scores'
+        );
+        if (!confirmed) {
+          const restored = { ...matrixScoresRef.current };
+          cleared.forEach(cell => {
+            if (restored[cell.studentId]?.[cell.assessmentId] === '') {
+              restored[cell.studentId] = { ...restored[cell.studentId], [cell.assessmentId]: cell.score };
+            }
+          });
+          matrixScoresRef.current = restored;
+          setMatrixScoresState(restored);
+          matrixDirtyRef.current = JSON.stringify(restored) !== JSON.stringify(matrixSavedRef.current);
+          setMatrixSaveStatus(matrixDirtyRef.current ? 'idle' : 'saved');
+          return;
+        }
       }
-      setTimeout(() => setIsMatrixSavedAlert(false), 2500);
+      if (batches.length > 0) {
+        await saveFacultyScoreBatchesApi(batches);
+        batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
+        const targetClassId = selectedClassId || availableClasses[0]?.id;
+        if (targetClassId) await refreshPersistedGrades(targetClassId);
+        setMatrixRefreshKey(key => key + 1);
+      }
+      matrixSavedRef.current = currentScores;
+      matrixDirtyRef.current = JSON.stringify(matrixScoresRef.current) !== JSON.stringify(currentScores);
+      setMatrixSaveStatus(matrixDirtyRef.current ? 'idle' : 'saved');
+      setIsMatrixSavedAlert(!matrixDirtyRef.current);
+      if (isManual) showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
     } catch (requestError) {
       setMatrixSaveStatus('error');
-      if (isManual) {
-        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix.', 'error');
+      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix. Nothing was saved.', 'error');
+    } finally {
+      matrixSavingRef.current = false;
+      if (matrixQueuedRef.current) {
+        matrixQueuedRef.current = false;
+        if (matrixDirtyRef.current && autoSaveRef.current) void matrixSaveRef.current();
       }
     }
   };
+  matrixSaveRef.current = performSaveMatrixScores;
 
   const handleMatrixScoreChange = (studentId: string, assessmentId: string, value: string) => {
-    matrixDirtyRef.current = true;
-    setMatrixScoresState(prev => {
-      const next = {
-        ...prev,
-        [studentId]: {
-          ...(prev[studentId] || {}),
-          [assessmentId]: value,
-        }
-      };
-      matrixScoresRef.current = next;
-      return next;
-    });
+    const next = {
+      ...matrixScoresRef.current,
+      [studentId]: { ...(matrixScoresRef.current[studentId] || {}), [assessmentId]: value },
+    };
+    matrixScoresRef.current = next;
+    matrixDirtyRef.current = JSON.stringify(next) !== JSON.stringify(matrixSavedRef.current);
+    setMatrixScoresState(next);
+    if (!matrixSavingRef.current) setMatrixSaveStatus(matrixDirtyRef.current ? 'idle' : 'saved');
     setIsMatrixSavedAlert(false);
-
-    if (matrixDebounceTimerRef.current) {
-      clearTimeout(matrixDebounceTimerRef.current);
-    }
-    matrixDebounceTimerRef.current = setTimeout(() => {
-      performSaveMatrixScores(false);
-    }, 1000);
   };
 
-  const handleMatrixScoreBlur = () => {
-    if (matrixDirtyRef.current) {
-      if (matrixDebounceTimerRef.current) {
-        clearTimeout(matrixDebounceTimerRef.current);
-      }
-      performSaveMatrixScores(false);
-    }
+  const handleMatrixScoreBlur = async () => {
+    if (autoSaveRef.current && (matrixDirtyRef.current || matrixSavingRef.current)) await matrixSaveRef.current();
   };
 
   const handleSaveMatrixScores = async () => {
-    if (matrixDebounceTimerRef.current) {
-      clearTimeout(matrixDebounceTimerRef.current);
-    }
-    performSaveMatrixScores(true);
+    await matrixSaveRef.current(true);
   };
 
   // Helper stats for Single Assessment Mode
@@ -1385,26 +1373,8 @@ export const GradeComputation: React.FC = () => {
     return { graded, total, avg, max, min };
   }, [activeAssessment, activeStudents, scoresInputState]);
 
-  // Quick fill helper
-  const handleQuickFillEmpty = (fillValue: number) => {
-    if (!activeAssessment) return;
-    setScoresInputState(prev => {
-      const updated = { ...prev };
-      activeStudents.forEach(student => {
-        if (!updated[student.id]?.score || updated[student.id].score === '') {
-          updated[student.id] = {
-            ...updated[student.id],
-            score: Math.min(fillValue, activeAssessment.maxScore).toString(),
-          };
-        }
-      });
-      return updated;
-    });
-    setIsScoresSavedAlert(false);
-  };
-
   const handleResetScoresInput = () => {
-    if (!selectedAssessmentId) return;
+    if (!selectedAssessmentId || singleSavingRef.current) return;
     const initialInputs: Record<string, { score: string; remarks: string }> = {};
     activeStudents.forEach(student => {
       const match = assessmentScores.find(
@@ -1415,6 +1385,10 @@ export const GradeComputation: React.FC = () => {
         remarks: match?.remarks || ''
       };
     });
+    singleScoresRef.current = initialInputs;
+    singleSavedRef.current = initialInputs;
+    singleDirtyRef.current = false;
+    setSingleSaveStatus('saved');
     setScoresInputState(initialInputs);
     setIsScoresSavedAlert(false);
   };
@@ -2875,6 +2849,8 @@ export const GradeComputation: React.FC = () => {
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
             value={selectedSubjectCode}
+            disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
+            title="Save or reset unsaved scores before changing the score context."
             onChange={async (e) => {
               const newCode = e.target.value;
               const matchOffering = facultyOfferings.find(o => o.courseCode === newCode);
@@ -2913,6 +2889,8 @@ export const GradeComputation: React.FC = () => {
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
           <select
             value={selectedClassId}
+            disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
+            title="Save or reset unsaved scores before changing the score context."
             onChange={(e) => {
               const newClassId = e.target.value;
               setSelectedClassId(newClassId);
@@ -2990,6 +2968,7 @@ export const GradeComputation: React.FC = () => {
           <div className="flex justify-end items-center bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button
+                disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
                 onClick={() => setScoreEntryMode('single')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'single'
                   ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
@@ -3000,6 +2979,7 @@ export const GradeComputation: React.FC = () => {
                 Single Activity View
               </button>
               <button
+                disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
                 onClick={() => setScoreEntryMode('matrix')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'matrix'
                   ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
@@ -3026,19 +3006,15 @@ export const GradeComputation: React.FC = () => {
 
                 <div className="flex items-center gap-2.5">
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-                    {matrixSaveStatus === 'saving' ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
-                        <span className="text-clinical-600 dark:text-clinical-400">Auto-saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="text-emerald-700 dark:text-emerald-400">Auto-save on</span>
-                      </>
-                    )}
+                    <span role="status">{matrixSaveStatus === 'saving' ? 'Saving…' : matrixSaveStatus === 'saved' ? 'Saved' : matrixSaveStatus === 'error' ? 'Failed – Retry' : 'Unsaved changes'}</span>
+                    {matrixSaveStatus === 'error' && <button type="button" onClick={() => void matrixSaveRef.current(true)} className="text-rose-600 underline">Retry</button>}
                   </div>
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <input type="checkbox" checked={autoSaveEnabled} onChange={event => setAutoSaveEnabled(event.target.checked)} />
+                    Auto-save
+                  </label>
                   <button
+                    data-manual-score-save
                     onClick={handleSaveMatrixScores}
                     disabled={matrixSaveStatus === 'saving'}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
@@ -3189,6 +3165,8 @@ export const GradeComputation: React.FC = () => {
                         ) : (
                           <select
                             value={selectedAssessmentId}
+                            disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
+                            title="Save or reset unsaved scores before changing the score context."
                             onChange={(e) => setSelectedAssessmentId(e.target.value)}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
@@ -3323,6 +3301,7 @@ export const GradeComputation: React.FC = () => {
                                     if (e.key === 'Enter' || e.key === 'ArrowDown') {
                                       e.preventDefault();
                                       const next = document.getElementById(`score-input-${idx + 1}`) as HTMLInputElement | null;
+                                      if (!next) void handleScoreBlur(student.id);
                                       if (next) {
                                         next.focus();
                                         next.select();
@@ -3330,6 +3309,7 @@ export const GradeComputation: React.FC = () => {
                                     } else if (e.key === 'ArrowUp') {
                                       e.preventDefault();
                                       const prev = document.getElementById(`score-input-${idx - 1}`) as HTMLInputElement | null;
+                                      if (!prev) void handleScoreBlur(student.id);
                                       if (prev) {
                                         prev.focus();
                                         prev.select();
@@ -3337,7 +3317,7 @@ export const GradeComputation: React.FC = () => {
                                     }
                                   }}
                                   onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
-                                  onBlur={() => handleScoreBlur(student.id)}
+                                  onBlur={event => { if (!(event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest('[data-manual-score-save]'))) void handleScoreBlur(student.id); }}
                                   className={`w-28 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${!isValid
                                     ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
                                     : row.score === ''
@@ -3359,19 +3339,11 @@ export const GradeComputation: React.FC = () => {
                   {selectedAssessmentId && filteredScoreStudents.length > 0 && (
                     <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-2.5">
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-                        {singleSaveStatus === 'saving' ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
-                            <span className="text-clinical-600 dark:text-clinical-400">Auto-saving...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            <span className="text-emerald-700 dark:text-emerald-400">Auto-save on</span>
-                          </>
-                        )}
+                        <span role="status">{singleSaveStatus === 'saving' ? 'Saving…' : singleSaveStatus === 'saved' ? 'Saved' : singleSaveStatus === 'error' ? 'Failed – Retry' : 'Unsaved changes'}</span>
+                        {singleSaveStatus === 'error' && <button type="button" onClick={() => void singleSaveRef.current(true)} className="text-rose-600 underline">Retry</button>}
                       </div>
                       <button
+                        data-manual-score-save
                         onClick={handleManualSaveScores}
                         disabled={singleSaveStatus === 'saving'}
                         className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
@@ -4095,6 +4067,7 @@ export const GradeComputation: React.FC = () => {
                       {/* Midterm Tab */}
                       <div
                         role="button"
+                        aria-label="Midterm Categories"
                         tabIndex={0}
                         onClick={() => setActivePeriodEditorTab('Midterm')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Midterm'); }}
@@ -4141,6 +4114,7 @@ export const GradeComputation: React.FC = () => {
                       {/* Finals Tab */}
                       <div
                         role="button"
+                        aria-label="Finals Categories"
                         tabIndex={0}
                         onClick={() => setActivePeriodEditorTab('Final')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Final'); }}
@@ -4224,7 +4198,7 @@ export const GradeComputation: React.FC = () => {
                                 <span>Lecture</span>
                                 <span className="text-[10px] font-semibold text-slate-400">Categories</span>
                               </div>
-                              <p className="text-[10px] text-slate-400 dark:text-slate-500">Component Contribution</p>
+                              <label htmlFor="lecture-component-weight" className="text-[10px] text-slate-400 dark:text-slate-500">Lecture contribution (%)</label>
                             </div>
                           </div>
 
@@ -4266,7 +4240,7 @@ export const GradeComputation: React.FC = () => {
                                 <span>Laboratory</span>
                                 <span className="text-[10px] font-semibold text-slate-400">Categories</span>
                               </div>
-                              <p className="text-[10px] text-slate-400 dark:text-slate-500">Component Contribution</p>
+                              <label htmlFor="laboratory-component-weight" className="text-[10px] text-slate-400 dark:text-slate-500">Laboratory contribution (%)</label>
                             </div>
                           </div>
 
@@ -4342,11 +4316,13 @@ export const GradeComputation: React.FC = () => {
                             : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                         }`}>
                           {activeComponentCategoryCalc.displayPercent} / 100%
+                          <span className="ml-1">{activeComponentCategoryCalc.isExact100 ? 'Valid 100%' : 'Must equal 100%'}</span>
                         </span>
 
                         {/* Simple "+ Add Category" button */}
                         <button
                           type="button"
+                          aria-label={activePeriodEditorTab === 'Midterm' ? 'Add Midterm Category' : 'Add Finals Category'}
                           onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
                           disabled={isLegacyCombinedPeriodConfig}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
@@ -4364,6 +4340,7 @@ export const GradeComputation: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
+                          disabled={isLegacyCombinedPeriodConfig}
                           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-clinical-600 hover:text-clinical-700 cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -4422,6 +4399,38 @@ export const GradeComputation: React.FC = () => {
                             </div>
 
 
+                            {componentMode === 'lecture_laboratory' && (
+                              <>
+                                <div className="w-full sm:w-32 shrink-0">
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Component</label>
+                                  <select
+                                    aria-label={`Component for ${row.name || 'unnamed category'}`}
+                                    value={row.component ?? ''}
+                                    onChange={event => handleUpdatePeriodCategoryComponent(activePeriodEditorTab, row.compositeKey, event.target.value as GradingComponentEnum | '')}
+                                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-semibold"
+                                  >
+                                    <option value="">Unassigned</option>
+                                    <option value="Lecture">Lecture</option>
+                                    <option value="Laboratory">Laboratory</option>
+                                  </select>
+                                </div>
+                                <div className="w-full sm:w-32 shrink-0">
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Source</label>
+                                  <select
+                                    aria-label={`Source for ${row.name || 'unnamed category'}`}
+                                    value={row.sourceKind}
+                                    disabled={row.inUse}
+                                    onChange={event => handleUpdatePeriodCategorySourceKind(activePeriodEditorTab, row.compositeKey, event.target.value as GradingSourceKindEnum)}
+                                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-semibold disabled:opacity-50"
+                                  >
+                                    <option value="assessment">Assessment</option>
+                                    <option value="attendance">Attendance</option>
+                                  </select>
+                                  {row.inUse && <p className="mt-1 text-[9px] leading-tight text-slate-400">In-use category source is fixed to protect linked records.</p>}
+                                </div>
+                              </>
+                            )}
+
                             {/* Weight (%) */}
                             <div className="w-full sm:w-28 shrink-0">
                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
@@ -4438,6 +4447,19 @@ export const GradeComputation: React.FC = () => {
                                 />
                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
                               </div>
+                            </div>
+
+                            <div className="w-full sm:w-24 shrink-0">
+                              <label htmlFor={`default-max-${row.compositeKey}`} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Default Max</label>
+                              <input
+                                id={`default-max-${row.compositeKey}`}
+                                type="text"
+                                value={row.defaultMax ?? ''}
+                                placeholder="50"
+                                disabled={isLegacyCombinedPeriodConfig}
+                                onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'defaultMax', e.target.value)}
+                                className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              />
                             </div>
 
                             {/* Delete Action */}
@@ -4460,7 +4482,7 @@ export const GradeComputation: React.FC = () => {
                   </div>
 
                   {/* Attendance Calendar Date Ranges (Collapsible) */}
-                  <details className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
+                  <details open className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
                     <summary className="p-3.5 sm:p-4 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between select-none hover:bg-slate-100/50 dark:hover:bg-slate-800/40 transition-colors">
                       <div className="flex items-center gap-2">
                         <Settings className="w-3.5 h-3.5 text-slate-400" />
@@ -4933,7 +4955,10 @@ export const GradeComputation: React.FC = () => {
 
                     if (isPeriodMode) {
                       const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                      const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold;
+                      const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                        ? evalResult.retentionState === 'remedial'
+                        : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                          && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
                       const isFailed = evalResult.overallGwa === 5.0;
                       const isPending = evalResult.statusText === 'PENDING';
                       const isIncomplete = evalResult.overallGwa === null;
@@ -5012,7 +5037,11 @@ export const GradeComputation: React.FC = () => {
                     }
 
                     // Legacy overall view
-                    const isFailsRetention = subj && subj.isClinical && typeof subj.grade === 'number' && subj.grade >= settings.retentionThreshold;
+                    const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
+                    const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                        ? evalResult.retentionState === 'remedial'
+                        : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                          && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
                     const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
                     const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
 
@@ -5352,7 +5381,10 @@ export const GradeComputation: React.FC = () => {
 
               if (isPeriodMode) {
                 const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold;
+                const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                  ? evalResult.retentionState === 'remedial'
+                  : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                    && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
                 const isFailed = evalResult.overallGwa === 5.0;
                 const isPending = evalResult.statusText === 'PENDING';
                 const isIncomplete = evalResult.overallGwa === null;
@@ -5411,7 +5443,11 @@ export const GradeComputation: React.FC = () => {
               }
 
               // Legacy print row
-              const isFailsRetention = subj && subj.isClinical && typeof subj.grade === 'number' && subj.grade >= settings.retentionThreshold;
+              const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
+              const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                  ? evalResult.retentionState === 'remedial'
+                  : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                    && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
               const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
               const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
               const remarksStr = !hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS';
@@ -5488,6 +5524,7 @@ export const GradeComputation: React.FC = () => {
                 Grading Period
               </label>
               <select
+                aria-label="Grading Period"
                 value={assPeriod}
                 onChange={(e) => handlePeriodChange(e.target.value as any)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
@@ -5536,6 +5573,7 @@ export const GradeComputation: React.FC = () => {
                     </div>
                   )}
                   <select
+                    aria-label="Category Type"
                     value={assGradingCategoryId || assType}
                     onChange={(e) => {
                       const selectedVal = e.target.value;
@@ -5581,7 +5619,7 @@ export const GradeComputation: React.FC = () => {
                             <optgroup label="Lecture Categories">
                               {lectureCategories.map(cat => (
                                 <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                                  {cat.name} ({cat.weight}%)
+                                  {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
                                 </option>
                               ))}
                             </optgroup>
@@ -5590,7 +5628,7 @@ export const GradeComputation: React.FC = () => {
                             <optgroup label="Laboratory Categories">
                               {labCategories.map(cat => (
                                 <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                                  {cat.name} ({cat.weight}%)
+                                  {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
                                 </option>
                               ))}
                             </optgroup>
@@ -5599,7 +5637,7 @@ export const GradeComputation: React.FC = () => {
                             <optgroup label="Other Categories">
                               {otherCategories.map(cat => (
                                 <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                                  {cat.name} ({cat.weight}%)
+                                  {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
                                 </option>
                               ))}
                             </optgroup>

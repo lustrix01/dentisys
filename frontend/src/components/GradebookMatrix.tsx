@@ -295,6 +295,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       if (e.key === 'Enter' || e.key === 'ArrowDown') {
         e.preventDefault();
         const nextInput = document.getElementById(`matrix-score-${studentIndex + 1}-${assessment.id}`) as HTMLInputElement | null;
+        if (!nextInput) onScoreBlur?.(student.id, assessment.id);
         if (nextInput) {
           nextInput.focus();
           nextInput.select();
@@ -302,6 +303,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         const prevInput = document.getElementById(`matrix-score-${studentIndex - 1}-${assessment.id}`) as HTMLInputElement | null;
+        if (!prevInput) onScoreBlur?.(student.id, assessment.id);
         if (prevInput) {
           prevInput.focus();
           prevInput.select();
@@ -320,7 +322,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           aria-label={`${assessment.title} score for ${student.name}`}
           value={value}
           onChange={event => onScoreChange(student.id, assessment.id, event.target.value)}
-          onBlur={() => onScoreBlur?.(student.id, assessment.id)}
+          onBlur={event => { if (!(event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest('[data-manual-score-save]'))) onScoreBlur?.(student.id, assessment.id); }}
           onKeyDown={handleKeyDown}
           className={`w-16 px-1.5 py-1 rounded-lg border text-xs text-center font-bold focus:outline-none ${!valid
             ? 'border-rose-500 bg-rose-50/50'

@@ -62,6 +62,36 @@ assert_faculty_grading(
     'Missing or incomplete course grades remain unresolved'
 );
 
+foreach ([
+    [97.0, 1.00],
+    [94.0, 1.25],
+    [87.34, 1.81],
+    [81.0, 2.38],
+    [80.00, 2.50],
+    [80.01, 2.50],
+    [79.99, 2.50],
+    [74.99, 5.00],
+    [NAN, 5.00],
+] as [$percentage, $expectedGwa]) {
+    assert_faculty_grading(
+        faculty_percentage_to_gwa($percentage) === $expectedGwa,
+        "Percentage {$percentage} converts to displayed GWA {$expectedGwa}"
+    );
+}
+assert_faculty_grading(
+    abs(faculty_percentage_to_gwa_exact(80.01) - 2.49875) < 1e-9
+        && faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(80.01), 2.50) === 'active',
+    '80.01% displays as 2.50 but remains active using the exact interpolated grade'
+);
+assert_faculty_grading(
+    faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(80.00), 2.50) === 'remedial',
+    'Exactly 80.00% reaches the 2.50 remediation trigger'
+);
+assert_faculty_grading(
+    faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(79.99), 2.50) === 'remedial',
+    '79.99% reaches the remediation trigger using the exact interpolated grade'
+);
+
 $periodDefaults = faculty_grading_default_period_template();
 assert_faculty_grading($periodDefaults['schemaMode'] === 'periods', 'Unconfigured grading defaults use period mode');
 assert_faculty_grading(

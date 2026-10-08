@@ -885,7 +885,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(panel).toContainText('Excused request approved');
   });
 
-  test.skip('Student Notices sends an At-Risk notice and reports suppressed test-mode deliveries', async ({ page }) => {
+  test('Student Notices sends an At-Risk notice and reports suppressed test-mode deliveries', async ({ page }) => {
     let posted: Record<string, unknown> | null = null;
     await page.route('**/api/faculty/students', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
@@ -3015,10 +3015,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Assessments Manager' }).click();
       await page.getByRole('button', { name: 'Add Assessment' }).click();
       const modalForm = page.locator('form').last();
-      const categorySelect = modalForm.locator('select').first();
+      const categorySelect = modalForm.getByLabel('Category Type');
       await expect(categorySelect).toContainText('Lecture · Quiz (100%)');
       await categorySelect.selectOption('101');
-      await modalForm.locator('select').nth(1).selectOption('Final');
+      await modalForm.getByLabel('Grading Period').selectOption('Final');
       await expect(categorySelect).toHaveValue('103');
       await expect(categorySelect.locator('option:checked')).toContainText('Lecture · Quiz');
 

@@ -330,7 +330,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     const createForm = page.locator('form').last();
     await expect(createForm.getByText('Target Class / Section')).toBeVisible();
     await expect(createForm.getByText('CLINIC-4A', { exact: true })).toBeVisible();
-    await createForm.locator('select').first().selectOption({ label: 'Quiz (90%)' });
+    await createForm.getByLabel('Category Type').selectOption({ label: 'Quiz (90%)' });
     await page.getByRole('button', { name: /Attendance Linking & Transmutation/i }).click();
     const toggle = page.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i });
     await expect(toggle).toBeVisible();
@@ -371,8 +371,8 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page.getByPlaceholder('e.g. Molar Crown Prep quiz')).toHaveValue('Unlinked assessment survives refresh');
     await expect(assessmentForm.locator('input[type="number"]').first()).toHaveValue('50');
     await expect(assessmentForm.locator('input[type="date"]')).toHaveValue(String(postedAssessment?.dueDate));
-    await expect(assessmentForm.locator('select').nth(0)).toHaveValue(String(postedAssessment?.gradingCategoryId));
-    await expect(assessmentForm.locator('select').nth(1)).toHaveValue('Midterm');
+    await expect(assessmentForm.getByLabel('Category Type')).toHaveValue(String(postedAssessment?.gradingCategoryId));
+    await expect(assessmentForm.getByLabel('Grading Period')).toHaveValue('Midterm');
     await expect(assessmentForm.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i })).toBeChecked();
     await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('button', { name: 'Student Scores Entry' }).click();

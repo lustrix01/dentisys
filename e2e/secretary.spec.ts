@@ -1,7 +1,5 @@
 import { test, expect } from './fixtures';
 
-declare const Buffer: any;
-
 test.describe('Class Secretary Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/api/auth/login', async (route) => {
@@ -477,7 +475,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
   });
 
   test('start: submitting invokes backend start API, renders authoritative session, and does not write to localStorage', async ({ page }) => {
-    let startApiPayload: Record<string, unknown> | null = null;
+    let startApiPayload = null as Record<string, unknown> | null;
 
     await page.route('**/api/secretary/attendance/session/active*', async (route) => {
       await route.fulfill({
@@ -516,17 +514,17 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
     await expect(page.getByText('Code: CS8-20260921-XYZ999', { exact: true })).toBeVisible();
     expect(startApiPayload).not.toBeNull();
-    expect((startApiPayload as any)?.csId).toBe(8);
-    expect((startApiPayload as any)?.geofenceEnabled).toBe(false);
-    expect((startApiPayload as any)?.geofenceLatitude).toBeUndefined();
-    expect((startApiPayload as any)?.geofenceLongitude).toBeUndefined();
+    expect((startApiPayload as Record<string, unknown>)?.csId).toBe(8);
+    expect((startApiPayload as Record<string, unknown>)?.geofenceEnabled).toBe(false);
+    expect((startApiPayload as Record<string, unknown>)?.geofenceLatitude).toBeUndefined();
+    expect((startApiPayload as Record<string, unknown>)?.geofenceLongitude).toBeUndefined();
 
     const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
     expect(storedItem).toBeNull();
   });
 
   test('map picker (ATT-002): clicking the OpenStreetMap map sets the geofence location sent on start', async ({ page }) => {
-    let startApiPayload: Record<string, unknown> | null = null;
+    let startApiPayload = null as Record<string, unknown> | null;
     // Keep the suite offline: tiles are served as a blank image.
     await page.route('https://tile.openstreetmap.org/**', async (route) => {
       await route.fulfill({
@@ -594,7 +592,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
 
   test('end: end action invokes backend endpoint and returns UI to inactive state', async ({ page }) => {
     let endApiCalled = false;
-    let endPayload: Record<string, unknown> | null = null;
+    let endPayload = null as Record<string, unknown> | null;
 
     let currentSession: typeof mockActiveSession | null = { ...mockActiveSession };
 
@@ -635,7 +633,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.getByRole('button', { name: /Confirm End Session/i }).click();
 
     expect(endApiCalled).toBe(true);
-    expect((endPayload as any)?.sessionId).toBe('42');
+    expect((endPayload as Record<string, unknown>)?.sessionId).toBe('42');
 
     // Form should return to inactive state
     await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();

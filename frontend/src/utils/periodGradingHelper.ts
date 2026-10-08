@@ -188,6 +188,7 @@ export interface StudentPeriodEvaluation {
   finalComponents?: Record<'lecture' | 'laboratory', PeriodComponentEvaluation>;
   overallGwa: number | null;
   overallPercentage: number | null;
+  retentionState?: string | null;
   historicalGwa: number | null;
   isIncomplete: boolean;
   statusText: string;
@@ -273,6 +274,7 @@ export function extractPeriodEvaluation(
       finalComponents: extractPeriodComponents(finalBreakdown),
       overallGwa,
       overallPercentage,
+      retentionState: isComputed ? computeResult.retentionState ?? null : null,
       historicalGwa,
       isIncomplete,
       statusText: isComputed ? (overallGwa === 5.0 ? 'FAILED' : 'PASS') : 'INCOMPLETE',
@@ -321,6 +323,7 @@ export function extractPeriodEvaluation(
         finalComponents: extractPeriodComponents(fin),
         overallGwa,
         overallPercentage,
+        retentionState: isBothComputed && typeof comps.retentionState === 'string' ? comps.retentionState : null,
         historicalGwa,
         isIncomplete,
         statusText: isBothComputed && overallGwa !== null ? (overallGwa === 5.0 ? 'FAILED' : 'PASS') : 'INCOMPLETE',
@@ -357,6 +360,8 @@ export function extractPeriodEvaluation(
   }
 
   // Legacy single-list or uncomputed
+  const legacyComputed = computeResult?.status === 'computed' ? computeResult : null;
+  const legacyComponents = subj?.components as Record<string, unknown> | undefined;
   const legacyGrade = subj && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade : null;
   return {
     isPeriodMode: false,
@@ -369,7 +374,10 @@ export function extractPeriodEvaluation(
     finalReasons: [],
     finalComponents: undefined,
     overallGwa: legacyGrade,
-    overallPercentage: null,
+    overallPercentage: legacyComputed?.percentage
+      ?? (typeof legacyComponents?.percentage === 'number' ? legacyComponents.percentage : null),
+    retentionState: legacyComputed?.retentionState
+      ?? (legacyGrade !== null && typeof legacyComponents?.retentionState === 'string' ? legacyComponents.retentionState : null),
     historicalGwa: null,
     isIncomplete: legacyGrade === null,
     statusText: legacyGrade !== null ? (legacyGrade === 5.0 ? 'FAILED' : 'PASS') : 'UNCOMPUTED',

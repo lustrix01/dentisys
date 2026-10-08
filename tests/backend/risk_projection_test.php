@@ -24,10 +24,15 @@ $afterOne = faculty_risk_period_percentage($categories, 75.0, 1);
 $expected = 30 * ((50 + 16.875) / 72.5) + 70 * ((80 + 39.375) / 152.5);
 assert_risk(abs($afterOne - $expected) < 1e-9, 'An assumed 75% assessment is spread across categories by weight');
 $risk = faculty_risk_level(static fn(int $n): ?float => faculty_risk_period_percentage($categories, 75.0, $n));
-assert_risk(($risk['level'] ?? null) === 'High' && ($risk['assumedAssessments'] ?? null) === 2, 'The worked example reaches 2.50 after 2 assumed assessments: High');
+assert_risk(($risk['level'] ?? null) === 'At Risk' && ($risk['assumedAssessments'] ?? null) === 3, 'The worked example reaches 2.50 after 3 assumed assessments: At Risk');
+
+assert_risk(
+    faculty_risk_level(static fn(int $n): ?float => 80.01) === ['level' => 'Low', 'assumedAssessments' => null],
+    'Risk does not treat a displayed 2.50 at 80.01% as reaching the exact trigger'
+);
 
 $single = [['kind' => 'assessment', 'weight' => 100.0, 'earned' => 100.0, 'possible' => 100.0]];
-assert_risk(faculty_risk_level(static fn(int $n): ?float => faculty_risk_period_percentage($single, 100.0, $n)) === ['level' => 'At Risk', 'assumedAssessments' => 3], 'One perfect assessment reaches 2.50 after 3 assumed assessments: At Risk');
+assert_risk(faculty_risk_level(static fn(int $n): ?float => faculty_risk_period_percentage($single, 100.0, $n)) === ['level' => 'At Risk', 'assumedAssessments' => 4], 'One perfect assessment reaches 2.50 after 4 assumed assessments: At Risk');
 
 $failing = [['kind' => 'assessment', 'weight' => 100.0, 'earned' => 40.0, 'possible' => 50.0]];
 assert_risk(faculty_risk_level(static fn(int $n): ?float => faculty_risk_period_percentage($failing, 50.0, $n)) === ['level' => 'High', 'assumedAssessments' => 0], 'A grade already 2.50 or worse is High');
