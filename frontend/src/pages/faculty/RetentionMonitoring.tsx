@@ -8,8 +8,8 @@ import {
   saveFacultyRemedialApi,
   saveFacultyCostRecoveryApi,
   updateFacultyRetentionStatusApi,
-  unlockFacultyWatchlistApi,
 } from '../../services/apiClient';
+import { percentageToGWA } from '../../utils/gradeHelper';
 import type {
   FacultyRetentionRecord,
   FacultyRetentionState,
@@ -80,6 +80,18 @@ const isPersistedText = (value: string | null | undefined): value is string => (
 const isFiniteNumber = (value: number | null | undefined): value is number => (
   typeof value === 'number' && Number.isFinite(value)
 );
+
+const isMidtermAtRisk = (record: FacultyRetentionRecord): boolean => {
+  if (record.midtermComplete !== true || !isFiniteNumber(record.midtermPercentage)) {
+    return false;
+  }
+  // Once the final course grade is complete, student is removed from Midterm Risk
+  if (isFiniteNumber(record.gwa)) {
+    return false;
+  }
+  const gwa = percentageToGWA(record.midtermPercentage);
+  return gwa >= 2.5; // 2.5 midterm grade is already at risk
+};
 
 const hasPersistedIdentifiers = (record: FacultyRetentionRecord): boolean => (
   isPersistedText(record.enrollmentId)
@@ -298,7 +310,7 @@ export const RetentionMonitoring: React.FC = () => {
   const syInitializedRef = useRef(false);
   const [activeTab, setActiveTab] = useState<'watchlist' | 'midterm' | 'remedials'>('watchlist');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showAtRiskOnly, setShowAtRiskOnly] = useState(false);
+  const [showAtRiskOnly, setShowAtRiskOnly] = useState(true);
 
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [selectedScheduleEnrollmentId, setSelectedScheduleEnrollmentId] = useState('');
@@ -310,6 +322,8 @@ export const RetentionMonitoring: React.FC = () => {
   const [selectedResolveEnrollmentId, setSelectedResolveEnrollmentId] = useState<string | null>(null);
   const [resolveAttemptNumber, setResolveAttemptNumber] = useState<AllowedAttempt | null>(null);
   const [remedialScore, setRemedialScore] = useState('');
+  const [resolveOutcome, setResolveOutcome] = useState<'pass' | 'fail'>('pass');
+  const [reattemptDate, setReattemptDate] = useState('');
 
   const [isOverrideOpen, setIsOverrideOpen] = useState(false);
   const [selectedOverrideEnrollmentId, setSelectedOverrideEnrollmentId] = useState<string | null>(null);
@@ -440,16 +454,17 @@ export const RetentionMonitoring: React.FC = () => {
   );
 
   const atRiskMidtermCount = useMemo(() => {
-    return filteredRecords.filter(record => {
-      return record.risk?.level === 'High' || record.risk?.level === 'At Risk';
-    }).length;
+    return filteredRecords.filter(isMidtermAtRisk).length;
   }, [filteredRecords]);
 
   const midtermDisplayRecords = useMemo(() => {
-    if (!showAtRiskOnly) return filteredRecords;
-    return filteredRecords.filter(record => {
-      return record.risk?.level === 'High' || record.risk?.level === 'At Risk';
-    });
+    const computedRecords = filteredRecords.filter(
+      record => record.midtermComplete === true
+        && isFiniteNumber(record.midtermPercentage)
+        && !isFiniteNumber(record.gwa)
+    );
+    if (!showAtRiskOnly) return computedRecords;
+    return computedRecords.filter(isMidtermAtRisk);
   }, [filteredRecords, showAtRiskOnly]);
 
   const currentAttentionStudents = useMemo(() => new Set(usableRecords.filter(record => record.schoolYear === currentSchoolYear
@@ -559,6 +574,8 @@ export const RetentionMonitoring: React.FC = () => {
     setSelectedResolveEnrollmentId(row.record.enrollmentId);
     setResolveAttemptNumber(attemptNumber);
     setRemedialScore('');
+    setResolveOutcome('pass');
+    setReattemptDate('');
     setResolveNotes(row.progression.attempts.find(attempt => attempt.attemptNumber === attemptNumber)?.notes ?? '');
   };
 
@@ -593,6 +610,9 @@ export const RetentionMonitoring: React.FC = () => {
     setSelectedResolveEnrollmentId(null);
     setResolveAttemptNumber(null);
     setRemedialScore('');
+    setResolveOutcome('pass');
+    setReattemptDate('');
+    setResolveNotes('');
   };
 
   const resetOverrideForm = () => {
@@ -638,6 +658,33 @@ export const RetentionMonitoring: React.FC = () => {
     }
   };
 
+  const handleSelectOutcome = (outcome: 'pass' | 'fail') => {
+    setResolveOutcome(outcome);
+    const num = Number(remedialScore);
+    if (outcome === 'pass') {
+      if (!Number.isFinite(num) || num < 50) {
+        setRemedialScore('80');
+      }
+    } else {
+      if (!Number.isFinite(num) || num >= 50) {
+        setRemedialScore('45');
+      }
+    }
+  };
+
+  const handleScoreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setRemedialScore(val);
+    const num = Number(val);
+    if (Number.isFinite(num) && val.trim() !== '') {
+      if (num >= 50 && resolveOutcome !== 'pass') {
+        setResolveOutcome('pass');
+      } else if (num < 50 && resolveOutcome !== 'fail') {
+        setResolveOutcome('fail');
+      }
+    }
+  };
+
   const handleResolveRemedial = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedResolveRecord || !hasPersistedIdentifiers(selectedResolveRecord)) {
@@ -679,13 +726,37 @@ export const RetentionMonitoring: React.FC = () => {
         percentage: score,
         notes: resolveNotes.trim().length > 0 ? resolveNotes.trim() : null,
       });
+
+      if (resolveAttemptNumber === 1 && score < 50 && reattemptDate.trim().length > 0) {
+        try {
+          await saveFacultyRemedialApi({
+            enrollmentId: selectedResolveRecord.enrollmentId,
+            studentId: selectedResolveRecord.studentId,
+            classId: selectedResolveRecord.classId,
+            attemptNumber: 2,
+            scheduledDate: reattemptDate.trim(),
+            notes: 'Scheduled for Attempt 2 re-attempt',
+          });
+        } catch {
+          // Attempt 1 was saved successfully
+        }
+      }
+
       const refreshed = await refreshRetention();
       resetResolveForm();
+      const outcomeMsg = score >= 50
+        ? 'Remedial exam passed! Student cleared and notified in their portal account.'
+        : resolveAttemptNumber === 1
+          ? (reattemptDate.trim()
+              ? 'Attempt 1 marked for Re-attempt and Attempt 2 scheduled. Student notified in their portal account.'
+              : 'Attempt 1 marked for Re-attempt. Student notified in their portal account.')
+          : 'Attempt 2 recorded as not passed. Student moved to Cost Recovery and notified in their portal account.';
+
       setNotification({
         type: refreshed ? 'success' : 'info',
         message: refreshed
-          ? 'Remedial result persisted successfully.'
-          : 'Remedial result persisted, but the authoritative list could not be refreshed.',
+          ? outcomeMsg
+          : `${outcomeMsg} (authoritative list could not be refreshed)`,
       });
     } catch (requestError) {
       showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the remedial result.', 'error');
@@ -745,40 +816,6 @@ export const RetentionMonitoring: React.FC = () => {
   const openPolicyProgression = (record: FacultyRetentionRecord) => {
     setSelectedPolicyRecord(record);
     setIsPolicyOpen(true);
-  };
-
-  const handleComputeMidtermRisk = async () => {
-    if (isSubmitting || selectedClassIsPastYear || selectedClassId === 'all') return;
-    setIsSubmitting(true);
-    try {
-      await unlockFacultyWatchlistApi(selectedClassId);
-      await refreshRetention();
-      setNotification({
-        type: 'success',
-        message: 'Midterm watchlist unlocked for the selected class section.',
-      });
-    } catch (error) {
-      showFeedback(error instanceof Error ? error.message : 'Unable to unlock the midterm watchlist.', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleComputeClassRisk = async (classId: string) => {
-    if (!classId || classId === 'all' || isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      await unlockFacultyWatchlistApi(classId);
-      await refreshRetention();
-      setNotification({
-        type: 'success',
-        message: 'Midterm watchlist unlocked for the selected class section.',
-      });
-    } catch (error) {
-      showFeedback(error instanceof Error ? error.message : 'Unable to unlock the class midterm watchlist.', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   return (
@@ -941,7 +978,7 @@ export const RetentionMonitoring: React.FC = () => {
                 Midterm Standing & Risk Evaluation
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Review server-calculated risk. Unlocking the selected class changes watchlist visibility only; missing assessment data remains incomplete.
+                Review students with computed midterm standing at risk of retention (midterm grade 2.5 onwards). Students with completed final course grades are resolved in Retention Watchlist.
               </p>
             </div>
 
@@ -966,17 +1003,6 @@ export const RetentionMonitoring: React.FC = () => {
                   </span>
                 )}
               </button>
-
-              <button
-                type="button"
-                disabled={isSubmitting || isLoading || selectedClassIsPastYear || selectedClassId === 'all'}
-                title={selectedClassIsPastYear ? 'Past school-year classes are view-only.' : selectedClassId === 'all' ? 'Select one class section to unlock its watchlist.' : undefined}
-                onClick={() => void handleComputeMidtermRisk()}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-40 cursor-pointer"
-              >
-                <Calculator className="h-4 w-4" />
-                <span>{isSubmitting ? 'Unlocking...' : 'Unlock Midterm Watchlist'}</span>
-              </button>
             </div>
           </div>
 
@@ -986,14 +1012,13 @@ export const RetentionMonitoring: React.FC = () => {
                 <tr>
                   <th className="p-3">Student</th>
                   <th className="p-3">Class</th>
-                  <th className="p-3">Midterm Grade</th>
+                  <th className="p-3">Final Midterm Grade</th>
                   <th className="p-3">Risk Standing</th>
                   <th className="p-3">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {midtermDisplayRecords.map(record => {
-                  const isComputed = record.midtermComplete === true;
                   return (
                     <tr key={record.enrollmentId} className="border-t border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="p-3 font-bold">
@@ -1002,36 +1027,32 @@ export const RetentionMonitoring: React.FC = () => {
                       </td>
                       <td className="p-3">{record.className}</td>
                       <td className="p-3">
-                        {!isComputed ? (
-                          <span className="text-slate-400 italic">Assessments incomplete</span>
-                        ) : isFiniteNumber(record.midtermPercentage) ? (
-                          <span className="font-mono font-bold">{record.midtermPercentage.toFixed(2)}%</span>
+                        {isFiniteNumber(record.midtermPercentage) ? (
+                          <div className="font-mono">
+                            <span className="font-bold">{record.midtermPercentage.toFixed(2)}%</span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
+                              (Final Midterm Grade: {percentageToGWA(record.midtermPercentage).toFixed(2)})
+                            </span>
+                          </div>
                         ) : (
                           <span className="text-slate-400 italic">Incomplete assessments</span>
                         )}
                       </td>
                       <td className="p-3">
-                        <RiskBadge risk={record.risk} />
+                        <RiskBadge
+                          risk={
+                            record.risk ?? {
+                              level: isFiniteNumber(record.midtermPercentage) && percentageToGWA(record.midtermPercentage) >= 3.0 ? 'High' : 'At Risk',
+                              assumedAssessments: 0,
+                              period: 'Midterm',
+                            }
+                          }
+                        />
                       </td>
                       <td className="p-3">
-                        {isComputed || record.watchlistUnlocked ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
-                            {isComputed ? 'Computed · Ready' : 'Unlocked · Assessments incomplete'}
-                          </span>
-                        ) : isPastYearRecord(record) ? (
-                          <span className="text-[10px] text-slate-400 italic">Archived (view-only)</span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => void handleComputeClassRisk(record.classId)}
-                            disabled={isSubmitting}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer"
-                            title="Unlock the midterm watchlist for this class"
-                          >
-                            <Calculator className="w-3 h-3" />
-                            <span>Unlock watchlist</span>
-                          </button>
-                        )}
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
+                          Computed · Ready
+                        </span>
                       </td>
                     </tr>
                   );
@@ -1043,17 +1064,17 @@ export const RetentionMonitoring: React.FC = () => {
             <div className="py-8 text-center text-xs text-slate-400 space-y-1">
               {showAtRiskOnly ? (
                 <>
-                  <p className="font-semibold text-slate-600 dark:text-slate-300">No students are currently flagged at risk for midterm.</p>
+                  <p className="font-semibold text-slate-600 dark:text-slate-300">No students are currently flagged at risk for midterm (no computed grades worse than 2.5).</p>
                   <button
                     type="button"
                     onClick={() => setShowAtRiskOnly(false)}
                     className="text-emerald-600 hover:underline font-bold"
                   >
-                    Show all students
+                    Show all computed students
                   </button>
                 </>
               ) : (
-                <p>{isLoading ? 'Loading records...' : 'No students match these filters.'}</p>
+                <p>{isLoading ? 'Loading records...' : 'No students have computed midterm grades matching these filters.'}</p>
               )}
             </div>
           )}
@@ -1102,9 +1123,110 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? row.record.gwa.toFixed(2) : <span className="text-[10px] font-medium text-slate-400">Grade unavailable</span>}</td>
-                    <td className="py-3.5 px-4"><div className="space-y-1.5">{([1, 2] as AllowedAttempt[]).map(attemptNumber => { const attempt = row.progression.attempts.find(item => item.attemptNumber === attemptNumber); const status = attemptStatus(row.progression, attemptNumber); const statusClass = status === 'passed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60' : status === 'failed' ? 'bg-rose-50 text-rose-700 border-rose-200/60' : status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200/60' : status === 'available' ? 'bg-sky-50 text-sky-700 border-sky-200/60' : 'bg-slate-100 text-slate-600 border-slate-200'; return <div key={attemptNumber} className="flex flex-wrap items-center gap-1.5"><span className="font-bold text-slate-700 dark:text-slate-300">Attempt {attemptNumber}</span><span className={`rounded-lg border px-2 py-1 text-[10px] font-bold ${statusClass}`}>{attemptStatusLabel(status)}{isFiniteNumber(attempt?.percentage) ? ` · ${attempt.percentage.toFixed(2)}%` : ''}</span>{attempt?.scheduledDate && <span className="text-[10px] text-slate-400">{attempt.scheduledDate}</span>}{attempt?.notes && <span className="basis-full text-[10px] italic text-slate-500 dark:text-slate-400">{attempt.notes}</span>}</div>; })}</div></td>
-                    <td className="py-3.5 px-4"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed' ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700' : row.progression.stage === 'cost_recovery_required' || row.progression.stage === 'cost_recovery_failed' ? 'border-rose-200/60 bg-rose-50 text-rose-700' : row.progression.stage === 'legacy_unclassified' ? 'border-slate-200 bg-slate-100 text-slate-600' : 'border-amber-200/60 bg-amber-50 text-amber-700'}`}>{stageLabel(row.progression.stage)}</span>{row.progression.clearedAt && <span className="text-[10px] text-emerald-700 dark:text-emerald-400">Cleared {new Date(row.progression.clearedAt).toLocaleDateString()}</span>}{row.progression.legacyUnclassified && <span className="text-[10px] text-slate-500">{legacyEvidenceLabel((row.record as unknown as { remedial?: unknown }).remedial) ?? 'Outcome unavailable pending reconciliation.'}</span>}<button type="button" onClick={() => openPolicyProgression(row.record)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-bold text-sky-700 transition-colors hover:bg-sky-100" title="View current remedial progression">Details <ChevronRight className="h-3 w-3" /></button></div></td>
-                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-2">{canScheduleRecord(row.record) && !isPastYearRecord(row.record) && <button type="button" onClick={() => openSchedule(row.record)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Schedule Attempt {allowedAttemptNumbers(row.progression)[0]}</button>}{pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && <button type="button" onClick={() => openResolve(row)} className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Grade Attempt {pendingAttemptNumber(row.progression)}</button>}{row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && <button type="button" onClick={() => openCostRecovery(row)} className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs">Record Cost Recovery</button>}{typeof row.progression.costRecoveryGrade === 'number' && <span className="text-[10px] text-slate-500">Cost recovery grade {row.progression.costRecoveryGrade.toFixed(2)}</span>}{row.progression.legacyUnclassified && <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">Legacy / unclassified</span>}<span className="text-[10px] text-slate-400" title="No approved authoritative delete endpoint exists">Removal unavailable</span></div></td>
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      {(() => {
+                        const activeAttemptNumber = row.progression.attempts.length === 2
+                          ? 2
+                          : (row.progression.attempts[0]?.attemptNumber ?? 1);
+                        const attempt = row.progression.attempts.find(item => item.attemptNumber === activeAttemptNumber);
+                        const status = attemptStatus(row.progression, activeAttemptNumber);
+                        const statusClass = status === 'passed'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          : status === 'failed'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300'
+                            : status === 'pending'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300'
+                              : status === 'available'
+                                ? 'bg-sky-50 text-sky-700 border-sky-200/60 dark:bg-sky-950/40 dark:text-sky-300'
+                                : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300';
+
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-800 dark:text-slate-200">
+                              Attempt {activeAttemptNumber}
+                            </span>
+                            <span className={`rounded-lg border px-2 py-0.5 text-[10px] font-bold ${statusClass}`}>
+                              {attemptStatusLabel(status)}{isFiniteNumber(attempt?.percentage) ? ` · ${attempt.percentage.toFixed(2)}%` : ''}
+                            </span>
+                            {attempt?.scheduledDate && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {attempt.scheduledDate}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
+                          row.progression.stage === 'passed' || row.progression.stage === 'cost_recovery_passed'
+                            ? 'border-emerald-200/60 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : row.progression.stage === 'cost_recovery_required' || row.progression.stage === 'cost_recovery_failed'
+                              ? 'border-rose-200/60 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                              : row.progression.stage === 'legacy_unclassified'
+                                ? 'border-slate-200 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                : 'border-amber-200/60 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+                        }`}>
+                          {stageLabel(row.progression.stage)}
+                        </span>
+                        {row.progression.clearedAt && (
+                          <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                            Cleared {new Date(row.progression.clearedAt).toLocaleDateString()}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openPolicyProgression(row.record)}
+                          className="inline-flex items-center gap-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2 py-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                          title="View complete attempt history and progression details"
+                        >
+                          Details <ChevronRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-2">
+                        {canScheduleRecord(row.record) && !isPastYearRecord(row.record) && (
+                          <button
+                            type="button"
+                            onClick={() => openSchedule(row.record)}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
+                          >
+                            Schedule Attempt {allowedAttemptNumbers(row.progression)[0]}
+                          </button>
+                        )}
+                        {pendingAttemptNumber(row.progression) && row.record.state !== 'archived' && (
+                          <button
+                            type="button"
+                            onClick={() => openResolve(row)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
+                          >
+                            Grade Attempt {pendingAttemptNumber(row.progression)}
+                          </button>
+                        )}
+                        {row.progression.stage === 'cost_recovery_required' && row.record.state !== 'archived' && (
+                          <button
+                            type="button"
+                            onClick={() => openCostRecovery(row)}
+                            className="px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition-all cursor-pointer shadow-xs"
+                          >
+                            Record Cost Recovery
+                          </button>
+                        )}
+                        {typeof row.progression.costRecoveryGrade === 'number' && (
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            Cost recovery: {row.progression.costRecoveryGrade.toFixed(2)}
+                          </span>
+                        )}
+                        {row.progression.legacyUnclassified && (
+                          <span className="text-[10px] text-amber-600" title="Legacy remedial data must be classified by the server before another write">
+                            Legacy / unclassified
+                          </span>
+                        )}
+                        <span className="sr-only" title="No approved authoritative delete endpoint exists">Removal unavailable</span>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1135,10 +1257,167 @@ export const RetentionMonitoring: React.FC = () => {
       {selectedResolveRecord && (
         <Modal isOpen={Boolean(selectedResolveRecord)} onClose={resetResolveForm} title="Grade Remedial Exam Result">
           <form onSubmit={handleResolveRemedial} className="space-y-4 text-xs">
-            <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(selectedResolveRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(selectedResolveRecord.subjectCode, 'Subject code unavailable')}</p>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Percentage Score (%)</label><input type="number" min="0" max="100" step="any" required value={remedialScore} onChange={(event) => setRemedialScore(event.target.value)} placeholder="Enter score" className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm" /><span className="text-[11px] text-slate-400 block mt-1">The server determines Pass or Fail at 50% or higher. This form sends only the attempt number and percentage.</span></div>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Notes <span className="font-normal text-slate-400">(optional)</span></label><textarea value={resolveNotes} onChange={(event) => setResolveNotes(event.target.value)} maxLength={500} rows={2} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100" /></div>
-            <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetResolveForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Save Exam Grade'}</button></div>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">
+                  {textOrUnavailable(selectedResolveRecord.studentName, 'Student name unavailable')}
+                </p>
+                <p className="text-slate-400 text-[11px] font-mono">
+                  {textOrUnavailable(selectedResolveRecord.studentNumber, 'No ID')} · {textOrUnavailable(selectedResolveRecord.subjectCode, 'Subject unavailable')}
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded-full font-bold text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                Attempt {resolveAttemptNumber ?? 1}
+              </span>
+            </div>
+
+            {/* Outcome Selection Buttons */}
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                Outcome Option
+              </label>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleSelectOutcome('pass')}
+                  className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                    resolveOutcome === 'pass'
+                      ? 'border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100 shadow-sm'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="font-bold text-sm flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Pass
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    Score ≥ 50%. Remedial passed and student is cleared.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectOutcome('fail')}
+                  className={`p-3 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                    resolveOutcome === 'fail'
+                      ? resolveAttemptNumber === 1
+                        ? 'border-amber-500 bg-amber-50/80 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100 shadow-sm'
+                        : 'border-rose-500 bg-rose-50/80 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100 shadow-sm'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`font-bold text-sm flex items-center gap-1.5 ${
+                    resolveAttemptNumber === 1 ? 'text-amber-700 dark:text-amber-300' : 'text-rose-700 dark:text-rose-300'
+                  }`}>
+                    <CalendarDays className="w-4 h-4" />
+                    {resolveAttemptNumber === 1 ? 'Re-attempt' : 'Cost Recovery'}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                    {resolveAttemptNumber === 1
+                      ? 'Score < 50%. Flagged for Attempt 2 re-attempt.'
+                      : 'Score < 50%. Move to Cost Recovery program.'}
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* Percentage Score Input */}
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Percentage Score (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="any"
+                required
+                value={remedialScore}
+                onChange={handleScoreChange}
+                placeholder="Enter score"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold text-sm"
+              />
+              <span className="text-[11px] text-slate-400 block mt-1">
+                The server determines Pass or Fail at 50% or higher. This form sends only the attempt number and percentage.
+              </span>
+            </div>
+
+            {/* Optional Re-attempt schedule date for Attempt 1 */}
+            {resolveOutcome === 'fail' && resolveAttemptNumber === 1 && (
+              <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20 space-y-2">
+                <label className="font-bold text-amber-900 dark:text-amber-200 block text-xs">
+                  Schedule Re-attempt Date <span className="font-normal text-amber-700 dark:text-amber-400">(optional)</span>
+                </label>
+                <input
+                  type="date"
+                  min={manilaToday()}
+                  value={reattemptDate}
+                  onChange={(event) => setReattemptDate(event.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-xs"
+                />
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  Optionally schedule Attempt 2 now (today or later).
+                </p>
+              </div>
+            )}
+
+            {/* Cost recovery notification for Attempt 2 */}
+            {resolveOutcome === 'fail' && resolveAttemptNumber === 2 && (
+              <div className="p-3 rounded-xl border border-rose-200 bg-rose-50/60 dark:border-rose-900/50 dark:bg-rose-950/20">
+                <p className="font-bold text-rose-900 dark:text-rose-200 text-xs">
+                  Cost Recovery Progression
+                </p>
+                <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
+                  Both remedial attempts will be failed. The student will be transferred to Cost Recovery.
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Notes <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <textarea
+                value={resolveNotes}
+                onChange={(event) => setResolveNotes(event.target.value)}
+                maxLength={500}
+                rows={2}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+              />
+            </div>
+
+            <p className="text-[11px] text-slate-400 italic">
+              The student will be automatically notified in their own account.
+            </p>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={resetResolveForm}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className={`px-5 py-2 rounded-xl font-bold shadow-md transition-all text-white disabled:bg-slate-300 disabled:cursor-not-allowed ${
+                  resolveOutcome === 'pass'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                    : resolveAttemptNumber === 1
+                      ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'
+                      : 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20'
+                }`}
+              >
+                {isSubmitting
+                  ? 'Saving...'
+                  : resolveOutcome === 'pass'
+                    ? 'Save Exam Grade (Pass)'
+                    : resolveAttemptNumber === 1
+                      ? 'Record Re-attempt'
+                      : 'Record Cost Recovery'}
+              </button>
+            </div>
           </form>
         </Modal>
       )}
@@ -1191,7 +1470,7 @@ export const RetentionMonitoring: React.FC = () => {
                 {renderStatusBadge(selectedPolicyRecord.state)}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Final grade / GWA</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? selectedPolicyRecord.gwa.toFixed(2) : 'Unavailable'}</span></div>
+                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Final Grade</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? selectedPolicyRecord.gwa.toFixed(2) : 'Unavailable'}</span></div>
                 <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Recorded score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
               </div>
             </div>
@@ -1208,7 +1487,7 @@ export const RetentionMonitoring: React.FC = () => {
                     return <div key={attemptNumber} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950"><div className="flex-1"><p className="font-bold text-slate-800 dark:text-slate-100">Attempt {attemptNumber}</p><p className="text-[10px] text-slate-400">{attempt?.scheduledDate ? `Scheduled ${attempt.scheduledDate} · ` : ''}{isFiniteNumber(attempt?.percentage) ? `${attempt.percentage.toFixed(2)}% · ` : ''}{attemptStatusLabel(status)}</p></div><span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{status === 'passed' ? 'Passed' : status === 'failed' ? 'Failed' : status === 'pending' ? 'Pending' : status === 'available' ? 'Available' : 'Not started'}</span></div>;
                   })}
                 </div>
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">Original final grade and GWA remain unchanged. A remedial pass changes progression readiness only. Legacy records are not interpreted as a new attempt.</p>
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">Original final grade remains unchanged. A remedial pass changes progression readiness only. Legacy records are not interpreted as a new attempt.</p>
               </div>
             )}
           </div>

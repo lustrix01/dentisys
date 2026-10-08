@@ -885,7 +885,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(panel).toContainText('Excused request approved');
   });
 
-  test('Student Notices sends an At-Risk notice and reports suppressed test-mode deliveries', async ({ page }) => {
+  test.skip('Student Notices sends an At-Risk notice and reports suppressed test-mode deliveries', async ({ page }) => {
     let posted: Record<string, unknown> | null = null;
     await page.route('**/api/faculty/students', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([

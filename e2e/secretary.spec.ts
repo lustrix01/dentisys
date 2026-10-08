@@ -1,5 +1,7 @@
 import { test, expect } from './fixtures';
 
+declare const Buffer: any;
+
 test.describe('Class Secretary Module E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/api/auth/login', async (route) => {
@@ -514,10 +516,10 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
     await expect(page.getByText('Code: CS8-20260921-XYZ999', { exact: true })).toBeVisible();
     expect(startApiPayload).not.toBeNull();
-    expect((startApiPayload as Record<string, unknown>)?.csId).toBe(8);
-    expect((startApiPayload as Record<string, unknown>)?.geofenceEnabled).toBe(false);
-    expect((startApiPayload as Record<string, unknown>)?.geofenceLatitude).toBeUndefined();
-    expect((startApiPayload as Record<string, unknown>)?.geofenceLongitude).toBeUndefined();
+    expect((startApiPayload as any)?.csId).toBe(8);
+    expect((startApiPayload as any)?.geofenceEnabled).toBe(false);
+    expect((startApiPayload as any)?.geofenceLatitude).toBeUndefined();
+    expect((startApiPayload as any)?.geofenceLongitude).toBeUndefined();
 
     const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
     expect(storedItem).toBeNull();
@@ -633,7 +635,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.getByRole('button', { name: /Confirm End Session/i }).click();
 
     expect(endApiCalled).toBe(true);
-    expect((endPayload as Record<string, unknown>)?.sessionId).toBe('42');
+    expect((endPayload as any)?.sessionId).toBe('42');
 
     // Form should return to inactive state
     await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();

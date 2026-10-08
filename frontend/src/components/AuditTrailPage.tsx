@@ -195,7 +195,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
         <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-800 dark:text-blue-300">
           <p className="font-bold">Faculty Workspace Activity</p>
           <p className="mt-1">
-            This view contains your own Faculty actions. Attendance changes made in your classes, including by the class Secretary, are listed under <strong>Class Attendance Activity</strong>. System-wide audit trail access remains reserved for Administrators, while Faculty email dispatch activity is tracked under <strong>Email Management</strong>.
+            This view contains your own Faculty actions. Attendance changes made in your classes, including by the class Secretary, are listed under <strong>Attendance Monitoring</strong>. System-wide audit trail access remains reserved for Administrators, while Faculty email dispatch activity is tracked under <strong>Email Management</strong>.
           </p>
         </div>
       )}

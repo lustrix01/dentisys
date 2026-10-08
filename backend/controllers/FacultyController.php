@@ -2905,16 +2905,34 @@ function handle_faculty_grading_config_save(): void
 
 function faculty_percentage_to_gwa(float $percentage): float
 {
-    if ($percentage >= 97) return 1.0;
-    if ($percentage >= 94) return 1.25;
-    if ($percentage >= 91) return 1.5;
-    if ($percentage >= 88) return 1.75;
-    if ($percentage >= 85) return 2.0;
-    if ($percentage >= 82) return 2.25;
-    if ($percentage >= 80) return 2.5;
-    if ($percentage >= 78) return 2.75;
-    if ($percentage >= 75) return 3.0;
-    return 5.0;
+    if (!is_finite($percentage)) return 5.0;
+    if ($percentage >= 97.0) return 1.0;
+    if ($percentage < 75.0) return 5.0;
+
+    $benchmarks = [
+        ['pct' => 97.0, 'grade' => 1.0],
+        ['pct' => 94.0, 'grade' => 1.25],
+        ['pct' => 91.0, 'grade' => 1.5],
+        ['pct' => 88.0, 'grade' => 1.75],
+        ['pct' => 85.0, 'grade' => 2.0],
+        ['pct' => 82.0, 'grade' => 2.25],
+        ['pct' => 80.0, 'grade' => 2.5],
+        ['pct' => 78.0, 'grade' => 2.75],
+        ['pct' => 75.0, 'grade' => 3.0],
+    ];
+
+    $count = count($benchmarks);
+    for ($i = 0; $i < $count - 1; $i++) {
+        $high = $benchmarks[$i];
+        $low = $benchmarks[$i + 1];
+        if ($percentage >= $low['pct'] && $percentage <= $high['pct']) {
+            $fraction = ($percentage - $low['pct']) / ($high['pct'] - $low['pct']);
+            $grade = $low['grade'] - $fraction * ($low['grade'] - $high['grade']);
+            return round($grade, 2);
+        }
+    }
+
+    return 3.0;
 }
 
 /**

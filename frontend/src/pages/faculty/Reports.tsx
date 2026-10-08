@@ -554,7 +554,7 @@ export const Reports: React.FC = () => {
       fileName = `Attendance_${selectedClass?.courseCode || 'Class'}_${attendanceDate}.csv`;
     }
 
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + headers + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -660,15 +660,6 @@ export const Reports: React.FC = () => {
             )}
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Generate course grade reports, print report sheets, and review analytics dashboards</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrint}
-            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 text-slate-650 hover:bg-slate-50 dark:text-slate-350 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 font-bold text-xs shadow-xs"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print Report Sheet</span>
-          </button>
         </div>
       </div>
 
@@ -804,13 +795,27 @@ export const Reports: React.FC = () => {
                 {selectedClass ? `${selectedClass.courseCode} · ${selectedClass.csName}` : 'Overview of final academic standing'}
               </p>
             </div>
-            <button
-              onClick={() => handleExportCSV('academic')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export CSV
-            </button>
+            <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => handleExportCSV('academic')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
+                title="Export academic ledger as CSV spreadsheet"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Export CSV</span>
+              </button>
+              <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
+                title="Export or print academic report as PDF document"
+              >
+                <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                <span>Export PDF</span>
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
@@ -914,13 +919,27 @@ export const Reports: React.FC = () => {
         <Card className="p-0 overflow-hidden no-print">
           <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
             <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Retention Status Reports</h3>
-            <button
-              onClick={() => handleExportCSV('retention')}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Export CSV
-            </button>
+            <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => handleExportCSV('retention')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
+                title="Export retention report as CSV spreadsheet"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Export CSV</span>
+              </button>
+              <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
+                title="Export or print retention report as PDF document"
+              >
+                <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                <span>Export PDF</span>
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
@@ -1010,14 +1029,29 @@ export const Reports: React.FC = () => {
                   })}
                 </select>
               )}
-              <button
-                onClick={() => handleExportCSV('attendance')}
-                disabled={attendanceRecords.length === 0}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm transition-colors disabled:opacity-40"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Export CSV
-              </button>
+              <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => handleExportCSV('attendance')}
+                  disabled={attendanceRecords.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Export attendance register as CSV spreadsheet"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Export CSV</span>
+                </button>
+                <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  disabled={attendanceRecords.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors disabled:opacity-40 cursor-pointer"
+                  title="Export or print attendance register as PDF document"
+                >
+                  <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                  <span>Export PDF</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1177,13 +1211,13 @@ export const Reports: React.FC = () => {
       {/* ----------------------------------------------------
           PRINT LAYOUT SHEETS PRINT AREA
       ---------------------------------------------------- */}
-      <div className="print-only hidden p-8 bg-white text-slate-900 space-y-6">
+      <div className="print-only hidden p-8 bg-white text-slate-900 space-y-6 font-sans">
         
         {/* school header */}
         <div className="text-center space-y-1.5 border-b-2 border-slate-800 pb-5 mb-6">
-          <h2 className="font-heading font-extrabold text-2xl tracking-tight uppercase">DentiSys Academic Portal</h2>
-          <p className="text-xs uppercase tracking-widest text-slate-500 font-bold">Official College Evaluations Report</p>
-          <p className="text-[10px] text-slate-400">Class: {classes.filter(cls => assignedClasses.includes(String(cls.csId))).map(cls => cls.block || cls.csName || cls.courseCode).join(', ') || 'unavailable'} • Date: {new Date().toISOString().split('T')[0]}</p>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Bicol University · College of Dental Medicine</p>
+          <h2 className="font-heading font-black text-2xl tracking-tight uppercase text-slate-900 mt-1">Official Academic & Evaluations Report</h2>
+          <div className="flex flex-wrap justify-center items-center gap-3 text-xs text-slate-600 mt-2 font-medium"><span><strong className="text-slate-800">Course:</strong> {selectedSubjectCode || 'Course'}</span><span>•</span><span><strong className="text-slate-800">Section:</strong> {selectedClass?.csName || selectedClassId || 'All Sections'}</span><span>•</span><span><strong className="text-slate-800">Term:</strong> {currentSchoolYear ? `S.Y. ${currentSchoolYear}` : 'Academic Year'}</span><span>•</span><span><strong className="text-slate-800">Date:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span></div>
         </div>
 
         {/* Dynamic content printing tables */}
@@ -1293,7 +1327,7 @@ export const Reports: React.FC = () => {
         )}
 
         {/* Faculty signature */}
-        <div className="flex justify-end items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
+        <div className="break-inside-avoid flex justify-end items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
           <div className="text-center w-48">
             <p className="font-bold">{user?.display_name}</p>
             <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />

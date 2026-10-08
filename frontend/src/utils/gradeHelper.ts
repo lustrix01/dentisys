@@ -22,20 +22,38 @@ export const effectiveAssessmentPercentage = (
 };
 
 /**
- * Converts a raw percentage score (50-100) to the Philippine academic scale (1.0 to 5.0).
- * 1.0 is excellent, 3.0 is passing, 5.0 is failing.
+ * Converts a raw percentage score (50-100) to the exact Philippine academic scale (1.00 to 5.00)
+ * using linear interpolation across benchmarks (e.g. 78.16% -> 2.73, 87.34% -> 1.81).
+ * 1.00 is excellent, 3.00 is passing, 5.00 is failing.
  */
 export const percentageToGWA = (pct: number): number => {
+  if (!Number.isFinite(pct)) return 5.0;
   if (pct >= 97) return 1.0;
-  if (pct >= 94) return 1.25;
-  if (pct >= 91) return 1.5;
-  if (pct >= 88) return 1.75;
-  if (pct >= 85) return 2.0;
-  if (pct >= 82) return 2.25;
-  if (pct >= 80) return 2.5; // Strict retention limit for dental majors
-  if (pct >= 78) return 2.75;
-  if (pct >= 75) return 3.0; // Passing grade
-  return 5.0; // Failure
+  if (pct < 75) return 5.0;
+
+  const benchmarks = [
+    { pct: 97, grade: 1.0 },
+    { pct: 94, grade: 1.25 },
+    { pct: 91, grade: 1.5 },
+    { pct: 88, grade: 1.75 },
+    { pct: 85, grade: 2.0 },
+    { pct: 82, grade: 2.25 },
+    { pct: 80, grade: 2.5 },
+    { pct: 78, grade: 2.75 },
+    { pct: 75, grade: 3.0 },
+  ];
+
+  for (let i = 0; i < benchmarks.length - 1; i++) {
+    const high = benchmarks[i];
+    const low = benchmarks[i + 1];
+    if (pct >= low.pct && pct <= high.pct) {
+      const fraction = (pct - low.pct) / (high.pct - low.pct);
+      const grade = low.grade - fraction * (low.grade - high.grade);
+      return Math.round(grade * 100) / 100;
+    }
+  }
+
+  return 3.0;
 };
 
 /**

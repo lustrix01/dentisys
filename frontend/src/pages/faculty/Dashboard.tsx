@@ -108,6 +108,7 @@ export const Dashboard: React.FC = () => {
   const [remedialScore, setRemedialScore] = useState<string>('');
   const [remedialNotes, setRemedialNotes] = useState<string>('');
   const [remedialOutcome, setRemedialOutcome] = useState<'passed' | 'failed'>('passed');
+  const [reattemptDate, setReattemptDate] = useState<string>('');
 
   // Extract unique subjects
   const allSubjects = Array.from(
@@ -160,20 +161,74 @@ export const Dashboard: React.FC = () => {
   const atRiskCount = dashboardKpis?.kpis.retentionAlerts ?? 0;
 
   // Pending remedials
-  const pendingRemedials = retentionRecords.flatMap(record => {
-    const remedial = record.remedial;
-    if (!remedial || remedial.status !== 'pending') return [];
-    // Only sections inside the selected school year (assignedClasses comes from the scoped KPI response).
-    if (!assignedClasses.includes(String(record.classId))) return [];
-    return [{
-      id: record.enrollmentId,
-      studentName: record.studentName || 'Student name unavailable',
-      subjectCode: record.subjectCode || 'Subject unavailable',
-      originalGrade: record.gwa,
-      record,
-      remedial,
-    }];
-  });
+  const pendingRemedials = useMemo(() => {
+    return retentionRecords.flatMap(record => {
+      // Only sections inside the selected school year (assignedClasses comes from the scoped KPI response).
+      if (assignedClasses.length > 0 && !assignedClasses.includes(String(record.classId))) {
+        return [];
+      }
+
+      const progression = record.remedialProgression;
+      const legacyRemedial = record.remedial as Record<string, unknown> | null;
+
+      let isPending = false;
+      let attemptNumber: 1 | 2 = 1;
+      let scheduledDate: string | null = null;
+      let notes = '';
+
+      // 1. Canonical remedial progression
+      if (progression) {
+        if (progression.stage === 'attempt_1_pending') {
+          isPending = true;
+          attemptNumber = 1;
+        } else if (progression.stage === 'attempt_2_pending') {
+          isPending = true;
+          attemptNumber = 2;
+        }
+
+        const pendingAttempt = Array.isArray(progression.attempts)
+          ? progression.attempts.find(a => a.outcome === 'pending' || (a as unknown as { status?: string }).status === 'pending')
+          : undefined;
+
+        if (pendingAttempt) {
+          isPending = true;
+          attemptNumber = pendingAttempt.attemptNumber === 2 ? 2 : 1;
+          scheduledDate = pendingAttempt.scheduledDate ?? null;
+          notes = pendingAttempt.notes ?? '';
+        }
+      }
+
+      // 2. Fallback to legacy remedial format
+      if (!isPending && legacyRemedial) {
+        const legacyStatus = legacyRemedial.status ?? (legacyRemedial as { outcome?: string }).outcome;
+        if (legacyStatus === 'pending' || record.state === 'remedial') {
+          isPending = true;
+          attemptNumber = 1;
+          notes = typeof legacyRemedial.notes === 'string' ? legacyRemedial.notes : '';
+        }
+      }
+
+      // 3. Fallback to record.state === 'remedial' if stage is not cleared/cost_recovery
+      if (!isPending && record.state === 'remedial' && progression?.stage !== 'passed' && progression?.stage !== 'cost_recovery_passed') {
+        isPending = true;
+        attemptNumber = progression?.stage === 'attempt_2_available' || progression?.stage === 'attempt_2_pending' ? 2 : 1;
+      }
+
+      if (!isPending) return [];
+
+      return [{
+        id: record.enrollmentId,
+        studentName: record.studentName || 'Student name unavailable',
+        subjectCode: record.subjectCode || 'Subject unavailable',
+        originalGrade: record.gwa,
+        attemptNumber,
+        scheduledDate,
+        record,
+        remedial: legacyRemedial ?? {},
+        notes,
+      }];
+    });
+  }, [retentionRecords, assignedClasses]);
 
   // Calculate class-specific attendance rate
   const selectedClassSummary = dashboardKpis?.classes.find(classItem => classItem.id === selectedClassId);
@@ -194,6 +249,9 @@ export const Dashboard: React.FC = () => {
         enrollmentId: selected.record.enrollmentId,
         studentId: selected.record.studentId,
         classId: selected.record.classId,
+        attemptNumber: selected.attemptNumber,
+        percentage: scoreVal,
+        notes: remedialNotes.trim() || undefined,
         remedial: {
           ...(selected.remedial || {}),
           status: remedialOutcome,
@@ -201,10 +259,28 @@ export const Dashboard: React.FC = () => {
           notes: remedialNotes.trim() || undefined,
         },
       });
+
+      if (selected.attemptNumber === 1 && scoreVal < 50 && reattemptDate.trim().length > 0) {
+        try {
+          await saveFacultyRemedialApi({
+            enrollmentId: selected.record.enrollmentId,
+            studentId: selected.record.studentId,
+            classId: selected.record.classId,
+            attemptNumber: 2,
+            scheduledDate: reattemptDate.trim(),
+            notes: 'Scheduled for Attempt 2 re-attempt',
+          });
+        } catch {
+          // Attempt 1 was saved successfully
+        }
+      }
+
       setSelectedRemedialId(null);
       setRemedialScore('');
       setRemedialNotes('');
+      setReattemptDate('');
       setRemedialOutcome('passed');
+      showFeedback('Remedial exam result recorded successfully. Student notified.', 'success');
       loadDashboard();
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : 'Unable to persist the remedial result.', 'error');
@@ -417,11 +493,20 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Widget 2: Today's Schedule */}
+          {/* Widget 2: Pending Remedials */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-xs font-bold font-heading text-slate-800 dark:text-slate-100 uppercase tracking-wider">Pending Remedials</h3>
-              <span className="text-[10px] text-slate-400 font-semibold">Authoritative</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400 font-semibold">Authoritative</span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/retention')}
+                  className="text-[10px] font-semibold text-clinical-600 hover:text-clinical-700 dark:text-clinical-400 hover:underline"
+                >
+                  View All &rarr;
+                </button>
+              </div>
             </div>
             {retentionError ? (
               <p className="text-xs text-amber-700 dark:text-amber-300">{retentionError}</p>
@@ -436,13 +521,21 @@ export const Dashboard: React.FC = () => {
                     onClick={() => {
                       setSelectedRemedialId(remedial.id);
                       setRemedialScore('');
-                      setRemedialNotes(typeof remedial.remedial.notes === 'string' ? remedial.remedial.notes : '');
+                      setRemedialNotes(remedial.notes || '');
                       setRemedialOutcome('passed');
+                      setReattemptDate('');
                     }}
                     className="w-full text-left p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 hover:border-clinical-400 transition-colors"
                   >
-                    <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">{remedial.studentName}</span>
-                    <span className="block text-[10px] text-slate-500 dark:text-slate-400">{remedial.subjectCode} · Record result</span>
+                    <div className="flex items-center justify-between">
+                      <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">{remedial.studentName}</span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50">
+                        Attempt {remedial.attemptNumber}
+                      </span>
+                    </div>
+                    <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {remedial.subjectCode} · {remedial.scheduledDate ? `Scheduled: ${remedial.scheduledDate}` : 'Record result'}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -522,14 +615,15 @@ export const Dashboard: React.FC = () => {
       <Modal
         isOpen={selectedRemedialId !== null}
         onClose={() => setSelectedRemedialId(null)}
-        title="Record Remedial Exam Score"
+        title={`Record Remedial Score (Attempt ${activeRemedialToRecord?.attemptNumber ?? 1})`}
       >
         {activeRemedialToRecord && (
           <form onSubmit={handleResolveRemedial} className="space-y-4">
             <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1">
               <div><span className="text-slate-400 font-semibold">Student:</span> <strong className="text-slate-800 dark:text-slate-200">{activeRemedialToRecord.studentName}</strong></div>
               <div><span className="text-slate-400 font-semibold">Subject:</span> <strong className="text-clinical-600 dark:text-clinical-400">{activeRemedialToRecord.subjectCode}</strong></div>
-              <div><span className="text-slate-400 font-semibold">Original Grade:</span> <strong className="text-rose-500">{activeRemedialToRecord.originalGrade}</strong></div>
+              <div><span className="text-slate-400 font-semibold">Original Grade:</span> <strong className="text-rose-500">{activeRemedialToRecord.originalGrade ?? 'N/A'}</strong></div>
+              <div><span className="text-slate-400 font-semibold">Current Attempt:</span> <span className="font-bold text-amber-600">Attempt {activeRemedialToRecord.attemptNumber}</span></div>
             </div>
 
             <div className="space-y-1.5">
@@ -541,9 +635,16 @@ export const Dashboard: React.FC = () => {
                 min="0"
                 max="100"
                 required
-                placeholder="Enter score (e.g. 82)"
+                placeholder="Enter score (e.g. 75)"
                 value={remedialScore}
-                onChange={(e) => setRemedialScore(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setRemedialScore(val);
+                  const num = Number(val);
+                  if (!isNaN(num) && val !== '') {
+                    setRemedialOutcome(num >= 50 ? 'passed' : 'failed');
+                  }
+                }}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-clinical-500 text-xs outline-none"
               />
             </div>
@@ -557,11 +658,36 @@ export const Dashboard: React.FC = () => {
                 onChange={event => setRemedialOutcome(event.target.value as 'passed' | 'failed')}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-clinical-500 text-xs outline-none"
               >
-                <option value="passed">Passed</option>
-                <option value="failed">Failed</option>
+                <option value="passed">Pass (Grade Cleared)</option>
+                {activeRemedialToRecord.attemptNumber === 1 ? (
+                  <option value="failed">Re-attempt (Allow Attempt 2)</option>
+                ) : (
+                  <option value="failed">Cost Recovery (Transfer to Cost Recovery)</option>
+                )}
               </select>
-              <p className="text-[10px] text-slate-400">The Faculty records the outcome; no client-side score threshold is inferred.</p>
+              <p className="text-[10px] text-slate-400">
+                {remedialOutcome === 'passed'
+                  ? 'Student will be marked as cleared and notified.'
+                  : activeRemedialToRecord.attemptNumber === 1
+                    ? 'Student will be marked for Attempt 2 re-attempt.'
+                    : 'Student will be moved to Cost Recovery program.'}
+              </p>
             </div>
+
+            {activeRemedialToRecord.attemptNumber === 1 && remedialOutcome === 'failed' && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Optional Attempt 2 Scheduled Date
+                </label>
+                <input
+                  type="date"
+                  min={new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date())}
+                  value={reattemptDate}
+                  onChange={(e) => setReattemptDate(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-clinical-500 text-xs outline-none"
+                />
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -576,20 +702,32 @@ export const Dashboard: React.FC = () => {
               />
             </div>
 
-            <div className="pt-3 flex justify-end gap-2">
+            <div className="pt-3 flex justify-between items-center">
               <button
                 type="button"
-                onClick={() => setSelectedRemedialId(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                onClick={() => {
+                  setSelectedRemedialId(null);
+                  navigate('/retention');
+                }}
+                className="text-xs font-semibold text-clinical-600 hover:text-clinical-700 hover:underline"
               >
-                Cancel
+                Open in Retention Monitoring &rarr;
               </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-clinical-600 hover:bg-clinical-700 shadow-md shadow-clinical-600/20 transition-all"
-              >
-                Save Score
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRemedialId(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-clinical-600 hover:bg-clinical-700 shadow-md shadow-clinical-600/20 transition-all"
+                >
+                  Save Result
+                </button>
+              </div>
             </div>
           </form>
         )}

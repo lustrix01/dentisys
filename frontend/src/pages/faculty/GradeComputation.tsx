@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Calculator,
@@ -10,6 +10,7 @@ import {
   CheckCircle,
   Plus,
   Search,
+  X,
   Edit,
   Trash2,
   Archive,
@@ -105,8 +106,8 @@ const categoryOptionKey = (category: {
   gradingPeriod?: 'Midterm' | 'Final' | null;
   component?: GradingComponentEnum | null;
 }, fallbackPeriod: 'Midterm' | 'Final') => category.id
-  ? String(category.id)
-  : `${category.gradingPeriod ?? fallbackPeriod}:${category.component ?? 'unassigned'}:${category.name}`;
+    ? String(category.id)
+    : `${category.gradingPeriod ?? fallbackPeriod}:${category.component ?? 'unassigned'}:${category.name}`;
 
 const calculateCategoryWeightSummary = (rows: PeriodCategoryDraftRow[]): CategoryWeightSummary => {
   let sumUnits = 0;
@@ -301,11 +302,28 @@ export const GradeComputation: React.FC = () => {
     }
   }, [availableClasses, selectedClassId]);
 
-  // Filter students under active subject/class scope
+  const getStudentLastName = (s: { lastName?: string; name: string }): string => {
+    if (s.lastName && s.lastName.trim()) return s.lastName.trim();
+    const parts = s.name.trim().split(/\s+/);
+    return parts.length > 0 ? parts[parts.length - 1] : s.name;
+  };
+
+  const sortStudentsByLastName = <T extends { lastName?: string; name: string }>(list: T[]): T[] => {
+    return [...list].sort((a, b) => {
+      const lastA = getStudentLastName(a).toLowerCase();
+      const lastB = getStudentLastName(b).toLowerCase();
+      const cmp = lastA.localeCompare(lastB);
+      if (cmp !== 0) return cmp;
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+  };
+
+  // Filter students under active subject/class scope (default sorted alphabetically by last name)
   const activeStudents = useMemo(() => {
-    return students.filter(s =>
+    const list = students.filter(s =>
       s.enrolledSubjects.some(sub => sub.classId === selectedClassId && sub.code === selectedSubjectCode)
     );
+    return sortStudentsByLastName(list);
   }, [students, selectedSubjectCode, selectedClassId]);
 
   // Find active subject details
@@ -336,8 +354,9 @@ export const GradeComputation: React.FC = () => {
   const [savedCategoryRows, setSavedCategoryRows] = useState<EditorCategoryRow[]>([]);
 
   // Period Mode State (Midterm & Finals)
-  const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '40', final: '60' });
-  const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '40', final: '60' });
+  const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '30', final: '70' });
+  const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '30', final: '70' });
+  const [isCustomizingWeights, setIsCustomizingWeights] = useState<boolean>(false);
 
   const [midtermCategories, setMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
   const [savedMidtermCategories, setSavedMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
@@ -451,7 +470,7 @@ export const GradeComputation: React.FC = () => {
   const [assClassId, setAssClassId] = useState('CLINIC-A');
   const [assType, setAssType] = useState<string>('Quiz');
   const [assPeriod, setAssPeriod] = useState<'Midterm' | 'Final'>('Midterm');
-  const [assMaxScore, setAssMaxScore] = useState(50);
+  const [assMaxScore, setAssMaxScore] = useState<number | ''>(50);
   const [assDueDate, setAssDueDate] = useState('');
   const [assInstructions, setAssInstructions] = useState('');
   const [assRemarks, setAssRemarks] = useState('');
@@ -668,7 +687,7 @@ export const GradeComputation: React.FC = () => {
     const preferredComponent = usesGroupedCategories ? selectedCurrentCategory?.component : undefined;
     const currentMatches = preferredComponent
       ? nextEligible.find(c => c.name === assType && c.component === preferredComponent)
-        ?? nextEligible.find(c => assGradingCategoryId && (String(c.id) === assGradingCategoryId || categoryOptionKey(c, newPeriod) === assGradingCategoryId) && c.component === preferredComponent)
+      ?? nextEligible.find(c => assGradingCategoryId && (String(c.id) === assGradingCategoryId || categoryOptionKey(c, newPeriod) === assGradingCategoryId) && c.component === preferredComponent)
       : nextEligible.find(
         c => (assGradingCategoryId && String(c.id) === String(assGradingCategoryId)) || c.name === assType
       );
@@ -729,6 +748,50 @@ export const GradeComputation: React.FC = () => {
       a.status !== 'Archived'
     );
   }, [assessments, activeSubTab, currentAssessmentOffering, selectedSubjectCode, selectedClassId]);
+
+  // Assessments Manager Filters State
+  const [assessmentSearch, setAssessmentSearch] = useState('');
+  const [assessmentPeriodFilter, setAssessmentPeriodFilter] = useState<'all' | 'Midterm' | 'Final'>('all');
+  const [assessmentCategoryFilter, setAssessmentCategoryFilter] = useState<string>('all');
+  const [assessmentStatusFilter, setAssessmentStatusFilter] = useState<string>('all');
+
+  const filteredAssessments = useMemo(() => {
+    return activeAssessments.filter(ass => {
+      // 1. Search query filter
+      if (assessmentSearch.trim()) {
+        const query = assessmentSearch.toLowerCase().trim();
+        const matchesTitle = ass.title.toLowerCase().includes(query);
+        const matchesInstructions = (ass.instructions || '').toLowerCase().includes(query);
+        const matchedCat = assessmentConfig?.categories.find(c => String(c.id) === String(ass.gradingCategoryId));
+        const matchesCategory = matchedCat?.name.toLowerCase().includes(query) || false;
+        if (!matchesTitle && !matchesInstructions && !matchesCategory) return false;
+      }
+
+      // 2. Grading Period filter
+      if (assessmentPeriodFilter !== 'all') {
+        if (ass.gradingPeriod !== assessmentPeriodFilter) return false;
+      }
+
+      // 3. Status filter
+      if (assessmentStatusFilter !== 'all') {
+        if (ass.status !== assessmentStatusFilter) return false;
+      }
+
+      // 4. Category filter
+      if (assessmentCategoryFilter !== 'all') {
+        if (String(ass.gradingCategoryId ?? '') !== String(assessmentCategoryFilter)) return false;
+      }
+
+      return true;
+    });
+  }, [
+    activeAssessments,
+    assessmentSearch,
+    assessmentPeriodFilter,
+    assessmentStatusFilter,
+    assessmentCategoryFilter,
+    assessmentConfig,
+  ]);
 
   const openNewAssessmentModal = async () => {
     const modalAvailableSections = availableClasses.length > 0
@@ -886,6 +949,12 @@ export const GradeComputation: React.FC = () => {
       ? Number(assGradingCategoryId)
       : null;
 
+    const parsedMaxScore = typeof assMaxScore === 'number' ? assMaxScore : parseInt(String(assMaxScore), 10);
+    if (isNaN(parsedMaxScore) || parsedMaxScore <= 0) {
+      showFeedback('Please enter a valid maximum score greater than 0.', 'error');
+      return;
+    }
+
     const candidate: any = editingAssessment
       ? {
         ...editingAssessment,
@@ -893,7 +962,7 @@ export const GradeComputation: React.FC = () => {
         type: assType,
         classId: assClassId,
         gradingPeriod: assPeriod,
-        maxScore: assMaxScore,
+        maxScore: parsedMaxScore,
         dueDate: assDueDate || null,
         instructions: assInstructions,
         remarks: assRemarks,
@@ -911,7 +980,7 @@ export const GradeComputation: React.FC = () => {
         subjectCode: targetSubjectCode,
         classId: assClassId,
         gradingPeriod: assPeriod,
-        maxScore: assMaxScore,
+        maxScore: parsedMaxScore,
         dueDate: assDueDate || null,
         instructions: assInstructions,
         remarks: assRemarks,
@@ -950,19 +1019,70 @@ export const GradeComputation: React.FC = () => {
   // 2. STUDENT SCORES TAB STATE
   // ----------------------------------------------------
   const [selectedAssessmentId, setSelectedAssessmentId] = useState('');
+  const [activityFilterPeriod, setActivityFilterPeriod] = useState<'all' | 'Midterm' | 'Final'>('all');
+  const [activityFilterType, setActivityFilterType] = useState<string>('all');
+  const [activityFilterSearch, setActivityFilterSearch] = useState<string>('');
   const [scoreSearch, setScoreSearch] = useState('');
   const [scoresInputState, setScoresInputState] = useState<Record<string, { score: string; remarks: string }>>({});
   const [isScoresSavedAlert, setIsScoresSavedAlert] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
 
-  // Set default assessment when subject/class changes
+  // Auto-save status states
+  const [singleSaveStatus, setSingleSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
+  const singleDirtyRef = useRef(false);
+  const singleDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const singleScoresRef = useRef<Record<string, { score: string; remarks: string }>>({});
+
+  const [matrixSaveStatus, setMatrixSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
+  const matrixDirtyRef = useRef(false);
+  const matrixDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matrixScoresRef = useRef<Record<string, Record<string, string>>>({});
+
+  const availableActivityTypes = useMemo(() => {
+    const types = new Set<string>();
+    activeAssessments.forEach(a => {
+      if (a.type && a.type.trim()) {
+        types.add(a.type.trim());
+      }
+    });
+    return Array.from(types).sort();
+  }, [activeAssessments]);
+
+  const activityMidtermCount = useMemo(() => {
+    return activeAssessments.filter(a => (a.gradingPeriod ?? 'Midterm') === 'Midterm').length;
+  }, [activeAssessments]);
+
+  const activityFinalCount = useMemo(() => {
+    return activeAssessments.filter(a => a.gradingPeriod === 'Final').length;
+  }, [activeAssessments]);
+
+  const singleActivityFilteredAssessments = useMemo(() => {
+    return activeAssessments.filter(a => {
+      if (activityFilterPeriod !== 'all') {
+        const period = a.gradingPeriod ?? 'Midterm';
+        if (period !== activityFilterPeriod) return false;
+      }
+      if (activityFilterType !== 'all') {
+        if ((a.type || '').trim() !== activityFilterType) return false;
+      }
+      if (activityFilterSearch.trim()) {
+        const q = activityFilterSearch.toLowerCase().trim();
+        const matchTitle = (a.title || '').toLowerCase().includes(q);
+        const matchType = (a.type || '').toLowerCase().includes(q);
+        if (!matchTitle && !matchType) return false;
+      }
+      return true;
+    });
+  }, [activeAssessments, activityFilterPeriod, activityFilterType, activityFilterSearch]);
+
+  // Set default assessment when subject/class or filter changes
   useEffect(() => {
-    if (activeAssessments.length > 0) {
-      setSelectedAssessmentId(activeAssessments[0].id);
-    } else {
-      setSelectedAssessmentId('');
+    if (singleActivityFilteredAssessments.length > 0) {
+      if (!singleActivityFilteredAssessments.some(a => a.id === selectedAssessmentId)) {
+        setSelectedAssessmentId(singleActivityFilteredAssessments[0].id);
+      }
     }
-  }, [selectedSubjectCode, selectedClassId, assessments]);
+  }, [singleActivityFilteredAssessments, selectedAssessmentId]);
 
   const activeAssessment = useMemo(() => {
     return assessments.find(a => a.id === selectedAssessmentId);
@@ -982,19 +1102,11 @@ export const GradeComputation: React.FC = () => {
       };
     });
     setScoresInputState(initialInputs);
+    singleScoresRef.current = initialInputs;
+    singleDirtyRef.current = false;
+    setSingleSaveStatus('saved');
     setIsScoresSavedAlert(false);
   }, [selectedAssessmentId, activeStudents, assessmentScores]);
-
-  const handleScoreChange = (studentId: string, val: string, field: 'score' | 'remarks') => {
-    setScoresInputState(prev => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [field]: val
-      }
-    }));
-    setIsScoresSavedAlert(false);
-  };
 
   // Validates a single score input
   const validateSingleScore = (scoreStr: string, maxScore: number): boolean => {
@@ -1017,40 +1129,20 @@ export const GradeComputation: React.FC = () => {
   const hasStoredScore = (assessmentId: string, studentId: string): boolean =>
     assessmentScores.some(score => score.assessmentId === assessmentId && score.studentId === studentId);
 
-  // Auto-save on input blur
-  const handleScoreBlur = async (studentId: string) => {
-    if (!autoSaveEnabled || !selectedAssessmentId || !activeAssessment) return;
-    const item = scoresInputState[studentId];
-    if (!item) return;
-
-    if (!validateSingleScore(item.score, activeAssessment.maxScore)) return;
-
-    const saveList: FacultyScoreEntry[] = Object.entries(scoresInputState)
-      .filter(([id, val]) => val.score !== '' || hasStoredScore(selectedAssessmentId, id))
-      .map(([id, val]) => ({
-        studentId: id,
-        score: val.score === '' ? null : parseFloat(val.score),
-        remarks: val.remarks
-      }));
-    try {
-      await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
-      saveAssessmentScores(selectedAssessmentId, saveList);
-      await refreshPersistedGrades(activeAssessment.classId);
-    } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Auto-save failed.', 'error');
-    }
-  };
-
-  const handleManualSaveScores = async () => {
+  // Single Assessment Saving Logic (Auto & Manual)
+  const performSaveSingleScores = async (isManual = false) => {
     if (!selectedAssessmentId || !activeAssessment) return;
+    if (singleSaveStatus === 'saving') return;
 
     let hasErrors = false;
     const saveList: FacultyScoreEntry[] = [];
+    const currentScores = singleScoresRef.current;
 
-    Object.entries(scoresInputState).forEach(([studentId, val]) => {
+    Object.entries(currentScores).forEach(([studentId, val]) => {
       if (val.score === '') {
-        // Clearing a stored score deletes it.
-        if (hasStoredScore(selectedAssessmentId, studentId)) saveList.push({ studentId, score: null, remarks: val.remarks });
+        if (hasStoredScore(selectedAssessmentId, studentId)) {
+          saveList.push({ studentId, score: null, remarks: val.remarks });
+        }
         return;
       }
 
@@ -1067,25 +1159,74 @@ export const GradeComputation: React.FC = () => {
     });
 
     if (hasErrors) {
-      showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
+      if (isManual) {
+        showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
+      }
       return;
     }
-    const clearedCount = saveList.filter(entry => entry.score === null).length;
-    const confirmed = await requestConfirmation(
-      `Save ${saveList.length - clearedCount} score(s)${clearedCount > 0 ? ` and clear ${clearedCount}` : ''} for ${activeAssessment.title}?`,
-      'Save scores'
-    );
-    if (!confirmed) return;
 
+    if (saveList.length === 0) {
+      singleDirtyRef.current = false;
+      return;
+    }
+
+    setSingleSaveStatus('saving');
     try {
       await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
       saveAssessmentScores(selectedAssessmentId, saveList);
       await refreshPersistedGrades(activeAssessment.classId);
+      singleDirtyRef.current = false;
+      setSingleSaveStatus('saved');
       setIsScoresSavedAlert(true);
-      setTimeout(() => setIsScoresSavedAlert(false), 3000);
+      if (isManual) {
+        showFeedback(`Saved ${saveList.filter(e => e.score !== null).length} scores successfully!`, 'success');
+      }
+      setTimeout(() => setIsScoresSavedAlert(false), 2500);
     } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
+      setSingleSaveStatus('error');
+      if (isManual) {
+        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
+      }
     }
+  };
+
+  const handleScoreChange = (studentId: string, val: string, field: 'score' | 'remarks') => {
+    singleDirtyRef.current = true;
+    setScoresInputState(prev => {
+      const next = {
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          [field]: val
+        }
+      };
+      singleScoresRef.current = next;
+      return next;
+    });
+    setIsScoresSavedAlert(false);
+
+    if (singleDebounceTimerRef.current) {
+      clearTimeout(singleDebounceTimerRef.current);
+    }
+    singleDebounceTimerRef.current = setTimeout(() => {
+      performSaveSingleScores(false);
+    }, 1000);
+  };
+
+  const handleScoreBlur = async (_studentId: string) => {
+    if (singleDirtyRef.current) {
+      if (singleDebounceTimerRef.current) {
+        clearTimeout(singleDebounceTimerRef.current);
+      }
+      performSaveSingleScores(false);
+    }
+  };
+
+  const handleManualSaveScores = async () => {
+    if (singleDebounceTimerRef.current) {
+      clearTimeout(singleDebounceTimerRef.current);
+    }
+    performSaveSingleScores(true);
   };
 
   // View Mode: 'single' (Activity view) vs 'matrix' (Full gradebook grid view)
@@ -1096,6 +1237,7 @@ export const GradeComputation: React.FC = () => {
 
   // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
   useEffect(() => {
+    if (matrixDirtyRef.current) return;
     const matrix: Record<string, Record<string, string>> = {};
     activeStudents.forEach(student => {
       matrix[student.id] = {};
@@ -1105,32 +1247,27 @@ export const GradeComputation: React.FC = () => {
       });
     });
     setMatrixScoresState(matrix);
+    matrixScoresRef.current = matrix;
+    matrixDirtyRef.current = false;
+    setMatrixSaveStatus('saved');
   }, [activeStudents, activeAssessments, assessmentScores]);
 
-  const handleMatrixScoreChange = (studentId: string, assessmentId: string, value: string) => {
-    setMatrixScoresState(prev => ({
-      ...prev,
-      [studentId]: {
-        ...(prev[studentId] || {}),
-        [assessmentId]: value,
-      }
-    }));
-    setIsMatrixSavedAlert(false);
-  };
+  // Matrix Assessment Saving Logic (Auto & Manual)
+  const performSaveMatrixScores = async (isManual = false) => {
+    if (matrixSaveStatus === 'saving') return;
 
-  const handleSaveMatrixScores = async () => {
     let hasErrors = false;
     let saveCount = 0;
     let clearedCount = 0;
     const batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }> = [];
+    const currentScores = matrixScoresRef.current;
 
     for (const ass of activeAssessments) {
       const scores: FacultyScoreEntry[] = [];
       activeStudents.forEach(student => {
-        const valStr = matrixScoresState[student.id]?.[ass.id] ?? '';
+        const valStr = currentScores[student.id]?.[ass.id] ?? '';
         const existingMatch = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
         if (valStr === '') {
-          // Clearing a stored score deletes it.
           if (existingMatch) {
             scores.push({ studentId: student.id, score: null, remarks: existingMatch.remarks || '' });
             clearedCount++;
@@ -1149,35 +1286,81 @@ export const GradeComputation: React.FC = () => {
     }
 
     if (hasErrors) {
-      showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
+      if (isManual) {
+        showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
+      }
       return;
     }
     if (batches.length === 0) {
-      showFeedback('There are no scores to save.', 'info');
+      if (isManual) {
+        showFeedback('There are no scores to save.', 'info');
+      }
+      matrixDirtyRef.current = false;
       return;
     }
-    const confirmed = await requestConfirmation(
-      `Save ${saveCount} score(s)${clearedCount > 0 ? ` and clear ${clearedCount}` : ''} across ${batches.length} assessment(s)? All changes are saved together or not at all.`,
-      'Save scores'
-    );
-    if (!confirmed) return;
 
+    setMatrixSaveStatus('saving');
     try {
       await saveFacultyScoreBatchesApi(batches);
-    } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix. Nothing was saved.', 'error');
-      return;
-    }
-    batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
+      batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
 
-    const targetClassId = selectedClassId || availableClasses[0]?.id;
-    if (targetClassId) {
-      await refreshPersistedGrades(targetClassId);
+      const targetClassId = selectedClassId || availableClasses[0]?.id;
+      if (targetClassId) {
+        await refreshPersistedGrades(targetClassId);
+      }
+      setMatrixRefreshKey(key => key + 1);
+      matrixDirtyRef.current = false;
+      setMatrixSaveStatus('saved');
+      setIsMatrixSavedAlert(true);
+      if (isManual) {
+        showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
+      }
+      setTimeout(() => setIsMatrixSavedAlert(false), 2500);
+    } catch (requestError) {
+      setMatrixSaveStatus('error');
+      if (isManual) {
+        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix.', 'error');
+      }
     }
-    setMatrixRefreshKey(key => key + 1);
-    setIsMatrixSavedAlert(true);
-    showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
-    setTimeout(() => setIsMatrixSavedAlert(false), 3000);
+  };
+
+  const handleMatrixScoreChange = (studentId: string, assessmentId: string, value: string) => {
+    matrixDirtyRef.current = true;
+    setMatrixScoresState(prev => {
+      const next = {
+        ...prev,
+        [studentId]: {
+          ...(prev[studentId] || {}),
+          [assessmentId]: value,
+        }
+      };
+      matrixScoresRef.current = next;
+      return next;
+    });
+    setIsMatrixSavedAlert(false);
+
+    if (matrixDebounceTimerRef.current) {
+      clearTimeout(matrixDebounceTimerRef.current);
+    }
+    matrixDebounceTimerRef.current = setTimeout(() => {
+      performSaveMatrixScores(false);
+    }, 1000);
+  };
+
+  const handleMatrixScoreBlur = () => {
+    if (matrixDirtyRef.current) {
+      if (matrixDebounceTimerRef.current) {
+        clearTimeout(matrixDebounceTimerRef.current);
+      }
+      performSaveMatrixScores(false);
+    }
+  };
+
+  const handleSaveMatrixScores = async () => {
+    if (matrixDebounceTimerRef.current) {
+      clearTimeout(matrixDebounceTimerRef.current);
+    }
+    performSaveMatrixScores(true);
   };
 
   // Helper stats for Single Assessment Mode
@@ -1236,12 +1419,13 @@ export const GradeComputation: React.FC = () => {
     setIsScoresSavedAlert(false);
   };
 
-  // Filter roster for scores entry
+  // Filter roster for scores entry (default sorted alphabetically by last name)
   const filteredScoreStudents = useMemo(() => {
-    return activeStudents.filter(s =>
+    const list = activeStudents.filter(s =>
       s.name.toLowerCase().includes(scoreSearch.toLowerCase()) ||
       s.studentId.toLowerCase().includes(scoreSearch.toLowerCase())
     );
+    return sortStudentsByLastName(list);
   }, [activeStudents, scoreSearch]);
 
   // ----------------------------------------------------
@@ -1302,6 +1486,16 @@ export const GradeComputation: React.FC = () => {
     setIsConversionModalOpen(false);
   };
 
+  const handleApplyBuGradingSystem = () => {
+    setSchemaMode('periods');
+    setComponentMode('lecture_laboratory');
+    setComponentWeights({ lecture: '60', laboratory: '40' });
+    setTermRatio({ midterm: '30', final: '70' });
+    setMidtermCategories(buildDefaultLectureLaboratoryCategories('Midterm'));
+    setFinalCategories(buildDefaultLectureLaboratoryCategories('Final'));
+    showFeedback('Applied BU Grading System standard (Lecture 60%, Lab 40% | Midterm 30%, Finals 70%). Click Save to apply.', 'success');
+  };
+
   // Keep selected offering key synchronized with the active course filter
   useEffect(() => {
     if (facultyOfferings.length === 0) return;
@@ -1336,6 +1530,7 @@ export const GradeComputation: React.FC = () => {
       if (res.configuration === null) {
         // Unconfigured offering: populate editable unsaved starting preset
         setSchemaMode('periods');
+        setIsCustomizingWeights(true);
         const defaults = res.defaults;
         const fallback = buildDefaultPeriodDraft();
         setComponentMode(defaults?.componentMode ?? 'lecture_laboratory');
@@ -1395,6 +1590,7 @@ export const GradeComputation: React.FC = () => {
         setSavedCategoryRows([]);
       } else {
         setIsPresetDraft(false);
+        setIsCustomizingWeights(false);
         const mode = res.configuration.schemaMode ?? 'overall';
         setSchemaMode(mode);
         const loadedComponentMode = res.configuration.componentMode ?? 'combined';
@@ -1474,8 +1670,8 @@ export const GradeComputation: React.FC = () => {
         } else {
           // Period Mode
           const tr = {
-            midterm: String(res.configuration.termRatio?.midterm ?? 40),
-            final: String(res.configuration.termRatio?.final ?? 60),
+            midterm: String(res.configuration.termRatio?.midterm ?? 30),
+            final: String(res.configuration.termRatio?.final ?? 70),
           };
           setTermRatio(tr);
           setSavedTermRatio(tr);
@@ -2089,7 +2285,7 @@ export const GradeComputation: React.FC = () => {
       });
     }
     return assignments;
-            };
+  };
 
   const assessmentMappingItems = [
     ...(firstSaveAssignmentError ?? []),
@@ -2414,6 +2610,10 @@ export const GradeComputation: React.FC = () => {
 
     return filtered.sort((a, b) => {
       if (sortField === 'name') {
+        const lastA = getStudentLastName(a).toLowerCase();
+        const lastB = getStudentLastName(b).toLowerCase();
+        const cmp = lastA.localeCompare(lastB);
+        if (cmp !== 0) return sortAsc ? cmp : -cmp;
         return sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
       } else {
         const subjA = a.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
@@ -2509,7 +2709,7 @@ export const GradeComputation: React.FC = () => {
       isLectureLaboratoryMode ? 'lecture_laboratory' : 'combined'
     );
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -2519,13 +2719,49 @@ export const GradeComputation: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const handleExportPDF = () => {
+    recordAudit({
+      action: 'Exported grade PDF',
+      module: 'Grade Computation',
+      description: `Exported printable PDF grade ledger for ${selectedSubjectCode}.`,
+      status: 'Success',
+    });
+    window.print();
+  };
+
   // ----------------------------------------------------
   // 5. IMPORT GRADE SHEETS TAB STATE
   // ----------------------------------------------------
   const [importPeriod, setImportPeriod] = useState<'Midterm' | 'Final' | 'Overall'>('Midterm');
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [csvPreviewData, setCsvPreviewData] = useState<{ id: string; name: string; score: number; valid: boolean; error?: string }[]>([]);
   const [csvErrors, setCsvErrors] = useState<string[]>([]);
+
+  const handleClearCsv = () => {
+    setCsvFile(null);
+    setCsvPreviewData([]);
+    setCsvErrors([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDownloadCsvTemplate = () => {
+    const headers = 'Student ID,Score\n';
+    const sampleRows = activeStudents.length > 0
+      ? activeStudents.map(s => `${s.studentId},`).join('\n')
+      : '2024-0001,85\n2024-0002,90\n';
+    const blob = new Blob([headers + sampleRows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${selectedSubjectCode || 'Course'}_${importPeriod}_Score_Template.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showFeedback('Sample CSV score template downloaded.', 'success');
+  };
 
   const handleCsvSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2756,8 +2992,8 @@ export const GradeComputation: React.FC = () => {
               <button
                 onClick={() => setScoreEntryMode('single')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'single'
-                    ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
               >
                 <List className="w-3.5 h-3.5" />
@@ -2766,8 +3002,8 @@ export const GradeComputation: React.FC = () => {
               <button
                 onClick={() => setScoreEntryMode('matrix')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'matrix'
-                    ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
               >
                 <Grid className="w-3.5 h-3.5" />
@@ -2788,13 +3024,27 @@ export const GradeComputation: React.FC = () => {
                   <p className="text-[10px] text-slate-400 mt-0.5">Edit all course assessments side-by-side in a spreadsheet grid.</p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                    {matrixSaveStatus === 'saving' ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
+                        <span className="text-clinical-600 dark:text-clinical-400">Auto-saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700 dark:text-emerald-400">Auto-save on</span>
+                      </>
+                    )}
+                  </div>
                   <button
                     onClick={handleSaveMatrixScores}
-                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97"
+                    disabled={matrixSaveStatus === 'saving'}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
                   >
-                    <Save className="w-4 h-4" />
-                    <span>{isMatrixSavedAlert ? 'All Matrix Scores Saved!' : 'Save All Matrix Scores'}</span>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isMatrixSavedAlert ? 'Saved!' : 'Save All Matrix Scores'}</span>
                   </button>
                 </div>
               </div>
@@ -2808,10 +3058,11 @@ export const GradeComputation: React.FC = () => {
                   <GradebookMatrix
                     classId={selectedClassId}
                     offering={matrixOffering}
-                    students={filteredScoreStudents.map(student => ({ id: student.id, studentId: String(student.studentId ?? ''), name: student.name }))}
+                    students={filteredScoreStudents.map(student => ({ id: student.id, studentId: String(student.studentId ?? ''), name: student.name, lastName: student.lastName }))}
                     assessments={activeAssessments}
                     scores={matrixScoresState}
                     onScoreChange={handleMatrixScoreChange}
+                    onScoreBlur={handleMatrixScoreBlur}
                     isValidScore={validateSingleScore}
                     refreshKey={matrixRefreshKey}
                   />
@@ -2830,25 +3081,126 @@ export const GradeComputation: React.FC = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 flex-1">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Choose Assessment</label>
-                      {activeAssessments.length === 0 ? (
-                        <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-150 rounded-xl text-xs text-slate-450 text-center">
-                          No active assessments. Please create one under "Assessments Manager" first.
+                    <div className="space-y-3">
+                      {/* Filter Controls Bar */}
+                      <div className="p-2.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-150 dark:border-slate-800 space-y-2">
+                        {/* Period Segmented Pills */}
+                        <div className="flex items-center gap-1 bg-slate-200/60 dark:bg-slate-800 p-0.5 rounded-lg">
+                          <button
+                            type="button"
+                            onClick={() => setActivityFilterPeriod('all')}
+                            className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
+                              activityFilterPeriod === 'all'
+                                ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
+                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                            }`}
+                          >
+                            All ({activeAssessments.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActivityFilterPeriod('Midterm')}
+                            className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
+                              activityFilterPeriod === 'Midterm'
+                                ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
+                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                            }`}
+                          >
+                            Midterm ({activityMidtermCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActivityFilterPeriod('Final')}
+                            className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
+                              activityFilterPeriod === 'Final'
+                                ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
+                                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                            }`}
+                          >
+                            Final ({activityFinalCount})
+                          </button>
                         </div>
-                      ) : (
-                        <select
-                          value={selectedAssessmentId}
-                          onChange={(e) => setSelectedAssessmentId(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none"
-                        >
-                          {activeAssessments.map(ass => (
-                            <option key={ass.id} value={ass.id}>
-                              {ass.title} ({ass.type} • Max: {ass.maxScore})
-                            </option>
-                          ))}
-                        </select>
-                      )}
+
+                        {/* Search & Category Row */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search..."
+                              value={activityFilterSearch}
+                              onChange={(e) => setActivityFilterSearch(e.target.value)}
+                              className="w-full pl-8 pr-6 py-1.5 rounded-lg border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                            />
+                            {activityFilterSearch && (
+                              <button
+                                type="button"
+                                onClick={() => setActivityFilterSearch('')}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+
+                          <select
+                            value={activityFilterType}
+                            onChange={(e) => setActivityFilterType(e.target.value)}
+                            className="w-full px-2 py-1.5 rounded-lg border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                          >
+                            <option value="all">All Categories</option>
+                            {availableActivityTypes.map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Choose Assessment */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Choose Assessment</label>
+                          <span className="text-[10px] text-slate-450 dark:text-slate-500 font-semibold">
+                            {singleActivityFilteredAssessments.length === activeAssessments.length
+                              ? `${activeAssessments.length} total`
+                              : `${singleActivityFilteredAssessments.length} of ${activeAssessments.length}`}
+                          </span>
+                        </div>
+
+                        {activeAssessments.length === 0 ? (
+                          <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-150 rounded-xl text-xs text-slate-450 text-center">
+                            No active assessments. Please create one under "Assessments Manager" first.
+                          </div>
+                        ) : singleActivityFilteredAssessments.length === 0 ? (
+                          <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-150 dark:border-slate-800 rounded-xl text-center space-y-1">
+                            <p className="text-xs text-slate-500">No assessments match the active filters.</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActivityFilterPeriod('all');
+                                setActivityFilterType('all');
+                                setActivityFilterSearch('');
+                              }}
+                              className="text-[11px] font-bold text-clinical-600 hover:underline"
+                            >
+                              Reset filters
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            value={selectedAssessmentId}
+                            onChange={(e) => setSelectedAssessmentId(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                          >
+                            {singleActivityFilteredAssessments.map((ass) => (
+                              <option key={ass.id} value={ass.id}>
+                                {activityFilterPeriod === 'all' && ass.gradingPeriod ? `[${ass.gradingPeriod}] ` : ''}
+                                {ass.title} ({ass.type || 'Assessment'} • Max: {ass.maxScore})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
                     </div>
 
                     {activeAssessment && (
@@ -2917,37 +3269,6 @@ export const GradeComputation: React.FC = () => {
               </div>
 
               <div className="lg:col-span-8 space-y-3">
-                {/* QUICK BATCH ACTIONS TOOLBAR */}
-                {selectedAssessmentId && activeAssessment && (
-                  <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                      <Zap className="w-3.5 h-3.5 text-amber-500" />
-                      Quick Actions:
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleQuickFillEmpty(0)}
-                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-650 dark:text-slate-300 hover:bg-slate-100 font-semibold text-[11px]"
-                      >
-                        Fill Empty with 0
-                      </button>
-                      <button
-                        onClick={() => handleQuickFillEmpty(activeAssessment.maxScore)}
-                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-650 dark:text-slate-300 hover:bg-slate-100 font-semibold text-[11px]"
-                      >
-                        Fill Empty with Max ({activeAssessment.maxScore})
-                      </button>
-                      <button
-                        onClick={handleResetScoresInput}
-                        className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-450 hover:text-slate-600 font-semibold text-[11px] flex items-center gap-1"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        Reset
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 <Card className="p-0 overflow-hidden">
                   <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
@@ -3001,21 +3322,27 @@ export const GradeComputation: React.FC = () => {
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === 'ArrowDown') {
                                       e.preventDefault();
-                                      const next = document.getElementById(`score-input-${idx + 1}`);
-                                      if (next) (next as HTMLInputElement).focus();
+                                      const next = document.getElementById(`score-input-${idx + 1}`) as HTMLInputElement | null;
+                                      if (next) {
+                                        next.focus();
+                                        next.select();
+                                      }
                                     } else if (e.key === 'ArrowUp') {
                                       e.preventDefault();
-                                      const prev = document.getElementById(`score-input-${idx - 1}`);
-                                      if (prev) (prev as HTMLInputElement).focus();
+                                      const prev = document.getElementById(`score-input-${idx - 1}`) as HTMLInputElement | null;
+                                      if (prev) {
+                                        prev.focus();
+                                        prev.select();
+                                      }
                                     }
                                   }}
                                   onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
                                   onBlur={() => handleScoreBlur(student.id)}
                                   className={`w-28 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${!isValid
-                                      ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
-                                      : row.score === ''
-                                        ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
-                                        : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
+                                    ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
+                                    : row.score === ''
+                                      ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
+                                      : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
                                     }`}
                                 />
                                 {!isValid && (
@@ -3030,12 +3357,26 @@ export const GradeComputation: React.FC = () => {
                   </div>
 
                   {selectedAssessmentId && filteredScoreStudents.length > 0 && (
-                    <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-3">
+                    <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-2.5">
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                        {singleSaveStatus === 'saving' ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
+                            <span className="text-clinical-600 dark:text-clinical-400">Auto-saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700 dark:text-emerald-400">Auto-save on</span>
+                          </>
+                        )}
+                      </div>
                       <button
                         onClick={handleManualSaveScores}
-                        className="flex items-center gap-1.5 px-5 py-3 rounded-2xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97"
+                        disabled={singleSaveStatus === 'saving'}
+                        className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
                       >
-                        <Save className="w-4 h-4" />
+                        <Save className="w-3.5 h-3.5" />
                         <span>{isScoresSavedAlert ? 'Scores Saved Successfully!' : 'Save Scores Sheet'}</span>
                       </button>
                     </div>
@@ -3085,6 +3426,107 @@ export const GradeComputation: React.FC = () => {
             </div>
           </div>
 
+          {/* ASSESSMENTS FILTERS TOOLBAR (SINGLE ROW) */}
+          <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-3 overflow-x-auto">
+            <div className="flex items-center gap-2.5 flex-nowrap shrink-0">
+              {/* Search Box */}
+              <div className="relative w-48 sm:w-56">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search assessment..."
+                  value={assessmentSearch}
+                  onChange={(e) => setAssessmentSearch(e.target.value)}
+                  className="w-full pl-9 pr-7 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
+                />
+                {assessmentSearch && (
+                  <button
+                    onClick={() => setAssessmentSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Grading Period Dropdown */}
+              <select
+                value={assessmentPeriodFilter}
+                onChange={(e) => {
+                  const newPeriod = e.target.value as 'all' | 'Midterm' | 'Final';
+                  setAssessmentPeriodFilter(newPeriod);
+                  if (assessmentCategoryFilter !== 'all' && assessmentConfig?.categories) {
+                    const match = assessmentConfig.categories.find(c => String(c.id) === String(assessmentCategoryFilter));
+                    if (match && newPeriod !== 'all' && match.gradingPeriod && match.gradingPeriod !== newPeriod) {
+                      setAssessmentCategoryFilter('all');
+                    }
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500"
+              >
+                <option value="all">All Periods</option>
+                <option value="Midterm">Midterm</option>
+                <option value="Final">Final</option>
+              </select>
+
+              {/* Category Dropdown (dynamically filtered by selected period) */}
+              {assessmentConfig?.categories && assessmentConfig.categories.length > 0 && (
+                <select
+                  value={assessmentCategoryFilter}
+                  onChange={(e) => setAssessmentCategoryFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500 max-w-[200px] truncate"
+                >
+                  <option value="all">All Categories</option>
+                  {assessmentConfig.categories
+                    .filter(c => {
+                      if (c.sourceKind === 'attendance') return false;
+                      if (assessmentPeriodFilter !== 'all' && c.gradingPeriod && c.gradingPeriod !== assessmentPeriodFilter) {
+                        return false;
+                      }
+                      return true;
+                    })
+                    .map(cat => (
+                      <option key={cat.id} value={String(cat.id)}>
+                        {assessmentPeriodFilter === 'all' && cat.gradingPeriod ? `${cat.gradingPeriod}: ` : ''}
+                        {cat.component ? `${cat.component} · ` : ''}{cat.name}
+                      </option>
+                    ))}
+                </select>
+              )}
+
+              {/* Status Dropdown */}
+              <select
+                value={assessmentStatusFilter}
+                onChange={(e) => setAssessmentStatusFilter(e.target.value)}
+                className="px-3 py-1.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-clinical-500"
+              >
+                <option value="all">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Closed">Closed</option>
+              </select>
+
+              {/* Clear Filters Button */}
+              {(assessmentSearch || assessmentPeriodFilter !== 'all' || assessmentCategoryFilter !== 'all' || assessmentStatusFilter !== 'all') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssessmentSearch('');
+                    setAssessmentPeriodFilter('all');
+                    setAssessmentCategoryFilter('all');
+                    setAssessmentStatusFilter('all');
+                  }}
+                  className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 hover:underline px-1.5 py-1 whitespace-nowrap"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+
+            <div className="text-[11px] text-slate-400 font-medium whitespace-nowrap shrink-0">
+              Showing <span className="font-bold text-slate-700 dark:text-slate-200">{filteredAssessments.length}</span> of {activeAssessments.length}
+            </div>
+          </div>
+
           <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
             <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
@@ -3105,8 +3547,14 @@ export const GradeComputation: React.FC = () => {
                       No active assessments created for this course. Click "Add Assessment" to create one.
                     </td>
                   </tr>
+                ) : filteredAssessments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-10 text-center text-slate-400 font-semibold">
+                      No assessments match the selected filters.
+                    </td>
+                  </tr>
                 ) : (
-                  activeAssessments.map(ass => (
+                  filteredAssessments.map(ass => (
                     <tr key={ass.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
@@ -3152,7 +3600,7 @@ export const GradeComputation: React.FC = () => {
                             if (matchedCategory) {
                               return (
                                 <span className="px-2 py-0.5 rounded-md font-semibold bg-clinical-50 text-clinical-600 dark:bg-clinical-950/40 dark:text-clinical-450 uppercase text-[9px] tracking-wide">
-                        {matchedCategory.component ? `${matchedCategory.component} · ${matchedCategory.name}` : matchedCategory.name}
+                                  {matchedCategory.component ? `${matchedCategory.component} · ${matchedCategory.name}` : matchedCategory.name}
                                 </span>
                               );
                             }
@@ -3238,25 +3686,25 @@ export const GradeComputation: React.FC = () => {
       ---------------------------------------------------- */}
       {activeSubTab === 'components' && (
         <Card className="max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
-          <CardHeader className="border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
+          <CardHeader className="relative border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div className="space-y-1 sm:pr-24">
                 <CardTitle className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
                   <Settings className="w-5 h-5 text-clinical-600 dark:text-clinical-400" />
                   <span>Configure Grading Weights & Schema</span>
                 </CardTitle>
                 {currentOffering && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                     Editing schema for: <span className="font-bold text-clinical-600 dark:text-clinical-400">{currentOffering.courseCode} — {currentOffering.courseName}</span>
                   </p>
                 )}
                 {currentOffering && (
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5" data-testid="weights-sections-note">
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500" data-testid="weights-sections-note">
                     These weights apply to all {currentOffering.sections.length === 1 ? 'sections' : `${currentOffering.sections.length} sections`} of this course ({currentOffering.sectionNames.join(', ')}). The section selector above does not change them.
                   </p>
                 )}
                 {currentOffering && !configLoading && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+                  <div className="pt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
                     <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                       {schemaMode === 'overall' ? 'Overall Grading (legacy)' : 'Period Grading'}
                     </span>
@@ -3279,16 +3727,18 @@ export const GradeComputation: React.FC = () => {
               </div>
 
               {currentOffering && (
-                <button
-                  type="button"
-                  onClick={handleReload}
-                  disabled={configLoading || configSaving}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-xs disabled:opacity-50 cursor-pointer"
-                  title="Reload latest configuration from server"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${configLoading ? 'animate-spin' : ''}`} />
-                  <span>Reload</span>
-                </button>
+                <div className="absolute top-6 right-6 sm:top-7 sm:right-7 z-10">
+                  <button
+                    type="button"
+                    onClick={handleReload}
+                    disabled={configLoading || configSaving}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-350 hover:bg-slate-50 dark:hover:bg-slate-800 bg-white dark:bg-slate-900 shadow-2xs disabled:opacity-50 cursor-pointer transition-colors"
+                    title="Reload latest configuration from server"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${configLoading ? 'animate-spin' : ''}`} />
+                    <span>Reload</span>
+                  </button>
+                </div>
               )}
             </div>
           </CardHeader>
@@ -3580,186 +4030,265 @@ export const GradeComputation: React.FC = () => {
               /* PERIOD GRADING VIEW (MIDTERM & FINALS) */
               <div className="space-y-6">
                 <form onSubmit={handleSaveGradingConfig} className="space-y-6">
-                  <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/40 space-y-4">
-                    {isLegacyCombinedPeriodConfig ? (
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 p-4">
-                        <div className="space-y-1">
-                          <h3 className="text-xs font-extrabold text-amber-900 dark:text-amber-200">Saved combined period grading</h3>
-                          <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80">
-                            This saved setup remains active until you save a validated conversion. Recorded grades stay unchanged until recomputation. Assign every existing category to a component and set both lists to valid totals before saving.
-                          </p>
-                        </div>
+                  {/* STATUS / UNSAVED BANNER */}
+                  {isDirty ? (
+                    <div className="p-3 sm:p-3.5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200 font-semibold">
+                        <Edit className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span>You have unsaved changes. Adjust weights or categories directly below, then click Save Grade Weights.</span>
+                      </div>
+                      {loadedConfig && (
                         <button
                           type="button"
-                          onClick={handleStartLectureLaboratoryConversion}
-                          disabled={configSaving}
-                          className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white font-bold text-xs"
+                          onClick={handleReload}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-amber-800 dark:text-amber-200 font-bold text-xs hover:bg-amber-100/50 transition-colors cursor-pointer shrink-0"
                         >
-                          <Zap className="w-3.5 h-3.5" />
-                          Convert to Lecture/Laboratory
+                          <span>Reset Changes</span>
                         </button>
-                      </div>
-                    ) : (
-                      <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-3">
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Lecture and Laboratory each have a separate editable category list for Midterm and Finals.
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label htmlFor="lecture-component-weight" className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-                              LECTURE CONTRIBUTION (%)
-                            </label>
-                            <input
-                              id="lecture-component-weight"
-                              type="text"
-                              value={componentWeights.lecture}
-                              onChange={event => handleUpdateComponentWeight('lecture', event.target.value)}
-                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor="laboratory-component-weight" className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-                              LABORATORY CONTRIBUTION (%)
-                            </label>
-                            <input
-                              id="laboratory-component-weight"
-                              type="text"
-                              value={componentWeights.laboratory}
-                              onChange={event => handleUpdateComponentWeight('laboratory', event.target.value)}
-                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* OVERALL TERM RATIO (MIDTERM VS FINAL) */}
-                  <div className="p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/40 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <h3 className="text-xs font-extrabold uppercase tracking-wide text-slate-800 dark:text-slate-100">
-                          OVERALL TERM RATIO (MIDTERM VS FINAL)
-                        </h3>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                          Configure how Midterm grade and Final grade combine into Overall GWA.
-                        </p>
-                      </div>
-
-                      <div>
-                        <span className={`px-3 py-1 rounded-full text-[11px] font-extrabold inline-block ${termRatioCalc.isExact100
-                            ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
-                            : 'bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300'
-                          }`}>
-                          Sum: {termRatioCalc.displayPercent}
-                        </span>
-                      </div>
+                      )}
                     </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-                          MIDTERM TERM WEIGHT (%):
-                        </label>
-                        <input
-                          id="midterm-ratio-input"
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={termRatio.midterm}
-                          disabled={isLegacyCombinedPeriodConfig}
-                          onChange={(e) => handleUpdateTermRatio('midterm', e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
+                  ) : (
+                    <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
+                        <CheckCircle className="w-4 h-4 text-clinical-600 dark:text-clinical-400 shrink-0" />
+                        <span>BU Dental Medicine Schema Active: Lecture {componentWeights.lecture}% / Lab {componentWeights.laboratory}% • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
                       </div>
-                      <div>
-                        <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-                          FINAL TERM WEIGHT (%):
-                        </label>
-                        <input
-                          id="final-ratio-input"
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={termRatio.final}
-                          disabled={isLegacyCombinedPeriodConfig}
-                          onChange={(e) => handleUpdateTermRatio('final', e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Period Schema Tabs */}
-                  <div className="flex border-b border-slate-200 dark:border-slate-800 gap-8">
-                    <button
-                      type="button"
-                      onClick={() => setActivePeriodEditorTab('Midterm')}
-                      className={`pb-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 cursor-pointer ${activePeriodEditorTab === 'Midterm'
-                          ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
-                          : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-                        }`}
-                    >
-                      Midterm Categories ({midtermCalc.displayPercent})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActivePeriodEditorTab('Final')}
-                      className={`pb-3 text-xs sm:text-sm font-extrabold transition-all border-b-2 cursor-pointer ${activePeriodEditorTab === 'Final'
-                          ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
-                          : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-                        }`}
-                    >
-                      Finals Categories ({finalCalc.displayPercent})
-                    </button>
-                  </div>
-
-                  {componentMode === 'lecture_laboratory' && (
-                    <div className="flex gap-3 border-b border-slate-200 dark:border-slate-800" role="tablist" aria-label="Grading component categories">
-                      {(['Lecture', 'Laboratory'] as const).map(component => (
-                        <button
-                          key={component}
-                          type="button"
-                          role="tab"
-                          aria-selected={activeComponentEditorTab === component}
-                          onClick={() => setActiveComponentEditorTab(component)}
-                          className={`pb-2.5 px-1 text-xs font-extrabold border-b-2 transition-all ${activeComponentEditorTab === component
-                            ? 'border-clinical-600 text-clinical-700 dark:text-clinical-400'
-                            : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}
-                        >
-                          {component} Categories
-                        </button>
-                      ))}
+                      <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0">
+                        Directly editable
+                      </span>
                     </div>
                   )}
 
-                  {/* Requirement Banner */}
-                  <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/30 flex items-center justify-between gap-3">
-                    <div className="text-xs text-amber-900 dark:text-amber-200">
-                      {componentMode === 'lecture_laboratory'
-                        ? <>{activeComponentEditorTab} category weights for <strong className="font-extrabold">{activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'}</strong> must sum to exactly <strong className="font-extrabold">100%</strong>.</>
-                        : <>Category weights for <strong className="font-extrabold">{activePeriodEditorTab === 'Midterm' ? 'Midterm Period' : 'Final Period'}</strong> must sum to exactly <strong className="font-extrabold">100%</strong>.</>}
+                  {/* LEGACY COMBINED NOTIFICATION (IF APPLICABLE) */}
+                  {isLegacyCombinedPeriodConfig && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 p-4 text-xs">
+                      <div className="space-y-0.5">
+                        <h3 className="font-bold text-amber-900 dark:text-amber-200">Saved combined period grading</h3>
+                        <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80">
+                          This setup remains active until converted. Assign categories to Lecture or Laboratory to apply standard split.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleStartLectureLaboratoryConversion}
+                        disabled={configSaving}
+                        className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white font-bold text-xs cursor-pointer shadow-xs"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>Convert to Lecture/Laboratory</span>
+                      </button>
                     </div>
-                    <div className="shrink-0 flex items-center gap-2">
-                      <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${(componentMode === 'lecture_laboratory' ? activeComponentCategoryCalc.isExact100 : activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100)
-                          ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
-                          : 'bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300'
-                        }`}>
-                        {(componentMode === 'lecture_laboratory' ? activeComponentCategoryCalc.displayPercent : activePeriodEditorTab === 'Midterm' ? midtermCalc.displayPercent : finalCalc.displayPercent)} / 100%
+                  )}
+
+                  {/* LEVEL 1: TOPMOST PERIOD TABS (MIDTERM & FINAL WITH INLINE RATIO EDITING) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                        1. Select Period & Term Split
                       </span>
-                      {(componentMode === 'lecture_laboratory' ? activeComponentCategoryCalc.isExact100 : activePeriodEditorTab === 'Midterm' ? midtermCalc.isExact100 : finalCalc.isExact100) ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                          <CheckCircle className="w-3 h-3" />
-                          Valid 100%
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
-                          <AlertTriangle className="w-3 h-3" />
-                          Must equal 100%
-                        </span>
-                      )}
+                      <span className={`text-[11px] font-bold ${termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                        Term Split Total: {termRatioCalc.displayPercent}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Midterm Tab */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActivePeriodEditorTab('Midterm')}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Midterm'); }}
+                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          activePeriodEditorTab === 'Midterm'
+                            ? 'border-clinical-600 bg-clinical-50/60 dark:bg-clinical-950/40 shadow-sm ring-2 ring-clinical-500/20'
+                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`w-3 h-3 rounded-full shrink-0 ${activePeriodEditorTab === 'Midterm' ? 'bg-clinical-600 ring-4 ring-clinical-200 dark:ring-clinical-900' : 'bg-slate-300 dark:bg-slate-700'}`} />
+                          <div>
+                            <div className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                              <span>Midterm</span>
+                              <span className="text-[11px] font-bold text-slate-400">Categories</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                              Midterm Period Weight
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Inline editable percentage */}
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative">
+                            <input
+                              id="midterm-ratio-input"
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={termRatio.midterm}
+                              disabled={isLegacyCombinedPeriodConfig}
+                              onChange={(e) => {
+                                setIsCustomizingWeights(true);
+                                handleUpdateTermRatio('midterm', e.target.value);
+                              }}
+                              className="w-16 sm:w-20 pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Finals Tab */}
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setActivePeriodEditorTab('Final')}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Final'); }}
+                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          activePeriodEditorTab === 'Final'
+                            ? 'border-clinical-600 bg-clinical-50/60 dark:bg-clinical-950/40 shadow-sm ring-2 ring-clinical-500/20'
+                            : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`w-3 h-3 rounded-full shrink-0 ${activePeriodEditorTab === 'Final' ? 'bg-clinical-600 ring-4 ring-clinical-200 dark:ring-clinical-900' : 'bg-slate-300 dark:bg-slate-700'}`} />
+                          <div>
+                            <div className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                              <span>Finals</span>
+                              <span className="text-[11px] font-bold text-slate-400">Categories</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                              Finals Period Weight
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Inline editable percentage */}
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="relative">
+                            <input
+                              id="final-ratio-input"
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={termRatio.final}
+                              disabled={isLegacyCombinedPeriodConfig}
+                              onChange={(e) => {
+                                setIsCustomizingWeights(true);
+                                handleUpdateTermRatio('final', e.target.value);
+                              }}
+                              className="w-16 sm:w-20 pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
+
+                  {/* LEVEL 2: COMPONENT SUB-TABS (LECTURE & LABORATORY WITH INLINE CONTRIBUTION EDITING) */}
+                  {componentMode === 'lecture_laboratory' && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                          2. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Component Contribution
+                        </span>
+                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          Lecture {componentWeights.lecture}% + Lab {componentWeights.laboratory}% = 100%
+                        </span>
+                      </div>
+
+                      <div
+                        role="tablist"
+                        aria-label="Grading component categories"
+                        className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                      >
+                        {/* Lecture Sub-Tab */}
+                        <div
+                          role="tab"
+                          aria-label="Lecture Categories"
+                          aria-selected={activeComponentEditorTab === 'Lecture'}
+                          tabIndex={0}
+                          onClick={() => setActiveComponentEditorTab('Lecture')}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveComponentEditorTab('Lecture'); }}
+                          className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            activeComponentEditorTab === 'Lecture'
+                              ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-xs'
+                              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${activeComponentEditorTab === 'Lecture' ? 'bg-emerald-500 ring-3 ring-emerald-200 dark:ring-emerald-900' : 'bg-slate-300 dark:bg-slate-700'}`} />
+                            <div>
+                              <div className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                                <span>Lecture</span>
+                                <span className="text-[10px] font-semibold text-slate-400">Categories</span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500">Component Contribution</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="relative">
+                              <input
+                                id="lecture-component-weight"
+                                type="text"
+                                value={componentWeights.lecture}
+                                onChange={(e) => {
+                                  setIsCustomizingWeights(true);
+                                  handleUpdateComponentWeight('lecture', e.target.value);
+                                }}
+                                className="w-14 sm:w-16 pl-2 pr-5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                              />
+                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 pointer-events-none">%</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Laboratory Sub-Tab */}
+                        <div
+                          role="tab"
+                          aria-label="Laboratory Categories"
+                          aria-selected={activeComponentEditorTab === 'Laboratory'}
+                          tabIndex={0}
+                          onClick={() => setActiveComponentEditorTab('Laboratory')}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveComponentEditorTab('Laboratory'); }}
+                          className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            activeComponentEditorTab === 'Laboratory'
+                              ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-xs'
+                              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${activeComponentEditorTab === 'Laboratory' ? 'bg-emerald-500 ring-3 ring-emerald-200 dark:ring-emerald-900' : 'bg-slate-300 dark:bg-slate-700'}`} />
+                            <div>
+                              <div className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                                <span>Laboratory</span>
+                                <span className="text-[10px] font-semibold text-slate-400">Categories</span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500">Component Contribution</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="relative">
+                              <input
+                                id="laboratory-component-weight"
+                                type="text"
+                                value={componentWeights.laboratory}
+                                onChange={(e) => {
+                                  setIsCustomizingWeights(true);
+                                  handleUpdateComponentWeight('laboratory', e.target.value);
+                                }}
+                                className="w-14 sm:w-16 pl-2 pr-5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                              />
+                              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 pointer-events-none">%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Period Validation Error */}
                   {periodValidationError && (
@@ -3769,7 +4298,7 @@ export const GradeComputation: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Category Cards List */}
+                  {/* UNASSIGNED CATEGORIES NOTICE (FOR CONVERSION SCENARIOS) */}
                   {componentMode === 'lecture_laboratory' && activePeriodUnassignedCategories.length > 0 && (
                     <div className="p-4 rounded-2xl border border-amber-300/70 dark:border-amber-800/70 bg-amber-50/60 dark:bg-amber-950/20 space-y-3" data-testid="unassigned-component-categories">
                       <div>
@@ -3793,150 +4322,145 @@ export const GradeComputation: React.FC = () => {
                       ))}
                     </div>
                   )}
-                  <div className="space-y-3">
-                    {activePeriodVisibleCategories.map((row, index, list) => (
-                      <div
-                        key={row.compositeKey}
-                        className="p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4"
-                      >
-                        {/* REORDER */}
-                        <div className="flex sm:flex-col gap-0.5 shrink-0">
-                          <button
-                            type="button"
-                            aria-label={`Move category ${row.name || 'unnamed'} up`}
-                            onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'up')}
-                            disabled={isLegacyCombinedPeriodConfig || index === 0}
-                            className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
-                          >
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Move category ${row.name || 'unnamed'} down`}
-                            onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'down')}
-                            disabled={isLegacyCombinedPeriodConfig || index === list.length - 1}
-                            className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
-                          >
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        {/* CATEGORY NAME */}
-                        <div className="flex-1">
-                          <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-                            CATEGORY NAME
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={row.name}
-                              placeholder="Category name (e.g. Quiz)"
-                              disabled={isLegacyCombinedPeriodConfig}
-                              onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'name', e.target.value)}
-                              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                            {row.sourceKind === 'attendance' && (
-                              <span className="shrink-0 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800" title="Authoritative attendance data from recorded sessions">
-                                Attendance
-                              </span>
-                            )}
-                          </div>
-                        </div>
 
-                        {componentMode === 'lecture_laboratory' && (
-                          <div className="w-full sm:w-32 shrink-0">
-                            <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">COMPONENT</label>
-                            <select
-                              aria-label={`Component for ${row.name || 'unnamed category'}`}
-                              value={row.component ?? ''}
-                              onChange={event => handleUpdatePeriodCategoryComponent(activePeriodEditorTab, row.compositeKey, event.target.value as GradingComponentEnum | '')}
-                              className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-semibold"
-                            >
-                              <option value="">Unassigned</option>
-                              <option value="Lecture">Lecture</option>
-                              <option value="Laboratory">Laboratory</option>
-                            </select>
-                          </div>
-                        )}
-
-                        {componentMode === 'lecture_laboratory' && (
-                          <div className="w-full sm:w-32 shrink-0">
-                            <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">SOURCE</label>
-                            <select
-                              aria-label={`Source for ${row.name || 'unnamed category'}`}
-                              value={row.sourceKind}
-                              disabled={row.inUse}
-                              onChange={event => handleUpdatePeriodCategorySourceKind(activePeriodEditorTab, row.compositeKey, event.target.value as GradingSourceKindEnum)}
-                              className="w-full px-2.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-semibold disabled:opacity-50"
-                            >
-                              <option value="assessment">Assessment</option>
-                              <option value="attendance">Attendance</option>
-                            </select>
-                            {row.inUse && <p className="mt-1 text-[9px] leading-tight text-slate-400">In-use category source is fixed to protect linked records.</p>}
-                          </div>
-                        )}
-
-                        {/* WEIGHT (%) */}
-                        <div className="w-full sm:w-28 shrink-0">
-                          <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-                            WEIGHT (%)
-                          </label>
-                            <input
-                              type="text"
-                              value={row.weight}
-                              placeholder="0"
-                              disabled={isLegacyCombinedPeriodConfig}
-                              onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
-                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                        </div>
-
-                        {/* DEFAULT MAX */}
-                        <div className="w-full sm:w-28 shrink-0">
-                          <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
-                            DEFAULT MAX
-                          </label>
-                          <input
-                            type="text"
-                            value={row.defaultMax ?? ''}
-                            placeholder="50"
-                            disabled={isLegacyCombinedPeriodConfig}
-                            onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'defaultMax', e.target.value)}
-                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                        </div>
-
-                        {/* DELETE ACTION */}
-                        <div className="pt-0 sm:pt-5 shrink-0 flex justify-end">
-                          <button
-                            type="button"
-                            aria-label={`Delete category ${row.name || 'unnamed'}`}
-                              onClick={() => handleRemovePeriodCategory(activePeriodEditorTab, row.compositeKey)}
-                              disabled={isLegacyCombinedPeriodConfig || row.inUse}
-                            title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
-                            className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                  {/* LEVEL 3: CATEGORIES LIST FOR ACTIVE PERIOD & COMPONENT */}
+                  <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
+                    {/* Header Toolbar */}
+                    <div className="p-3.5 sm:p-4 bg-slate-50/70 dark:bg-slate-850/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                          3. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} • {activeComponentEditorTab} Categories ({activePeriodVisibleCategories.length})
+                        </span>
+                        <span className="text-[11px] text-slate-400">• Must total 100%</span>
                       </div>
-                    ))}
-                  </div>
 
-                  {/* Add Category Button */}
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
-                      disabled={isLegacyCombinedPeriodConfig}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-extrabold text-xs transition-colors shadow-2xs cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>{activePeriodEditorTab === 'Midterm' ? 'Add Midterm Category' : 'Add Finals Category'}</span>
-                    </button>
+                      <div className="flex items-center gap-2.5">
+                        {/* Status badge */}
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${
+                          activeComponentCategoryCalc.isExact100
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                            : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                        }`}>
+                          {activeComponentCategoryCalc.displayPercent} / 100%
+                        </span>
+
+                        {/* Simple "+ Add Category" button */}
+                        <button
+                          type="button"
+                          onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
+                          disabled={isLegacyCombinedPeriodConfig}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Category</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Categories rows list */}
+                    {activePeriodVisibleCategories.length === 0 ? (
+                      <div className="py-12 text-center text-slate-400 space-y-2">
+                        <p className="text-xs">No {activeComponentEditorTab} categories defined for {activePeriodEditorTab}.</p>
+                        <button
+                          type="button"
+                          onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-clinical-600 hover:text-clinical-700 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add first category</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                        {activePeriodVisibleCategories.map((row, index, list) => (
+                          <div
+                            key={row.compositeKey}
+                            className="p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/30"
+                          >
+                            {/* Reorder Buttons */}
+                            <div className="flex sm:flex-col gap-0.5 shrink-0">
+                              <button
+                                type="button"
+                                aria-label={`Move category ${row.name || 'unnamed'} up`}
+                                onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'up')}
+                                disabled={isLegacyCombinedPeriodConfig || index === 0}
+                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Move category ${row.name || 'unnamed'} down`}
+                                onClick={() => handleMovePeriodCategory(activePeriodEditorTab, index, 'down')}
+                                disabled={isLegacyCombinedPeriodConfig || index === list.length - 1}
+                                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            {/* Category Name */}
+                            <div className="flex-1 min-w-0">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                Category Name
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={row.name}
+                                  placeholder="Category name (e.g. Quizzes, Practical Exam)"
+                                  disabled={isLegacyCombinedPeriodConfig}
+                                  onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'name', e.target.value)}
+                                  className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
+                                />
+                                {row.sourceKind === 'attendance' && (
+                                  <span className="shrink-0 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800" title="Authoritative attendance data from recorded sessions">
+                                    Attendance
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+
+                            {/* Weight (%) */}
+                            <div className="w-full sm:w-28 shrink-0">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                Weight (%)
+                              </label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={row.weight}
+                                  placeholder="0"
+                                  disabled={isLegacyCombinedPeriodConfig}
+                                  onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
+                                  className="w-full pl-2 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
+                              </div>
+                            </div>
+
+                            {/* Delete Action */}
+                            <div className="sm:pt-5 shrink-0 flex justify-end">
+                              <button
+                                type="button"
+                                aria-label={`Delete category ${row.name || 'unnamed'}`}
+                                onClick={() => handleRemovePeriodCategory(activePeriodEditorTab, row.compositeKey)}
+                                disabled={isLegacyCombinedPeriodConfig || row.inUse}
+                                title={row.inUse ? 'Cannot delete category with associated assessments' : 'Delete category'}
+                                className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-20 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Attendance Calendar Date Ranges (Collapsible) */}
-                  <details open className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
+                  <details className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
                     <summary className="p-3.5 sm:p-4 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between select-none hover:bg-slate-100/50 dark:hover:bg-slate-800/40 transition-colors">
                       <div className="flex items-center gap-2">
                         <Settings className="w-3.5 h-3.5 text-slate-400" />
@@ -4017,18 +4541,16 @@ export const GradeComputation: React.FC = () => {
                   </details>
 
                   {/* Bottom Summary & Save Bar */}
-                  <div className="pt-6 border-t border-slate-200/90 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold text-slate-500 dark:text-slate-400">
-                      <span>
-                        Term Split: <span className={termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{termRatioCalc.displayPercent}</span>
+                  <div className="pt-5 border-t border-slate-200/90 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                      <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+                        Term Split: <strong className={termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{termRatio.midterm}% / {termRatio.final}%</strong>
                       </span>
-                      <span className="text-slate-300 dark:text-slate-700">•</span>
-                      <span>
-                        Midterm: <span className={midtermCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{midtermCalc.displayPercent}</span>
+                      <span className="px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+                        Components: <strong className="text-slate-700 dark:text-slate-300">{componentWeights.lecture}% / {componentWeights.laboratory}%</strong>
                       </span>
-                      <span className="text-slate-300 dark:text-slate-700">•</span>
-                      <span>
-                        Final: <span className={finalCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{finalCalc.displayPercent}</span>
+                      <span className={`px-2.5 py-1 rounded-xl ${activeComponentCategoryCalc.isExact100 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'}`}>
+                        {activeComponentEditorTab} Total: <strong>{activeComponentCategoryCalc.displayPercent}</strong>
                       </span>
                     </div>
 
@@ -4036,7 +4558,7 @@ export const GradeComputation: React.FC = () => {
                       <button
                         type="submit"
                         disabled={configSaving || periodValidationError !== null || isLegacyCombinedPeriodConfig}
-                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
+                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                       >
                         <Save className="w-4 h-4" />
                         <span>{configSaving ? 'Saving...' : loadedConfig ? 'Save Grade Weights' : 'Save Initial Schema'}</span>
@@ -4258,59 +4780,75 @@ export const GradeComputation: React.FC = () => {
       ---------------------------------------------------- */}
       {activeSubTab === 'summaries' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
             <div>
-              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Academic Grade Summaries</h3>
-              <p className="text-[10px] text-slate-400 mt-0.5">General Weighted Averages (GWA) based on current evaluation scores</p>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-200">Academic Grade Summaries</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-clinical-50 text-clinical-700 dark:bg-clinical-950/60 dark:text-clinical-400 border border-clinical-200/50">
+                  {selectedSubjectCode || 'Course'} · {selectedClassId || 'Section'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">General Weighted Averages (GWA) and periodic evaluations based on current component scores</p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => setIsRecomputeConfirmOpen(true)}
                 disabled={isRecomputing || !selectedClassId}
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
               >
                 <Zap className={`w-3.5 h-3.5 ${isRecomputing ? 'animate-spin' : 'text-amber-400'}`} />
                 <span>{isRecomputing ? 'Recomputing...' : 'Recompute Grades'}</span>
               </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="flex items-center gap-1 px-3.5 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 text-slate-650 hover:bg-slate-50 dark:text-slate-350 dark:hover:bg-slate-900 bg-white dark:bg-slate-950 font-bold text-xs"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Print Layout
-              </button>
-              <button
-                type="button"
-                onClick={handleExportCSV}
-                className="flex items-center gap-1 px-3.5 py-2.5 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs shadow-sm"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Export CSV Ledger
-              </button>
+
+              {/* Clean Export Group (CSV & PDF) */}
+              <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  aria-label="Export CSV Ledger"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
+                  title="Export grade ledger as CSV spreadsheet"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Export CSV</span>
+                </button>
+                <div className="w-px h-3.5 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+                <button
+                  type="button"
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
+                  title="Export or print grade ledger as PDF document"
+                >
+                  <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                  <span>Export PDF</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="px-5 py-3 border-b border-slate-150 dark:border-slate-800/80 flex items-center">
+          <div className="px-5 py-3 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/10 dark:bg-slate-900/10 flex items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search student..."
+                placeholder="Search student by name or ID..."
                 value={summarySearch}
                 onChange={(e) => setSummarySearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-205 dark:border-slate-850 bg-white dark:bg-slate-900 text-xs focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-205 dark:border-slate-850 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
               />
             </div>
+            <span className="text-[11px] font-semibold text-slate-400 hidden sm:inline">
+              Showing {sortedSummaryStudents.length} {sortedSummaryStudents.length === 1 ? 'student' : 'students'}
+            </span>
           </div>
 
           {/* Recompute Alert */}
           {recomputeAlert && (
             <div className={`mx-5 my-3 p-4 rounded-2xl border text-xs flex flex-col gap-1.5 ${recomputeAlert.status === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
-                : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+              : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
               }`}>
               <div className="flex items-center gap-2 font-bold">
                 {recomputeAlert.status === 'success' ? (
@@ -4374,7 +4912,7 @@ export const GradeComputation: React.FC = () => {
                   )}
                   <th className="px-5 py-3 text-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => toggleSort('overall')}>
                     <div className="flex items-center justify-center gap-1">
-                      Overall GWA
+                      Final Grade
                       <ArrowUpDown className="w-3 h-3" />
                     </div>
                   </th>
@@ -4457,14 +4995,14 @@ export const GradeComputation: React.FC = () => {
                           </td>
                           <td className="px-5 py-3">
                             <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${isFailed
-                                ? 'bg-rose-100 text-rose-700'
-                                : isFailsRetention
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : isPending
-                                    ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
-                                    : isIncomplete
-                                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                                      : 'bg-emerald-100 text-emerald-700'
+                              ? 'bg-rose-100 text-rose-700'
+                              : isFailsRetention
+                                ? 'bg-amber-100 text-amber-700'
+                                : isPending
+                                  ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400'
+                                  : isIncomplete
+                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                    : 'bg-emerald-100 text-emerald-700'
                               }`}>
                               {isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : isPending ? 'PENDING' : isIncomplete ? 'INCOMPLETE' : 'PASS'}
                             </span>
@@ -4493,12 +5031,12 @@ export const GradeComputation: React.FC = () => {
                         </td>
                         <td className="px-5 py-3">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${!hasGrade
-                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                              : isFailed
-                                ? 'bg-rose-100 text-rose-700'
-                                : isFailsRetention
-                                  ? 'bg-amber-100 text-amber-700'
-                                  : 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                            : isFailed
+                              ? 'bg-rose-100 text-rose-700'
+                              : isFailsRetention
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-emerald-100 text-emerald-700'
                             }`}>
                             {!hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS'}
                           </span>
@@ -4517,63 +5055,150 @@ export const GradeComputation: React.FC = () => {
           TAB 5: IMPORT GRADE SHEETS
       ---------------------------------------------------- */}
       {activeSubTab === 'import' && (
-        <Card className="max-w-3xl mx-auto">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-clinical-550" />
-              Import Grade Sheet from CSV
-            </CardTitle>
+        <Card className="max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
+          <CardHeader className="border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-lg font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
+                  <Upload className="w-5 h-5 text-clinical-600 dark:text-clinical-400" />
+                  <span>Import Grade Sheets from CSV</span>
+                </CardTitle>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Upload CSV score records to validate and preview assessment marks for enrolled students
+                </p>
+              </div>
+              <div className="shrink-0">
+                <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  {selectedSubjectCode || 'Course'} · {selectedClassId || 'Section'}
+                </span>
+              </div>
+            </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div role="note" className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 text-xs font-semibold text-amber-800 dark:text-amber-300 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>
-                Not functional yet: this tab only checks a CSV file and shows a preview. It saves nothing, and no
-                grades are imported or recalculated. Enter scores in the Score Entry tab.
-              </span>
-            </div>
-            <div className="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs text-slate-550 dark:text-slate-400 space-y-1.5">
-              <h4 className="font-bold text-slate-800 dark:text-slate-205">Import File Requirements:</h4>
-              <ul className="list-disc pl-4 space-y-1 text-[11px]">
-                <li>File must be in standard **CSV (Comma Separated Values)** format.</li>
-                <li>Header row must contain **"Student ID"** and **"Score"** (GWA mapping percentage, 0-100).</li>
-                <li>Values will be validated and mapped to the chosen Grading Period components.</li>
-              </ul>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Grading Period / Component Destination</label>
-                <select
-                  value={importPeriod}
-                  onChange={(e) => setImportPeriod(e.target.value as any)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
+          <CardContent className="p-6 sm:p-7 space-y-6">
+            {/* Top Grid: Destination & Upload Dropzone */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
+              {/* Left Column: Component Destination & Template Guide */}
+              <div className="space-y-4 flex flex-col justify-between p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-850/50 border border-slate-150 dark:border-slate-800">
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                      1. Grading Component Destination
+                    </label>
+                    <select
+                      value={importPeriod}
+                      onChange={(e) => setImportPeriod(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-205 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
+                    >
+                      <option value="Midterm">Midterm Examination Score</option>
+                      <option value="Final">Final Examination / Quizzes</option>
+                      <option value="Overall">Clinical Practicums / Laboratories</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Required Columns
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300">
+                        Student ID
+                      </span>
+                      <span className="px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300">
+                        Score (0–100)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={handleDownloadCsvTemplate}
+                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-clinical-400 dark:hover:border-clinical-500 text-clinical-600 dark:text-clinical-400 hover:text-clinical-700 font-bold text-xs transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download CSV Template with Roster</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column: Interactive Dropzone */}
+              <div className="flex flex-col">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                  2. Select CSV Score Sheet
+                </label>
+                <div
+                  className={`flex-1 flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-dashed transition-all text-center ${
+                    csvFile
+                      ? 'border-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/20'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-clinical-500 dark:hover:border-clinical-400 bg-slate-50/40 dark:bg-slate-850/30'
+                  }`}
                 >
-                  <option value="Midterm">Midterm Exams Score</option>
-                  <option value="Final">Final Quizzes / Class Activities</option>
-                  <option value="Overall">Clinical Practicums / Laboratories</option>
-                </select>
-              </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCsvSelect}
+                    className="hidden"
+                    id="csv-file-upload"
+                  />
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Select CSV Sheet File</label>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleCsvSelect}
-                  className="w-full text-xs text-slate-450 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-clinical-50 file:text-clinical-700 hover:file:bg-clinical-100 cursor-pointer border border-slate-205 dark:border-slate-800 p-1.5 rounded-xl"
-                />
+                  {csvFile ? (
+                    <div className="space-y-2">
+                      <div className="w-10 h-10 mx-auto rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                        <Check className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate max-w-xs">
+                          {csvFile.name}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {(csvFile.size / 1024).toFixed(1)} KB • CSV Spreadsheet
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-center gap-2 pt-1">
+                        <label
+                          htmlFor="csv-file-upload"
+                          className="px-3 py-1 rounded-lg text-xs font-bold text-clinical-600 dark:text-clinical-400 hover:bg-clinical-50 dark:hover:bg-clinical-950/50 cursor-pointer transition-colors"
+                        >
+                          Change File
+                        </label>
+                        <button
+                          type="button"
+                          onClick={handleClearCsv}
+                          className="px-3 py-1 rounded-lg text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label htmlFor="csv-file-upload" className="cursor-pointer space-y-2">
+                      <div className="w-10 h-10 mx-auto rounded-full bg-clinical-50 dark:bg-clinical-950/60 text-clinical-600 dark:text-clinical-400 flex items-center justify-center">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-clinical-600 dark:text-clinical-400 hover:underline">
+                          Browse CSV file
+                        </span>
+                        <span className="text-xs text-slate-400"> or drag and drop</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">Standard Comma-Separated Values (.csv)</p>
+                    </label>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Error notifications */}
+            {/* Parsing Errors Notification */}
             {csvErrors.length > 0 && (
-              <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 space-y-1.5">
-                <h4 className="text-xs font-bold text-rose-600 flex items-center gap-1">
-                  <AlertTriangle className="w-4 h-4" />
-                  CSV Parsing and Validation Errors ({csvErrors.length})
+              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 space-y-1.5 text-xs">
+                <h4 className="font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>Validation Issues ({csvErrors.length})</span>
                 </h4>
-                <div className="max-h-28 overflow-y-auto text-[11px] text-rose-500 font-medium space-y-1">
+                <div className="max-h-28 overflow-y-auto text-[11px] text-rose-600 dark:text-rose-400 space-y-0.5 pl-5">
                   {csvErrors.map((err, idx) => (
                     <div key={idx}>• {err}</div>
                   ))}
@@ -4581,30 +5206,62 @@ export const GradeComputation: React.FC = () => {
               </div>
             )}
 
-            {/* Import Preview */}
+            {/* CSV Data Preview */}
             {csvPreviewData.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">CSV Data Verification Preview</h4>
-                <div className="border border-slate-150 dark:border-slate-800/80 rounded-xl max-h-56 overflow-y-auto">
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                      Data Verification Preview
+                    </h4>
+                    <p className="text-[10px] text-slate-400">
+                      Inspected {csvPreviewData.length} records against current roster
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      {csvPreviewData.filter(r => r.valid).length} Valid
+                    </span>
+                    {csvPreviewData.filter(r => !r.valid).length > 0 && (
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                        {csvPreviewData.filter(r => !r.valid).length} Invalid
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
                   <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800 text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-900/60 sticky top-0">
-                      <tr className="text-left font-bold text-[9px] uppercase text-slate-450 tracking-wider">
-                        <th className="px-4 py-2">Student ID</th>
-                        <th className="px-4 py-2">Student Name</th>
-                        <th className="px-4 py-2">Imported Score</th>
-                        <th className="px-4 py-2">Status</th>
+                    <thead className="bg-slate-50 dark:bg-slate-850 sticky top-0 z-10">
+                      <tr className="text-left font-bold text-[10px] uppercase text-slate-400 tracking-wider">
+                        <th className="px-4 py-2.5">Student ID</th>
+                        <th className="px-4 py-2.5">Student Name</th>
+                        <th className="px-4 py-2.5">Imported Score</th>
+                        <th className="px-4 py-2.5">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-[11px]">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
                       {csvPreviewData.map((row, idx) => (
-                        <tr key={idx} className={row.valid ? 'hover:bg-slate-50' : 'bg-rose-50/20 text-rose-500'}>
-                          <td className="px-4 py-2 font-semibold">{row.id}</td>
-                          <td className="px-4 py-2">{row.name}</td>
-                          <td className="px-4 py-2 font-bold">{row.score}%</td>
+                        <tr
+                          key={idx}
+                          className={row.valid ? 'hover:bg-slate-50 dark:hover:bg-slate-800/30' : 'bg-rose-50/30 dark:bg-rose-950/10'}
+                        >
+                          <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-400 font-semibold">{row.id}</td>
+                          <td className="px-4 py-2 font-bold text-slate-800 dark:text-slate-100">{row.name}</td>
+                          <td className="px-4 py-2 font-mono font-bold text-clinical-600 dark:text-clinical-400">{row.score}%</td>
                           <td className="px-4 py-2">
-                            <span className={`font-bold uppercase ${row.valid ? 'text-emerald-500' : 'text-rose-500'}`}>
-                              {row.valid ? 'OK' : 'Error'}
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                                row.valid
+                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                  : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                              }`}
+                            >
+                              {row.valid ? 'Ready' : 'Error'}
                             </span>
+                            {row.error && (
+                              <span className="block text-[10px] text-rose-500 mt-0.5">{row.error}</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -4614,29 +5271,41 @@ export const GradeComputation: React.FC = () => {
               </div>
             )}
 
-            <div className="flex justify-end pt-2 border-t border-slate-150 dark:border-slate-800/80">
+            <div className="flex items-center justify-between pt-4 border-t border-slate-150 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={handleClearCsv}
+                disabled={!csvFile && csvPreviewData.length === 0}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+              >
+                Reset
+              </button>
+
               <button
                 type="button"
                 disabled
-                title="Importing grade sheets is not available yet. Nothing is saved."
-                className="flex items-center gap-1 px-5 py-3 rounded-2xl bg-clinical-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white disabled:text-slate-500 font-semibold text-xs shadow-sm transition-all"
+                title="Importing grade sheets is a preview capability. Apply individual scores in the Student Scores Entry tab."
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 font-bold text-xs cursor-not-allowed"
               >
-                <Save className="w-4 h-4" />
-                <span>Import not available</span>
+                <Save className="w-3.5 h-3.5" />
+                <span>Import Preview Verified</span>
               </button>
             </div>
           </CardContent>
         </Card>
       )}
 
+
+
+
       {/* ----------------------------------------------------
           PRINT LAYOUT SCREEN (HIDDEN NORMALLY)
       ---------------------------------------------------- */}
-      <div className="print-only hidden p-8 bg-white text-slate-900 space-y-6">
+      <div className="print-only hidden p-8 bg-white text-slate-900 space-y-6 font-sans">
         <div className="text-center space-y-1.5 border-b-2 border-slate-800 pb-5 mb-6">
-          <h2 className="font-heading font-extrabold text-2xl tracking-tight uppercase">DentiSys Academic Portal</h2>
-          <p className="text-xs uppercase tracking-widest text-slate-500 font-bold">Class Grade Ledger Report</p>
-          <p className="text-[10px] text-slate-400">Class: {selectedClassId} • Subject Code: {selectedSubjectCode} ({activeSubjectName})</p>
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Bicol University · College of Dental Medicine</p>
+          <h2 className="font-heading font-black text-2xl tracking-tight uppercase text-slate-900 mt-1">Class Grade Ledger Report</h2>
+          <div className="flex flex-wrap justify-center items-center gap-3 text-xs text-slate-600 mt-2 font-medium"><span><strong className="text-slate-800">Course:</strong> {selectedSubjectCode} {activeSubjectName ? `(${activeSubjectName})` : ''}</span><span>•</span><span><strong className="text-slate-800">Section:</strong> {selectedClassId || '—'}</span><span>•</span><span><strong className="text-slate-800">Term:</strong> {currentSchoolYear ? `S.Y. ${currentSchoolYear}` : 'Current Academic Year'}</span><span>•</span><span><strong className="text-slate-800">Date:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span></div>
         </div>
 
         <table className="w-full border-collapse border border-slate-300 text-xs">
@@ -4660,7 +5329,7 @@ export const GradeComputation: React.FC = () => {
                     <th className="border border-slate-300 px-4 py-2 text-center">Final %</th>
                   </>
                 )}
-                <th className="border border-slate-300 px-4 py-2 text-center">Overall GWA</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Final Grade (Overall GWA)</th>
                 <th className="border border-slate-300 px-4 py-2 text-center">Remarks</th>
               </tr>
             ) : (
@@ -4671,7 +5340,7 @@ export const GradeComputation: React.FC = () => {
                 <th className="border border-slate-300 px-4 py-2 text-center">Practicum</th>
                 <th className="border border-slate-300 px-4 py-2 text-center">Exams</th>
                 <th className="border border-slate-300 px-4 py-2 text-center">Attendance</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Overall GWA</th>
+                <th className="border border-slate-300 px-4 py-2 text-center">Final Grade (Overall GWA)</th>
                 <th className="border border-slate-300 px-4 py-2 text-center">Remarks</th>
               </tr>
             )}
@@ -4763,7 +5432,7 @@ export const GradeComputation: React.FC = () => {
           </tbody>
         </table>
 
-        <div className="flex justify-between items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
+        <div className="break-inside-avoid flex justify-between items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
           <div className="text-center w-40">
             <div className="h-0.5 w-full bg-slate-400 mb-1" />
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Dean of Dentistry Seal</p>
@@ -4814,6 +5483,20 @@ export const GradeComputation: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Grading Period
+              </label>
+              <select
+                value={assPeriod}
+                onChange={(e) => handlePeriodChange(e.target.value as any)}
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
+              >
+                <option value="Midterm">Midterm Period</option>
+                <option value="Final">Final Period</option>
+              </select>
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Category Type
@@ -4872,28 +5555,61 @@ export const GradeComputation: React.FC = () => {
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
                   >
                     <option value="">Select grading category</option>
-                    {modalEligibleCategories.map(cat => (
-                      <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                        {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
-                      </option>
-                    ))}
+                    {(() => {
+                      const lectureCategories = modalEligibleCategories.filter(
+                        c => (c.component ?? 'Lecture').toLowerCase() === 'lecture'
+                      );
+                      const labCategories = modalEligibleCategories.filter(
+                        c => (c.component ?? '').toLowerCase() === 'laboratory' || (c.component ?? '').toLowerCase() === 'lab'
+                      );
+                      const otherCategories = modalEligibleCategories.filter(c => {
+                        const comp = (c.component ?? '').toLowerCase();
+                        return comp !== 'lecture' && comp !== 'laboratory' && comp !== 'lab' && comp !== '';
+                      });
+
+                      if (lectureCategories.length === 0 && labCategories.length === 0 && otherCategories.length === 0) {
+                        return modalEligibleCategories.map(cat => (
+                          <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
+                            {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
+                          </option>
+                        ));
+                      }
+
+                      return (
+                        <>
+                          {lectureCategories.length > 0 && (
+                            <optgroup label="Lecture Categories">
+                              {lectureCategories.map(cat => (
+                                <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
+                                  {cat.name} ({cat.weight}%)
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {labCategories.length > 0 && (
+                            <optgroup label="Laboratory Categories">
+                              {labCategories.map(cat => (
+                                <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
+                                  {cat.name} ({cat.weight}%)
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {otherCategories.length > 0 && (
+                            <optgroup label="Other Categories">
+                              {otherCategories.map(cat => (
+                                <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
+                                  {cat.name} ({cat.weight}%)
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </>
+                      );
+                    })()}
                   </select>
                 </div>
               )}
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Grading Period
-              </label>
-              <select
-                value={assPeriod}
-                onChange={(e) => handlePeriodChange(e.target.value as any)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none"
-              >
-                <option value="Midterm">Midterm Period</option>
-                <option value="Final">Final Period</option>
-              </select>
             </div>
           </div>
 
@@ -4906,8 +5622,22 @@ export const GradeComputation: React.FC = () => {
                 type="number"
                 min="1"
                 required
+                placeholder="e.g. 50"
                 value={assMaxScore}
-                onChange={(e) => setAssMaxScore(parseInt(e.target.value) || 50)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setAssMaxScore('');
+                  } else {
+                    const num = parseInt(val, 10);
+                    setAssMaxScore(isNaN(num) ? '' : num);
+                  }
+                }}
+                onBlur={() => {
+                  if (assMaxScore === '' || Number(assMaxScore) <= 0) {
+                    setAssMaxScore(50);
+                  }
+                }}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
               />
             </div>
