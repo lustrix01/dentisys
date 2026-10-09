@@ -357,7 +357,6 @@ export const GradeComputation: React.FC = () => {
   // Period Mode State (Midterm & Finals)
   const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '30', final: '70' });
   const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '30', final: '70' });
-  const [isCustomizingWeights, setIsCustomizingWeights] = useState<boolean>(false);
 
   const [midtermCategories, setMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
   const [savedMidtermCategories, setSavedMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
@@ -1460,16 +1459,6 @@ export const GradeComputation: React.FC = () => {
     setIsConversionModalOpen(false);
   };
 
-  const handleApplyBuGradingSystem = () => {
-    setSchemaMode('periods');
-    setComponentMode('lecture_laboratory');
-    setComponentWeights({ lecture: '60', laboratory: '40' });
-    setTermRatio({ midterm: '30', final: '70' });
-    setMidtermCategories(buildDefaultLectureLaboratoryCategories('Midterm'));
-    setFinalCategories(buildDefaultLectureLaboratoryCategories('Final'));
-    showFeedback('Applied BU Grading System standard (Lecture 60%, Lab 40% | Midterm 30%, Finals 70%). Click Save to apply.', 'success');
-  };
-
   // Keep selected offering key synchronized with the active course filter
   useEffect(() => {
     if (facultyOfferings.length === 0) return;
@@ -1504,7 +1493,6 @@ export const GradeComputation: React.FC = () => {
       if (res.configuration === null) {
         // Unconfigured offering: populate editable unsaved starting preset
         setSchemaMode('periods');
-        setIsCustomizingWeights(true);
         const defaults = res.defaults;
         const fallback = buildDefaultPeriodDraft();
         setComponentMode(defaults?.componentMode ?? 'lecture_laboratory');
@@ -1564,7 +1552,6 @@ export const GradeComputation: React.FC = () => {
         setSavedCategoryRows([]);
       } else {
         setIsPresetDraft(false);
-        setIsCustomizingWeights(false);
         const mode = res.configuration.schemaMode ?? 'overall';
         setSchemaMode(mode);
         const loadedComponentMode = res.configuration.componentMode ?? 'combined';
@@ -4101,7 +4088,6 @@ export const GradeComputation: React.FC = () => {
                               value={termRatio.midterm}
                               disabled={isLegacyCombinedPeriodConfig}
                               onChange={(e) => {
-                                setIsCustomizingWeights(true);
                                 handleUpdateTermRatio('midterm', e.target.value);
                               }}
                               className="w-16 sm:w-20 pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
@@ -4148,7 +4134,6 @@ export const GradeComputation: React.FC = () => {
                               value={termRatio.final}
                               disabled={isLegacyCombinedPeriodConfig}
                               onChange={(e) => {
-                                setIsCustomizingWeights(true);
                                 handleUpdateTermRatio('final', e.target.value);
                               }}
                               className="w-16 sm:w-20 pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
@@ -4209,7 +4194,6 @@ export const GradeComputation: React.FC = () => {
                                 type="text"
                                 value={componentWeights.lecture}
                                 onChange={(e) => {
-                                  setIsCustomizingWeights(true);
                                   handleUpdateComponentWeight('lecture', e.target.value);
                                 }}
                                 className="w-14 sm:w-16 pl-2 pr-5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
@@ -4251,7 +4235,6 @@ export const GradeComputation: React.FC = () => {
                                 type="text"
                                 value={componentWeights.laboratory}
                                 onChange={(e) => {
-                                  setIsCustomizingWeights(true);
                                   handleUpdateComponentWeight('laboratory', e.target.value);
                                 }}
                                 className="w-14 sm:w-16 pl-2 pr-5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
