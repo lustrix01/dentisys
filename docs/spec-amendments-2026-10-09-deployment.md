@@ -85,3 +85,20 @@ deployed." in DEL-001 was replaced with the approved text:
 
 Consequence: hardening step 3 (`AllowTcpForwarding no`) gets a per-user
 exception limited to the pgAdmin and Mailpit loopback ports.
+
+## Follow-up, same day: real biometrics on the demo VPS
+
+The Owner asked to enable face attendance on the VPS so it "must work like what
+it did back on my local environment", and approved this text, added to BIO-007
+after the paragraph on availability after the institutional review:
+
+> Owner decision (2026-10-09): For the DEL-001 VPS demonstration deployment
+> only, real biometrics MAY be enabled before the BIO-002 review by explicit
+> server configuration (`BIOMETRIC_SIDECAR_ENABLED=true`), so the DentiSys team
+> can test it. It then behaves as in local development. Only DentiSys team
+> members enroll (BIO-002 note). Without that setting, production-like
+> environments keep real biometrics disabled.
+
+Same session, no spec change needed: three web and three frontend replicas behind
+Traefik for rolling Watchtower updates (one biometric sidecar), Google Sign-In
+configured with the existing client ID, and the instance upgraded to 4 GB.

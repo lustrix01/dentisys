@@ -445,7 +445,7 @@ export interface RuntimeConfigPayload {
       active: 'mailpit' | 'smtp';
     };
     biometrics: {
-      active: 'disabled' | 'development-mock';
+      active: 'disabled' | 'development-mock' | 'sidecar';
     };
     location: {
       active: 'disabled' | 'development-mock';

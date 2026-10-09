@@ -771,6 +771,8 @@ Docker remains the intended deployment model. No specific CPU/GPU is a product r
 
 After the BIO-002 institutional privacy/consent review and the remaining technical approvals required by BIO-007 are complete, real biometrics is available by default. Student enrollment and use remain voluntary and require consent. A development biometric mock MAY remain only behind explicit development configuration. Mock and real enrollment MUST remain separate; real biometric failure or unavailable infrastructure MUST fall back to manual attendance and MUST NOT silently use the mock.
 
+Owner decision (2026-10-09): For the DEL-001 VPS demonstration deployment only, real biometrics MAY be enabled before the BIO-002 review by explicit server configuration (`BIOMETRIC_SIDECAR_ENABLED=true`), so the DentiSys team can test it. It then behaves as in local development. Only DentiSys team members enroll (BIO-002 note). Without that setting, production-like environments keep real biometrics disabled.
+
 ## BIO-009 — Audit, information minimization, and accepted limits
 
 **Status: APPROVED**

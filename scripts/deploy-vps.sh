@@ -167,7 +167,7 @@ if [[ "$pending" != 'Nothing to apply' ]]; then
 fi
 
 compose up -d --no-build --remove-orphans --wait --wait-timeout 240
-compose exec -T --interactive=false frontend wget -q -O /dev/null http://127.0.0.1/healthcheck.php
+compose exec -T --interactive=false frontend wget -q -O /dev/null http://127.0.0.1/
 # Same maintenance as the LAN script; report failures without stopping the stack.
 compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-grade-weights.php || echo 'WARNING: Grade-weight setup did not finish.' >&2
 compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-first-dean.php || echo 'WARNING: First Dean invitation did not finish (check FIRST_DEAN_*).' >&2

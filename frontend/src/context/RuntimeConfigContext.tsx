@@ -60,7 +60,9 @@ function normalizeRuntimeConfig(payload: RuntimeConfigPayload): RuntimeConfig {
         active: payload.providers?.email?.active === 'mailpit' ? 'mailpit' : 'smtp',
       },
       biometrics: {
-        active: payload.providers?.biometrics?.active === 'development-mock' ? 'development-mock' : 'disabled',
+        active: payload.providers?.biometrics?.active === 'sidecar'
+          ? 'sidecar'
+          : (payload.providers?.biometrics?.active === 'development-mock' ? 'development-mock' : 'disabled'),
       },
       location: {
         active: payload.providers?.location?.active === 'development-mock' ? 'development-mock' : 'disabled',

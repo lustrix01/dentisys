@@ -8,6 +8,13 @@ require_once __DIR__ . '/../../backend/controllers/RuntimeConfigController.php';
 
 $environmentKeys = [
     'APP_ENV',
+    'APP_BASE_URL',
+    'JWT_SIGNING_KEY_B64',
+    'MFA_ENCRYPTION_KEY_B64',
+    'AUDIT_MAC_KEY_B64',
+    'BIOMETRIC_SIDECAR_ENABLED',
+    'BIOMETRIC_SIDECAR_URL',
+    'BIOMETRIC_SIDECAR_SHARED_SECRET',
     'EMAIL_PROVIDER',
     'DEV_MOCK_IDENTITY_ENABLED',
     'DEV_MOCK_BIOMETRIC_ENABLED',
@@ -64,6 +71,30 @@ foreach (['JWT_SIGNING_KEY_B64', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64', 
         fwrite(STDERR, "FAIL: runtime configuration leaked {$secret}.\n");
         exit(1);
     }
+}
+
+putenv('APP_ENV=single-server');
+putenv('APP_BASE_URL=https://dentisys.example.edu');
+putenv('EMAIL_PROVIDER=smtp');
+foreach (['DEV_MOCK_IDENTITY_ENABLED', 'DEV_MOCK_LOCATION_ENABLED', 'DEV_BROWSER_ATTENDANCE_PROTOTYPE_ENABLED'] as $flag) {
+    putenv("$flag=false");
+}
+foreach (['JWT_SIGNING_KEY_B64', 'MFA_ENCRYPTION_KEY_B64', 'AUDIT_MAC_KEY_B64'] as $key) {
+    putenv($key . '=' . base64_encode(str_repeat('p', 32)));
+}
+putenv('BIOMETRIC_SIDECAR_ENABLED=true');
+putenv('BIOMETRIC_SIDECAR_URL=http://biometric:8000');
+putenv('BIOMETRIC_SIDECAR_SHARED_SECRET=runtime-test-private-sidecar-secret');
+ob_start();
+handle_runtime_config();
+$vpsBody = (string) ob_get_clean();
+$vpsPayload = json_decode($vpsBody, true);
+if (($vpsPayload['environment'] ?? null) !== 'single-server'
+    || ($vpsPayload['providers']['biometrics'] ?? null) !== ['active' => 'sidecar']
+    || str_contains($vpsBody, 'runtime-test-private-sidecar-secret')
+    || str_contains($vpsBody, 'http://biometric:8000')) {
+    fwrite(STDERR, "FAIL: VPS runtime configuration must expose sidecar availability without its credentials.\n");
+    exit(1);
 }
 
 foreach ($savedEnvironment as $key => $value) {

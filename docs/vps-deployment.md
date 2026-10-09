@@ -9,7 +9,7 @@ a later Owner-approved amendment. Manual attendance remains available.
 
 The private-LAN prototype is unchanged; use [single-server.md](single-server.md)
 for that case. This VPS uses GHCR images built by hand from a tested commit,
-Traefik with Let's Encrypt, Watchtower for the three application containers,
+Traefik with Let's Encrypt, Watchtower for web/frontend/biometric,
 internal PostgreSQL, and pgAdmin on loopback. No source checkout or CI/CD runs on the VPS.
 
 ## Host, DNS and firewall
@@ -17,8 +17,9 @@ internal PostgreSQL, and pgAdmin on loopback. No source checkout or CI/CD runs o
 Start with an **x86-64 Ubuntu 26.04 LTS VPS, 2 vCPU**, **2 GB RAM minimum / 4 GB
 recommended**, and **at least 30 GB disk** for images, PostgreSQL and 14 database
 dumps. AWS's default 8 GB disk runs out while pulling the biometric image.
-This is a starting size; measure memory, disk and biometric latency during team
-testing. AWS Lightsail/EC2,
+With real biometrics enabled, **4 GB RAM is recommended** (for example AWS
+EC2 [t3.medium](https://aws.amazon.com/ec2/instance-types/t3/), 2 vCPU / 4 GB).
+Measure memory, disk and biometric latency during team testing. AWS Lightsail/EC2,
 Vultr and DigitalOcean are possible providers; select an equivalent Ubuntu VPS.
 The publishing script builds `linux/amd64`; do not select an ARM instance.
 
@@ -147,6 +148,13 @@ without variable references. Do not put `GHCR_TOKEN` in this file. See
   These are the initial GUI login, not PostgreSQL credentials.
 - Set the absolute model path, SHA-256 and team-validated research calibration
   values. The script verifies the model hash; it invents no biometric thresholds.
+- `BIOMETRIC_SIDECAR_ENABLED=true` opts this `single-server` demo into real
+  enrollment and attendance verification, as in local development. Only team
+  members enroll (BIO-002 note); consent and manual fallback still apply. To
+  disable it, set `false` and rerun deployment. It defaults to false when absent;
+  production and test environments cannot opt in. Keep the sidecar URL/secret
+  configured and `BIOMETRIC_CHALLENGE_TTL_SECONDS=120` unless team testing
+  requires another positive lifetime.
 - Keep `EMAIL_PROVIDER=smtp`, `SMTP_HOST=smtp.gmail.com`, port `587`, encryption
   `starttls`, and peer verification `true`. Set sender/user and a Gmail App
   Password, with 2-Step Verification enabled. Use the sender address for
@@ -200,7 +208,7 @@ checks `_schema_migrations`, and saves a private dump before any pending
 migrations. A backup/migration failure aborts; the app stays stopped after a
 migration failure. A new database initializes all migrations on first creation.
 Then it starts the full stack without building, waits for health, checks the
-frontend-to-API path, and runs grade-weight setup, the first-Dean invitation and
+frontend root page, and runs grade-weight setup, the first-Dean invitation and
 biometric expiry. Bootstrap failures warn so you can repair and rerun.
 
 The Dean opens the invitation email, chooses a password and invites Faculty.
@@ -234,6 +242,56 @@ for the empty failed installation; an instance with application data needs the
 backup/restore procedure instead. If a check reports unavailable sudo
 credentials, run `sudo -v` in the same terminal and retry; the check itself
 never waits for password input.
+
+## Replicas and routing
+
+The overlay runs **three web and three frontend replicas, and one biometric
+sidecar**. Traefik sends `/api`, `/api/...` and `/healthcheck.php` directly to
+web with higher router priority; the remaining paths go to frontend. This avoids
+Nginx's cached web IPs during Watchtower replacements. Paths, Authorization
+headers and cookies pass through intact. `APP_IS_HTTPS=true` keeps secure cookies;
+`TRUSTED_PROXY_CIDRS` trusts Traefik's private Docker network so the backend uses
+the client IP from its forwarded header. Keep public clients outside those
+trusted ranges and never enable insecure forwarded-header trust in Traefik.
+
+Both services have Docker healthchecks and Traefik HTTP healthchecks (every
+five seconds). With `allowemptyservices=false`, the
+[Traefik v3.6.2 Docker provider](https://github.com/traefik/traefik/blob/v3.6.2/pkg/provider/docker/config.go)
+excludes starting and unhealthy containers; a replacement joins routing only
+after its Docker healthcheck succeeds. Watchtower rolls labeled containers one
+at a time. Full deployment still stops all app replicas for pending migrations;
+`up --wait` waits for all replicas, while maintenance `exec` runs once on one.
+
+The shared `dentisys_vps_ratelimit` volume holds file rate limits and MFA/Google
+challenge attempt counters with `flock` across web replicas. A new volume inherits
+`www-data:www-data` ownership and mode 0700 from the image. Sessions, refresh
+and other security tokens, biometric challenges and attendance use PostgreSQL;
+no PHP file sessions need affinity. Upload temp files are request-local, Google's
+JWKS cache is safe per replica, and the per-replica email outbox log is diagnostic,
+not a delivery queue. The unused legacy settings/assessment path helpers have
+no callers; active settings and assessments use PostgreSQL. Protected biometric
+references stay on the single sidecar's volume, excluded from ordinary backups.
+
+The biometric gate audit found backend activation in `app/config.php` and
+frontend runtime normalization discarding `sidecar`; both now honor the demo
+opt-in. The sidecar client/controllers require the active provider, not a
+development environment. Real camera, consent, enrollment and check-in screens
+use Student/linked-Secretary authorization without an environment gate. The
+remaining development-only checks belong to mocks and remain unchanged.
+
+## Google Sign-In setup
+
+Create a Web application OAuth client using Google's
+[setup guide](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid).
+Add the exact site origin `https://<APP_DOMAIN>` to **Authorized JavaScript
+origins**, without a path. In Google Auth Platform's Audience settings, add the
+team accounts as test users while the app is in
+[Testing mode](https://support.google.com/cloud/answer/15549945).
+Set `GOOGLE_CLIENT_ID` in the server `.env` and rerun deployment; an empty value
+disables Google Sign-In. Invitation acceptance and activation remain
+password-only. After activation, users link the matching institutional Google
+account from their profile, confirming password and MFA when enabled (REG-003).
+Google sign-in never replaces the DentiSys password or authorizes public signup.
 
 ## Verify and operate
 
@@ -273,7 +331,10 @@ curl --fail https://dentisys.example.com/api/health
 
 Expect HTTP to redirect to HTTPS, HTTPS to show the application with a trusted
 certificate, API health to report `"status":"ok"`, and web/db/biometric to be
-healthy. Confirm invitation delivery, sign-in and manual attendance in a
+healthy; `compose ps` must show three healthy web and three healthy frontend
+replicas, and one healthy biometric container. Check `/api/runtime-config` reports
+`biometrics.active: sidecar` when opted in. Confirm invitation delivery, sign-in,
+team-only enrollment/check-in and manual attendance in a
 browser. Replace `dentisys.example.com` above with `APP_DOMAIN`.
 Inspect Watchtower logs for registry/API errors and Traefik logs for
 DNS/ACME errors. Do not use `curl -k` to hide certificate problems.

@@ -232,13 +232,18 @@ function app_config(?array $overrides = null): array
     );
     $biometricSidecarUrl = rtrim(trim((string) config_value('BIOMETRIC_SIDECAR_URL', $values, '')), '/');
     $biometricSidecarSecret = trim((string) config_value('BIOMETRIC_SIDECAR_SHARED_SECRET', $values, ''));
+    $biometricSidecarEnabled = config_strict_bool(
+        config_value('BIOMETRIC_SIDECAR_ENABLED', $values, false),
+        'BIOMETRIC_SIDECAR_ENABLED'
+    );
     $biometricChallengeTtl = (int) config_value('BIOMETRIC_CHALLENGE_TTL_SECONDS', $values, 120);
     if ($biometricChallengeTtl <= 0) {
         throw new RuntimeException('Configuration value "BIOMETRIC_CHALLENGE_TTL_SECONDS" must be positive.');
     }
-    // Real biometrics is intentionally limited to the local development lane
-    // until the deferred production approvals and camera calibration are complete.
-    $biometricActive = ($isDevelopment && $biometricSidecarUrl !== '' && $biometricSidecarSecret !== '')
+    // Owner decision (2026-10-09), DEL-001: opt in to team-only real biometrics
+    // for the single-server VPS demo; other production-like environments stay disabled.
+    $biometricActive = (($isDevelopment || ($appEnv === 'single-server' && $biometricSidecarEnabled))
+        && $biometricSidecarUrl !== '' && $biometricSidecarSecret !== '')
         ? 'sidecar'
         : ($mockFlags['biometrics'] ? 'development-mock' : 'disabled');
 

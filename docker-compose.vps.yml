@@ -8,6 +8,7 @@ services:
       - "--api.dashboard=false"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.allowemptyservices=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
@@ -26,27 +27,58 @@ services:
   web:
     build: !reset null
     image: ${WEB_IMAGE:?Set WEB_IMAGE to the published GHCR web image.}
+    deploy:
+      replicas: 3
     environment:
       APP_IS_HTTPS: "true"
       APP_BASE_URL: https://${APP_DOMAIN:?Set APP_DOMAIN to the VPS hostname.}
+      BIOMETRIC_SIDECAR_ENABLED: ${BIOMETRIC_SIDECAR_ENABLED:-false}
+      BIOMETRIC_CHALLENGE_TTL_SECONDS: ${BIOMETRIC_CHALLENGE_TTL_SECONDS:-120}
+    volumes:
+      - dentisys_vps_ratelimit:/var/www/html/backend/storage/ratelimit
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.dentisys-api.rule=Host(`${APP_DOMAIN:?Set APP_DOMAIN to the VPS hostname.}`) && (Path(`/api`) || PathPrefix(`/api/`) || Path(`/healthcheck.php`))"
+      - "traefik.http.routers.dentisys-api.priority=100"
+      - "traefik.http.routers.dentisys-api.entrypoints=websecure"
+      - "traefik.http.routers.dentisys-api.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dentisys-api.service=dentisys-api"
+      - "traefik.http.services.dentisys-api.loadbalancer.server.port=80"
+      - "traefik.http.services.dentisys-api.loadbalancer.healthcheck.path=/healthcheck.php"
+      - "traefik.http.services.dentisys-api.loadbalancer.healthcheck.interval=5s"
+      - "traefik.http.services.dentisys-api.loadbalancer.healthcheck.timeout=2s"
 
   frontend:
     build: !reset null
     image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to the published GHCR frontend image.}
+    deploy:
+      replicas: 3
     ports: !reset []
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
       - "traefik.enable=true"
       - "traefik.http.routers.dentisys.rule=Host(`${APP_DOMAIN:?Set APP_DOMAIN to the VPS hostname.}`)"
+      - "traefik.http.routers.dentisys.priority=10"
       - "traefik.http.routers.dentisys.entrypoints=websecure"
       - "traefik.http.routers.dentisys.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.dentisys.service=dentisys"
       - "traefik.http.services.dentisys.loadbalancer.server.port=80"
+      - "traefik.http.services.dentisys.loadbalancer.healthcheck.path=/"
+      - "traefik.http.services.dentisys.loadbalancer.healthcheck.interval=5s"
+      - "traefik.http.services.dentisys.loadbalancer.healthcheck.timeout=2s"
 
   biometric:
     build: !reset null
     image: ${BIOMETRIC_IMAGE:?Set BIOMETRIC_IMAGE to the published GHCR biometric image.}
+    deploy:
+      replicas: 1
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     restart: unless-stopped
@@ -85,3 +117,4 @@ services:
 volumes:
   dentisys_letsencrypt:
   dentisys_vps_pgadmin_data:
+  dentisys_vps_ratelimit:
