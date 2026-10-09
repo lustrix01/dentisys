@@ -74,6 +74,7 @@ for migration in "$deploy_dir"/database/migrations/*.sql; do
   [[ -f "$incoming" ]] || fail "Local branch is behind the server: missing $(basename "$migration"). Nothing installed."
   cmp -s <(sed 's/\r$//' "$migration") <(sed 's/\r$//' "$incoming") || fail "Migration differs: $(basename "$migration"). Do not rewrite migrations. Nothing installed."
 done
+install -d -m 0755 "$deploy_dir/database" "$deploy_dir/database/migrations"
 for file in database/init.sql database/apply-migrations.sh; do
   if ! cmp -s "$stage/$file" "$deploy_dir/$file"; then
     echo "WARNING: $file changed. Rerun deploy-vps.sh from the matching bundle to refresh the db container's file mounts." >&2
@@ -82,11 +83,12 @@ for file in database/init.sql database/apply-migrations.sh; do
   fi
 done
 for file in database/init.sql database/apply-migrations.sh; do
-  install -m 0640 "$stage/$file" "$deploy_dir/$file"
+  install -m 0644 "$stage/$file" "$deploy_dir/$file"
 done
 for migration in "$stage"/database/migrations/*.sql; do
   destination="$deploy_dir/database/migrations/$(basename "$migration")"
-  [[ -f "$destination" ]] || install -m 0640 "$migration" "$destination"
+  [[ -f "$destination" ]] || install -m 0644 "$migration" "$destination"
+  chmod 0644 "$destination"
 done
 install -m 0750 "$stage/scripts/migrate-vps.sh" "$deploy_dir/scripts/migrate-vps.sh"
 if [[ "$1" == check ]]; then

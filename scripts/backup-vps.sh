@@ -44,7 +44,7 @@ compose() {
 backup_temp="$(mktemp "$backup_dir/.vps-nightly-XXXXXX.part")"
 trap 'rm -f -- "$backup_temp"' EXIT
 # BIO-003: database only. Never archive or copy the biometric volume.
-compose exec -T db pg_dump -U "${admin_user:-postgres}" -d "${db_name:-dentisys}" -Fc > "$backup_temp"
+compose exec -T --interactive=false db pg_dump -U "${admin_user:-postgres}" -d "${db_name:-dentisys}" -Fc > "$backup_temp"
 test -s "$backup_temp"
 chmod 600 "$backup_temp"
 backup_suffix="${backup_temp##*-}"

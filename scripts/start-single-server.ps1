@@ -84,7 +84,7 @@ foreach ($task in @(
     @{ Script = 'bootstrap-first-dean.php'; Label = 'First Dean invitation (check FIRST_DEAN_*)' },
     @{ Script = 'expire-biometrics.php'; Label = 'Biometric expiry sweep' }
 )) {
-    & docker compose @composeArgs exec -T web php "/var/www/html/backend/bin/$($task.Script)"
+    & docker compose @composeArgs exec -T -u www-data web php "/var/www/html/backend/bin/$($task.Script)"
     if ($LASTEXITCODE -ne 0) { Write-Warning "$($task.Label) did not finish." }
 }
 Write-Host 'Single-server stack started. PostgreSQL remains internal; access the application on APP_HTTP_PORT.'

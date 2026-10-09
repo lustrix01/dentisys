@@ -75,7 +75,7 @@ fi
 compose up -d --build --wait
 
 # Same maintenance as start-dev. A failure is reported but does not stop the stack.
-compose exec -T web php /var/www/html/backend/bin/bootstrap-grade-weights.php || echo 'WARNING: Grade-weight setup did not finish.' >&2
-compose exec -T web php /var/www/html/backend/bin/bootstrap-first-dean.php || echo 'WARNING: First Dean invitation did not finish (check FIRST_DEAN_*).' >&2
-compose exec -T web php /var/www/html/backend/bin/expire-biometrics.php || echo 'WARNING: Biometric expiry sweep did not finish.' >&2
+compose exec -T -u www-data web php /var/www/html/backend/bin/bootstrap-grade-weights.php || echo 'WARNING: Grade-weight setup did not finish.' >&2
+compose exec -T -u www-data web php /var/www/html/backend/bin/bootstrap-first-dean.php || echo 'WARNING: First Dean invitation did not finish (check FIRST_DEAN_*).' >&2
+compose exec -T -u www-data web php /var/www/html/backend/bin/expire-biometrics.php || echo 'WARNING: Biometric expiry sweep did not finish.' >&2
 echo 'Single-server stack started. PostgreSQL remains internal; access the application on APP_HTTP_PORT.'

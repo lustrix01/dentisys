@@ -14,9 +14,11 @@ internal PostgreSQL, and pgAdmin on loopback. No source checkout or CI/CD runs o
 
 ## Host, DNS and firewall
 
-Start with an **x86-64 Ubuntu 26.04 LTS VPS, 2 vCPU / 4 GB RAM**, with enough disk
-for images, PostgreSQL and 14 database dumps. This is a starting size; measure
-memory, disk and biometric latency during team testing. AWS Lightsail/EC2,
+Start with an **x86-64 Ubuntu 26.04 LTS VPS, 2 vCPU**, **2 GB RAM minimum / 4 GB
+recommended**, and **at least 30 GB disk** for images, PostgreSQL and 14 database
+dumps. AWS's default 8 GB disk runs out while pulling the biometric image.
+This is a starting size; measure memory, disk and biometric latency during team
+testing. AWS Lightsail/EC2,
 Vultr and DigitalOcean are possible providers; select an equivalent Ubuntu VPS.
 The publishing script builds `linux/amd64`; do not select an ARM instance.
 
@@ -205,6 +207,33 @@ The Dean opens the invitation email, chooses a password and invites Faculty.
 No development seed or demo credentials are loaded. If delivery fails, repair
 SMTP and rerun; the bootstrap retries safely and does nothing once a Dean is
 active. Do not enroll volunteers' biometrics.
+
+### Failed first database initialization
+
+An earlier deploy installed schema files with permissions unreadable by the
+container's `postgres` user (uid 999). The log shows `Permission denied` for
+`001-migrations.sh`, then `Skipping initialization` on restart; the database
+exists but `_schema_migrations` does not. The migration check now stops with a
+recovery message, and prints progress while waiting up to 180 seconds for db.
+
+For this failed **first initialization on an empty database**, repair modes in
+place, apply the schema once, then rerun the fixed deployment from its bundle:
+
+```bash
+sudo chmod 0755 /opt/dentisys/database /opt/dentisys/database/migrations
+sudo chmod 0644 /opt/dentisys/database/init.sql /opt/dentisys/database/apply-migrations.sh /opt/dentisys/database/migrations/*.sql
+sudo docker exec dentisys-db-1 sh /docker-entrypoint-initdb.d/001-migrations.sh
+cd /tmp/dentisys-deploy
+bash scripts/deploy-vps.sh
+```
+
+`chmod` keeps the inode, so the existing single-file bind mounts see the fix.
+Schema files contain no secrets. Keep `.env`, backups, `.docker` and assets
+private; do not remove the database volume or use `down -v`. This recovery is
+for the empty failed installation; an instance with application data needs the
+backup/restore procedure instead. If a check reports unavailable sudo
+credentials, run `sudo -v` in the same terminal and retry; the check itself
+never waits for password input.
 
 ## Verify and operate
 

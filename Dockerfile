@@ -17,5 +17,7 @@ RUN sed -ri 's!/var/www/html!/var/www/html/backend/public!g' /etc/apache2/sites-
 COPY docker/php/zz-dentisys.ini /usr/local/etc/php/conf.d/zz-dentisys.ini
 COPY --chown=www-data:www-data backend/ /var/www/html/backend/
 COPY --from=composer --chown=www-data:www-data /app/vendor /var/www/html/backend/vendor
+RUN install -d -o www-data -g www-data -m 0700 \
+    /var/www/html/backend/storage /var/www/html/backend/storage/ratelimit
 CMD ["sh", "-c", "php /var/www/html/backend/bin/validate-config.php && exec apache2-foreground"]
 EXPOSE 80

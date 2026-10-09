@@ -28,8 +28,11 @@ umask 077
 sudo install -d -m 0750 -o "$(id -un)" -g "$(id -gn)" "$deploy_dir"
 exec 9>"$deploy_dir/.deploy.lock"
 flock -n 9 || fail 'Another VPS deployment or database sync is running.'
-for dir in database database/migrations scripts assets .docker; do
+for dir in scripts assets .docker; do
   install -d -m 0750 "$deploy_dir/$dir"
+done
+for dir in database database/migrations; do
+  install -d -m 0755 "$deploy_dir/$dir"
 done
 install -d -m 0700 "$deploy_dir/backups"
 db_start_args=()
@@ -39,11 +42,14 @@ for file in database/init.sql database/apply-migrations.sh; do
     db_start_args=(--force-recreate)
   fi
 done
-for file in docker-compose.web.yml docker-compose.database.yml docker-compose.vps.yml database/init.sql database/apply-migrations.sh; do
+for file in docker-compose.web.yml docker-compose.database.yml docker-compose.vps.yml; do
   install -m 0640 "$source_dir/$file" "$deploy_dir/$file"
 done
+for file in database/init.sql database/apply-migrations.sh; do
+  install -m 0644 "$source_dir/$file" "$deploy_dir/$file"
+done
 for migration in "$source_dir"/database/migrations/[0-9][0-9][0-9]_*.sql; do
-  install -m 0640 "$migration" "$deploy_dir/database/migrations/$(basename "$migration")"
+  install -m 0644 "$migration" "$deploy_dir/database/migrations/$(basename "$migration")"
 done
 install -m 0750 "$source_dir/scripts/backup-vps.sh" "$deploy_dir/scripts/backup-vps.sh"
 install -m 0750 "$source_dir/scripts/migrate-vps.sh" "$deploy_dir/scripts/migrate-vps.sh"
@@ -153,7 +159,7 @@ compose rm -f watchtower
 compose pull
 compose up -d --no-build "${db_start_args[@]}" --wait --wait-timeout 180 db
 rm -f -- "$deploy_dir/.db-recreate-required"
-pending="$(bash "$deploy_dir/scripts/migrate-vps.sh" --check)"
+pending="$(bash "$deploy_dir/scripts/migrate-vps.sh" --check </dev/null)" || fail 'Database check failed; see the error above and the initialization recovery runbook.'
 echo "$pending"
 if [[ "$pending" != 'Nothing to apply' ]]; then
   compose stop frontend web biometric
@@ -161,11 +167,11 @@ if [[ "$pending" != 'Nothing to apply' ]]; then
 fi
 
 compose up -d --no-build --remove-orphans --wait --wait-timeout 240
-compose exec -T frontend wget -q -O /dev/null http://127.0.0.1/healthcheck.php
+compose exec -T --interactive=false frontend wget -q -O /dev/null http://127.0.0.1/healthcheck.php
 # Same maintenance as the LAN script; report failures without stopping the stack.
-compose exec -T web php /var/www/html/backend/bin/bootstrap-grade-weights.php || echo 'WARNING: Grade-weight setup did not finish.' >&2
-compose exec -T web php /var/www/html/backend/bin/bootstrap-first-dean.php || echo 'WARNING: First Dean invitation did not finish (check FIRST_DEAN_*).' >&2
-compose exec -T web php /var/www/html/backend/bin/expire-biometrics.php || echo 'WARNING: Biometric expiry sweep did not finish.' >&2
+compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-grade-weights.php || echo 'WARNING: Grade-weight setup did not finish.' >&2
+compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-first-dean.php || echo 'WARNING: First Dean invitation did not finish (check FIRST_DEAN_*).' >&2
+compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/expire-biometrics.php || echo 'WARNING: Biometric expiry sweep did not finish.' >&2
 
 sudo apt-get install -y cron
 sudo systemctl enable --now cron
