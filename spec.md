@@ -615,6 +615,8 @@ Separate application/database-server deployment is not implemented.
 
 Do not treat existing prototype deployment files as production readiness.
 
+The approved VPS demonstration deployment (DEL-001) is the only supported non-local deployment. The private-LAN single-server prototype remains available and unchanged.
+
 ## RUN-003 — Secrets
 
 **Status: CURRENT**
@@ -680,6 +682,8 @@ Students may refuse biometric processing or later revoke consent. Refusal or ina
 The consent disclosure MUST state the attendance-only purpose; the biometric material processed; that raw facial images are not retained; that a protected reference is retained and expires every semester; revocation and deletion behavior; who may access enrollment status; the manual attendance alternative; and that revocation does not erase historical attendance. This scope applies to adult university Students.
 
 Before real Student deployment, final privacy and consent wording MUST be reviewed and approved by the research team, adviser, relevant University authority, and University Data Protection Officer. This named review is the required institutional gate for real Student deployment; real deployment remains deferred until that gate and the remaining technical approvals in BIO-007 are complete.
+
+For the DEL-001 demonstration deployment, only DentiSys team members enroll facial biometrics. Enrolling volunteer Students requires the BIO-002 institutional review, or a later Owner-approved amendment.
 
 ## BIO-003 — Temporary captures, protected reference, and infrastructure boundary
 
@@ -869,11 +873,20 @@ Students contact Secretary or Faculty outside DentiSys. Current scope has no Stu
 
 ## DEL-001 — Image publishing and deployment
 
-**Status: DEFERRED**
+**Status: APPROVED (demonstration scope)**
 
-Image publishing and demonstration deployment remain future work.
+Owner decision (2026-10-09): A demonstration deployment on one cloud VPS is approved for testing by the DentiSys team and invited volunteer Faculty and Students. It is not a production deployment and not the BIO-002 real Student deployment.
 
-Do not add cloud infrastructure, TLS, deployment automation, registry configuration, CI/CD, or related infrastructure unless explicitly scoped and approved.
+Approved infrastructure, and nothing beyond it:
+
+* Traefik as the only public entry point (ports 80 and 443), with HTTP redirected to HTTPS and Let's Encrypt certificates for one hostname (initially a DuckDNS name; changing the hostname needs no amendment).
+* Application images (web, frontend, biometric) published to GitHub Container Registry under the Owner's account, built and pushed by the Owner from a tested commit. No CI/CD pipeline.
+* Watchtower updating only the labeled DentiSys application containers. A release that adds database migrations MUST be deployed with the deploy script, which backs up the database before migrating; Watchtower alone MUST NOT be relied on for such a release.
+* A deploy script, a nightly PostgreSQL backup that the Owner can copy off the server, host firewall guidance (SSH, 80, 443 only), and a runbook.
+
+PostgreSQL, Mailpit and the biometric component stay internal to Docker. pgAdmin is not deployed. Secrets live only in the server's environment file, never in Git or in images. Separate application/database servers, Kubernetes, other cloud services and public database access remain out of scope.
+
+Do not add other cloud infrastructure, TLS, deployment automation, registry configuration, CI/CD, or related infrastructure unless explicitly scoped and approved.
 
 A development-only, self-signed HTTPS mode for testing on phones over the local network is permitted. It is not deployment TLS and does not authorize deployment infrastructure.
 
