@@ -13,8 +13,16 @@ if ($Tag -like 'sha-*') { throw 'Use a moving tag such as demo; sha-* tags ident
 
 function Invoke-Native {
     param([string]$Command, [string[]]$Arguments)
-    & $Command @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "$Command failed (exit $LASTEXITCODE)." }
+    # Windows PowerShell treats redirected native stderr as an error record.
+    $nativeCommand = Get-Command -Name $Command -ErrorAction Stop
+    $nativePreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $nativeCommand @Arguments
+        $nativeExit = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $nativePreference }
+    if ($nativeExit -ne 0) { throw "$Command failed (exit $nativeExit)." }
 }
 
 Push-Location $repoRoot
@@ -63,8 +71,8 @@ try {
     }
     foreach ($image in $images) {
         foreach ($imageTag in @("sha-$sha", $Tag)) {
-            & docker push "$($image.Repository):$imageTag"
-            if ($LASTEXITCODE -ne 0) {
+            try { Invoke-Native docker @('push', "$($image.Repository):$imageTag") }
+            catch {
                 throw 'Push failed. Run docker login ghcr.io with package write access, then rerun this script. It does not handle tokens.'
             }
         }

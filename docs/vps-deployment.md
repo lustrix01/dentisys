@@ -284,8 +284,38 @@ Both services have Docker healthchecks and Traefik HTTP healthchecks (every
 five seconds). With `allowemptyservices=false`, the
 [Traefik v3.6.2 Docker provider](https://github.com/traefik/traefik/blob/v3.6.2/pkg/provider/docker/config.go)
 excludes starting and unhealthy containers; a replacement joins routing only
-after its Docker healthcheck succeeds. Watchtower rolls labeled containers one
-at a time. Full deployment still stops all app replicas for pending migrations;
+after its Docker healthcheck succeeds. Watchtower lifecycle hooks are enabled:
+each web/frontend post-update hook runs **inside the new container** and checks
+its own HTTP endpoint for up to 150 seconds (each probe has a two-second timeout).
+After success it waits 15 seconds for Docker health polling and Traefik discovery
+before Watchtower replaces the next replica. The matching hook timeout labels
+are **3 minutes**, not seconds. This synchronous sequence is confirmed in the
+[Watchtower 1.7.1 update code](https://github.com/containrrr/watchtower/blob/v1.7.1/internal/actions/update.go)
+and [hook documentation](https://github.com/containrrr/watchtower/blob/v1.7.1/docs/lifecycle-hooks.md).
+
+Install these labels and the Watchtower environment change by uploading the
+matching bundle and rerunning `deploy-vps.sh` **before** publishing an app-only
+release. Publishing images alone does not change existing container labels.
+
+Watchtower's stop-signal labels use Apache's `SIGWINCH` and Nginx's `SIGQUIT`
+to finish in-flight requests, matching the images' graceful stop signals.
+[Watchtower otherwise sends SIGTERM](https://containrrr.dev/watchtower/stop-signals/).
+A sleep-only pre-update hook would leave the old container routable, so none is
+used. Both routers use three transport attempts with 100 ms initial backoff.
+[Traefik v3.6.2 retry](https://github.com/traefik/traefik/blob/v3.6.2/pkg/middlewares/retry/retry.go)
+handles connection errors before a response and stops retrying once request
+headers have been sent to the backend. It does not replay a submitted mutation,
+retry an interrupted response, or retry application HTTP error statuses.
+
+If readiness never succeeds, the hook exits nonzero and Watchtower logs the
+failure. **Watchtower 1.7.1 then continues to the next replica**; it does not halt
+the rollout or roll back the bad image. Traefik excludes unhealthy replacements,
+but an entirely bad release can still exhaust the healthy replicas. Monitor
+`compose logs -f watchtower` during publishing; on failure run
+`compose stop watchtower` promptly and use the rollback procedure below.
+The single biometric container still has an interruption when it updates;
+manual attendance remains the fallback. Full deployment still stops all app
+replicas for pending migrations;
 `up --wait` waits for all replicas, while maintenance `exec` runs once on one.
 
 The shared `dentisys_vps_ratelimit` volume holds file rate limits and MFA/Google
@@ -483,6 +513,11 @@ attempts; without it, configure your SSH agent/config to offer the correct key.
 OpenSSH handles key authentication and the remote sudo prompt; the script does
 not collect passwords or tokens. An interrupted transfer can leave a disposable
 `/tmp/dentisys-sync-*` staging directory.
+
+Windows PowerShell 5.1 scripts judge native SSH/SCP/Docker commands by exit code.
+Informational stderr (including SSH's connection-closed message) is preserved
+without aborting a successful command, also when logging with `*> file` or
+`2>&1`. A nonzero SSH exit still prevents publishing.
 
 The server refuses a sync if any existing migration is missing locally or has
 different contents; update your local branch instead of deleting server files.

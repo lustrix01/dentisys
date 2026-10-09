@@ -38,12 +38,29 @@ services:
       - dentisys_vps_ratelimit:/var/www/html/backend/storage/ratelimit
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.stop-signal=SIGWINCH"
+      # Wait for HTTP readiness, then allow Docker health and Traefik to catch up.
+      - >-
+        com.centurylinklabs.watchtower.lifecycle.post-update=php -r '
+        $$end = time() + 150;
+        $$context = stream_context_create(["http" => ["timeout" => 2]]);
+        do {
+          $$body = @file_get_contents("http://127.0.0.1/healthcheck.php", false, $$context);
+          $$health = json_decode((string) $$body, true);
+          if (($$health["status"] ?? "") === "ok") { sleep(15); exit(0); }
+          sleep(1);
+        } while (time() < $$end);
+        fwrite(STDERR, "Web readiness failed after 150 seconds.\n"); exit(1);'
+      - "com.centurylinklabs.watchtower.lifecycle.post-update-timeout=3"
       - "traefik.enable=true"
       - "traefik.http.routers.dentisys-api.rule=Host(`${APP_DOMAIN:?Set APP_DOMAIN to the VPS hostname.}`) && (Path(`/api`) || PathPrefix(`/api/`) || Path(`/healthcheck.php`))"
       - "traefik.http.routers.dentisys-api.priority=100"
       - "traefik.http.routers.dentisys-api.entrypoints=websecure"
       - "traefik.http.routers.dentisys-api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dentisys-api.service=dentisys-api"
+      - "traefik.http.routers.dentisys-api.middlewares=dentisys-retry"
+      - "traefik.http.middlewares.dentisys-retry.retry.attempts=3"
+      - "traefik.http.middlewares.dentisys-retry.retry.initialinterval=100ms"
       - "traefik.http.services.dentisys-api.loadbalancer.server.port=80"
       - "traefik.http.services.dentisys-api.loadbalancer.healthcheck.path=/healthcheck.php"
       - "traefik.http.services.dentisys-api.loadbalancer.healthcheck.interval=5s"
@@ -63,12 +80,23 @@ services:
       start_period: 5s
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.stop-signal=SIGQUIT"
+      - >-
+        com.centurylinklabs.watchtower.lifecycle.post-update=end=$$(( $$(date +%s) + 150 ));
+        until wget -T 2 -q -O /dev/null http://127.0.0.1/; do
+          [ "$$(date +%s)" -lt "$$end" ] || { echo 'Frontend readiness failed after 150 seconds.' >&2; exit 1; };
+          sleep 1;
+        done; sleep 15
+      - "com.centurylinklabs.watchtower.lifecycle.post-update-timeout=3"
       - "traefik.enable=true"
       - "traefik.http.routers.dentisys.rule=Host(`${APP_DOMAIN:?Set APP_DOMAIN to the VPS hostname.}`)"
       - "traefik.http.routers.dentisys.priority=10"
       - "traefik.http.routers.dentisys.entrypoints=websecure"
       - "traefik.http.routers.dentisys.tls.certresolver=letsencrypt"
       - "traefik.http.routers.dentisys.service=dentisys"
+      - "traefik.http.routers.dentisys.middlewares=dentisys-retry"
+      - "traefik.http.middlewares.dentisys-retry.retry.attempts=3"
+      - "traefik.http.middlewares.dentisys-retry.retry.initialinterval=100ms"
       - "traefik.http.services.dentisys.loadbalancer.server.port=80"
       - "traefik.http.services.dentisys.loadbalancer.healthcheck.path=/"
       - "traefik.http.services.dentisys.loadbalancer.healthcheck.interval=5s"
@@ -90,6 +118,7 @@ services:
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_ROLLING_RESTART: "true"
+      WATCHTOWER_LIFECYCLE_HOOKS: "true"
       WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-300}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

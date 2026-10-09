@@ -30,8 +30,16 @@ if ($IdentityFile) {
 
 function Invoke-Native {
     param([string]$Command, [string[]]$Arguments)
-    & $Command @Arguments
-    if ($LASTEXITCODE -ne 0) { throw "$Command failed (exit $LASTEXITCODE)." }
+    # Windows PowerShell treats redirected native stderr as an error record.
+    $nativeCommand = Get-Command -Name $Command -ErrorAction Stop
+    $nativePreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $nativeCommand @Arguments
+        $nativeExit = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $nativePreference }
+    if ($nativeExit -ne 0) { throw "$Command failed (exit $nativeExit)." }
 }
 
 Push-Location $repoRoot
