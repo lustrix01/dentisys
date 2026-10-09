@@ -31,30 +31,46 @@ DNS must resolve correctly and port 80 must be reachable for ACME HTTP-01.
 
 ## Before you start
 
-Apply **steps 1–6 only** of the Owner's
-[Ubuntu 26.04 hardening guide](https://computingforgeeks.com/harden-ubuntu-2604-server/):
-unattended upgrades, a sudo user with key login, SSH hardening, UFW, fail2ban and
-sysctl hardening. Use `devops` and port `2202` in the examples below. Keep root
-and password SSH login disabled, `MaxAuthTries 3`, `AllowUsers devops`,
-`AllowTcpForwarding no` and `AllowAgentForwarding no`; use the SSH fail2ban jail
-on 2202 with three retries and a one-hour ban. Do not change `ip_forward` or
-apply steps 7 onward. The per-user tunnel exception in **Database and Mailpit
-access** below is the only forwarding exception. Use the same non-root sudo
-user for every deployment/sync.
+The optional script applies [steps 1–6 of the Owner's Ubuntu 26.04 hardening guide](https://computingforgeeks.com/harden-ubuntu-2604-server/).
 
-Keep the existing UFW SSH rule (for example `limit 2202/tcp`). Check a second
-key-authenticated SSH session before closing the first. Then open HTTP/HTTPS
-in UFW and the cloud firewall/security group. In the cloud firewall allow your
-**custom SSH port, not 22**, from the operator's IP, and 80/443 from the internet.
-Apply equivalent IPv6 rules if enabled. Open no PostgreSQL (5432), biometric
-(8000), Mailpit or pgAdmin port:
+On a fresh EC2 host, first allow **TCP 2202 from your IP** and **80/443 for the
+web server** in the AWS Security Group. Keep 22 available for the initial
+`ubuntu` connection. Apply equivalent IPv6 rules if enabled. Prepare recovery
+access through [Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started.html)
+or [EC2 Instance Connect](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-connect-prerequisites.html).
+Session Manager needs its agent/IAM setup; Instance Connect still needs access
+to the configured SSH listener and user. Its default port-22 browser connection
+will not reach SSH after hardening.
 
-```bash
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-sudo ufw status verbose
+From the repository on Windows, use the AWS `.pem`:
+
+```powershell
+.\scripts\harden-vps.ps1 -Server ubuntu@replace-with-vps-ip -KeyFile 'C:\path\to\aws.pem'
 ```
+
+The wrapper checks the key ACL and prints repair commands if needed; it does
+not change ACLs. The server first asks for the `devops` sudo password twice
+through `passwd`, then one confirmation that the Security Group already
+allows 2202/80/443. All input finishes before live host settings change, and
+steps 1–6 then run unattended. A usable existing `devops` password is retained
+on reruns. SSH switches directly to **2202, devops only**. Keep the current
+session open until a second key login succeeds:
+
+```powershell
+ssh -i 'C:\path\to\aws.pem' -p 2202 devops@replace-with-vps-ip
+```
+
+After that test, remove 22 from the Security Group and continue with the
+publishing, bundle/model and deployment sections below. Use `devops` for every
+deployment/sync, adding `-i` with your `.pem` to the SCP/SSH commands below.
+A required reboot is reported for you to perform after testing the new login. To rerun, connect as `devops` with `-Port 2202`.
+
+By default, a separate commented SSH block permits only `devops` local
+forwarding to `127.0.0.1:5050` (pgAdmin) and `127.0.0.1:8025` (Mailpit).
+Pass `-NoDbTunnel` to omit it (`--no-db-tunnel` when running the Bash script
+directly). Agent forwarding remains disabled. Do not open PostgreSQL (5432),
+biometrics (8000), Mailpit or pgAdmin publicly. The script leaves `ip_forward`
+unchanged and applies only steps 1–6.
 
 Docker-published ports can bypass ufw, so the cloud firewall and Compose port
 bindings matter: only Traefik publishes non-loopback ports. See
@@ -347,8 +363,9 @@ with `EMAIL_PROVIDER=smtp`; custom mode starts it with its UI only at
 Mailpit SMTP remain unpublished. To use Mailpit, set `EMAIL_PROVIDER=custom`
 and rerun deployment.
 
-Hardening step 3 denies forwarding. Add this one exception for the deployment
-user in `/etc/ssh/sshd_config.d/99-z-dentisys-tunnels.conf`, which sorts after
+The hardening script enables the loopback exception by default. If you applied
+the guide manually, or omitted the exception and now need these tunnels, add
+the following block for devops in `/etc/ssh/sshd_config.d/99-z-dentisys-tunnels.conf`, which sorts after
 `99-hardening.conf` (or put it at the end of that hardening file):
 
 ```text
@@ -358,8 +375,7 @@ Match User devops
 Match all
 ```
 
-Replace `devops` if your sudo user differs. Keep agent forwarding disabled and
-forwarding denied for other users. If you change either UI's server port,
+Keep agent forwarding disabled and forwarding denied globally. If you change either UI's server port,
 change `PermitOpen` and the tunnel destination to match. **Keep the current SSH
 session open while testing a second session.** Validate before reloading:
 
