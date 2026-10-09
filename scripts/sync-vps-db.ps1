@@ -63,7 +63,7 @@ deploy_dir=/opt/dentisys
 fail() { echo "ERROR: $*" >&2; exit 1; }
 [[ "$(id -u)" -ne 0 ]] || fail 'Use the non-root sudo account that deployed DentiSys.'
 [[ -f "$deploy_dir/.env" ]] || fail 'Run deploy-vps.sh first, using this same sudo account.'
-sudo -v
+sudo -n true 2>/dev/null || sudo -v
 umask 077
 exec 9>"$deploy_dir/.deploy.lock"
 flock -n 9 || fail 'Another VPS deployment or database sync is running.'

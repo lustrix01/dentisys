@@ -23,7 +23,7 @@ env_value() {
 }
 
 [[ "$(id -u)" -ne 0 ]] || fail 'Run as a non-root user with sudo rights.'
-sudo -v
+sudo -n true 2>/dev/null || sudo -v
 umask 077
 sudo install -d -m 0750 -o "$(id -un)" -g "$(id -gn)" "$deploy_dir"
 exec 9>"$deploy_dir/.deploy.lock"
