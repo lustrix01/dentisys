@@ -34,6 +34,7 @@ import { Modal } from '../../components/Modal';
 import { showFeedback, requestConfirmation } from '../../components/FeedbackCenter';
 import {
   getFacultyClassesApi,
+  type AcademicTerm,
   getFacultyCoursesApi,
   getFacultyStudentsApi,
   createFacultyClassApi,
@@ -195,7 +196,8 @@ export const ClassesAndRosters: React.FC = () => {
   const [newCourseName, setNewCourseName] = useState('');
   const [newBlock, setNewBlock] = useState('');
   const [newSchoolYear, setNewSchoolYear] = useState('');
-  const [newSemester, setNewSemester] = useState('1ST');
+  const [academicTerms, setAcademicTerms] = useState<AcademicTerm[]>([]);
+  const [newTermId, setNewTermId] = useState('');
   const [newYearLevel, setNewYearLevel] = useState(4);
   // Course components: lecture and/or laboratory, each with its own units
   // and its own schedule.
@@ -330,6 +332,9 @@ export const ClassesAndRosters: React.FC = () => {
       setClasses(classData);
       const currentSy = clsRes.currentSchoolYear || '';
       setNewSchoolYear(currentSy);
+      const terms = (clsRes.academicTerms ?? []).filter(term => term.id !== null && term.schoolYear === currentSy);
+      setAcademicTerms(terms);
+      setNewTermId(previous => terms.some(term => String(term.id) === previous) ? previous : String(terms[0]?.id ?? ''));
       if (!syInitializedRef.current && currentSy) {
         setSelectedSchoolYear(currentSy);
         syInitializedRef.current = true;
@@ -836,6 +841,10 @@ export const ClassesAndRosters: React.FC = () => {
       showFeedback(scheduleConflict, 'error');
       return;
     }
+    if (!newTermId || !academicTerms.some(term => String(term.id) === newTermId)) {
+      showFeedback('Choose a Dean-defined academic term before creating a class.', 'error');
+      return;
+    }
     if (!newSchoolYear) {
       showFeedback('Classes can only be created for the current active school year. Please reload.', 'error');
       return;
@@ -878,8 +887,7 @@ export const ClassesAndRosters: React.FC = () => {
         courseId: targetCourseId > 0 ? targetCourseId : undefined,
         courseCode: newCourseCode.trim(),
         courseName: newCourseName.trim(),
-        semester: newSemester,
-        schoolYear: newSchoolYear,
+        academicTermId: Number(newTermId),
         yearLevel: newYearLevel,
         block: newBlock.trim(),
         lecRoom: includesLecture ? (lecRoom || undefined) : undefined,
@@ -1807,6 +1815,7 @@ export const ClassesAndRosters: React.FC = () => {
               </span>
             </div>
 
+            {academicTerms.length === 0 && <p role="status" className="rounded-xl bg-amber-50 dark:bg-amber-950/30 p-3 text-amber-800 dark:text-amber-200">No open term. Ask the Dean to add the terms for {newSchoolYear}.</p>}
             {/* Course Code & Title */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -1962,15 +1971,14 @@ export const ClassesAndRosters: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester *</label>
-                <select
-                  value={newSemester}
-                  onChange={(e) => setNewSemester(e.target.value)}
+                <label htmlFor="new-academic-term" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Academic term *</label>
+                <select id="new-academic-term" required disabled={academicTerms.length === 0}
+                  value={newTermId}
+                  onChange={(e) => setNewTermId(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
                 >
-                  <option value="1ST">1st Semester</option>
-                  <option value="2ND">2nd Semester</option>
-                  <option value="SUMMER">Summer</option>
+                  <option value="">Choose a term</option>
+                  {academicTerms.map(term => <option key={term.id} value={String(term.id)}>{term.semester} {term.schoolYear} ({term.startDate} – {term.endDate})</option>)}
                 </select>
               </div>
             </div>
@@ -2094,6 +2102,7 @@ export const ClassesAndRosters: React.FC = () => {
                 type="submit"
                 disabled={
                   isSubmittingClass ||
+                  !newTermId ||
                   !newSchoolYear ||
                   !!scheduleConflict ||
                   !newCourseCode.trim() ||
@@ -2319,7 +2328,7 @@ export const ClassesAndRosters: React.FC = () => {
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Semester *</label>
                 <select
                   value={editSemester}
-                  disabled={editTermLocked}
+                  disabled
                   onChange={(e) => setEditSemester(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
                 >
@@ -2340,9 +2349,7 @@ export const ClassesAndRosters: React.FC = () => {
               </div>
             </div>
             <p className="text-[10px] text-slate-400 -mt-2">
-              {editTermLocked
-                ? 'Scores or grades are already recorded for this class, so its course and semester can no longer change.'
-                : 'Course and semester can change until the first score or grade is recorded. The course title you enter shows only for your class.'}
+              Semester and school year stay fixed. The course title you enter shows only for your class.
             </p>
 
             {/* Course components and units: same choices as Create Class */}

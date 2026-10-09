@@ -57,7 +57,7 @@ $offerings = $pdo->query(
     "SELECT cs.instructor_user_id, cs.course_id, cs.semester, cs.school_year,
             c.course_code, c.grading_config::text AS grading_config,
             ua.login_email, ua.role, ua.display_name,
-            MIN(cs.term_start_date)::text AS term_start, MAX(cs.term_end_date)::text AS term_end
+            json_agg(json_build_object('school_year', cs.school_year, 'semester', cs.semester, 'term_start_date', cs.term_start_date, 'term_end_date', cs.term_end_date))::text AS term_classes
        FROM class_sections cs
        JOIN courses c ON c.course_id = cs.course_id
        JOIN user_accounts ua ON ua.user_id = cs.instructor_user_id
@@ -84,6 +84,7 @@ $context = [
     'http_method' => 'CLI',
     'endpoint' => 'bin/bootstrap-grade-weights.php',
 ];
+$terms = academic_terms_read($pdo);
 $created = 0;
 $failed = 0;
 foreach ($offerings as $offering) {
@@ -104,7 +105,10 @@ foreach ($offerings as $offering) {
         'semester' => (string) $offering['semester'],
         'schoolYear' => (string) $offering['school_year'],
     ]);
-    $dateRanges = bootstrap_attendance_date_ranges($offering['term_start'], $offering['term_end']);
+    $resolved = array_map(static fn(array $class): array => academic_resolve_class_term_dates($class, $terms), json_decode($offering['term_classes'], true));
+    $starts = array_values(array_filter(array_column($resolved, 'startDate')));
+    $ends = array_values(array_filter(array_column($resolved, 'endDate')));
+    $dateRanges = bootstrap_attendance_date_ranges($starts === [] ? null : min($starts), $ends === [] ? null : max($ends));
     if ($dateRanges !== null) {
         $payload['attendanceDateRanges'] = $dateRanges;
     }

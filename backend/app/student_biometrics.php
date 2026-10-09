@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/academic_year.php';
+
 /** A profile left in "enrolling" longer than this is a crashed request and may be recovered. */
 const STUDENT_BIOMETRIC_ENROLLING_STALE_SECONDS = 300;
 
@@ -105,7 +107,7 @@ function student_biometric_profile(PDO $pdo, int $studentId, bool $forUpdate = f
                     consent_disclosure_version, enrolled_at, consent_responded_at,
                     revoked_at, revoked_by_user_id, recorded_by_user_id,
                     enrollment_status, protected_object_reference,
-                    reference_expires_on, usable_sample_count, created_at, updated_at
+                    reference_expires_on, reference_term_id, reference_cs_id, usable_sample_count, created_at, updated_at
                FROM biometric_profiles
               WHERE student_id = ?";
     if ($forUpdate) {
@@ -254,7 +256,7 @@ function student_biometric_expire_if_needed(
     }
 
     $today = app_local_date($config, attendance_session_now_utc());
-    if ((string) $row['reference_expires_on'] >= $today) {
+    if (!student_biometric_expiry_due($pdo, $studentId, $row['reference_expires_on'], $today)) {
         return $row;
     }
 
@@ -334,27 +336,35 @@ function student_biometric_invalidate(
     return true;
 }
 
+function student_biometric_enrollment_term(PDO $pdo, int $studentId, ?array $config = null): array
+{
+    $classes = academic_student_term_dates($pdo, $studentId);
+    $latest = academic_latest_term_end($classes);
+    if ($latest === null) {
+        $class = $classes[0] ?? null;
+        $name = $class === null ? academic_current_school_year($pdo) : academic_term_semester($class['semester']) . ' ' . $class['school_year'];
+        throw new StudentBiometricException('Face enrollment opens once the Dean sets the dates for ' . $name . '.', 409, 'biometric_reference_expiry_unavailable');
+    }
+    $config ??= app_config();
+    if ($latest['endDate'] < app_local_date($config, attendance_session_now_utc())) {
+        throw new StudentBiometricException('This term has ended.', 409, 'biometric_term_ended');
+    }
+    return $latest;
+}
+
 function student_biometric_reference_expiry(PDO $pdo, int $studentId): string
 {
-    $stmt = $pdo->prepare(
-        "SELECT MAX(cs.term_end_date)
-           FROM enrollments e
-           JOIN class_sections cs ON cs.cs_id = e.cs_id
-          WHERE e.student_id = ?
-            AND LOWER(e.status) = 'active'
-            AND LOWER(cs.status) = 'active'
-            AND cs.term_end_date IS NOT NULL"
-    );
-    $stmt->execute([$studentId]);
-    $expiry = $stmt->fetchColumn();
-    if (!is_string($expiry) || $expiry === '') {
-        throw new StudentBiometricException(
-            'Biometric enrollment requires an active academic term with an end date.',
-            409,
-            'biometric_reference_expiry_unavailable'
-        );
-    }
-    return $expiry;
+    return student_biometric_enrollment_term($pdo, $studentId)['endDate'];
+}
+
+/** A stored expiry never extends merely because a Student joins a later term.
+ * Dean date edits propagate it transactionally. Resolution also catches ended
+ * active classes when a legacy enrollment has no provenance metadata.
+ */
+function student_biometric_expiry_due(PDO $pdo, int $studentId, ?string $storedExpiry, string $today): bool
+{
+    $latest = academic_latest_term_end(academic_student_term_dates($pdo, $studentId));
+    return ($storedExpiry !== null && $storedExpiry < $today) || ($latest !== null && $latest['endDate'] < $today);
 }
 
 function student_biometric_actions(): array

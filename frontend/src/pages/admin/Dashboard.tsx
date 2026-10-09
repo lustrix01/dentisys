@@ -96,6 +96,10 @@ export const Dashboard: React.FC = () => {
         />
       </div>
 
+      {apiData?.academicTermReminder && <div role="status" className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4 text-sm text-amber-800 dark:text-amber-200">
+        This term ends on {apiData.academicTermReminder.endDate}. Add dates for {apiData.academicTermReminder.semester} {apiData.academicTermReminder.schoolYear}.
+        <button type="button" onClick={() => navigate('/admin/settings#academic-terms')} className="ml-2 font-bold underline">Open Academic terms</button>
+      </div>}
       {/* 2-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         

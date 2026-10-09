@@ -14,6 +14,13 @@ VALUES
     (1, 'INT101', 'Integration Course', 3, 1, '1ST', 'Disposable integration fixture course', 0, '{"quizzes":30,"exams":50,"attendance":20}'::jsonb)
 ON CONFLICT DO NOTHING;
 
+-- Dean-defined current-year terms for the disposable Faculty-create workflows.
+INSERT INTO academic_terms (school_year, semester, start_date, end_date, created_by_user_id, updated_by_user_id)
+VALUES ('2026-2027', '1ST', CURRENT_DATE, CURRENT_DATE + 120, 1, 1),
+       ('2026-2027', '2ND', CURRENT_DATE + 121, CURRENT_DATE + 240, 1, 1),
+       ('2026-2027', 'Summer', CURRENT_DATE + 241, CURRENT_DATE + 270, 1, 1)
+ON CONFLICT (school_year, semester) DO NOTHING;
+
 INSERT INTO class_sections
     (cs_id, cs_name, course_id, instructor_user_id, semester, school_year, year_level, status, term_code, term_start_date, term_end_date)
 VALUES

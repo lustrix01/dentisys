@@ -19,6 +19,11 @@ require_once dirname(__DIR__) . '/controllers/AdminController.php';
 require_once dirname(__DIR__) . '/controllers/FacultyController.php';
 
 return [
+    ['method' => 'GET', 'path' => '/api/admin/academic-terms', 'handler' => 'handle_admin_academic_terms'],
+    ['method' => 'POST', 'path' => '/api/admin/academic-terms', 'handler' => 'handle_admin_academic_terms'],
+    ['method' => 'POST', 'path' => '/api/admin/academic-terms/preview', 'handler' => 'handle_admin_academic_terms'],
+    ['method' => 'POST', 'path' => '/api/admin/academic-terms/delete', 'handler' => 'handle_admin_academic_terms'],
+    ['method' => 'POST', 'path' => '/api/admin/academic-terms/copy', 'handler' => 'handle_admin_academic_terms'],
     [
         'method' => 'GET',
         'path' => '/api/health',

@@ -31,6 +31,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/auth/logout', '/api/auth/password/reset-request', '/api/auth/password/reset-confirm',
   '/api/auth/student/invitation', '/api/auth/student/activate', '/api/auth/development/mock-student-session',
   '/api/admin/faculty-invitations', '/api/admin/faculty-invitations/reissue', '/api/faculty/student-invitations', '/api/admin/dashboard/kpis', '/api/admin/retention/criteria',
+  '/api/admin/academic-terms', '/api/admin/academic-terms/preview', '/api/admin/academic-terms/delete', '/api/admin/academic-terms/copy',
   '/api/admin/retention/criteria', '/api/admin/audit-logs', '/api/admin/profile', '/api/admin/settings', '/api/admin/reports/summary',
   '/api/secretary/invite', '/api/secretary/invitation', '/api/secretary/invitations', '/api/secretary/invitations/revoke',
   '/api/secretary/activate', '/api/secretary/dashboard/kpis', '/api/secretary/attendance', '/api/secretary/attendance/override',
@@ -63,7 +64,7 @@ const GET_ONLY_API_PATHS = new Set([
 
 const MULTI_METHOD_API_PATHS = new Set([
   '/api/admin/faculty-invitations',
-  '/api/admin/retention/criteria', '/api/admin/profile', '/api/admin/settings',
+  '/api/admin/academic-terms', '/api/admin/retention/criteria', '/api/admin/profile', '/api/admin/settings',
   '/api/secretary/profile', '/api/secretary/settings', '/api/faculty/scores', '/api/faculty/profile',
   '/api/faculty/settings', '/api/faculty/classes',
   '/api/notifications', '/api/faculty/excused-requests', '/api/secretary/excused-requests',
@@ -128,6 +129,7 @@ function responseFor(pathname: string, method: string): unknown {
   };
   if (pathname.endsWith('/dashboard/kpis')) return { status: 'ok', kpis: {}, classes: [], gwaBuckets: [], statusCounts: {}, classAttendance: [] };
   if (pathname.endsWith('/reports/summary')) return { status: 'ok', reports: { students: [], attendance: [], totalCount: 0, summary: { totalStudents: 0, averageGWA: 0, atRiskCount: 0, retentionPassRate: 0 } } };
+  if (pathname.endsWith('/admin/academic-terms')) return { status: 'ok', currentSchoolYear: '2026-2027', today: '2026-10-10', terms: [] };
   if (pathname.endsWith('/admin/settings')) return { status: 'ok', settings: { theme: 'light', retentionThreshold: 2.5, weights: { quizzes: 20, exams: 30, practicum: 40, attendance: 10 }, transmutationDefaults: { minimumPercentage: 50, maximumPercentage: 100 } } };
   if (pathname.endsWith('/faculty/settings')) return { status: 'ok', settings: { theme: 'light', transmutationDefaults: { minimumPercentage: 50, maximumPercentage: 100 } } };
   if (pathname.endsWith('/faculty/students') || pathname.endsWith('/faculty/assessments')) return [];

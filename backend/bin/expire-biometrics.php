@@ -45,25 +45,32 @@ $candidates = $pdo->prepare(
        FROM biometric_profiles bp
        JOIN students s ON s.student_id = bp.student_id
       WHERE bp.enrollment_status IN ('active', 'enrolling')
-        AND (LOWER(COALESCE(s.status, '')) <> 'active'
-             OR (bp.reference_expires_on IS NOT NULL AND bp.reference_expires_on < ?))
       ORDER BY bp.student_id"
 );
-$candidates->execute([$today]);
+$candidates->execute();
 $rows = $candidates->fetchAll(PDO::FETCH_ASSOC);
 
 $done = 0;
+$wouldDelete = 0;
 $failed = 0;
 foreach ($rows as $row) {
     $inactive = in_array($row['student_inactive'], [true, 't', '1', 1], true);
+    if (!$inactive && !student_biometric_expiry_due($pdo, (int) $row['student_id'], $row['reference_expires_on'], $today)) continue;
     $label = sprintf('%s (student #%d)', $row['student_number'], (int) $row['student_id']);
     $why = $inactive ? 'Student is not active' : "validity ended {$row['reference_expires_on']}";
     if ($dryRun) {
+        $wouldDelete++;
         echo "WOULD DELETE: {$label}: {$why}\n";
         continue;
     }
     $pdo->beginTransaction();
     try {
+        academic_terms_lock($pdo);
+        $profile = student_biometric_profile($pdo, (int) $row['student_id'], true);
+        if (!$inactive && ($profile === null || !student_biometric_expiry_due($pdo, (int) $row['student_id'], $profile['reference_expires_on'], $today))) {
+            $pdo->commit();
+            continue;
+        }
         student_biometric_invalidate(
             $pdo, $config, $systemActor, $context, (int) $row['student_id'],
             $inactive ? 'revoked' : 'expired',
@@ -86,6 +93,6 @@ foreach ($rows as $row) {
 }
 
 echo $dryRun
-    ? sprintf("%d biometric reference(s) would be deleted.\n", count($rows))
+    ? sprintf("%d biometric reference(s) would be deleted.\n", $wouldDelete)
     : sprintf("Deleted %d biometric reference(s); %d failed.\n", $done, $failed);
 exit($failed > 0 ? 1 : 0);

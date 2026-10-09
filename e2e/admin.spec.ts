@@ -88,6 +88,82 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
+
+  test('Academic terms groups missing dates, validates fields, confirms expiry, copies and deletes', async ({ page }) => {
+    let terms = [
+      { id: null as number | null, schoolYear: '2026-2027', semester: '1ST', startDate: null as string | null, endDate: null as string | null, classCount: 3 },
+      { id: 2, schoolYear: '2025-2026', semester: 'Summer', startDate: '2026-04-01', endDate: '2026-06-01', classCount: 0 },
+    ];
+    let invalid = true;
+    let saves = 0;
+    const posted: Array<Record<string, unknown>> = [];
+    await page.route('**/api/admin/academic-terms**', async route => {
+      const pathname = new URL(route.request().url()).pathname;
+      const data = route.request().method() === 'GET' ? {} : route.request().postDataJSON();
+      posted.push({ path: pathname, ...data });
+      let body: unknown = { status: 'ok' }; let status = 200;
+      if (route.request().method() === 'GET') body = { status: 'ok', currentSchoolYear: '2026-2027', today: '2026-10-10', terms };
+      else if (pathname.endsWith('/preview') && invalid) { status = 422; body = { status: 'error', code: 'VALIDATION_ERROR', message: 'Validation failed.', errors: [{ field: 'endDate', message: 'End date must be after start date.' }] }; invalid = false; }
+      else if (pathname.endsWith('/preview')) body = { status: 'ok', confirmationRequired: !!data.id && data.endDate < '2026-10-10', expiringEnrollments: !!data.id && data.endDate < '2026-10-10' ? 3 : 0 };
+      else if (pathname.endsWith('/copy')) { body = { status: 'ok', schoolYear: '2027-2028', created: 1 }; terms = [...terms, { id: 3, schoolYear: '2027-2028', semester: '1ST', startDate: '2027-08-01', endDate: '2027-12-31', classCount: 0 }]; }
+      else if (pathname.endsWith('/delete')) terms = terms.filter(term => term.id !== data.id);
+      else { saves++; terms = terms.map(term => term.schoolYear === data.schoolYear && term.semester === data.semester ? { ...term, id: 1, startDate: data.startDate, endDate: data.endDate } : term); body = { status: 'ok', confirmationRequired: false, id: 1 }; }
+      await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    });
+    await page.click('a[href="/admin/settings"]');
+    const section = page.locator('#academic-terms');
+    const row = section.getByTestId('2026-2027-1ST');
+    await expect(row).toContainText('Dates not set');
+    await expect(row).toContainText('3 classes');
+    await row.getByRole('button', { name: 'Set dates' }).click();
+    let dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Start date').fill('2026-08-01');
+    await dialog.getByLabel('End date').fill('2026-07-01');
+    await dialog.getByRole('button', { name: 'Save term' }).click();
+    await expect(dialog.getByLabel('End date')).toHaveAttribute('aria-invalid', 'true');
+    expect(saves).toBe(0);
+    await dialog.getByLabel('End date').fill('2026-12-31');
+    await dialog.getByRole('button', { name: 'Save term' }).click();
+    await expect(row).toContainText('2026-08-01 – 2026-12-31');
+    await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+    await row.getByRole('button', { name: 'Edit dates' }).click();
+    dialog = page.getByRole('dialog');
+    await expect(dialog.getByLabel('School year')).toHaveAttribute('readonly', '');
+    await expect(dialog.getByLabel('Semester')).toBeDisabled();
+    await dialog.getByLabel('End date').fill('2026-10-10');
+    await dialog.getByRole('button', { name: 'Save term' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(row).toContainText('2026-10-10');
+    expect(saves).toBe(2);
+    expect(posted.some(data => data.confirmedExpiringEnrollments !== undefined)).toBe(false);
+    await row.getByRole('button', { name: 'Edit dates' }).click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByLabel('End date').fill('2026-10-09');
+    await dialog.getByRole('button', { name: 'Save term' }).click();
+    await expect(dialog).toContainText('3 unexpired biometric enrollments will expire');
+    expect(saves).toBe(2);
+    await dialog.getByRole('button', { name: 'Confirm and save' }).click();
+    await expect(row).toContainText('2026-10-09');
+    expect(posted.some(data => data.confirmedExpiringEnrollments === 3)).toBe(true);
+    await section.getByRole('button', { name: 'Copy previous school year' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Copy terms', exact: true }).click();
+    await expect(section).toContainText('Review and adjust their dates.');
+    const copied = section.getByTestId('2027-2028-1ST');
+    await expect(copied).toBeVisible();
+    await copied.getByRole('button', { name: 'Delete', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete term', exact: true }).click();
+    await expect(copied).toHaveCount(0);
+  });
+
+  test('Academic-term dashboard reminder links to Settings', async ({ page }) => {
+    await page.route('**/api/admin/dashboard/kpis**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', kpis: {}, academicTermReminder: { semester: '2ND', schoolYear: '2026-2027', endDate: '2026-10-20' } }) }));
+    await page.reload();
+    await expect(page.getByRole('status')).toContainText('Add dates for 2ND 2026-2027');
+    await page.getByRole('button', { name: 'Open Academic terms' }).click();
+    await expect(page).toHaveURL('/admin/settings#academic-terms');
+    await expect(page.getByText('Academic terms', { exact: true })).toBeVisible();
+  });
+
   test('admin dashboard renders user info and role panel', async ({ page }) => {
     await expect(page.locator('body')).toContainText(/Dean|Office of the Dean|Dashboard/i);
   });

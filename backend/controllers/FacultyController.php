@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/app/remedial_attempts.php';
+require_once dirname(__DIR__) . '/app/academic_year.php';
 require_once dirname(__DIR__) . '/app/class_meetings.php';
 require_once dirname(__DIR__) . '/app/notifications.php';
 
@@ -7348,6 +7349,7 @@ function handle_faculty_classes_get(): void
             'status' => 'ok',
             'currentSchoolYear' => $currentSchoolYear,
             'classes' => $mapped,
+            'academicTerms' => array_values(array_filter(academic_terms_list($pdo), static fn(array $term): bool => $term['id'] !== null && $term['schoolYear'] === $currentSchoolYear)),
         ], 200);
     } catch (\Throwable $e) {
         error_log('Faculty classes get error: ' . sanitize_for_log($e));
@@ -7508,20 +7510,7 @@ function faculty_class_semester_label(string $semester): string
 
 function normalize_course_semester(?string $sem): ?string
 {
-    if ($sem === null || trim($sem) === '') {
-        return null;
-    }
-    $s = strtoupper(trim($sem));
-    if (str_contains($s, '1ST') || str_contains($s, 'FIRST')) {
-        return '1ST';
-    }
-    if (str_contains($s, '2ND') || str_contains($s, 'SECOND')) {
-        return '2ND';
-    }
-    if (str_contains($s, 'SUMMER')) {
-        return 'Summer';
-    }
-    return null;
+    return academic_term_semester($sem);
 }
 
 function handle_faculty_class_create(): void
@@ -7550,10 +7539,11 @@ function handle_faculty_class_create(): void
         $courseId = (int) ($data['courseId'] ?? 0);
         $courseCode = isset($data['courseCode']) ? trim((string) $data['courseCode']) : '';
         $courseName = isset($data['courseName']) ? trim((string) $data['courseName']) : '';
-        $semester = validate_required_string($data, 'semester', 1, 20);
-        $schoolYear = validate_required_string($data, 'schoolYear', 4, 20);
-        academic_require_current_school_year($pdo, $schoolYear);
-        $semester = faculty_class_semester_label($semester);
+        $pdo->beginTransaction();
+        academic_terms_lock($pdo);
+        $term = academic_term_for_class_create($pdo, $data);
+        $schoolYear = $term['school_year'];
+        $semester = faculty_class_semester_label($term['semester']);
         $rawYearLevel = $data['yearLevel'] ?? 1;
         $yearLevel = is_numeric($rawYearLevel) ? (int) $rawYearLevel : 0;
         if ($yearLevel < 1 || $yearLevel > 6) {
@@ -7569,7 +7559,6 @@ function handle_faculty_class_create(): void
         }
 
         $courseTitle = null;
-        $pdo->beginTransaction();
         if ($courseCode !== '') {
             $course = faculty_resolve_catalog_course(
                 $pdo, $courseCode, $courseName, $lectureUnits, $labUnits, $yearLevel, $semester, (int) $authCtx['user_id']
@@ -7652,6 +7641,7 @@ function handle_faculty_class_create(): void
         if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
+        if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
         error_log('Faculty class create error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
@@ -7811,14 +7801,9 @@ function handle_faculty_class_update(): void
                 return;
             }
             if ($semesterChanges || $yearChanges) {
-                $nextSemester = $termFieldsRequested['semester'] ?? (string) $before['semester'];
-                $nextYear = $termFieldsRequested['schoolYear'] ?? (string) $before['school_year'];
-                $updates[] = 'semester = ?';
-                $params[] = $nextSemester;
-                $updates[] = 'school_year = ?';
-                $params[] = $nextYear;
-                $updates[] = 'term_code = ?';
-                $params[] = "{$nextYear}-{$nextSemester}";
+                $pdo->rollBack();
+                safe_error_response('Semester and school year cannot be changed when editing a class.', 409);
+                return;
             }
 
             $unitsRequested = array_key_exists('lectureUnits', $data) || array_key_exists('labUnits', $data);

@@ -263,6 +263,7 @@ function handle_admin_dashboard_kpis(): void
             ],
             'classAttendance' => $classAttendance,
             'recentAuditEvents' => admin_recent_audit_events($pdo, 5),
+            'academicTermReminder' => academic_next_term_reminder(academic_terms_read($pdo), app_local_date($config, attendance_session_now_utc())),
         ], 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
@@ -911,5 +912,45 @@ function handle_admin_reports_summary(): void
     } catch (\Throwable $e) {
         error_log('Admin reports error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
+    }
+}
+
+/** ACA-002 Settings operations share authentication, transaction and error handling. */
+function handle_admin_academic_terms(): void
+{
+    $pdo = null;
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $actor = admin_verify_auth($pdo, $config);
+        if (request_method() === 'GET') {
+            json_response(['status' => 'ok', 'currentSchoolYear' => academic_current_school_year($pdo),
+                'today' => app_local_date($config, attendance_session_now_utc()), 'terms' => academic_terms_list($pdo)]);
+            return;
+        }
+        $body = request_body();
+        if (!$body['has_body']) { safe_error_response('Request body required.', 400); return; }
+        $pdo->beginTransaction();
+        academic_terms_lock($pdo);
+        $data = $body['data'];
+        $path = request_path();
+        if (str_ends_with($path, '/copy')) {
+            $result = academic_terms_copy_year($pdo, $config, $actor);
+        } elseif (str_ends_with($path, '/delete')) {
+            academic_term_delete($pdo, $config, $actor, (int) ($data['id'] ?? 0));
+            $result = [];
+        } else {
+            $result = academic_term_save($pdo, $config, $actor, $data, str_ends_with($path, '/preview'));
+        }
+        if (str_ends_with($path, '/preview') || ($result['confirmationRequired'] ?? false)) $pdo->rollBack();
+        else $pdo->commit();
+        json_response(['status' => 'ok'] + $result);
+    } catch (ValidationException $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+        validation_error_response($e->getErrors());
+    } catch (Throwable $e) {
+        if ($pdo instanceof PDO && $pdo->inTransaction()) $pdo->rollBack();
+        error_log('Academic terms error: ' . sanitize_for_log($e));
+        safe_error_response('Unable to save academic terms.', 500);
     }
 }

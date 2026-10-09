@@ -31,6 +31,31 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page).toHaveURL('/');
   });
 
+
+  test('Faculty creation offers only Dean terms for the current year', async ({ page }) => {
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [], academicTerms: [
+      { id: 12, schoolYear: '2026-2027', semester: 'Summer', startDate: '2027-05-01', endDate: '2027-07-31', classCount: 0 },
+      { id: 11, schoolYear: '2025-2026', semester: '1ST', startDate: '2025-08-01', endDate: '2025-12-31', classCount: 0 },
+    ] }) }));
+    await page.click('a[href="/classes"]');
+    await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
+    const terms = page.getByLabel('Academic term *');
+    await expect(terms).toHaveValue('12');
+    await expect(terms.locator('option')).toHaveCount(2);
+    await expect(terms).toContainText('Summer 2026-2027');
+    await expect(terms).not.toContainText('2025-2026');
+    await terms.selectOption('12');
+  });
+
+  test('Faculty creation explains when the Dean has no current-year term', async ({ page }) => {
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [], academicTerms: [] }) }));
+    await page.click('a[href="/classes"]');
+    await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
+    await expect(page.getByText('No open term. Ask the Dean to add the terms for 2026-2027.')).toBeVisible();
+    await expect(page.getByLabel('Academic term *')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save Class Section' })).toBeDisabled();
+  });
+
   test('faculty dashboard renders properly', async ({ page }) => {
     await expect(page.locator('body')).toContainText(/Faculty|Dashboard|Classes|Student/i);
   });
@@ -186,7 +211,7 @@ test.describe('Faculty Module E2E Tests', () => {
       if (route.request().method() === 'POST') {
         created = route.request().postDataJSON();
         await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', csId: 91, message: 'Class section created successfully.' }) });
-      } else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [] }) });
+      } else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', academicTerms: [{ id: 1, schoolYear: '2026-2027', semester: '1ST', startDate: '2026-08-01', endDate: '2026-12-31', classCount: 0 }], classes: [] }) });
     });
     await page.route('**/api/faculty/courses', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', courses: [] }) }));
     await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));

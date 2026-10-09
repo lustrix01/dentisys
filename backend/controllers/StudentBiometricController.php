@@ -306,6 +306,7 @@ function handle_student_biometric_enrollment(): void
         [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
         $studentId = $identity['student_id'];
         student_biometric_require_sidecar($config);
+        student_biometric_enrollment_term($pdo, $studentId, $config);
         $frames = student_biometric_uploaded_frames();
         if (count($frames) < 20) {
             throw new StudentBiometricException('At least twenty usable enrollment samples are required.', 422, 'enrollment_samples_insufficient');
@@ -395,22 +396,23 @@ function handle_student_biometric_enrollment(): void
         if ($reference === '' || $usable < 20 || $usable > 30) {
             throw new StudentBiometricException('Biometric enrollment did not produce a valid protected reference.', 503, 'biometric_service_unavailable');
         }
-        $expiresOn = student_biometric_reference_expiry($pdo, $studentId);
         $nowSql = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
         $pdo->beginTransaction();
         try {
+            academic_terms_lock($pdo);
+            $term = student_biometric_enrollment_term($pdo, $studentId, $config);
             $row = student_biometric_profile($pdo, $studentId, true);
             $before = student_biometric_snapshot($row);
             $update = $pdo->prepare(
                 "UPDATE biometric_profiles
                     SET enrollment_status = 'active', face_enrolled = 1,
-                        protected_object_reference = ?, reference_expires_on = ?,
+                        protected_object_reference = ?, reference_expires_on = ?, reference_term_id = ?, reference_cs_id = ?,
                         usable_sample_count = ?, enrolled_at = ?, revoked_at = NULL,
                         revoked_by_user_id = NULL, template_reference = NULL,
                         image_references = NULL, updated_at = ?
                   WHERE profile_id = ?"
             );
-            $update->execute([$reference, $expiresOn, $usable, $nowSql, $nowSql, (int) $row['profile_id']]);
+            $update->execute([$reference, $term['endDate'], $term['termId'], $term['cs_id'], $usable, $nowSql, $nowSql, (int) $row['profile_id']]);
             $row = student_biometric_profile($pdo, $studentId, true);
             student_biometric_complete_challenge($pdo, $challengeTokenId, (string) $idempotencyKey);
             student_biometric_record_audit(
@@ -447,15 +449,26 @@ function handle_student_biometric_enrollment(): void
             try {
                 $restorePdo = create_pdo($config);
                 $restorePdo->beginTransaction();
+                academic_terms_lock($restorePdo);
+                // A Dean edit may have propagated the previous reference while
+                // the sidecar request was running; retain that current validity.
+                $currentProfile = student_biometric_profile($restorePdo, $studentId, true);
+                if ($currentProfile !== null && in_array($currentProfile['enrollment_status'], ['expired', 'revoked'], true)
+                    && $currentProfile['protected_object_reference'] !== $previous['protected_object_reference']) {
+                    $previous = $currentProfile; // Keep a concurrent expiry/revocation terminal.
+                }
+                if ($currentProfile !== null && $currentProfile['protected_object_reference'] === $previous['protected_object_reference']) {
+                    foreach (['reference_expires_on', 'reference_term_id', 'reference_cs_id'] as $field) $previous[$field] = $currentProfile[$field];
+                }
                 $restore = $restorePdo->prepare(
                     "UPDATE biometric_profiles
                         SET enrollment_status = ?, face_enrolled = ?, protected_object_reference = ?,
-                            reference_expires_on = ?, usable_sample_count = ?, enrolled_at = ?, updated_at = ?
+                            reference_expires_on = ?, reference_term_id = ?, reference_cs_id = ?, usable_sample_count = ?, enrolled_at = ?, updated_at = ?
                       WHERE profile_id = ?"
                 );
                 $restore->execute([
                     $previous['enrollment_status'], (int) $previous['face_enrolled'], $previous['protected_object_reference'],
-                    $previous['reference_expires_on'], $previous['usable_sample_count'], $previous['enrolled_at'],
+                    $previous['reference_expires_on'], $previous['reference_term_id'], $previous['reference_cs_id'], $previous['usable_sample_count'], $previous['enrolled_at'],
                     attendance_session_now_utc()->format('Y-m-d H:i:s.u'), (int) $previous['profile_id'],
                 ]);
                 if ($challengeTokenId !== null && $idempotencyKey !== null) {

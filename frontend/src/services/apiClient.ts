@@ -1647,7 +1647,7 @@ export interface CourseCatalogItem {
   isClinical: boolean;
 }
 
-export function getFacultyClassesApi(): Promise<{ status: string; currentSchoolYear?: string; classes: FacultyClassItem[] }> {
+export function getFacultyClassesApi(): Promise<{ status: string; currentSchoolYear?: string; academicTerms?: AcademicTerm[]; classes: FacultyClassItem[] }> {
   return request('GET', '/faculty/classes');
 }
 
@@ -1661,8 +1661,7 @@ export function createFacultyClassApi(data: {
   courseId?: number;
   courseCode?: string;
   courseName?: string;
-  semester: string;
-  schoolYear: string;
+  academicTermId: number;
   yearLevel: number;
   block?: string;
   lecRoom?: string;
@@ -2218,4 +2217,34 @@ export function markNotificationReadApi(notificationId: number | string): Promis
 
 export function markAllNotificationsReadApi(): Promise<{ status: string; updatedCount: number }> {
   return request<{ status: string; updatedCount: number }>('POST', '/notifications/read-all');
+}
+
+export type AcademicTerm = {
+  id: number | null;
+  schoolYear: string;
+  semester: '1ST' | '2ND' | 'Summer';
+  startDate: string | null;
+  endDate: string | null;
+  classCount: number;
+};
+export type AcademicTermInput = {
+  id?: number;
+  schoolYear: string;
+  semester: AcademicTerm['semester'];
+  startDate: string;
+  endDate: string;
+  confirmedExpiringEnrollments?: number;
+};
+export type AcademicTermSaveResult = { status: string; confirmationRequired: boolean; expiringEnrollments?: number; id?: number };
+export function getAcademicTermsApi(): Promise<{ status: string; currentSchoolYear: string; today: string; terms: AcademicTerm[] }> {
+  return request('GET', '/admin/academic-terms');
+}
+export function saveAcademicTermApi(data: AcademicTermInput, preview = false): Promise<AcademicTermSaveResult> {
+  return request('POST', preview ? '/admin/academic-terms/preview' : '/admin/academic-terms', data);
+}
+export function deleteAcademicTermApi(id: number): Promise<{ status: string }> {
+  return request('POST', '/admin/academic-terms/delete', { id });
+}
+export function copyAcademicTermsApi(): Promise<{ status: string; schoolYear: string; created: number }> {
+  return request('POST', '/admin/academic-terms/copy', {});
 }

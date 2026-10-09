@@ -283,6 +283,7 @@ $expectedMigrations = [
     '043_class_meetings.sql',
     '044_scheduled_attendance_sessions.sql',
     '045_lecture_laboratory_grading.sql',
+    '046_academic_terms.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -1445,6 +1446,7 @@ expect_same(200, $facultyLoginStatus, 'Faculty integration login succeeds');
 $facultyAccessToken = (string) ($facultyLoginBody['access_token'] ?? '');
 $seedFacultyAccessToken = $facultyAccessToken;
 
+require __DIR__ . '/academic_terms_integration.php';
 require __DIR__ . '/schedule_session_integration.php';
 
 $facultyGeofenceClassStmt = $pdo->prepare(
@@ -3684,14 +3686,14 @@ $classTitleReadRow = array_values(array_filter(
 expect_same('Own Class Title ' . $classEditFixtureSuffix, $classTitleReadRow['courseName'] ?? null, 'Class reads show the class title');
 expect_same($classTitleCatalogBefore, $classTitleReadRow['catalogCourseName'] ?? null, 'Class reads keep the shared catalog name');
 
-// Semester may change while the class has no scores or grades.
+// CLS-001: term identity stays protected even before scores or grades.
 [$classSemesterStatus] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
     'csId' => (string) $classEditOwnedId,
     'semester' => '2nd Semester',
 ]);
-expect_same(200, $classSemesterStatus, 'Semester can change before any score or grade is recorded');
+expect_same(409, $classSemesterStatus, 'Semester cannot change before any score or grade is recorded');
 $classEditRowStmt->execute([$classEditOwnedId]);
-expect_same('2ND', $classEditRowStmt->fetch(PDO::FETCH_ASSOC)['semester'] ?? null, 'The changed semester persists as the canonical semester code');
+expect_same('1ST', $classEditRowStmt->fetch(PDO::FETCH_ASSOC)['semester'] ?? null, 'The original canonical semester is preserved');
 [$classUnitsStatus] = integration_http_json('/api/faculty/classes/update', $generatedFacultyAccessToken, [
     'csId' => (string) $classEditOwnedId,
     'lectureUnits' => 2,

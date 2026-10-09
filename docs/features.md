@@ -44,6 +44,7 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 
 ## Audit and notifications
 
+- Dean-defined academic terms in Settings, Faculty current-year term selection, and an in-app next-term reminder; biometric expiry follows audited term-date edits — ACA-002, CLS-002, BIO-005 — implemented.
 - Dean/Admin System Audit, separate from personal activity views — SEC-004 — implemented, tests passing.
 - Faculty and Secretary My Activity, read from the database and limited to the signed-in account — SEC-004 — implemented, tests passing.
 - Audit records keep the actor ID and the name at the time of the event, and strip passwords, tokens, secrets and recovery codes — SEC-004 — implemented, tests passing.
