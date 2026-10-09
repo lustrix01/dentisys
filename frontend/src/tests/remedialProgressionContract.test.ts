@@ -1,4 +1,5 @@
 import test from 'node:test';
+import ts from 'typescript';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +9,43 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const apiClient = fs.readFileSync(path.join(currentDirectory, '../services/apiClient.ts'), 'utf8');
 const facultyPage = fs.readFileSync(path.join(currentDirectory, '../pages/faculty/RetentionMonitoring.tsx'), 'utf8');
 const studentPage = fs.readFileSync(path.join(currentDirectory, '../pages/student/RetentionMonitoring.tsx'), 'utf8');
+const dashboard = fs.readFileSync(path.join(currentDirectory, '../pages/faculty/Dashboard.tsx'), 'utf8');
+
+test('Dashboard pending remedials require scoped classes and scheduled progression or legacy pending status', () => {
+  const source = dashboard.slice(dashboard.indexOf('  const pendingRemedials ='), dashboard.indexOf('  // Calculate class-specific attendance rate'));
+  assert.doesNotMatch(source, /assignedClasses\.length\s*>\s*0\s*&&/);
+  assert.doesNotMatch(source, /record\.state\s*===\s*['"]remedial['"]/);
+  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const select = new Function('retentionRecords', 'assignedClasses', 'useMemo', compiled + 'return pendingRemedials;');
+  const record = { enrollmentId: '1', classId: 'class', state: 'remedial', remedial: { status: 'pending' } };
+  const pending = (row: object, classes = ['class']) => select([row], classes, (factory: () => unknown) => factory());
+
+  assert.deepEqual(pending(record, []), [], 'no selected-year classes or unloaded KPIs must show nothing');
+  assert.deepEqual(pending({ ...record, classId: 'other-year' }), []);
+  assert.equal(pending(record)[0].attemptNumber, 1, 'legacy pending remains supported');
+  assert.deepEqual(pending({ ...record, remedial: { outcome: 'pending' } }), []);
+  assert.deepEqual(pending({ ...record, remedial: null }), []);
+
+  for (const stage of ['none', 'attempt_2_available', 'cost_recovery_required', 'cost_recovery_failed', 'cost_recovery_passed', 'passed', 'legacy_unclassified']) {
+    assert.deepEqual(pending({ ...record, remedialProgression: { stage, attempts: [] } }), [], `${stage} must not inherit legacy pending`);
+  }
+  for (const attemptNumber of [1, 2]) {
+    for (const statusField of ['outcome', 'status']) {
+      const attempt = { attemptNumber, scheduledDate: '2026-10-12', notes: 'Scheduled exam', [statusField]: 'pending' };
+      const rows = pending({ ...record, remedialProgression: { stage: 'none', attempts: [attempt] } });
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].attemptNumber, attemptNumber);
+      assert.equal(rows[0].scheduledDate, attempt.scheduledDate);
+      assert.equal(rows[0].notes, attempt.notes);
+    }
+    const rows = pending({ ...record, remedialProgression: {
+      stage: `attempt_${attemptNumber}_pending`, attempts: [{ attemptNumber, scheduledDate: '2026-10-13' }],
+    } });
+    assert.equal(rows[0].attemptNumber, attemptNumber);
+    assert.equal(rows[0].scheduledDate, '2026-10-13', 'pending stage uses the matching attempt date');
+    assert.equal(pending({ ...record, remedialProgression: { stage: `attempt_${attemptNumber}_pending`, attempts: [] } })[0].attemptNumber, attemptNumber);
+  }
+});
 
 type AttemptOutcome = 'passed' | 'failed';
 type Progression = 'first_attempt_pending' | 'second_attempt_available' | 'passed' | 'cost_recovery_required';

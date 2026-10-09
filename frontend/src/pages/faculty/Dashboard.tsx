@@ -164,7 +164,7 @@ export const Dashboard: React.FC = () => {
   const pendingRemedials = useMemo(() => {
     return retentionRecords.flatMap(record => {
       // Only sections inside the selected school year (assignedClasses comes from the scoped KPI response).
-      if (assignedClasses.length > 0 && !assignedClasses.includes(String(record.classId))) {
+      if (!assignedClasses.includes(String(record.classId))) {
         return [];
       }
 
@@ -188,6 +188,7 @@ export const Dashboard: React.FC = () => {
 
         const pendingAttempt = Array.isArray(progression.attempts)
           ? progression.attempts.find(a => a.outcome === 'pending' || (a as unknown as { status?: string }).status === 'pending')
+            ?? (isPending ? progression.attempts.find(a => a.attemptNumber === attemptNumber) : undefined)
           : undefined;
 
         if (pendingAttempt) {
@@ -198,20 +199,13 @@ export const Dashboard: React.FC = () => {
         }
       }
 
-      // 2. Fallback to legacy remedial format
-      if (!isPending && legacyRemedial) {
-        const legacyStatus = legacyRemedial.status ?? (legacyRemedial as { outcome?: string }).outcome;
-        if (legacyStatus === 'pending' || record.state === 'remedial') {
+      // Legacy pending records are used only when canonical progression is absent.
+      if (!progression && legacyRemedial) {
+        if (legacyRemedial.status === 'pending') {
           isPending = true;
           attemptNumber = 1;
           notes = typeof legacyRemedial.notes === 'string' ? legacyRemedial.notes : '';
         }
-      }
-
-      // 3. Fallback to record.state === 'remedial' if stage is not cleared/cost_recovery
-      if (!isPending && record.state === 'remedial' && progression?.stage !== 'passed' && progression?.stage !== 'cost_recovery_passed') {
-        isPending = true;
-        attemptNumber = progression?.stage === 'attempt_2_available' || progression?.stage === 'attempt_2_pending' ? 2 : 1;
       }
 
       if (!isPending) return [];

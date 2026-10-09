@@ -66,6 +66,8 @@ const weightLabel = (weight: number | string) => `${Number(weight)}%`;
 /**
  * Class-record grading matrix: Student info, then Midterm and Tentative Final
  * grouped by component (Lecture / Laboratory) and saved Grade Weights categories.
+ * Every calculated column comes from the server's own computation (a preview
+ * that saves nothing), so it reflects the saved scores.
  */
 export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   classId, offering, students, assessments, scores, onScoreChange, onScoreBlur, isValidScore, refreshKey,
@@ -124,8 +126,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
     const byPeriod: Record<PeriodKey, ComponentGroup[]> = { midterm: [], final: [] };
     if (!periodMode || !config) return byPeriod;
 
-    const lectureWeight = config.componentWeights?.lecture ?? 60;
-    const labWeight = config.componentWeights?.laboratory ?? 40;
+    const lectureWeight = config.componentWeights?.lecture;
+    const labWeight = config.componentWeights?.laboratory;
 
     for (const period of PERIODS) {
       const allCategories = [...(period.key === 'midterm' ? config.midtermCategories ?? [] : config.finalCategories ?? [])]
@@ -238,17 +240,6 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       const compEval = pb.components[compKey];
       if (typeof compEval?.percentage === 'number') {
         return format(compEval.percentage, 2);
-      }
-    }
-
-    const categoryIds = new Set(comp.categories.map(c => String(c.category.id ?? '')));
-    const relevantDetails = (pb.categories ?? []).filter(c => categoryIds.has(String(c.categoryId ?? '')));
-
-    if (relevantDetails.length > 0) {
-      const hasAnyContribution = relevantDetails.some(d => d.contribution !== undefined && d.contribution !== null);
-      if (hasAnyContribution) {
-        const totalPercent = relevantDetails.reduce((sum, d) => sum + (d.contribution ?? 0), 0);
-        return format(totalPercent, 2);
       }
     }
 

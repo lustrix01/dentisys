@@ -18,6 +18,28 @@ import {
 import { percentageToGWAExact } from '../utils/gradeHelper.ts';
 import type { FacultyLegacyComputedResult, FacultyPeriodModeComputedResult, FacultyPeriodModeIncompleteResult } from '../services/apiClient.ts';
 
+test('Gradebook matrix component values and weight labels use only saved server data', () => {
+  const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
+  assert.doesNotMatch(matrix, /\?\?\s*(?:60|40)\b/);
+  assert.match(matrix, /const lectureWeight = config\.componentWeights\?\.lecture;/);
+  assert.match(matrix, /const labWeight = config\.componentWeights\?\.laboratory;/);
+  assert.match(matrix, /comp\.weight !== undefined \? `\(\$\{comp\.weight\}%\)` : ''/);
+  assert.match(matrix, /Every calculated column comes from the server's own computation/);
+  const source = matrix.slice(matrix.indexOf('  const componentPercentage ='), matrix.indexOf('  const getVisibleComponents ='));
+  assert.doesNotMatch(source, /contribution|\.reduce\(/, 'missing server component totals must never be reconstructed from category contributions');
+  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const percentage = (breakdown: unknown, componentKey = 'lecture') => new Function('periodBreakdown', 'format', compiled + 'return componentPercentage("student", "midterm", { componentKey: "' + componentKey + '" });')(
+    () => breakdown,
+    (value: number) => Number.isFinite(value) ? value.toFixed(2) : '—'
+  );
+  assert.equal(percentage(undefined), '—');
+  assert.equal(percentage({ categories: [{ categoryId: 1, contribution: 85 }] }), '—');
+  assert.equal(percentage({ components: { lecture: { percentage: null } }, categories: [{ contribution: 85 }] }), '—');
+  assert.equal(percentage({ components: { lecture: { percentage: 0 } } }), '0.00');
+  assert.equal(percentage({ components: { lecture: { percentage: 81.25 } } }), '81.25');
+  assert.equal(percentage({ components: { laboratory: { percentage: 92.5 } } }, 'laboratory'), '92.50');
+});
+
 test('Faculty grade views use the inclusive authoritative retention boundary', () => {
   const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
   const gradeComputation = fs.readFileSync(
