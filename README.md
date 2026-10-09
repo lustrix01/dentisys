@@ -431,4 +431,5 @@ Repository rules for contributors and coding agents are in [AGENTS.md](AGENTS.md
 - [Documentation index](docs/README.md): architecture, features, database, and guides.
 - [Development environment details](docs/development-environment.md)
 - [Single-server details](docs/single-server.md)
+- [VPS demonstration deployment](docs/vps-deployment.md): the approved DEL-001 cloud VPS runbook.
 - [Demo accounts](docs/demo-accounts.md)

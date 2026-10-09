@@ -60,3 +60,28 @@ now reads "Do not add other cloud infrastructure, …".
   `database/migrations/` go through the deploy script.
 - Gmail SMTP needs an App Password and is limited to roughly 500 messages a
   day.
+
+## Follow-up, same day: database sync script
+
+The Owner approved changing the Watchtower sentence in DEL-001 to: "A release
+that adds database migrations MUST be deployed with the deploy script or the
+database sync script, each of which backs up the database before migrating;
+Watchtower alone MUST NOT be relied on for such a release." The Owner chose a
+sync for schema migrations only (no data copy), run before publishing images so
+Watchtower rolls the new application out against the migrated schema.
+
+## Follow-up, same day: pgAdmin and Mailpit through SSH tunnels
+
+The Owner asked to reach the VPS database and Mailpit from localhost through
+SSH tunnels, as in learningfullstack, with pgAdmin running "always on the VPS,
+for demo purposes and verification", optional to boot. "pgAdmin is not
+deployed." in DEL-001 was replaced with the approved text:
+
+> pgAdmin runs on the VPS by default for demonstration and verification, and
+> can be switched off in the server environment (`PGADMIN_ENABLED=false`). It
+> is bound to the server's loopback address and reached only through an SSH
+> tunnel. The Mailpit UI, which runs only when `EMAIL_PROVIDER=custom`, is
+> reached the same way. Neither is exposed through Traefik or any public port.
+
+Consequence: hardening step 3 (`AllowTcpForwarding no`) gets a per-user
+exception limited to the pgAdmin and Mailpit loopback ports.

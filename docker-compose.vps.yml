@@ -1,0 +1,87 @@
+# Demo VPS overlay: use after web and database Compose files (DEL-001).
+name: dentisys
+
+services:
+  traefik:
+    image: traefik:v3.6.2
+    command:
+      - "--api.dashboard=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL:?Set TRAEFIK_ACME_EMAIL for certificate renewal.}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - dentisys_letsencrypt:/letsencrypt
+    restart: unless-stopped
+
+  web:
+    build: !reset null
+    image: ${WEB_IMAGE:?Set WEB_IMAGE to the published GHCR web image.}
+    environment:
+      APP_IS_HTTPS: "true"
+      APP_BASE_URL: https://${APP_DOMAIN:?Set APP_DOMAIN to the VPS hostname.}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  frontend:
+    build: !reset null
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to the published GHCR frontend image.}
+    ports: !reset []
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.dentisys.rule=Host(`${APP_DOMAIN:?Set APP_DOMAIN to the VPS hostname.}`)"
+      - "traefik.http.routers.dentisys.entrypoints=websecure"
+      - "traefik.http.routers.dentisys.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dentisys.loadbalancer.server.port=80"
+
+  biometric:
+    build: !reset null
+    image: ${BIOMETRIC_IMAGE:?Set BIOMETRIC_IMAGE to the published GHCR biometric image.}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    restart: unless-stopped
+
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    environment:
+      DOCKER_API_VERSION: "1.44"
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_ROLLING_RESTART: "true"
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-300}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/dentisys/.docker/config.json:/config.json:ro
+    restart: unless-stopped
+
+  pgadmin:
+    profiles: [tools]
+    image: dpage/pgadmin4:9.16
+    ports:
+      - "127.0.0.1:${PGADMIN_HTTP_PORT:-5050}:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?Set PGADMIN_DEFAULT_EMAIL for pgAdmin.}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Set PGADMIN_DEFAULT_PASSWORD for pgAdmin.}
+      PGADMIN_DISABLE_POSTFIX: "true"
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+    volumes:
+      - dentisys_vps_pgadmin_data:/var/lib/pgadmin
+      - ./database/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  dentisys_letsencrypt:
+  dentisys_vps_pgadmin_data:

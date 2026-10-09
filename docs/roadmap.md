@@ -7,4 +7,4 @@ What's next, in order (Owner-set 2026-10-07). Each item is one feature: agree th
 3. **Email History tied to the outbox** — each Email Management action linked to its delivery record (backlog 5.8).
 4. **Manual Override filtering** — date, then session on that date, then records, with status, override and Student filters (backlog 7.2).
 
-After these, the Owner picks the next items from the backlog. Facial biometrics, image publishing and deployment remain planned work under spec BIO and DEL-001; the Registrar format and live Google verification are externally blocked (backlog 9.4, 9.5).
+After these, the Owner picks the next items from the backlog. The [DEL-001 VPS demonstration deployment](vps-deployment.md) now has manual GHCR publishing, HTTPS, app-only Watchtower updates and backups; real Student biometric deployment remains deferred under spec BIO, and the Registrar format and live Google verification are externally blocked (backlog 9.4, 9.5).

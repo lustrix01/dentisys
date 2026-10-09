@@ -2,7 +2,7 @@
 
 ## Status: unfinished private-LAN prototype
 
-This Compose configuration is within DentiSys deployment bounds, but it is not a supported production deployment process. It is an implementation foundation for controlled private-LAN testing on one host. DentiSys does not yet have the operational deployment workflow used by LearningFullStack.
+This Compose configuration is within DentiSys deployment bounds, but it is not a supported production deployment process. It is an implementation foundation for controlled private-LAN testing on one host. For the approved DEL-001 cloud VPS demonstration, use the [VPS deployment runbook](vps-deployment.md).
 
 It currently starts separate containers for Nginx frontend, PHP API, and PostgreSQL:
 

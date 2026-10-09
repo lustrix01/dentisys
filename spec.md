@@ -881,10 +881,10 @@ Approved infrastructure, and nothing beyond it:
 
 * Traefik as the only public entry point (ports 80 and 443), with HTTP redirected to HTTPS and Let's Encrypt certificates for one hostname (initially a DuckDNS name; changing the hostname needs no amendment).
 * Application images (web, frontend, biometric) published to GitHub Container Registry under the Owner's account, built and pushed by the Owner from a tested commit. No CI/CD pipeline.
-* Watchtower updating only the labeled DentiSys application containers. A release that adds database migrations MUST be deployed with the deploy script, which backs up the database before migrating; Watchtower alone MUST NOT be relied on for such a release.
+* Watchtower updating only the labeled DentiSys application containers. A release that adds database migrations MUST be deployed with the deploy script or the database sync script, each of which backs up the database before migrating; Watchtower alone MUST NOT be relied on for such a release.
 * A deploy script, a nightly PostgreSQL backup that the Owner can copy off the server, host firewall guidance (SSH, 80, 443 only), and a runbook.
 
-PostgreSQL, Mailpit and the biometric component stay internal to Docker. pgAdmin is not deployed. Secrets live only in the server's environment file, never in Git or in images. Separate application/database servers, Kubernetes, other cloud services and public database access remain out of scope.
+PostgreSQL, Mailpit and the biometric component stay internal to Docker. pgAdmin runs on the VPS by default for demonstration and verification, and can be switched off in the server environment (`PGADMIN_ENABLED=false`). It is bound to the server's loopback address and reached only through an SSH tunnel. The Mailpit UI, which runs only when `EMAIL_PROVIDER=custom`, is reached the same way. Neither is exposed through Traefik or any public port. Secrets live only in the server's environment file, never in Git or in images. Separate application/database servers, Kubernetes, other cloud services and public database access remain out of scope.
 
 Do not add other cloud infrastructure, TLS, deployment automation, registry configuration, CI/CD, or related infrastructure unless explicitly scoped and approved.
 

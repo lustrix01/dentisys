@@ -1,0 +1,17 @@
+.git/
+**/.env*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/keys/
+**/secrets/
+**/backups/
+**/*.dump
+**/*.sql
+**/*.task
+models/
+storage/
+__pycache__/
+.venv/
+*.log

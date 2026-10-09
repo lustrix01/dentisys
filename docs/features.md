@@ -58,4 +58,4 @@ What DentiSys does today, checked against the code on `lighthal7` on 2026-10-07;
 
 - Email-code sign-in verification is retired; system email remains for non-authentication features.
 - Facial biometrics are not a complete production flow (BIO-001 to BIO-010).
-- Image publishing, deployment automation, cloud infrastructure, TLS and CI/CD are not part of this repository (RUN-002, DEL-001).
+- [VPS demonstration deployment](vps-deployment.md) provides manual GHCR publishing, Traefik HTTPS, app-only Watchtower updates and PostgreSQL backups (RUN-002, DEL-001); production deployment and CI/CD remain out of scope.
