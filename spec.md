@@ -715,7 +715,7 @@ The design rationale MUST explicitly reference ISO/IEC 24745:2022, Information s
 
 **Implementation: research prototype implemented**
 
-An enrollment expires every semester. A Student MUST re-enroll to continue biometric attendance after expiration.
+An enrollment expires every semester. "Semester end" is the end date of the Dean-defined term (ACA-002). A Student MUST re-enroll to continue biometric attendance after expiration.
 
 Usable biometric material MUST be invalidated and deleted when the enrollment expires at semester end, the Student revokes consent, Admin revokes enrollment, the linked Student account is deleted, the Student becomes inactive, or re-enrollment replaces the old enrollment. Re-enrollment MUST replace the previous usable reference; old usable templates MUST NOT be retained for historical audit. An audit record may retain that expiration, revocation, deletion, or replacement occurred without retaining the biometric material.
 
@@ -912,6 +912,17 @@ These technical items remain unresolved. Listing them does not select or approve
 
 # 9A. Contract Boundaries
 
+## ACA-002 - Dean-defined academic terms
+**Status: APPROVED**
+
+Owner decision (2026-10-10): The Dean (Admin) defines academic terms. A term is a school year plus a semester (`1ST`, `2ND` or `Summer`) with a start date and an end date. The end date MUST be after the start date; each school year and semester has at most one term; terms in the same school year MUST NOT overlap. Dates are calendar dates in the operational timezone (Asia/Manila), and a term ends at the end of its end date. The Dean may copy the previous school year's terms, shifted by one year, and then adjust them. A term used by any class MUST NOT be deleted. Every term change is audited.
+
+Faculty may create a class only in a Dean-defined term of the current school year (CLS-002); the class's semester and school year come from that term. Existing classes link to the term with the same semester and school year. A class's own stored term dates apply only when no matching Dean-defined term exists.
+
+When the term containing today will end within 14 days and the following term has no dates, the Dean dashboard shows an in-app reminder to define it. No email is sent.
+
+Biometric enrollment expiry (BIO-005) is the latest term end date among the Student's active classes. When the Dean changes a term's end date, unexpired enrollments for that term follow the new date. If the new end date has already passed, the Dean sees how many enrollments will expire before saving, and those enrollments expire at the next expiry run. Enrollment is refused when the Student's active classes have no term or every one of those terms has ended.
+
 ## CLS-001 - Faculty class-section editing
 **Status: CURRENT**
 
@@ -1007,7 +1018,7 @@ Use the source start-session presentation with PDF-directed improvements. Existi
 
 ## CLS-002 - Current-year creation and historical classes (PDF page 9)
 
-Faculty may create classes only for the current school year. Past-school-year classes are view-only: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. The Owner selected 2026-2027 as the current school year on 2026-09-24. Any historical correction exception requires a separately approved rule.
+Faculty may create classes only for the current school year. Past-school-year classes are view-only: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. The Owner selected 2026-2027 as the current school year on 2026-09-24. Any historical correction exception requires a separately approved rule. Class creation additionally requires a Dean-defined term (ACA-002).
 
 ## ID-002 - Structured names and 3NF
 
