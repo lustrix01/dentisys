@@ -529,7 +529,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                     }`}
                     rowSpan={3}
                   >
-                    {period.key === 'midterm' ? 'Final Midterm Grade' : 'Final Grade'}
+                    {period.key === 'midterm' ? 'Midterm Grade' : 'Final Grade'}
                     <div className="font-normal normal-case">(1.00–5.00)</div>
                   </th>
                 </React.Fragment>
@@ -660,7 +660,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                             <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${period.totalLabel}: ${format(pct)}%`}>
                               {format(pct)}
                             </td>
-                            <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Final Midterm Grade' : 'Final Grade'} (1.00–5.00): ${periodEquivalentGrade(pct)}`}>
+                            <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Midterm Grade' : 'Final Grade'} (1.00–5.00): ${periodEquivalentGrade(pct)}`}>
                               {periodEquivalentGrade(pct)}
                             </td>
                           </>
