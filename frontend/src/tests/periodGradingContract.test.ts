@@ -1,5 +1,7 @@
 import test from 'node:test';
 import ts from 'typescript';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +19,134 @@ import {
 } from '../utils/periodGradingHelper.ts';
 import { percentageToGWAExact } from '../utils/gradeHelper.ts';
 import type { FacultyLegacyComputedResult, FacultyPeriodModeComputedResult, FacultyPeriodModeIncompleteResult } from '../services/apiClient.ts';
+
+test('Grade Weights banner and category steps describe combined, grouped, and unsaved configurations', () => {
+  const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
+  assert.doesNotMatch(source, /BU Dental Medicine Schema Active/);
+  const start = source.indexOf('<span>{loadedConfig ?');
+  assert.ok(start >= 0);
+  const banner = source.slice(start, source.indexOf('</span>', start) + '</span>'.length);
+  const compiled = ts.transpileModule(`return (${banner});`, {
+    fileName: 'banner.tsx',
+    compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const render = (saved: boolean, mode: string, midterm = 35, final = 65) => renderToStaticMarkup(
+    new Function('React', 'loadedConfig', 'componentMode', 'termRatio', 'componentWeights', compiled)(
+      React, saved ? {} : null, mode, { midterm, final }, { lecture: 60, laboratory: 40 }
+    )
+  );
+  assert.equal(render(true, 'combined'), '<span>Saved grading: Midterm 35% / Finals 65%</span>');
+  assert.equal(render(true, 'lecture_laboratory'), '<span>Saved grading: Midterm 35% / Finals 65% · Lecture 60% / Laboratory 40%</span>');
+  assert.equal(render(false, 'lecture_laboratory', 30, 70), '<span>BU syllabus default (unsaved): Midterm 30% / Finals 70% · Lecture 60% / Laboratory 40%</span>');
+  assert.match(source, /componentMode === 'lecture_laboratory' \? '3\.' : '2\.'/);
+  assert.match(source, /componentMode === 'lecture_laboratory' && ` • \$\{activeComponentEditorTab\}`/);
+});
+
+test('Score panels keep one manual save per view in safe-area sticky live status bars', () => {
+  const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
+  const panels = source.slice(source.indexOf("{scoreEntryMode === 'matrix' ?"), source.indexOf('TAB 2:'));
+  assert.equal((panels.match(/data-manual-score-save\s/g) ?? []).length, 2);
+  for (const [status, handler, ref] of [
+    ['matrixSaveStatus', 'handleSaveMatrixScores', 'matrixSaveRef'],
+    ['singleSaveStatus', 'handleManualSaveScores', 'singleSaveRef'],
+  ]) {
+    const position = panels.indexOf(`<span role="status" aria-live="polite">{${status}`);
+    assert.ok(position >= 0);
+    const barStart = panels.lastIndexOf('<div className="sticky bottom-0', position);
+    assert.ok(barStart >= 0);
+    const bar = panels.slice(barStart, panels.indexOf('</button>', panels.indexOf('data-manual-score-save', position)));
+    assert.match(bar, /bg-white dark:bg-slate-900/);
+    assert.match(bar, /env\(safe-area-inset-bottom\)/);
+    for (const text of ['Saving…', 'Saved', 'Failed – Retry', 'Unsaved changes']) assert.ok(bar.includes(text));
+    assert.ok(bar.includes(`${ref}.current(true)`));
+    assert.ok(bar.includes(`onClick={${handler}}`));
+  }
+  assert.match(source, /grid grid-cols-2 gap-1 sm:flex sm:gap-0/);
+  assert.match(source, /hidden sm:block[^"\n]*">Use Enter/);
+  assert.match(source, /id=\{`score-input-\$\{idx\}`\}[\s\S]*?inputMode="decimal"/);
+  assert.match(source, /whitespace-nowrap[^\n]*rounded-full/);
+});
+
+test('Matrix pins opaque identity cells and offers a guarded phone switch without changing input navigation', () => {
+  const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
+  const identityCells = matrix.split('\n').filter(line => /<(?:th|td) /.test(line) && /(?:ID Number|Full Name|student\.studentId|student\.name)/.test(line));
+  assert.equal(identityCells.length, 4);
+  assert.match(matrix, /<thead className="sticky top-0 z-30/);
+  for (const cell of identityCells) {
+    assert.match(cell, /sticky/);
+    assert.match(cell, /left-0/);
+    assert.match(cell, /bg-(?:slate-50|white) dark:bg-slate-900/);
+  }
+  for (const cell of [identityCells[1], identityCells[3]]) assert.match(cell, /left-\[120px\]/);
+  assert.match(identityCells[0], /!isPhone &&/);
+  assert.match(identityCells[2], /!isPhone &&/);
+  assert.match(identityCells[3], /isPhone && <span/);
+  assert.match(matrix, /The full matrix is easier on a larger screen\. Use Single Activity View to enter scores on a phone\./);
+  assert.match(matrix, /onClick=\{onSingleActivityView\} disabled=\{!canSwitchView\}/);
+  assert.match(matrix, /id=\{inputId\}\s+inputMode="decimal"/);
+  assert.match(matrix, /const inputId = `matrix-score-\$\{studentIndex\}-\$\{assessment\.id\}`/);
+});
+
+test('Matrix renders exactly one identity header with matching desktop and phone columns', () => {
+  const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
+  const studentHeader = matrix.split('\n').find(line => line.includes('>Student Info</th>'))!;
+  assert.equal((matrix.match(/>Student Info<\/th>/g) ?? []).length, 1);
+  const identityHeaders = matrix.slice(matrix.indexOf('{!isPhone && <th'), matrix.indexOf('{periodMode && visiblePeriods.map', matrix.indexOf('{!isPhone && <th')));
+  const identityBody = matrix.slice(matrix.indexOf('{!isPhone && <td'), matrix.indexOf('{periodMode && visiblePeriods.map', matrix.indexOf('{!isPhone && <td')));
+  assert.doesNotMatch(identityHeaders + identityBody, /hidden|sm:table-cell/);
+  const render = (jsx: string, isPhone: boolean, periodMode: boolean) => {
+    const compiled = ts.transpileModule(`return (<table>${jsx}</table>);`, {
+      fileName: 'identity.tsx', compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    return renderToStaticMarkup(new Function('React', 'isPhone', 'periodMode', 'th', 'student', compiled)(
+      React, isPhone, periodMode, '', { name: 'Alice Reyes', studentId: 'DENT-001' }
+    ));
+  };
+  for (const isPhone of [false, true]) {
+    const columns = isPhone ? 1 : 2;
+    const group = render(`<thead><tr>${studentHeader}</tr></thead>`, isPhone, true);
+    assert.match(group, new RegExp(`colSpan="${columns}"`, 'i'));
+    for (const periodMode of [false, true]) {
+      const headers = render(`<thead><tr>${identityHeaders}</tr></thead>`, isPhone, periodMode);
+      const body = render(`<tbody><tr>${identityBody}</tr></tbody>`, isPhone, periodMode);
+      assert.equal((headers.match(/<th /g) ?? []).length, columns);
+      assert.equal((body.match(/<td /g) ?? []).length, columns);
+      assert.equal(headers.includes('ID Number'), !isPhone);
+      assert.match(headers, new RegExp(`rowSpan="${periodMode ? 3 : 1}"`, 'i'));
+      assert.equal((body.match(/DENT-001/g) ?? []).length, 1);
+      assert.equal(body.includes('<span'), isPhone);
+    }
+  }
+});
+
+test('Matrix phone state defaults safely and follows media changes with cleanup', () => {
+  const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
+  const source = matrix.slice(matrix.indexOf('  const [isPhone,'), matrix.indexOf('  // Filters state'));
+  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const states: boolean[] = [];
+  let cleanup: (() => void) | undefined;
+  let listener: (() => void) | undefined;
+  const media = {
+    matches: true,
+    addEventListener: (event: string, callback: () => void) => { assert.equal(event, 'change'); listener = callback; },
+    removeEventListener: (event: string, callback: () => void) => { assert.equal(event, 'change'); assert.equal(callback, listener); listener = undefined; },
+  };
+  const run = (window: unknown) => new Function('window', 'useState', 'useEffect', compiled)(
+    window,
+    (initial: boolean) => { assert.equal(initial, false); return [initial, (value: boolean) => states.push(value)]; },
+    (effect: () => (() => void) | undefined) => { cleanup = effect(); }
+  );
+  run(undefined);
+  run({});
+  assert.deepEqual(states, []);
+  run({ matchMedia: (query: string) => { assert.equal(query, '(max-width: 639px)'); return media; } });
+  assert.deepEqual(states, [true]);
+  media.matches = false;
+  listener!();
+  assert.deepEqual(states, [true, false]);
+  cleanup!();
+  assert.equal(listener, undefined);
+});
 
 test('Gradebook matrix component values and weight labels use only saved server data', () => {
   const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');

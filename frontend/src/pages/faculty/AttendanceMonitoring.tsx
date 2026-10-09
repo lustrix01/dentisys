@@ -95,7 +95,7 @@ export const AttendanceMonitoring: React.FC = () => {
           </button>
         ))}
       </div>
-      {activityOpen ? <><p className="text-[10px] font-bold text-slate-400">Home / Attendance Monitoring / Class Attendance Activity</p><ClassAttendanceActivity /></> : <AttendanceWorksheet />}
+      {activityOpen ? <ClassAttendanceActivity /> : <AttendanceWorksheet />}
     </div>
   );
 };

@@ -91,6 +91,42 @@ test('Midterm watchlist visibility and risk remain server-owned', () => {
   assert.match(retentionPage, /await unlockFacultyWatchlistApi/);
 });
 
+test('Midterm risk is visible only after completion or unlock, with the same at-risk count and filter', () => {
+  const visibility = retentionPage.match(/const isMidtermRiskVisible = \(record: FacultyRetentionRecord\): boolean => \(([\s\S]*?)\n\);/)?.[1];
+  const atRisk = retentionPage.match(/const hasVisibleMidtermRisk = \(record: FacultyRetentionRecord\): boolean => \(([\s\S]*?)\n\);/)?.[1];
+  assert.ok(visibility);
+  assert.ok(atRisk);
+  const isVisible = new Function('record', `return (${visibility});`);
+  const isAtRisk = new Function('record', 'isMidtermRiskVisible', `return (${atRisk});`);
+  for (const midtermComplete of [true, false, undefined]) {
+    for (const watchlistUnlocked of [true, false, undefined]) {
+      for (const level of ['High', 'At Risk', 'Low', null]) {
+        const record = { midtermComplete, watchlistUnlocked, risk: level ? { level } : null };
+        const visible = midtermComplete === true || watchlistUnlocked === true;
+        assert.equal(isVisible(record), visible);
+        assert.equal(isAtRisk(record, isVisible), visible && (level === 'High' || level === 'At Risk'));
+      }
+    }
+  }
+  assert.match(retentionPage, /const atRiskMidtermCount = useMemo\(\(\) => eligibleMidtermRecords\.filter\(hasVisibleMidtermRisk\)\.length/);
+  assert.match(retentionPage, /if \(!showAtRiskOnly\) return eligibleMidtermRecords;/);
+  assert.match(retentionPage, /return eligibleMidtermRecords\.filter\(hasVisibleMidtermRisk\);/);
+  assert.match(retentionPage, /isMidtermRiskVisible\(record\) \? <RiskBadge risk=\{record\.risk\} \/> : <span[^>]*>Locked<\/span>/);
+  assert.match(retentionPage, /if \(!risk\) return <span[^>]*>Not enough data<\/span>/);
+});
+
+test('Retention phone cards share table rows and actions, with readable fields and touch targets', () => {
+  assert.equal((retentionPage.match(/className=\{`\$\{RETENTION_TABLE_LAYOUT\}/g) ?? []).length, 3);
+  assert.match(retentionPage, /max-sm:\[&_tr\]:grid-cols-1/);
+  assert.match(retentionPage, /max-sm:\[&_td\]:whitespace-normal/);
+  assert.match(retentionPage, /max-sm:\[&_button\]:min-h-10/);
+  assert.match(retentionPage, /max-sm:\[&_td>div\]:flex-wrap/);
+  for (const label of ['Midterm Grade', 'Risk Standing', 'Status', 'Course Grade', 'Actions', 'Attempts', 'Current stage']) {
+    assert.ok(retentionPage.includes(`<PhoneFieldLabel>${label}</PhoneFieldLabel>`));
+  }
+  assert.doesNotMatch(retentionPage, /Final Midterm Grade/);
+});
+
 test('Remedial outcomes preserve entered scores and report partial success truthfully', () => {
   const selector = retentionPage.match(/const handleSelectOutcome[\s\S]*?\n  };/)?.[0];
   assert.ok(selector);

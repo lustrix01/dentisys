@@ -2903,7 +2903,7 @@ export const GradeComputation: React.FC = () => {
       </Card>
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
+      <div className="grid grid-cols-2 gap-1 sm:flex sm:gap-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
         <button
           onClick={() => setActiveSubTab('scores')}
           className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -2981,7 +2981,7 @@ export const GradeComputation: React.FC = () => {
 
           {scoreEntryMode === 'matrix' ? (
             /* FULL GRADEBOOK MATRIX VIEW */
-            <Card className="p-0 overflow-hidden">
+            <Card className="p-0">
               <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
@@ -2992,23 +2992,10 @@ export const GradeComputation: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-                    <span role="status">{matrixSaveStatus === 'saving' ? 'Saving…' : matrixSaveStatus === 'saved' ? 'Saved' : matrixSaveStatus === 'error' ? 'Failed – Retry' : 'Unsaved changes'}</span>
-                    {matrixSaveStatus === 'error' && <button type="button" onClick={() => void matrixSaveRef.current(true)} className="text-rose-600 underline">Retry</button>}
-                  </div>
                   <label className="flex items-center gap-1.5 text-xs">
                     <input type="checkbox" checked={autoSaveEnabled} onChange={event => setAutoSaveEnabled(event.target.checked)} />
                     Auto-save
                   </label>
-                  <button
-                    data-manual-score-save
-                    onClick={handleSaveMatrixScores}
-                    disabled={matrixSaveStatus === 'saving'}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>{isMatrixSavedAlert ? 'Saved!' : 'Save All Matrix Scores'}</span>
-                  </button>
                 </div>
               </div>
 
@@ -3026,11 +3013,28 @@ export const GradeComputation: React.FC = () => {
                     scores={matrixScoresState}
                     onScoreChange={handleMatrixScoreChange}
                     onScoreBlur={handleMatrixScoreBlur}
+                    onSingleActivityView={() => setScoreEntryMode('single')}
+                    canSwitchView={singleSaveStatus === 'saved' && matrixSaveStatus === 'saved'}
                     isValidScore={validateSingleScore}
                     refreshKey={matrixRefreshKey}
                   />
                 );
               })()}
+              <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 sm:px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-800">
+                  <span role="status" aria-live="polite">{matrixSaveStatus === 'saving' ? 'Saving…' : matrixSaveStatus === 'saved' ? 'Saved' : matrixSaveStatus === 'error' ? 'Failed – Retry' : 'Unsaved changes'}</span>
+                  {matrixSaveStatus === 'error' && <button type="button" onClick={() => void matrixSaveRef.current(true)} className="text-rose-600 underline">Retry</button>}
+                </div>
+                <button
+                  data-manual-score-save
+                  onClick={handleSaveMatrixScores}
+                  disabled={matrixSaveStatus === 'saving'}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isMatrixSavedAlert ? 'Saved!' : 'Save All Matrix Scores'}</span>
+                </button>
+              </div>
             </Card>
           ) : (
             /* ENHANCED SINGLE ACTIVITY VIEW */
@@ -3234,11 +3238,11 @@ export const GradeComputation: React.FC = () => {
               </div>
 
               <div className="lg:col-span-8 space-y-3">
-                <Card className="p-0 overflow-hidden">
+                <Card className="p-0">
                   <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Roster Score Entries</h3>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Use Enter / Down / Up arrow keys to quickly navigate between student score boxes.</p>
+                      <p className="hidden sm:block text-[10px] text-slate-400 mt-0.5">Use Enter / Down / Up arrow keys to quickly navigate between student score boxes.</p>
                     </div>
 
                     <div className="relative w-full sm:w-56">
@@ -3280,6 +3284,7 @@ export const GradeComputation: React.FC = () => {
                                 <input
                                   id={`score-input-${idx}`}
                                   type="number"
+                                  inputMode="decimal"
                                   min="0"
                                   max={activeAssessment?.maxScore || 100}
                                   placeholder={`0 - ${activeAssessment?.maxScore || 100}`}
@@ -3324,9 +3329,9 @@ export const GradeComputation: React.FC = () => {
                   </div>
 
                   {selectedAssessmentId && filteredScoreStudents.length > 0 && (
-                    <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-2.5">
+                    <div className="sticky bottom-0 z-20 px-3 sm:px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 flex flex-wrap justify-end items-center gap-2">
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-                        <span role="status">{singleSaveStatus === 'saving' ? 'Saving…' : singleSaveStatus === 'saved' ? 'Saved' : singleSaveStatus === 'error' ? 'Failed – Retry' : 'Unsaved changes'}</span>
+                        <span role="status" aria-live="polite">{singleSaveStatus === 'saving' ? 'Saving…' : singleSaveStatus === 'saved' ? 'Saved' : singleSaveStatus === 'error' ? 'Failed – Retry' : 'Unsaved changes'}</span>
                         {singleSaveStatus === 'error' && <button type="button" onClick={() => void singleSaveRef.current(true)} className="text-rose-600 underline">Retry</button>}
                       </div>
                       <button
@@ -3644,8 +3649,8 @@ export const GradeComputation: React.FC = () => {
           TAB 3: GRADE WEIGHTS EDITOR
       ---------------------------------------------------- */}
       {activeSubTab === 'components' && (
-        <Card className="max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
-          <CardHeader className="relative border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
+        <Card className="p-0 sm:p-6 max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
+          <CardHeader className="relative border-b border-slate-100 dark:border-slate-800/80 p-3 sm:p-7">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="space-y-1 sm:pr-24">
                 <CardTitle className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
@@ -3686,7 +3691,7 @@ export const GradeComputation: React.FC = () => {
               </div>
 
               {currentOffering && (
-                <div className="absolute top-6 right-6 sm:top-7 sm:right-7 z-10">
+                <div className="self-start sm:absolute sm:top-7 sm:right-7 z-10">
                   <button
                     type="button"
                     onClick={handleReload}
@@ -3701,7 +3706,7 @@ export const GradeComputation: React.FC = () => {
               )}
             </div>
           </CardHeader>
-          <CardContent className="p-6 sm:p-7 space-y-6">
+          <CardContent className="p-3 sm:p-7 space-y-6">
 
             {/* Conflict Alert (409) */}
             {conflictError && (
@@ -3866,7 +3871,7 @@ export const GradeComputation: React.FC = () => {
                 <form onSubmit={handleSaveGradingConfig} className="space-y-5">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         Grading Categories ({categoryRows.length})
                       </span>
                       <button
@@ -4010,7 +4015,7 @@ export const GradeComputation: React.FC = () => {
                     <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
                         <CheckCircle className="w-4 h-4 text-clinical-600 dark:text-clinical-400 shrink-0" />
-                        <span>BU Dental Medicine Schema Active: Lecture {componentWeights.lecture}% / Lab {componentWeights.laboratory}% • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
+                        <span>{loadedConfig ? 'Saved grading' : 'BU syllabus default (unsaved)'}: Midterm {termRatio.midterm}% / Finals {termRatio.final}%{componentMode === 'lecture_laboratory' && <> · Lecture {componentWeights.lecture}% / Laboratory {componentWeights.laboratory}%</>}</span>
                       </div>
                       <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0">
                         Directly editable
@@ -4041,8 +4046,8 @@ export const GradeComputation: React.FC = () => {
 
                   {/* LEVEL 1: TOPMOST PERIOD TABS (MIDTERM & FINAL WITH INLINE RATIO EDITING) */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1">
+                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                         1. Select Period & Term Split
                       </span>
                       <span className={`text-[11px] font-bold ${termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
@@ -4058,7 +4063,7 @@ export const GradeComputation: React.FC = () => {
                         tabIndex={0}
                         onClick={() => setActivePeriodEditorTab('Midterm')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Midterm'); }}
-                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        className={`p-2.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 ${
                           activePeriodEditorTab === 'Midterm'
                             ? 'border-clinical-600 bg-clinical-50/60 dark:bg-clinical-950/40 shadow-sm ring-2 ring-clinical-500/20'
                             : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
@@ -4104,7 +4109,7 @@ export const GradeComputation: React.FC = () => {
                         tabIndex={0}
                         onClick={() => setActivePeriodEditorTab('Final')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Final'); }}
-                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        className={`p-2.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 ${
                           activePeriodEditorTab === 'Final'
                             ? 'border-clinical-600 bg-clinical-50/60 dark:bg-clinical-950/40 shadow-sm ring-2 ring-clinical-500/20'
                             : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
@@ -4148,7 +4153,7 @@ export const GradeComputation: React.FC = () => {
                   {/* LEVEL 2: COMPONENT SUB-TABS (LECTURE & LABORATORY WITH INLINE CONTRIBUTION EDITING) */}
                   {componentMode === 'lecture_laboratory' && (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between px-1">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1">
                         <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                           2. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Component Contribution
                         </span>
@@ -4170,7 +4175,7 @@ export const GradeComputation: React.FC = () => {
                           tabIndex={0}
                           onClick={() => setActiveComponentEditorTab('Lecture')}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveComponentEditorTab('Lecture'); }}
-                          className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 ${
                             activeComponentEditorTab === 'Lecture'
                               ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-xs'
                               : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
@@ -4211,7 +4216,7 @@ export const GradeComputation: React.FC = () => {
                           tabIndex={0}
                           onClick={() => setActiveComponentEditorTab('Laboratory')}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveComponentEditorTab('Laboratory'); }}
-                          className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 ${
                             activeComponentEditorTab === 'Laboratory'
                               ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-xs'
                               : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
@@ -4283,22 +4288,22 @@ export const GradeComputation: React.FC = () => {
                   {/* LEVEL 3: CATEGORIES LIST FOR ACTIVE PERIOD & COMPONENT */}
                   <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
                     {/* Header Toolbar */}
-                    <div className="p-3.5 sm:p-4 bg-slate-50/70 dark:bg-slate-850/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
+                    <div className="p-2.5 sm:p-4 bg-slate-50/70 dark:bg-slate-850/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                         <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
-                          3. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} • {activeComponentEditorTab} Categories ({activePeriodVisibleCategories.length})
+                          {componentMode === 'lecture_laboratory' ? '3.' : '2.'} {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'}{componentMode === 'lecture_laboratory' && ` • ${activeComponentEditorTab}`} Categories ({activePeriodVisibleCategories.length})
                         </span>
                         <span className="text-[11px] text-slate-400">• Must total 100%</span>
                       </div>
 
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex flex-col items-start sm:flex-row sm:items-center gap-2.5">
                         {/* Status badge */}
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${
+                        <span className={`whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-extrabold border ${
                           activeComponentCategoryCalc.isExact100
                             ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                             : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                         }`}>
-                          {activeComponentCategoryCalc.displayPercent} / 100%
+                          {activeComponentCategoryCalc.displayPercent}<span className="hidden sm:inline"> / 100%</span>
                           <span className="ml-1">{activeComponentCategoryCalc.isExact100 ? 'Valid 100%' : 'Must equal 100%'}</span>
                         </span>
 

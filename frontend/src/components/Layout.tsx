@@ -482,7 +482,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative overflow-clip font-sans">
       
       {/* Background Subtle Gradient Blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] aspect-square rounded-full bg-accent-200/25 dark:bg-accent-950/30 blur-[120px] pointer-events-none z-0" />
@@ -724,7 +724,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       </aside>
 
       {/* Main Container — offset by sidebar width, fills remaining height, scrolls independently */}
-      <div className={`flex-1 flex flex-col min-w-0 h-screen overflow-hidden relative z-10 transition-all duration-300 ${
+      <div className={`flex-1 flex flex-col min-w-0 min-h-screen overflow-clip relative z-10 transition-all duration-300 ${
         isSidebarCollapsed ? 'md:ml-20' : 'md:ml-72'
       }`}>
         
@@ -856,7 +856,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         </header>
 
         {/* Scrollable Content Body */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+        <main className="flex-1 p-6 md:p-8">
           {currentUser.role === 'student' && isDevelopmentMockStudent(user, config) && !studentPrototypeEnabled && (
             <div className="mb-6 p-4 rounded-2xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
               Student attendance and biometric workflows are development-only browser prototypes. No authoritative attendance record or facial template is written while the explicit P02 providers are disabled.
