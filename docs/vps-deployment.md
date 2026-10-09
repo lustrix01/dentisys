@@ -104,34 +104,44 @@ publishing the moving tags.
 
 ## Bundle and model
 
-From that same clean, tested commit, make the bundle in Windows PowerShell.
-It contains configuration templates and schema files, never real `.env` files,
-tokens, application source or protected biometric references:
+From the same clean, tested commit, run the uploader in Windows PowerShell:
 
 ```powershell
-& "$env:SystemRoot\System32\tar.exe" -czf "$env:TEMP\dentisys-deploy.tar.gz" .env.vps.example docker-compose.web.yml docker-compose.database.yml docker-compose.vps.yml database/init.sql database/apply-migrations.sh database/pgadmin-servers.json database/migrations scripts/deploy-vps.sh scripts/backup-vps.sh scripts/migrate-vps.sh
-scp -P 2202 "$env:TEMP\dentisys-deploy.tar.gz" devops@replace-with-vps-ip:/tmp/
-scp -P 2202 "C:\replace-with-model-path\face_landmarker.task" devops@replace-with-vps-ip:/tmp/face_landmarker.task
-ssh -p 2202 devops@replace-with-vps-ip
+.\scripts\upload-vps.ps1 -Server devops@replace-with-vps-ip -Port 2202 -Deploy
+# Optional: -IdentityFile "$HOME\.ssh\id_ed25519"
+# Optional: -ModelPath "C:\replace-with-model-path\face_landmarker.task"
 ```
 
-On the VPS:
+It archives HEAD's configuration template, three Compose files, database
+schema/migrations and pgAdmin definition, and deploy/backup/migration scripts.
+It never uploads real environment files, tokens, application source or protected
+biometric references. Images still come from `publish-images.ps1`.
+
+The default model path is `..\dentisys-biometric-assets\face_landmarker.task`,
+relative to the repository root. This is the generic Face Landmarker asset
+described in [biometric calibration](biometric-calibration-deployment.md), not
+an enrolled biometric reference. The script prints its local SHA-256 for
+`MEDIAPIPE_FACE_LANDMARKER_SHA256` and checks the installed server model first;
+an identical model is not uploaded. Use `-SkipModel` for bundle-only updates.
+
+One SCP transfer uploads the bundle and, when needed, the model. One subsequent
+SSH session replaces only `/tmp/dentisys-deploy`, extracts the bundle and installs
+the model with mode 0644 when `/opt/dentisys/assets` already exists. `-Port`
+defaults to 22; pass your hardened port. `-IdentityFile` adds
+`IdentitiesOnly=yes`. OpenSSH handles authentication; the uploader collects
+no passwords or tokens.
+
+With `-Deploy`, SSH requests a TTY and runs
+`bash /tmp/dentisys-deploy/scripts/deploy-vps.sh`, allowing its sudo and GHCR
+prompts. Without `-Deploy`, the uploader prints the exact SSH deploy command.
+
+On the first deployment, the model remains at `/tmp/face_landmarker.task`.
+The first deploy invocation prepares `/opt/dentisys` (0750), copies runtime
+files, creates `.env` (0600) and stops so you can fill it in. Rerun the uploader
+after that first invocation to install the model, using its printed hash in the
+server settings. Edit those settings directly on the VPS:
 
 ```bash
-mkdir -p /tmp/dentisys-deploy
-tar -xzf /tmp/dentisys-deploy.tar.gz -C /tmp/dentisys-deploy
-cd /tmp/dentisys-deploy
-bash scripts/deploy-vps.sh
-```
-
-The first invocation prepares `/opt/dentisys` (0750), copies the runtime files,
-creates `.env` (0600) and stops so you can fill it in. Upload the deployment
-provided model described in [biometric calibration](biometric-calibration-deployment.md).
-This is the generic Face Landmarker asset, not an enrolled biometric reference:
-
-```bash
-install -m 0644 /tmp/face_landmarker.task /opt/dentisys/assets/face_landmarker.task
-sha256sum /opt/dentisys/assets/face_landmarker.task
 nano /opt/dentisys/.env
 ```
 
@@ -483,10 +493,17 @@ migration failure returns an error and prevents publishing; the error names the
 backup file (a failed/empty dump is removed). The app stays up, so inspect the
 failure promptly, retry after repair, or follow the restore procedure below.
 
-For bundle, Compose, `init.sql` or `apply-migrations.sh` changes, create/upload
-the matching bundle and rerun `bash scripts/deploy-vps.sh` from it. Compare
-`.env.vps.example` against the server `.env` and fill new settings without
-replacing secrets. Sync warns if either database entrypoint file changed:
+For bundle, Compose, deployment-script, `init.sql` or `apply-migrations.sh`
+changes, test/commit and run `upload-vps.ps1` from the matching commit:
+
+```powershell
+.\scripts\upload-vps.ps1 -Server devops@replace-with-vps-ip -Port 2202 -SkipModel -Deploy
+```
+
+Omit `-SkipModel` when updating the model. Publish application images with
+`publish-images.ps1`; use `sync-vps-db.ps1` for migrations as described above.
+Compare `.env.vps.example` against the server `.env` and fill new settings
+without replacing secrets. Sync warns if either database entrypoint file changed:
 replacing a host file does not refresh its existing container bind mount; a
 full deploy recreates db when needed. Sync never recreates db. Full deploy
 still stops the app around pending migrations and restarts it on success.
