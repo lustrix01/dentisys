@@ -102,3 +102,18 @@ after the paragraph on availability after the institutional review:
 Same session, no spec change needed: three web and three frontend replicas behind
 Traefik for rolling Watchtower updates (one biometric sidecar), Google Sign-In
 configured with the existing client ID, and the instance upgraded to 4 GB.
+
+## Follow-up: host hardening script
+
+The Owner asked for a script that applies their hardening guide
+(https://computingforgeeks.com/harden-ubuntu-2604-server/) steps 1-6 "as is",
+with manual input only at the start, and approved this addition to the DEL-001
+automation bullet:
+
+> ...a runbook, and an optional host hardening script that applies the Owner's
+> hardening guide (steps 1–6) exactly as written, except that the AWS key
+> replaces `ssh-copy-id` and `devops` keeps a forwarding exception limited to
+> the pgAdmin and Mailpit loopback ports.
+
+The forwarding exception is on by default so pgAdmin and Mailpit stay reachable
+only through an SSH tunnel; `AllowTcpForwarding no` alone would block the tunnel.
