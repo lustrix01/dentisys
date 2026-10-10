@@ -103,9 +103,9 @@ stage_ssh() {
   done
   cp -- "$work_dir/99-hardening.conf" "$work_dir/sshd_config.d/99-hardening.conf"
   # Test the complete Ubuntu configuration with staged drop-ins, without writing /etc/ssh.
-  awk -v include="$work_dir/sshd_config.d/*.conf" '
+  awk -v include_path="$work_dir/sshd_config.d/*.conf" '
     /^[[:space:]]*Include[[:space:]]+\/etc\/ssh\/sshd_config.d\/\*\.conf[[:space:]]*$/ {
-      print "Include " include; found = 1; next
+      print "Include " include_path; found = 1; next
     }
     { print }
     END { if (!found) exit 1 }
