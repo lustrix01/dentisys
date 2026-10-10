@@ -117,3 +117,11 @@ automation bullet:
 
 The forwarding exception is on by default so pgAdmin and Mailpit stay reachable
 only through an SSH tunnel; `AllowTcpForwarding no` alone would block the tunnel.
+
+## Follow-up, 2026-10-10: configurable sudo account
+
+The Owner chose a `-User` parameter for the provisioning scripts (default
+`devops`) and approved changing "`devops` keeps a forwarding exception" in the
+DEL-001 hardening-script bullet to "the sudo account (`devops` by default) keeps
+a forwarding exception". The Owner also chose that provisioning reboots once at
+the end when Ubuntu requires it (guide step 1), then re-verifies.
