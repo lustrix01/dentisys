@@ -36,6 +36,14 @@ From the repository on Windows PowerShell 5.1:
 # Optional: -Domain demo.example.com -NoDbTunnel
 ```
 
+For an instance rebuilt on the same Elastic IP, add `-NewInstance` to that command.
+It scans both SSH ports, prints the new host key fingerprints, and removes the old
+entries for this IP from your `known_hosts`. Compare the printed fingerprints with
+**EC2 > Actions > Monitor and troubleshoot > Get system log**, under
+`BEGIN SSH HOST KEY FINGERPRINTS`, before confirming the run; cancel if they differ.
+Without this switch, a changed key stops and prints the exact rebuild command.
+Host key checking remains enabled.
+
 All answers and the AWS checklist confirmation come first. Passwords and the GHCR
 read token are hidden, kept in memory, and sent only through SSH stdin; no secret
 configuration is saved on the PC. The server applies the hardening guide steps
@@ -50,6 +58,19 @@ preserve the server `.env` and its signing keys/database passwords. If hardening
 finished but no environment was created, it collects the missing setup answers
 at the start of the next run. `-NoDbTunnel` omits the pgAdmin/Mailpit exception.
 The script changes only the VPS; AWS resources and DNS remain manual.
+
+Server stdout and stderr stream live. On failure, the launcher includes the last
+20 lines and prints a recovery command. The complete output is appended per run
+with a UTC timestamp to **`/var/log/dentisys-provision.log`** (root-only, mode 0600;
+stdin secrets are never logged). To read it after the SSH switch:
+
+```powershell
+ssh -i 'C:\path\to\aws.pem' -o IdentitiesOnly=yes -t -p 2202 devops@203.0.113.10 'sudo tail -n 80 /var/log/dentisys-provision.log'
+```
+
+If hardening stopped before the switch, use `-p 22 ubuntu@203.0.113.10` instead.
+The log is on the VPS, so retrieve it before terminating a failed instance.
+
 
 ## Host, DNS and firewall
 

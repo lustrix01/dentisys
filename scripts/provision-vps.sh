@@ -5,6 +5,25 @@ umask 077
 fail() { echo "ERROR: $*" >&2; exit 1; }
 phase() { printf '\n=== %s ===\n' "$1"; }
 [[ "$EUID" -eq 0 && $# -eq 0 ]] || fail 'Run via provision-vps.ps1 (sudo, stdin protocol; no arguments).'
+# Append both streams without logging stdin or command expansions.
+log_file=/var/log/dentisys-provision.log
+touch "$log_file"
+chown root:root "$log_file"
+chmod 600 "$log_file"
+exec 9>&1
+exec > >(tee -a "$log_file") 2>&1
+log_pid=$!
+finish_logging() {
+  local status="$1"
+  exec 1>&9 2>&1
+  exec 9>&-
+  wait "$log_pid" || { [[ "$status" -ne 0 ]] || status=1; }
+  exit "$status"
+}
+trap 'finish_logging "$?"' EXIT
+printf '\n=== DentiSys provision run %s ===\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+# Report implicit command failures too, without exposing their arguments.
+trap 'printf "ERROR: provisioning command failed (exit %s, line %s).\n" "$?" "$LINENO" >&2' ERR
 . /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 26.04 ]] || fail 'Ubuntu 26.04 LTS is required.'
 source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -84,7 +103,22 @@ handoff_staging() {
   done
 }
 env_temp=''
-trap '[[ -z "$env_temp" ]] || rm -f -- "$env_temp"; handoff_staging' EXIT
+finish_run() {
+  local status="$?" cleanup_status
+  trap - EXIT
+  # Preserve the original failure while still closing and draining the log pipe.
+  set +e
+  if [[ -n "$env_temp" ]]; then
+    rm -f -- "$env_temp"
+    cleanup_status="$?"
+    [[ "$cleanup_status" -eq 0 || "$status" -ne 0 ]] || status="$cleanup_status"
+  fi
+  handoff_staging
+  cleanup_status="$?"
+  [[ "$cleanup_status" -eq 0 || "$status" -ne 0 ]] || status="$cleanup_status"
+  finish_logging "$status"
+}
+trap finish_run EXIT
 
 phase 'A. Host hardening (guide steps 1-6)'
 harden_flags=(--non-interactive --sg-confirmed --ssh-port "$ssh_port")
