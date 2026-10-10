@@ -815,6 +815,8 @@ Every session has a required class end time. It must be on the session day and a
 
 A revoked session is treated as if it never happened. Its attendance records do not count toward attendance rates, attendance categories, transmutation, or reports. No student is resolved to Absent for it. The records and the revocation stay in history and audit.
 
+Owner decision (2026-10-10): A scheduled session may be edited until it opens. Editable fields are the same as at creation except the class section: date, opening time, Present cutoff, Late cutoff, class end time, room, biometric and geofence settings, location, and radius. Faculty may edit scheduled sessions for classes they are authorized to manage, including sessions a Secretary created for that class. A Secretary may edit only scheduled sessions they created. Edits follow the creation rules for timing, past dates, and overlaps; a session does not overlap with itself. Active, ended, and revoked sessions cannot be edited. Each edit is recorded in the audit trail with actor, timestamp, and previous and new values. Editing does not create or change attendance records.
+
 ## ATT-002 — Geofencing and location privacy
 
 **Status: APPROVED**
@@ -872,6 +874,12 @@ Secretary retains authorized ordinary manual attendance functionality. When a St
 For attendance rates, Excused counts as attended.
 
 Students contact Secretary or Faculty outside DentiSys. Current scope has no Student-facing in-system excuse or dispute submission, no supporting-document upload requirement, and no specified dispute deadline. Manual correction audit MUST preserve the old status, new status, actor, timestamp, reason where applicable, and the original biometric outcome.
+
+## ATT-007 — Student upcoming sessions
+
+**Status: APPROVED**
+
+Students see scheduled and open attendance sessions for their own active class enrollments on the Daily Attendance page. By default this covers today and the next 7 days, with an option to view all upcoming sessions. Revoked and ended sessions are not listed. Times are shown in Asia/Manila; countdowns use server time, are informational only, and never decide attendance. Listing a session does not change attendance eligibility or timing.
 
 ## DEL-001 — Image publishing and deployment
 
@@ -1015,6 +1023,8 @@ Faculty invitations follow the PDF's structured name fields, institutional email
 Adopt the source Attendance Monitoring interface, consolidating Start Attendance Session and Session History within it, with class and relevant attendance filters. Reproduce the Secretary/Student toggle and reduced sidebar. The toggle retains the same account and canonical Student identity under BIO-010; it grants no new role or access to another Student.
 
 Use the source start-session presentation with PDF-directed improvements. Existing ATT rules still govern timing, geofence, ownership, correction, history, and Excused approval. A source delete/relaunch control does not authorize erasing attendance history or reusing verification.
+
+Owner decision (2026-10-10): Attendance Monitoring separates session management from student records. A Sessions view shows the live session, upcoming sessions with Edit and Revoke, and past sessions, plus a "New attendance session" action placed apart from every session list. A Roll call view shows student attendance for a selected session. The Secretary uses the same structure. Session timing may be entered with quick choices or custom values that keep the window lengths when the opening time changes, and exact times are always available; timing validation is unchanged.
 
 ## CLS-002 - Current-year creation and historical classes (PDF page 9)
 
