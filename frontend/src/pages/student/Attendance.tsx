@@ -12,8 +12,6 @@ import {
   User,
   ArrowRight,
   ShieldCheck,
-  Eye,
-  RotateCcw,
   Loader2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -145,7 +143,6 @@ export const Attendance: React.FC = () => {
   const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
   const [livenessChallenge, setLivenessChallenge] = useState<LivenessChallengeResponse | null>(null);
-  const [activeActionIndex, setActiveActionIndex] = useState<0 | 1>(0);
   const [verificationResult, setVerificationResult] = useState<BiometricAttendanceResponse | null>(null);
   const [failureNotice, setFailureNotice] = useState<string | null>(null);
   const [cameraLoading, setCameraLoading] = useState(false);
@@ -336,7 +333,6 @@ export const Attendance: React.FC = () => {
     setLivenessChallenge(null);
     setCameraError(null);
     setCameraLoading(false);
-    setActiveActionIndex(0);
     setCheckInStage('camera');
   };
 
@@ -524,7 +520,6 @@ export const Attendance: React.FC = () => {
     const guidanceAbortController = new AbortController();
     guidanceAbortRef.current = guidanceAbortController;
     primeGuidanceAudio();
-    setActiveActionIndex(0);
     setCapturedFrameCount(0);
     setLastActionSuccess(null);
     const isRunActive = (): boolean => captureRunRef.current === runId && !abortCaptureRef.current;
@@ -560,7 +555,6 @@ export const Attendance: React.FC = () => {
         onFrameCount: setCapturedFrameCount,
         onActionSuccess: (index, action) => {
           if (!isRunActive()) return;
-          setActiveActionIndex(index);
           setLastActionSuccess(formatAction(action).title);
           playGuidanceSuccessTone();
         },
@@ -687,7 +681,6 @@ export const Attendance: React.FC = () => {
     setCameraError(null);
     setCameraLoading(false);
     setCapturePhase('idle');
-    setActiveActionIndex(0);
     setCheckInStage('camera');
   };
 
@@ -1135,45 +1128,6 @@ export const Attendance: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Liveness instructions */}
-                  {livenessChallenge && (
-                    <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-                          <ShieldCheck className="w-4 h-4" />
-                          Follow Server Liveness Instructions
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          Step {activeActionIndex + 1} of 2
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {livenessChallenge.actions.map((act, idx) => {
-                          const details = formatAction(act);
-                          const isActive = activeActionIndex === idx;
-                          return (
-                            <div
-                              key={idx}
-                              onClick={() => setActiveActionIndex(idx as 0 | 1)}
-                              className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${isActive
-                                ? 'bg-white dark:bg-slate-900 border-blue-500 shadow-xs'
-                                : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-70'
-                                }`}
-                            >
-                              <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
-                                {act === 'blink' ? <Eye className="w-4 h-4 text-blue-600" /> : <RotateCcw className="w-4 h-4 text-blue-600" />}
-                                <span>Action {idx + 1}: {details.title}</span>
-                              </div>
-                              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                {details.instruction}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
                   {/* Video Viewport */}
                   <div className="relative w-full max-w-md mx-auto aspect-[4/3] bg-slate-900 rounded-2xl overflow-hidden shadow-inner border border-slate-800">
                     <video
@@ -1204,6 +1158,11 @@ export const Attendance: React.FC = () => {
                   <GuidedCaptureStatus
                     phase={capturePhase}
                     actions={livenessChallenge?.actions ?? null}
+                    nextActionLabel={
+                      capturePhase === 'phase2_action1' && livenessChallenge?.actions[1]
+                        ? formatAction(livenessChallenge.actions[1]).title
+                        : undefined
+                    }
                     instruction={phaseInstruction}
                     lastActionSuccess={lastActionSuccess}
                     issue={captureIssue}

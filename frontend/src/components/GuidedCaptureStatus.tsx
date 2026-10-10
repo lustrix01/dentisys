@@ -25,6 +25,7 @@ export function livenessActionTitle(action: LivenessAction): string {
 interface GuidedCaptureStatusProps {
   phase: GuidedCapturePhase;
   actions: [LivenessAction, LivenessAction] | null;
+  nextActionLabel?: string;
   instruction: string;
   lastActionSuccess: string | null;
   issue: GuidanceIssue | null;
@@ -40,6 +41,7 @@ interface GuidedCaptureStatusProps {
 export const GuidedCaptureStatus: React.FC<GuidedCaptureStatusProps> = ({
   phase,
   actions,
+  nextActionLabel,
   instruction,
   lastActionSuccess,
   issue,
@@ -81,6 +83,9 @@ export const GuidedCaptureStatus: React.FC<GuidedCaptureStatusProps> = ({
           {capturedCount} / {totalCount} samples
         </span>
       </div>
+      {nextActionLabel && (
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">Next: {nextActionLabel}</p>
+      )}
 
       <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
         <div className="bg-blue-600 h-full transition-all duration-150" style={{ width: `${percent}%` }} />
