@@ -1659,7 +1659,6 @@ export const GradeComputation: React.FC = () => {
             id: c.id,
             name: c.name,
             weight: String(c.weight),
-            defaultMax: (c.name.toLowerCase().includes('exam') || c.name.toLowerCase().includes('attendance') || c.name.toLowerCase().includes('lab')) ? '100' : '50',
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Midterm' as const,
             sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
@@ -1678,7 +1677,6 @@ export const GradeComputation: React.FC = () => {
             id: c.id,
             name: c.name,
             weight: String(c.weight),
-            defaultMax: (c.name.toLowerCase().includes('exam') || c.name.toLowerCase().includes('attendance') || c.name.toLowerCase().includes('lab')) ? '100' : '50',
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Final' as const,
             sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
@@ -1967,7 +1965,6 @@ export const GradeComputation: React.FC = () => {
       tempId,
       name: '',
       weight: '',
-      defaultMax: '50',
       sortOrder: sameComponentRows.length + 1,
       gradingPeriod: period,
       sourceKind: 'assessment',
@@ -1984,7 +1981,7 @@ export const GradeComputation: React.FC = () => {
   const handleUpdatePeriodCategoryField = (
     period: 'Midterm' | 'Final',
     compositeKey: string,
-    field: 'name' | 'weight' | 'defaultMax',
+    field: 'name' | 'weight',
     val: string
   ) => {
     const updateList = (list: PeriodCategoryDraftRow[]) =>
@@ -4388,35 +4385,20 @@ export const GradeComputation: React.FC = () => {
 
 
                             {componentMode === 'lecture_laboratory' && (
-                              <>
-                                <div className="w-full sm:w-32 shrink-0">
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Component</label>
-                                  <select
-                                    aria-label={`Component for ${row.name || 'unnamed category'}`}
-                                    value={row.component ?? ''}
-                                    onChange={event => handleUpdatePeriodCategoryComponent(activePeriodEditorTab, row.compositeKey, event.target.value as GradingComponentEnum | '')}
-                                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-semibold"
-                                  >
-                                    <option value="">Unassigned</option>
-                                    <option value="Lecture">Lecture</option>
-                                    <option value="Laboratory">Laboratory</option>
-                                  </select>
-                                </div>
-                                <div className="w-full sm:w-32 shrink-0">
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Source</label>
-                                  <select
-                                    aria-label={`Source for ${row.name || 'unnamed category'}`}
-                                    value={row.sourceKind}
-                                    disabled={row.inUse}
-                                    onChange={event => handleUpdatePeriodCategorySourceKind(activePeriodEditorTab, row.compositeKey, event.target.value as GradingSourceKindEnum)}
-                                    className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-semibold disabled:opacity-50"
-                                  >
-                                    <option value="assessment">Assessment</option>
-                                    <option value="attendance">Attendance</option>
-                                  </select>
-                                  {row.inUse && <p className="mt-1 text-[9px] leading-tight text-slate-400">In-use category source is fixed to protect linked records.</p>}
-                                </div>
-                              </>
+                              <div className="w-full sm:w-32 shrink-0">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Source</label>
+                                <select
+                                  aria-label={`Source for ${row.name || 'unnamed category'}`}
+                                  value={row.sourceKind}
+                                  disabled={row.inUse}
+                                  onChange={event => handleUpdatePeriodCategorySourceKind(activePeriodEditorTab, row.compositeKey, event.target.value as GradingSourceKindEnum)}
+                                  className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-semibold disabled:opacity-50"
+                                >
+                                  <option value="assessment">Assessment</option>
+                                  <option value="attendance">Attendance</option>
+                                </select>
+                                {row.inUse && <p className="mt-1 text-[9px] leading-tight text-slate-400">In-use category source is fixed to protect linked records.</p>}
+                              </div>
                             )}
 
                             {/* Weight (%) */}
@@ -4427,6 +4409,7 @@ export const GradeComputation: React.FC = () => {
                               <div className="relative">
                                 <input
                                   type="text"
+                                  aria-label={`Weight for ${row.name || 'unnamed category'}`}
                                   value={row.weight}
                                   placeholder="0"
                                   disabled={isLegacyCombinedPeriodConfig}
@@ -4435,19 +4418,6 @@ export const GradeComputation: React.FC = () => {
                                 />
                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
                               </div>
-                            </div>
-
-                            <div className="w-full sm:w-24 shrink-0">
-                              <label htmlFor={`default-max-${row.compositeKey}`} className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Default Max</label>
-                              <input
-                                id={`default-max-${row.compositeKey}`}
-                                type="text"
-                                value={row.defaultMax ?? ''}
-                                placeholder="50"
-                                disabled={isLegacyCombinedPeriodConfig}
-                                onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'defaultMax', e.target.value)}
-                                className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                              />
                             </div>
 
                             {/* Delete Action */}

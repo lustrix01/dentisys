@@ -23,7 +23,6 @@ export interface PeriodCategoryDraftRow {
   id?: number | null;
   name: string;
   weight: string;
-  defaultMax?: string;
   sortOrder: number;
   gradingPeriod: GradingPeriodEnum;
   sourceKind: GradingSourceKindEnum;
@@ -79,7 +78,6 @@ export function buildDefaultLectureLaboratoryCategories(period: GradingPeriodEnu
       tempId,
       name: category.name,
       weight: category.weight,
-      defaultMax: '100',
       sortOrder: positions[category.component],
       gradingPeriod: period,
       sourceKind: 'assessment',

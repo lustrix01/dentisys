@@ -3034,9 +3034,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.goto('/grades?tab=components');
       await expect(page.getByRole('tab', { name: 'Lecture Categories' })).toBeVisible();
       await page.getByRole('button', { name: /Finals Categories/ }).click();
-      await expect(page.getByLabel('Component for Quiz')).toHaveValue('Lecture');
+      await expect(page.getByLabel('Source for Quiz')).toHaveValue('assessment');
       // The active editor draft now conflicts with the saved picker configuration.
-      await page.getByLabel('Component for Quiz').selectOption('Laboratory');
+      await page.getByLabel('Weight for Quiz').fill('25');
       await page.getByRole('button', { name: 'Assessments Manager' }).click();
       await page.getByRole('button', { name: 'Add Assessment' }).click();
       const modalForm = page.locator('form').last();
