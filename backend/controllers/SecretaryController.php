@@ -1316,7 +1316,7 @@ function handle_secretary_attendance_session_start(): void
         );
         $latitude = secretary_attendance_session_optional_float($data, 'geofenceLatitude', -90, 90);
         $longitude = secretary_attendance_session_optional_float($data, 'geofenceLongitude', -180, 180);
-        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters');
+        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters', 0.01, 999999.99);
         if (($latitude === null) !== ($longitude === null)) {
             throw new ValidationException([[
                 'field' => 'geofenceLatitude',
@@ -1331,12 +1331,6 @@ function handle_secretary_attendance_session_start(): void
         }
         if ($geofenceEnabled && $radius === null) {
             $radius = 100.0;
-        }
-        if ($radius !== null && $radius <= 0) {
-            throw new ValidationException([[
-                'field' => 'geofenceRadiusMeters',
-                'message' => 'Geofence radius must be greater than zero.',
-            ]]);
         }
 
         $sessionCode = null;

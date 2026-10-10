@@ -278,12 +278,12 @@ function attendance_session_update_values(array $data, array $config, string $ro
         $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', $biometricRequired);
         $latitude = attendance_session_request_float($data, 'geofenceLatitude', -90, 90);
         $longitude = attendance_session_request_float($data, 'geofenceLongitude', -180, 180);
-        $radius = attendance_session_request_float($data, 'geofenceRadiusMeters', 0.01, null);
+        $radius = attendance_session_request_float($data, 'geofenceRadiusMeters', 0.01, 999999.99);
     } else {
         $geofenceEnabled = secretary_attendance_session_bool($data, array_key_exists('geofenceEnabled', $data) ? 'geofenceEnabled' : 'requireGeo', $biometricRequired);
         $latitude = secretary_attendance_session_optional_float($data, 'geofenceLatitude', -90, 90);
         $longitude = secretary_attendance_session_optional_float($data, 'geofenceLongitude', -180, 180);
-        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters');
+        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters', 0.01, 999999.99);
     }
     if (($latitude === null) !== ($longitude === null)) {
         throw new ValidationException([['field' => 'geofenceLatitude', 'message' => 'Geofence latitude and longitude must be provided together.']]);
@@ -293,9 +293,6 @@ function attendance_session_update_values(array $data, array $config, string $ro
     }
     if ($geofenceEnabled && $radius === null) {
         $radius = 100.0;
-    }
-    if ($role === 'secretary' && $radius !== null && $radius <= 0) {
-        throw new ValidationException([['field' => 'geofenceRadiusMeters', 'message' => 'Geofence radius must be greater than zero.']]);
     }
 
     return [
