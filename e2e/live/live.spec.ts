@@ -383,7 +383,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible({ timeout: 15000 });
 
   // Verify assigned class is shown (CLINIC-4B)
-  await expect(page.getByText('CLINIC-4B')).toBeVisible();
+  await expect(page.locator('form').getByText('CLINIC-4B', { exact: true })).toBeVisible();
 
   // Verify localStorage has no active session key
   const localSessionBefore = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
@@ -395,9 +395,9 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   );
   await page.getByText('Enforce GPS Geofence Verification').click();
   const sessionWindow = manilaSessionWindow();
-  const openingTimeInput = page.getByText('Opening Time', { exact: true }).locator('xpath=following-sibling::input[@type="time"]');
-  const presentCutoffInput = page.getByText('Present Cutoff', { exact: true }).locator('xpath=following-sibling::input[@type="time"]');
-  const lateCutoffInput = page.getByText('Late Cutoff', { exact: true }).locator('xpath=following-sibling::input[@type="time"]');
+  const openingTimeInput = page.getByLabel('Opening Time', { exact: true });
+  const presentCutoffInput = page.getByLabel('Present Cutoff', { exact: true });
+  const lateCutoffInput = page.getByLabel('Late Cutoff', { exact: true });
   await expect(openingTimeInput).toHaveCount(1);
   await expect(presentCutoffInput).toHaveCount(1);
   await expect(lateCutoffInput).toHaveCount(1);
@@ -446,7 +446,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await page.click('a[href="/"]');
   await expect(page).toHaveURL('/');
   await page.getByRole('link', { name: 'Attendance Monitoring', exact: true }).click();
-  await page.getByRole('link', { name: 'Start Attendance Session', exact: true }).click();
+  await page.goto('/secretary/start-session');
   await expect(page).toHaveURL('/secretary/start-session');
 
   await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
@@ -515,6 +515,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
 
   // 4. Navigate directly to /attendance
   await page.goto('/attendance');
+  await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
 
   // Verify header and initial empty worksheet state
   await expect(page.getByRole('main').getByRole('heading', { name: /Attendance Monitoring/i })).toBeVisible({ timeout: 15000 });

@@ -91,6 +91,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
       await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Excused request sent to Faculty for approval.', request: null }) });
     });
     await page.goto('/secretary/attendance');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByRole('row').filter({ hasText: 'Request Student' }).getByRole('button', { name: 'Override' }).click();
     await page.getByRole('button', { name: 'Request Excused' }).click();
     await expect(page.getByText(/Excused needs Faculty approval/)).toBeVisible();
@@ -335,6 +336,101 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
+  });
+
+  test('Secretary edits its own scheduled session and hides Edit for other creators', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    let payload: Record<string, unknown> | null = null;
+    let saved = false;
+    const own = { sessionId: '701', classId: '8', className: 'CLINIC-4B', subjectCode: 'CLIN402', date: '2099-10-02', sessionDate: '2099-10-02', sessionCode: 'OWN-701', status: 'scheduled', room: 'Saved room', openingTime: '08:00', presentCutoff: '08:30', lateCutoff: '10:30', classEndTime: '11:30', biometricRequired: false, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75, geofenceRadiusMeters: 250, createdByRole: 'secretary', createdByCurrentSecretary: true };
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ json: { status: 'ok', activeSession: null } }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => route.fulfill({ json: { status: 'ok', records: [], sessions: [{ ...own, room: saved ? 'Changed room' : own.room }, { ...own, sessionId: '702', sessionCode: 'OTHER-702', createdByCurrentSecretary: false }] } }));
+    await page.route('**/api/secretary/attendance/session/update', route => {
+      payload = route.request().postDataJSON(); saved = true;
+      return route.fulfill({ json: { status: 'ok', session: { ...mockActiveSession, ...own, room: 'Changed room' } } });
+    });
+    await page.route('**/api/secretary/profile', route => route.fulfill({ json: { status: 'ok', profile: { id: '300', assignedClassName: 'CLINIC-4B', classroomName: 'Dental Clinic Lab 2' } } }));
+    await page.goto('/secretary/attendance');
+    await expect(page.getByRole('tab', { name: 'Sessions', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByLabel('Opening Time', { exact: true })).toHaveValue('08:00');
+    await expect(page.getByLabel('Present Cutoff', { exact: true })).toHaveValue('08:30');
+    await expect(page.getByLabel('Class End Time', { exact: true })).toHaveValue('11:30');
+    await expect(page.getByText('Saved session location', { exact: true })).toBeVisible();
+    await page.getByPlaceholder('e.g. BU Dental Room 101').fill('Changed room');
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByText('Attendance session updated.')).toBeVisible();
+    expect(payload).toEqual({ sessionId: '701', sessionDate: own.sessionDate, room: 'Changed room', openingTime: '08:00', presentCutoff: '08:30', lateCutoff: '10:30', classEndTime: '11:30', biometricRequired: false, geofenceEnabled: true, geofenceRadiusMeters: 250, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByPlaceholder('e.g. BU Dental Room 101')).toHaveValue('Changed room');
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Attendance session', exact: true }).selectOption('701');
+    await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Attendance session', exact: true })).toHaveValue('701');
+  });
+
+  test('Secretary hides unknown-creator Edit and retains ownership and scheduled-only server errors', async ({ page }) => {
+    let attempts = 0;
+    let showOwned = false;
+    const scheduled = { sessionId: '703', classId: '8', className: 'CLINIC-4B', subjectCode: 'CLIN402', date: '2099-10-02', sessionCode: 'UNKNOWN-703', status: 'scheduled', room: 'Saved room', openingTime: '08:00', presentCutoff: '08:30', lateCutoff: '12:00', classEndTime: '13:00', biometricRequired: true, geofenceEnabled: false };
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ json: { status: 'ok', activeSession: null } }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => route.fulfill({ json: { status: 'ok', records: [], sessions: [{ ...scheduled, ...(showOwned ? { createdByCurrentSecretary: true } : {}) }, { ...scheduled, sessionId: '704', createdByCurrentSecretary: null }, { ...scheduled, sessionId: '705', createdByCurrentSecretary: false }] } }));
+    await page.route('**/api/secretary/attendance/session/update', route => {
+      attempts++;
+      return route.fulfill({ status: attempts === 1 ? 403 : 409, json: { status: 'error', code: attempts === 1 ? 'ATTENDANCE_SESSION_EDIT_FORBIDDEN' : 'ATTENDANCE_SESSION_NOT_EDITABLE', message: attempts === 1 ? 'You can edit only sessions you created.' : 'Only scheduled sessions can be edited.' } });
+    });
+    await page.goto('/secretary/attendance');
+    await expect(page.getByRole('button', { name: 'Revoke scheduled session', exact: true })).toHaveCount(3);
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+    showOwned = true;
+    await page.getByRole('button', { name: 'Refresh attendance', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.locator('form').getByRole('alert')).toHaveText('You can edit only sessions you created.');
+    await expect(page.getByLabel('Session date (Asia/Manila)')).toHaveValue(scheduled.date);
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.locator('form').getByRole('alert')).toHaveText('Only scheduled sessions can be edited.');
+    await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled();
+  });
+
+  test('Secretary session filters narrow past sessions by date, subject, and searchable details', async ({ page }) => {
+    const base = { classId: '8', className: 'CLINIC-4B', subjectCode: 'CLIN402', date: '2099-10-02', status: 'ended', openingTime: '08:00', classEndTime: '11:30', room: 'Dental Lab' };
+    const sessions = [
+      { ...base, sessionId: '801', sessionCode: 'TARGET-801', room: 'Special Room' },
+      { ...base, sessionId: '802', sessionCode: 'SUBJECT-802', subjectCode: 'CLIN401' },
+      { ...base, sessionId: '803', sessionCode: 'DATE-803', date: '2099-10-03' },
+      { ...base, sessionId: '804', sessionCode: 'OTHER-804', status: 'revoked' },
+    ];
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ json: { status: 'ok', activeSession: null } }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => route.fulfill({ json: { status: 'ok', records: [], sessions } }));
+    await page.goto('/secretary/attendance');
+    const past = page.getByRole('heading', { name: 'Past sessions', exact: true }).locator('..');
+    await expect(past.getByRole('button', { name: 'Open roll call', exact: true })).toHaveCount(4);
+    await expect(past.getByText('Fri, Oct 2, 2099 · 08:00–11:30 · TARGET-801 · ended', { exact: true })).toBeVisible();
+    await page.getByLabel('Date', { exact: true }).selectOption('2099-10-02');
+    await expect(past.getByRole('button', { name: 'Open roll call', exact: true })).toHaveCount(3);
+    await expect(past.getByText(/DATE-803/)).toHaveCount(0);
+    await page.getByLabel('Subject', { exact: true }).selectOption('CLIN402');
+    await expect(past.getByRole('button', { name: 'Open roll call', exact: true })).toHaveCount(2);
+    await expect(past.getByText(/SUBJECT-802/)).toHaveCount(0);
+    await page.getByLabel('Search', { exact: true }).fill('  sPeCiAl rOoM  ');
+    await expect(past.getByRole('button', { name: 'Open roll call', exact: true })).toHaveCount(1);
+    await expect(past.getByText(/TARGET-801/)).toBeVisible();
+    await page.getByLabel('Search', { exact: true }).fill('other-804');
+    await expect(past.getByRole('button', { name: 'Open roll call', exact: true })).toHaveCount(1);
+    await expect(past.getByText(/OTHER-804/)).toBeVisible();
+    await page.getByLabel('Search', { exact: true }).fill('CLINIC-4B');
+    await expect(past.getByRole('button', { name: 'Open roll call', exact: true })).toHaveCount(2);
+    await page.getByLabel('Search', { exact: true }).fill('no match');
+    await expect(past.getByText('No sessions match this filter.', { exact: true })).toBeVisible();
+    await page.getByLabel('Search', { exact: true }).fill('');
+    await page.getByLabel('Subject', { exact: true }).selectOption('all');
+    await page.getByLabel('Date', { exact: true }).selectOption('');
+    await expect(past.getByRole('button', { name: 'Open roll call', exact: true })).toHaveCount(4);
   });
 
   test('initial state: active lookup returns null -> Start Session state shown', async ({ page }) => {

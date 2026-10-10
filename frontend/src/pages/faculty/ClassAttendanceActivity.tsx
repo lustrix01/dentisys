@@ -11,7 +11,7 @@ const formatManila = (value: string | null) => value
   : '—';
 
 /** Attendance status changes in the Faculty member's classes (server data only). */
-export const ClassAttendanceActivity: React.FC = () => {
+export const ClassAttendanceActivity: React.FC<{ classIds?: string[] }> = ({ classIds }) => {
   const [rows, setRows] = useState<FacultyAttendanceActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +31,11 @@ export const ClassAttendanceActivity: React.FC = () => {
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return rows;
-    return rows.filter(row => [row.studentName, row.studentNumber, row.className, row.courseCode, row.sessionCode, row.actorName, row.reason]
+    const scoped = classIds ? rows.filter(row => row.classId !== null && classIds.includes(row.classId)) : rows;
+    if (!needle) return scoped;
+    return scoped.filter(row => [row.studentName, row.studentNumber, row.className, row.courseCode, row.sessionCode, row.actorName, row.reason]
       .some(value => (value ?? '').toLowerCase().includes(needle)));
-  }, [rows, query]);
+  }, [rows, query, classIds]);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">

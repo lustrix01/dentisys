@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
+import { formatSessionDate } from '../../utils/sessionDate';
 import {
   Search,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { ClassAttendanceActivity } from './ClassAttendanceActivity';
+import { SessionTimingFields } from '../../components/SessionTimingFields';
 import { Card } from '../../components/Card';
 import { LocationPicker } from '../../components/LocationPicker';
 import { FacultyExcusedRequestsPanel } from '../../components/FacultyExcusedRequestsPanel';
@@ -27,6 +29,8 @@ import {
   recordFacultyInitialAttendanceApi,
   correctFacultyAttendanceApi,
   createFacultyAttendanceSessionApi,
+  updateFacultyAttendanceSessionApi,
+  FacultyManagedAttendanceSession,
   revokeFacultyAttendanceSessionApi,
   endFacultyAttendanceSessionApi,
   FacultyClassItem,
@@ -81,26 +85,16 @@ const attendanceMethodLabel = (method?: string | null, overrideReason?: string |
 
 const manilaDateToday = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
-export const AttendanceMonitoring: React.FC = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activityOpen = searchParams.get('tab') === 'activity';
-  return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div role="tablist" aria-label="Attendance Monitoring" className="flex gap-2">
-        {(['monitoring', 'activity'] as const).map(tab => (
-          <button key={tab} type="button" role="tab" aria-selected={activityOpen === (tab === 'activity')}
-            onClick={() => setSearchParams(previous => { const next = new URLSearchParams(previous); if (tab === 'activity') next.set('tab', tab); else next.delete('tab'); return next; })}
-            className={`px-4 py-2 rounded-lg text-xs font-bold ${activityOpen === (tab === 'activity') ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
-            {tab === 'activity' ? 'Class Attendance Activity' : 'Attendance Monitoring'}
-          </button>
-        ))}
-      </div>
-      {activityOpen ? <ClassAttendanceActivity /> : <AttendanceWorksheet />}
-    </div>
-  );
-};
+export const AttendanceMonitoring: React.FC = () => <AttendanceWorksheet />;
 
 const AttendanceWorksheet: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') === 'activity' ? 'activity' : searchParams.get('tab') === 'rollcall' ? 'rollcall' : 'sessions';
+  const switchTab = (nextTab: string) => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    if (nextTab === 'sessions') next.delete('tab'); else next.set('tab', nextTab);
+    return next;
+  });
   // Assigned classes from API
   const [classes, setClasses] = useState<FacultyClassItem[]>([]);
   const [loadingClasses, setLoadingClasses] = useState<boolean>(true);
@@ -182,6 +176,8 @@ const AttendanceWorksheet: React.FC = () => {
   // Session creation is presented here as part of the Attendance Monitoring workspace.
   // The submit path remains the authoritative Faculty session API.
   const [isStartSessionOpen, setIsStartSessionOpen] = useState(false);
+  const [editingSession, setEditingSession] = useState<FacultyManagedAttendanceSession | null>(null);
+  const [sessionActionTarget, setSessionActionTarget] = useState<FacultyManagedAttendanceSession | null>(null);
   const [sessionRoom, setSessionRoom] = useState('');
   const [openingTime, setOpeningTime] = useState('08:00');
   const [presentCutoff, setPresentCutoff] = useState('09:00');
@@ -445,14 +441,14 @@ const AttendanceWorksheet: React.FC = () => {
   // Submit Session Revocation (Revokes active session, preserves recorded attendance, blocks further submissions)
   const handleRevokeSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!worksheet?.attendanceSession?.sessionId) return;
+    if (!sessionActionTarget?.sessionId) return;
 
     setSubmittingRevocation(true);
     const writeScope = beginWorksheetMutation();
     setRevokeError(null);
     try {
       await revokeFacultyAttendanceSessionApi({
-        sessionId: worksheet.attendanceSession.sessionId,
+        sessionId: sessionActionTarget.sessionId,
         reason: revokeReason.trim() || null,
       });
 
@@ -477,12 +473,12 @@ const AttendanceWorksheet: React.FC = () => {
 
   // End the session now: students without a record are resolved to Absent (ATT-003).
   const handleEndSession = async () => {
-    if (!worksheet?.attendanceSession?.sessionId) return;
+    if (!sessionActionTarget?.sessionId) return;
     setSubmittingEnd(true);
     const writeScope = beginWorksheetMutation();
     setEndError(null);
     try {
-      await endFacultyAttendanceSessionApi({ sessionId: worksheet.attendanceSession.sessionId });
+      await endFacultyAttendanceSessionApi({ sessionId: sessionActionTarget.sessionId });
       setIsEndModalOpen(false);
       setNotification({ type: 'success', message: 'Attendance session ended. Students without a record were marked Absent.' });
       const csIdNum = parseInt(selectedCsId, 10);
@@ -546,8 +542,7 @@ const AttendanceWorksheet: React.FC = () => {
     const writeScope = beginWorksheetMutation();
     setSessionError(null);
     try {
-      const response = await createFacultyAttendanceSessionApi({
-        csId,
+      const payload = {
         sessionDate,
         room: sessionRoom.trim() || undefined,
         openingTime,
@@ -559,9 +554,12 @@ const AttendanceWorksheet: React.FC = () => {
         geofenceRadiusMeters: geofenceEnabled ? geofenceRadius : undefined,
         geofenceLatitude: geofenceEnabled ? sessionLocation?.latitude : undefined,
         geofenceLongitude: geofenceEnabled ? sessionLocation?.longitude : undefined,
-      });
+      };
+      const response = editingSession
+        ? await updateFacultyAttendanceSessionApi({ ...payload, sessionId: editingSession.sessionId })
+        : await createFacultyAttendanceSessionApi({ ...payload, csId });
       setIsStartSessionOpen(false);
-      setNotification({ type: 'success', message: response.session.status === 'scheduled' ? `Attendance session scheduled for ${sessionDate} at ${openingTime} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
+      setNotification({ type: 'success', message: editingSession ? 'Attendance session updated.' : response.session.status === 'scheduled' ? `Attendance session scheduled for ${sessionDate} at ${openingTime} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
       if (worksheetScope.current === writeScope) {
         setSelectedDate(sessionDate);
         setSelectedSessionId(response.session.sessionId);
@@ -573,6 +571,24 @@ const AttendanceWorksheet: React.FC = () => {
       setSubmittingSession(false);
       finishWorksheetMutation(writeScope);
     }
+  };
+
+  const managedSessions: FacultyManagedAttendanceSession[] = worksheet?.managedSessions ?? Array.from(new Map([
+    ...(worksheet?.pendingSessions ?? []), ...(worksheet?.attendanceSessions ?? []),
+    ...(worksheet?.attendanceSession ? [worksheet.attendanceSession] : []),
+  ].map(session => [session.sessionId, session])).values());
+  const liveSession = managedSessions.find(session => session.status === 'active') ?? null;
+  const upcomingSessions = managedSessions.filter(session => session.status === 'scheduled');
+  const pastSessions = managedSessions.filter(session => session.status === 'ended' || session.status === 'revoked');
+  const openSessionEdit = (session: FacultyManagedAttendanceSession) => {
+    setEditingSession(session); setSessionError(null);
+    setSessionDate(session.sessionDate || selectedDate); setSessionRoom(session.room || '');
+    setOpeningTime(session.openingTime || '08:00'); setPresentCutoff(session.presentCutoff || '09:00');
+    setLateCutoff(session.lateCutoff || '12:00'); setClassEndTime(session.classEndTime || '13:00');
+    setBiometricRequired(session.biometricRequired ?? true); setGeofenceEnabled(session.geofenceEnabled ?? true);
+    setGeofenceRadius(session.geofenceRadiusMeters ?? 100);
+    setSessionLocation(session.geofenceLatitude != null && session.geofenceLongitude != null ? { latitude: session.geofenceLatitude, longitude: session.geofenceLongitude } : null);
+    setIsStartSessionOpen(true);
   };
 
   // Rule 4: Straightforward counts, no invented presence rate formula
@@ -618,10 +634,6 @@ const AttendanceWorksheet: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
-      <FacultyExcusedRequestsPanel onDecided={() => {
-        const csIdNum = parseInt(selectedCsId, 10);
-        if (csIdNum > 0) void loadWorksheet(csIdNum, selectedDate);
-      }} />
       {/* Source UI: page title and the primary session action sit together. */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
@@ -640,18 +652,6 @@ const AttendanceWorksheet: React.FC = () => {
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Live session
             </span>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setSessionError(null);
-              setIsStartSessionOpen(true);
-            }}
-            disabled={!selectedCsId || selectedClassIsPast || loadingWorksheet || attendanceWritePending}
-            title={selectedClassIsPast ? 'Past school-year classes are view-only.' : undefined}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Play className="w-4 h-4 fill-white" /> Start Attendance Session
-          </button>
           {selectedCsId && (
             <button
               type="button"
@@ -697,7 +697,7 @@ const AttendanceWorksheet: React.FC = () => {
 
       {/* Source UI: compact filter rail above the roll call. */}
       <Card className="p-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <div>
             <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5">School year
               <select aria-label="Attendance school year" value={selectedSchoolYear} disabled={attendanceWritePending} onChange={event => {
@@ -760,49 +760,6 @@ const AttendanceWorksheet: React.FC = () => {
             </select>
           </div>
 
-          {/* Step 3: Worksheet Date */}
-          <div>
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Worksheet Date</span>
-            </label>
-            <input
-              type="date"
-              value={selectedDate}
-              disabled={attendanceWritePending}
-
-              onChange={(e) => { setWorksheet(null); setSelectedDate(e.target.value); setSelectedSessionId(''); }}
-              className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
-            />
-          </div>
-
-          <div>
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5">Attendance status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              disabled={!worksheet}
-              className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-50"
-            >
-              <option value="all">All statuses{worksheet ? ` (${stats.total})` : ''}</option>
-              <option value="present">Present{worksheet ? ` (${stats.present})` : ''}</option>
-              <option value="late">Late{worksheet ? ` (${stats.late})` : ''}</option>
-              <option value="absent">Absent{worksheet ? ` (${stats.absent})` : ''}</option>
-              <option value="excused">Excused{worksheet ? ` (${stats.excused})` : ''}</option>
-              <option value="unrecorded">Unresolved{worksheet ? ` (${stats.total - stats.recorded})` : ''}</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="relative mt-3">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search student name or ID..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
-          />
         </div>
 
         {classesError && (
@@ -813,6 +770,151 @@ const AttendanceWorksheet: React.FC = () => {
         )}
       </Card>
 
+      <div role="tablist" aria-label="Attendance Monitoring" className="flex flex-wrap gap-2">
+        {(['sessions', 'rollcall', 'activity'] as const).map(item => <button key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => switchTab(item)} className={tab === item ? 'rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white' : 'rounded-lg bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>{item === 'sessions' ? 'Sessions' : item === 'rollcall' ? 'Roll call' : 'Activity log'}</button>)}
+      </div>
+      <FacultyExcusedRequestsPanel onDecided={() => {
+        const csIdNum = parseInt(selectedCsId, 10);
+        if (csIdNum > 0) void loadWorksheet(csIdNum, selectedDate);
+      }} />
+      {tab === 'activity' && <ClassAttendanceActivity classIds={scopedClasses.filter(item => (!selectedCourseId || item.courseId === selectedCourseId) && (!selectedCsId || String(item.csId) === selectedCsId)).map(item => String(item.csId))} />}
+      {tab === 'sessions' && <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Sessions</h2>
+          <button
+            type="button"
+            onClick={() => {
+              setSessionError(null);
+              setEditingSession(null);
+              setSessionDate(manilaDateToday());
+              setOpeningTime('08:00'); setPresentCutoff('09:00'); setLateCutoff('12:00'); setClassEndTime('13:00');
+              setSessionRoom(''); setBiometricRequired(true); setGeofenceEnabled(true);
+              setSessionLocation(null); setGeofenceRadius(100);
+              setIsStartSessionOpen(true);
+            }}
+            disabled={!selectedCsId || selectedClassIsPast || loadingWorksheet || attendanceWritePending}
+            title={selectedClassIsPast ? 'Past school-year classes are view-only.' : undefined}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Play className="w-4 h-4 fill-white" /> New attendance session
+          </button>
+
+        </div>
+        {!selectedCsId ? <Card className="p-8 text-center text-xs text-slate-400">Please select an Assigned Course and Class Section to view the attendance worksheet.</Card> : loadingWorksheet ? <p className="text-xs text-slate-400">Loading authoritative attendance worksheet...</p> : worksheetError ? <p role="alert" className="text-xs text-rose-600">{worksheetError}</p> : <>
+          <Card className="space-y-3 p-4"><h2 className="text-sm font-bold">Live session</h2>
+          {/* Attendance Session Information / Revocation Control */}
+          {liveSession && (
+            liveSession.status === 'active' ? (
+              <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fade-in">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-extrabold text-[10px] uppercase tracking-wider">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                      Live Attendance Session Active
+                    </span>
+                    <span className="font-mono text-slate-500 font-bold">
+                      Code: {liveSession.sessionCode}
+                    </span>
+                    {liveSession.room && (
+                      <span className="text-slate-500 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {liveSession.room}
+                      </span>
+                    )}
+                  </div>
+                  {liveSession.openingTime && liveSession.presentCutoff && (
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                      <Clock className="w-3 h-3 text-blue-500" />
+                      <span>
+                        Timing (Asia/Manila): Open {liveSession.openingTime} → Present Cutoff {liveSession.presentCutoff} → Late Cutoff {liveSession.lateCutoff || 'Late'}
+                        {liveSession.classEndTime ? ` → Class ends ${liveSession.classEndTime}` : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2 self-start sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  disabled={selectedClassIsPast}
+                  onClick={() => {
+                    setSessionActionTarget(liveSession);
+                    setEndError(null);
+                    setIsEndModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>End Session</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedClassIsPast}
+                  onClick={() => {
+                    setSessionActionTarget(liveSession);
+                    setRevokeError(null);
+                    setRevokeReason('');
+                    setIsRevokeModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm shadow-rose-600/20 cursor-pointer self-start sm:self-auto shrink-0"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  <span>Revoke Session</span>
+                </button>
+                </div>
+              </div>
+            ) : null
+          )}
+
+
+            {!liveSession && <p className="text-xs text-slate-400">No live session.</p>}
+          </Card>
+          <Card className="space-y-3 p-4"><h2 className="text-sm font-bold">Upcoming</h2><p className="text-xs text-slate-400">Scheduled sessions (Asia/Manila)</p>
+            {upcomingSessions.length === 0 && <p className="text-xs text-slate-400">No upcoming sessions. Create one with New attendance session.</p>}
+            {upcomingSessions.map(session => <div key={session.sessionId} className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700 sm:flex-row sm:items-center">
+              <p className="min-w-0 break-words text-xs">{formatSessionDate(session.sessionDate)} · {session.openingTime}–{session.classEndTime} · {session.sessionCode}</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={selectedClassIsPast || attendanceWritePending} onClick={() => openSessionEdit(session)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold dark:border-slate-700 disabled:opacity-50">Edit</button>
+                <button type="button" disabled={selectedClassIsPast || attendanceWritePending} onClick={() => { setSessionActionTarget(session); setRevokeError(null); setRevokeReason(''); setIsRevokeModalOpen(true); }} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 dark:border-rose-900 dark:text-rose-300 disabled:opacity-50">Revoke scheduled session</button>
+              </div>
+            </div>)}
+          </Card>
+          <Card className="space-y-3 p-4"><h2 className="text-sm font-bold">Past sessions</h2>
+            {pastSessions.length === 0 && <p className="text-xs text-slate-400">No past sessions.</p>}
+            {pastSessions.map(session => <div key={session.sessionId} className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700 sm:flex-row sm:items-center">
+              <p className="min-w-0 break-words text-xs">{formatSessionDate(session.sessionDate)} · {session.openingTime}–{session.classEndTime} · {session.sessionCode} · {session.status === 'revoked' ? 'Session Revoked' : 'Ended'}</p>
+              <button type="button" disabled={attendanceWritePending} onClick={() => { setSelectedDate(session.sessionDate || selectedDate); setSelectedSessionId(session.sessionId); switchTab('rollcall'); }} className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold dark:bg-slate-800">Open roll call</button>
+            </div>)}
+          </Card>
+        </>}
+      </div>}
+      {tab === 'rollcall' && <>
+        <Card className="space-y-3 p-4">
+          {/* Step 3: Worksheet Date */}
+          <div>
+            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Worksheet Date</span>
+            </label>
+            <input
+              type="date"
+              aria-label="Worksheet date"
+              value={selectedDate}
+              disabled={attendanceWritePending}
+
+              onChange={(e) => { setWorksheet(null); setSelectedDate(e.target.value); setSelectedSessionId(''); }}
+              className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            />
+          </div>
+
+          {<label className="block text-xs font-bold">Attendance session
+            <select value={selectedSessionId || worksheet?.attendanceSession?.sessionId || ''} disabled={attendanceWritePending} onChange={event => setSelectedSessionId(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
+              <option value="">Choose a session</option>
+              {(worksheet?.attendanceSessions ?? []).map(session => <option key={String(session.sessionId)} value={String(session.sessionId)}>{String(session.openingTime ?? 'Unconfigured')}–{String(session.classEndTime ?? '')} · {String(session.sessionCode)} · {String(session.status)}</option>)}
+            </select>
+          </label>}
+
+        </Card>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Students in this section and their attendance for the selected session.</p>
       {/* 3. Summary Count Cards (Rule 4: straightforward counts) */}
       {worksheet && (
         <>
@@ -889,22 +991,7 @@ const AttendanceWorksheet: React.FC = () => {
       ) : worksheet ? (
         <Card className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-4">
           {worksheetIsReadOnly && <p role="status" className="text-xs font-semibold text-amber-700 dark:text-amber-300">{selectedClassIsPast ? 'Past school-year attendance is view-only.' : selectedDate > manilaDateToday() || worksheet.attendanceSession?.status === 'scheduled' ? 'Scheduled session: attendance opens at its chosen date/time in Asia/Manila.' : 'Choose a session to manage its attendance.'}</p>}
-          {worksheet.attendanceSessions.length > 1 && <label className="block text-xs font-bold">Attendance session
-            <select value={selectedSessionId} disabled={attendanceWritePending} onChange={event => setSelectedSessionId(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
-              <option value="">Choose a session</option>
-              {worksheet.attendanceSessions.map(session => <option key={String(session.sessionId)} value={String(session.sessionId)}>{String(session.openingTime ?? 'Unconfigured')}–{String(session.classEndTime ?? '')} · {String(session.sessionCode)} · {String(session.status)}</option>)}
-            </select>
-          </label>}
-          {Boolean(worksheet.pendingSessions?.length) && <div aria-label="Upcoming and open sessions" className="space-y-2 text-xs">
-            <p className="font-bold">Upcoming and open sessions (Asia/Manila)</p>
-            {worksheet.pendingSessions?.map(session => <button key={session.sessionId} type="button" disabled={attendanceWritePending} onClick={() => { setSelectedDate(session.sessionDate); setSelectedSessionId(session.sessionId); }} className="block w-full rounded-xl border border-slate-200 p-2 text-left dark:border-slate-700 disabled:opacity-50">
-              {session.sessionDate} · {session.openingTime ?? 'Unconfigured'}–{session.classEndTime ?? ''} · {session.status === 'scheduled' ? 'Scheduled' : 'Open'} · {session.sessionCode}
-            </button>)}
-          </div>}
-          {worksheet.attendanceSession?.status === 'scheduled' && !selectedClassIsPast && <button type="button" onClick={() => { setRevokeError(null); setIsRevokeModalOpen(true); }} className="rounded-xl border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700">Revoke scheduled session</button>}
-          {/* Attendance Session Information / Revocation Control */}
-          {worksheet.attendanceSession && (
-            worksheet.attendanceSession.status === 'revoked' ? (
+          {worksheet.attendanceSession?.status === 'revoked' && (
               <div className="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fade-in">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -926,66 +1013,8 @@ const AttendanceWorksheet: React.FC = () => {
                   )}
                 </div>
               </div>
-            ) : worksheet.attendanceSession.status === 'active' ? (
-              <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fade-in">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-extrabold text-[10px] uppercase tracking-wider">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                      Live Attendance Session Active
-                    </span>
-                    <span className="font-mono text-slate-500 font-bold">
-                      Code: {worksheet.attendanceSession.sessionCode}
-                    </span>
-                    {worksheet.attendanceSession.room && (
-                      <span className="text-slate-500 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {worksheet.attendanceSession.room}
-                      </span>
-                    )}
-                  </div>
-                  {worksheet.attendanceSession.openingTime && worksheet.attendanceSession.presentCutoff && (
-                    <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
-                      <Clock className="w-3 h-3 text-blue-500" />
-                      <span>
-                        Timing (Asia/Manila): Open {worksheet.attendanceSession.openingTime} → Present Cutoff {worksheet.attendanceSession.presentCutoff} → Late Cutoff {worksheet.attendanceSession.lateCutoff || 'Late'}
-                        {worksheet.attendanceSession.classEndTime ? ` → Class ends ${worksheet.attendanceSession.classEndTime}` : ''}
-                      </span>
-                    </div>
-                  )}
-                </div>
 
-                <div className="flex gap-2 self-start sm:self-auto shrink-0">
-                <button
-                  type="button"
-                  disabled={selectedClassIsPast}
-                  onClick={() => {
-                    setEndError(null);
-                    setIsEndModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all cursor-pointer"
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>End Session</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={selectedClassIsPast}
-                  onClick={() => {
-                    setRevokeError(null);
-                    setRevokeReason('');
-                    setIsRevokeModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-sm shadow-rose-600/20 cursor-pointer self-start sm:self-auto shrink-0"
-                >
-                  <Ban className="w-3.5 h-3.5" />
-                  <span>Revoke Session</span>
-                </button>
-                </div>
-              </div>
-            ) : null
           )}
-
           {/* Controls Bar: Search & Status Filter */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
             <div className="relative flex-1 max-w-sm">
@@ -999,9 +1028,10 @@ const AttendanceWorksheet: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <label className="text-xs font-bold text-slate-500 whitespace-nowrap">Filter Status:</label>
               <select
+                aria-label="Attendance status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer"
@@ -1026,7 +1056,7 @@ const AttendanceWorksheet: React.FC = () => {
           </div>
 
           {/* Roster Table: Bounded Scroll Container with Sticky Header */}
-          <div className="max-h-[560px] overflow-y-auto border border-slate-200/80 dark:border-slate-800 rounded-xl">
+          <div className="max-h-[560px] overflow-auto border border-slate-200/80 dark:border-slate-800 rounded-xl">
             <table className="w-full text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-slate-50/80 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-slate-400 z-10">
                 <tr>
@@ -1135,6 +1165,9 @@ const AttendanceWorksheet: React.FC = () => {
         </Card>
       ) : null}
 
+
+      </>}
+
       {/* Session entry is intentionally kept inside Attendance Monitoring per UI-005. */}
       {isStartSessionOpen && (
         <Modal
@@ -1145,7 +1178,7 @@ const AttendanceWorksheet: React.FC = () => {
               setSessionError(null);
             }
           }}
-          title="Start Attendance Session"
+          title={editingSession ? 'Edit attendance session' : 'New attendance session'}
         >
           <form onSubmit={handleStartSession} className="space-y-4 text-xs">
             {sessionError && (
@@ -1170,16 +1203,7 @@ const AttendanceWorksheet: React.FC = () => {
               <input value={sessionRoom} onChange={(event) => setSessionRoom(event.target.value)} placeholder="e.g. Dental Clinic Room 101" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
             </label>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Opening</span><input type="time" value={openingTime} onChange={(event) => setOpeningTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-              <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Present cutoff</span><input type="time" value={presentCutoff} onChange={(event) => setPresentCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-              <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Late cutoff</span><input type="time" value={lateCutoff} onChange={(event) => setLateCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-            </div>
-            <label className="block">
-              <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class end time</span>
-              <input type="time" required aria-label="Class end time" value={classEndTime} onChange={(event) => setClassEndTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-              <small className="mt-1 block text-slate-400">The session ends automatically at this time; students without a record are marked Absent.</small>
-            </label>
+            <SessionTimingFields role="faculty" value={{ openingTime, presentCutoff, lateCutoff, classEndTime }} onChange={value => { setOpeningTime(value.openingTime); setPresentCutoff(value.presentCutoff); setLateCutoff(value.lateCutoff); setClassEndTime(value.classEndTime); }} />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
@@ -1194,7 +1218,7 @@ const AttendanceWorksheet: React.FC = () => {
 
             {geofenceEnabled && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/70 dark:bg-emerald-950/20">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch justify-between gap-3">
                   <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span><input type="number" min={25} max={1000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
                   <button type="button" onClick={handleAcquireSessionLocation} disabled={locatingSession} className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"><Navigation className="w-3.5 h-3.5" />{locatingSession ? 'Locating…' : 'Use device location'}</button>
                   <button type="button" onClick={() => setShowSessionMap(shown => !shown)} className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-emerald-600 px-3 py-2.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300"><MapPin className="w-3.5 h-3.5" />{showSessionMap ? 'Hide map' : 'Pick on map'}</button>
@@ -1210,7 +1234,7 @@ const AttendanceWorksheet: React.FC = () => {
 
             <div className="flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
               <button type="button" onClick={() => setIsStartSessionOpen(false)} disabled={submittingSession} className="rounded-xl bg-slate-100 px-4 py-2 font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200 disabled:opacity-50">Cancel</button>
-              <button type="submit" disabled={submittingSession} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white shadow-md shadow-emerald-600/20 disabled:opacity-50"><Play className="w-3.5 h-3.5 fill-white" />{submittingSession ? 'Saving…' : sessionDate > manilaDateToday() ? 'Schedule Session' : 'Start Session'}</button>
+              <button type="submit" disabled={submittingSession} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white shadow-md shadow-emerald-600/20 disabled:opacity-50"><Play className="w-3.5 h-3.5 fill-white" />{submittingSession ? 'Saving…' : editingSession ? 'Save changes' : sessionDate > manilaDateToday() ? 'Schedule Session' : 'Start Session'}</button>
             </div>
           </form>
         </Modal>
@@ -1364,7 +1388,7 @@ const AttendanceWorksheet: React.FC = () => {
       )}
 
       {/* Session End Confirmation */}
-      {isEndModalOpen && worksheet?.attendanceSession && (
+      {isEndModalOpen && sessionActionTarget && (
         <Modal
           isOpen={isEndModalOpen}
           onClose={() => {
@@ -1380,7 +1404,7 @@ const AttendanceWorksheet: React.FC = () => {
               </div>
             )}
             <p className="text-slate-700 dark:text-slate-300">
-              End session <span className="font-mono font-bold">{worksheet.attendanceSession.sessionCode}</span> now? Students without an attendance record will be marked Absent. Corrections remain possible afterwards.
+              End session <span className="font-mono font-bold">{sessionActionTarget.sessionCode}</span> now? Students without an attendance record will be marked Absent. Corrections remain possible afterwards.
             </p>
             <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
               <button
@@ -1407,7 +1431,7 @@ const AttendanceWorksheet: React.FC = () => {
       )}
 
       {/* 6. Session Revocation Modal */}
-      {isRevokeModalOpen && worksheet?.attendanceSession && (
+      {isRevokeModalOpen && sessionActionTarget && (
         <Modal
           isOpen={isRevokeModalOpen}
           onClose={() => {
@@ -1436,12 +1460,12 @@ const AttendanceWorksheet: React.FC = () => {
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1 text-slate-700 dark:text-slate-300">
               <div className="flex justify-between">
                 <span className="font-semibold">Session Code:</span>
-                <span className="font-mono font-bold">{worksheet.attendanceSession.sessionCode}</span>
+                <span className="font-mono font-bold">{sessionActionTarget.sessionCode}</span>
               </div>
-              {worksheet.attendanceSession.room && (
+              {sessionActionTarget.room && (
                 <div className="flex justify-between">
                   <span className="font-semibold">Room:</span>
-                  <span>{worksheet.attendanceSession.room}</span>
+                  <span>{sessionActionTarget.room}</span>
                 </div>
               )}
             </div>

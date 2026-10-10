@@ -1,23 +1,20 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
-import { LocationPicker } from '../../components/LocationPicker';
+import { formatSessionDate } from '../../utils/sessionDate';
+import { SecretarySessionForm } from './SecretarySessionForm';
+import { Modal } from '../../components/Modal';
 import { 
-  Play, 
   Square, 
   Clock, 
   MapPin, 
-  Camera, 
   CheckCircle2, 
   AlertCircle, 
-  BookOpen, 
-  ShieldCheck,
   RefreshCw,
   UserCheck,
-  Navigation,
   Loader2,
   X,
   Ban,
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle } from '../../components/Card';
+import { Card } from '../../components/Card';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { DEVELOPMENT_LOCATION_FIXTURES } from '../../services/developmentProviders';
 import {
@@ -25,6 +22,7 @@ import {
   getSecretaryDashboardKpisApi,
   getSecretaryAttendanceApi,
   startSecretaryAttendanceSessionApi,
+  updateSecretaryAttendanceSessionApi,
   endSecretaryAttendanceSessionApi,
   revokeSecretaryAttendanceSessionApi,
   type SecretaryAttendanceSession,
@@ -33,7 +31,8 @@ import {
 
 const manilaToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
 
-export const StartSession: React.FC = () => {
+type SessionItem = NonNullable<Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['sessions']>[number];
+export const StartSession: React.FC<{ embedded?: boolean; onOpenRollCall?: (sessionId: string) => void }> = ({ embedded = false, onOpenRollCall }) => {
   const config = useRuntimeConfig();
   const simulationEnabled = config.providers.location.active === 'development-mock' && config.features.browser_attendance_prototype;
 
@@ -57,6 +56,12 @@ export const StartSession: React.FC = () => {
   // Form inputs for starting a new session with distinct timing cutoffs in Asia/Manila
   const [sessionDate, setSessionDate] = useState(() => manilaToday());
   const [queuedSessions, setQueuedSessions] = useState<NonNullable<Awaited<ReturnType<typeof getSecretaryAttendanceApi>>['sessions']>>([]);
+  const [allSessions, setAllSessions] = useState<SessionItem[]>([]);
+  const [filterDate, setFilterDate] = useState('');
+  const [filterSubject, setFilterSubject] = useState('all');
+  const [filterQuery, setFilterQuery] = useState('');
+  const [editingSession, setEditingSession] = useState<SessionItem | null>(null);
+  const [showConfiguration, setShowConfiguration] = useState(!embedded);
   const [queuedRevokeId, setQueuedRevokeId] = useState<string | null>(null);
   const [customRoom, setCustomRoom] = useState('');
   const [openingTimeStr, setOpeningTimeStr] = useState('08:00');
@@ -102,6 +107,18 @@ export const StartSession: React.FC = () => {
     return endTotalMins - startTotalMins;
   };
 
+  const dates = Array.from(new Set(allSessions.map(session => session.date))).sort().reverse();
+  const subjects = Array.from(new Set(allSessions.map(session => session.subjectCode).filter(Boolean))).sort();
+  const matchesSessionFilters = (session: SessionItem) => {
+    if (filterDate && session.date !== filterDate) return false;
+    if (filterSubject !== 'all' && session.subjectCode !== filterSubject) return false;
+    const needle = filterQuery.trim().toLocaleLowerCase();
+    return !needle || [session.subjectCode, session.className, session.sessionCode, session.room || ''].join(' ').toLocaleLowerCase().includes(needle);
+  };
+  const filteredUpcoming = queuedSessions.filter(matchesSessionFilters);
+  const pastSessions = allSessions.filter(session => session.status === 'ended' || session.status === 'revoked');
+  const filteredPast = pastSessions.filter(matchesSessionFilters);
+
   const calculatedMinutes = computeDurationMinutes(openingTimeStr, lateCutoffStr);
   const calculatedHours = Math.floor(calculatedMinutes / 60);
   const calculatedRemainingMins = calculatedMinutes % 60;
@@ -132,6 +149,7 @@ export const StartSession: React.FC = () => {
         if (generation !== sessionReadGeneration.current) return;
         setLiveAttendanceRecords(attendance.records ?? []);
       } else setLiveAttendanceRecords([]);
+      setAllSessions(attResult.sessions ?? []);
       setQueuedSessions((attResult.sessions ?? []).filter(session => session.status === 'scheduled'));
 
       if (activeResult?.activeSession && (activeResult.activeSession.status === 'active' || activeResult.activeSession.status === 'revoked')) {
@@ -160,6 +178,7 @@ export const StartSession: React.FC = () => {
         if (generation !== sessionReadGeneration.current) return;
         setLiveAttendanceRecords(records.records ?? []);
         setActiveSession(active.activeSession);
+        setAllSessions(attendance.sessions ?? []);
         setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
       }).catch(() => { /* Keep the last successful server state. */ });
     }, 30000);
@@ -244,6 +263,25 @@ export const StartSession: React.FC = () => {
     }
   };
 
+  const openCreate = () => {
+    setEditingSession(null); setNotification(null); setGpsError(null);
+    setSessionDate(manilaToday()); setCustomRoom(assignedClass?.classroomName || '');
+    setOpeningTimeStr('08:00'); setPresentCutoffStr('08:30'); setLateCutoffStr('12:00'); setClassEndTimeStr('13:00');
+    setRequireFace(true); setRequireGeo(true); setGeofenceRadius(100);
+    setGpsLocation(simulationEnabled ? { lat: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436, lng: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438, address: 'Development room location' } : null);
+    setShowConfiguration(true);
+  };
+  const openEdit = (session: SessionItem) => {
+    setEditingSession(session); setNotification(null); setGpsError(null);
+    setSessionDate(session.sessionDate || session.date); setCustomRoom(session.room || '');
+    setOpeningTimeStr(session.openingTime || '08:00'); setPresentCutoffStr(session.presentCutoff || '08:30');
+    setLateCutoffStr(session.lateCutoff || '12:00'); setClassEndTimeStr(session.classEndTime || '13:00');
+    setRequireFace(session.biometricRequired ?? true); setRequireGeo(session.geofenceEnabled ?? true);
+    setGeofenceRadius(session.geofenceRadiusMeters ?? 100);
+    setGpsLocation(session.geofenceLatitude != null && session.geofenceLongitude != null ? { lat: session.geofenceLatitude, lng: session.geofenceLongitude, address: 'Saved session location' } : null);
+    setShowConfiguration(true);
+  };
+
   const handleStartSession = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -315,17 +353,22 @@ export const StartSession: React.FC = () => {
           : {}),
       };
 
-      const res = await startSecretaryAttendanceSessionApi(payload);
+      const { csId, latitude: _latitude, longitude: _longitude, ...settings } = payload;
+      const res = editingSession
+        ? await updateSecretaryAttendanceSessionApi({ ...settings, sessionId: editingSession.sessionId })
+        : await startSecretaryAttendanceSessionApi({ ...payload, csId });
+      if (embedded) setShowConfiguration(false);
       if (res.session.status === 'active') {
         setActiveSession(res.session);
         const current = await getSecretaryAttendanceApi({ sessionId: res.session.sessionId });
         setLiveAttendanceRecords(current.records ?? []);
       }
       const attendance = await getSecretaryAttendanceApi();
+      setAllSessions(attendance.sessions ?? []);
       setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
       setNotification({
         type: 'success',
-        message: res.session.status === 'scheduled' ? `Session scheduled for ${sessionDate} at ${openingTimeStr} (Asia/Manila). Session code: ${res.session.sessionCode}` : `Class session for ${res.session.courseCode || res.session.className} is now ACTIVE! Session code: ${res.session.sessionCode}`,
+        message: editingSession ? 'Attendance session updated.' : res.session.status === 'scheduled' ? `Session scheduled for ${sessionDate} at ${openingTimeStr} (Asia/Manila). Session code: ${res.session.sessionCode}` : `Class session for ${res.session.courseCode || res.session.className} is now ACTIVE! Session code: ${res.session.sessionCode}`,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to start session.';
@@ -350,6 +393,9 @@ export const StartSession: React.FC = () => {
       const res = await endSecretaryAttendanceSessionApi({ sessionId: activeSession.sessionId });
       setActiveSession(null);
       setShowEndModal(false);
+      const attendance = await getSecretaryAttendanceApi();
+      setAllSessions(attendance.sessions ?? []);
+      setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
       setNotification({
         type: 'info',
         message: `Class session for ${res.session.courseCode || res.session.className} has been successfully ENDED. Attendance register closed.`,
@@ -380,6 +426,7 @@ export const StartSession: React.FC = () => {
       });
       if (!queuedRevokeId) setActiveSession(res.session);
       const attendance = await getSecretaryAttendanceApi();
+      setAllSessions(attendance.sessions ?? []);
       setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
       setQueuedRevokeId(null);
       setShowRevokeModal(false);
@@ -469,11 +516,46 @@ export const StartSession: React.FC = () => {
   const totalEnrolled = sessionRecords.length;
   const attendanceRatePct = totalEnrolled > 0 ? Math.round((checkedInCount / totalEnrolled) * 100) : null;
 
+  const configurationForm = (
+    <SecretarySessionForm
+      assignedClass={assignedClass}
+      sessionDate={sessionDate}
+      setSessionDate={setSessionDate}
+      customRoom={customRoom}
+      setCustomRoom={setCustomRoom}
+      openingTimeStr={openingTimeStr}
+      setOpeningTimeStr={setOpeningTimeStr}
+      presentCutoffStr={presentCutoffStr}
+      setPresentCutoffStr={setPresentCutoffStr}
+      lateCutoffStr={lateCutoffStr}
+      setLateCutoffStr={setLateCutoffStr}
+      classEndTimeStr={classEndTimeStr}
+      setClassEndTimeStr={setClassEndTimeStr}
+      requireFace={requireFace}
+      setRequireFace={setRequireFace}
+      requireGeo={requireGeo}
+      setRequireGeo={setRequireGeo}
+      geofenceRadius={geofenceRadius}
+      setGeofenceRadius={setGeofenceRadius}
+      gpsLocation={gpsLocation}
+      setGpsLocation={setGpsLocation}
+      isLocating={isLocating}
+      showGpsMap={showGpsMap}
+      setShowGpsMap={setShowGpsMap}
+      gpsError={gpsError}
+      formattedDurationLabel={formattedDurationLabel}
+      submitting={submitting}
+      handleAcquireGps={handleAcquireGps}
+      handleStartSession={handleStartSession}
+      editing={Boolean(editingSession)}
+      error={notification?.type === 'warning' ? notification.message : undefined} />
+  );
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
 
       {/* 1. Top Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+      {!embedded && <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Start Class Session & Attendance Control
@@ -498,8 +580,11 @@ export const StartSession: React.FC = () => {
         </div>
       </div>
 
+      }
+      <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold">Sessions</h2><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void loadInitialData()} disabled={submitting || ending || revoking} aria-label="Refresh attendance" className="rounded-xl bg-slate-100 p-2.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><RefreshCw className="h-4 w-4" /></button><button type="button" disabled={submitting || ending || revoking} onClick={openCreate} className="rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50">New attendance session</button></div></div>
+
       {/* Alert Notification */}
-      {notification && (
+      {notification && !(showConfiguration && notification.type === 'warning') && (
         <div className={`p-4 rounded-2xl border flex items-center justify-between gap-3 text-xs font-semibold animate-fade-in ${
           notification.type === 'success' 
             ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/20'
@@ -519,6 +604,9 @@ export const StartSession: React.FC = () => {
         </div>
       )}
 
+      <h2 className="text-sm font-bold">Live session</h2>
+      {embedded && activeSession?.status === 'active' && <p className="text-xs font-bold text-emerald-600 dark:text-emerald-300">LIVE SESSION ACTIVE</p>}
+      {embedded && !activeSession && <Card className="p-5 text-xs text-slate-400">NO ACTIVE SESSION</Card>}
       {/* 2. Sleek Active / Revoked Session Status Card */}
       {activeSession ? (
         activeSession.status === 'revoked' ? (
@@ -770,296 +858,41 @@ export const StartSession: React.FC = () => {
         </div>
       )}
 
-      {queuedSessions.length > 0 && <Card className="space-y-3 p-5">
-        <h2 className="text-sm font-bold">Scheduled sessions (Asia/Manila)</h2>
-        {queuedSessions.map(session => <div key={session.sessionId} className="flex items-center justify-between gap-3 text-xs">
-          <span>{session.date} · {session.openingTime ?? ''}–{session.classEndTime ?? ''} · {session.subjectCode} · {session.sessionCode}</span>
-          <button type="button" onClick={() => { setQueuedRevokeId(session.sessionId); setRevokeReason(''); setShowRevokeModal(true); }} className="rounded-lg border border-rose-200 px-3 py-2 font-bold text-rose-700">Revoke scheduled session</button>
+      <Card className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3" aria-label="Session filters">
+        <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">Subject
+          <select aria-label="Subject" value={filterSubject} onChange={event => setFilterSubject(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800"><option value="all">All subjects</option>{subjects.map(subject => <option key={subject} value={subject}>{subject}</option>)}</select>
+        </label>
+        <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">Date
+          <select aria-label="Date" value={filterDate} onChange={event => setFilterDate(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800"><option value="">All dates</option>{dates.map(date => <option key={date} value={date}>{formatSessionDate(date)}</option>)}</select>
+        </label>
+        <label className="block text-xs font-bold text-slate-600 dark:text-slate-300">Search
+          <input value={filterQuery} onChange={event => setFilterQuery(event.target.value)} placeholder="Subject, section, session code or room..." className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800" />
+        </label>
+      </Card>
+      <Card className="space-y-3 p-5">
+        <h2 className="text-sm font-bold">Upcoming</h2><h3 className="text-xs text-slate-400">Scheduled sessions (Asia/Manila)</h3>
+        {filteredUpcoming.length === 0 && queuedSessions.length > 0 && <p className="text-xs text-slate-400">No sessions match this filter.</p>}
+        {queuedSessions.length === 0 && <p className="text-xs text-slate-400">No upcoming sessions. Create one with New attendance session.</p>}
+        {filteredUpcoming.map(session => <div key={session.sessionId} className="flex flex-col justify-between gap-3 text-xs sm:flex-row sm:items-center">
+          <span className="min-w-0 break-words">{formatSessionDate(session.date)} · {session.openingTime ?? ''}–{session.classEndTime ?? ''} · {session.subjectCode} · {session.sessionCode}</span>
+          <div className="flex flex-wrap gap-2">
+            {session.createdByCurrentSecretary === true && <button type="button" disabled={submitting || ending || revoking} onClick={() => openEdit(session)} className="rounded-lg border border-slate-200 px-3 py-2 font-bold dark:border-slate-700">Edit</button>}
+            <button type="button" disabled={submitting || ending || revoking} onClick={() => { setQueuedRevokeId(session.sessionId); setRevokeReason(''); setShowRevokeModal(true); }} className="rounded-lg border border-rose-200 px-3 py-2 font-bold text-rose-700 dark:border-rose-900 dark:text-rose-300">Revoke scheduled session</button>
+          </div>
         </div>)}
-        <p className="text-[11px] text-slate-500">Attendance opens automatically on the chosen date/time. You may queue another session below.</p>
-      </Card>}
+      </Card>
+      <Card className="space-y-3 p-5"><h2 className="text-sm font-bold">Past sessions</h2>
+        {filteredPast.length === 0 && pastSessions.length > 0 && <p className="text-xs text-slate-400">No sessions match this filter.</p>}
+        {pastSessions.length === 0 && <p className="text-xs text-slate-400">No past sessions.</p>}
+        {filteredPast.map(session => <div key={session.sessionId} className="flex flex-col justify-between gap-3 text-xs sm:flex-row sm:items-center">
+          <span className="min-w-0 break-words">{formatSessionDate(session.date)} · {session.openingTime}–{session.classEndTime} · {session.sessionCode} · {session.status}</span>
+          {onOpenRollCall && <button type="button" onClick={() => onOpenRollCall(session.sessionId)} className="rounded-lg bg-slate-100 px-3 py-2 font-bold dark:bg-slate-800">Open roll call</button>}
+        </div>)}
+      </Card>
 
       {/* Session setup remains available while another session is open. */}
-      {(
-        <div className="max-w-3xl mx-auto">
-          <Card className="p-6">
-            <CardHeader className="p-0 pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
-              <CardTitle className="flex items-center justify-between text-base">
-                <div className="flex items-center gap-2">
-                  <Play className="w-5 h-5 text-blue-600" />
-                  <span>Session Configuration</span>
-                </div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Section Operations</span>
-              </CardTitle>
-            </CardHeader>
-
-            <form onSubmit={handleStartSession} className="space-y-5">
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">Session date (Asia/Manila)
-                <input type="date" required min={manilaToday()} value={sessionDate} onChange={event => setSessionDate(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
-              </label>
-
-
-              {/* GPS Location Acquisition Block */}
-              <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-100">
-                    <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span>Secretary Room GPS Location</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAcquireGps}
-                    disabled={isLocating}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isLocating ? 'animate-spin' : ''}`} />
-                    <span>{isLocating ? 'Locating...' : 'Locate My GPS'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowGpsMap(shown => !shown)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-600 text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer"
-                  >
-                    <MapPin className="w-3 h-3" />
-                    <span>{showGpsMap ? 'Hide map' : 'Pick on map'}</span>
-                  </button>
-                </div>
-
-                {showGpsMap && (
-                  <LocationPicker
-                    value={gpsLocation ? { latitude: gpsLocation.lat, longitude: gpsLocation.lng } : null}
-                    radiusMeters={geofenceRadius}
-                    onChange={location => setGpsLocation({
-                      lat: location.latitude,
-                      lng: location.longitude,
-                      address: `Map location (${location.latitude.toFixed(5)}°, ${location.longitude.toFixed(5)}°)`,
-                    })}
-                  />
-                )}
-
-                {gpsError && (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">{gpsError}</p>
-                )}
-
-                {gpsLocation ? (
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800/80 flex items-center gap-2 text-xs">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                    <span className="font-bold text-slate-700 dark:text-slate-200 truncate">{gpsLocation.address}</span>
-                  </div>
-                ) : (
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-400">
-                    Click &quot;Locate My GPS&quot; to acquire current room position.
-                  </div>
-                )}
-              </div>
-
-              {/* Subject / Section Selection */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <BookOpen className="w-4 h-4 text-blue-500" />
-                  <span>Assigned Dentistry Class Section</span>
-                </label>
-                {assignedClass?.classId ? (
-                  <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
-                    <span>{assignedClass.className}</span>
-                    <span className="text-xs font-semibold text-slate-400">Section #{assignedClass.classId}</span>
-                  </div>
-                ) : (
-                  <div className="w-full px-4 py-3 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 text-sm font-semibold text-amber-700 dark:text-amber-300">
-                    No class section is assigned to your Secretary account.
-                  </div>
-                )}
-              </div>
-
-              {/* Room Location */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-blue-500" />
-                  <span>Assigned Classroom / Lab Room</span>
-                </label>
-                <input
-                  type="text"
-                  value={customRoom}
-                  onChange={(e) => setCustomRoom(e.target.value)}
-                  required
-                  placeholder="e.g. BU Dental Room 101"
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-sm font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Session Timing Controls in Asia/Manila */}
-              <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-4">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-blue-500" />
-                      <span>Session Timing (Philippines Time — Asia/Manila, UTC+08:00)</span>
-                    </label>
-                    <span className="text-[10px] font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md border border-blue-200/60 dark:border-blue-800/60">
-                      Asia/Manila
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    Server time is authoritative. Capture opens at Opening Time, awards Present until Present Cutoff, awards Late from Present Cutoff until Late Cutoff, and closes capture at Late Cutoff.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                      Opening Time
-                    </label>
-                    <input
-                      type="time"
-                      value={openingTimeStr}
-                      onChange={(e) => setOpeningTimeStr(e.target.value)}
-                      required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-[10px] text-slate-400 block">Capture opens</span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                      Present Cutoff
-                    </label>
-                    <input
-                      type="time"
-                      value={presentCutoffStr}
-                      onChange={(e) => setPresentCutoffStr(e.target.value)}
-                      required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-[10px] text-slate-400 block">On-time deadline</span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                      Late Cutoff
-                    </label>
-                    <input
-                      type="time"
-                      value={lateCutoffStr}
-                      onChange={(e) => setLateCutoffStr(e.target.value)}
-                      required
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-[10px] text-slate-400 block">Capture closes</span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label htmlFor="secretary-class-end-time" className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                    Class End Time
-                  </label>
-                  <input
-                    id="secretary-class-end-time"
-                    type="time"
-                    value={classEndTimeStr}
-                    onChange={(e) => setClassEndTimeStr(e.target.value)}
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-[10px] text-slate-400 block">The session ends automatically at this time; students without a record are marked Absent.</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
-                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-300">
-                    <span className="font-bold">On-Time (Present):</span> {openingTimeStr} – {presentCutoffStr}
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-800 dark:text-amber-300">
-                    <span className="font-bold">Late Window:</span> {presentCutoffStr} – {lateCutoffStr}
-                  </div>
-                </div>
-              </div>
-
-              {/* Auto-Calculated Duration Display Badge */}
-              <div className="p-3.5 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  Total Session Capture Span:
-                </span>
-                <span className="font-extrabold text-blue-700 dark:text-blue-300 text-sm">{formattedDurationLabel}</span>
-              </div>
-
-              {/* Geofence Verification Radius */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-blue-500" />
-                  <span>Geofence Verification Radius</span>
-                </label>
-                <select
-                  value={geofenceRadius}
-                  onChange={(e) => setGeofenceRadius(Number(e.target.value))}
-                  className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={100}>100 meters (Strict Room Radius)</option>
-                  <option value={200}>200 meters (BU Dental Building / Room)</option>
-                  <option value={500}>500 meters (Campus Wide)</option>
-                </select>
-              </div>
-
-              {/* Requirement Checkboxes */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                  Mandatory Check-In Criteria
-                </span>
-
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={requireFace}
-                    onChange={(e) => setRequireFace(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                  />
-                  <div className="text-xs">
-                    <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                      <Camera className="w-3.5 h-3.5 text-blue-500" />
-                      Require Facial Biometrics Scan
-                    </span>
-                    <p className="text-[11px] text-slate-400">Students must verify webcam face match before recording attendance.</p>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={requireGeo}
-                    onChange={(e) => setRequireGeo(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                  />
-                  <div className="text-xs">
-                    <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-blue-500" />
-                      Enforce GPS Geofence Verification
-                    </span>
-                    <p className="text-[11px] text-slate-400">Must be physically within BU Dental Room location boundary.</p>
-                  </div>
-                </label>
-              </div>
-
-              {/* Submit Start Button */}
-              <button
-                type="submit"
-                disabled={submitting || !assignedClass?.classId}
-                className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-sm shadow-lg shadow-blue-600/25 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Starting Attendance Session...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-5 h-5 fill-white" />
-                    <span>{sessionDate > manilaToday() ? 'Schedule Class Session' : 'Start Class Session Now'}</span>
-                  </>
-                )}
-              </button>
-
-            </form>
-          </Card>
-        </div>
+      {showConfiguration && (
+        embedded ? <Modal isOpen={showConfiguration} onClose={() => { if (!submitting) setShowConfiguration(false); }} title={editingSession ? 'Edit attendance session' : 'New attendance session'}>{configurationForm}</Modal> : configurationForm
       )}
 
     </div>

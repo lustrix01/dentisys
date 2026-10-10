@@ -114,7 +114,7 @@ test.describe('P02 development safety seams', () => {
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
     await page.click('a[href="/secretary/attendance"]');
-    await page.click('a[href="/secretary/start-session"]');
+    await page.getByRole('button', { name: 'New attendance session', exact: true }).click();
     await page.getByRole('button', { name: /Locate My GPS/i }).click();
     await expect(page.getByText(/BU Dental Room Location Verified/i)).toBeVisible();
     await page.getByRole('button', { name: /Start Class Session Now/i }).click();

@@ -1192,7 +1192,7 @@ function secretary_attendance_session_fetch(
                    s.geofence_radius_meters, s.biometric_required, s.opening_time,
                    s.present_cutoff_time, s.late_cutoff_time, s.class_end_time, s.revoked_at,
                    s.revoked_by_user_id, s.revocation_reason, s.created_at,
-                   s.updated_at, cs.cs_name, cs.block, c.course_id,
+                   s.updated_at, s.created_by_role, cs.cs_name, cs.block, c.course_id,
                    c.course_code, c.name AS course_name,
                    COALESCE(NULLIF(CONCAT_WS(' ', NULLIF(pi.name_prefix, ''),
                        NULLIF(pi.first_name, ''), NULLIF(pi.middle_name, ''),
@@ -1216,7 +1216,7 @@ function secretary_attendance_session_fetch(
     return $row === false ? null : $row;
 }
 
-function secretary_attendance_session_map(array $row): array
+function secretary_attendance_session_map(array $row, ?int $currentSecretaryId = null): array
 {
     return [
         'sessionId' => (string) $row['session_id'],
@@ -1235,6 +1235,10 @@ function secretary_attendance_session_map(array $row): array
         ],
         'courseCode' => $row['course_code'],
         'instructorName' => $row['instructor_name'] ?? null,
+        'createdByRole' => $row['created_by_role'] ?? null,
+        'createdByCurrentSecretary' => $currentSecretaryId === null ? null : (($row['created_by_role'] ?? null) === 'secretary'
+            && (int) ($row['owner_user_id'] ?? 0) === $currentSecretaryId
+            && (int) ($row['secretary_user_id'] ?? 0) === $currentSecretaryId),
         'sessionDate' => $row['session_date'],
         'sessionCode' => $row['session_code'],
         'room' => $row['room'],
@@ -1513,7 +1517,7 @@ function handle_secretary_attendance_session_active(): void
 
         json_response([
             'status' => 'ok',
-            'activeSession' => secretary_attendance_session_map($session),
+            'activeSession' => secretary_attendance_session_map($session, (int) $authCtx['user_id']),
         ], 200);
     } catch (\Throwable $e) {
         error_log('Secretary active attendance session error: ' . sanitize_for_log($e));
@@ -1792,6 +1796,9 @@ function handle_secretary_attendance_get(): void
         $sessionSql =
             "SELECT a.session_id, a.cs_id, a.session_date, a.session_code, a.room,
                     a.status, a.started_at, a.ended_at, a.revoked_at, a.opening_time, a.class_end_time,
+                     a.present_cutoff_time, a.late_cutoff_time, a.biometric_required, a.geofence_enabled,
+                     a.geofence_latitude, a.geofence_longitude, a.geofence_radius_meters,
+                     a.created_by_role, a.owner_user_id, a.secretary_user_id,
                     cs.cs_name, c.course_code
                FROM attendance_sessions a
                JOIN class_sections cs ON cs.cs_id = a.cs_id
@@ -1819,6 +1826,18 @@ function handle_secretary_attendance_get(): void
             'className' => $row['cs_name'],
             'subjectCode' => $row['course_code'],
             'date' => $row['session_date'],
+            'sessionDate' => $row['session_date'],
+            'presentCutoff' => $row['present_cutoff_time'] !== null ? substr((string) $row['present_cutoff_time'], 0, 5) : null,
+            'lateCutoff' => $row['late_cutoff_time'] !== null ? substr((string) $row['late_cutoff_time'], 0, 5) : null,
+            'biometricRequired' => attendance_session_bool($row['biometric_required']),
+            'geofenceEnabled' => attendance_session_bool($row['geofence_enabled']),
+            'geofenceLatitude' => $row['geofence_latitude'] !== null ? (float) $row['geofence_latitude'] : null,
+            'geofenceLongitude' => $row['geofence_longitude'] !== null ? (float) $row['geofence_longitude'] : null,
+            'geofenceRadiusMeters' => $row['geofence_radius_meters'] !== null ? (float) $row['geofence_radius_meters'] : null,
+            'createdByRole' => $row['created_by_role'] ?? null,
+            'createdByCurrentSecretary' => ($row['created_by_role'] ?? null) === 'secretary'
+                && (int) $row['owner_user_id'] === (int) $authCtx['user_id']
+                && (int) $row['secretary_user_id'] === (int) $authCtx['user_id'],
             'sessionCode' => $row['session_code'],
             'room' => $row['room'],
             'status' => $row['status'],

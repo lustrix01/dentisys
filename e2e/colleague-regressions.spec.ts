@@ -290,6 +290,7 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
     return route.fulfill({ json: { status: 'ok', records: [record], sessions: [] } });
   });
   await page.goto('/secretary/attendance');
+  await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
   await page.getByRole('row').filter({ hasText: 'Correction Student' }).getByRole('button', { name: 'Override' }).click();
   await expect(page.locator('textarea')).toHaveValue('');
   await page.locator('textarea').fill('New verified correction reason');
@@ -333,9 +334,9 @@ for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 
         date: '2026-10-03', subjectCode: 'DENT401', status: '',
       }] : [] } });
     });
-    await page.goto('/secretary/attendance?view=history');
-    const history = page.getByText('Session code: AFTERNOON-901', { exact: true }).locator('../..');
-    await history.getByRole('button', { name: 'View roll call', exact: true }).click();
+    await page.goto('/secretary/attendance?tab=sessions');
+    const history = page.getByText('Sat, Oct 3, 2026 · – · AFTERNOON-901 · ended', { exact: true }).locator('..');
+    await history.getByRole('button', { name: 'Open roll call', exact: true }).click();
     await expect(page.getByRole('combobox', { name: 'Attendance session', exact: true })).toHaveValue('901');
     await expect(page.getByRole('row').filter({ hasText: 'Afternoon Student' })).toContainText('Not recorded');
     await expect(page.getByRole('row').filter({ hasText: 'Morning Student' })).toHaveCount(0);
@@ -367,6 +368,7 @@ for (const boundary of [
       return route.fulfill({ status: 201, json: { status: 'ok', message: 'Excused request sent to Faculty for approval.' } });
     });
     await page.goto('/secretary/attendance');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     const row = page.getByRole('row').filter({ hasText: 'Boundary Student' });
     await row.getByRole('button', { name: 'Override', exact: true }).click();
     await page.getByRole('button', { name: boundary.action === 'excused' ? 'Request Excused' : 'Present', exact: true }).click();

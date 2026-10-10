@@ -4564,6 +4564,9 @@ function faculty_attendance_session_payload(?array $session): ?array
         'status' => $session['status'],
         'startedAt' => attendance_session_timestamp($session['started_at']),
         'endedAt' => attendance_session_timestamp($session['ended_at']),
+        'createdByRole' => $session['created_by_role'] ?? null,
+        'geofenceLatitude' => $session['geofence_latitude'] !== null ? (float) $session['geofence_latitude'] : null,
+        'geofenceLongitude' => $session['geofence_longitude'] !== null ? (float) $session['geofence_longitude'] : null,
         'geofenceEnabled' => (bool) $session['geofence_enabled'],
         'geofenceRadiusMeters' => $session['geofence_radius_meters'] !== null ? (float) $session['geofence_radius_meters'] : null,
         'biometricRequired' => (bool) $session['biometric_required'],
@@ -4679,7 +4682,7 @@ function handle_faculty_attendance_get(): void
 
         $sessionStmt = $pdo->prepare(
             "SELECT session_id, cs_id, session_date, session_code, room, status, started_at, ended_at,
-                    geofence_enabled, geofence_radius_meters, biometric_required,
+                    geofence_enabled, geofence_latitude, geofence_longitude, geofence_radius_meters, biometric_required, created_by_role,
                     opening_time, present_cutoff_time, late_cutoff_time, class_end_time, revoked_at,
                     revocation_reason
              FROM attendance_sessions
@@ -4757,12 +4760,10 @@ function handle_faculty_attendance_get(): void
             },
             $rosterStmt->fetchAll(PDO::FETCH_ASSOC)
         );
-        $pendingStmt = $pdo->prepare("SELECT session_id, session_date, opening_time, class_end_time, session_code, status
-            FROM attendance_sessions WHERE cs_id = ? AND status IN ('scheduled', 'active') ORDER BY session_date, opening_time, session_id");
+        $pendingStmt = $pdo->prepare("SELECT * FROM attendance_sessions WHERE cs_id = ? ORDER BY session_date, opening_time, session_id");
         $pendingStmt->execute([$csId]);
-        $pendingSessions = array_map(static fn(array $row): array => ['sessionId' => (string) $row['session_id'],
-            'sessionDate' => $row['session_date'], 'openingTime' => isset($row['opening_time']) ? substr($row['opening_time'], 0, 5) : null,
-            'classEndTime' => isset($row['class_end_time']) ? substr($row['class_end_time'], 0, 5) : null, 'sessionCode' => $row['session_code'], 'status' => $row['status']], $pendingStmt->fetchAll(PDO::FETCH_ASSOC));
+        $managedSessions = array_map('faculty_attendance_session_payload', $pendingStmt->fetchAll(PDO::FETCH_ASSOC));
+        $pendingSessions = array_values(array_filter($managedSessions, static fn(array $session): bool => in_array($session['status'], ['scheduled', 'active'], true)));
         json_response([
             'status' => 'ok',
             'worksheet' => [
@@ -4785,6 +4786,7 @@ function handle_faculty_attendance_get(): void
                     ? faculty_attendance_session_payload($selectedSession)
                     : null,
                 'pendingSessions' => $pendingSessions,
+                'managedSessions' => $managedSessions,
                 'attendanceSessions' => array_map(
                     static fn(array $matchingSession): array => faculty_attendance_session_payload($matchingSession),
                     $matchingSessions

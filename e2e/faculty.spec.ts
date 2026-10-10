@@ -751,13 +751,16 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     ] }) }));
     await page.route('**/api/faculty/attendance?*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', worksheet: mockWorksheetSectionA }) }));
     await page.goto('/attendance');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await expect(page.getByLabel('Attendance school year')).toHaveValue('current');
     await expect(page.getByLabel('Assigned course').locator('option[value="103"]')).toHaveCount(0);
     await page.getByLabel('Attendance school year').selectOption('2024-2025');
     await page.getByLabel('Assigned course').selectOption('103');
     await page.getByLabel('Class section').selectOption('4');
     await expect(page.getByText('Past school-year attendance is view-only.')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Start Attendance Session', exact: true })).toBeDisabled();
+    await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'New attendance session', exact: true })).toBeDisabled();
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByRole('button', { name: 'Override', exact: true })).toBeDisabled();
     await page.getByLabel('Attendance school year').selectOption('current');
     await expect(page.getByLabel('Assigned course')).toHaveValue('');
@@ -775,7 +778,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.goto('/attendance');
     await page.getByLabel('Assigned course').selectOption('101');
     await page.getByLabel('Class section').selectOption('1');
-    await page.getByRole('button', { name: 'Start Attendance Session', exact: true }).click();
+    await page.getByRole('button', { name: 'New attendance session', exact: true }).click();
     const date = page.getByLabel('Session date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
@@ -825,6 +828,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
+
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     const courseSelect = page.getByLabel('Assigned course', { exact: true });
     await courseSelect.selectOption('101');
 
@@ -969,6 +974,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
+
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
@@ -989,6 +996,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
+
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     const dateInput = page.locator('input[type="date"]');
     const maxVal = await dateInput.getAttribute('max');
     expect(maxVal).toBeNull();
@@ -1010,6 +1019,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const futureDateValue = new Date(`${manilaToday}T00:00:00.000Z`);
     futureDateValue.setUTCDate(futureDateValue.getUTCDate() + 2);
     const futureDate = futureDateValue.toISOString().slice(0, 10);
+    const readableFutureDate = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(futureDateValue);
     const requestedDates: string[] = [];
     let overrideRequests = 0;
 
@@ -1034,6 +1044,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
+
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
     const dateInput = page.locator('input[type="date"]');
@@ -1041,7 +1053,10 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     await expect.poll(() => requestedDates[requestedDates.length - 1]).toBe(futureDate);
     await expect(page.getByText('Scheduled session: attendance opens at its chosen date/time in Asia/Manila.', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: new RegExp(`${futureDate}.*Scheduled.*FUTURE-101`) })).toBeVisible();
+    await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
+    await expect(page.getByText(`${readableFutureDate} · 08:00–11:00 · FUTURE-101`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     const aliceRow = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
     const overrideButton = aliceRow.getByRole('button', { name: 'Override', exact: true });
     const bulkButton = page.getByRole('button', { name: 'Mark all unrecorded as Present', exact: true });
@@ -1076,6 +1091,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'updated', recordId: '999' }) });
       });
       await page.goto('/attendance');
+      await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
       await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
       await page.getByLabel('Class section', { exact: true }).selectOption('1');
       const student = operation === 'correction' ? 'Bob White' : 'Alice Green';
@@ -1130,6 +1146,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'created', recordId: '999' }) });
       });
       await page.goto('/attendance');
+      await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
       await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
       await page.getByLabel('Class section', { exact: true }).selectOption('1');
       const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
@@ -1142,7 +1159,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await expect(page.getByLabel('Assigned course', { exact: true })).toBeDisabled();
         await expect(page.getByLabel('Class section', { exact: true })).toBeDisabled();
         await expect(page.locator('input[type="date"]')).toBeDisabled();
-        if (newerRead === 'same session') await expect(page.getByRole('button', { name: /Open.*SAME-SESSION/ })).toBeDisabled();
+        if (newerRead === 'same session') await expect(page.getByRole('combobox', { name: 'Attendance session', exact: true })).toBeDisabled();
         releaseWrite();
         await expect(page.getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
         await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
@@ -1187,6 +1204,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...activeSession, status: 'revoked' } }) });
     });
     await page.goto('/attendance');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
     await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
@@ -1197,10 +1215,12 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(refresh).toBeDisabled();
       expect(reads).toBe(1);
       if (action === 'session revocation' && index === 1) {
+        await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
         await page.getByRole('button', { name: 'Revoke Session', exact: true }).click();
         await page.getByRole('button', { name: 'Confirm Revoke Session', exact: true }).click();
         await expect(page.getByText(/Attendance session revoked\. Already-recorded/)).toBeVisible();
         expect(reads).toBe(1);
+        await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
       }
       releases[index]();
       const row = page.locator('tbody tr').filter({ hasText: roster[index].studentName });
@@ -1239,6 +1259,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', operation: 'created', recordId: '999' }) });
     });
     await page.goto('/attendance');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
     const alice = page.locator('tbody tr').filter({ hasText: 'Alice Green' });
@@ -1281,6 +1302,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
+
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
@@ -1335,6 +1358,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
+
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
@@ -1386,6 +1411,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         : route.fulfill({ json: { status: 'ok', operation: 'updated', recordId: '50' } });
     });
     await page.goto('/attendance');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
     const row = page.locator('tbody tr').filter({ hasText: 'Bob White' });
@@ -1426,6 +1452,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       return route.fulfill({ json: { status: 'ok', operation: 'created', recordId: '999' } });
     });
     await page.goto('/attendance');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
     await page.locator('input[type="date"]').fill('2026-09-20');
@@ -1459,6 +1486,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
+
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
 
@@ -1485,6 +1514,8 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     });
 
     await page.goto('/attendance');
+
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
     await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
     await page.getByLabel('Class section', { exact: true }).selectOption('1');
     await expect(page.getByText('Alice Green')).toBeVisible();
@@ -1502,6 +1533,65 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     expect(payloads[0]?.status).toBe('present');
     await expect(page.locator('tbody tr').filter({ hasText: 'Alice Green' }).getByText('Present', { exact: true }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'Mark all unrecorded as Present' })).toBeDisabled();
+  });
+
+  test('Faculty opening quick choice shifts exact times and the create payload on a phone', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    let payload: Record<string, unknown> | null = null;
+    await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: mockWorksheetSectionA } }));
+    await page.route('**/api/faculty/attendance/session', route => {
+      payload = route.request().postDataJSON();
+      return route.fulfill({ status: 409, json: { status: 'error', message: 'Booking conflict fixture.' } });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
+    await page.getByRole('button', { name: 'New attendance session', exact: true }).click();
+    await page.getByRole('group', { name: 'Opens at', exact: true }).getByRole('button', { name: '10:00', exact: true }).click();
+    await expect(page.getByLabel('Opening', { exact: true })).toHaveValue('10:00');
+    await expect(page.getByLabel('Present cutoff', { exact: true })).toHaveValue('11:00');
+    await expect(page.getByLabel('Late cutoff', { exact: true })).toHaveValue('14:00');
+    await expect(page.getByLabel('Class end time', { exact: true })).toHaveValue('15:00');
+    await page.getByLabel('Session date (Asia/Manila)').fill('2099-10-02');
+    await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
+    await page.getByRole('button', { name: 'Schedule Session', exact: true }).click();
+    await expect.poll(() => payload).toMatchObject({ csId: 1, sessionDate: '2099-10-02', openingTime: '10:00', presentCutoff: '11:00', lateCutoff: '14:00', classEndTime: '15:00', geofenceEnabled: false });
+    await expect(page.getByText('Booking conflict fixture.')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
+    await expect(page.getByText('Alice Green')).toBeVisible();
+  });
+
+  test('Faculty edits a Secretary scheduled session, preserves settings, and handles overlap before retry', async ({ page }) => {
+    let saved = false;
+    const payloads: Record<string, unknown>[] = [];
+    const session = { sessionId: '700', sessionDate: '2099-10-02', sessionCode: 'EDIT-700', status: 'scheduled', room: 'Saved room', openingTime: '08:00', presentCutoff: '08:30', lateCutoff: '10:30', classEndTime: '11:30', biometricRequired: false, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75, geofenceRadiusMeters: 250, createdByRole: 'secretary' };
+    await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: { ...mockWorksheetSectionA, managedSessions: [{ ...session, room: saved ? 'Changed room' : session.room }] } } }));
+    await page.route('**/api/faculty/attendance/session/update', route => {
+      payloads.push(route.request().postDataJSON());
+      if (payloads.length === 1) return route.fulfill({ status: 409, json: { status: 'error', code: 'CONFLICT', message: 'A schedule already exists on 2099-10-02 from 10:00 to 13:00 (Asia/Manila), created by Faculty Jane Doe.' } });
+      saved = true;
+      return route.fulfill({ json: { status: 'ok', session: { ...session, room: 'Changed room' } } });
+    });
+    await page.goto('/attendance');
+    await page.getByLabel('Assigned course', { exact: true }).selectOption('101');
+    await page.getByLabel('Class section', { exact: true }).selectOption('1');
+    await expect(page.getByText('Fri, Oct 2, 2099 · 08:00–11:30 · EDIT-700', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByLabel('Session date (Asia/Manila)')).toHaveValue(session.sessionDate);
+    await expect(page.getByLabel('Present cutoff', { exact: true })).toHaveValue('08:30');
+    await expect(page.getByLabel('Allowed radius (meters)')).toHaveValue('250');
+    await expect(page.getByRole('checkbox', { name: /Face biometric/ })).not.toBeChecked();
+    await expect(page.getByText('Location acquired: 13.15, 123.75')).toBeVisible();
+    await page.getByLabel('Room or session location').fill('Changed room');
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('created by Faculty Jane Doe');
+    expect(payloads).toEqual([{ sessionId: '700', sessionDate: session.sessionDate, room: 'Changed room', openingTime: '08:00', presentCutoff: '08:30', lateCutoff: '10:30', classEndTime: '11:30', biometricRequired: false, geofenceEnabled: true, geofenceRadiusMeters: 250, geofenceLatitude: 13.15, geofenceLongitude: 123.75 }]);
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByText('Attendance session updated.')).toBeVisible();
+    expect(payloads[1]).toEqual(payloads[0]);
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByLabel('Room or session location')).toHaveValue('Changed room');
   });
 
   test.describe('Faculty Grade Weights Editor', () => {

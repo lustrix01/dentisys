@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, CalendarDays, Camera, CheckCircle2, Clock, Clock3, History, MapPin, Pencil, Play, RefreshCw, Search, ShieldCheck } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { formatSessionDate } from '../../utils/sessionDate';
+import { AlertCircle, Camera, CheckCircle2, Clock, Pencil, RefreshCw, Search, ShieldCheck } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { StartSession } from './StartSession';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import {
@@ -18,12 +20,6 @@ const statusClass: Record<string, string> = {
   late: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
   absent: 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
   excused: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
-};
-
-const sessionStatusClass: Record<string, string> = {
-  active: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  ended: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-  revoked: 'bg-rose-500/10 text-rose-700 dark:text-rose-400',
 };
 
 const formatSessionTime = (value?: string) => {
@@ -93,7 +89,13 @@ export const AttendanceList: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const activePanel = searchParams.get('view') === 'history' ? 'history' : 'rollcall';
+  const activePanel = searchParams.get('tab') === 'sessions' ? 'sessions' : searchParams.get('tab') === 'rollcall' || searchParams.get('view') === 'rollcall' || searchParams.has('sessionId') || searchParams.has('session') || searchParams.has('student') || searchParams.has('date') ? 'rollcall' : 'sessions';
+  const switchTab = (tab: string) => setSearchParams(previous => {
+    const next = new URLSearchParams(previous);
+    next.delete('view');
+    next.set('tab', tab);
+    return next;
+  });
 
   const load = async () => {
     if (saving.current) return;
@@ -219,7 +221,7 @@ export const AttendanceList: React.FC = () => {
   useEffect(() => {
     void load();
     return () => { ++loadRequest.current; };
-  }, []);
+  }, [activePanel]);
 
   useEffect(() => {
     const requestId = ++sessionRequest.current;
@@ -248,16 +250,6 @@ export const AttendanceList: React.FC = () => {
     });
   }, [date, query, records, sessionRecords, sessionId, status, subject]);
 
-  const filteredSessions = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    return sessions.filter((session) => {
-      if (date && session.date !== date) return false;
-      if (subject !== 'all' && session.subjectCode !== subject) return false;
-      if (!needle) return true;
-      return [session.subjectCode, session.className, session.sessionCode, session.room || ''].join(' ').toLocaleLowerCase().includes(needle);
-    });
-  }, [date, query, sessions, subject]);
-
   const attended = filtered.filter((record) => record.status === 'present' || record.status === 'late' || record.status === 'excused').length;
   const present = filtered.filter((record) => record.status === 'present').length;
   const late = filtered.filter((record) => record.status === 'late').length;
@@ -273,26 +265,24 @@ export const AttendanceList: React.FC = () => {
           <p className="mt-1 text-xs text-slate-400">{className || 'No section assigned'} · Review check-ins, session history, and audited attendance actions.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Link to="/secretary/start-session" className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-extrabold text-white shadow-md shadow-blue-600/20 hover:bg-blue-700"><Play className="h-4 w-4 fill-white" /> Start Attendance Session</Link>
-          <button type="button" onClick={() => { setRefreshVersion(version => version + 1); void load(); }} disabled={loading || submitting || sessionLoading} aria-label="Refresh attendance" className="inline-flex items-center justify-center rounded-xl bg-slate-100 p-2.5 text-slate-600 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          {activePanel === 'rollcall' && <button type="button" onClick={() => { setRefreshVersion(version => version + 1); void load(); }} disabled={loading || submitting || sessionLoading} aria-label="Refresh attendance" className="inline-flex items-center justify-center rounded-xl bg-slate-100 p-2.5 text-slate-600 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>}
         </div>
       </div>
 
       {error && <div role="alert" className="flex items-center justify-between rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-xs text-rose-700 dark:text-rose-300"><span className="flex items-center gap-2"><AlertCircle className="h-4 w-4" />{error}</span><button type="button" disabled={submitting} onClick={() => { setRefreshVersion(version => version + 1); void load(); }} className="font-bold underline">Retry</button></div>}
 
-      <div className="flex flex-col gap-3 border-b border-slate-200 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          <button type="button" onClick={() => setSearchParams({})} className={`whitespace-nowrap border-b-2 px-4 py-3 text-xs font-extrabold ${activePanel === 'rollcall' ? 'border-blue-600 text-blue-700 dark:text-blue-300' : 'border-transparent text-slate-400'}`}>Daily Roll Call</button>
-          <button type="button" onClick={() => setSearchParams({ view: 'history' })} className={`inline-flex whitespace-nowrap items-center gap-1.5 border-b-2 px-4 py-3 text-xs font-extrabold ${activePanel === 'history' ? 'border-blue-600 text-blue-700 dark:text-blue-300' : 'border-transparent text-slate-400'}`}><History className="h-3.5 w-3.5" /> Session History</button>
-        </div>
+      <div role="tablist" aria-label="Attendance Monitoring" className="flex flex-wrap gap-2">
+        {(['sessions', 'rollcall'] as const).map(tab => <button key={tab} type="button" role="tab" aria-selected={activePanel === tab} onClick={() => switchTab(tab)} className={activePanel === tab ? 'rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white' : 'rounded-lg bg-slate-100 px-4 py-2 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>{tab === 'sessions' ? 'Sessions' : 'Roll call'}</button>)}
       </div>
-
+      {activePanel === 'sessions' && <StartSession embedded onOpenRollCall={id => { setSessionId(id); setDate(''); setSubject('all'); setQuery(''); switchTab('rollcall'); }} />}
+      {activePanel === 'rollcall' && <>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Students in this section and their attendance for the selected session.</p>
       {!selectedRecord && feedback && <p role="status" className="text-xs font-bold text-emerald-700">{feedback.text}</p>}
       <Card className="border border-slate-200 p-4 shadow-xs dark:border-slate-800">
         <label className="mb-3 block text-xs font-bold">Attendance session
-          <select value={sessionId} disabled={submitting} onChange={event => { setSessionId(event.target.value); setDate(''); setSubject('all'); }} className="ml-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+          <select value={sessionId} disabled={submitting} onChange={event => { setSessionId(event.target.value); setDate(''); setSubject('all'); }} className="mt-1 block w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
             <option value="">All recorded results</option>
-            {sessions.map(session => <option key={session.sessionId} value={session.sessionId}>{session.subjectCode} · {session.date} · {formatSessionTime(session.startedAt)} · {session.sessionCode}</option>)}
+            {sessions.map(session => <option key={session.sessionId} value={session.sessionId}>{session.subjectCode} · {formatSessionDate(session.date)} · {formatSessionTime(session.startedAt)} · {session.sessionCode}</option>)}
           </select>
         </label>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -304,7 +294,7 @@ export const AttendanceList: React.FC = () => {
         {activePanel === 'rollcall' && <div className="mt-3 flex flex-wrap items-center gap-2"><span className="text-xs font-extrabold text-slate-700 dark:text-slate-200">Class Roll Call ({filtered.length} records)</span><span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">All: {filtered.length}</span><span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">Present: {present}</span><span className="rounded-lg bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">Late: {late}</span><span className="rounded-lg bg-rose-500/10 px-2.5 py-1 text-[10px] font-bold text-rose-700 dark:text-rose-300">Absent: {absent}</span><span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold text-sky-700 dark:text-sky-300">Excused: {excused}</span><span className="ml-auto text-[10px] font-bold text-slate-400">{filtered.length ? Math.round((attended / filtered.length) * 100) : 0}% attended</span></div>}
       </Card>
 
-      {activePanel === 'rollcall' ? (
+      {(
         <Card className="overflow-hidden border border-slate-200/80 p-0 shadow-xs dark:border-slate-800">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -398,12 +388,8 @@ export const AttendanceList: React.FC = () => {
             </table>
           </div>
         </Card>
-      ) : (
-        <Card className="overflow-hidden border border-slate-200 p-0 shadow-xs dark:border-slate-800">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800"><div><h2 className="font-heading text-sm font-extrabold text-slate-800 dark:text-slate-100">Class Sessions History & Management</h2><p className="mt-1 text-[11px] text-slate-400">Review created attendance sessions for your authorized class section.</p></div><Link to="/secretary/start-session" className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-extrabold text-white hover:bg-blue-700"><Play className="h-3.5 w-3.5 fill-white" /> New session</Link></div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">{loading ? <div className="px-5 py-12 text-center text-slate-400">Loading session history…</div> : filteredSessions.length === 0 ? <div className="px-5 py-12 text-center text-slate-400">No sessions match this filter.</div> : filteredSessions.map((session) => <div key={session.sessionId} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-slate-800 dark:text-slate-100">{session.subjectCode} · {session.className}</span><span className={`rounded-lg px-2 py-1 text-[10px] font-extrabold capitalize ${sessionStatusClass[session.status] || sessionStatusClass.ended}`}>{session.status}</span></div><p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400"><CalendarDays className="h-3.5 w-3.5" /> {session.date}<Clock3 className="ml-1 h-3.5 w-3.5" /> {formatSessionTime(session.startedAt)} {session.room && <><MapPin className="ml-1 h-3.5 w-3.5" /> {session.room}</>}</p><p className="mt-1 text-[10px] font-mono text-slate-400">Session code: {session.sessionCode}</p></div><div className="flex items-center gap-2"><button type="button" disabled={submitting} onClick={() => { setSessionId(session.sessionId); setDate(''); setSubject('all'); setSearchParams({}); }} className="rounded-lg bg-slate-100 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer">View roll call</button><Link to="/secretary/start-session" className="rounded-lg border border-blue-200 px-3 py-1.5 text-[10px] font-bold text-blue-700 dark:border-blue-900 dark:text-blue-300">View control</Link></div></div>)}</div>
-        </Card>
       )}
+      </>}
 
       {selectedRecord && (
         <Modal

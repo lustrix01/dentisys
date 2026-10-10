@@ -1069,8 +1069,28 @@ export interface FacultyAttendanceWorksheetRosterItem {
   yearLevel?: number | null;
 }
 
+export interface FacultyManagedAttendanceSession extends Record<string, unknown> {
+  sessionId: string;
+  sessionDate?: string;
+  sessionCode: string;
+  status: string;
+  room?: string | null;
+  openingTime?: string | null;
+  presentCutoff?: string | null;
+  lateCutoff?: string | null;
+  classEndTime?: string | null;
+  biometricRequired?: boolean;
+  geofenceEnabled?: boolean;
+  geofenceLatitude?: number | null;
+  geofenceLongitude?: number | null;
+  geofenceRadiusMeters?: number | null;
+  createdByRole?: string | null;
+  revocationReason?: string | null;
+}
+
 export interface FacultyAttendanceWorksheet {
-  pendingSessions?: Array<{ sessionId: string; sessionDate: string; sessionCode: string; status: string; openingTime: string | null; classEndTime: string | null }>;
+  pendingSessions?: FacultyManagedAttendanceSession[];
+  managedSessions?: FacultyManagedAttendanceSession[];
   classSection: {
     id: string;
     name: string;
@@ -1095,6 +1115,9 @@ export interface FacultyAttendanceWorksheet {
     status: 'active' | 'ended' | 'revoked' | string;
     startedAt?: string;
     endedAt?: string | null;
+    geofenceLatitude?: number | null;
+    geofenceLongitude?: number | null;
+    createdByRole?: string | null;
     geofenceEnabled?: boolean;
     geofenceRadiusMeters?: number | null;
     biometricRequired?: boolean;
@@ -1106,7 +1129,7 @@ export interface FacultyAttendanceWorksheet {
     revokedAt?: string | null;
     revocationReason?: string | null;
   } | null;
-  attendanceSessions: Array<Record<string, unknown>>;
+  attendanceSessions: FacultyManagedAttendanceSession[];
   roster: FacultyAttendanceWorksheetRosterItem[];
 }
 
@@ -1343,6 +1366,16 @@ export function getSecretaryAttendanceApi(params?: {
     sessionCode: string;
     room?: string;
     status: string;
+    sessionDate?: string;
+    presentCutoff?: string | null;
+    lateCutoff?: string | null;
+    biometricRequired?: boolean;
+    geofenceEnabled?: boolean;
+    geofenceLatitude?: number | null;
+    geofenceLongitude?: number | null;
+    geofenceRadiusMeters?: number | null;
+    createdByRole?: string | null;
+    createdByCurrentSecretary?: boolean | null;
     openingTime?: string | null;
     classEndTime?: string | null;
     startedAt?: string;
@@ -1441,6 +1474,8 @@ export function updateSecretarySettingsApi(settings: { theme: 'light' | 'dark' }
 
 // Secretary Attendance Session API Methods & Types
 export interface SecretaryAttendanceSession {
+  createdByRole?: string | null;
+  createdByCurrentSecretary?: boolean | null;
   sessionId: string;
   csId: number;
   classId?: string;

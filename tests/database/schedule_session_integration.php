@@ -110,6 +110,21 @@ expect_true(str_contains($facultyOverlapBody['message'] ?? '', 'Secretary'), 'Co
 [$queueReadStatus, $queueReadBody] = integration_http_get_json('/api/faculty/attendance?csId=' . $meetingClassId . '&date=' . $queueDate, $seedFacultyAccessToken);
 expect_same(200, $queueReadStatus, 'Faculty can view a future queue without recording attendance');
 expect_same(2, count($queueReadBody['worksheet']['pendingSessions'] ?? []), 'Queue read includes both role bookings');
+$managerFields = ['sessionDate', 'openingTime', 'presentCutoff', 'lateCutoff', 'classEndTime', 'room', 'biometricRequired', 'geofenceEnabled', 'geofenceLatitude', 'geofenceLongitude', 'geofenceRadiusMeters', 'createdByRole'];
+foreach (['pendingSessions', 'attendanceSessions', 'managedSessions'] as $managerList) {
+    foreach ($queueReadBody['worksheet'][$managerList] ?? [] as $managerSession) {
+        foreach ($managerFields as $managerField) { expect_true(array_key_exists($managerField, $managerSession), 'Faculty ' . $managerList . ' includes editable ' . $managerField); }
+    }
+}
+expect_same(2, count($queueReadBody['worksheet']['managedSessions'] ?? []), 'Faculty management list includes sessions across dates within the authorized class');
+[$secretaryManagerStatus, $secretaryManagerBody] = integration_http_get_json('/api/secretary/attendance?csId=' . $meetingClassId, $secretaryAccessToken);
+expect_same(200, $secretaryManagerStatus, 'Secretary manager read remains authorized');
+expect_same(2, count($secretaryManagerBody['sessions'] ?? []), 'Secretary manager fixture includes both creators');
+foreach ($secretaryManagerBody['sessions'] ?? [] as $managerSession) {
+    foreach ($managerFields as $managerField) { expect_true(array_key_exists($managerField, $managerSession), 'Secretary read includes editable ' . $managerField); }
+    expect_same((int) $managerSession['sessionId'] === $laterId, $managerSession['createdByCurrentSecretary'], 'Secretary edit ownership is derived from the persisted creator');
+}
+
 [$pastQueueStatus] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, array_merge($queuePayload, ['sessionDate' => (new DateTimeImmutable('now', $sessionLocalTimezone))->modify('-1 day')->format('Y-m-d')]));
 expect_same(422, $pastQueueStatus, 'Faculty cannot create a past-dated session');
 [$pastSecretaryStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, array_merge($queuePayload, ['sessionDate' => (new DateTimeImmutable('now', $sessionLocalTimezone))->modify('-1 day')->format('Y-m-d')]));
@@ -131,6 +146,12 @@ $sessionEditRecords->execute([$futureEnrollmentId]);
 $recordsBeforeEdit = $sessionEditRecords->fetchAll(PDO::FETCH_ASSOC);
 [$sessionEditStatus, $sessionEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $sessionEditPayload);
 expect_same(200, $sessionEditStatus, 'Faculty edits a scheduled session: ' . json_encode($sessionEditBody));
+[$editedManagerStatus, $editedManagerBody] = integration_http_get_json('/api/faculty/attendance?csId=' . $meetingClassId . '&date=' . $sessionEditPayload['sessionDate'] . '&sessionId=' . $queuedId, $seedFacultyAccessToken);
+expect_same(200, $editedManagerStatus, 'Edited Faculty session can be read for prefilling');
+foreach (['geofenceLatitude', 'geofenceLongitude', 'geofenceRadiusMeters', 'biometricRequired', 'geofenceEnabled'] as $managerField) {
+    expect_same($sessionEditBody['session'][$managerField], $editedManagerBody['worksheet']['attendanceSession'][$managerField], 'Manager read preserves edited ' . $managerField);
+}
+
 expect_same('ok', $sessionEditBody['status'] ?? null, 'Scheduled edit returns the success envelope');
 expect_same($meetingClassId, $sessionEditBody['session']['csId'] ?? null, 'Session edit ignores a different requested class section');
 expect_same((string) $queuedId, $sessionEditBody['session']['sessionId'] ?? null, 'Session edit keeps its existing ID');
