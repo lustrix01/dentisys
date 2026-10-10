@@ -431,5 +431,6 @@ Repository rules for contributors and coding agents are in [AGENTS.md](AGENTS.md
 - [Documentation index](docs/README.md): architecture, features, database, and guides.
 - [Development environment details](docs/development-environment.md)
 - [Single-server details](docs/single-server.md)
+- [Deploying DentiSys from scratch](docs/deploy-from-scratch.md): step-by-step guide from an empty AWS account to a verified server with one command.
 - [VPS demonstration deployment](docs/vps-deployment.md): the approved DEL-001 cloud VPS runbook.
 - [Demo accounts](docs/demo-accounts.md)

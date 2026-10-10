@@ -12,6 +12,8 @@ for that case. This VPS uses GHCR images built by hand from a tested commit,
 Traefik with Let's Encrypt, Watchtower for web/frontend/biometric,
 internal PostgreSQL, and pgAdmin on loopback. No source checkout or CI/CD runs on the VPS.
 
+> New here? Start with [Deploying DentiSys from scratch](deploy-from-scratch.md); this page is the detailed reference.
+
 ## Quick start
 
 Do these AWS steps manually before starting the command:
