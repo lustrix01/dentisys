@@ -12,6 +12,45 @@ for that case. This VPS uses GHCR images built by hand from a tested commit,
 Traefik with Let's Encrypt, Watchtower for web/frontend/biometric,
 internal PostgreSQL, and pgAdmin on loopback. No source checkout or CI/CD runs on the VPS.
 
+## Quick start
+
+Do these AWS steps manually before starting the command:
+
+1. Launch an **x86-64 Ubuntu 26.04 LTS EC2 instance**, for example
+   **c7i-flex.large (4 GB RAM)**, with a **30 GB or larger disk** and your key pair.
+2. Allocate and associate an **Elastic IP**. Keep the AWS .pem private on Windows.
+3. Security Group: **22 from your IP for the first run only**, **2202 from your IP**,
+   and **80/443 for the web server**. Do not expose database or UI ports.
+4. Optionally point your own domain's A record to the Elastic IP (Cloudflare DNS-only).
+   Without `-Domain`, the script uses `<ip-with-dashes>.sslip.io`.
+5. Prepare Session Manager or configured EC2 Instance Connect recovery, publish the
+   tested `:demo` images using the publishing section below, and commit a clean tree.
+   Keep the face model at `..\dentisys-biometric-assets\face_landmarker.task` and
+   team-tested calibration in your local `.env`. Docker is not needed on this PC
+   for provisioning; image publishing remains a separate manual operation.
+
+From the repository on Windows PowerShell 5.1:
+
+```powershell
+.\scripts\provision-vps.ps1 -Ip 203.0.113.10 -KeyFile 'C:\path\to\aws.pem'
+# Optional: -Domain demo.example.com -NoDbTunnel
+```
+
+All answers and the AWS checklist confirmation come first. Passwords and the GHCR
+read token are hidden, kept in memory, and sent only through SSH stdin; no secret
+configuration is saved on the PC. The server applies the hardening guide steps
+1–6, creates its private environment, deploys and prints PASS/FAIL checks. The
+current SSH session continues through the port switch. `-SshPort` defaults to
+2202; use the matching Security Group rule if you change it.
+
+After a successful fresh run, test the printed devops login and **remove 22 from
+the Security Group**. The launcher probes ubuntu on 22 or devops on the chosen
+port. Reruns ask only for the sudo password and a fresh GHCR read token, then
+preserve the server `.env` and its signing keys/database passwords. If hardening
+finished but no environment was created, it collects the missing setup answers
+at the start of the next run. `-NoDbTunnel` omits the pgAdmin/Mailpit exception.
+The script changes only the VPS; AWS resources and DNS remain manual.
+
 ## Host, DNS and firewall
 
 Start with an **x86-64 Ubuntu 26.04 LTS VPS, 2 vCPU**, **2 GB RAM minimum / 4 GB

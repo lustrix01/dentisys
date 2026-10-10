@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set +x
 set -euo pipefail
 
 source_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -6,6 +7,22 @@ deploy_dir=/opt/dentisys
 env_file="$deploy_dir/.env"
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
+non_interactive=false
+token_stdin=false
+for flag in "$@"; do
+  case "$flag" in
+    --non-interactive) non_interactive=true ;;
+    --token-stdin) token_stdin=true ;;
+    *) fail 'Usage: deploy-vps.sh [--non-interactive] [--token-stdin]' ;;
+  esac
+done
+# Consume credentials before apt, sudo or any subprocess can read stdin.
+token="${GHCR_TOKEN:-}"
+if [[ "$token_stdin" == true ]]; then
+  IFS= read -r -d '' token || fail 'Missing NUL-terminated GHCR token on stdin.'
+  exec </dev/null
+fi
+if [[ "$non_interactive" == true ]]; then exec </dev/null; fi
 # Read literal one-line values; Compose handles interpolation and escaping.
 env_value() {
   local key="$1" line value=''
@@ -22,11 +39,23 @@ env_value() {
   printf '%s' "$value"
 }
 
-[[ "$(id -u)" -ne 0 ]] || fail 'Run as a non-root user with sudo rights.'
-sudo -n true 2>/dev/null || sudo -v
+deploy_user="$(id -un)"
+if [[ "$EUID" -eq 0 ]]; then
+  [[ "$non_interactive" == true ]] || fail 'Run as a non-root user with sudo rights.'
+  deploy_user=devops
+fi
+deploy_group="$(id -gn "$deploy_user")"
+if [[ "$non_interactive" == true ]]; then
+  sudo -n true </dev/null || fail 'Non-interactive deployment requires sudo credentials.'
+else
+  sudo -n true 2>/dev/null || sudo -v
+fi
+# Root orchestration still leaves standalone deployments owned by devops.
+install() { command install -o "$deploy_user" -g "$deploy_group" "$@"; }
 umask 077
-sudo install -d -m 0750 -o "$(id -un)" -g "$(id -gn)" "$deploy_dir"
+sudo install -d -m 0750 -o "$deploy_user" -g "$deploy_group" "$deploy_dir"
 exec 9>"$deploy_dir/.deploy.lock"
+if [[ "$EUID" -eq 0 ]]; then chown "$deploy_user:$deploy_group" "$deploy_dir/.deploy.lock"; fi
 flock -n 9 || fail 'Another VPS deployment or database sync is running.'
 for dir in scripts assets .docker; do
   install -d -m 0750 "$deploy_dir/$dir"
@@ -117,7 +146,7 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
   . /etc/os-release
   [[ "${ID:-}" == ubuntu ]] || fail 'Automatic Docker installation supports Ubuntu LTS only.'
   sudo apt-get update
-  sudo apt-get install -y ca-certificates curl
+  sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y ca-certificates curl
   sudo install -d -m 0755 /etc/apt/keyrings
   sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   sudo chmod a+r /etc/apt/keyrings/docker.asc
@@ -125,7 +154,7 @@ if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>
     "${UBUNTU_CODENAME:-$VERSION_CODENAME}" "$(dpkg --print-architecture)" |
     sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null
   sudo apt-get update
-  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 sudo systemctl enable --now docker
 docker_cmd() { sudo docker --config "$deploy_dir/.docker" "$@"; }
@@ -143,8 +172,7 @@ sudo env DOCKER_API_VERSION=1.44 docker version >/dev/null || fail 'Docker Engin
 if [[ ! -f "$deploy_dir/.docker/config.json" ]]; then
   printf '{}\n' > "$deploy_dir/.docker/config.json"
 fi
-token="${GHCR_TOKEN:-}"
-if [[ -z "$token" && -t 0 ]]; then
+if [[ -z "$token" && "$non_interactive" == false && -t 0 ]]; then
   read -r -s -p "GHCR token for $GHCR_USERNAME (blank skips login): " token || true
   printf '\n' >&2
 fi
@@ -153,6 +181,7 @@ if [[ -n "$token" ]]; then
 fi
 unset token GHCR_TOKEN
 sudo chmod 600 "$deploy_dir/.docker/config.json"
+sudo chown "$deploy_user:$deploy_group" "$deploy_dir/.docker/config.json"
 # Stop automatic updates before the manual migration/update sequence.
 compose stop watchtower
 compose rm -f watchtower
@@ -170,10 +199,10 @@ compose up -d --no-build --remove-orphans --wait --wait-timeout 240
 compose exec -T --interactive=false frontend wget -q -O /dev/null http://127.0.0.1/
 # Same maintenance as the LAN script; report failures without stopping the stack.
 compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-grade-weights.php || echo 'WARNING: Grade-weight setup did not finish.' >&2
-compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-first-dean.php || echo 'WARNING: First Dean invitation did not finish (check FIRST_DEAN_*).' >&2
+compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/bootstrap-first-dean.php || { if [[ "$non_interactive" == true ]]; then fail 'First Dean invitation failed; check SMTP configuration and rerun.'; else echo 'WARNING: First Dean invitation did not finish (check FIRST_DEAN_*).' >&2; fi; }
 compose exec -T --interactive=false -u www-data web php /var/www/html/backend/bin/expire-biometrics.php || echo 'WARNING: Biometric expiry sweep did not finish.' >&2
 
-sudo apt-get install -y cron
+sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a APT_LISTCHANGES_FRONTEND=none apt-get -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y cron
 sudo systemctl enable --now cron
 printf 'SHELL=/bin/bash\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n17 2 * * * root /bin/bash /opt/dentisys/scripts/backup-vps.sh\n' |
   sudo tee /etc/cron.d/dentisys-backup >/dev/null

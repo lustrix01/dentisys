@@ -8,10 +8,12 @@ param(
     [string]$IdentityFile,
     [string]$ModelPath = '..\dentisys-biometric-assets\face_landmarker.task',
     [switch]$SkipModel,
-    [switch]$Deploy
+    [switch]$Deploy,
+    [switch]$Provision
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Provision -and ($Deploy -or $SkipModel)) { throw 'Provision requires the model and cannot be combined with Deploy.' }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $sshArgs = @('-p', "$Port")
 $scpArgs = @('-P', "$Port")
@@ -20,6 +22,11 @@ if ($IdentityFile) {
     if (-not (Test-Path -LiteralPath $identity -PathType Leaf)) { throw 'IdentityFile must be a key file.' }
     $sshArgs += @('-i', $identity, '-o', 'IdentitiesOnly=yes')
     $scpArgs += @('-i', $identity, '-o', 'IdentitiesOnly=yes')
+}
+
+if ($Provision) {
+    $sshArgs += @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new')
+    $scpArgs += @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new')
 }
 
 function Invoke-Native {
@@ -52,6 +59,7 @@ try {
         'database/pgadmin-servers.json', 'database/migrations', 'scripts/deploy-vps.sh',
         'scripts/backup-vps.sh', 'scripts/migrate-vps.sh'
     )
+    if ($Provision) { $bundleFiles += @('scripts/provision-vps.sh', 'scripts/harden-vps.sh') }
     Invoke-Native git (@('archive', '--format=tar.gz', '-o', $archive, 'HEAD') + $bundleFiles)
     $uploadFiles = @($archive)
     $uploadModel = $false
@@ -87,14 +95,14 @@ try {
     if ($uploadModel) {
         $remoteCommands += @(
             "echo '$modelHash  /tmp/face_landmarker.task' | sha256sum -c -",
-            "if [ -d /opt/dentisys/assets ]; then install -m 0644 /tmp/face_landmarker.task /opt/dentisys/assets/face_landmarker.task; else echo 'deploy-vps.sh first creates /opt/dentisys; model left at /tmp/face_landmarker.task. Rerun upload-vps.ps1 after its first run to install the model.'; fi"
+            $(if ($Provision) { 'install -m 0644 /tmp/face_landmarker.task /tmp/dentisys-deploy/face_landmarker.task' } else { "if [ -d /opt/dentisys/assets ]; then install -m 0644 /tmp/face_landmarker.task /opt/dentisys/assets/face_landmarker.task; else echo 'deploy-vps.sh first creates /opt/dentisys; model left at /tmp/face_landmarker.task. Rerun upload-vps.ps1 after its first run to install the model.'; fi" })
         )
     }
     if ($Deploy) { $remoteCommands += 'bash /tmp/dentisys-deploy/scripts/deploy-vps.sh' }
     $sessionArgs = $sshArgs
     if ($Deploy) { $sessionArgs += '-t' }
     Invoke-Native ssh ($sessionArgs + @($Server, ($remoteCommands -join '; ')))
-    if (-not $Deploy) {
+    if (-not $Deploy -and -not $Provision) {
         $deployArgs = $sshArgs + @('-t', $Server, 'bash /tmp/dentisys-deploy/scripts/deploy-vps.sh')
         $quotedArgs = $deployArgs | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }
         Write-Host ('Deploy with: ssh ' + ($quotedArgs -join ' '))

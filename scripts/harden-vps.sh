@@ -1,19 +1,31 @@
 #!/usr/bin/env bash
+set +x
 set -euo pipefail
 
 # Owner's Ubuntu 26.04 guide, steps 1-6; AWS keys replace ssh-copy-id.
 no_db_tunnel=false
+non_interactive=false
+sg_confirmed=false
+password_stdin=false
+check_only=false
+ssh_port=2202
 fail() { echo "ERROR: $*" >&2; exit 1; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --non-interactive) non_interactive=true; shift ;;
+    --sg-confirmed) sg_confirmed=true; shift ;;
+    --password-stdin) password_stdin=true; shift ;;
+    --check-only) check_only=true; shift ;;
+    --ssh-port) [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || fail "--ssh-port needs a port."; ssh_port="$2"; shift 2 ;;
     --no-db-tunnel) no_db_tunnel=true; shift ;;
     --help|-h)
-      echo 'Usage: sudo bash harden-vps.sh [--no-db-tunnel]'
+      echo 'Usage: sudo bash harden-vps.sh [--ssh-port 2202] [--no-db-tunnel] [--non-interactive --sg-confirmed --password-stdin]'
       exit 0
       ;;
     *) fail "Unknown argument: $1" ;;
   esac
 done
+[[ "$ssh_port" -ge 1024 && "$ssh_port" -le 65535 ]] || fail "SSH port must be between 1024 and 65535."
 [[ "$EUID" -eq 0 ]] || fail 'Run this script with sudo.'
 invoking_user="${SUDO_USER:-}"
 [[ "$invoking_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "$invoking_user" != root ]] || fail 'Run sudo from the SSH login user; direct root invocation is refused.'
@@ -21,7 +33,16 @@ invoking_user="${SUDO_USER:-}"
 . /etc/os-release
 [[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 26.04 ]] || fail 'This script supports fresh Ubuntu 26.04 LTS hosts only.'
 export PATH="/usr/sbin:/sbin:$PATH"
-[[ -t 0 ]] || fail 'A TTY is required for passwd and the Security Group confirmation. Reconnect with ssh -t.'
+if [[ "$non_interactive" == false && "$check_only" == false ]]; then
+  [[ -t 0 ]] || fail 'A TTY is required for passwd and the Security Group confirmation. Reconnect with ssh -t.'
+elif [[ "$check_only" == false ]]; then
+  [[ "$sg_confirmed" == true && "$password_stdin" == true ]] || fail 'Non-interactive hardening requires --sg-confirmed and --password-stdin.'
+fi
+password=''
+if [[ "$password_stdin" == true ]]; then
+  IFS= read -r -d '' password || fail 'Missing NUL-terminated devops password on stdin.'
+  [[ -n "$password" && "$password" != *$'\n'* && "$password" != *$'\r'* ]] || fail 'Password must be a nonempty single-line value.'
+fi
 umask 077
 work_dir="$(mktemp -d /tmp/dentisys-hardening.XXXXXX)"
 trap 'rm -rf -- "$work_dir"' EXIT
@@ -95,7 +116,7 @@ stage_ssh() {
   while IFS= read -r setting; do
     grep -Fxq "$setting" "$work_dir/sshd-effective" || fail "An existing SSH setting overrides the guide: $setting. Live SSH settings were not changed."
   done <<EOF
-port 2202
+port $ssh_port
 permitrootlogin no
 passwordauthentication no
 kbdinteractiveauthentication no
@@ -129,9 +150,9 @@ if id devops >/dev/null 2>&1; then
   password_status="$(passwd -S devops | awk '{print $2}')"
 fi
 
-cat > "$work_dir/99-hardening.conf" <<'EOF'
+cat > "$work_dir/99-hardening.conf" <<EOF
 # Owner's guide: SSH settings (step 3).
-Port 2202
+Port $ssh_port
 PermitRootLogin no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -156,6 +177,12 @@ Match User devops
 EOF
 fi
 stage_ssh
+if [[ "$check_only" == true ]]; then
+  [[ "$password_status" == P && -f "$ssh_config" ]] || exit 1
+  validate_devops_keys
+  cmp -s "$work_dir/99-hardening.conf" "$ssh_config"
+  exit $?
+fi
 
 # All operator input precedes changes to the live host. passwd handles both
 # hidden entries in a private prefix; only its hash is applied during step 2.
@@ -164,15 +191,24 @@ if [[ "$password_status" != P ]]; then
   printf 'root:x:0:0:root:/root:/bin/bash\ndevops:x:1000:1000::/home/devops:/bin/bash\n' > "$work_dir/password/etc/passwd"
   printf 'root:*:0:0:99999:7:::\ndevops:!:0:0:99999:7:::\n' > "$work_dir/password/etc/shadow"
   cp /etc/login.defs "$work_dir/password/etc/login.defs"
-  echo 'Set the devops sudo password now. passwd will ask for it twice.'
-  passwd --prefix "$work_dir/password" devops
+  if [[ "$password_stdin" == true ]]; then echo 'Applying the devops password supplied at the launcher.'; else echo 'Set the devops sudo password now. passwd will ask for it twice.'; fi
+  if [[ "$password_stdin" == true ]]; then
+    printf 'devops:%s\n' "$password" | chpasswd --prefix "$work_dir/password"
+  else
+    passwd --prefix "$work_dir/password" devops
+  fi
   [[ "$(passwd --prefix "$work_dir/password" -S devops | awk '{print $2}')" == P ]] || fail 'devops needs a usable sudo password.'
 else
   echo 'devops already has a usable password; it will be retained.'
 fi
+unset password
 echo 'Keep this session open. Have an AWS recovery route ready (Session Manager, or configured EC2 Instance Connect).'
-read -r -p 'Does the AWS Security Group already allow TCP 2202 from your IP and TCP 80/443 for the web server? Type yes to continue: ' security_group_ready
-[[ "$security_group_ready" == yes ]] || fail 'Security Group confirmation declined. No live host settings were changed.'
+if [[ "$sg_confirmed" == false ]]; then
+  read -r -p "Does the AWS Security Group already allow TCP $ssh_port from your IP and TCP 80/443 for the web server? Type yes to continue: " security_group_ready
+  [[ "$security_group_ready" == yes ]] || fail 'Security Group confirmation declined. No live host settings were changed.'
+else
+  echo 'Security Group readiness was confirmed at the launcher summary.'
+fi
 exec </dev/null
 export DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a
 
@@ -243,7 +279,7 @@ fi
 apt -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y ufw
 ufw default deny incoming
 ufw default allow outgoing
-ufw limit 2202/tcp comment "SSH"
+ufw limit "$ssh_port/tcp" comment "SSH"
 ufw allow 80/tcp comment "HTTP"
 ufw allow 443/tcp comment "HTTPS"
 ufw --force enable
@@ -251,10 +287,10 @@ ufw status verbose
 
 # Step 5: journal-backed SSH fail2ban jail.
 apt -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y fail2ban
-cat > /etc/fail2ban/jail.d/sshd.local <<'EOF'
+cat > /etc/fail2ban/jail.d/sshd.local <<EOF
 [sshd]
 enabled = true
-port = 2202
+port = $ssh_port
 maxretry = 3
 findtime = 10m
 bantime = 1h
@@ -299,14 +335,18 @@ fs.suid_dumpable=0
 EOF
 chmod 644 /etc/sysctl.d/99-hardening.conf
 sysctl --system
-cat <<'EOF'
+if [[ "$non_interactive" == true ]]; then
+  echo 'Hardening complete; provisioning continues in the current SSH session.'
+else
+cat <<EOF
 Hardening complete. Keep this session open until the second login succeeds.
-In a SECOND window, test: ssh -i <key> -p 2202 devops@<ip>
+In a SECOND window, test: ssh -i <key> -p $ssh_port devops@<ip>
 Use the same AWS .pem and public IP/hostname as your original login.
 After a successful login, remove TCP 22 from the AWS Security Group, then continue with the bundle/deploy steps.
 Recovery: AWS EC2 -> instance -> Connect -> Session Manager (requires configured SSM Agent/IAM).
-EC2 Instance Connect is another route when configured for devops on 2202 with network access; the default port-22 browser connection cannot reach the hardened SSH listener.
+EC2 Instance Connect is another route when configured for devops on $ssh_port with network access; the default port-22 browser connection cannot reach the hardened SSH listener.
 EOF
+fi
 if [[ -f /var/run/reboot-required ]]; then
   echo 'A reboot is required. Reboot manually after verifying the new key login; this run keeps the current SSH session alive.'
 fi
