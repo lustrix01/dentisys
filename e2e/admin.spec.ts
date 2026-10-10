@@ -114,6 +114,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const section = page.locator('#academic-terms');
     const row = section.getByTestId('2026-2027-1ST');
     await expect(row).toContainText('Dates not set');
+    await expect(row).toContainText('Not set');
     await expect(row).toContainText('3 classes');
     await row.getByRole('button', { name: 'Set dates' }).click();
     let dialog = page.getByRole('dialog');
@@ -124,7 +125,8 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     expect(saves).toBe(0);
     await dialog.getByLabel('End date').fill('2026-12-31');
     await dialog.getByRole('button', { name: 'Save term' }).click();
-    await expect(row).toContainText('2026-08-01 – 2026-12-31');
+    await expect(row).toContainText('Aug 1 – Dec 31, 2026');
+    await expect(row).toContainText('Current');
     await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
     await row.getByRole('button', { name: 'Edit dates' }).click();
     dialog = page.getByRole('dialog');
@@ -133,7 +135,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await dialog.getByLabel('End date').fill('2026-10-10');
     await dialog.getByRole('button', { name: 'Save term' }).click();
     await expect(dialog).not.toBeVisible();
-    await expect(row).toContainText('2026-10-10');
+    await expect(row).toContainText('Oct 10, 2026');
     expect(saves).toBe(2);
     expect(posted.some(data => data.confirmedExpiringEnrollments !== undefined)).toBe(false);
     await row.getByRole('button', { name: 'Edit dates' }).click();
@@ -143,7 +145,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(dialog).toContainText('3 unexpired biometric enrollments will expire');
     expect(saves).toBe(2);
     await dialog.getByRole('button', { name: 'Confirm and save' }).click();
-    await expect(row).toContainText('2026-10-09');
+    await expect(row).toContainText('Oct 9, 2026');
     expect(posted.some(data => data.confirmedExpiringEnrollments === 3)).toBe(true);
     await section.getByRole('button', { name: 'Copy previous school year' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Copy terms', exact: true }).click();
