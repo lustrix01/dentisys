@@ -1194,6 +1194,12 @@ export function createFacultyAttendanceSessionApi(data: {
   return request('POST', '/faculty/attendance/session', data);
 }
 
+export function updateFacultyAttendanceSessionApi(
+  data: Omit<Parameters<typeof createFacultyAttendanceSessionApi>[0], 'csId' | 'classSectionId' | 'subjectCode' | 'topic'> & { sessionId: string | number }
+): Promise<{ status: string; session: NonNullable<FacultyAttendanceWorksheet['attendanceSession']> }> {
+  return request('POST', '/faculty/attendance/session/update', data);
+}
+
 export function endFacultyAttendanceSessionApi(data: {
   sessionId: string | number;
 }): Promise<{ status: string; session: Record<string, unknown> }> {
@@ -1494,6 +1500,12 @@ export function startSecretaryAttendanceSessionApi(
   data: StartSecretaryAttendanceSessionPayload
 ): Promise<{ status: string; session: SecretaryAttendanceSession }> {
   return request('POST', '/secretary/attendance/session', data);
+}
+
+export function updateSecretaryAttendanceSessionApi(
+  data: Omit<StartSecretaryAttendanceSessionPayload, 'csId' | 'sessionCode' | 'latitude' | 'longitude'> & { sessionId: string | number }
+): Promise<{ status: string; session: SecretaryAttendanceSession }> {
+  return request('POST', '/secretary/attendance/session/update', data);
 }
 
 export function getSecretaryActiveAttendanceSessionApi(

@@ -242,6 +242,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/secretary/attendance/session/update',
+        'handler' => 'handle_secretary_attendance_session_update',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/secretary/attendance/session/active',
         'handler' => 'handle_secretary_attendance_session_active',
@@ -494,6 +500,12 @@ return [
         'method' => 'POST',
         'path' => '/api/faculty/attendance/session',
         'handler' => 'handle_faculty_attendance_session_create',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/attendance/session/update',
+        'handler' => 'handle_faculty_attendance_session_update',
         'has_params' => false,
     ],
     [

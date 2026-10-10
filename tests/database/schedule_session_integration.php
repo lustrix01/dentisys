@@ -114,10 +114,88 @@ expect_same(2, count($queueReadBody['worksheet']['pendingSessions'] ?? []), 'Que
 expect_same(422, $pastQueueStatus, 'Faculty cannot create a past-dated session');
 [$pastSecretaryStatus] = integration_http_json('/api/secretary/attendance/session', $secretaryAccessToken, array_merge($queuePayload, ['sessionDate' => (new DateTimeImmutable('now', $sessionLocalTimezone))->modify('-1 day')->format('Y-m-d')]));
 expect_same(422, $pastSecretaryStatus, 'Secretary cannot create a past-dated session');
+
+// ATT-001 scheduled edits use the same creation contract, preserving history.
+$sessionEditPayload = array_merge($queuePayload, [
+    'sessionId' => $queuedId, 'csId' => 2147483647,
+    'sessionDate' => (new DateTimeImmutable($queueDate))->modify('+1 day')->format('Y-m-d'),
+    'openingTime' => '08:10', 'presentCutoff' => '09:10', 'lateCutoff' => '10:10', 'classEndTime' => '10:50',
+    'room' => 'Edited Room ' . $scheduleSuffix, 'biometricRequired' => true, 'geofenceEnabled' => true,
+    'geofenceLatitude' => 13.1391, 'geofenceLongitude' => 123.7438, 'geofenceRadiusMeters' => 125,
+]);
+$sessionEditCount = $pdo->prepare('SELECT COUNT(*) FROM attendance_sessions WHERE cs_id = ?');
+$sessionEditCount->execute([$meetingClassId]);
+$sessionsBeforeEdit = (int) $sessionEditCount->fetchColumn();
+$sessionEditRecords = $pdo->prepare('SELECT record_id, attendance_session_id, session_date, session_code, status FROM attendance_records WHERE enrollment_id = ? ORDER BY record_id');
+$sessionEditRecords->execute([$futureEnrollmentId]);
+$recordsBeforeEdit = $sessionEditRecords->fetchAll(PDO::FETCH_ASSOC);
+[$sessionEditStatus, $sessionEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $sessionEditPayload);
+expect_same(200, $sessionEditStatus, 'Faculty edits a scheduled session: ' . json_encode($sessionEditBody));
+expect_same('ok', $sessionEditBody['status'] ?? null, 'Scheduled edit returns the success envelope');
+expect_same($meetingClassId, $sessionEditBody['session']['csId'] ?? null, 'Session edit ignores a different requested class section');
+expect_same((string) $queuedId, $sessionEditBody['session']['sessionId'] ?? null, 'Session edit keeps its existing ID');
+expect_same($queuedBody['session']['sessionCode'], $sessionEditBody['session']['sessionCode'] ?? null, 'Session edit preserves its original session code');
+expect_same('scheduled', $sessionEditBody['session']['status'] ?? null, 'A future edited opening remains scheduled');
+foreach (['sessionDate', 'openingTime', 'presentCutoff', 'lateCutoff', 'classEndTime', 'room', 'biometricRequired', 'geofenceEnabled', 'geofenceLatitude', 'geofenceLongitude'] as $editField) {
+    expect_same($sessionEditPayload[$editField], $sessionEditBody['session'][$editField] ?? null, 'Session edit returns the new ' . $editField);
+}
+expect_same(125.0, (float) ($sessionEditBody['session']['geofenceRadiusMeters'] ?? 0), 'Session edit returns the new radius');
+$sessionEditAudit = $pdo->prepare("SELECT actor_user_id, actor_role, before_state_json, after_state_json FROM audit_events WHERE action_code = 'attendance_session_updated' AND target_id = ? ORDER BY sequence_number DESC LIMIT 1");
+$sessionEditAudit->execute([(string) $queuedId]);
+$sessionEditAuditRow = $sessionEditAudit->fetch(PDO::FETCH_ASSOC);
+expect_same('faculty', $sessionEditAuditRow['actor_role'] ?? null, 'Scheduled edit audit records the Faculty actor');
+expect_same((int) $pdo->query("SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph'")->fetchColumn(), (int) ($sessionEditAuditRow['actor_user_id'] ?? 0), 'Scheduled edit audit records the acting user ID');
+$sessionEditBefore = json_decode($sessionEditAuditRow['before_state_json'], true);
+$sessionEditAfter = json_decode($sessionEditAuditRow['after_state_json'], true);
+foreach (['session_date' => $queueDate, 'opening_time' => '08:00:00', 'present_cutoff_time' => '09:00:00', 'late_cutoff_time' => '10:00:00', 'class_end_time' => '11:00:00', 'room' => null, 'biometric_required' => false, 'geofence_enabled' => false, 'geofence_latitude' => null, 'geofence_longitude' => null, 'geofence_radius_meters' => null, 'status' => 'scheduled'] as $field => $value) {
+    expect_true(array_key_exists($field, $sessionEditBefore) && $sessionEditBefore[$field] === $value, 'Edit audit preserves previous ' . $field);
+}
+foreach (['session_date' => $sessionEditPayload['sessionDate'], 'opening_time' => '08:10:00', 'present_cutoff_time' => '09:10:00', 'late_cutoff_time' => '10:10:00', 'class_end_time' => '10:50:00', 'room' => $sessionEditPayload['room'], 'biometric_required' => true, 'geofence_enabled' => true, 'geofence_latitude' => '13.139100', 'geofence_longitude' => '123.743800', 'geofence_radius_meters' => '125.00', 'status' => 'scheduled'] as $field => $value) {
+    expect_same($value, $sessionEditAfter[$field] ?? null, 'Edit audit records new ' . $field);
+}
+[$unchangedEditStatus] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $sessionEditPayload);
+expect_same(200, $unchangedEditStatus, 'An unchanged scheduled edit does not conflict with itself');
+[$restoreQueueStatus] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $queuePayload + ['sessionId' => $queuedId]);
+expect_same(200, $restoreQueueStatus, 'Scheduled edit can restore the original date and times');
+[$secretaryForbiddenEditStatus, $secretaryForbiddenEditBody] = integration_http_json('/api/secretary/attendance/session/update', $secretaryAccessToken, $queuePayload + ['sessionId' => $queuedId]);
+expect_same(403, $secretaryForbiddenEditStatus, 'Secretary cannot edit a Faculty-created scheduled session');
+expect_same('ATTENDANCE_SESSION_EDIT_FORBIDDEN', $secretaryForbiddenEditBody['code'] ?? null, 'Secretary edit denial returns its contract code');
+expect_same('You can edit only sessions you created.', $secretaryForbiddenEditBody['message'] ?? null, 'Secretary edit denial returns its exact message');
+[$facultySecretaryEditStatus, $facultySecretaryEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, array_merge($laterPayload, ['sessionId' => $laterId, 'openingTime' => '11:15', 'room' => 'Faculty edits Secretary booking']));
+expect_same(200, $facultySecretaryEditStatus, 'Faculty edits the class Secretary-created scheduled session');
+expect_same('11:15', $facultySecretaryEditBody['session']['openingTime'] ?? null, 'Faculty changes the Secretary-created opening time');
+[$secretaryOwnEditStatus] = integration_http_json('/api/secretary/attendance/session/update', $secretaryAccessToken, $laterPayload + ['sessionId' => $laterId]);
+expect_same(200, $secretaryOwnEditStatus, 'Secretary edits their own session after a Faculty edit');
+[$overlapEditStatus, $overlapEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $laterPayload + ['sessionId' => $queuedId]);
+expect_same(409, $overlapEditStatus, 'Editing cannot overlap another scheduled session');
+expect_same('CONFLICT', $overlapEditBody['code'] ?? null, 'Edit overlap keeps the existing conflict code');
+expect_same($facultyOverlapBody['message'] ?? null, $overlapEditBody['message'] ?? null, 'Edit overlap reuses the exact creation conflict message');
+[$pastEditStatus, $pastEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, array_merge($queuePayload, ['sessionId' => $queuedId, 'sessionDate' => (new DateTimeImmutable('now', $sessionLocalTimezone))->modify('-1 day')->format('Y-m-d')]));
+expect_same(422, $pastEditStatus, 'A scheduled session cannot be edited to a past date');
+expect_same('VALIDATION_ERROR', $pastEditBody['code'] ?? null, 'Past-date edit reuses creation validation');
+expect_same(['sessionDate' => 'Past attendance session dates are not allowed.'], $pastEditBody['errors'] ?? null, 'Past-date edit preserves the exact validation message');
+foreach (['faculty' => $seedFacultyAccessToken, 'secretary' => $secretaryAccessToken] as $editRole => $editToken) {
+    foreach ([null, 'invalid', true, 0, 2147483648] as $invalidEditId) {
+        [$invalidEditStatus, $invalidEditBody] = integration_http_json('/api/' . $editRole . '/attendance/session/update', $editToken, $queuePayload + ['sessionId' => $invalidEditId]);
+        expect_same(400, $invalidEditStatus, $editRole . ' edit requires a valid session ID');
+        expect_same('BAD_REQUEST', $invalidEditBody['code'] ?? null, 'Invalid edit ID returns BAD_REQUEST');
+    }
+    [$missingEditStatus, $missingEditBody] = integration_http_json('/api/' . $editRole . '/attendance/session/update', $editToken, $queuePayload + ['sessionId' => 2147483647]);
+    expect_same(404, $missingEditStatus, $editRole . ' edit hides missing sessions');
+    expect_same('NOT_FOUND', $missingEditBody['code'] ?? null, 'Missing session edit returns NOT_FOUND');
+}
+$sessionEditCount->execute([$meetingClassId]);
+expect_same($sessionsBeforeEdit, (int) $sessionEditCount->fetchColumn(), 'Scheduled edits never create or delete sessions');
+$sessionEditRecords->execute([$futureEnrollmentId]);
+expect_same($recordsBeforeEdit, $sessionEditRecords->fetchAll(PDO::FETCH_ASSOC), 'Scheduled edits never create or change attendance records');
+
 [$queuedEndStatus] = integration_http_json('/api/faculty/attendance/session/end', $seedFacultyAccessToken, ['sessionId' => $queuedId]);
 expect_same(409, $queuedEndStatus, 'Queued sessions cannot resolve future attendance early');
 [$queuedRevokeStatus] = integration_http_json('/api/secretary/attendance/session/revoke', $secretaryAccessToken, ['sessionId' => $laterId, 'reason' => 'Fixture cancellation']);
 expect_same(200, $queuedRevokeStatus, 'An authorized Secretary can revoke a queued session');
+[$revokedEditStatus, $revokedEditBody] = integration_http_json('/api/secretary/attendance/session/update', $secretaryAccessToken, $laterPayload + ['sessionId' => $laterId]);
+expect_same(409, $revokedEditStatus, 'Revoked sessions cannot be edited');
+expect_same('ATTENDANCE_SESSION_NOT_EDITABLE', $revokedEditBody['code'] ?? null, 'Revoked edit returns NOT_EDITABLE');
 [$releasedStatus, $releasedBody] = integration_http_json('/api/faculty/attendance/session', $seedFacultyAccessToken, $laterPayload);
 expect_same(201, $releasedStatus, 'Revocation releases the booking period');
 $releasedId = (int) ($releasedBody['session']['sessionId'] ?? 0);
@@ -132,6 +210,10 @@ attendance_sessions_open_due($pdo, $sessionConfig, attendance_session_request_co
 $queueState = $pdo->prepare('SELECT status FROM attendance_sessions WHERE session_id = ?');
 $queueState->execute([$queuedId]);
 expect_same('active', $queueState->fetchColumn(), 'Due queued session opens automatically');
+[$activeEditStatus, $activeEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $queuePayload + ['sessionId' => $queuedId]);
+expect_same(409, $activeEditStatus, 'Active sessions cannot be edited');
+expect_same('ATTENDANCE_SESSION_NOT_EDITABLE', $activeEditBody['code'] ?? null, 'Active edit returns NOT_EDITABLE');
+expect_same('Only scheduled sessions can be edited.', $activeEditBody['message'] ?? null, 'Active edit returns the exact status message');
 $queueState->execute([$legacySessionId]);
 expect_same('active', $queueState->fetchColumn(), 'Legacy session history is preserved without blocking the scheduled opening');
 $queueState->execute([$releasedId]);
@@ -153,6 +235,9 @@ try {
     $openingLockPdo->rollBack();
 }
 $pdo->prepare("UPDATE attendance_sessions SET status = 'ended', ended_at = ? WHERE session_id = ?")->execute([$queueDate . ' 03:00:00', $queuedId]);
+[$endedEditStatus, $endedEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $queuePayload + ['sessionId' => $queuedId]);
+expect_same(409, $endedEditStatus, 'Ended sessions cannot be edited');
+expect_same('ATTENDANCE_SESSION_NOT_EDITABLE', $endedEditBody['code'] ?? null, 'Ended edit returns NOT_EDITABLE');
 attendance_sessions_open_due($pdo, $sessionConfig, attendance_session_request_context(), new DateTimeImmutable($queueDate . ' 11:05:00', $sessionLocalTimezone));
 $queueState->execute([$releasedId]);
 expect_same('active', $queueState->fetchColumn(), 'The deferred session opens after its predecessor ends');

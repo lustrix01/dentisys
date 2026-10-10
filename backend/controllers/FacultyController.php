@@ -4944,6 +4944,31 @@ function handle_faculty_attendance_session_create(): void
     }
 }
 
+function handle_faculty_attendance_session_update(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+        $context = attendance_session_request_context();
+        attendance_sessions_end_overdue($pdo, $config, $context);
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+        $session = attendance_session_update($pdo, $config, $authCtx, $context, $body['data'], 'faculty');
+        json_response(['status' => 'ok', 'session' => attendance_session_map($session, true)], 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
+    } catch (AttendanceSessionException $e) {
+        emit_response(build_error_response($e->getMessage(), $e->statusCode, $e->errorCode));
+    } catch (Throwable $e) {
+        error_log('Faculty attendance session update error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
 function handle_faculty_attendance_session_revoke(): void
 {
     $context = [

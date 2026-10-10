@@ -42,17 +42,22 @@ function attendance_session_creation_status(string $date, ?string $opening, arra
     return $date . ' ' . ($opening ?? '00:00:00') > $now->format('Y-m-d H:i:s') ? 'scheduled' : 'active';
 }
 
-/** Called while holding the class-section row lock in both creation paths. */
-function attendance_session_booking_conflict(PDO $pdo, int $csId, string $date, ?string $opening, string $end): ?string
+/** Called while holding the class-section row lock when creating or editing. */
+function attendance_session_booking_conflict(PDO $pdo, int $csId, string $date, ?string $opening, string $end, ?int $excludeSessionId = null): ?string
 {
+    $exclude = $excludeSessionId !== null ? ' AND s.session_id <> ?' : '';
     $stmt = $pdo->prepare("SELECT s.session_date, s.opening_time, s.class_end_time, s.created_by_role,
         u.display_name AS creator_name FROM attendance_sessions s
         LEFT JOIN user_accounts u ON u.user_id = s.owner_user_id
         WHERE s.cs_id = ? AND s.session_date = ? AND s.status IN ('active', 'scheduled')
           AND COALESCE(s.opening_time, TIME '00:00') < CAST(? AS time)
           AND CAST(? AS time) < COALESCE(s.class_end_time, TIME '23:59:59')
-        ORDER BY s.opening_time, s.session_id LIMIT 1");
-    $stmt->execute([$csId, $date, $end, $opening ?? '00:00:00']);
+        {$exclude} ORDER BY s.opening_time, s.session_id LIMIT 1");
+    $params = [$csId, $date, $end, $opening ?? '00:00:00'];
+    if ($excludeSessionId !== null) {
+        $params[] = $excludeSessionId;
+    }
+    $stmt->execute($params);
     $existing = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$existing) return null;
     $role = ($existing['created_by_role'] ?? '') === 'faculty' ? 'Faculty' : 'Secretary';
@@ -223,7 +228,7 @@ function attendance_session_fetch_for_manager(
                     s.geofence_longitude, s.geofence_radius_meters,
                     s.biometric_required, s.opening_time, s.present_cutoff_time,
                     s.late_cutoff_time, s.class_end_time, s.revoked_at, s.revoked_by_user_id,
-                    s.revocation_reason, s.created_at, s.updated_at,
+                    s.revocation_reason, s.created_at, s.updated_at, s.created_by_role,
                     cs.cs_name, cs.block, c.course_id, c.course_code,
                     c.name AS course_name, u.display_name AS instructor_name
                FROM attendance_sessions s
@@ -244,6 +249,157 @@ function attendance_session_fetch_for_manager(
     ]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     return $row === false ? null : $row;
+}
+
+/** Preserve each role's creation parsing, defaults, aliases and validation messages. */
+function attendance_session_update_values(array $data, array $config, string $role): array
+{
+    $today = app_local_date($config, attendance_session_now_utc());
+    $sessionDate = $role === 'faculty'
+        ? attendance_session_creation_date(trim((string) ($data['sessionDate'] ?? ($data['date'] ?? $today))), $config)
+        : secretary_attendance_session_date($data, attendance_session_now_utc(), $config);
+    [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
+    $classEndTime = attendance_session_class_end_time_from_request($data, $lateCutoff, $sessionDate, $config);
+
+    $room = null;
+    if ($role === 'faculty') {
+        if (array_key_exists('room', $data) && trim((string) $data['room']) !== '') {
+            $room = validate_required_string($data, 'room', 1, 255);
+        }
+        $biometricRequired = attendance_session_request_bool($data, 'biometricRequired', false);
+    } else {
+        if (array_key_exists('room', $data) && $data['room'] !== null && $data['room'] !== '') {
+            $room = validate_required_string($data, 'room', 1, 255);
+        }
+        $biometricRequired = secretary_attendance_session_bool($data, array_key_exists('biometricRequired', $data) ? 'biometricRequired' : 'requireFace', false);
+    }
+    attendance_session_require_timing_for_biometric($biometricRequired, $openingTime, $presentCutoff, $lateCutoff);
+    if ($role === 'faculty') {
+        $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', $biometricRequired);
+        $latitude = attendance_session_request_float($data, 'geofenceLatitude', -90, 90);
+        $longitude = attendance_session_request_float($data, 'geofenceLongitude', -180, 180);
+        $radius = attendance_session_request_float($data, 'geofenceRadiusMeters', 0.01, null);
+    } else {
+        $geofenceEnabled = secretary_attendance_session_bool($data, array_key_exists('geofenceEnabled', $data) ? 'geofenceEnabled' : 'requireGeo', $biometricRequired);
+        $latitude = secretary_attendance_session_optional_float($data, 'geofenceLatitude', -90, 90);
+        $longitude = secretary_attendance_session_optional_float($data, 'geofenceLongitude', -180, 180);
+        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters');
+    }
+    if (($latitude === null) !== ($longitude === null)) {
+        throw new ValidationException([['field' => 'geofenceLatitude', 'message' => 'Geofence latitude and longitude must be provided together.']]);
+    }
+    if ($geofenceEnabled && $latitude === null) {
+        throw new ValidationException([['field' => 'geofenceLatitude', 'message' => 'A geofenced session requires the session location (latitude and longitude).']]);
+    }
+    if ($geofenceEnabled && $radius === null) {
+        $radius = 100.0;
+    }
+    if ($role === 'secretary' && $radius !== null && $radius <= 0) {
+        throw new ValidationException([['field' => 'geofenceRadiusMeters', 'message' => 'Geofence radius must be greater than zero.']]);
+    }
+
+    return [
+        'session_date' => $sessionDate, 'opening_time' => $openingTime,
+        'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff,
+        'class_end_time' => $classEndTime, 'room' => $room,
+        'biometric_required' => $biometricRequired, 'geofence_enabled' => $geofenceEnabled,
+        'geofence_latitude' => $latitude, 'geofence_longitude' => $longitude,
+        'geofence_radius_meters' => $radius,
+    ];
+}
+
+function attendance_session_update_audit_state(array $values): array
+{
+    foreach (['biometric_required', 'geofence_enabled'] as $field) {
+        $values[$field] = attendance_session_bool($values[$field]);
+    }
+    // The audit writer requires decimal values as strings, never floats.
+    foreach (['geofence_latitude', 'geofence_longitude', 'geofence_radius_meters'] as $field) {
+        $values[$field] = $values[$field] !== null ? (string) $values[$field] : null;
+    }
+    return $values;
+}
+
+function attendance_session_update(PDO $pdo, array $config, array $authCtx, array $context, array $data, string $role): array
+{
+    $sessionId = faculty_attendance_positive_int($data['sessionId'] ?? null);
+    if ($sessionId === null || $sessionId <= 0 || $sessionId > 2147483647) {
+        throw new AttendanceSessionException('A valid attendance session ID is required.', 400, 'BAD_REQUEST');
+    }
+    $values = attendance_session_update_values($data, $config, $role);
+    $userId = (int) $authCtx['user_id'];
+    $session = attendance_session_fetch_for_manager($pdo, $userId, $role, $sessionId);
+    if ($session === null) {
+        throw new AttendanceSessionException('Attendance session was not found in an assigned class.', 404, 'NOT_FOUND');
+    }
+    // The class section is immutable; request csId/classSectionId are ignored.
+    $csId = (int) $session['cs_id'];
+    $pdo->beginTransaction();
+    try {
+        $managerColumn = $role === 'faculty' ? 'instructor_user_id' : 'secretary_user_id';
+        $lock = $pdo->prepare("SELECT cs_id FROM class_sections WHERE cs_id = ? AND {$managerColumn} = ? AND LOWER(status) = 'active' FOR UPDATE");
+        $lock->execute([$csId, $userId]);
+        if ($lock->fetchColumn() === false) {
+            throw new AttendanceSessionException('Attendance session was not found in an assigned class.', 404, 'NOT_FOUND');
+        }
+        $session = attendance_session_fetch_for_manager($pdo, $userId, $role, $sessionId, true);
+        if ($session === null) {
+            throw new AttendanceSessionException('Attendance session was not found in an assigned class.', 404, 'NOT_FOUND');
+        }
+        if ($session['status'] !== 'scheduled') {
+            throw new AttendanceSessionException('Only scheduled sessions can be edited.', 409, 'ATTENDANCE_SESSION_NOT_EDITABLE');
+        }
+        // On Secretary insert these are the actor, not the assigned class Secretary.
+        if ($role === 'secretary' && (($session['created_by_role'] ?? null) !== 'secretary'
+            || (int) ($session['secretary_user_id'] ?? 0) !== $userId
+            || (int) ($session['owner_user_id'] ?? 0) !== $userId)) {
+            throw new AttendanceSessionException('You can edit only sessions you created.', 403, 'ATTENDANCE_SESSION_EDIT_FORBIDDEN');
+        }
+        if (academic_class_section_is_past($pdo, $csId)) {
+            throw new AttendanceSessionException('Past school-year classes are view-only.', 409, 'CONFLICT');
+        }
+        $conflict = attendance_session_booking_conflict($pdo, $csId, $values['session_date'], $values['opening_time'], $values['class_end_time'], $sessionId);
+        if ($conflict !== null) {
+            throw new AttendanceSessionException($conflict, 409, 'CONFLICT');
+        }
+        $values['status'] = attendance_session_creation_status($values['session_date'], $values['opening_time'], $config);
+        $nowSql = attendance_session_now_utc()->format('Y-m-d H:i:s.u');
+        $update = $pdo->prepare(
+            "UPDATE attendance_sessions SET session_date = :session_date, opening_time = :opening_time,
+                present_cutoff_time = :present_cutoff_time, late_cutoff_time = :late_cutoff_time,
+                class_end_time = :class_end_time, room = :room, biometric_required = :biometric_required,
+                geofence_enabled = :geofence_enabled, geofence_latitude = :geofence_latitude,
+                geofence_longitude = :geofence_longitude, geofence_radius_meters = :geofence_radius_meters,
+                status = :status, updated_at = :updated_at
+             WHERE session_id = :id AND status = 'scheduled'"
+        );
+        $params = $values;
+        $params['biometric_required'] = $values['biometric_required'] ? 1 : 0;
+        $params['geofence_enabled'] = $values['geofence_enabled'] ? 1 : 0;
+        $update->execute($params + ['updated_at' => $nowSql, 'id' => $sessionId]);
+        if ($update->rowCount() !== 1) {
+            throw new AttendanceSessionException('Only scheduled sessions can be edited.', 409, 'ATTENDANCE_SESSION_NOT_EDITABLE');
+        }
+        $updatedSession = attendance_session_fetch_for_manager($pdo, $userId, $role, $sessionId);
+        // Audit the persisted row so NUMERIC rounding is reflected in the after-state.
+        $before = attendance_session_update_audit_state(array_intersect_key($session, $values));
+        $after = attendance_session_update_audit_state(array_intersect_key($updatedSession, $values));
+        attendance_session_record_audit(
+            $pdo, $config, $authCtx, $context, 'attendance_session_updated', $sessionId, $csId,
+            "Updated attendance session '{$session['session_code']}' for class section #{$csId}.", null, $before, $after
+        );
+        $pdo->commit();
+        return $updatedSession;
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        if (($e->errorInfo[0] ?? (string) $e->getCode()) === '23505') {
+            throw new AttendanceSessionException('An active attendance session or duplicate session code already exists for this class section.', 409, 'CONFLICT');
+        }
+        throw $e;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        throw $e;
+    }
 }
 
 function attendance_session_fetch_for_student(
