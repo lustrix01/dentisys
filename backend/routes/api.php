@@ -595,6 +595,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'GET',
+        'path' => '/api/student/attendance/sessions/upcoming',
+        'handler' => 'handle_student_attendance_upcoming_sessions',
+        'has_params' => false,
+    ],
+    [
         'method' => 'POST',
         'path' => '/api/student/attendance/biometric',
         'handler' => 'handle_student_attendance_biometric',

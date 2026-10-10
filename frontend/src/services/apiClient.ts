@@ -14,6 +14,7 @@ import type {
   LivenessGuidanceResponse,
   BiometricEnrollmentResponse,
   BiometricRevocationResponse,
+  StudentActiveSession,
   StudentActiveSessionsResponse,
   BiometricAttendanceResponse,
   StudentAttendanceLogsResponse,
@@ -2134,6 +2135,41 @@ export async function getStudentActiveAttendanceSessions(): Promise<StudentActiv
     }
   }
   return { sessions: [] };
+}
+
+export interface StudentUpcomingSession extends StudentActiveSession {
+  sessionDate: string;
+  classEndTime: string | null;
+  captureStatus: string | null;
+}
+
+export interface StudentUpcomingSessionsResponse {
+  sessions: StudentUpcomingSession[];
+  serverNow: string;
+  timezone: string;
+  range: 'week' | 'all';
+}
+
+export async function getStudentUpcomingAttendanceSessions(
+  range: 'week' | 'all' = 'week'
+): Promise<StudentUpcomingSessionsResponse> {
+  const raw = await request<unknown>('GET', `/student/attendance/sessions/upcoming?range=${range}`);
+  const obj = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const rows = Array.isArray(obj.sessions) ? obj.sessions : [];
+  return {
+    sessions: rows.map((value): StudentUpcomingSession => {
+      const row = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+      return {
+        ...normalizeStudentActiveSession(value),
+        sessionDate: typeof row.sessionDate === 'string' ? row.sessionDate : '',
+        classEndTime: typeof row.classEndTime === 'string' ? row.classEndTime : null,
+        captureStatus: typeof row.captureStatus === 'string' ? row.captureStatus : null,
+      };
+    }),
+    serverNow: typeof obj.serverNow === 'string' ? obj.serverNow : new Date().toISOString(),
+    timezone: typeof obj.timezone === 'string' ? obj.timezone : 'Asia/Manila',
+    range: obj.range === 'all' ? 'all' : 'week',
+  };
 }
 
 export function submitBiometricAttendance(formData: FormData, signal?: AbortSignal): Promise<BiometricAttendanceResponse> {

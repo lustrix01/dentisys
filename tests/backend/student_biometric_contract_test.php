@@ -159,6 +159,7 @@ foreach ([
     ['POST', '/api/student/biometric/enrollment'],
     ['DELETE', '/api/student/biometric/profile'],
     ['GET', '/api/student/attendance/sessions/active'],
+    ['GET', '/api/student/attendance/sessions/upcoming'],
     ['POST', '/api/student/attendance/biometric'],
     ['GET', '/api/student/attendance/logs'],
 ] as [$method, $path]) {

@@ -333,4 +333,50 @@ $secretarySocket = integration_http_async_json('/api/secretary/attendance/sessio
 $bookingStatuses = [$concurrentFacultyStatus, $concurrentSecretaryStatus];
 sort($bookingStatuses);
 expect_same([201, 409], $bookingStatuses, 'Concurrent Faculty/Secretary booking produces one success and one conflict');
+
+// ATT-007 Student upcoming sessions: read-only list of scheduled/open sessions.
+[$upcomingLoginStatus, $upcomingLoginBody] = integration_http_json('/api/auth/login', '', ['email' => 'student@bicol-u.edu.ph', 'password' => $demoPasswords['student@bicol-u.edu.ph']]);
+expect_same(200, $upcomingLoginStatus, 'Student upcoming-sessions login succeeds');
+$upcomingToken = (string) ($upcomingLoginBody['access_token'] ?? '');
+$upcomingToday = (new DateTimeImmutable('now', $sessionLocalTimezone))->format('Y-m-d');
+$upcomingOwnerId = (int) $pdo->query("SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph'")->fetchColumn();
+$upcomingInsert = $pdo->prepare("INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, started_at, ended_at, status, opening_time, present_cutoff_time, late_cutoff_time, class_end_time)
+    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, '23:00', '23:20', '23:40', '23:55') RETURNING session_id");
+$upcomingAdd = static function (int $csId, string $date, string $code, string $status) use ($upcomingInsert, $secretaryFixtureUserId, $upcomingOwnerId, $scheduleSuffix): int {
+    $upcomingInsert->execute([$csId, $secretaryFixtureUserId, $upcomingOwnerId, $date, $code . $scheduleSuffix, $status === 'ended' ? date('Y-m-d H:i:s') : null, $status]);
+    return (int) $upcomingInsert->fetchColumn();
+};
+$upcomingDay = static fn(int $days): string => (new DateTimeImmutable($upcomingToday))->modify('+' . $days . ' days')->format('Y-m-d');
+$upcomingScheduledToday = $upcomingAdd($meetingClassId, $upcomingToday, 'UPC-TODAY-', 'scheduled');
+$upcomingNear = $upcomingAdd($meetingClassId, $upcomingDay(5), 'UPC-NEAR-', 'scheduled');
+$upcomingFar = $upcomingAdd($meetingClassId, $upcomingDay(10), 'UPC-FAR-', 'scheduled');
+$upcomingEnded = $upcomingAdd($meetingClassId, $upcomingDay(1), 'UPC-ENDED-', 'ended');
+$upcomingForeignClassId = (int) $pdo->query("SELECT cs_id FROM class_sections WHERE cs_id NOT IN (SELECT cs_id FROM enrollments WHERE student_id = 26 AND status = 'Active') ORDER BY cs_id LIMIT 1")->fetchColumn();
+expect_true($upcomingForeignClassId > 0, 'A class without the Student exists for upcoming-session isolation');
+$upcomingForeign = $upcomingAdd($upcomingForeignClassId, $upcomingDay(2), 'UPC-OTHER-', 'scheduled');
+$upcomingBefore = (int) $pdo->query('SELECT COUNT(*) FROM attendance_records')->fetchColumn();
+$upcomingIds = static fn(array $body): array => array_map('intval', array_column($body['sessions'] ?? [], 'sessionId'));
+[$upcomingWeekStatus, $upcomingWeekBody] = integration_http_get_json('/api/student/attendance/sessions/upcoming', $upcomingToken);
+expect_same(200, $upcomingWeekStatus, 'Student reads upcoming sessions');
+expect_same('week', $upcomingWeekBody['range'] ?? null, 'Upcoming sessions default to the week range');
+expect_true(is_string($upcomingWeekBody['serverNow'] ?? null) && str_ends_with($upcomingWeekBody['serverNow'], 'Z'), 'Upcoming sessions include a UTC server time');
+$weekIds = $upcomingIds($upcomingWeekBody);
+expect_true(in_array($upcomingScheduledToday, $weekIds, true), 'Week range lists a session scheduled today');
+expect_true(in_array($upcomingNear, $weekIds, true), 'Week range lists a session 5 days ahead');
+expect_true(!in_array($upcomingFar, $weekIds, true), 'Week range hides a session 10 days ahead');
+expect_true(!in_array($upcomingEnded, $weekIds, true), 'Ended sessions are not listed');
+expect_true(!in_array($upcomingForeign, $weekIds, true), 'Sessions of classes without an active enrollment are not listed');
+foreach ([$queuedId, $releasedId] as $revokedFixtureId) {
+    expect_true(!in_array($revokedFixtureId, $weekIds, true), 'Revoked sessions are not listed');
+}
+$todayRow = array_values(array_filter($upcomingWeekBody['sessions'], static fn(array $row): bool => (int) $row['sessionId'] === $upcomingScheduledToday))[0] ?? [];
+expect_same('23:55', $todayRow['classEndTime'] ?? null, 'Upcoming sessions include the class end time');
+[$upcomingAllStatus, $upcomingAllBody] = integration_http_get_json('/api/student/attendance/sessions/upcoming?range=all', $upcomingToken);
+expect_same(200, $upcomingAllStatus, 'Student reads all upcoming sessions');
+expect_true(in_array($upcomingFar, $upcomingIds($upcomingAllBody), true), 'All range lists a session 10 days ahead');
+[$upcomingBadStatus] = integration_http_get_json('/api/student/attendance/sessions/upcoming?range=month', $upcomingToken);
+expect_same(422, $upcomingBadStatus, 'Invalid upcoming range is rejected');
+expect_same($upcomingBefore, (int) $pdo->query('SELECT COUNT(*) FROM attendance_records')->fetchColumn(), 'Listing upcoming sessions writes no attendance');
+$pdo->prepare("UPDATE attendance_sessions SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP WHERE session_id IN (?, ?, ?, ?)")->execute([$upcomingScheduledToday, $upcomingNear, $upcomingFar, $upcomingForeign]);
+
 $pdo->prepare("UPDATE class_sections SET status = 'Archived' WHERE cs_id = ?")->execute([$meetingClassId]);

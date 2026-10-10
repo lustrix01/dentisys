@@ -303,6 +303,72 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(main.getByText('Your face is registered for attendance')).toHaveCount(0);
   });
 
+  test('Daily Attendance lists upcoming sessions and requests all on demand', async ({ page }) => {
+    const student = {
+      user_id: 28,
+      login_email: 'upcoming.student@bicol-u.edu.ph',
+      display_name: 'Upcoming Student',
+      role: 'student',
+      session_uuid: 'upcoming-student-session',
+      authentication_source: 'password',
+      student: { student_id: 28, student_number: 'P03-UPCOMING', status: 'active' },
+    };
+    const makeSession = (id: number, courseCode: string, sessionDate: string, times: string[], extra: Record<string, unknown>) => ({
+      id, sessionId: String(id), courseCode, courseName: `${courseCode} Course`, sessionDate,
+      openingTime: times[0], presentCutoff: times[1], lateCutoff: times[2], classEndTime: times[3],
+      status: 'scheduled', captureOpen: false, captureStatus: 'session_not_open', alreadyRecordedStatus: null, ...extra,
+    });
+    const open = makeSession(901, 'OPEN101', '2026-10-12', ['09:00', '10:30', '11:00', '12:00'], { status: 'active', captureOpen: true, captureStatus: 'present' });
+    const later = makeSession(902, 'LATER102', '2026-10-12', ['13:30', '14:00', '14:30', '15:00'], {});
+    const nextWeek = makeSession(903, 'WEEK103', '2026-10-15', ['08:00', '09:00', '10:00', '11:00'], {});
+    const farAway = makeSession(904, 'FAR104', '2026-10-30', ['08:00', '09:00', '10:00', '11:00'], {});
+    const requestedRanges: string[] = [];
+    await page.route('**/api/runtime-config', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        ...ENABLED_RUNTIME_CONFIG,
+        providers: { ...ENABLED_RUNTIME_CONFIG.providers, biometrics: { active: 'sidecar' } },
+      }) });
+    });
+    await page.route('**/api/auth/refresh', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'upcoming-student-token', user: { user_id: 28 } }) });
+    });
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(student) });
+    });
+    await page.route('**/api/student/biometric/profile', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', consentGranted: true, enrollmentStatus: 'active', enrolledAt: '2026-09-27T08:00:00+08:00',
+        expiresAt: '2026-12-20', usableSampleCount: 28, requiredUsableSamples: 20, manualFallbackAvailable: true,
+      }) });
+    });
+    await page.route('**/api/student/attendance/sessions/active', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [open] }) });
+    });
+    await page.route('**/api/student/attendance/sessions/upcoming**', async route => {
+      const range = new URL(route.request().url()).searchParams.get('range') ?? 'week';
+      requestedRanges.push(range);
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', range, timezone: 'Asia/Manila', serverNow: '2026-10-12T02:00:00Z',
+        sessions: range === 'all' ? [open, later, nextWeek, farAway] : [open, later, nextWeek],
+      }) });
+    });
+
+    await page.goto('/student/attendance');
+    const main = page.getByRole('main');
+    await expect(main.getByText('Daily Class Check-In')).toBeVisible();
+    await expect(main.getByText('Upcoming sessions')).toBeVisible();
+    await expect(main.getByText('Open · Present until 10:30')).toBeVisible();
+    await expect(main.getByText('Opens in 3h 30m')).toBeVisible();
+    await expect(main.getByText('WEEK103')).toBeVisible();
+    await expect(main.getByText('Thu, Oct 15 · 08:00–11:00')).toBeVisible();
+    await expect(main.getByText('FAR104')).toHaveCount(0);
+
+    await main.getByRole('button', { name: 'Show all upcoming' }).click();
+    await expect(main.getByText('FAR104')).toBeVisible();
+    expect(requestedRanges).toContain('all');
+    await expect(main.getByRole('button', { name: 'Show next 7 days' })).toBeVisible();
+  });
+
   test('development-mock Student retains the gated prototype subtree and actions', async ({ page }) => {
     await page.route('**/api/runtime-config', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({

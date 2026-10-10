@@ -584,6 +584,69 @@ function handle_student_attendance_active_sessions(): void
     }
 }
 
+function handle_student_attendance_upcoming_sessions(): void
+{
+    try {
+        [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
+        $range = isset($_GET['range']) && is_string($_GET['range']) ? $_GET['range'] : 'week';
+        if ($range !== 'week' && $range !== 'all') {
+            throw new StudentBiometricException('Range must be week or all.', 422, 'VALIDATION_ERROR');
+        }
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
+        $now = attendance_session_now_utc();
+        $today = app_local_date($config, $now);
+        $params = [$identity['student_id'], $today];
+        $rangeSql = '';
+        if ($range === 'week') {
+            $rangeSql = ' AND s.session_date <= ?';
+            $params[] = (new DateTimeImmutable($today))->modify('+7 days')->format('Y-m-d');
+        }
+        $stmt = $pdo->prepare(
+            "SELECT s.session_id, s.cs_id, s.secretary_user_id, s.owner_user_id,
+                    s.session_date, s.session_code, s.room, s.started_at, s.ended_at,
+                    s.status, s.geofence_enabled, s.geofence_latitude, s.geofence_longitude,
+                    s.geofence_radius_meters, s.biometric_required, s.opening_time,
+                    s.present_cutoff_time, s.late_cutoff_time, s.class_end_time, s.revoked_at,
+                    s.revoked_by_user_id, s.revocation_reason, s.created_at, s.updated_at,
+                    cs.cs_name, cs.block, c.course_id, c.course_code, c.name AS course_name,
+                    u.display_name AS instructor_name, r.record_id, r.status AS record_status
+               FROM attendance_sessions s
+               JOIN class_sections cs ON cs.cs_id = s.cs_id
+               JOIN courses c ON c.course_id = cs.course_id
+               JOIN enrollments e ON e.cs_id = cs.cs_id AND e.student_id = ? AND e.status = 'Active'
+               LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
+               LEFT JOIN attendance_records r ON r.attendance_session_id = s.session_id AND r.enrollment_id = e.enrollment_id
+              WHERE s.status IN ('scheduled', 'active') AND s.session_date >= ?" . $rangeSql . "
+              ORDER BY s.session_date, s.opening_time, s.session_id"
+        );
+        $stmt->execute($params);
+        $sessions = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $decision = attendance_session_timing_decision($row, $now, $config);
+            $payload = attendance_session_map($row, false);
+            $payload['captureOpen'] = $decision['allowed'];
+            $payload['captureStatus'] = $decision['allowed'] ? $decision['status'] : $decision['code'];
+            $payload['window'] = [
+                'openingTime' => $payload['openingTime'],
+                'presentCutoff' => $payload['presentCutoff'],
+                'lateCutoff' => $payload['lateCutoff'],
+                'timezone' => $config['app']['operational_timezone'],
+            ];
+            $payload['alreadyRecordedStatus'] = $row['record_status'] ?? null;
+            $sessions[] = $payload;
+        }
+        json_response([
+            'status' => 'ok',
+            'range' => $range,
+            'sessions' => $sessions,
+            'timezone' => $config['app']['operational_timezone'],
+            'serverNow' => $now->format('Y-m-d\\TH:i:s\\Z'),
+        ], 200);
+    } catch (Throwable $e) {
+        student_biometric_emit_exception($e);
+    }
+}
+
 function student_biometric_post_float(string $field, ?float $minimum = null, ?float $maximum = null): ?float
 {
     if (!array_key_exists($field, $_POST) || $_POST[$field] === '') {

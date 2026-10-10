@@ -22,6 +22,8 @@ import { StudentUnavailable } from './RealStudentSurfaces';
 import {
   getStudentBiometricProfile,
   getStudentActiveAttendanceSessions,
+  getStudentUpcomingAttendanceSessions,
+  type StudentUpcomingSession,
   getStudentAttendanceLogs,
   createBiometricLivenessChallenge,
   requestBiometricLivenessGuidance,
@@ -96,6 +98,62 @@ const MOCK_CLASS_SESSIONS: Record<string, ClassSessionInfo> = {
     status: 'ended',
     statusMessage: 'Session ENDED at 09:00 AM. Check-in window is now closed.',
   },
+};
+
+const MANILA_PARTS = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+function manilaNow(ms: number): { date: string; minutes: number } {
+  const parts: Record<string, string> = {};
+  MANILA_PARTS.formatToParts(new Date(ms)).forEach(part => { parts[part.type] = part.value; });
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}
+
+function timeToMinutes(value: string | null | undefined): number | null {
+  const match = /^(\d{2}):(\d{2})/.exec(value ?? '');
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+function formatUpcomingDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  if (!year || !month || !day) return isoDate;
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const weekday = weekdays[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  return `${weekday}, ${months[month - 1]} ${day}`;
+}
+
+function upcomingPill(session: StudentUpcomingSession, nowMinutes: number): { label: string; tone: 'open' | 'late' | 'soon' | 'done' | 'idle' } {
+  if (session.alreadyRecordedStatus) return { label: `Recorded: ${session.alreadyRecordedStatus}`, tone: 'done' };
+  if (session.isOpen) {
+    if (session.captureStatus === 'late') return { label: `Open · Late until ${session.lateCutoff ?? '--:--'}`, tone: 'late' };
+    return { label: `Open · Present until ${session.presentCutoff ?? '--:--'}`, tone: 'open' };
+  }
+  const opening = timeToMinutes(session.openingTime);
+  if (opening !== null && opening > nowMinutes) {
+    const wait = opening - nowMinutes;
+    const hours = Math.floor(wait / 60);
+    return { label: `Opens in ${hours > 0 ? `${hours}h ` : ''}${wait % 60}m`, tone: 'soon' };
+  }
+  return { label: 'Not open', tone: 'idle' };
+}
+
+const UPCOMING_PILL_CLASSES: Record<'open' | 'late' | 'soon' | 'done' | 'idle', string> = {
+  open: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
+  late: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
+  soon: 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300',
+  done: 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  idle: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
 function formatAction(action: LivenessAction): { title: string; instruction: string } {
@@ -243,6 +301,41 @@ export const Attendance: React.FC = () => {
     };
   }, [checkInStage, pendingAttendancePayload, stopCamera]);
 
+  // Upcoming sessions (ATT-007): display-only; countdowns use the server clock offset.
+  const [upcomingSessions, setUpcomingSessions] = useState<StudentUpcomingSession[]>([]);
+  const [upcomingRange, setUpcomingRange] = useState<'week' | 'all'>('week');
+  const [upcomingError, setUpcomingError] = useState(false);
+  const [clockOffsetMs, setClockOffsetMs] = useState(0);
+  const [clockLocalNow, setClockLocalNow] = useState(() => Date.now());
+  const upcomingRangeRef = useRef<'week' | 'all'>('week');
+
+  const loadUpcoming = useCallback(async (range: 'week' | 'all'): Promise<void> => {
+    try {
+      const response = await getStudentUpcomingAttendanceSessions(range);
+      const serverMs = Date.parse(response.serverNow);
+      setClockOffsetMs(Number.isFinite(serverMs) ? serverMs - Date.now() : 0);
+      setClockLocalNow(Date.now());
+      setUpcomingSessions(response.sessions);
+      setUpcomingError(false);
+    } catch {
+      setUpcomingSessions([]);
+      setUpcomingError(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthoritative) return undefined;
+    const timer = window.setInterval(() => setClockLocalNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, [isAuthoritative]);
+
+  const handleToggleUpcomingRange = () => {
+    const next = upcomingRange === 'week' ? 'all' : 'week';
+    upcomingRangeRef.current = next;
+    setUpcomingRange(next);
+    void loadUpcoming(next);
+  };
+
   // Load Authoritative Sessions and Profile
   const loadAuthoritativeData = useCallback(async () => {
     if (!isAuthoritative) return;
@@ -251,6 +344,7 @@ export const Attendance: React.FC = () => {
     const [profileResult, sessionsResult] = await Promise.allSettled([
       getStudentBiometricProfile(),
       getStudentActiveAttendanceSessions(),
+      loadUpcoming(upcomingRangeRef.current),
     ]);
     const errors: string[] = [];
     if (profileResult.status === 'fulfilled') {
@@ -272,13 +366,17 @@ export const Attendance: React.FC = () => {
       ? `${errors.join(' ')} Automated attendance is unavailable until the data can be loaded. Please use the authorized Secretary or Faculty manual attendance path.`
       : null);
     setInitialLoading(false);
-  }, [isAuthoritative]);
+  }, [isAuthoritative, loadUpcoming]);
 
   useEffect(() => {
     if (isAuthoritative) {
       void loadAuthoritativeData();
     }
   }, [isAuthoritative, loadAuthoritativeData]);
+
+  const serverNowParts = manilaNow(clockLocalNow + clockOffsetMs);
+  const upcomingToday = upcomingSessions.filter(s => s.sessionDate === serverNowParts.date);
+  const upcomingLater = upcomingSessions.filter(s => s.sessionDate > serverNowParts.date);
 
   // Selected Authoritative Session Object
   const currentSelectedSession = activeSessions.find(s => s.id === selectedSessionId) || activeSessions[0] || null;
@@ -1015,6 +1113,97 @@ export const Attendance: React.FC = () => {
           {/* ACTIVE SESSIONS & CHECK-IN FORM */}
           {checkInStage !== 'result' && (
             <>
+              {/* Upcoming sessions (ATT-007): informational only, never authoritative */}
+              <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-600" />
+                    Upcoming sessions
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={handleToggleUpcomingRange}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                  >
+                    {upcomingRange === 'week' ? 'Show all upcoming' : 'Show next 7 days'}
+                  </button>
+                </div>
+
+                {upcomingError && (
+                  <p className="text-xs text-amber-700 dark:text-amber-300">Upcoming sessions could not be loaded.</p>
+                )}
+
+                {!upcomingError && upcomingSessions.length === 0 && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {upcomingRange === 'week'
+                      ? 'No attendance sessions scheduled in the next 7 days.'
+                      : 'No upcoming attendance sessions scheduled.'}
+                  </p>
+                )}
+
+                {upcomingToday.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Today</h4>
+                    {upcomingToday.map(sess => {
+                      const pill = upcomingPill(sess, serverNowParts.minutes);
+                      const selectable = Boolean(sess.isOpen) && activeSessions.some(a => a.id === sess.id);
+                      return (
+                        <div
+                          key={sess.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                              <span className="font-mono text-xs text-blue-600 dark:text-blue-400 mr-1.5">{sess.courseCode}</span>
+                              {sess.courseName}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {sess.openingTime ?? '--:--'}–{sess.classEndTime ?? '--:--'}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${UPCOMING_PILL_CLASSES[pill.tone]}`}>
+                              {pill.label}
+                            </span>
+                            {selectable && !sess.alreadyRecordedStatus && (
+                              <button
+                                type="button"
+                                onClick={() => { if (checkInStage === 'idle') setSelectedSessionId(sess.id); }}
+                                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold cursor-pointer"
+                              >
+                                Take attendance
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {upcomingLater.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      {upcomingRange === 'week' ? 'Next 7 days' : 'Later'}
+                    </h4>
+                    {upcomingLater.map(sess => (
+                      <div
+                        key={sess.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 p-3 rounded-2xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800"
+                      >
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100 break-words">
+                          <span className="font-mono text-xs text-blue-600 dark:text-blue-400 mr-1.5">{sess.courseCode}</span>
+                          {sess.courseName}
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {formatUpcomingDate(sess.sessionDate)} · {sess.openingTime ?? '--:--'}–{sess.classEndTime ?? '--:--'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Active Sessions List or Dropdown */}
               <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
                 <div className="flex items-center justify-between">
