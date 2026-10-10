@@ -9,11 +9,13 @@ fail() { echo "ERROR: $*" >&2; exit 1; }
 
 non_interactive=false
 token_stdin=false
-for flag in "$@"; do
-  case "$flag" in
-    --non-interactive) non_interactive=true ;;
-    --token-stdin) token_stdin=true ;;
-    *) fail 'Usage: deploy-vps.sh [--non-interactive] [--token-stdin]' ;;
+root_deploy_user=devops
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --non-interactive) non_interactive=true; shift ;;
+    --token-stdin) token_stdin=true; shift ;;
+    --user) [[ $# -ge 2 ]] || fail 'Usage: deploy-vps.sh [--non-interactive] [--token-stdin] [--user devops]'; root_deploy_user="$2"; shift 2 ;;
+    *) fail 'Usage: deploy-vps.sh [--non-interactive] [--token-stdin] [--user devops]' ;;
   esac
 done
 # Consume credentials before apt, sudo or any subprocess can read stdin.
@@ -42,7 +44,8 @@ env_value() {
 deploy_user="$(id -un)"
 if [[ "$EUID" -eq 0 ]]; then
   [[ "$non_interactive" == true ]] || fail 'Run as a non-root user with sudo rights.'
-  deploy_user=devops
+  [[ "$root_deploy_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "$root_deploy_user" != root && "$root_deploy_user" != ubuntu ]] || fail 'Invalid --user for root deployment.'
+  deploy_user="$root_deploy_user"
 fi
 deploy_group="$(id -gn "$deploy_user")"
 if [[ "$non_interactive" == true ]]; then
@@ -50,7 +53,7 @@ if [[ "$non_interactive" == true ]]; then
 else
   sudo -n true 2>/dev/null || sudo -v
 fi
-# Root orchestration still leaves standalone deployments owned by devops.
+# Root orchestration still leaves standalone deployments owned by the sudo account (devops by default).
 install() { command install -o "$deploy_user" -g "$deploy_group" "$@"; }
 umask 077
 sudo install -d -m 0750 -o "$deploy_user" -g "$deploy_group" "$deploy_dir"

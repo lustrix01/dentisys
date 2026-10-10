@@ -10,13 +10,15 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$SshPort = 2202,
     [switch]$NoDbTunnel,
-    [switch]$NewInstance
+    [switch]$NewInstance,
+    [string]$User = 'devops'
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $address = $null
 if (-not [Net.IPAddress]::TryParse($Ip, [ref]$address) -or $address.ToString() -ne $Ip) { throw 'Ip must be an IPv4 address.' }
+if ($User -cnotmatch '^[a-z_][a-z0-9_-]{0,31}\z' -or $User -in @('root', 'ubuntu')) { throw 'User must be a lowercase Linux username other than root or ubuntu.' }
 if ($Domain -and $Domain -notmatch '\.') { throw 'Domain must be a hostname, without a scheme, port or path.' }
 function Invoke-Native {
     param([string]$Command, [string[]]$Arguments)
@@ -151,24 +153,33 @@ try {
     if ($Domain) { $newInstanceCommand += " -Domain '$Domain'" }
     if ($SshPort -ne 2202) { $newInstanceCommand += " -SshPort $SshPort" }
     if ($NoDbTunnel) { $newInstanceCommand += ' -NoDbTunnel' }
+    if ($User -ne 'devops') { $newInstanceCommand += " -User $User" }
     $newInstanceCommand += ' -NewInstance'
     if ($NewInstance) { Reset-InstanceHostKeys }
     # Probes never prompt. Changed host keys stop with a rebuild command.
-    $probeCommand = 'id -un; if [ -f /opt/dentisys/.env ]; then echo ENV_EXISTS; grep -E ''^(APP_DOMAIN|GHCR_USERNAME)='' /opt/dentisys/.env; fi'
+    $probeCommand = 'id -un; if [ -f /opt/dentisys/.env ]; then echo ENV_EXISTS; grep -E ''^(APP_DOMAIN|GHCR_USERNAME)='' /opt/dentisys/.env; fi; if [ -d /opt/dentisys ]; then echo DEPLOY_OWNER=$(stat -c %U /opt/dentisys); fi; grep -E ''^AllowUsers[[:space:]]'' /etc/ssh/sshd_config.d/99-hardening.conf 2>/dev/null; true'
     $probeResult = Invoke-SshProbe 'ubuntu' 22
     $fresh = $probeResult.ExitCode -eq 0
     $loginUser = 'ubuntu'
     $loginPort = 22
     if (-not $fresh) {
-        $probeResult = Invoke-SshProbe 'devops' $SshPort
-        if ($probeResult.ExitCode -ne 0) { throw 'No SSH probe succeeded. Resolve the connection diagnostics above, then rerun.' }
-        $loginUser = 'devops'
+        $probeResult = Invoke-SshProbe $User $SshPort
+        if ($probeResult.ExitCode -ne 0) { throw "No SSH probe succeeded. Resolve the connection diagnostics above, then rerun. If this server was provisioned with a different sudo account, pass it with -User." }
+        $loginUser = $User
         $loginPort = $SshPort
     }
     $probe = @($probeResult.Output -split '\r?\n' | Where-Object { $_ -ne '' })
     $envExists = $probe -contains 'ENV_EXISTS'
+    # Refuse to create a second sudo account on a server set up for another one.
+    $existingUsers = @()
+    foreach ($line in $probe) {
+        if ($line -match '^\s*AllowUsers\s+(.+)$') { $existingUsers += @($Matches[1].Trim() -split '\s+') }
+        elseif ($line -match '^DEPLOY_OWNER=(.+)$') { $existingUsers += $Matches[1].Trim() }
+    }
+    $otherUsers = @($existingUsers | Where-Object { $_ -cne $User } | Sort-Object -Unique)
+    if ($otherUsers.Count -gt 0) { throw "This server is already set up for sudo account '$($otherUsers -join ', ')', not '$User'. Rerun with -User $($otherUsers[0]); nothing was uploaded or changed." }
     if ($fresh) { Write-Host 'Mode: fresh server (ubuntu on 22).' }
-    else { Write-Host "Mode: already hardened server (devops on $SshPort)." }
+    else { Write-Host "Mode: already hardened server ($User on $SshPort)." }
     if (-not $fresh -and -not $envExists) { Write-Host 'Resuming setup: server .env is missing; collect the fresh environment answers now.' }
 
     function Read-Answer {
@@ -226,16 +237,17 @@ try {
     }
     $answers = [ordered]@{
         MODE = $(if ($envExists) { 'rerun' } else { 'fresh' })
+        SUDO_USER_NAME = $User
         IP = $Ip
         DOMAIN = $Domain
         SSH_PORT = "$SshPort"
         NO_DB_TUNNEL = "$($NoDbTunnel.IsPresent)".ToLowerInvariant()
         SG_CONFIRMED = 'true'
     }
-    $password = Read-Secret 'Devops sudo password'
+    $password = Read-Secret "$User sudo password"
     $passwordAgain = $null
     if ($fresh) {
-        $passwordAgain = Read-Secret 'Repeat devops sudo password'
+        $passwordAgain = Read-Secret "Repeat $User sudo password"
         if ((Secret-Text $password) -cne (Secret-Text $passwordAgain)) { throw 'Passwords do not match; nothing was uploaded or changed.' }
         $passwordAgain.Dispose()
         $passwordAgain = $null
@@ -279,12 +291,12 @@ try {
     }
 
     Write-Host "`n=== Confirm provisioning ==="
-    Write-Host "Server: $Ip; SSH: $loginUser on $loginPort -> devops on $SshPort; site: https://$siteDomain"
+    Write-Host "Server: $Ip; SSH: $loginUser on $loginPort -> $User on $SshPort; site: https://$siteDomain"
     Write-Host "Loopback database/Mailpit tunnels: $(-not $NoDbTunnel); existing server .env retained: $envExists"
-    Write-Host 'Devops password: ********; GHCR token: ********'
+    Write-Host "$User password: ********; GHCR token: ********"
     foreach ($entry in $answers.GetEnumerator()) {
         if ($entry.Value -is [Security.SecureString]) { if ($entry.Key -ne 'GHCR_TOKEN') { Write-Host "$($entry.Key): ********" }; continue }
-        if ($entry.Key -notin @('MODE', 'IP', 'DOMAIN', 'SSH_PORT', 'NO_DB_TUNNEL', 'SG_CONFIRMED')) { Write-Host "$($entry.Key): $($entry.Value)" }
+        if ($entry.Key -notin @('MODE', 'SUDO_USER_NAME', 'IP', 'DOMAIN', 'SSH_PORT', 'NO_DB_TUNNEL', 'SG_CONFIRMED')) { Write-Host "$($entry.Key): $($entry.Value)" }
     }
     Write-Host "AWS checklist: TCP $SshPort from your IP and 80/443 open; hostname resolves to the Elastic IP; images :demo already published."
     Write-Host 'Have Session Manager or configured Instance Connect recovery ready. This command changes only the VPS.'
@@ -293,96 +305,139 @@ try {
 
     # The only local staging is the clean-HEAD, non-secret bundle and model.
     & (Join-Path $PSScriptRoot 'upload-vps.ps1') -Server "$loginUser@$Ip" -Port $loginPort -IdentityFile $identity -ModelPath $modelPath -Provision
-    $remote = 'sudo -n bash /tmp/dentisys-deploy/scripts/provision-vps.sh'
-    if ($loginUser -eq 'devops') {
-        # Force fresh sudo authentication and put its newline password before
-        # the NUL protocol. Do not rely on a cached timestamp across pipes.
-        $remote = 'bash -c ''set +x; IFS= read -r -d "" password || exit 1; if sudo -n -k true >/dev/null 2>&1; then { printf "%s\0" "$password"; unset password; cat; } | sudo -n bash /tmp/dentisys-deploy/scripts/provision-vps.sh; else { printf "%s\n%s\0" "$password" "$password"; unset password; cat; } | sudo -k -S -p "" bash /tmp/dentisys-deploy/scripts/provision-vps.sh; fi'''
-    }
-    # Merge remote streams at their source for ordering; also capture SSH's own stderr.
-    $remote = 'set +x; exec 2>&1; ' + $remote
-    $start = New-Object Diagnostics.ProcessStartInfo
-    $start.FileName = @(Get-Command ssh -CommandType Application)[0].Source
-    $sessionArgs = $keyArgs + @('-T', '-p', "$loginPort", "$loginUser@$Ip", $remote)
-    $start.Arguments = ($sessionArgs | ForEach-Object { Quote-NativeArgument $_ }) -join ' '
-    $start.UseShellExecute = $false
-    $start.RedirectStandardInput = $true
-    $start.RedirectStandardOutput = $true
-    $start.RedirectStandardError = $true
-    $start.StandardOutputEncoding = [Text.Encoding]::UTF8
-    $start.StandardErrorEncoding = [Text.Encoding]::UTF8
-    $process = New-Object Diagnostics.Process
-    $process.StartInfo = $start
-    if (-not $process.Start()) { throw 'Unable to start SSH.' }
-    $readers = @($process.StandardOutput, $process.StandardError)
-    $readTasks = @($readers[0].ReadLineAsync(), $readers[1].ReadLineAsync())
-    $lastLines = New-Object 'Collections.Generic.Queue[string]'
-    function Receive-SessionOutput {
-        for ($i = 0; $i -lt $readers.Count; $i++) {
-            while ($null -ne $readTasks[$i] -and $readTasks[$i].IsCompleted) {
-                $line = $readTasks[$i].GetAwaiter().GetResult()
-                if ($null -eq $line) { $readTasks[$i] = $null; break }
-                Write-Host $line
-                $lastLines.Enqueue($line)
-                while ($lastLines.Count -gt 20) { $null = $lastLines.Dequeue() }
-                $readTasks[$i] = $readers[$i].ReadLineAsync()
+    # Runs provision-vps.sh once over SSH, sending the password and Fields on stdin.
+    function Invoke-ProvisionSession {
+        param([string]$SessionUser, [int]$SessionPort, $Fields)
+        $remote = 'sudo -n bash /tmp/dentisys-deploy/scripts/provision-vps.sh'
+        if ($SessionUser -eq $User) {
+            # Force fresh sudo authentication and put its newline password before
+            # the NUL protocol. Do not rely on a cached timestamp across pipes.
+            $remote = 'bash -c ''set +x; IFS= read -r -d "" password || exit 1; if sudo -n -k true >/dev/null 2>&1; then { printf "%s\0" "$password"; unset password; cat; } | sudo -n bash /tmp/dentisys-deploy/scripts/provision-vps.sh; else { printf "%s\n%s\0" "$password" "$password"; unset password; cat; } | sudo -k -S -p "" bash /tmp/dentisys-deploy/scripts/provision-vps.sh; fi'''
+        }
+        # Merge remote streams at their source for ordering; also capture SSH's own stderr.
+        $remote = 'set +x; exec 2>&1; ' + $remote
+        $start = New-Object Diagnostics.ProcessStartInfo
+        $start.FileName = @(Get-Command ssh -CommandType Application)[0].Source
+        $sessionArgs = $keyArgs + @('-T', '-p', "$SessionPort", "$SessionUser@$Ip", $remote)
+        $start.Arguments = ($sessionArgs | ForEach-Object { Quote-NativeArgument $_ }) -join ' '
+        $start.UseShellExecute = $false
+        $start.RedirectStandardInput = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.StandardOutputEncoding = [Text.Encoding]::UTF8
+        $start.StandardErrorEncoding = [Text.Encoding]::UTF8
+        $process = New-Object Diagnostics.Process
+        $process.StartInfo = $start
+        if (-not $process.Start()) { throw 'Unable to start SSH.' }
+        $readers = @($process.StandardOutput, $process.StandardError)
+        $readTasks = @($readers[0].ReadLineAsync(), $readers[1].ReadLineAsync())
+        $lastLines = New-Object 'Collections.Generic.Queue[string]'
+        $marker = @{ BootId = $null }
+        function Receive-SessionOutput {
+            for ($i = 0; $i -lt $readers.Count; $i++) {
+                while ($null -ne $readTasks[$i] -and $readTasks[$i].IsCompleted) {
+                    $line = $readTasks[$i].GetAwaiter().GetResult()
+                    if ($null -eq $line) { $readTasks[$i] = $null; break }
+                    Write-Host $line
+                    if ($line -match '^DENTISYS_REBOOTING ([0-9a-f-]+)$') { $marker.BootId = $Matches[1] }
+                    $lastLines.Enqueue($line)
+                    while ($lastLines.Count -gt 20) { $null = $lastLines.Dequeue() }
+                    $readTasks[$i] = $readers[$i].ReadLineAsync()
+                }
             }
         }
-    }
-    function Write-Field {
-        param($Value)
-        $plain = $null
-        $bytes = $null
+        function Write-Field {
+            param($Value)
+            $plain = $null
+            $bytes = $null
+            try {
+                if ($Value -is [Security.SecureString]) { $plain = Secret-Text $Value } else { $plain = [string]$Value }
+                $bytes = [Text.Encoding]::UTF8.GetBytes($plain + [char]0)
+                $write = $process.StandardInput.BaseStream.WriteAsync($bytes, 0, $bytes.Length)
+                while (-not $write.IsCompleted) {
+                    Receive-SessionOutput
+                    [Threading.Thread]::Sleep(20)
+                }
+                $null = $write.GetAwaiter().GetResult()
+                Receive-SessionOutput
+            }
+            finally {
+                if ($bytes) { [Array]::Clear($bytes, 0, $bytes.Length) }
+                $plain = $null
+            }
+        }
         try {
-            if ($Value -is [Security.SecureString]) { $plain = Secret-Text $Value } else { $plain = [string]$Value }
-            $bytes = [Text.Encoding]::UTF8.GetBytes($plain + [char]0)
-            $write = $process.StandardInput.BaseStream.WriteAsync($bytes, 0, $bytes.Length)
-            while (-not $write.IsCompleted) {
+            $inputFailed = $false
+            try {
+                Write-Field $password
+                Write-Field 'DENTISYS_PROVISION_1'
+                foreach ($entry in $Fields.GetEnumerator()) { Write-Field $entry.Key; Write-Field $entry.Value }
+                Write-Field 'END'
+            }
+            catch { $inputFailed = $true }
+            finally {
+                try { $process.StandardInput.Close() } catch { $inputFailed = $true }
+            }
+            while ($null -ne $readTasks[0] -or $null -ne $readTasks[1]) {
                 Receive-SessionOutput
                 [Threading.Thread]::Sleep(20)
             }
-            $null = $write.GetAwaiter().GetResult()
-            Receive-SessionOutput
-        }
-        finally {
-            if ($bytes) { [Array]::Clear($bytes, 0, $bytes.Length) }
-            $plain = $null
-        }
-    }
-    try {
-        $inputFailed = $false
-        try {
-            Write-Field $password
-            Write-Field 'DENTISYS_PROVISION_1'
-            foreach ($entry in $answers.GetEnumerator()) { Write-Field $entry.Key; Write-Field $entry.Value }
-            Write-Field 'END'
-        }
-        catch { $inputFailed = $true }
-        finally {
-            try { $process.StandardInput.Close() } catch { $inputFailed = $true }
-        }
-        while ($null -ne $readTasks[0] -or $null -ne $readTasks[1]) {
-            Receive-SessionOutput
-            [Threading.Thread]::Sleep(20)
-        }
-        $process.WaitForExit()
-        if ($process.ExitCode -ne 0 -or $inputFailed) {
-            $quotedKey = "'" + $identity.Replace("'", "''") + "'"
-            Write-Host 'Server log: /var/log/dentisys-provision.log (root only).'
-            Write-Host "Read it: ssh -i $quotedKey -o IdentitiesOnly=yes -t -p $SshPort devops@$Ip 'sudo tail -n 80 /var/log/dentisys-provision.log'"
-            if ($fresh) {
-                Write-Host "If SSH has not switched yet: ssh -i $quotedKey -o IdentitiesOnly=yes -t -p 22 ubuntu@$Ip 'sudo tail -n 80 /var/log/dentisys-provision.log'"
+            $process.WaitForExit()
+            return [pscustomobject]@{
+                ExitCode = $process.ExitCode
+                InputFailed = $inputFailed
+                BootId = $marker.BootId
+                Tail = ($lastLines.ToArray() -join [Environment]::NewLine)
             }
-            $reason = "Server provisioning failed (exit $($process.ExitCode))."
-            if ($inputFailed) { $reason += ' SSH stdin transmission did not complete.' }
-            $tail = ($lastLines.ToArray() -join [Environment]::NewLine)
-            if (-not $tail) { $tail = '(No server output received; check the SSH connection.)' }
-            throw "$reason Fix the reported failure and rerun.`nLast server/SSH output (up to 20 lines):`n$tail"
+        }
+        finally {
+            $process.StandardInput.Dispose()
+            $process.Dispose()
         }
     }
-    finally {
-        $process.StandardInput.Dispose()
-        $process.Dispose()
+    function Stop-ProvisionFailure {
+        param($Session, [bool]$ShowUbuntuLog)
+        $quotedKey = "'" + $identity.Replace("'", "''") + "'"
+        Write-Host 'Server log: /var/log/dentisys-provision.log (root only).'
+        Write-Host "Read it: ssh -i $quotedKey -o IdentitiesOnly=yes -t -p $SshPort ${User}@$Ip 'sudo tail -n 80 /var/log/dentisys-provision.log'"
+        if ($ShowUbuntuLog) {
+            Write-Host "If SSH has not switched yet: ssh -i $quotedKey -o IdentitiesOnly=yes -t -p 22 ubuntu@$Ip 'sudo tail -n 80 /var/log/dentisys-provision.log'"
+        }
+        $reason = "Server provisioning failed (exit $($Session.ExitCode))."
+        if ($Session.InputFailed) { $reason += ' SSH stdin transmission did not complete.' }
+        $tail = $Session.Tail
+        if (-not $tail) { $tail = '(No server output received; check the SSH connection.)' }
+        throw "$reason Fix the reported failure and rerun.`nLast server/SSH output (up to 20 lines):`n$tail"
+    }
+    $session = @(Invoke-ProvisionSession $loginUser $loginPort $answers)[-1]
+    # The marker is printed only after every check passed; the reboot may drop SSH (255).
+    $rebooting = $session.BootId -and -not $session.InputFailed -and $session.ExitCode -in @(0, 255)
+    if (-not $rebooting -and ($session.ExitCode -ne 0 -or $session.InputFailed)) { Stop-ProvisionFailure $session $fresh }
+    if ($rebooting) {
+        Write-Host "`n=== Reboot (guide step 1) ==="
+        Write-Host "Waiting up to 5 minutes for ${User}@${Ip}:$SshPort to reboot and accept SSH again (checking every 10 s)..."
+        $bootArgs = $keyArgs + @('-T', '-p', "$SshPort", "${User}@$Ip", 'cat /proc/sys/kernel/random/boot_id')
+        $deadline = (Get-Date).AddMinutes(5)
+        $back = $false
+        while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 10
+            $poll = Invoke-CapturedNative 'ssh' $bootArgs
+            $bootId = $poll.Output.Trim()
+            $stamp = Get-Date -Format 'HH:mm:ss'
+            if ($poll.ExitCode -eq 0 -and $bootId -and $bootId -ne $session.BootId) { $back = $true; break }
+            if ($poll.ExitCode -eq 0) { Write-Host "  $stamp SSH still up; the reboot has not started yet." }
+            else { Write-Host "  $stamp SSH down; waiting for the server to come back." }
+        }
+        if (-not $back) {
+            throw "The server did not come back on SSH ${User}@${Ip}:$SshPort within 5 minutes after the reboot. Check the instance in the EC2 console (status checks, system log), then rerun this command to verify."
+        }
+        Write-Host 'SSH is back after the reboot. Waiting 30 s before reconnecting (ufw rate-limits new SSH connections).'
+        Start-Sleep -Seconds 30
+        # /tmp is cleared at boot; upload the same bundle again for the verify-only pass.
+        & (Join-Path $PSScriptRoot 'upload-vps.ps1') -Server "${User}@$Ip" -Port $SshPort -IdentityFile $identity -ModelPath $modelPath -Provision
+        $verifyFields = [ordered]@{ MODE = 'verify'; SUDO_USER_NAME = $User; SSH_PORT = "$SshPort" }
+        $session = @(Invoke-ProvisionSession $User $SshPort $verifyFields)[-1]
+        if ($session.ExitCode -ne 0 -or $session.InputFailed) { Stop-ProvisionFailure $session $false }
     }
     # This request comes from the Owner's PC, independently of server-side curls.
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
@@ -394,7 +449,7 @@ try {
     Write-Host 'PASS: public HTTPS and API health from the PC.'
     if ($fresh) { Write-Host 'Manual: remove TCP 22 from the AWS Security Group after checking the new login.' }
     $quotedKey = "'" + $identity.Replace("'", "''") + "'"
-    Write-Host "Login: ssh -i $quotedKey -o IdentitiesOnly=yes -p $SshPort devops@$Ip"
+    Write-Host "Login: ssh -i $quotedKey -o IdentitiesOnly=yes -p $SshPort ${User}@$Ip"
     Write-Host "Site: https://$siteDomain"
 }
 finally {

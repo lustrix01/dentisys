@@ -33,8 +33,14 @@ From the repository on Windows PowerShell 5.1:
 
 ```powershell
 .\scripts\provision-vps.ps1 -Ip 203.0.113.10 -KeyFile 'C:\path\to\aws.pem'
-# Optional: -Domain demo.example.com -NoDbTunnel
+# Optional: -Domain demo.example.com -NoDbTunnel -User opsadmin
 ```
+
+`-User` names the sudo/SSH account the script creates (`devops` by default; a
+lowercase Linux username other than `root` or `ubuntu`). Use the same `-User` on
+every rerun: if the server was already set up for a different account, the
+launcher stops at its first probe instead of creating a second one. The
+examples below use `devops`; substitute your `-User` name.
 
 For an instance rebuilt on the same Elastic IP, add `-NewInstance` to that command.
 It scans both SSH ports, prints the new host key fingerprints, and removes the old
@@ -51,9 +57,17 @@ configuration is saved on the PC. The server applies the hardening guide steps
 current SSH session continues through the port switch. `-SshPort` defaults to
 2202; use the matching Security Group rule if you change it.
 
-After a successful fresh run, test the printed devops login and **remove 22 from
-the Security Group**. The launcher probes ubuntu on 22 or devops on the chosen
-port. Reruns ask only for the sudo password and a fresh GHCR read token, then
+If the updates applied in step 1 require a reboot (`/var/run/reboot-required`),
+the server reboots itself only after every PASS/FAIL check has passed; it never
+reboots after a failure. The launcher then waits up to 5 minutes for SSH on the
+sudo account and port to come back (checking every 10 s), uploads the bundle
+again and runs a verification-only pass: it skips hardening, environment and
+deployment, waits up to 5 minutes for the containers to become healthy, repeats
+the checks, then repeats the HTTPS health check from the PC.
+
+After a successful fresh run, test the printed sudo-account login and **remove 22 from
+the Security Group**. The launcher probes ubuntu on 22 or the sudo account
+(`devops` by default) on the chosen port. Reruns ask only for the sudo password and a fresh GHCR read token, then
 preserve the server `.env` and its signing keys/database passwords. If hardening
 finished but no environment was created, it collects the missing setup answers
 at the start of the next run. `-NoDbTunnel` omits the pgAdmin/Mailpit exception.
@@ -106,6 +120,7 @@ From the repository on Windows, use the AWS `.pem`:
 
 ```powershell
 .\scripts\harden-vps.ps1 -Server ubuntu@replace-with-vps-ip -KeyFile 'C:\path\to\aws.pem'
+# Optional: -User opsadmin (the sudo account, devops by default)
 ```
 
 The wrapper checks the key ACL and prints repair commands if needed; it does
@@ -124,6 +139,8 @@ After that test, remove 22 from the Security Group and continue with the
 publishing, bundle/model and deployment sections below. Use `devops` for every
 deployment/sync, adding `-i` with your `.pem` to the SCP/SSH commands below.
 A required reboot is reported for you to perform after testing the new login. To rerun, connect as `devops` with `-Port 2202`.
+With a different `-User` (`--user` when running the Bash script directly), read
+that name wherever `devops` appears in this guide.
 
 By default, a separate commented SSH block permits only `devops` local
 forwarding to `127.0.0.1:5050` (pgAdmin) and `127.0.0.1:8025` (Mailpit).
@@ -465,7 +482,7 @@ and rerun deployment.
 
 The hardening script enables the loopback exception by default. If you applied
 the guide manually, or omitted the exception and now need these tunnels, add
-the following block for devops in `/etc/ssh/sshd_config.d/99-z-dentisys-tunnels.conf`, which sorts after
+the following block for the sudo account (devops by default) in `/etc/ssh/sshd_config.d/99-z-dentisys-tunnels.conf`, which sorts after
 `99-hardening.conf` (or put it at the end of that hardening file):
 
 ```text

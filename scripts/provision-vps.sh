@@ -41,15 +41,15 @@ exec 8>/run/lock/dentisys-provision.lock
 flock -n 8 || fail 'Another provisioning run is active.'
 
 # NUL framing transports UTF-8 literally; never eval, source or log input.
-IFS= read -r -d '' devops_password || fail 'Missing devops password.'
-[[ -n "$devops_password" && "$devops_password" != *$'\n'* && "$devops_password" != *$'\r'* ]] || fail 'Invalid devops password framing.'
+IFS= read -r -d '' admin_password || fail 'Missing sudo password.'
+[[ -n "$admin_password" && "$admin_password" != *$'\n'* && "$admin_password" != *$'\r'* ]] || fail 'Invalid sudo password framing.'
 IFS= read -r -d '' protocol || fail 'Missing protocol.'
 [[ "$protocol" == DENTISYS_PROVISION_1 ]] || fail 'Unsupported stdin protocol.'
 declare -A input=()
 while IFS= read -r -d '' key; do
   [[ "$key" != END ]] || break
   case "$key" in
-    MODE|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_HAAR_SCALE_FACTOR|BIOMETRIC_HAAR_MIN_NEIGHBORS|BIOMETRIC_HAAR_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_LBPH_RADIUS|BIOMETRIC_LBPH_NEIGHBORS|BIOMETRIC_LBPH_GRID_X|BIOMETRIC_LBPH_GRID_Y|BIOMETRIC_LBPH_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
+    MODE|SUDO_USER_NAME|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_HAAR_SCALE_FACTOR|BIOMETRIC_HAAR_MIN_NEIGHBORS|BIOMETRIC_HAAR_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_LBPH_RADIUS|BIOMETRIC_LBPH_NEIGHBORS|BIOMETRIC_LBPH_GRID_X|BIOMETRIC_LBPH_GRID_Y|BIOMETRIC_LBPH_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
     *) fail 'Unexpected input field.' ;;
   esac
   [[ ! -v "input[$key]" ]] || fail 'Duplicate input field.'
@@ -60,13 +60,26 @@ done
 [[ "${key:-}" == END ]] || fail 'Missing end of stdin protocol.'
 unset value key protocol
 exec </dev/null
-[[ "${input[SG_CONFIRMED]:-}" == true ]] || fail 'Confirm the AWS checklist before provisioning.'
+# MODE=verify reruns only phase D (after the post-provisioning reboot).
+mode="${input[MODE]:-}"
+[[ "$mode" =~ ^(fresh|rerun|verify)$ ]] || fail 'Invalid mode.'
+admin_user="${input[SUDO_USER_NAME]:-devops}"
+[[ "$admin_user" =~ ^[a-z_][a-z0-9_-]{0,31}$ && "$admin_user" != root && "$admin_user" != ubuntu ]] || fail 'The sudo account must be a lowercase Linux username other than root or ubuntu.'
 ssh_port="${input[SSH_PORT]:-2202}"
 [[ "$ssh_port" =~ ^[0-9]+$ && "$ssh_port" -ge 1024 && "$ssh_port" -le 65535 ]] || fail 'Invalid SSH port.'
-[[ "${input[NO_DB_TUNNEL]:-}" == true || "${input[NO_DB_TUNNEL]:-}" == false ]] || fail 'Invalid tunnel switch.'
-[[ -n "${input[GHCR_TOKEN]:-}" ]] || fail 'A GHCR read token is required.'
+# Never hand an existing deployment to a second sudo account.
+if [[ -d "$deploy_dir" && "$(stat -c '%U' "$deploy_dir")" != "$admin_user" ]]; then
+  fail "$deploy_dir belongs to $(stat -c '%U' "$deploy_dir"), not $admin_user. Rerun with that user."
+fi
+if [[ "$mode" == verify ]]; then
+  [[ -f "$env_file" ]] || fail 'Verify-only mode needs the existing server .env.'
+else
+  [[ "${input[SG_CONFIRMED]:-}" == true ]] || fail 'Confirm the AWS checklist before provisioning.'
+  [[ "${input[NO_DB_TUNNEL]:-}" == true || "${input[NO_DB_TUNNEL]:-}" == false ]] || fail 'Invalid tunnel switch.'
+  [[ -n "${input[GHCR_TOKEN]:-}" ]] || fail 'A GHCR read token is required.'
+fi
 # Validate every fresh answer before changing the host.
-if [[ ! -f "$env_file" ]]; then
+if [[ "$mode" != verify && ! -f "$env_file" ]]; then
   for key in GHCR_USERNAME SMTP_USER SMTP_PASS TRAEFIK_ACME_EMAIL FIRST_DEAN_FIRST_NAME FIRST_DEAN_LAST_NAME FIRST_DEAN_EMAIL PGADMIN_DEFAULT_EMAIL PGADMIN_DEFAULT_PASSWORD ALLOWED_EMAIL_DOMAINS STUDENT_AUTH_ENABLED BIOMETRIC_SIDECAR_ENABLED BIOMETRIC_HAAR_SCALE_FACTOR BIOMETRIC_HAAR_MIN_NEIGHBORS BIOMETRIC_HAAR_MIN_FACE_PX BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE BIOMETRIC_LBPH_RADIUS BIOMETRIC_LBPH_NEIGHBORS BIOMETRIC_LBPH_GRID_X BIOMETRIC_LBPH_GRID_Y BIOMETRIC_LBPH_THRESHOLD BIOMETRIC_MATCH_COUNT BIOMETRIC_BLINK_THRESHOLD BIOMETRIC_HEAD_TURN_RATIO; do
     [[ -n "${input[$key]:-}" && "${input[$key]}" != *replace_with_* ]] || fail "Missing fresh configuration: $key."
   done
@@ -89,17 +102,17 @@ if [[ ! -f "$env_file" ]]; then
 fi
 export DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=none NEEDRESTART_MODE=a
 
-# Once SSH accepts only devops, hand the fixed upload paths to that user so
-# its next SCP and extraction can replace the first ubuntu-owned bundle.
+# Once SSH accepts only the sudo account, hand the fixed upload paths to that
+# user so its next SCP and extraction can replace the first ubuntu-owned bundle.
 handoff_staging() {
   [[ "$source_dir" == /tmp/dentisys-deploy ]] || return 0
-  id devops >/dev/null 2>&1 || return 0
+  id "$admin_user" >/dev/null 2>&1 || return 0
   [[ -f /etc/ssh/sshd_config.d/99-hardening.conf ]] || return 0
   grep -Fxq "Port $ssh_port" /etc/ssh/sshd_config.d/99-hardening.conf || return 0
-  grep -Fxq 'AllowUsers devops' /etc/ssh/sshd_config.d/99-hardening.conf || return 0
-  chown -R "devops:$(id -gn devops)" /tmp/dentisys-deploy
+  grep -Fxq "AllowUsers $admin_user" /etc/ssh/sshd_config.d/99-hardening.conf || return 0
+  chown -R "$admin_user:$(id -gn "$admin_user")" /tmp/dentisys-deploy
   for upload_file in /tmp/dentisys-deploy.tar.gz /tmp/face_landmarker.task; do
-    [[ ! -f "$upload_file" || -L "$upload_file" ]] || chown "devops:$(id -gn devops)" "$upload_file"
+    [[ ! -f "$upload_file" || -L "$upload_file" ]] || chown "$admin_user:$(id -gn "$admin_user")" "$upload_file"
   done
 }
 env_temp=''
@@ -120,19 +133,24 @@ finish_run() {
 }
 trap finish_run EXIT
 
+if [[ "$mode" == verify ]]; then
+  unset admin_password input
+  echo 'Verify-only run: skipping phases A-C.'
+else
+# Phases A-C (not indented to keep the diff small); verify mode skips them.
 phase 'A. Host hardening (guide steps 1-6)'
-harden_flags=(--non-interactive --sg-confirmed --ssh-port "$ssh_port")
+harden_flags=(--non-interactive --sg-confirmed --ssh-port "$ssh_port" --user "$admin_user")
 [[ "${input[NO_DB_TUNNEL]}" != true ]] || harden_flags+=(--no-db-tunnel)
 if bash "$source_dir/scripts/harden-vps.sh" "${harden_flags[@]}" --check-only </dev/null >/dev/null 2>&1; then
-  echo 'SKIP: hardening drop-in already matches; devops keys and SSH configuration passed pre-checks.'
+  echo "SKIP: hardening drop-in already matches; $admin_user keys and SSH configuration passed pre-checks."
 else
-  printf '%s\0' "$devops_password" | bash "$source_dir/scripts/harden-vps.sh" "${harden_flags[@]}" --password-stdin
+  printf '%s\0' "$admin_password" | bash "$source_dir/scripts/harden-vps.sh" "${harden_flags[@]}" --password-stdin
 fi
-unset devops_password
+unset admin_password
 handoff_staging
 
 phase 'B. Server environment and face model'
-install -d -m 0750 -o devops -g "$(id -gn devops)" "$deploy_dir" "$deploy_dir/assets"
+install -d -m 0750 -o "$admin_user" -g "$(id -gn "$admin_user")" "$deploy_dir" "$deploy_dir/assets"
 model="$source_dir/face_landmarker.task"
 if [[ -f "$model" ]]; then
   if [[ -f "$env_file" ]]; then
@@ -141,7 +159,7 @@ if [[ -f "$model" ]]; then
     [[ "${uploaded_hash%% *}" == "${configured_hash,,}" ]] || fail 'Uploaded model differs from the preserved server checksum. Existing model was left untouched.'
   fi
   if ! cmp -s "$model" "$deploy_dir/assets/face_landmarker.task"; then
-    install -m 0644 -o devops -g "$(id -gn devops)" "$model" "$deploy_dir/assets/face_landmarker.task"
+    install -m 0644 -o "$admin_user" -g "$(id -gn "$admin_user")" "$model" "$deploy_dir/assets/face_landmarker.task"
   else
     echo 'SKIP: installed face model already matches.'
   fi
@@ -187,7 +205,7 @@ else
     printf '%s\n' "$line" >> "$env_temp"
   done < "$source_dir/.env.vps.example"
   ! grep -q '^[A-Z_][A-Z0-9_]*=.*replace_with_' "$env_temp" || fail 'A required environment value is still a placeholder.'
-  chown "devops:$(id -gn devops)" "$env_temp"
+  chown "$admin_user:$(id -gn "$admin_user")" "$env_temp"
   chmod 600 "$env_temp"
   ln "$env_temp" "$env_file" || fail 'Environment appeared during provisioning; refusing to overwrite it.'
   rm -f -- "$env_temp"
@@ -199,8 +217,9 @@ fi
 phase 'C. Deploy using the existing deployment script'
 ghcr_token="${input[GHCR_TOKEN]}"
 unset input
-printf '%s\0' "$ghcr_token" | bash "$source_dir/scripts/deploy-vps.sh" --non-interactive --token-stdin
+printf '%s\0' "$ghcr_token" | bash "$source_dir/scripts/deploy-vps.sh" --non-interactive --token-stdin --user "$admin_user"
 unset ghcr_token
+fi
 
 phase 'D. Verify containers, public HTTPS and backup scheduling'
 cd "$deploy_dir"
@@ -212,20 +231,30 @@ if [[ "$(env_value PGADMIN_ENABLED)" != false ]]; then profile+=(--profile tools
 compose() { env "${compose_env[@]}" docker --config "$deploy_dir/.docker" compose --env-file "$env_file" -p dentisys -f docker-compose.web.yml -f docker-compose.database.yml -f docker-compose.vps.yml "${profile[@]}" "$@"; }
 failed=0
 result() { if [[ "$1" == true ]]; then echo "PASS: $2"; else echo "FAIL: $2"; failed=$((failed + 1)); fi; }
-web=0 frontend=0 biometric=0 healthy=true
-if ! ids="$(compose ps --all -q)"; then ids=''; healthy=false; fi
-[[ -n "$ids" ]] || healthy=false
-for id in $ids; do
-  if ! state="$(docker inspect --format '{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{index .Config.Labels "com.docker.compose.service"}}' "$id")"; then healthy=false; continue; fi
-  read -r running health service <<< "$state"
-  [[ "$running" == true && ( "$health" == healthy || "$health" == none ) ]] || healthy=false
-  case "$service" in
-    web) web=$((web + 1)); [[ "$health" == healthy ]] || healthy=false ;;
-    frontend) frontend=$((frontend + 1)); [[ "$health" == healthy ]] || healthy=false ;;
-    biometric) biometric=$((biometric + 1)); [[ "$health" == healthy ]] || healthy=false ;;
-  esac
+# After a reboot the containers restart on their own; give them time to become healthy.
+container_deadline="$SECONDS"
+if [[ "$mode" == verify ]]; then
+  container_deadline=$((SECONDS + 300))
+  echo 'Waiting up to 5 minutes for containers to become healthy after the reboot...'
+fi
+while true; do
+  web=0 frontend=0 biometric=0 healthy=true
+  if ! ids="$(compose ps --all -q)"; then ids=''; healthy=false; fi
+  [[ -n "$ids" ]] || healthy=false
+  for id in $ids; do
+    if ! state="$(docker inspect --format '{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{index .Config.Labels "com.docker.compose.service"}}' "$id")"; then healthy=false; continue; fi
+    read -r running health service <<< "$state"
+    [[ "$running" == true && ( "$health" == healthy || "$health" == none ) ]] || healthy=false
+    case "$service" in
+      web) web=$((web + 1)); [[ "$health" == healthy ]] || healthy=false ;;
+      frontend) frontend=$((frontend + 1)); [[ "$health" == healthy ]] || healthy=false ;;
+      biometric) biometric=$((biometric + 1)); [[ "$health" == healthy ]] || healthy=false ;;
+    esac
+  done
+  [[ "$web" -eq 3 && "$frontend" -eq 3 && "$biometric" -eq 1 ]] || healthy=false
+  [[ "$healthy" != true && "$SECONDS" -lt "$container_deadline" ]] || break
+  sleep 10
 done
-[[ "$web" -eq 3 && "$frontend" -eq 3 && "$biometric" -eq 1 ]] || healthy=false
 result "$healthy" 'containers running; 3 healthy web, 3 healthy frontend, 1 healthy biometric'
 headers="$(curl -sS --connect-timeout 5 --max-time 10 -I "http://$domain" 2>/dev/null || true)"
 redirect=false
@@ -268,3 +297,16 @@ result "$cron_ok" 'nightly backup cron installed and cron active'
 unset body
 [[ "$failed" -eq 0 ]] || fail "Verification failed ($failed checks). Existing environment and database retained; fix the reported issue and rerun."
 echo "Verification complete: all checks passed. Site: https://$domain"
+# Guide step 1: reboot when required, only after every phase passed. The delay
+# lets this script drain its log and the SSH session close first.
+if [[ -f /var/run/reboot-required ]]; then
+  if [[ "$mode" == verify ]]; then
+    echo 'NOTE: a reboot is still required (new updates arrived); reboot manually when convenient.'
+  else
+    handoff_staging
+    boot_id="$(cat /proc/sys/kernel/random/boot_id)"
+    echo 'Reboot required; rebooting now.'
+    systemd-run --quiet --on-active=10 /usr/bin/systemctl reboot || fail 'Could not schedule the reboot; deployment passed, reboot manually.'
+    echo "DENTISYS_REBOOTING $boot_id"
+  fi
+fi
