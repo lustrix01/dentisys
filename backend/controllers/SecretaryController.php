@@ -1316,7 +1316,7 @@ function handle_secretary_attendance_session_start(): void
         );
         $latitude = secretary_attendance_session_optional_float($data, 'geofenceLatitude', -90, 90);
         $longitude = secretary_attendance_session_optional_float($data, 'geofenceLongitude', -180, 180);
-        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters', 0.01, 999999.99);
+        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters', ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS, ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS);
         if (($latitude === null) !== ($longitude === null)) {
             throw new ValidationException([[
                 'field' => 'geofenceLatitude',

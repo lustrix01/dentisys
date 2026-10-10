@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+const ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS = 50;
+const ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS = 2000;
+
 class AttendanceSessionException extends RuntimeException
 {
     public readonly int $statusCode;
@@ -278,12 +281,12 @@ function attendance_session_update_values(array $data, array $config, string $ro
         $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', $biometricRequired);
         $latitude = attendance_session_request_float($data, 'geofenceLatitude', -90, 90);
         $longitude = attendance_session_request_float($data, 'geofenceLongitude', -180, 180);
-        $radius = attendance_session_request_float($data, 'geofenceRadiusMeters', 0.01, 999999.99);
+        $radius = attendance_session_request_float($data, 'geofenceRadiusMeters', ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS, ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS);
     } else {
         $geofenceEnabled = secretary_attendance_session_bool($data, array_key_exists('geofenceEnabled', $data) ? 'geofenceEnabled' : 'requireGeo', $biometricRequired);
         $latitude = secretary_attendance_session_optional_float($data, 'geofenceLatitude', -90, 90);
         $longitude = secretary_attendance_session_optional_float($data, 'geofenceLongitude', -180, 180);
-        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters', 0.01, 999999.99);
+        $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters', ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS, ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS);
     }
     if (($latitude === null) !== ($longitude === null)) {
         throw new ValidationException([['field' => 'geofenceLatitude', 'message' => 'Geofence latitude and longitude must be provided together.']]);
