@@ -45,7 +45,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/faculty/classes/unenroll', '/api/faculty/grading-config',
   '/api/notifications', '/api/notifications/read-all', '/api/secretary/activity', '/api/faculty/activity', '/api/faculty/attendance-activity', '/api/faculty/excused-requests', '/api/secretary/excused-requests',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
-  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/biometric/profile',
+  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming', '/api/student/biometric/profile',
   '/api/student/profile',
 ]);
 
@@ -58,7 +58,7 @@ const GET_ONLY_API_PATHS = new Set([
   '/api/faculty/attendance', '/api/faculty/email-logs', '/api/faculty/reports/summary', '/api/faculty/courses', '/api/faculty/retention',
   '/api/faculty/classes/available-students',
   '/api/student/dashboard', '/api/student/classes', '/api/student/retention',
-  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/biometric/profile',
+  '/api/student/attendance/logs', '/api/student/attendance/sessions/active', '/api/student/attendance/sessions/upcoming', '/api/student/biometric/profile',
   '/api/student/profile',
 ]);
 
@@ -201,6 +201,7 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname === '/api/student/retention') return { status: 'ok', retention: { records: [], atRiskCount: 0, hasPendingGrades: false } };
   if (pathname === '/api/student/attendance/logs') return { status: 'ok', records: [], total: 0 };
   if (pathname === '/api/student/attendance/sessions/active') return { status: 'ok', activeSession: null };
+  if (pathname === '/api/student/attendance/sessions/upcoming') return { status: 'ok', range: 'week', sessions: [], timezone: 'Asia/Manila', serverNow: '2026-10-10T00:00:00Z' };
   if (pathname === '/api/student/biometric/profile') return { status: 'ok', consentGranted: false, enrollmentStatus: 'not_enrolled', enrolledAt: null, expiresAt: null, usableSampleCount: 0, requiredUsableSamples: 20, manualFallbackAvailable: true };
   if (pathname === '/api/student/profile') {
     return {
