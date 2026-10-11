@@ -78,6 +78,7 @@ import {
   generateGradeSummaryCSV,
   isPeriodComputeResult
 } from '../../utils/periodGradingHelper';
+import { percentageToGWAExact } from '../../utils/gradeHelper';
 import type {
   PeriodDraftState,
   PeriodCategoryDraftRow,
@@ -4933,7 +4934,10 @@ export const GradeComputation: React.FC = () => {
 
                     if (isPeriodMode) {
                       const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                      const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold;
+                      const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                          ? evalResult.retentionState === 'remedial'
+                          : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                            && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
                       const isFailed = evalResult.overallGwa === 5.0;
                       const isPending = evalResult.statusText === 'PENDING';
                       const isIncomplete = evalResult.overallGwa === null;
@@ -5012,7 +5016,11 @@ export const GradeComputation: React.FC = () => {
                     }
 
                     // Legacy overall view
-                    const isFailsRetention = subj && subj.isClinical && typeof subj.grade === 'number' && subj.grade >= settings.retentionThreshold;
+                    const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
+                    const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                        ? evalResult.retentionState === 'remedial'
+                        : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                          && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
                     const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
                     const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
 
@@ -5352,7 +5360,10 @@ export const GradeComputation: React.FC = () => {
 
               if (isPeriodMode) {
                 const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold;
+                const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                    ? evalResult.retentionState === 'remedial'
+                    : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                      && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
                 const isFailed = evalResult.overallGwa === 5.0;
                 const isPending = evalResult.statusText === 'PENDING';
                 const isIncomplete = evalResult.overallGwa === null;
@@ -5411,7 +5422,11 @@ export const GradeComputation: React.FC = () => {
               }
 
               // Legacy print row
-              const isFailsRetention = subj && subj.isClinical && typeof subj.grade === 'number' && subj.grade >= settings.retentionThreshold;
+              const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
+              const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
+                  ? evalResult.retentionState === 'remedial'
+                  : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
+                    && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
               const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
               const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
               const remarksStr = !hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS';
