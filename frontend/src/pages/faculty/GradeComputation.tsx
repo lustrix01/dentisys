@@ -1302,6 +1302,22 @@ export const GradeComputation: React.FC = () => {
     setMatrixSaveStatus('saved');
   }, [activeStudents, activeAssessments, assessmentScores]);
 
+  // Emptied fields that still have a stored score; only a manual save deletes them.
+  const singlePendingClears = useMemo(() => {
+    const ids = new Set<string>();
+    Object.entries(scoresInputState).forEach(([studentId, val]) => {
+      if (val.score === '' && selectedAssessmentId && hasStoredScore(selectedAssessmentId, studentId)) ids.add(studentId);
+    });
+    return ids;
+  }, [scoresInputState, assessmentScores, selectedAssessmentId]);
+  const matrixPendingClears = useMemo(() => {
+    const keys = new Set<string>();
+    assessmentScores.forEach(stored => {
+      if (matrixScoresState[stored.studentId]?.[stored.assessmentId] === '') keys.add(`${stored.studentId}|${stored.assessmentId}`);
+    });
+    return keys;
+  }, [matrixScoresState, assessmentScores]);
+
   // Matrix Assessment Saving Logic (Auto & Manual)
   const performSaveMatrixScores = async (isManual = false) => {
     if (matrixSaveStatus === 'saving') return;
@@ -3101,7 +3117,7 @@ export const GradeComputation: React.FC = () => {
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>{isMatrixSavedAlert ? 'Saved!' : 'Save All Matrix Scores'}</span>
+                    <span>{isMatrixSavedAlert ? 'Saved!' : `Save All Matrix Scores${matrixPendingClears.size > 0 ? ` (${matrixPendingClears.size} to clear)` : ''}`}</span>
                   </button>
                 </div>
               </div>
@@ -3118,6 +3134,7 @@ export const GradeComputation: React.FC = () => {
                     students={filteredScoreStudents.map(student => ({ id: student.id, studentId: String(student.studentId ?? ''), name: student.name, lastName: student.lastName }))}
                     assessments={activeAssessments}
                     scores={matrixScoresState}
+                    pendingClearKeys={matrixPendingClears}
                     onScoreChange={handleMatrixScoreChange}
                     onScoreBlur={handleMatrixScoreBlur}
                     isValidScore={validateSingleScore}
@@ -3395,8 +3412,11 @@ export const GradeComputation: React.FC = () => {
                                   }}
                                   onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
                                   onBlur={() => handleScoreBlur(student.id)}
+                                  title={singlePendingClears.has(student.id) ? 'Cleared — click Save to apply' : undefined}
                                   className={`w-28 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${!isValid
                                     ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
+                                    : singlePendingClears.has(student.id)
+                                    ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-600'
                                     : row.score === ''
                                       ? 'border-slate-200 dark:border-slate-800 dark:bg-slate-950'
                                       : 'border-clinical-550/30 bg-clinical-50/20 text-clinical-650'
@@ -3434,7 +3454,7 @@ export const GradeComputation: React.FC = () => {
                         className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        <span>{isScoresSavedAlert ? 'Scores Saved Successfully!' : 'Save Scores Sheet'}</span>
+                        <span>{isScoresSavedAlert ? 'Scores Saved Successfully!' : `Save Scores Sheet${singlePendingClears.size > 0 ? ` (${singlePendingClears.size} to clear)` : ''}`}</span>
                       </button>
                     </div>
                   )}

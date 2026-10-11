@@ -32,6 +32,8 @@ interface GradebookMatrixProps {
   students: MatrixStudent[];
   assessments: MatrixAssessment[];
   scores: Record<string, Record<string, string>>;
+  /** Emptied cells (studentId|assessmentId) whose stored score is deleted only by a manual save. */
+  pendingClearKeys?: Set<string>;
   onScoreChange: (studentId: string, assessmentId: string, value: string) => void;
   onScoreBlur?: (studentId: string, assessmentId: string) => void;
   isValidScore: (value: string, maxScore: number) => boolean;
@@ -68,7 +70,7 @@ const weightLabel = (weight: number | string) => `${Number(weight)}%`;
  * grouped by component (Lecture / Laboratory) and saved Grade Weights categories.
  */
 export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
-  classId, offering, students, assessments, scores, onScoreChange, onScoreBlur, isValidScore, refreshKey,
+  classId, offering, students, assessments, scores, pendingClearKeys, onScoreChange, onScoreBlur, isValidScore, refreshKey,
 }) => {
   const [config, setConfig] = useState<FacultyGradingConfiguration | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
@@ -322,9 +324,12 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           onChange={event => onScoreChange(student.id, assessment.id, event.target.value)}
           onBlur={() => onScoreBlur?.(student.id, assessment.id)}
           onKeyDown={handleKeyDown}
+          title={pendingClearKeys?.has(`${student.id}|${assessment.id}`) ? 'Cleared — click Save to apply' : undefined}
           className={`w-16 px-1.5 py-1 rounded-lg border text-xs text-center font-bold focus:outline-none ${!valid
             ? 'border-rose-500 bg-rose-50/50'
-            : value === ''
+            : pendingClearKeys?.has(`${student.id}|${assessment.id}`)
+              ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-600'
+              : value === ''
               ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'
               : 'border-clinical-500/30 bg-clinical-50/20'}`}
         />
