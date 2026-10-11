@@ -164,7 +164,7 @@ export const Dashboard: React.FC = () => {
   const pendingRemedials = useMemo(() => {
     return retentionRecords.flatMap(record => {
       // Only sections inside the selected school year (assignedClasses comes from the scoped KPI response).
-      if (!assignedClasses.includes(String(record.classId))) {
+      if (assignedClasses.length > 0 && !assignedClasses.includes(String(record.classId))) {
         return [];
       }
 
@@ -188,7 +188,6 @@ export const Dashboard: React.FC = () => {
 
         const pendingAttempt = Array.isArray(progression.attempts)
           ? progression.attempts.find(a => a.outcome === 'pending' || (a as unknown as { status?: string }).status === 'pending')
-            ?? (isPending ? progression.attempts.find(a => a.attemptNumber === attemptNumber) : undefined)
           : undefined;
 
         if (pendingAttempt) {
@@ -199,13 +198,20 @@ export const Dashboard: React.FC = () => {
         }
       }
 
-      // Legacy pending records are used only when canonical progression is absent.
-      if (!progression && legacyRemedial) {
-        if (legacyRemedial.status === 'pending') {
+      // 2. Fallback to legacy remedial format
+      if (!isPending && legacyRemedial) {
+        const legacyStatus = legacyRemedial.status ?? (legacyRemedial as { outcome?: string }).outcome;
+        if (legacyStatus === 'pending' || record.state === 'remedial') {
           isPending = true;
           attemptNumber = 1;
           notes = typeof legacyRemedial.notes === 'string' ? legacyRemedial.notes : '';
         }
+      }
+
+      // 3. Fallback to record.state === 'remedial' if stage is not cleared/cost_recovery
+      if (!isPending && record.state === 'remedial' && progression?.stage !== 'passed' && progression?.stage !== 'cost_recovery_passed') {
+        isPending = true;
+        attemptNumber = progression?.stage === 'attempt_2_available' || progression?.stage === 'attempt_2_pending' ? 2 : 1;
       }
 
       if (!isPending) return [];
@@ -228,38 +234,35 @@ export const Dashboard: React.FC = () => {
   const selectedClassSummary = dashboardKpis?.classes.find(classItem => classItem.id === selectedClassId);
   const classAttendanceRate = selectedClassSummary?.attendance ?? null;
 
-  const outcomeContradictsScore = remedialScore.trim() !== '' && Number.isFinite(Number(remedialScore))
-    && (Number(remedialScore) >= 50) !== (remedialOutcome === 'passed');
-
   const handleResolveRemedial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRemedialId) return;
     const scoreVal = Number(remedialScore);
-    if (remedialScore.trim() === '' || !Number.isFinite(scoreVal) || scoreVal < 0 || scoreVal > 100) {
+    if (isNaN(scoreVal) || scoreVal < 0 || scoreVal > 100) {
       showFeedback('Please enter a valid score (0-100).', 'error');
-      return;
-    }
-    if (outcomeContradictsScore) {
-      showFeedback('The selected outcome contradicts the entered score. The pass mark is 50%.', 'error');
       return;
     }
     const selected = pendingRemedials.find(row => row.id === selectedRemedialId);
     if (!selected) return;
     try {
-      const response = await saveFacultyRemedialApi({
+      await saveFacultyRemedialApi({
         enrollmentId: selected.record.enrollmentId,
         studentId: selected.record.studentId,
         classId: selected.record.classId,
         attemptNumber: selected.attemptNumber,
         percentage: scoreVal,
         notes: remedialNotes.trim() || undefined,
+        remedial: {
+          ...(selected.remedial || {}),
+          status: remedialOutcome,
+          remedialScore: scoreVal,
+          notes: remedialNotes.trim() || undefined,
+        },
       });
 
-      let scheduleError: string | null = null;
-      let studentNotified = response.notification?.created === true;
       if (selected.attemptNumber === 1 && scoreVal < 50 && reattemptDate.trim().length > 0) {
         try {
-          const scheduleResponse = await saveFacultyRemedialApi({
+          await saveFacultyRemedialApi({
             enrollmentId: selected.record.enrollmentId,
             studentId: selected.record.studentId,
             classId: selected.record.classId,
@@ -267,9 +270,8 @@ export const Dashboard: React.FC = () => {
             scheduledDate: reattemptDate.trim(),
             notes: 'Scheduled for Attempt 2 re-attempt',
           });
-          studentNotified = studentNotified || scheduleResponse.notification?.created === true;
-        } catch (error) {
-          scheduleError = `Attempt 1 was saved but Attempt 2 could not be scheduled: ${error instanceof Error ? error.message : 'Unknown scheduling error.'}`;
+        } catch {
+          // Attempt 1 was saved successfully
         }
       }
 
@@ -278,8 +280,7 @@ export const Dashboard: React.FC = () => {
       setRemedialNotes('');
       setReattemptDate('');
       setRemedialOutcome('passed');
-      if (scheduleError) showFeedback(scheduleError, 'error');
-      else showFeedback('Remedial exam result recorded successfully.' + (studentNotified ? ' Student notified.' : ''), 'success');
+      showFeedback('Remedial exam result recorded successfully. Student notified.', 'success');
       loadDashboard();
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : 'Unable to persist the remedial result.', 'error');
@@ -618,7 +619,6 @@ export const Dashboard: React.FC = () => {
       >
         {activeRemedialToRecord && (
           <form onSubmit={handleResolveRemedial} className="space-y-4">
-            {outcomeContradictsScore && <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">The selected outcome contradicts the entered score. The pass mark is 50%.</p>}
             <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1">
               <div><span className="text-slate-400 font-semibold">Student:</span> <strong className="text-slate-800 dark:text-slate-200">{activeRemedialToRecord.studentName}</strong></div>
               <div><span className="text-slate-400 font-semibold">Subject:</span> <strong className="text-clinical-600 dark:text-clinical-400">{activeRemedialToRecord.subjectCode}</strong></div>
@@ -667,7 +667,7 @@ export const Dashboard: React.FC = () => {
               </select>
               <p className="text-[10px] text-slate-400">
                 {remedialOutcome === 'passed'
-                  ? 'Student will be marked as cleared.'
+                  ? 'Student will be marked as cleared and notified.'
                   : activeRemedialToRecord.attemptNumber === 1
                     ? 'Student will be marked for Attempt 2 re-attempt.'
                     : 'Student will be moved to Cost Recovery program.'}

@@ -34,8 +34,6 @@ interface GradebookMatrixProps {
   scores: Record<string, Record<string, string>>;
   onScoreChange: (studentId: string, assessmentId: string, value: string) => void;
   onScoreBlur?: (studentId: string, assessmentId: string) => void;
-  onSingleActivityView: () => void;
-  canSwitchView: boolean;
   isValidScore: (value: string, maxScore: number) => boolean;
   /** Changes after each save so the calculated columns are fetched again. */
   refreshKey: number;
@@ -68,26 +66,14 @@ const weightLabel = (weight: number | string) => `${Number(weight)}%`;
 /**
  * Class-record grading matrix: Student info, then Midterm and Tentative Final
  * grouped by component (Lecture / Laboratory) and saved Grade Weights categories.
- * Every calculated column comes from the server's own computation (a preview
- * that saves nothing), so it reflects the saved scores.
  */
 export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
-  classId, offering, students, assessments, scores, onScoreChange, onScoreBlur, isValidScore, refreshKey, onSingleActivityView, canSwitchView,
+  classId, offering, students, assessments, scores, onScoreChange, onScoreBlur, isValidScore, refreshKey,
 }) => {
   const [config, setConfig] = useState<FacultyGradingConfiguration | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [results, setResults] = useState<Record<string, FacultyGradeComputeResult>>({});
   const [computeNotice, setComputeNotice] = useState<string | null>(null);
-  const [isPhone, setIsPhone] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const media = window.matchMedia('(max-width: 639px)');
-    const updateIsPhone = () => setIsPhone(media.matches);
-    updateIsPhone();
-    media.addEventListener('change', updateIsPhone);
-    return () => media.removeEventListener('change', updateIsPhone);
-  }, []);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -138,8 +124,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
     const byPeriod: Record<PeriodKey, ComponentGroup[]> = { midterm: [], final: [] };
     if (!periodMode || !config) return byPeriod;
 
-    const lectureWeight = config.componentWeights?.lecture;
-    const labWeight = config.componentWeights?.laboratory;
+    const lectureWeight = config.componentWeights?.lecture ?? 60;
+    const labWeight = config.componentWeights?.laboratory ?? 40;
 
     for (const period of PERIODS) {
       const allCategories = [...(period.key === 'midterm' ? config.midtermCategories ?? [] : config.finalCategories ?? [])]
@@ -255,6 +241,17 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       }
     }
 
+    const categoryIds = new Set(comp.categories.map(c => String(c.category.id ?? '')));
+    const relevantDetails = (pb.categories ?? []).filter(c => categoryIds.has(String(c.categoryId ?? '')));
+
+    if (relevantDetails.length > 0) {
+      const hasAnyContribution = relevantDetails.some(d => d.contribution !== undefined && d.contribution !== null);
+      if (hasAnyContribution) {
+        const totalPercent = relevantDetails.reduce((sum, d) => sum + (d.contribution ?? 0), 0);
+        return format(totalPercent, 2);
+      }
+    }
+
     return '—';
   };
 
@@ -298,7 +295,6 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       if (e.key === 'Enter' || e.key === 'ArrowDown') {
         e.preventDefault();
         const nextInput = document.getElementById(`matrix-score-${studentIndex + 1}-${assessment.id}`) as HTMLInputElement | null;
-        if (!nextInput) onScoreBlur?.(student.id, assessment.id);
         if (nextInput) {
           nextInput.focus();
           nextInput.select();
@@ -306,7 +302,6 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         const prevInput = document.getElementById(`matrix-score-${studentIndex - 1}-${assessment.id}`) as HTMLInputElement | null;
-        if (!prevInput) onScoreBlur?.(student.id, assessment.id);
         if (prevInput) {
           prevInput.focus();
           prevInput.select();
@@ -318,7 +313,6 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       <td key={assessment.id} className="px-1.5 py-2 text-center">
         <input
           id={inputId}
-          inputMode="decimal"
           type="number"
           min="0"
           max={assessment.maxScore}
@@ -326,7 +320,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
           aria-label={`${assessment.title} score for ${student.name}`}
           value={value}
           onChange={event => onScoreChange(student.id, assessment.id, event.target.value)}
-          onBlur={event => { if (!(event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest('[data-manual-score-save]'))) onScoreBlur?.(student.id, assessment.id); }}
+          onBlur={() => onScoreBlur?.(student.id, assessment.id)}
           onKeyDown={handleKeyDown}
           className={`w-16 px-1.5 py-1 rounded-lg border text-xs text-center font-bold focus:outline-none ${!valid
             ? 'border-rose-500 bg-rose-50/50'
@@ -471,17 +465,12 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
       {computeNotice && <p className="px-5 pt-1 text-[11px] text-slate-500">Calculated columns: {computeNotice}</p>}
       <p className="px-5 text-[10px] text-slate-400">Calculated columns use the server's grade computation of the saved scores; they update after “Save All Matrix Scores”.</p>
 
-      <div className="sm:hidden px-3 py-3 text-xs text-slate-600 dark:text-slate-300">
-        <p>The full matrix is easier on a larger screen. Use Single Activity View to enter scores on a phone.</p>
-        <button type="button" onClick={onSingleActivityView} disabled={!canSwitchView} className="mt-2 font-bold text-clinical-600 dark:text-clinical-400 underline disabled:opacity-50">Single Activity View</button>
-      </div>
-
       <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
         <table className="min-w-full border-collapse text-xs">
-          <thead className="sticky top-0 z-30 bg-slate-50 dark:bg-slate-900 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 text-[10px] font-bold uppercase tracking-wider text-slate-500">
             {/* ROW 1: Period Headers */}
             <tr>
-              <th className={`${th} sticky left-0 z-20 bg-slate-50 dark:bg-slate-900`} colSpan={isPhone ? 1 : 2}>Student Info</th>
+              <th className={th} colSpan={2}>Student Info</th>
               {periodMode && visiblePeriods.map(period => (
                 <th key={period.key} className={th} colSpan={periodColumnCount(period.key)}>{period.label}</th>
               ))}
@@ -491,8 +480,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
             {/* ROW 2: Component Separation (Lecture vs Laboratory) */}
             <tr>
-              {!isPhone && <th className={`${th} sticky left-0 z-20 w-[120px] min-w-[120px] max-w-[120px] bg-slate-50 dark:bg-slate-900`} rowSpan={periodMode ? 3 : 1}>ID Number</th>}
-              <th className={`${th} sticky z-20 ${isPhone ? 'left-0 w-[140px] min-w-[140px] max-w-[140px]' : 'left-[120px] w-[200px] min-w-[200px] max-w-[200px]'} text-left bg-slate-50 dark:bg-slate-900`} rowSpan={periodMode ? 3 : 1}>Full Name</th>
+              <th className={th} rowSpan={periodMode ? 3 : 1}>ID Number</th>
+              <th className={`${th} min-w-[200px] text-left`} rowSpan={periodMode ? 3 : 1}>Full Name</th>
               {periodMode && visiblePeriods.map(period => (
                 <React.Fragment key={`${period.key}-comps`}>
                   {getVisibleComponents(period.key).map(comp => (
@@ -529,7 +518,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                     }`}
                     rowSpan={3}
                   >
-                    {period.key === 'midterm' ? 'Midterm Grade' : 'Final Grade'}
+                    {period.key === 'midterm' ? 'Final Midterm Grade' : 'Final Grade'}
                     <div className="font-normal normal-case">(1.00–5.00)</div>
                   </th>
                 </React.Fragment>
@@ -616,8 +605,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               const computed = result?.status === 'computed';
               return (
                 <tr key={student.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/20">
-                  {!isPhone && <td className="sticky left-0 z-10 w-[120px] min-w-[120px] max-w-[120px] px-3 py-2 font-mono text-[11px] text-slate-500 break-all bg-white dark:bg-slate-900">{student.studentId}</td>}
-                  <td className={`sticky z-10 ${isPhone ? 'left-0 w-[140px] min-w-[140px] max-w-[140px]' : 'left-[120px] w-[200px] min-w-[200px] max-w-[200px]'} px-3 py-2 font-bold text-slate-800 dark:text-slate-200 break-words bg-white dark:bg-slate-900`}>{student.name}{isPhone && <span className="block mt-1 font-mono text-[10px] font-normal text-slate-500 break-all">{student.studentId}</span>}</td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-slate-500 whitespace-nowrap">{student.studentId}</td>
+                  <td className="px-3 py-2 font-bold text-slate-800 dark:text-slate-200">{student.name}</td>
                   {periodMode && visiblePeriods.map(period => (
                     <React.Fragment key={period.key}>
                       {getVisibleComponents(period.key).map(comp => (
@@ -660,7 +649,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                             <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${period.totalLabel}: ${format(pct)}%`}>
                               {format(pct)}
                             </td>
-                            <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Midterm Grade' : 'Final Grade'} (1.00–5.00): ${periodEquivalentGrade(pct)}`}>
+                            <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Final Midterm Grade' : 'Final Grade'} (1.00–5.00): ${periodEquivalentGrade(pct)}`}>
                               {periodEquivalentGrade(pct)}
                             </td>
                           </>

@@ -38,7 +38,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card'
 import { GradebookMatrix } from '../../components/GradebookMatrix';
 import { Modal } from '../../components/Modal';
 import { requestConfirmation, showFeedback } from '../../components/FeedbackCenter';
-import { percentageToGWAExact } from '../../utils/gradeHelper';
 import { recordAudit } from '../../services/auditService';
 
 import {
@@ -357,6 +356,7 @@ export const GradeComputation: React.FC = () => {
   // Period Mode State (Midterm & Finals)
   const [termRatio, setTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '30', final: '70' });
   const [savedTermRatio, setSavedTermRatio] = useState<{ midterm: string; final: string }>({ midterm: '30', final: '70' });
+  const [isCustomizingWeights, setIsCustomizingWeights] = useState<boolean>(false);
 
   const [midtermCategories, setMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
   const [savedMidtermCategories, setSavedMidtermCategories] = useState<PeriodCategoryDraftRow[]>([]);
@@ -1030,30 +1030,12 @@ export const GradeComputation: React.FC = () => {
   // Auto-save status states
   const [singleSaveStatus, setSingleSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const singleDirtyRef = useRef(false);
-  const singleSavingRef = useRef(false);
-  const singleQueuedRef = useRef(false);
-  const singleSavedRef = useRef<Record<string, { score: string; remarks: string }>>({});
-  const singleSaveRef = useRef<(manual?: boolean) => Promise<void>>(async () => {});
+  const singleDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const singleScoresRef = useRef<Record<string, { score: string; remarks: string }>>({});
 
   const [matrixSaveStatus, setMatrixSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const matrixDirtyRef = useRef(false);
-  const matrixSavingRef = useRef(false);
-  const matrixQueuedRef = useRef(false);
-  const matrixSavedRef = useRef<Record<string, Record<string, string>>>({});
-  const matrixSaveRef = useRef<(manual?: boolean) => Promise<void>>(async () => {});
-  const autoSaveRef = useRef(autoSaveEnabled);
-  autoSaveRef.current = autoSaveEnabled;
-
-  useEffect(() => {
-    const warnUnsaved = (event: BeforeUnloadEvent) => {
-      if (!singleDirtyRef.current && !matrixDirtyRef.current && !singleSavingRef.current && !matrixSavingRef.current) return;
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warnUnsaved);
-    return () => window.removeEventListener('beforeunload', warnUnsaved);
-  }, []);
+  const matrixDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const matrixScoresRef = useRef<Record<string, Record<string, string>>>({});
 
   const availableActivityTypes = useMemo(() => {
@@ -1095,7 +1077,6 @@ export const GradeComputation: React.FC = () => {
 
   // Set default assessment when subject/class or filter changes
   useEffect(() => {
-    if (singleDirtyRef.current || singleSavingRef.current) return;
     if (singleActivityFilteredAssessments.length > 0) {
       if (!singleActivityFilteredAssessments.some(a => a.id === selectedAssessmentId)) {
         setSelectedAssessmentId(singleActivityFilteredAssessments[0].id);
@@ -1109,7 +1090,7 @@ export const GradeComputation: React.FC = () => {
 
   // Load existing student scores
   useEffect(() => {
-    if (!selectedAssessmentId || singleDirtyRef.current || singleSavingRef.current) return;
+    if (!selectedAssessmentId) return;
     const initialInputs: Record<string, { score: string; remarks: string }> = {};
     activeStudents.forEach(student => {
       const match = assessmentScores.find(
@@ -1122,7 +1103,6 @@ export const GradeComputation: React.FC = () => {
     });
     setScoresInputState(initialInputs);
     singleScoresRef.current = initialInputs;
-    singleSavedRef.current = initialInputs;
     singleDirtyRef.current = false;
     setSingleSaveStatus('saved');
     setIsScoresSavedAlert(false);
@@ -1149,88 +1129,104 @@ export const GradeComputation: React.FC = () => {
   const hasStoredScore = (assessmentId: string, studentId: string): boolean =>
     assessmentScores.some(score => score.assessmentId === assessmentId && score.studentId === studentId);
 
-  // Save on leaving a cell. Refs preserve edits made while a request is in flight.
+  // Single Assessment Saving Logic (Auto & Manual)
   const performSaveSingleScores = async (isManual = false) => {
-    if (!selectedAssessmentId || !activeAssessment || (!isManual && !autoSaveRef.current)) return;
-    if (singleSavingRef.current) {
-      singleQueuedRef.current = true;
+    if (!selectedAssessmentId || !activeAssessment) return;
+    if (singleSaveStatus === 'saving') return;
+
+    let hasErrors = false;
+    const saveList: FacultyScoreEntry[] = [];
+    const currentScores = singleScoresRef.current;
+
+    Object.entries(currentScores).forEach(([studentId, val]) => {
+      if (val.score === '') {
+        if (hasStoredScore(selectedAssessmentId, studentId)) {
+          saveList.push({ studentId, score: null, remarks: val.remarks });
+        }
+        return;
+      }
+
+      const num = parseFloat(val.score);
+      if (isNaN(num) || num < 0 || num > activeAssessment.maxScore) {
+        hasErrors = true;
+      } else {
+        saveList.push({
+          studentId,
+          score: num,
+          remarks: val.remarks
+        });
+      }
+    });
+
+    if (hasErrors) {
+      if (isManual) {
+        showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
+      }
       return;
     }
-    singleSavingRef.current = true;
+
+    if (saveList.length === 0) {
+      singleDirtyRef.current = false;
+      return;
+    }
+
     setSingleSaveStatus('saving');
     try {
-      const currentScores = singleScoresRef.current;
-      const saveList: FacultyScoreEntry[] = [];
-      for (const [studentId, val] of Object.entries(currentScores)) {
-        if (!validateSingleScore(val.score, activeAssessment.maxScore)) {
-          throw new Error('Some scores are invalid. Scores cannot exceed the assessment maximum.');
-        }
-        if (val.score !== '' || hasStoredScore(selectedAssessmentId, studentId)) {
-          saveList.push({ studentId, score: val.score === '' ? null : Number(val.score), remarks: val.remarks });
-        }
+      await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
+      saveAssessmentScores(selectedAssessmentId, saveList);
+      await refreshPersistedGrades(activeAssessment.classId);
+      singleDirtyRef.current = false;
+      setSingleSaveStatus('saved');
+      setIsScoresSavedAlert(true);
+      if (isManual) {
+        showFeedback(`Saved ${saveList.filter(e => e.score !== null).length} scores successfully!`, 'success');
       }
-      const cleared = saveList.filter(entry => entry.score === null);
-      if (isManual || cleared.length > 0) {
-        const confirmed = await requestConfirmation(
-          `Save ${saveList.length - cleared.length} score(s)${cleared.length > 0 ? ` and clear ${cleared.length}` : ''} for ${activeAssessment.title}?`,
-          'Save scores'
-        );
-        if (!confirmed) {
-          const restored = { ...singleScoresRef.current };
-          cleared.forEach(entry => {
-            const stored = assessmentScores.find(score => score.assessmentId === selectedAssessmentId && score.studentId === entry.studentId);
-            if (stored && restored[entry.studentId]?.score === '') {
-              restored[entry.studentId] = { ...restored[entry.studentId], score: String(stored.score) };
-            }
-          });
-          singleScoresRef.current = restored;
-          setScoresInputState(restored);
-          singleDirtyRef.current = JSON.stringify(restored) !== JSON.stringify(singleSavedRef.current);
-          setSingleSaveStatus(singleDirtyRef.current ? 'idle' : 'saved');
-          return;
-        }
-      }
-      if (saveList.length > 0) {
-        await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
-        saveAssessmentScores(selectedAssessmentId, saveList);
-        await refreshPersistedGrades(activeAssessment.classId);
-      }
-      singleSavedRef.current = currentScores;
-      singleDirtyRef.current = JSON.stringify(singleScoresRef.current) !== JSON.stringify(currentScores);
-      setSingleSaveStatus(singleDirtyRef.current ? 'idle' : 'saved');
-      setIsScoresSavedAlert(!singleDirtyRef.current);
-      if (isManual) showFeedback(`Saved ${saveList.filter(entry => entry.score !== null).length} scores successfully!`, 'success');
+      setTimeout(() => setIsScoresSavedAlert(false), 2500);
     } catch (requestError) {
       setSingleSaveStatus('error');
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
-    } finally {
-      singleSavingRef.current = false;
-      if (singleQueuedRef.current) {
-        singleQueuedRef.current = false;
-        if (singleDirtyRef.current && autoSaveRef.current) void singleSaveRef.current();
+      if (isManual) {
+        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
       }
     }
   };
-  singleSaveRef.current = performSaveSingleScores;
 
   const handleScoreChange = (studentId: string, val: string, field: 'score' | 'remarks') => {
-    const next = {
-      ...singleScoresRef.current,
-      [studentId]: { ...singleScoresRef.current[studentId], [field]: val },
-    };
-    singleScoresRef.current = next;
-    singleDirtyRef.current = JSON.stringify(next) !== JSON.stringify(singleSavedRef.current);
-    setScoresInputState(next);
-    if (!singleSavingRef.current) setSingleSaveStatus(singleDirtyRef.current ? 'idle' : 'saved');
+    singleDirtyRef.current = true;
+    setScoresInputState(prev => {
+      const next = {
+        ...prev,
+        [studentId]: {
+          ...prev[studentId],
+          [field]: val
+        }
+      };
+      singleScoresRef.current = next;
+      return next;
+    });
     setIsScoresSavedAlert(false);
+
+    if (singleDebounceTimerRef.current) {
+      clearTimeout(singleDebounceTimerRef.current);
+    }
+    singleDebounceTimerRef.current = setTimeout(() => {
+      performSaveSingleScores(false);
+    }, 1000);
   };
 
   const handleScoreBlur = async (_studentId: string) => {
-    if (autoSaveRef.current && (singleDirtyRef.current || singleSavingRef.current)) await singleSaveRef.current();
+    if (singleDirtyRef.current) {
+      if (singleDebounceTimerRef.current) {
+        clearTimeout(singleDebounceTimerRef.current);
+      }
+      performSaveSingleScores(false);
+    }
   };
 
   const handleManualSaveScores = async () => {
-    await singleSaveRef.current(true);
+    if (singleDebounceTimerRef.current) {
+      clearTimeout(singleDebounceTimerRef.current);
+    }
+    performSaveSingleScores(true);
   };
 
   // View Mode: 'single' (Activity view) vs 'matrix' (Full gradebook grid view)
@@ -1241,7 +1237,7 @@ export const GradeComputation: React.FC = () => {
 
   // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
   useEffect(() => {
-    if (matrixDirtyRef.current || matrixSavingRef.current) return;
+    if (matrixDirtyRef.current) return;
     const matrix: Record<string, Record<string, string>> = {};
     activeStudents.forEach(student => {
       matrix[student.id] = {};
@@ -1252,102 +1248,119 @@ export const GradeComputation: React.FC = () => {
     });
     setMatrixScoresState(matrix);
     matrixScoresRef.current = matrix;
-    matrixSavedRef.current = matrix;
     matrixDirtyRef.current = false;
     setMatrixSaveStatus('saved');
   }, [activeStudents, activeAssessments, assessmentScores]);
 
+  // Matrix Assessment Saving Logic (Auto & Manual)
   const performSaveMatrixScores = async (isManual = false) => {
-    if (!isManual && !autoSaveRef.current) return;
-    if (matrixSavingRef.current) {
-      matrixQueuedRef.current = true;
-      return;
-    }
-    matrixSavingRef.current = true;
-    setMatrixSaveStatus('saving');
-    try {
-      const currentScores = matrixScoresRef.current;
-      let saveCount = 0;
-      const cleared: Array<{ studentId: string; assessmentId: string; score: string }> = [];
-      const batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }> = [];
-      for (const ass of activeAssessments) {
-        const scores: FacultyScoreEntry[] = [];
-        for (const student of activeStudents) {
-          const value = currentScores[student.id]?.[ass.id] ?? '';
-          const stored = assessmentScores.find(score => score.assessmentId === ass.id && score.studentId === student.id);
-          if (!validateSingleScore(value, ass.maxScore)) throw new Error('Some scores in the matrix are invalid (exceed max score or negative).');
-          if (value === '' && stored) {
-            scores.push({ studentId: student.id, score: null, remarks: stored.remarks || '' });
-            cleared.push({ studentId: student.id, assessmentId: ass.id, score: String(stored.score) });
-          } else if (value !== '') {
-            scores.push({ studentId: student.id, score: Number(value), remarks: stored?.remarks || '' });
-            saveCount++;
+    if (matrixSaveStatus === 'saving') return;
+
+    let hasErrors = false;
+    let saveCount = 0;
+    let clearedCount = 0;
+    const batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }> = [];
+    const currentScores = matrixScoresRef.current;
+
+    for (const ass of activeAssessments) {
+      const scores: FacultyScoreEntry[] = [];
+      activeStudents.forEach(student => {
+        const valStr = currentScores[student.id]?.[ass.id] ?? '';
+        const existingMatch = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
+        if (valStr === '') {
+          if (existingMatch) {
+            scores.push({ studentId: student.id, score: null, remarks: existingMatch.remarks || '' });
+            clearedCount++;
           }
-        }
-        if (scores.length > 0) batches.push({ assessmentId: ass.id, scores });
-      }
-      if (isManual || cleared.length > 0) {
-        const confirmed = await requestConfirmation(
-          `Save ${saveCount} score(s)${cleared.length > 0 ? ` and clear ${cleared.length}` : ''} across ${batches.length} assessment(s)? All changes are saved together or not at all.`,
-          'Save scores'
-        );
-        if (!confirmed) {
-          const restored = { ...matrixScoresRef.current };
-          cleared.forEach(cell => {
-            if (restored[cell.studentId]?.[cell.assessmentId] === '') {
-              restored[cell.studentId] = { ...restored[cell.studentId], [cell.assessmentId]: cell.score };
-            }
-          });
-          matrixScoresRef.current = restored;
-          setMatrixScoresState(restored);
-          matrixDirtyRef.current = JSON.stringify(restored) !== JSON.stringify(matrixSavedRef.current);
-          setMatrixSaveStatus(matrixDirtyRef.current ? 'idle' : 'saved');
           return;
         }
+        const num = parseFloat(valStr);
+        if (isNaN(num) || num < 0 || num > ass.maxScore) {
+          hasErrors = true;
+        } else {
+          scores.push({ studentId: student.id, score: num, remarks: existingMatch?.remarks || '' });
+          saveCount++;
+        }
+      });
+      if (scores.length > 0) batches.push({ assessmentId: ass.id, scores });
+    }
+
+    if (hasErrors) {
+      if (isManual) {
+        showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
       }
-      if (batches.length > 0) {
-        await saveFacultyScoreBatchesApi(batches);
-        batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
-        const targetClassId = selectedClassId || availableClasses[0]?.id;
-        if (targetClassId) await refreshPersistedGrades(targetClassId);
-        setMatrixRefreshKey(key => key + 1);
+      return;
+    }
+    if (batches.length === 0) {
+      if (isManual) {
+        showFeedback('There are no scores to save.', 'info');
       }
-      matrixSavedRef.current = currentScores;
-      matrixDirtyRef.current = JSON.stringify(matrixScoresRef.current) !== JSON.stringify(currentScores);
-      setMatrixSaveStatus(matrixDirtyRef.current ? 'idle' : 'saved');
-      setIsMatrixSavedAlert(!matrixDirtyRef.current);
-      if (isManual) showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
+      matrixDirtyRef.current = false;
+      return;
+    }
+
+    setMatrixSaveStatus('saving');
+    try {
+      await saveFacultyScoreBatchesApi(batches);
+      batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
+
+      const targetClassId = selectedClassId || availableClasses[0]?.id;
+      if (targetClassId) {
+        await refreshPersistedGrades(targetClassId);
+      }
+      setMatrixRefreshKey(key => key + 1);
+      matrixDirtyRef.current = false;
+      setMatrixSaveStatus('saved');
+      setIsMatrixSavedAlert(true);
+      if (isManual) {
+        showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
+      }
+      setTimeout(() => setIsMatrixSavedAlert(false), 2500);
     } catch (requestError) {
       setMatrixSaveStatus('error');
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix. Nothing was saved.', 'error');
-    } finally {
-      matrixSavingRef.current = false;
-      if (matrixQueuedRef.current) {
-        matrixQueuedRef.current = false;
-        if (matrixDirtyRef.current && autoSaveRef.current) void matrixSaveRef.current();
+      if (isManual) {
+        showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix.', 'error');
       }
     }
   };
-  matrixSaveRef.current = performSaveMatrixScores;
 
   const handleMatrixScoreChange = (studentId: string, assessmentId: string, value: string) => {
-    const next = {
-      ...matrixScoresRef.current,
-      [studentId]: { ...(matrixScoresRef.current[studentId] || {}), [assessmentId]: value },
-    };
-    matrixScoresRef.current = next;
-    matrixDirtyRef.current = JSON.stringify(next) !== JSON.stringify(matrixSavedRef.current);
-    setMatrixScoresState(next);
-    if (!matrixSavingRef.current) setMatrixSaveStatus(matrixDirtyRef.current ? 'idle' : 'saved');
+    matrixDirtyRef.current = true;
+    setMatrixScoresState(prev => {
+      const next = {
+        ...prev,
+        [studentId]: {
+          ...(prev[studentId] || {}),
+          [assessmentId]: value,
+        }
+      };
+      matrixScoresRef.current = next;
+      return next;
+    });
     setIsMatrixSavedAlert(false);
+
+    if (matrixDebounceTimerRef.current) {
+      clearTimeout(matrixDebounceTimerRef.current);
+    }
+    matrixDebounceTimerRef.current = setTimeout(() => {
+      performSaveMatrixScores(false);
+    }, 1000);
   };
 
-  const handleMatrixScoreBlur = async () => {
-    if (autoSaveRef.current && (matrixDirtyRef.current || matrixSavingRef.current)) await matrixSaveRef.current();
+  const handleMatrixScoreBlur = () => {
+    if (matrixDirtyRef.current) {
+      if (matrixDebounceTimerRef.current) {
+        clearTimeout(matrixDebounceTimerRef.current);
+      }
+      performSaveMatrixScores(false);
+    }
   };
 
   const handleSaveMatrixScores = async () => {
-    await matrixSaveRef.current(true);
+    if (matrixDebounceTimerRef.current) {
+      clearTimeout(matrixDebounceTimerRef.current);
+    }
+    performSaveMatrixScores(true);
   };
 
   // Helper stats for Single Assessment Mode
@@ -1372,8 +1385,26 @@ export const GradeComputation: React.FC = () => {
     return { graded, total, avg, max, min };
   }, [activeAssessment, activeStudents, scoresInputState]);
 
+  // Quick fill helper
+  const handleQuickFillEmpty = (fillValue: number) => {
+    if (!activeAssessment) return;
+    setScoresInputState(prev => {
+      const updated = { ...prev };
+      activeStudents.forEach(student => {
+        if (!updated[student.id]?.score || updated[student.id].score === '') {
+          updated[student.id] = {
+            ...updated[student.id],
+            score: Math.min(fillValue, activeAssessment.maxScore).toString(),
+          };
+        }
+      });
+      return updated;
+    });
+    setIsScoresSavedAlert(false);
+  };
+
   const handleResetScoresInput = () => {
-    if (!selectedAssessmentId || singleSavingRef.current) return;
+    if (!selectedAssessmentId) return;
     const initialInputs: Record<string, { score: string; remarks: string }> = {};
     activeStudents.forEach(student => {
       const match = assessmentScores.find(
@@ -1384,10 +1415,6 @@ export const GradeComputation: React.FC = () => {
         remarks: match?.remarks || ''
       };
     });
-    singleScoresRef.current = initialInputs;
-    singleSavedRef.current = initialInputs;
-    singleDirtyRef.current = false;
-    setSingleSaveStatus('saved');
     setScoresInputState(initialInputs);
     setIsScoresSavedAlert(false);
   };
@@ -1459,6 +1486,16 @@ export const GradeComputation: React.FC = () => {
     setIsConversionModalOpen(false);
   };
 
+  const handleApplyBuGradingSystem = () => {
+    setSchemaMode('periods');
+    setComponentMode('lecture_laboratory');
+    setComponentWeights({ lecture: '60', laboratory: '40' });
+    setTermRatio({ midterm: '30', final: '70' });
+    setMidtermCategories(buildDefaultLectureLaboratoryCategories('Midterm'));
+    setFinalCategories(buildDefaultLectureLaboratoryCategories('Final'));
+    showFeedback('Applied BU Grading System standard (Lecture 60%, Lab 40% | Midterm 30%, Finals 70%). Click Save to apply.', 'success');
+  };
+
   // Keep selected offering key synchronized with the active course filter
   useEffect(() => {
     if (facultyOfferings.length === 0) return;
@@ -1493,6 +1530,7 @@ export const GradeComputation: React.FC = () => {
       if (res.configuration === null) {
         // Unconfigured offering: populate editable unsaved starting preset
         setSchemaMode('periods');
+        setIsCustomizingWeights(true);
         const defaults = res.defaults;
         const fallback = buildDefaultPeriodDraft();
         setComponentMode(defaults?.componentMode ?? 'lecture_laboratory');
@@ -1552,6 +1590,7 @@ export const GradeComputation: React.FC = () => {
         setSavedCategoryRows([]);
       } else {
         setIsPresetDraft(false);
+        setIsCustomizingWeights(false);
         const mode = res.configuration.schemaMode ?? 'overall';
         setSchemaMode(mode);
         const loadedComponentMode = res.configuration.componentMode ?? 'combined';
@@ -1659,6 +1698,7 @@ export const GradeComputation: React.FC = () => {
             id: c.id,
             name: c.name,
             weight: String(c.weight),
+            defaultMax: (c.name.toLowerCase().includes('exam') || c.name.toLowerCase().includes('attendance') || c.name.toLowerCase().includes('lab')) ? '100' : '50',
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Midterm' as const,
             sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
@@ -1677,6 +1717,7 @@ export const GradeComputation: React.FC = () => {
             id: c.id,
             name: c.name,
             weight: String(c.weight),
+            defaultMax: (c.name.toLowerCase().includes('exam') || c.name.toLowerCase().includes('attendance') || c.name.toLowerCase().includes('lab')) ? '100' : '50',
             sortOrder: c.sortOrder ?? (idx + 1),
             gradingPeriod: 'Final' as const,
             sourceKind: c.sourceKind ?? (c.name.toLowerCase() === 'attendance' ? 'attendance' : 'assessment'),
@@ -1965,6 +2006,7 @@ export const GradeComputation: React.FC = () => {
       tempId,
       name: '',
       weight: '',
+      defaultMax: '50',
       sortOrder: sameComponentRows.length + 1,
       gradingPeriod: period,
       sourceKind: 'assessment',
@@ -1981,7 +2023,7 @@ export const GradeComputation: React.FC = () => {
   const handleUpdatePeriodCategoryField = (
     period: 'Midterm' | 'Final',
     compositeKey: string,
-    field: 'name' | 'weight',
+    field: 'name' | 'weight' | 'defaultMax',
     val: string
   ) => {
     const updateList = (list: PeriodCategoryDraftRow[]) =>
@@ -2833,8 +2875,6 @@ export const GradeComputation: React.FC = () => {
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
             value={selectedSubjectCode}
-            disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
-            title="Save or reset unsaved scores before changing the score context."
             onChange={async (e) => {
               const newCode = e.target.value;
               const matchOffering = facultyOfferings.find(o => o.courseCode === newCode);
@@ -2873,8 +2913,6 @@ export const GradeComputation: React.FC = () => {
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
           <select
             value={selectedClassId}
-            disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
-            title="Save or reset unsaved scores before changing the score context."
             onChange={(e) => {
               const newClassId = e.target.value;
               setSelectedClassId(newClassId);
@@ -2900,7 +2938,7 @@ export const GradeComputation: React.FC = () => {
       </Card>
 
       {/* Navigation Sub-Tabs */}
-      <div className="grid grid-cols-2 gap-1 sm:flex sm:gap-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
+      <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
         <button
           onClick={() => setActiveSubTab('scores')}
           className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -2952,7 +2990,6 @@ export const GradeComputation: React.FC = () => {
           <div className="flex justify-end items-center bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
               <button
-                disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
                 onClick={() => setScoreEntryMode('single')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'single'
                   ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
@@ -2963,7 +3000,6 @@ export const GradeComputation: React.FC = () => {
                 Single Activity View
               </button>
               <button
-                disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
                 onClick={() => setScoreEntryMode('matrix')}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${scoreEntryMode === 'matrix'
                   ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-sm'
@@ -2978,7 +3014,7 @@ export const GradeComputation: React.FC = () => {
 
           {scoreEntryMode === 'matrix' ? (
             /* FULL GRADEBOOK MATRIX VIEW */
-            <Card className="p-0">
+            <Card className="p-0 overflow-hidden">
               <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
@@ -2989,10 +3025,27 @@ export const GradeComputation: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  <label className="flex items-center gap-1.5 text-xs">
-                    <input type="checkbox" checked={autoSaveEnabled} onChange={event => setAutoSaveEnabled(event.target.checked)} />
-                    Auto-save
-                  </label>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
+                    {matrixSaveStatus === 'saving' ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
+                        <span className="text-clinical-600 dark:text-clinical-400">Auto-saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-700 dark:text-emerald-400">Auto-save on</span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleSaveMatrixScores}
+                    disabled={matrixSaveStatus === 'saving'}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isMatrixSavedAlert ? 'Saved!' : 'Save All Matrix Scores'}</span>
+                  </button>
                 </div>
               </div>
 
@@ -3010,28 +3063,11 @@ export const GradeComputation: React.FC = () => {
                     scores={matrixScoresState}
                     onScoreChange={handleMatrixScoreChange}
                     onScoreBlur={handleMatrixScoreBlur}
-                    onSingleActivityView={() => setScoreEntryMode('single')}
-                    canSwitchView={singleSaveStatus === 'saved' && matrixSaveStatus === 'saved'}
                     isValidScore={validateSingleScore}
                     refreshKey={matrixRefreshKey}
                   />
                 );
               })()}
-              <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 sm:px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-800">
-                  <span role="status" aria-live="polite">{matrixSaveStatus === 'saving' ? 'Saving…' : matrixSaveStatus === 'saved' ? 'Saved' : matrixSaveStatus === 'error' ? 'Failed – Retry' : 'Unsaved changes'}</span>
-                  {matrixSaveStatus === 'error' && <button type="button" onClick={() => void matrixSaveRef.current(true)} className="text-rose-600 underline">Retry</button>}
-                </div>
-                <button
-                  data-manual-score-save
-                  onClick={handleSaveMatrixScores}
-                  disabled={matrixSaveStatus === 'saving'}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>{isMatrixSavedAlert ? 'Saved!' : 'Save All Matrix Scores'}</span>
-                </button>
-              </div>
             </Card>
           ) : (
             /* ENHANCED SINGLE ACTIVITY VIEW */
@@ -3153,8 +3189,6 @@ export const GradeComputation: React.FC = () => {
                         ) : (
                           <select
                             value={selectedAssessmentId}
-                            disabled={singleSaveStatus !== 'saved' || matrixSaveStatus !== 'saved'}
-                            title="Save or reset unsaved scores before changing the score context."
                             onChange={(e) => setSelectedAssessmentId(e.target.value)}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
@@ -3235,11 +3269,11 @@ export const GradeComputation: React.FC = () => {
               </div>
 
               <div className="lg:col-span-8 space-y-3">
-                <Card className="p-0">
+                <Card className="p-0 overflow-hidden">
                   <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Roster Score Entries</h3>
-                      <p className="hidden sm:block text-[10px] text-slate-400 mt-0.5">Use Enter / Down / Up arrow keys to quickly navigate between student score boxes.</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Use Enter / Down / Up arrow keys to quickly navigate between student score boxes.</p>
                     </div>
 
                     <div className="relative w-full sm:w-56">
@@ -3281,7 +3315,6 @@ export const GradeComputation: React.FC = () => {
                                 <input
                                   id={`score-input-${idx}`}
                                   type="number"
-                                  inputMode="decimal"
                                   min="0"
                                   max={activeAssessment?.maxScore || 100}
                                   placeholder={`0 - ${activeAssessment?.maxScore || 100}`}
@@ -3290,7 +3323,6 @@ export const GradeComputation: React.FC = () => {
                                     if (e.key === 'Enter' || e.key === 'ArrowDown') {
                                       e.preventDefault();
                                       const next = document.getElementById(`score-input-${idx + 1}`) as HTMLInputElement | null;
-                                      if (!next) void handleScoreBlur(student.id);
                                       if (next) {
                                         next.focus();
                                         next.select();
@@ -3298,7 +3330,6 @@ export const GradeComputation: React.FC = () => {
                                     } else if (e.key === 'ArrowUp') {
                                       e.preventDefault();
                                       const prev = document.getElementById(`score-input-${idx - 1}`) as HTMLInputElement | null;
-                                      if (!prev) void handleScoreBlur(student.id);
                                       if (prev) {
                                         prev.focus();
                                         prev.select();
@@ -3306,7 +3337,7 @@ export const GradeComputation: React.FC = () => {
                                     }
                                   }}
                                   onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
-                                  onBlur={event => { if (!(event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest('[data-manual-score-save]'))) void handleScoreBlur(student.id); }}
+                                  onBlur={() => handleScoreBlur(student.id)}
                                   className={`w-28 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${!isValid
                                     ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'
                                     : row.score === ''
@@ -3326,13 +3357,21 @@ export const GradeComputation: React.FC = () => {
                   </div>
 
                   {selectedAssessmentId && filteredScoreStudents.length > 0 && (
-                    <div className="sticky bottom-0 z-20 px-3 sm:px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900 flex flex-wrap justify-end items-center gap-2">
+                    <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-2.5">
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-                        <span role="status" aria-live="polite">{singleSaveStatus === 'saving' ? 'Saving…' : singleSaveStatus === 'saved' ? 'Saved' : singleSaveStatus === 'error' ? 'Failed – Retry' : 'Unsaved changes'}</span>
-                        {singleSaveStatus === 'error' && <button type="button" onClick={() => void singleSaveRef.current(true)} className="text-rose-600 underline">Retry</button>}
+                        {singleSaveStatus === 'saving' ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
+                            <span className="text-clinical-600 dark:text-clinical-400">Auto-saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700 dark:text-emerald-400">Auto-save on</span>
+                          </>
+                        )}
                       </div>
                       <button
-                        data-manual-score-save
                         onClick={handleManualSaveScores}
                         disabled={singleSaveStatus === 'saving'}
                         className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
@@ -3646,8 +3685,8 @@ export const GradeComputation: React.FC = () => {
           TAB 3: GRADE WEIGHTS EDITOR
       ---------------------------------------------------- */}
       {activeSubTab === 'components' && (
-        <Card className="p-0 sm:p-6 max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
-          <CardHeader className="relative border-b border-slate-100 dark:border-slate-800/80 p-3 sm:p-7">
+        <Card className="max-w-4xl mx-auto shadow-sm border border-slate-200/90 dark:border-slate-800 rounded-3xl overflow-hidden bg-white dark:bg-slate-900">
+          <CardHeader className="relative border-b border-slate-100 dark:border-slate-800/80 p-6 sm:p-7">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="space-y-1 sm:pr-24">
                 <CardTitle className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2.5">
@@ -3688,7 +3727,7 @@ export const GradeComputation: React.FC = () => {
               </div>
 
               {currentOffering && (
-                <div className="self-start sm:absolute sm:top-7 sm:right-7 z-10">
+                <div className="absolute top-6 right-6 sm:top-7 sm:right-7 z-10">
                   <button
                     type="button"
                     onClick={handleReload}
@@ -3703,7 +3742,7 @@ export const GradeComputation: React.FC = () => {
               )}
             </div>
           </CardHeader>
-          <CardContent className="p-3 sm:p-7 space-y-6">
+          <CardContent className="p-6 sm:p-7 space-y-6">
 
             {/* Conflict Alert (409) */}
             {conflictError && (
@@ -3868,7 +3907,7 @@ export const GradeComputation: React.FC = () => {
                 <form onSubmit={handleSaveGradingConfig} className="space-y-5">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between px-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         Grading Categories ({categoryRows.length})
                       </span>
                       <button
@@ -4012,7 +4051,7 @@ export const GradeComputation: React.FC = () => {
                     <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
                         <CheckCircle className="w-4 h-4 text-clinical-600 dark:text-clinical-400 shrink-0" />
-                        <span>{loadedConfig ? 'Saved grading' : 'BU syllabus default (unsaved)'}: Midterm {termRatio.midterm}% / Finals {termRatio.final}%{componentMode === 'lecture_laboratory' && <> · Lecture {componentWeights.lecture}% / Laboratory {componentWeights.laboratory}%</>}</span>
+                        <span>BU Dental Medicine Schema Active: Lecture {componentWeights.lecture}% / Lab {componentWeights.laboratory}% • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
                       </div>
                       <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0">
                         Directly editable
@@ -4043,8 +4082,8 @@ export const GradeComputation: React.FC = () => {
 
                   {/* LEVEL 1: TOPMOST PERIOD TABS (MIDTERM & FINAL WITH INLINE RATIO EDITING) */}
                   <div className="space-y-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1">
-                        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                         1. Select Period & Term Split
                       </span>
                       <span className={`text-[11px] font-bold ${termRatioCalc.isExact100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
@@ -4056,11 +4095,10 @@ export const GradeComputation: React.FC = () => {
                       {/* Midterm Tab */}
                       <div
                         role="button"
-                        aria-label="Midterm Categories"
                         tabIndex={0}
                         onClick={() => setActivePeriodEditorTab('Midterm')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Midterm'); }}
-                        className={`p-2.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 ${
+                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
                           activePeriodEditorTab === 'Midterm'
                             ? 'border-clinical-600 bg-clinical-50/60 dark:bg-clinical-950/40 shadow-sm ring-2 ring-clinical-500/20'
                             : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
@@ -4090,6 +4128,7 @@ export const GradeComputation: React.FC = () => {
                               value={termRatio.midterm}
                               disabled={isLegacyCombinedPeriodConfig}
                               onChange={(e) => {
+                                setIsCustomizingWeights(true);
                                 handleUpdateTermRatio('midterm', e.target.value);
                               }}
                               className="w-16 sm:w-20 pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
@@ -4102,11 +4141,10 @@ export const GradeComputation: React.FC = () => {
                       {/* Finals Tab */}
                       <div
                         role="button"
-                        aria-label="Finals Categories"
                         tabIndex={0}
                         onClick={() => setActivePeriodEditorTab('Final')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Final'); }}
-                        className={`p-2.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 ${
+                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
                           activePeriodEditorTab === 'Final'
                             ? 'border-clinical-600 bg-clinical-50/60 dark:bg-clinical-950/40 shadow-sm ring-2 ring-clinical-500/20'
                             : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
@@ -4136,6 +4174,7 @@ export const GradeComputation: React.FC = () => {
                               value={termRatio.final}
                               disabled={isLegacyCombinedPeriodConfig}
                               onChange={(e) => {
+                                setIsCustomizingWeights(true);
                                 handleUpdateTermRatio('final', e.target.value);
                               }}
                               className="w-16 sm:w-20 pl-2.5 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs sm:text-sm text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
@@ -4150,7 +4189,7 @@ export const GradeComputation: React.FC = () => {
                   {/* LEVEL 2: COMPONENT SUB-TABS (LECTURE & LABORATORY WITH INLINE CONTRIBUTION EDITING) */}
                   {componentMode === 'lecture_laboratory' && (
                     <div className="space-y-2">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1">
+                      <div className="flex items-center justify-between px-1">
                         <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                           2. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} Component Contribution
                         </span>
@@ -4172,7 +4211,7 @@ export const GradeComputation: React.FC = () => {
                           tabIndex={0}
                           onClick={() => setActiveComponentEditorTab('Lecture')}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveComponentEditorTab('Lecture'); }}
-                          className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 ${
+                          className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             activeComponentEditorTab === 'Lecture'
                               ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-xs'
                               : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
@@ -4185,7 +4224,7 @@ export const GradeComputation: React.FC = () => {
                                 <span>Lecture</span>
                                 <span className="text-[10px] font-semibold text-slate-400">Categories</span>
                               </div>
-                              <label htmlFor="lecture-component-weight" className="text-[10px] text-slate-400 dark:text-slate-500">Lecture contribution (%)</label>
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500">Component Contribution</p>
                             </div>
                           </div>
 
@@ -4196,6 +4235,7 @@ export const GradeComputation: React.FC = () => {
                                 type="text"
                                 value={componentWeights.lecture}
                                 onChange={(e) => {
+                                  setIsCustomizingWeights(true);
                                   handleUpdateComponentWeight('lecture', e.target.value);
                                 }}
                                 className="w-14 sm:w-16 pl-2 pr-5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
@@ -4213,7 +4253,7 @@ export const GradeComputation: React.FC = () => {
                           tabIndex={0}
                           onClick={() => setActiveComponentEditorTab('Laboratory')}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveComponentEditorTab('Laboratory'); }}
-                          className={`p-2.5 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 ${
+                          className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             activeComponentEditorTab === 'Laboratory'
                               ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20 shadow-xs'
                               : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
@@ -4226,7 +4266,7 @@ export const GradeComputation: React.FC = () => {
                                 <span>Laboratory</span>
                                 <span className="text-[10px] font-semibold text-slate-400">Categories</span>
                               </div>
-                              <label htmlFor="laboratory-component-weight" className="text-[10px] text-slate-400 dark:text-slate-500">Laboratory contribution (%)</label>
+                              <p className="text-[10px] text-slate-400 dark:text-slate-500">Component Contribution</p>
                             </div>
                           </div>
 
@@ -4237,6 +4277,7 @@ export const GradeComputation: React.FC = () => {
                                 type="text"
                                 value={componentWeights.laboratory}
                                 onChange={(e) => {
+                                  setIsCustomizingWeights(true);
                                   handleUpdateComponentWeight('laboratory', e.target.value);
                                 }}
                                 className="w-14 sm:w-16 pl-2 pr-5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-extrabold text-xs text-right focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
@@ -4285,29 +4326,27 @@ export const GradeComputation: React.FC = () => {
                   {/* LEVEL 3: CATEGORIES LIST FOR ACTIVE PERIOD & COMPONENT */}
                   <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
                     {/* Header Toolbar */}
-                    <div className="p-2.5 sm:p-4 bg-slate-50/70 dark:bg-slate-850/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                    <div className="p-3.5 sm:p-4 bg-slate-50/70 dark:bg-slate-850/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
                         <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
-                          {componentMode === 'lecture_laboratory' ? '3.' : '2.'} {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'}{componentMode === 'lecture_laboratory' && ` • ${activeComponentEditorTab}`} Categories ({activePeriodVisibleCategories.length})
+                          3. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} • {activeComponentEditorTab} Categories ({activePeriodVisibleCategories.length})
                         </span>
                         <span className="text-[11px] text-slate-400">• Must total 100%</span>
                       </div>
 
-                      <div className="flex flex-col items-start sm:flex-row sm:items-center gap-2.5">
+                      <div className="flex items-center gap-2.5">
                         {/* Status badge */}
-                        <span className={`whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-extrabold border ${
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${
                           activeComponentCategoryCalc.isExact100
                             ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                             : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                         }`}>
-                          {activeComponentCategoryCalc.displayPercent}<span className="hidden sm:inline"> / 100%</span>
-                          <span className="ml-1">{activeComponentCategoryCalc.isExact100 ? 'Valid 100%' : 'Must equal 100%'}</span>
+                          {activeComponentCategoryCalc.displayPercent} / 100%
                         </span>
 
                         {/* Simple "+ Add Category" button */}
                         <button
                           type="button"
-                          aria-label={activePeriodEditorTab === 'Midterm' ? 'Add Midterm Category' : 'Add Finals Category'}
                           onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
                           disabled={isLegacyCombinedPeriodConfig}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
@@ -4325,7 +4364,6 @@ export const GradeComputation: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
-                          disabled={isLegacyCombinedPeriodConfig}
                           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold text-clinical-600 hover:text-clinical-700 cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -4384,23 +4422,6 @@ export const GradeComputation: React.FC = () => {
                             </div>
 
 
-                            {componentMode === 'lecture_laboratory' && (
-                              <div className="w-full sm:w-32 shrink-0">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Source</label>
-                                <select
-                                  aria-label={`Source for ${row.name || 'unnamed category'}`}
-                                  value={row.sourceKind}
-                                  disabled={row.inUse}
-                                  onChange={event => handleUpdatePeriodCategorySourceKind(activePeriodEditorTab, row.compositeKey, event.target.value as GradingSourceKindEnum)}
-                                  className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-semibold disabled:opacity-50"
-                                >
-                                  <option value="assessment">Assessment</option>
-                                  <option value="attendance">Attendance</option>
-                                </select>
-                                {row.inUse && <p className="mt-1 text-[9px] leading-tight text-slate-400">In-use category source is fixed to protect linked records.</p>}
-                              </div>
-                            )}
-
                             {/* Weight (%) */}
                             <div className="w-full sm:w-28 shrink-0">
                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
@@ -4409,7 +4430,6 @@ export const GradeComputation: React.FC = () => {
                               <div className="relative">
                                 <input
                                   type="text"
-                                  aria-label={`Weight for ${row.name || 'unnamed category'}`}
                                   value={row.weight}
                                   placeholder="0"
                                   disabled={isLegacyCombinedPeriodConfig}
@@ -4440,7 +4460,7 @@ export const GradeComputation: React.FC = () => {
                   </div>
 
                   {/* Attendance Calendar Date Ranges (Collapsible) */}
-                  <details open className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
+                  <details className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 overflow-hidden group">
                     <summary className="p-3.5 sm:p-4 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between select-none hover:bg-slate-100/50 dark:hover:bg-slate-800/40 transition-colors">
                       <div className="flex items-center gap-2">
                         <Settings className="w-3.5 h-3.5 text-slate-400" />
@@ -4913,10 +4933,7 @@ export const GradeComputation: React.FC = () => {
 
                     if (isPeriodMode) {
                       const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                      const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
-                        ? evalResult.retentionState === 'remedial'
-                        : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
-                          && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
+                      const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold;
                       const isFailed = evalResult.overallGwa === 5.0;
                       const isPending = evalResult.statusText === 'PENDING';
                       const isIncomplete = evalResult.overallGwa === null;
@@ -4995,11 +5012,7 @@ export const GradeComputation: React.FC = () => {
                     }
 
                     // Legacy overall view
-                    const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                    const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
-                        ? evalResult.retentionState === 'remedial'
-                        : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
-                          && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
+                    const isFailsRetention = subj && subj.isClinical && typeof subj.grade === 'number' && subj.grade >= settings.retentionThreshold;
                     const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
                     const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
 
@@ -5339,10 +5352,7 @@ export const GradeComputation: React.FC = () => {
 
               if (isPeriodMode) {
                 const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-                const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
-                  ? evalResult.retentionState === 'remedial'
-                  : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
-                    && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
+                const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && evalResult.overallGwa >= settings.retentionThreshold;
                 const isFailed = evalResult.overallGwa === 5.0;
                 const isPending = evalResult.statusText === 'PENDING';
                 const isIncomplete = evalResult.overallGwa === null;
@@ -5401,11 +5411,7 @@ export const GradeComputation: React.FC = () => {
               }
 
               // Legacy print row
-              const evalResult = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
-              const isFailsRetention = subj && subj.isClinical && evalResult.overallGwa !== null && (evalResult.retentionState != null
-                  ? evalResult.retentionState === 'remedial'
-                  : evalResult.overallPercentage !== null && Number.isFinite(evalResult.overallPercentage)
-                    && percentageToGWAExact(evalResult.overallPercentage) >= settings.retentionThreshold);
+              const isFailsRetention = subj && subj.isClinical && typeof subj.grade === 'number' && subj.grade >= settings.retentionThreshold;
               const isFailed = subj && typeof subj.grade === 'number' && subj.grade === 5.0;
               const hasGrade = subj && typeof subj.grade === 'number' && subj.grade > 0;
               const remarksStr = !hasGrade ? 'UNCOMPUTED' : isFailed ? 'FAILED' : isFailsRetention ? 'FAILS RETENTION' : 'PASS';
@@ -5482,7 +5488,6 @@ export const GradeComputation: React.FC = () => {
                 Grading Period
               </label>
               <select
-                aria-label="Grading Period"
                 value={assPeriod}
                 onChange={(e) => handlePeriodChange(e.target.value as any)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-clinical-500"
@@ -5531,7 +5536,6 @@ export const GradeComputation: React.FC = () => {
                     </div>
                   )}
                   <select
-                    aria-label="Category Type"
                     value={assGradingCategoryId || assType}
                     onChange={(e) => {
                       const selectedVal = e.target.value;
@@ -5577,7 +5581,7 @@ export const GradeComputation: React.FC = () => {
                             <optgroup label="Lecture Categories">
                               {lectureCategories.map(cat => (
                                 <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                                  {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
+                                  {cat.name} ({cat.weight}%)
                                 </option>
                               ))}
                             </optgroup>
@@ -5586,7 +5590,7 @@ export const GradeComputation: React.FC = () => {
                             <optgroup label="Laboratory Categories">
                               {labCategories.map(cat => (
                                 <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                                  {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
+                                  {cat.name} ({cat.weight}%)
                                 </option>
                               ))}
                             </optgroup>
@@ -5595,7 +5599,7 @@ export const GradeComputation: React.FC = () => {
                             <optgroup label="Other Categories">
                               {otherCategories.map(cat => (
                                 <option key={categoryOptionKey(cat, assPeriod)} value={categoryOptionKey(cat, assPeriod)}>
-                                  {cat.component ? `${cat.component} · ` : ''}{cat.name} ({cat.weight}%)
+                                  {cat.name} ({cat.weight}%)
                                 </option>
                               ))}
                             </optgroup>
