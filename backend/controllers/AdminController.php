@@ -789,6 +789,7 @@ function handle_admin_reports_summary(): void
                     COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
                     s.bu_email, s.year_level, s.status, b.consent_status, b.face_enrolled,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                    COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
                     " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,
                     e.remedial_state_json, ers.status AS normalized_remedial_status,
                     ers.original_grade AS normalized_original_grade,
@@ -873,6 +874,7 @@ function handle_admin_reports_summary(): void
                 $grouped[$id]['enrolledSubjects'][] = [
                     'code' => $s['course_code'], 'name' => $s['course_name'],
                     'units' => (float) $s['units'], 'grade' => $s['final_gwa'] !== null ? (float) $s['final_gwa'] : null,
+                    'percentage' => $s['final_percentage'] !== null ? (float) $s['final_percentage'] : null,
                     'isClinical' => (bool) $s['is_clinical'],
                     'hasRemedial' => $s['retention_state'] === 'remedial',
                     'components' => $s['grade_components_json'] ? json_decode($s['grade_components_json'], true) : null,

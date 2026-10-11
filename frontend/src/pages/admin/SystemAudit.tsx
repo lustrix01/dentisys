@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { recordAudit } from '../../services/auditService';
+import { percentageToGWAExact } from '../../utils/gradeHelper';
 
 type ReportTab = 'students' | 'academic' | 'retention' | 'attendance';
 
@@ -38,8 +39,13 @@ const csvEscapeField = (value: unknown) => {
 
 export const DeanReports: React.FC = () => {
   const [retentionThreshold, setRetentionThreshold] = useState(2.5);
-  // Retention flag is the server's enrollment state, never the rounded grade (spec 2026-10-09).
-  const failsRetention = (sub: any): boolean => sub.hasRemedial === true;
+  // Flags by grade, comparing the exact grade so rounding never creates a flag (spec 2026-10-09).
+  const failsRetention = (sub: any): boolean => {
+    if (sub.grade === null || sub.grade === undefined) return false;
+    return typeof sub.percentage === 'number'
+      ? percentageToGWAExact(sub.percentage) >= retentionThreshold
+      : Number(sub.grade) >= retentionThreshold;
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dbStudents, setDbStudents] = useState<any[]>([]);
