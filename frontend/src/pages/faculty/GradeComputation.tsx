@@ -1036,6 +1036,13 @@ export const GradeComputation: React.FC = () => {
   // Cleared stored scores not yet sent: only a manual save deletes them; they stay empty meanwhile.
   const singlePendingClearRef = useRef<{ assessmentId: string; ids: Set<string> }>({ assessmentId: '', ids: new Set() });
   const matrixPendingClearRef = useRef<Set<string>>(new Set());
+  // Save in flight (a ref, not state, so a click right after a blur save is queued instead of lost).
+  const singleSavingRef = useRef(false);
+  const singleQueuedRef = useRef<{ manual: boolean } | null>(null);
+  const saveSingleRef = useRef<(isManual?: boolean) => Promise<void>>(async () => {});
+  const matrixSavingRef = useRef(false);
+  const matrixQueuedRef = useRef<{ manual: boolean } | null>(null);
+  const saveMatrixRef = useRef<(isManual?: boolean) => Promise<void>>(async () => {});
 
   const [matrixSaveStatus, setMatrixSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const matrixDirtyRef = useRef(false);
@@ -1160,7 +1167,10 @@ export const GradeComputation: React.FC = () => {
   // Single Assessment Saving Logic (Auto & Manual)
   const performSaveSingleScores = async (isManual = false) => {
     if (!selectedAssessmentId || !activeAssessment) return;
-    if (singleSaveStatus === 'saving') return;
+    if (singleSavingRef.current) {
+      singleQueuedRef.current = { manual: isManual || !!singleQueuedRef.current?.manual };
+      return;
+    }
 
     let hasErrors = false;
     const saveList: FacultyScoreEntry[] = [];
@@ -1202,6 +1212,13 @@ export const GradeComputation: React.FC = () => {
     }
 
     setSingleSaveStatus('saving');
+    singleSavingRef.current = true;
+    const finish = () => {
+      singleSavingRef.current = false;
+      const queued = singleQueuedRef.current;
+      singleQueuedRef.current = null;
+      if (queued) setTimeout(() => saveSingleRef.current(queued.manual), 0);
+    };
     try {
       await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
       singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: cleared };
@@ -1220,7 +1237,9 @@ export const GradeComputation: React.FC = () => {
         showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save assessment scores.', 'error');
       }
     }
+    finish();
   };
+  saveSingleRef.current = performSaveSingleScores;
 
   const handleScoreChange = (studentId: string, val: string, field: 'score' | 'remarks') => {
     singleDirtyRef.current = true;
@@ -1320,7 +1339,10 @@ export const GradeComputation: React.FC = () => {
 
   // Matrix Assessment Saving Logic (Auto & Manual)
   const performSaveMatrixScores = async (isManual = false) => {
-    if (matrixSaveStatus === 'saving') return;
+    if (matrixSavingRef.current) {
+      matrixQueuedRef.current = { manual: isManual || !!matrixQueuedRef.current?.manual };
+      return;
+    }
 
     let hasErrors = false;
     let saveCount = 0;
@@ -1372,6 +1394,13 @@ export const GradeComputation: React.FC = () => {
     }
 
     setMatrixSaveStatus('saving');
+    matrixSavingRef.current = true;
+    const finish = () => {
+      matrixSavingRef.current = false;
+      const queued = matrixQueuedRef.current;
+      matrixQueuedRef.current = null;
+      if (queued) setTimeout(() => saveMatrixRef.current(queued.manual), 0);
+    };
     try {
       await saveFacultyScoreBatchesApi(batches);
       matrixPendingClearRef.current = cleared;
@@ -1395,7 +1424,9 @@ export const GradeComputation: React.FC = () => {
         showFeedback(requestError instanceof Error ? requestError.message : 'Unable to save the score matrix.', 'error');
       }
     }
+    finish();
   };
+  saveMatrixRef.current = performSaveMatrixScores;
 
   const handleMatrixScoreChange = (studentId: string, assessmentId: string, value: string) => {
     matrixDirtyRef.current = true;
@@ -3113,11 +3144,10 @@ export const GradeComputation: React.FC = () => {
                   </div>
                   <button
                     onClick={handleSaveMatrixScores}
-                    disabled={matrixSaveStatus === 'saving'}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-bold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>{isMatrixSavedAlert ? 'Saved!' : `Save All Matrix Scores${matrixPendingClears.size > 0 ? ` (${matrixPendingClears.size} to clear)` : ''}`}</span>
+                    <span>{isMatrixSavedAlert && matrixPendingClears.size === 0 ? 'Saved!' : `Save All Matrix Scores${matrixPendingClears.size > 0 ? ` (${matrixPendingClears.size} to clear)` : ''}`}</span>
                   </button>
                 </div>
               </div>
@@ -3450,11 +3480,10 @@ export const GradeComputation: React.FC = () => {
                       </div>
                       <button
                         onClick={handleManualSaveScores}
-                        disabled={singleSaveStatus === 'saving'}
                         className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-clinical-500 to-accent-500 hover:from-clinical-600 hover:to-accent-600 text-white font-semibold text-xs shadow-md transition-all active:scale-97 disabled:opacity-50"
                       >
                         <Save className="w-3.5 h-3.5" />
-                        <span>{isScoresSavedAlert ? 'Scores Saved Successfully!' : `Save Scores Sheet${singlePendingClears.size > 0 ? ` (${singlePendingClears.size} to clear)` : ''}`}</span>
+                        <span>{isScoresSavedAlert && singlePendingClears.size === 0 ? 'Scores Saved Successfully!' : `Save Scores Sheet${singlePendingClears.size > 0 ? ` (${singlePendingClears.size} to clear)` : ''}`}</span>
                       </button>
                     </div>
                   )}
