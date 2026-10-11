@@ -93,6 +93,25 @@ if ($sidecar !== '') {
             && str_contains($verifySource, 'Biometric reference is invalid.'),
         'Verification refuses legacy LBPH references before reading a template'
     );
+    $boundCheck = strpos($verifySource, 'if not liveness_bound_to_face(');
+    biometric_protocol_expect(
+        $boundCheck !== false
+            && str_contains(substr($verifySource, $boundCheck), '"Face could not be verified.", "biometric_verification_failed"'),
+        'Verification requires the liveness actions on matching frames of the same face'
+    );
+    $enrollmentStart = strpos($sidecar, 'def enrollment():');
+    $enrollmentSource = $enrollmentStart === false
+        ? ''
+        : substr($sidecar, $enrollmentStart, max(0, strpos($sidecar, 'def verify():') - $enrollmentStart));
+    biometric_protocol_expect(
+        str_contains($enrollmentSource, 'if not liveness_bound_to_face(')
+            && str_contains($enrollmentSource, 'liveness_failed'),
+        'Enrollment requires the liveness actions on frames of the enrolled face'
+    );
+    biometric_protocol_expect(
+        preg_match('/with _LANDMARKER_LOCK:\s+result = landmarker\.detect\(/', $sidecar) === 1,
+        'Shared MediaPipe landmarker is serialized across worker threads'
+    );
 } else {
     fwrite(STDOUT, "PASS: Sidecar file check skipped (not mounted in container environment)\n");
 }
