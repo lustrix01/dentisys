@@ -1209,13 +1209,15 @@ export const GradeComputation: React.FC = () => {
     if (singleDebounceTimerRef.current) {
       clearTimeout(singleDebounceTimerRef.current);
     }
+    // Auto-save off: scores wait for the manual Save button.
+    if (!autoSaveEnabled) return;
     singleDebounceTimerRef.current = setTimeout(() => {
       performSaveSingleScores(false);
     }, 1000);
   };
 
   const handleScoreBlur = async (_studentId: string) => {
-    if (singleDirtyRef.current) {
+    if (autoSaveEnabled && singleDirtyRef.current) {
       if (singleDebounceTimerRef.current) {
         clearTimeout(singleDebounceTimerRef.current);
       }
@@ -1343,13 +1345,15 @@ export const GradeComputation: React.FC = () => {
     if (matrixDebounceTimerRef.current) {
       clearTimeout(matrixDebounceTimerRef.current);
     }
+    // Auto-save off: scores wait for the manual Save button.
+    if (!autoSaveEnabled) return;
     matrixDebounceTimerRef.current = setTimeout(() => {
       performSaveMatrixScores(false);
     }, 1000);
   };
 
   const handleMatrixScoreBlur = () => {
-    if (matrixDirtyRef.current) {
+    if (autoSaveEnabled && matrixDirtyRef.current) {
       if (matrixDebounceTimerRef.current) {
         clearTimeout(matrixDebounceTimerRef.current);
       }
