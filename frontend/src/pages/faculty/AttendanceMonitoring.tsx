@@ -635,6 +635,8 @@ export const AttendanceMonitoring: React.FC = () => {
     try {
       await updateFacultyAttendanceSessionApi({
         sessionId: editingSession.sessionId,
+        // Without the date the server moves the session to today.
+        sessionDate: editingSession.sessionDate || selectedDate,
         room: editRoom.trim() || undefined,
         openingTime: editOpeningTime,
         presentCutoff: editPresentCutoff,
