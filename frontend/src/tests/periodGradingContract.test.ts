@@ -20,154 +20,111 @@ import {
 import { percentageToGWAExact } from '../utils/gradeHelper.ts';
 import type { FacultyLegacyComputedResult, FacultyPeriodModeComputedResult, FacultyPeriodModeIncompleteResult } from '../services/apiClient.ts';
 
-test('Grade Weights banner and category steps describe combined, grouped, and unsaved configurations', () => {
+test('Grade Weights banner shows the current schema and the saved or unsaved badges', () => {
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
-  assert.doesNotMatch(source, /BU Dental Medicine Schema Active/);
-  const start = source.indexOf('<span>{loadedConfig ?');
+  const start = source.indexOf('<span>BU Dental Medicine Schema Active:');
   assert.ok(start >= 0);
   const banner = source.slice(start, source.indexOf('</span>', start) + '</span>'.length);
   const compiled = ts.transpileModule(`return (${banner});`, {
     fileName: 'banner.tsx',
     compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const render = (saved: boolean, mode: string, midterm = 35, final = 65) => renderToStaticMarkup(
-    new Function('React', 'loadedConfig', 'componentMode', 'termRatio', 'componentWeights', compiled)(
-      React, saved ? {} : null, mode, { midterm, final }, { lecture: 60, laboratory: 40 }
+  const render = (midterm: string, final: string) => renderToStaticMarkup(
+    new Function('React', 'componentWeights', 'termRatio', compiled)(
+      React, { lecture: '60', laboratory: '40' }, { midterm, final }
     )
   );
-  assert.equal(render(true, 'combined'), '<span>Saved grading: Midterm 35% / Finals 65%</span>');
-  assert.equal(render(true, 'lecture_laboratory'), '<span>Saved grading: Midterm 35% / Finals 65% · Lecture 60% / Laboratory 40%</span>');
-  assert.equal(render(false, 'lecture_laboratory', 30, 70), '<span>BU syllabus default (unsaved): Midterm 30% / Finals 70% · Lecture 60% / Laboratory 40%</span>');
-  assert.match(source, /componentMode === 'lecture_laboratory' \? '3\.' : '2\.'/);
-  assert.match(source, /componentMode === 'lecture_laboratory' && ` • \$\{activeComponentEditorTab\}`/);
+  assert.equal(render('35', '65'), '<span>BU Dental Medicine Schema Active: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
+  // Unsaved edits replace the banner; saved versus unsaved presets are badges.
+  assert.match(source, /\{isDirty \? \(/);
+  assert.match(source, /You have unsaved changes\. Adjust weights or categories directly below, then click Save Grade Weights\./);
+  assert.match(source, /Version \{loadedConfig\.version\}/);
+  assert.match(source, /Suggested starting preset — unsaved/);
+  assert.match(source, /activePeriodEditorTab === 'Midterm' \? 'Midterm' : 'Finals'\} • \{activeComponentEditorTab\} Categories/);
 });
 
-test('Score panels keep one manual save per view in safe-area sticky live status bars', () => {
+test('Score panels keep one manual Save per view, show the clear count, and warn before leaving with unsaved scores', () => {
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
-  const panels = source.slice(source.indexOf("{scoreEntryMode === 'matrix' ?"), source.indexOf('TAB 2:'));
-  assert.equal((panels.match(/data-manual-score-save\s/g) ?? []).length, 2);
-  for (const [status, handler, ref] of [
-    ['matrixSaveStatus', 'handleSaveMatrixScores', 'matrixSaveRef'],
-    ['singleSaveStatus', 'handleManualSaveScores', 'singleSaveRef'],
-  ]) {
-    const position = panels.indexOf(`<span role="status" aria-live="polite">{${status}`);
-    assert.ok(position >= 0);
-    const barStart = panels.lastIndexOf('<div className="sticky bottom-0', position);
-    assert.ok(barStart >= 0);
-    const bar = panels.slice(barStart, panels.indexOf('</button>', panels.indexOf('data-manual-score-save', position)));
-    assert.match(bar, /bg-white dark:bg-slate-900/);
-    assert.match(bar, /env\(safe-area-inset-bottom\)/);
-    for (const text of ['Saving…', 'Saved', 'Failed – Retry', 'Unsaved changes']) assert.ok(bar.includes(text));
-    assert.ok(bar.includes(`${ref}.current(true)`));
-    assert.ok(bar.includes(`onClick={${handler}}`));
-  }
-  assert.match(source, /grid grid-cols-2 gap-1 sm:flex sm:gap-0/);
-  assert.match(source, /hidden sm:block[^"\n]*">Use Enter/);
-  assert.match(source, /id=\{`score-input-\$\{idx\}`\}[\s\S]*?inputMode="decimal"/);
-  assert.match(source, /whitespace-nowrap[^\n]*rounded-full/);
+  assert.equal((source.match(/onClick=\{handleManualSaveScores\}/g) ?? []).length, 1);
+  assert.equal((source.match(/onClick=\{handleSaveMatrixScores\}/g) ?? []).length, 1);
+  assert.match(source, /`Save Scores Sheet\$\{singlePendingClears\.size > 0 \? ` \(\$\{singlePendingClears\.size\} to clear\)` : ''\}`/);
+  assert.match(source, /`Save All Matrix Scores\$\{matrixPendingClears\.size > 0 \? ` \(\$\{matrixPendingClears\.size\} to clear\)` : ''\}`/);
+  // Save buttons are never disabled while a save runs; the next save is queued instead.
+  const saveButtons = [...source.matchAll(/<button\s+onClick=\{(?:handleManualSaveScores|handleSaveMatrixScores)\}[^>]*>/g)];
+  assert.equal(saveButtons.length, 2);
+  for (const [button] of saveButtons) assert.doesNotMatch(button, /disabled=\{/);
+  // Auto-save toggle exists in Single view only; the matrix always auto-saves.
+  assert.match(source, /checked=\{autoSaveEnabled\}/);
+  assert.match(source, /Auto-save on/);
+  assert.match(source, /addEventListener\('beforeunload', warnUnsaved\)/);
+  assert.match(source, /if \(!singleDirtyRef\.current && !matrixDirtyRef\.current\) return;/);
+  assert.match(source, /removeEventListener\('beforeunload', warnUnsaved\)/);
 });
 
-test('Matrix pins opaque identity cells and offers a guarded phone switch without changing input navigation', () => {
+test('Matrix keeps its sticky header and arrow-key input navigation', () => {
   const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
-  const identityCells = matrix.split('\n').filter(line => /<(?:th|td) /.test(line) && /(?:ID Number|Full Name|student\.studentId|student\.name)/.test(line));
-  assert.equal(identityCells.length, 4);
-  assert.match(matrix, /<thead className="sticky top-0 z-30/);
-  for (const cell of identityCells) {
-    assert.match(cell, /sticky/);
-    assert.match(cell, /left-0/);
-    assert.match(cell, /bg-(?:slate-50|white) dark:bg-slate-900/);
-  }
-  for (const cell of [identityCells[1], identityCells[3]]) assert.match(cell, /left-\[120px\]/);
-  assert.match(identityCells[0], /!isPhone &&/);
-  assert.match(identityCells[2], /!isPhone &&/);
-  assert.match(identityCells[3], /isPhone && <span/);
-  assert.match(matrix, /The full matrix is easier on a larger screen\. Use Single Activity View to enter scores on a phone\./);
-  assert.match(matrix, /onClick=\{onSingleActivityView\} disabled=\{!canSwitchView\}/);
-  assert.match(matrix, /id=\{inputId\}\s+inputMode="decimal"/);
+  assert.match(matrix, /<thead className="sticky top-0 z-10/);
   assert.match(matrix, /const inputId = `matrix-score-\$\{studentIndex\}-\$\{assessment\.id\}`/);
+  assert.match(matrix, /matrix-score-\$\{studentIndex \+ 1\}-\$\{assessment\.id\}/);
+  assert.match(matrix, /matrix-score-\$\{studentIndex - 1\}-\$\{assessment\.id\}/);
+  assert.match(matrix, /e\.key === 'Enter' \|\| e\.key === 'ArrowDown'/);
+  assert.match(matrix, /e\.key === 'ArrowUp'/);
+  assert.match(matrix, /pendingClearKeys\?\.has\(`\$\{student\.id\}\|\$\{assessment\.id\}`\)/);
+  assert.match(matrix, /border-amber-400 bg-amber-50/);
+  // The phone switch was removed on purpose (owhie8 UI, Owner-approved).
+  assert.doesNotMatch(matrix, /isPhone|onSingleActivityView|matchMedia/);
 });
 
-test('Matrix renders exactly one identity header with matching desktop and phone columns', () => {
+test('Matrix renders exactly one identity header and matching ID and name body cells', () => {
   const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
-  const studentHeader = matrix.split('\n').find(line => line.includes('>Student Info</th>'))!;
   assert.equal((matrix.match(/>Student Info<\/th>/g) ?? []).length, 1);
-  const identityHeaders = matrix.slice(matrix.indexOf('{!isPhone && <th'), matrix.indexOf('{periodMode && visiblePeriods.map', matrix.indexOf('{!isPhone && <th')));
-  const identityBody = matrix.slice(matrix.indexOf('{!isPhone && <td'), matrix.indexOf('{periodMode && visiblePeriods.map', matrix.indexOf('{!isPhone && <td')));
-  assert.doesNotMatch(identityHeaders + identityBody, /hidden|sm:table-cell/);
-  const render = (jsx: string, isPhone: boolean, periodMode: boolean) => {
+  const render = (jsx: string, periodMode: boolean) => {
     const compiled = ts.transpileModule(`return (<table>${jsx}</table>);`, {
       fileName: 'identity.tsx', compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
     }).outputText;
-    return renderToStaticMarkup(new Function('React', 'isPhone', 'periodMode', 'th', 'student', compiled)(
-      React, isPhone, periodMode, '', { name: 'Alice Reyes', studentId: 'DENT-001' }
+    return renderToStaticMarkup(new Function('React', 'periodMode', 'th', 'student', compiled)(
+      React, periodMode, '', { name: 'Alice Reyes', studentId: 'DENT-001' }
     ));
   };
-  for (const isPhone of [false, true]) {
-    const columns = isPhone ? 1 : 2;
-    const group = render(`<thead><tr>${studentHeader}</tr></thead>`, isPhone, true);
-    assert.match(group, new RegExp(`colSpan="${columns}"`, 'i'));
-    for (const periodMode of [false, true]) {
-      const headers = render(`<thead><tr>${identityHeaders}</tr></thead>`, isPhone, periodMode);
-      const body = render(`<tbody><tr>${identityBody}</tr></tbody>`, isPhone, periodMode);
-      assert.equal((headers.match(/<th /g) ?? []).length, columns);
-      assert.equal((body.match(/<td /g) ?? []).length, columns);
-      assert.equal(headers.includes('ID Number'), !isPhone);
-      assert.match(headers, new RegExp(`rowSpan="${periodMode ? 3 : 1}"`, 'i'));
-      assert.equal((body.match(/DENT-001/g) ?? []).length, 1);
-      assert.equal(body.includes('<span'), isPhone);
-    }
+  const line = (text: string) => matrix.split('\n').find(row => row.includes(text))!.trim();
+  const group = render(`<thead><tr>${line('>Student Info</th>')}</tr></thead>`, true);
+  assert.match(group, /colSpan="2"/i);
+  for (const periodMode of [false, true]) {
+    const headers = render(`<thead><tr>${line('>ID Number</th>')}${line('>Full Name</th>')}</tr></thead>`, periodMode);
+    assert.equal((headers.match(/<th /g) ?? []).length, 2);
+    assert.match(headers, new RegExp(`rowSpan="${periodMode ? 3 : 1}"`, 'i'));
+    const body = render(`<tbody><tr>${line('{student.studentId}</td>')}${line('{student.name}</td>')}</tr></tbody>`, periodMode);
+    assert.equal((body.match(/<td /g) ?? []).length, 2);
+    assert.equal((body.match(/DENT-001/g) ?? []).length, 1);
+    assert.equal((body.match(/Alice Reyes/g) ?? []).length, 1);
   }
-});
-
-test('Matrix phone state defaults safely and follows media changes with cleanup', () => {
-  const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
-  const source = matrix.slice(matrix.indexOf('  const [isPhone,'), matrix.indexOf('  // Filters state'));
-  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const states: boolean[] = [];
-  let cleanup: (() => void) | undefined;
-  let listener: (() => void) | undefined;
-  const media = {
-    matches: true,
-    addEventListener: (event: string, callback: () => void) => { assert.equal(event, 'change'); listener = callback; },
-    removeEventListener: (event: string, callback: () => void) => { assert.equal(event, 'change'); assert.equal(callback, listener); listener = undefined; },
-  };
-  const run = (window: unknown) => new Function('window', 'useState', 'useEffect', compiled)(
-    window,
-    (initial: boolean) => { assert.equal(initial, false); return [initial, (value: boolean) => states.push(value)]; },
-    (effect: () => (() => void) | undefined) => { cleanup = effect(); }
-  );
-  run(undefined);
-  run({});
-  assert.deepEqual(states, []);
-  run({ matchMedia: (query: string) => { assert.equal(query, '(max-width: 639px)'); return media; } });
-  assert.deepEqual(states, [true]);
-  media.matches = false;
-  listener!();
-  assert.deepEqual(states, [true, false]);
-  cleanup!();
-  assert.equal(listener, undefined);
 });
 
 test('Gradebook matrix component values and weight labels use only saved server data', () => {
   const matrix = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../components/GradebookMatrix.tsx'), 'utf8');
-  assert.doesNotMatch(matrix, /\?\?\s*(?:60|40)\b/);
-  assert.match(matrix, /const lectureWeight = config\.componentWeights\?\.lecture;/);
-  assert.match(matrix, /const labWeight = config\.componentWeights\?\.laboratory;/);
+  // Owner-approved: unsaved/unconfigured offerings show the 60/40 syllabus default; saved weights win.
+  assert.match(matrix, /const lectureWeight = config\.componentWeights\?\.lecture \?\? 60;/);
+  assert.match(matrix, /const labWeight = config\.componentWeights\?\.laboratory \?\? 40;/);
   assert.match(matrix, /comp\.weight !== undefined \? `\(\$\{comp\.weight\}%\)` : ''/);
-  assert.match(matrix, /Every calculated column comes from the server's own computation/);
+  assert.match(matrix, /Calculated columns use the server's grade computation of the saved scores/);
   const source = matrix.slice(matrix.indexOf('  const componentPercentage ='), matrix.indexOf('  const getVisibleComponents ='));
-  assert.doesNotMatch(source, /contribution|\.reduce\(/, 'missing server component totals must never be reconstructed from category contributions');
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const percentage = (breakdown: unknown, componentKey = 'lecture') => new Function('periodBreakdown', 'format', compiled + 'return componentPercentage("student", "midterm", { componentKey: "' + componentKey + '" });')(
+  const percentage = (breakdown: unknown, componentKey = 'lecture', categoryIds: number[] = [1]) => new Function('periodBreakdown', 'format', 'comp', compiled + 'return componentPercentage("student", "midterm", comp);')(
     () => breakdown,
-    (value: number) => Number.isFinite(value) ? value.toFixed(2) : '—'
+    (value: number) => Number.isFinite(value) ? value.toFixed(2) : '—',
+    { componentKey, categories: categoryIds.map(id => ({ category: { id } })) }
   );
   assert.equal(percentage(undefined), '—');
-  assert.equal(percentage({ categories: [{ categoryId: 1, contribution: 85 }] }), '—');
-  assert.equal(percentage({ components: { lecture: { percentage: null } }, categories: [{ contribution: 85 }] }), '—');
-  assert.equal(percentage({ components: { lecture: { percentage: 0 } } }), '0.00');
+  assert.equal(percentage({ categories: [] }), '—');
+  // The server component percentage wins when present, including 0.
+  assert.equal(percentage({ components: { lecture: { percentage: 0 } }, categories: [{ categoryId: 1, contribution: 85 }] }), '0.00');
   assert.equal(percentage({ components: { lecture: { percentage: 81.25 } } }), '81.25');
   assert.equal(percentage({ components: { laboratory: { percentage: 92.5 } } }, 'laboratory'), '92.50');
+  // Legacy grids without a server component total sum the contributions of this component's categories only.
+  assert.equal(percentage({ categories: [{ categoryId: 1, contribution: 85 }] }), '85.00');
+  assert.equal(percentage({ components: { lecture: { percentage: null } }, categories: [{ categoryId: 1, contribution: 50 }, { categoryId: 2, contribution: 30.5 }, { categoryId: 3, contribution: 99 }] }, 'lecture', [1, 2]), '80.50');
+  assert.equal(percentage({ categories: [{ categoryId: 9, contribution: 85 }] }), '—', 'categories outside the component are ignored');
+  assert.equal(percentage({ categories: [{ categoryId: 1 }] }), '—', 'no contribution means no value');
 });
 
 test('Faculty grade views use the inclusive authoritative retention boundary', () => {
@@ -1102,147 +1059,196 @@ test('Lecture/Laboratory CSV quotes embedded text and neutralizes formula-leadin
   ].join('\n'));
 });
 
-// Exercise the actual score handlers with controlled API promises.
-function scoreSaveHarness(mode: 'single' | 'matrix' = 'single') {
+// Exercise the actual score handlers with controlled API promises and fake timers.
+function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled = true) {
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
   const handlers = mode === 'single'
     ? source.slice(source.indexOf('  const performSaveSingleScores'), source.indexOf('  // View Mode:'))
     : source.slice(source.indexOf('  const performSaveMatrixScores'), source.indexOf('  // Helper stats'));
-  const initial = { student: { score: '10', remarks: '' } };
   const calls: Array<Array<{ studentId: string; score: number | null }>> = [];
   const statuses: string[] = [];
-  const confirmations: string[] = [];
-  let approve = true;
+  const feedback: string[] = [];
+  const timers: Array<{ fn: () => void; ms: number; cancelled: boolean }> = [];
   let save = async () => {};
+  let singleState: Record<string, { score: string; remarks: string }> = { student: { score: '10', remarks: '' } };
+  let matrixState: Record<string, Record<string, string>> = { student: { assessment: '10' } };
   const context = {
+    autoSaveEnabled,
     selectedClassId: 'class',
     availableClasses: [],
     activeAssessments: [{ id: 'assessment', maxScore: 100 }],
     activeStudents: [{ id: 'student' }],
+    assessmentScores: [{ assessmentId: 'assessment', studentId: 'student', score: 10, remarks: '' }],
     matrixSavingRef: { current: false },
-    matrixQueuedRef: { current: false },
+    matrixQueuedRef: { current: null as { manual: boolean } | null },
     matrixDirtyRef: { current: false },
-    matrixSavedRef: { current: { student: { assessment: '10' } } },
-    matrixScoresRef: { current: { student: { assessment: '10' } } },
-    matrixSaveRef: { current: async (_manual?: boolean) => {} },
+    matrixDebounceTimerRef: { current: null as unknown },
+    matrixPendingClearRef: { current: new Set<string>() },
+    matrixScoresRef: { current: matrixState },
+    saveMatrixRef: { current: async (_manual?: boolean) => {} },
     setMatrixSaveStatus: (status: string) => statuses.push(status),
-    setMatrixScoresState: () => {},
+    setMatrixScoresState: (update: (previous: typeof matrixState) => typeof matrixState) => { matrixState = update(matrixState); },
     setMatrixRefreshKey: () => {},
     setIsMatrixSavedAlert: () => {},
     saveFacultyScoreBatchesApi: async (batches: Array<{ scores: Array<{ studentId: string; score: number | null }> }>) => { calls.push(batches.flatMap(batch => batch.scores)); await save(); },
     selectedAssessmentId: 'assessment',
     activeAssessment: { classId: 'class', maxScore: 100, title: 'Quiz' },
-    autoSaveRef: { current: true },
     singleSavingRef: { current: false },
-    singleQueuedRef: { current: false },
+    singleQueuedRef: { current: null as { manual: boolean } | null },
     singleDirtyRef: { current: false },
-    singleSavedRef: { current: initial },
-    singleScoresRef: { current: initial },
-    singleSaveRef: { current: async (_manual?: boolean) => {} },
-    assessmentScores: [{ assessmentId: 'assessment', studentId: 'student', score: 10 }],
+    singleDebounceTimerRef: { current: null as unknown },
+    singlePendingClearRef: { current: { assessmentId: 'assessment', ids: new Set<string>() } },
+    singleScoresRef: { current: singleState },
+    saveSingleRef: { current: async (_manual?: boolean) => {} },
     setSingleSaveStatus: (status: string) => statuses.push(status),
-    validateSingleScore: (value: string, max: number) => value === '' || (Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= max),
     hasStoredScore: () => true,
-    requestConfirmation: async (message: string) => { confirmations.push(message); return approve; },
-    setScoresInputState: () => {},
+    setScoresInputState: (update: (previous: typeof singleState) => typeof singleState) => { singleState = update(singleState); },
     saveFacultyAssessmentScoresApi: async (_id: string, scores: Array<{ studentId: string; score: number | null }>) => { calls.push(scores); await save(); },
     saveAssessmentScores: () => {},
     refreshPersistedGrades: async () => {},
     setIsScoresSavedAlert: () => {},
-    showFeedback: () => {},
+    showFeedback: (message: string) => feedback.push(message),
+    setTimeout: (fn: () => void, ms: number) => { const timer = { fn, ms, cancelled: false }; timers.push(timer); return timer; },
+    clearTimeout: (timer: { cancelled: boolean } | null) => { if (timer) timer.cancelled = true; },
   };
   const compiled = ts.transpileModule(handlers, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const exposed = mode === 'single' ? 'return { handleScoreChange, handleScoreBlur, handleManualSaveScores };'
     : 'return { handleScoreChange: (_student, value) => handleMatrixScoreChange(_student, "assessment", value), handleScoreBlur: handleMatrixScoreBlur, handleManualSaveScores: handleSaveMatrixScores };';
   const actions = new Function(...Object.keys(context), compiled + exposed)(...Object.values(context));
-  return { actions, context, calls, statuses, confirmations, setApprove: (value: boolean) => { approve = value; }, setSave: (next: () => Promise<void>) => { save = next; } };
+  // Saves run unawaited from the handlers, so let the async work finish before asserting.
+  const settle = () => new Promise<void>(resolve => setImmediate(resolve));
+  const fire = (ms: number) => { for (const timer of timers.splice(0)) if (timer.ms === ms && !timer.cancelled) timer.fn(); };
+  const pending = (ms: number) => timers.filter(timer => timer.ms === ms && !timer.cancelled).length;
+  return { actions, context, calls, statuses, feedback, settle, fire, pending, setSave: (next: () => Promise<void>) => { save = next; } };
 }
 
-test('Score entry saves on exit, respects Auto-save, and confirms manual Save', async () => {
+test('Score entry saves 1 s after typing and on leaving a field, only while Auto-save is on; manual Save needs no confirmation', async () => {
   const h = scoreSaveHarness();
   h.actions.handleScoreChange('student', '20', 'score');
-  assert.equal(h.calls.length, 0, 'typing must not save');
-  h.context.autoSaveRef.current = false;
-  await h.actions.handleScoreBlur('student');
-  assert.equal(h.calls.length, 0, 'Auto-save off must not save on blur');
-  await h.actions.handleManualSaveScores();
+  assert.equal(h.calls.length, 0, 'typing alone must not save');
+  assert.equal(h.pending(1000), 1, 'saves 1 second after typing stops');
+  h.fire(1000);
+  await h.settle();
   assert.equal(h.calls.length, 1);
   assert.equal(h.calls[0][0].score, 20);
-  assert.equal(h.confirmations.length, 1);
-  assert.equal(h.context.singleDirtyRef.current, false);
+  h.actions.handleScoreChange('student', '25', 'score');
+  await h.actions.handleScoreBlur('student');
+  await h.settle();
+  assert.equal(h.pending(1000), 0, 'leaving the field replaces the pending timer');
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls[1][0].score, 25);
+
+  const off = scoreSaveHarness('single', false);
+  off.actions.handleScoreChange('student', '20', 'score');
+  await off.actions.handleScoreBlur('student');
+  off.fire(1000);
+  await off.settle();
+  assert.equal(off.calls.length, 0, 'Auto-save off saves nothing by itself');
+  await off.actions.handleManualSaveScores();
+  await off.settle();
+  assert.equal(off.calls.length, 1);
+  assert.equal(off.calls[0][0].score, 20);
+  assert.equal(off.context.singleDirtyRef.current, false);
 });
 
-test('Score entry queues the latest edit while a save is in flight', async () => {
+test('Score entry queues the latest edit while a save is in flight and keeps manual saves manual', async () => {
   const h = scoreSaveHarness();
   let finish!: () => void;
   h.setSave(() => new Promise<void>(resolve => { finish = resolve; }));
   h.actions.handleScoreChange('student', '20', 'score');
-  const first = h.actions.handleScoreBlur('student');
-  h.actions.handleScoreChange('student', '10', 'score');
   await h.actions.handleScoreBlur('student');
-  assert.equal(h.calls.length, 1);
+  h.actions.handleScoreChange('student', '10', 'score');
+  await h.actions.handleManualSaveScores();
+  assert.equal(h.calls.length, 1, 'a second save does not start while one is running');
+  assert.deepEqual(h.context.singleQueuedRef.current, { manual: true });
   h.setSave(async () => {});
   finish();
-  await first;
-  // Drain the queued async API and recomputation microtasks.
-  for (let i = 0; i < 10; i++) await Promise.resolve();
+  await h.settle();
+  h.fire(0);
+  await h.settle();
   assert.equal(h.calls.length, 2);
-  assert.equal(h.calls[1][0].score, 10, 'reverting during save is still an edit against the in-flight value');
+  assert.equal(h.calls[1][0].score, 10, 'the queued save sends the latest value');
   assert.equal(h.context.singleScoresRef.current.student.score, '10');
   assert.equal(h.context.singleDirtyRef.current, false);
+  assert.equal(h.feedback.filter(message => /^Saved \d+ scores/.test(message)).length, 1, 'only the queued manual save reports success');
 });
 
-test('Declining a stored-score deletion restores the value and failed saves remain retryable', async () => {
+test('Clearing a stored score is applied only by a manual Save, and failed saves remain retryable', async () => {
   const h = scoreSaveHarness();
-  h.setApprove(false);
   h.actions.handleScoreChange('student', '', 'score');
   await h.actions.handleScoreBlur('student');
-  assert.equal(h.calls.length, 0);
-  assert.equal(h.context.singleScoresRef.current.student.score, '10');
-  assert.equal(h.context.singleDirtyRef.current, false);
-  h.setApprove(true);
+  await h.settle();
+  assert.equal(h.calls.length, 0, 'auto-save never deletes a stored score');
+  assert.equal(h.context.singleScoresRef.current.student.score, '', 'the field stays cleared');
+  assert.deepEqual([...h.context.singlePendingClearRef.current.ids], ['student']);
+  assert.equal(h.context.singleDirtyRef.current, true);
+  await h.actions.handleManualSaveScores();
+  await h.settle();
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0][0].score, null, 'manual Save applies the clear without a confirmation');
+  assert.equal(h.context.singlePendingClearRef.current.ids.size, 0);
+
   h.setSave(async () => { throw new Error('Offline'); });
   h.actions.handleScoreChange('student', '30', 'score');
   await h.actions.handleScoreBlur('student');
+  await h.settle();
   assert.equal(h.statuses.at(-1), 'error');
   assert.equal(h.context.singleDirtyRef.current, true);
   h.setSave(async () => {});
   await h.actions.handleManualSaveScores();
+  await h.settle();
   assert.equal(h.statuses.at(-1), 'saved');
   assert.equal(h.calls.at(-1)?.[0].score, 30);
 });
 
-test('Matrix saves obey the toggle, confirm clearing, and queue the latest scores', async () => {
+test('Matrix always auto-saves, applies clears only on manual Save, and queues the latest scores', async () => {
   const h = scoreSaveHarness('matrix');
-  h.context.autoSaveRef.current = false;
   h.actions.handleScoreChange('student', '20');
-  await h.actions.handleScoreBlur();
-  assert.equal(h.calls.length, 0);
-  await h.actions.handleManualSaveScores();
-  assert.match(h.confirmations[0], /All changes are saved together or not at all/);
+  assert.equal(h.calls.length, 0, 'typing alone must not save');
+  assert.equal(h.pending(1000), 1);
+  h.fire(1000);
+  await h.settle();
   assert.equal(h.calls[0][0].score, 20);
 
-  h.context.autoSaveRef.current = true;
-  let finish!: () => void;
-  h.setSave(() => new Promise<void>(resolve => { finish = resolve; }));
-  h.actions.handleScoreChange('student', '30');
-  const first = h.actions.handleScoreBlur();
-  h.actions.handleScoreChange('student', '40');
-  await h.actions.handleScoreBlur();
-  h.setSave(async () => {});
-  finish();
-  await first;
-  for (let i = 0; i < 10; i++) await Promise.resolve();
-  assert.equal(h.calls.at(-1)?.[0].score, 40);
-  assert.equal(h.context.matrixDirtyRef.current, false);
+  const clearing = scoreSaveHarness('matrix');
+  clearing.actions.handleScoreChange('student', '');
+  await clearing.actions.handleScoreBlur();
+  await clearing.settle();
+  assert.equal(clearing.calls.length, 0, 'auto-save never deletes a stored score');
+  assert.deepEqual([...clearing.context.matrixPendingClearRef.current], ['student|assessment']);
+  assert.equal(clearing.context.matrixDirtyRef.current, true);
+  await clearing.actions.handleManualSaveScores();
+  await clearing.settle();
+  assert.equal(clearing.calls[0][0].score, null, 'manual Save applies the clear without a confirmation');
 
-  const deletion = scoreSaveHarness('matrix');
-  deletion.setApprove(false);
-  deletion.actions.handleScoreChange('student', '');
-  await deletion.actions.handleScoreBlur();
-  assert.equal(deletion.calls.length, 0);
-  assert.equal(deletion.context.matrixScoresRef.current.student.assessment, '10');
-  assert.equal(deletion.context.matrixDirtyRef.current, false);
+  let finish!: () => void;
+  const queued = scoreSaveHarness('matrix');
+  queued.setSave(() => new Promise<void>(resolve => { finish = resolve; }));
+  queued.actions.handleScoreChange('student', '30');
+  await queued.actions.handleScoreBlur();
+  queued.actions.handleScoreChange('student', '40');
+  await queued.actions.handleScoreBlur();
+  assert.equal(queued.calls.length, 1);
+  queued.setSave(async () => {});
+  finish();
+  await queued.settle();
+  queued.fire(0);
+  await queued.settle();
+  assert.equal(queued.calls.at(-1)?.[0].score, 40);
+  assert.equal(queued.context.matrixDirtyRef.current, false);
+
+  const failing = scoreSaveHarness('matrix');
+  failing.setSave(async () => { throw new Error('Offline'); });
+  failing.actions.handleScoreChange('student', '50');
+  await failing.actions.handleScoreBlur();
+  await failing.settle();
+  assert.equal(failing.statuses.at(-1), 'error');
+  assert.equal(failing.context.matrixDirtyRef.current, true);
+  failing.setSave(async () => {});
+  await failing.actions.handleManualSaveScores();
+  await failing.settle();
+  assert.equal(failing.statuses.at(-1), 'saved');
+  assert.equal(failing.calls.at(-1)?.[0].score, 50);
 });
 
 test('Evaluation Extraction: legacy results expose server retention state and exact percentage', () => {

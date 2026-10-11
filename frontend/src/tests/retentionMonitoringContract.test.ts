@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { percentageToGWA } from '../utils/gradeHelper.ts';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const retentionPage = fs.readFileSync(path.join(currentDirectory, '../pages/faculty/RetentionMonitoring.tsx'), 'utf8');
@@ -71,60 +72,28 @@ test('Subject-level risk rules do not fabricate client-derived decisions', () =>
   assert.doesNotMatch(retentionPage, /computeSubjectGrade/);
 });
 
-test('Midterm watchlist visibility and risk remain server-owned', () => {
-  const eligible = retentionPage.match(/const eligibleMidtermRecords = useMemo\(\(\) => filteredRecords\.filter\(record =>([\s\S]*?)\), \[filteredRecords\]\)/)?.[1];
-  assert.ok(eligible);
-  const visible = new Function('record', 'isFiniteNumber', `return (${eligible});`);
+test('Midterm watchlist lists completed midterms without a final grade, at 2.50 or worse, and keeps server risk', () => {
+  const body = retentionPage.match(/const isMidtermAtRisk = \(record: FacultyRetentionRecord\): boolean => \{([\s\S]*?)\r?\n\};/)?.[1];
+  assert.ok(body);
+  const isAtRisk = new Function('record', 'isFiniteNumber', 'percentageToGWA', body);
   const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
   for (const [record, expected] of [
-    [{ midtermComplete: true, gwa: null }, true],
-    [{ midtermComplete: false, watchlistUnlocked: true }, true],
-    [{ midtermComplete: false, watchlistUnlocked: false }, true],
-    [{ midtermComplete: true, gwa: 2.49 }, false],
-    [{ watchlistUnlocked: true, gwa: 3 }, false],
-  ] as const) assert.equal(visible(record, finite), expected);
-  assert.match(retentionPage, /record\.risk\?\.level === 'High' \|\| record\.risk\?\.level === 'At Risk'/);
-  assert.doesNotMatch(retentionPage, /isMidtermAtRisk|record\.risk \?\? \{/);
-  assert.match(retentionPage, /Unlocked .* Assessments incomplete/);
-  assert.match(retentionPage, /handleComputeMidtermRisk/);
-  assert.match(retentionPage, /handleComputeClassRisk/);
-  assert.match(retentionPage, /await unlockFacultyWatchlistApi/);
-});
-
-test('Midterm risk is visible only after completion or unlock, with the same at-risk count and filter', () => {
-  const visibility = retentionPage.match(/const isMidtermRiskVisible = \(record: FacultyRetentionRecord\): boolean => \(([\s\S]*?)\n\);/)?.[1];
-  const atRisk = retentionPage.match(/const hasVisibleMidtermRisk = \(record: FacultyRetentionRecord\): boolean => \(([\s\S]*?)\n\);/)?.[1];
-  assert.ok(visibility);
-  assert.ok(atRisk);
-  const isVisible = new Function('record', `return (${visibility});`);
-  const isAtRisk = new Function('record', 'isMidtermRiskVisible', `return (${atRisk});`);
-  for (const midtermComplete of [true, false, undefined]) {
-    for (const watchlistUnlocked of [true, false, undefined]) {
-      for (const level of ['High', 'At Risk', 'Low', null]) {
-        const record = { midtermComplete, watchlistUnlocked, risk: level ? { level } : null };
-        const visible = midtermComplete === true || watchlistUnlocked === true;
-        assert.equal(isVisible(record), visible);
-        assert.equal(isAtRisk(record, isVisible), visible && (level === 'High' || level === 'At Risk'));
-      }
-    }
-  }
-  assert.match(retentionPage, /const atRiskMidtermCount = useMemo\(\(\) => eligibleMidtermRecords\.filter\(hasVisibleMidtermRisk\)\.length/);
-  assert.match(retentionPage, /if \(!showAtRiskOnly\) return eligibleMidtermRecords;/);
-  assert.match(retentionPage, /return eligibleMidtermRecords\.filter\(hasVisibleMidtermRisk\);/);
-  assert.match(retentionPage, /isMidtermRiskVisible\(record\) \? <RiskBadge risk=\{record\.risk\} \/> : <span[^>]*>Locked<\/span>/);
+    [{ midtermComplete: true, midtermPercentage: 70, gwa: null }, true],
+    [{ midtermComplete: true, midtermPercentage: 80, gwa: null }, true],
+    [{ midtermComplete: true, midtermPercentage: 90, gwa: null }, false],
+    [{ midtermComplete: true, midtermPercentage: 70, gwa: 2.75 }, false],
+    [{ midtermComplete: true, midtermPercentage: null, gwa: null }, false],
+    [{ midtermComplete: false, midtermPercentage: 70, gwa: null }, false],
+  ] as const) assert.equal(isAtRisk(record, finite, percentageToGWA), expected);
+  // The list, the count, and the At-Risk filter share the same rule; the badge prefers the server record.
+  assert.match(retentionPage, /filteredRecords\.filter\(isMidtermAtRisk\)\.length/);
+  assert.match(retentionPage, /if \(!showAtRiskOnly\) return computedRecords;/);
+  assert.match(retentionPage, /return computedRecords\.filter\(isMidtermAtRisk\);/);
+  assert.match(retentionPage, /record\.risk \?\? \{/);
+  assert.match(retentionPage, /percentageToGWA\(record\.midtermPercentage\) >= 3\.0 \? 'High' : 'At Risk'/);
   assert.match(retentionPage, /if \(!risk\) return <span[^>]*>Not enough data<\/span>/);
-});
-
-test('Retention phone cards share table rows and actions, with readable fields and touch targets', () => {
-  assert.equal((retentionPage.match(/className=\{`\$\{RETENTION_TABLE_LAYOUT\}/g) ?? []).length, 3);
-  assert.match(retentionPage, /max-sm:\[&_tr\]:grid-cols-1/);
-  assert.match(retentionPage, /max-sm:\[&_td\]:whitespace-normal/);
-  assert.match(retentionPage, /max-sm:\[&_button\]:min-h-10/);
-  assert.match(retentionPage, /max-sm:\[&_td>div\]:flex-wrap/);
-  for (const label of ['Midterm Grade', 'Risk Standing', 'Status', 'Course Grade', 'Actions', 'Attempts', 'Current stage']) {
-    assert.ok(retentionPage.includes(`<PhoneFieldLabel>${label}</PhoneFieldLabel>`));
-  }
-  assert.doesNotMatch(retentionPage, /Final Midterm Grade/);
+  // Lock/unlock was removed on purpose (owhie8 UI, Owner-approved).
+  assert.doesNotMatch(retentionPage, /unlockFacultyWatchlistApi|watchlistUnlocked|isMidtermRiskVisible/);
 });
 
 test('Remedial outcomes preserve entered scores and report partial success truthfully', () => {
