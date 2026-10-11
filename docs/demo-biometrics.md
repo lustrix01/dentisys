@@ -83,9 +83,12 @@ the authoritative ordered liveness check over their candidate frames.
 
 Twenty usable samples are required. Failed quality or liveness samples do not
 count; the sidecar may accept no more than 30 usable samples. The sidecar
-performs exactly-one-face Haar detection, temporary liveness action matching in
-the server-issued order, and encrypted LBPH model generation. Raw frames exist
-only in request memory and are not stored.
+performs exactly-one-face YuNet detection, temporary liveness action matching in
+the server-issued order, and encrypted SFace template generation (usable samples
+averaged into one normalized template). Raw frames and per-frame embeddings exist
+only in request memory and are not stored. Enrollments made before 2026-10-11
+are legacy `lbph/` references that never verify; see the migration note in
+`docs/biometric-calibration-deployment.md`.
 
 On success the response is the profile response with `enrollmentStatus:
 "active"`, the server-selected usable count, and the term-derived expiry.
@@ -106,7 +109,9 @@ server values.
 
 The server evaluates the session status, configured opening/Present/Late
 windows, consent, enrollment expiry, geofence, challenge, liveness, and strict
-authenticated-Student 1:1 LBPH verification. It assigns `present` or `late`
+authenticated-Student 1:1 SFace verification (cosine similarity of each usable
+frame to the template; at least `MATCH_COUNT` frames must reach the threshold).
+It assigns `present` or `late`
 using server time in `Asia/Manila`, writes one persisted attendance row, and
 records an audit event. Client timestamps, client attendance status, and local
 face flags are never accepted as authority. Exact Student coordinates are not
@@ -169,8 +174,8 @@ attendance path. They do not lock the account or create `absent`.
 
 The sidecar is private to the Compose network. Health requires the configured
 calibration values, a non-empty shared secret, a 32-byte AES-GCM storage key,
-and the mounted MediaPipe Face Landmarker model whose SHA-256 matches the
-deployment value. Protected LBPH references are encrypted in the dedicated
+and the mounted YuNet, SFace, and MediaPipe Face Landmarker models whose SHA-256
+values match the deployment values. Protected SFace templates are encrypted in the dedicated
 biometric volume. Missing calibration, model, checksum, key, or secret keeps
 real capture unavailable; a simulated camera or localStorage flag is not
 evidence of biometric completion.

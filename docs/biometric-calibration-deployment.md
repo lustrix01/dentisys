@@ -18,26 +18,26 @@ review, and explicit Owner approval are complete.
 - Local path: `C:\Users\decha\Desktop\Github\dentisys-biometric-assets\face_landmarker.task`
 - SHA-256: `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`
 - Deployment: mounted into the biometric sidecar at `/app/models/face_landmarker.task` read-only; the model binary is outside Git.
-- Use: MediaPipe Face Landmarker is limited to landmark, transformation, and blendshape analysis for active liveness. Haar remains the face detector and LBPH remains the strict 1:1 verifier.
+- Use: MediaPipe Face Landmarker is limited to landmark, transformation, and blendshape analysis for active liveness. YuNet is the face detector and SFace is the strict 1:1 verifier.
+- YuNet face detector `face_detection_yunet_2023mar.onnx`: SHA-256 `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4`. Local folder `C:\Users\decha\Desktop\Github\dentisys-biometric-assets\` (VPS: `/opt/dentisys/assets/`), mounted read-only into the sidecar and checksum-checked at startup. Environment keys: `BIOMETRIC_YUNET_MODEL_HOST_PATH`, `BIOMETRIC_YUNET_SHA256`.
+- SFace recognizer `face_recognition_sface_2021dec.onnx`: SHA-256 `0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79`. Same folder, mount, and startup check. Environment keys: `BIOMETRIC_SFACE_MODEL_HOST_PATH`, `BIOMETRIC_SFACE_SHA256`.
 
 ## Provisional development configuration
 
 The local `.env` uses the following non-secret values. The shared secret and
 32-byte storage key are generated locally and intentionally omitted from this
-report.
+report. The detector and verifier were originally Haar Cascade and LBPH; they
+were replaced on 2026-10-11 after offline calibration showed LBPH accepted
+45.6% of impostor attempts at its provisional rule (any 3 of 30 frames at
+distance 70).
 
 | Parameter | Provisional value | Technical rationale | Safety implication and limitation |
 | --- | ---: | --- | --- |
-| `BIOMETRIC_HAAR_SCALE_FACTOR` | `1.1` | Standard OpenCV multi-scale step that balances scan cost and sensitivity. | May miss faces or increase false detections under unusual scale, lighting, or camera distance; must be validated on the target camera. |
-| `BIOMETRIC_HAAR_MIN_NEIGHBORS` | `5` | Moderate confirmation requirement for a frontal Haar detection. | More conservative than very low values, but it is not a measured false-acceptance control. |
-| `BIOMETRIC_HAAR_MIN_FACE_PX` | `120` | Requires enough face detail for the provisional laptop/phone-camera pipeline. | Rejects smaller or distant faces and is not a universal device threshold. |
-| `BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE` | `60.0` | Blur/low-light screening using Laplacian variance. Lowered from the provisional `100.0` (Owner decision, 2026-09-28) after ordinary 640×480 laptop webcams failed most frames as "blurry or too dark". | Only affects which frames are usable; identity matching (`LBPH_THRESHOLD`, `MATCH_COUNT`) and liveness (`BLINK_THRESHOLD`, `HEAD_TURN_RATIO`) are unchanged. The measure still changes with exposure, compression, and camera sharpening. |
-| `BIOMETRIC_LBPH_RADIUS` | `1` | OpenCV LBPH default-style local-neighborhood radius. | A technology parameter, not a production match-quality guarantee. |
-| `BIOMETRIC_LBPH_NEIGHBORS` | `8` | Standard local binary pattern neighborhood size. | Can be sensitive to illumination and pose; must be evaluated with genuine and impostor samples. |
-| `BIOMETRIC_LBPH_GRID_X` | `8` | Standard spatial subdivision that preserves local face structure. | More grid detail can increase sensitivity to alignment and device differences. |
-| `BIOMETRIC_LBPH_GRID_Y` | `8` | Paired with `GRID_X` for square face crops. | Same alignment and device limitations as the horizontal grid. |
-| `BIOMETRIC_LBPH_THRESHOLD` | `70.0` | Conservative provisional upper bound for OpenCV LBPH's lower-is-better confidence output. | This is explicitly not a production threshold; the value may cause false rejects or false accepts outside the local test conditions. |
-| `BIOMETRIC_MATCH_COUNT` | `3` | Requires repeated consistent matches so one frame cannot authorize attendance. | It does not define a production decision window or statistically validated operating point. |
+| `BIOMETRIC_YUNET_SCORE_THRESHOLD` | `0.9` | YuNet detection confidence a face must reach; a frame is usable only if exactly one face meets it. | Weak or multiple detections are rejected as quality failures; must be validated on the target camera. |
+| `BIOMETRIC_MIN_FACE_PX` | `120` | Requires enough face detail for the provisional laptop/phone-camera pipeline, measured on the YuNet face box. | Rejects smaller or distant faces and is not a universal device threshold. |
+| `BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE` | `60.0` | Blur/low-light screening using Laplacian variance on the aligned 112×112 crop. Lowered from the provisional `100.0` (Owner decision, 2026-09-28) after ordinary 640×480 laptop webcams failed most frames as "blurry or too dark". | Only affects which frames are usable; identity matching (`SFACE_COSINE_THRESHOLD`, `MATCH_COUNT`) and liveness (`BLINK_THRESHOLD`, `HEAD_TURN_RATIO`) are unchanged. The measure still changes with exposure, compression, and camera sharpening. |
+| `BIOMETRIC_SFACE_COSINE_THRESHOLD` | `0.44` | Minimum cosine similarity between a usable frame's L2-normalized SFace embedding and the enrolled template. Chosen from offline LFW calibration through the sidecar's own pipeline (200 people, 3 impostors each, 24 enrollment samples, 30 frames per attempt, simulated good-camera and older-phone profiles): 0 impostor attempts accepted (about 555 per profile) and about 95% of genuine attempts passed on every profile (retries counted as not passing). | Approved by the Owner on 2026-10-11 with the YuNet score, minimum face, sharpness and match count (spec BIO-007). LFW cannot show error rates below about 1 in 1,000; team re-enrollment and live genuine/impostor tests on the demo server follow. Raw calibration files are in the git-ignored `calibration.local/` folder. |
+| `BIOMETRIC_MATCH_COUNT` | `3` | Requires repeated consistent matches so one frame cannot authorize attendance. | Any 3 matching frames in one attempt of up to 30 frames; calibrated together with the SFace threshold above. |
 | `BIOMETRIC_BLINK_THRESHOLD` | `0.21` | Common eye-aspect-ratio starting point for a blink signal. | Glasses, pose, eyelid shape, landmark noise, and camera frame rate can change the result. |
 | `BIOMETRIC_HEAD_TURN_RATIO` | `0.15` | Moderate normalized nose displacement from the eye midpoint for a turn signal. | It is camera- and face-pose-dependent and is not a proven presentation-attack detector. |
 | `BIOMETRIC_CHALLENGE_TTL_SECONDS` | `120` | Short-lived local challenge window that accommodates ordinary camera interaction. | Challenges remain single-use and server-generated; TTL is not a liveness or identity threshold. |
@@ -53,10 +53,12 @@ dedicated biometric volume; raw frames are not retained.
 
 ## Local setup procedure
 
-1. Keep the model at the external path above, or set
-   `MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH` to another external path.
+1. Keep the three models at the external paths above, or set
+   `MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH`, `BIOMETRIC_YUNET_MODEL_HOST_PATH`,
+   and `BIOMETRIC_SFACE_MODEL_HOST_PATH` to other external paths.
 2. Copy `.env.example` to `.env` if the local file does not exist.
-3. Set the model SHA-256 to the checksum in this report.
+3. Set each model SHA-256 (`BIOMETRIC_YUNET_SHA256`, `BIOMETRIC_SFACE_SHA256`,
+   and the MediaPipe checksum) to the checksum in this report.
 4. Generate a development-only random sidecar shared secret and a random
    32-byte storage key. Store them only in `.env`; never commit or print them.
 5. Set the provisional calibration values in `.env`, keeping
@@ -68,8 +70,17 @@ dedicated biometric volume; raw frames are not retained.
    testing. If biometric processing is unavailable or rejected, use the
    authorized manual attendance path.
 
+Existing LBPH enrollments (`lbph/` references made before 2026-10-11) never
+verify and return 503, so each environment must expire them once at deploy.
+Run `php /var/www/html/backend/bin/expire-lbph-biometrics.php --dry-run` inside
+the web container (same as `docker compose exec web php ...`), review the
+output, then run it again without `--dry-run`. The script deletes the encrypted
+LBPH file through the sidecar, marks the profile expired, writes an audit entry,
+and keeps consent; enrolled Students re-enroll. Revoking a `lbph/` reference
+still works.
+
 The sidecar has no host-published port. It is reachable only through the
-private Compose network. The model mount is read-only, and the biometric
+private Compose network. The model mounts are read-only, and the biometric
 storage volume is separate from PostgreSQL. Do not delete, reset, or replace
 either persisted volume during this lane.
 
@@ -96,7 +107,7 @@ Protection Officer review named in the product specification:
 
 - target-camera validation covers the supported desktop, Android, and iOS
   device classes and the intended operating conditions;
-- the selected LBPH threshold and repeated-match rule are justified by a
+- the selected SFace cosine threshold and repeated-match rule are justified by a
   documented false-acceptance/false-rejection trade-off, not copied from this
   provisional configuration;
 - active liveness resists the tested photo, display, video, and replay cases

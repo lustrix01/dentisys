@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import secrets
-import tempfile
+import threading
 import uuid
 from dataclasses import dataclass
 from functools import lru_cache
@@ -37,15 +37,10 @@ class BiometricError(RuntimeError):
 
 @dataclass(frozen=True)
 class Calibration:
-    haar_scale_factor: float
-    haar_min_neighbors: int
-    haar_min_face_px: int
+    yunet_score_threshold: float
+    min_face_px: int
     quality_laplacian_variance: float
-    lbph_radius: int
-    lbph_neighbors: int
-    lbph_grid_x: int
-    lbph_grid_y: int
-    lbph_threshold: float
+    sface_cosine_threshold: float
     match_count: int
     blink_threshold: float
     head_turn_ratio: float
@@ -94,15 +89,10 @@ def shared_secret() -> str:
 @lru_cache(maxsize=1)
 def calibration() -> Calibration:
     return validate_calibration(Calibration(
-        haar_scale_factor=required_float("BIOMETRIC_HAAR_SCALE_FACTOR", minimum=1.0),
-        haar_min_neighbors=required_int("BIOMETRIC_HAAR_MIN_NEIGHBORS"),
-        haar_min_face_px=required_int("BIOMETRIC_HAAR_MIN_FACE_PX"),
+        yunet_score_threshold=required_float("BIOMETRIC_YUNET_SCORE_THRESHOLD", maximum=1.0),
+        min_face_px=required_int("BIOMETRIC_MIN_FACE_PX"),
         quality_laplacian_variance=required_float("BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE"),
-        lbph_radius=required_int("BIOMETRIC_LBPH_RADIUS"),
-        lbph_neighbors=required_int("BIOMETRIC_LBPH_NEIGHBORS"),
-        lbph_grid_x=required_int("BIOMETRIC_LBPH_GRID_X"),
-        lbph_grid_y=required_int("BIOMETRIC_LBPH_GRID_Y"),
-        lbph_threshold=required_float("BIOMETRIC_LBPH_THRESHOLD"),
+        sface_cosine_threshold=required_float("BIOMETRIC_SFACE_COSINE_THRESHOLD", maximum=1.0),
         match_count=required_int("BIOMETRIC_MATCH_COUNT"),
         blink_threshold=required_float("BIOMETRIC_BLINK_THRESHOLD", maximum=1.0),
         head_turn_ratio=required_float("BIOMETRIC_HEAD_TURN_RATIO", maximum=1.0),
@@ -110,7 +100,15 @@ def calibration() -> Calibration:
 
 
 def validate_calibration(config: Calibration) -> Calibration:
-    if config.lbph_grid_x <= 0 or config.lbph_grid_y <= 0:
+    if (
+        not np.isfinite(config.yunet_score_threshold)
+        or config.yunet_score_threshold <= 0
+        or config.yunet_score_threshold >= 1
+        or config.min_face_px <= 0
+        or not np.isfinite(config.sface_cosine_threshold)
+        or config.sface_cosine_threshold <= 0
+        or config.sface_cosine_threshold >= 1
+    ):
         raise BiometricError("Biometric calibration is invalid.", "biometric_service_unavailable", 503)
     if config.match_count <= 1 or config.match_count > 30:
         raise BiometricError("Biometric calibration is invalid.", "biometric_service_unavailable", 503)
@@ -157,29 +155,36 @@ FACE_ISSUE_MESSAGES = {
 }
 
 
-def assess_face(image: np.ndarray, config: Calibration) -> tuple[np.ndarray | None, str | None]:
-    """Return (crop, None) for a usable frame, or (None, issue) explaining why not.
+_YUNET_LOCK = threading.Lock()
+_SFACE_LOCK = threading.Lock()
 
-    Uses only the approved calibration values (Haar parameters and the
-    Laplacian quality threshold); it introduces no new thresholds.
-    """
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    faces = cascade.detectMultiScale(
-        gray,
-        scaleFactor=config.haar_scale_factor,
-        minNeighbors=config.haar_min_neighbors,
-        minSize=(config.haar_min_face_px, config.haar_min_face_px),
-    )
+
+def assess_face(image: np.ndarray, config: Calibration) -> tuple[np.ndarray | None, str | None]:
+    """Return an aligned face crop for a usable frame, or its quality issue."""
+    height, width = image.shape[:2]
+    detector = yunet_detector()
+    with _YUNET_LOCK:
+        detector.setInputSize((width, height))
+        _, faces = detector.detect(image)
+    if faces is None or len(faces) == 0:
+        return None, "no_face"
+    faces = [
+        face for face in faces
+        if float(face[2]) >= config.min_face_px and float(face[3]) >= config.min_face_px
+    ]
     if len(faces) == 0:
         return None, "no_face"
     if len(faces) > 1:
         return None, "multiple_faces"
-    x, y, width, height = faces[0]
-    crop = gray[y : y + height, x : x + width]
-    if crop.size == 0 or float(cv2.Laplacian(crop, cv2.CV_64F).var()) < config.quality_laplacian_variance:
+    face = faces[0]
+    with _SFACE_LOCK:
+        crop = face_recognizer().alignCrop(image, face)
+    if crop is None or crop.size == 0:
         return None, "low_quality"
-    return cv2.resize(cv2.equalizeHist(crop), (200, 200), interpolation=cv2.INTER_AREA), None
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    if float(cv2.Laplacian(gray, cv2.CV_64F).var()) < config.quality_laplacian_variance:
+        return None, "low_quality"
+    return crop, None
 
 
 def face_crop(image: np.ndarray, config: Calibration) -> np.ndarray:
@@ -215,6 +220,41 @@ def face_landmarker():
         output_facial_transformation_matrixes=True,
     )
     return vision.FaceLandmarker.create_from_options(options)
+
+
+def checked_model_path(path_name: str, checksum_name: str, label: str) -> str:
+    model_path = os.getenv(path_name, "").strip()
+    if not model_path or not Path(model_path).is_file():
+        raise BiometricError(f"{label} is not configured.", "biometric_service_unavailable", 503)
+    expected_checksum = required_sha256(checksum_name)
+    digest = hashlib.sha256()
+    try:
+        with Path(model_path).open("rb") as model_file:
+            for chunk in iter(lambda: model_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise BiometricError(f"{label} is not configured.", "biometric_service_unavailable", 503) from exc
+    if not secrets.compare_digest(digest.hexdigest(), expected_checksum):
+        raise BiometricError(f"{label} checksum does not match.", "biometric_service_unavailable", 503)
+    return model_path
+
+
+@lru_cache(maxsize=1)
+def yunet_detector():
+    model_path = checked_model_path(
+        "BIOMETRIC_YUNET_MODEL_PATH", "BIOMETRIC_YUNET_SHA256", "YuNet model"
+    )
+    return cv2.FaceDetectorYN.create(
+        model_path, "", (320, 320), calibration().yunet_score_threshold
+    )
+
+
+@lru_cache(maxsize=1)
+def face_recognizer():
+    model_path = checked_model_path(
+        "BIOMETRIC_SFACE_MODEL_PATH", "BIOMETRIC_SFACE_SHA256", "SFace model"
+    )
+    return cv2.FaceRecognizerSF.create(model_path, "")
 
 
 def landmark_points(image: np.ndarray) -> list[tuple[float, float]]:
@@ -300,13 +340,26 @@ def verify_liveness(images: Iterable[np.ndarray], actions: list[str], config: Ca
     raise BiometricError("Liveness challenge was not completed.", "liveness_failed")
 
 
+def reference_token(reference: str, kind: str) -> str:
+    prefix = kind + "/"
+    if not reference.startswith(prefix):
+        raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
+    token = reference[len(prefix):]
+    if len(token) != 32 or any(character not in "0123456789abcdef" for character in token):
+        raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
+    return token
+
+
 def model_reference_path(reference: str) -> Path:
-    if not reference.startswith("lbph/"):
-        raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
-    token = reference.split("/", 1)[1]
-    if not token or any(character not in "0123456789abcdef" for character in token):
-        raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
-    return STORAGE_DIR / (token + ".lbph")
+    return STORAGE_DIR / (reference_token(reference, "sface") + ".sface")
+
+
+def revoke_reference_path(reference: str) -> Path:
+    if reference.startswith("sface/"):
+        return STORAGE_DIR / (reference_token(reference, "sface") + ".sface")
+    if reference.startswith("lbph/"):
+        return STORAGE_DIR / (reference_token(reference, "lbph") + ".lbph")
+    raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
 
 
 def encrypt_model(model: bytes, reference: str) -> bytes:
@@ -324,34 +377,23 @@ def decrypt_model(blob: bytes, reference: str) -> bytes:
         raise BiometricError("Biometric reference could not be opened.", "biometric_service_unavailable", 503) from exc
 
 
-def train_model(crops: list[np.ndarray], config: Calibration) -> bytes:
-    if len(crops) < 20:
-        raise BiometricError("At least twenty usable enrollment samples are required.", "quality_failed")
-    recognizer = cv2.face.LBPHFaceRecognizer_create(
-        radius=config.lbph_radius,
-        neighbors=config.lbph_neighbors,
-        grid_x=config.lbph_grid_x,
-        grid_y=config.lbph_grid_y,
-    )
-    recognizer.train(crops, np.ones((len(crops),), dtype=np.int32))
-    with tempfile.NamedTemporaryFile(suffix=".yml") as model_file:
-        recognizer.write(model_file.name)
-        model_file.seek(0)
-        return model_file.read()
+def face_embedding(crop: np.ndarray) -> np.ndarray:
+    with _SFACE_LOCK:
+        vector = np.asarray(face_recognizer().feature(crop), dtype=np.float32).reshape(-1)
+    norm = float(np.linalg.norm(vector))
+    if vector.size != 128 or not np.isfinite(vector).all() or not np.isfinite(norm) or norm <= 0:
+        raise BiometricError("Biometric service is unavailable.", "biometric_service_unavailable", 503)
+    return np.asarray(vector / norm, dtype=np.float32)
 
 
-def recognizer_from_model(model: bytes, config: Calibration):
-    recognizer = cv2.face.LBPHFaceRecognizer_create(
-        radius=config.lbph_radius,
-        neighbors=config.lbph_neighbors,
-        grid_x=config.lbph_grid_x,
-        grid_y=config.lbph_grid_y,
-    )
-    with tempfile.NamedTemporaryFile(suffix=".yml") as model_file:
-        model_file.write(model)
-        model_file.flush()
-        recognizer.read(model_file.name)
-    return recognizer
+def template_from_bytes(template: bytes) -> np.ndarray:
+    if len(template) != 128 * 4:
+        raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
+    vector = np.frombuffer(template, dtype="<f4")
+    norm = float(np.linalg.norm(vector))
+    if not np.isfinite(vector).all() or not np.isfinite(norm) or norm <= 0:
+        raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
+    return np.asarray(vector / norm, dtype=np.float32)
 
 
 def uploaded_images() -> list[np.ndarray]:
@@ -385,6 +427,8 @@ def health():
     shared_secret()
     storage_key()
     face_landmarker()
+    yunet_detector()
+    face_recognizer()
     return jsonify({"status": "ok", "service": "biometric"})
 
 
@@ -408,9 +452,15 @@ def enrollment():
     # on every uploaded frame, in upload order.
     verify_liveness(images, actions, config)
     usable = min(len(crops), 30)
-    reference = "lbph/" + uuid.uuid4().hex
+    embeddings = [face_embedding(crop) for crop in crops[:usable]]
+    template = np.mean(np.stack(embeddings).astype(np.float64), axis=0)
+    norm = float(np.linalg.norm(template))
+    if not np.isfinite(template).all() or not np.isfinite(norm) or norm <= 0:
+        raise BiometricError("Biometric service is unavailable.", "biometric_service_unavailable", 503)
+    template_bytes = np.asarray(template / norm, dtype="<f4").tobytes()
+    reference = "sface/" + uuid.uuid4().hex
     path = model_reference_path(reference)
-    encrypted = encrypt_model(train_model(crops[:usable], config), reference)
+    encrypted = encrypt_model(template_bytes, reference)
     temporary = path.with_suffix(".tmp-" + secrets.token_hex(8))
     try:
         temporary.write_bytes(encrypted)
@@ -430,8 +480,10 @@ def verify():
     actions = validate_actions(request.form.get("challengeActions"))
     images = uploaded_images()
     verify_liveness(images, actions, config)
+    if not reference.startswith("sface/"):
+        raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
     model = decrypt_model(model_reference_path(reference).read_bytes(), reference)
-    recognizer = recognizer_from_model(model, config)
+    template = template_from_bytes(model)
     matches = 0
     usable = 0
     for image in images:
@@ -442,8 +494,8 @@ def verify():
                 raise
             continue
         usable += 1
-        label, confidence = recognizer.predict(crop)
-        if int(label) == 1 and float(confidence) <= config.lbph_threshold:
+        similarity = float(np.dot(face_embedding(crop), template))
+        if similarity >= config.sface_cosine_threshold:
             matches += 1
     if usable < config.match_count:
         raise BiometricError("Not enough clear face frames were captured. Face the camera in good light and retry.", "quality_failed")
@@ -472,7 +524,7 @@ def revoke_reference():
     payload = request.get_json(silent=True) or {}
     reference = str(payload.get("protectedObjectReference", ""))
     if reference:
-        path = model_reference_path(reference)
+        path = revoke_reference_path(reference)
         if path.exists():
             path.unlink()
     return jsonify({"ok": True})

@@ -751,13 +751,15 @@ Biometric processing MUST remain inside the same single-server DentiSys Docker d
 
 Normal enrollment MUST require 20 usable facial samples, and at most 30 usable samples MAY be accepted during one enrollment operation. Failed quality or liveness samples MUST NOT count. Raw enrollment samples MUST be discarded after protected-reference generation or an aborted enrollment.
 
-The SFace matching threshold MUST be server-controlled. No universal numeric production threshold is approved; calibration MUST use the actual DentiSys camera, preprocessing, and enrollment pipeline and consider false acceptance and false rejection. End users MUST NOT configure the threshold. One matching frame MUST NOT authorize attendance; repeated consistent matching is required.
+The SFace matching threshold MUST be server-controlled. Calibration MUST use the actual DentiSys camera, preprocessing, and enrollment pipeline and consider false acceptance and false rejection. End users MUST NOT configure the threshold. One matching frame MUST NOT authorize attendance; repeated consistent matching is required.
+
+Owner decision (2026-10-11): The approved face-matching values are a YuNet detection score of at least 0.9, a minimum face size of 120 pixels, a sharpness (Laplacian variance) of at least 60 on the aligned face, an SFace cosine similarity of at least 0.44, and at least 3 matching frames in one attempt of up to 30 frames. A frame counts only when exactly one face meets the score and size limits. In offline calibration on 200 LFW people (about 185 genuine and 555 impostor attempts per camera profile), these values accepted no impostor attempt and passed about 95% of genuine attempts on both the good-camera and older-phone profiles, counting attempts with too few clear frames as not passing. The LFW set cannot show error rates below about 1 in 1,000, and team re-enrollment and live genuine and impostor tests on the demo server still follow.
 
 Liveness/PAD MUST use randomized active challenge-response. Challenges MUST be server-generated, short-lived, and single-use. Each ordinary attempt MUST request two distinct randomized actions in randomized order from blink, turn head left, and turn head right. The browser MAY display the challenge but MUST NOT be authoritative for pass/fail. The DentiSys biometric component MUST verify the action sequence using temporary frames. MediaPipe Face Landmarker is approved only for landmark, transformation, and blendshape analysis used for liveness and MUST NOT replace YuNet detection or SFace verification. Raw liveness frames MUST NOT be retained.
 
 Retained facial references (SFace embeddings) MUST be distinct from raw imagery and stored in dedicated biometric storage excluded from ordinary application/database backups. Protected facial reference data MUST be encrypted at rest using AES-256-GCM. The encryption key MUST be server-controlled and MUST NOT be committed to Git, stored in the ordinary database, exposed through APIs, or sent to browser clients. PostgreSQL MAY contain biometric-profile metadata and an opaque protected-object reference, but MUST NOT contain raw photos or an unprotected facial reference. For the current research deployment, loss or intentional replacement of the encryption key MAY invalidate protected references and require Student re-enrollment.
 
-The following remain deferred and MUST NOT be invented or selected by implementation: numeric SFace similarity threshold; exact repeated-match frame count; exact matching decision window or numeric rule; numeric image-quality thresholds; numeric blink, head-pose, liveness, or timing thresholds; exact internal biometric service protocol; exact filesystem or volume layout; CPU/GPU sizing; future passive PAD; and advanced key-management, KMS, or key-rotation infrastructure.
+The following remain deferred and MUST NOT be invented or selected by implementation: numeric blink, head-pose, liveness, or timing thresholds; exact internal biometric service protocol; exact filesystem or volume layout; CPU/GPU sizing; future passive PAD; and advanced key-management, KMS, or key-rotation infrastructure.
 
 The remaining deferred parameters require team research, technical validation, and later explicit Owner approval. Any future threshold MUST be selected through validation of the chosen technology and MUST NOT be configurable by Students, Faculty, Secretary, or Admin.
 
@@ -916,7 +918,7 @@ Do not invent speculative open questions.
 
 Current open decisions and deferred technical selections:
 
-* BIO-007: numeric SFace similarity threshold; exact repeated-match frame count; exact matching decision window or numeric rule; numeric image-quality thresholds; numeric blink, head-pose, liveness, and timing thresholds; exact internal biometric service protocol; exact filesystem or volume layout; CPU/GPU sizing; future passive PAD; and advanced key-management, KMS, or key-rotation infrastructure.
+* BIO-007: numeric blink, head-pose, liveness, and timing thresholds; exact internal biometric service protocol; exact filesystem or volume layout; CPU/GPU sizing; future passive PAD; and advanced key-management, KMS, or key-rotation infrastructure.
 
 These technical items remain unresolved. Listing them does not select or approve any technology. The biometric product requirements in §8 are approved.
 

@@ -118,8 +118,13 @@ Push-Location $repoRoot
 try {
     $dirty = @(& git status --porcelain --untracked-files=all)
     if ($LASTEXITCODE -ne 0 -or $dirty.Count -gt 0) { throw 'Test and commit a clean working tree before provisioning; the bundle comes from HEAD.' }
-    $modelPath = Join-Path (Split-Path $repoRoot -Parent) 'dentisys-biometric-assets\face_landmarker.task'
-    if (-not (Test-Path -LiteralPath $modelPath -PathType Leaf)) { throw 'Missing ..\dentisys-biometric-assets\face_landmarker.task.' }
+    $assetsPath = Join-Path (Split-Path $repoRoot -Parent) 'dentisys-biometric-assets'
+    $modelPath = Join-Path $assetsPath 'face_landmarker.task'
+    $yunetModelPath = Join-Path $assetsPath 'face_detection_yunet_2023mar.onnx'
+    $sfaceModelPath = Join-Path $assetsPath 'face_recognition_sface_2021dec.onnx'
+    foreach ($model in @($modelPath, $yunetModelPath, $sfaceModelPath)) {
+        if (-not (Test-Path -LiteralPath $model -PathType Leaf)) { throw "Missing biometric model: $model" }
+    }
     $key = Get-Item -LiteralPath $KeyFile
     if ($key.PSProvider.Name -ne 'FileSystem' -or $key.PSIsContainer) { throw 'KeyFile must be a local private-key file.' }
     $identity = $key.FullName
@@ -212,9 +217,8 @@ try {
     # Select local defaults by key before reading their values. Never send local
     # JWT, database passwords, biometric encryption keys or sidecar shared secrets.
     $calibrationKeys = @(
-        'BIOMETRIC_HAAR_SCALE_FACTOR', 'BIOMETRIC_HAAR_MIN_NEIGHBORS', 'BIOMETRIC_HAAR_MIN_FACE_PX',
-        'BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE', 'BIOMETRIC_LBPH_RADIUS', 'BIOMETRIC_LBPH_NEIGHBORS',
-        'BIOMETRIC_LBPH_GRID_X', 'BIOMETRIC_LBPH_GRID_Y', 'BIOMETRIC_LBPH_THRESHOLD',
+        'BIOMETRIC_YUNET_SCORE_THRESHOLD', 'BIOMETRIC_MIN_FACE_PX',
+        'BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE', 'BIOMETRIC_SFACE_COSINE_THRESHOLD',
         'BIOMETRIC_MATCH_COUNT', 'BIOMETRIC_BLINK_THRESHOLD', 'BIOMETRIC_HEAD_TURN_RATIO',
         'BIOMETRIC_CHALLENGE_TTL_SECONDS'
     )
@@ -303,8 +307,8 @@ try {
     $confirmation = Read-Host 'Press Enter to confirm the AWS checklist and start (anything else cancels)'
     if ($confirmation -ne '') { throw 'Cancelled before upload or server changes.' }
 
-    # The only local staging is the clean-HEAD, non-secret bundle and model.
-    & (Join-Path $PSScriptRoot 'upload-vps.ps1') -Server "$loginUser@$Ip" -Port $loginPort -IdentityFile $identity -ModelPath $modelPath -Provision
+    # The only local staging is the clean-HEAD, non-secret bundle and models.
+    & (Join-Path $PSScriptRoot 'upload-vps.ps1') -Server "$loginUser@$Ip" -Port $loginPort -IdentityFile $identity -ModelPath $modelPath -YuNetModelPath $yunetModelPath -SFaceModelPath $sfaceModelPath -Provision
     # Runs provision-vps.sh once over SSH, sending the password and Fields on stdin.
     function Invoke-ProvisionSession {
         param([string]$SessionUser, [int]$SessionPort, $Fields)
@@ -434,7 +438,7 @@ try {
         Write-Host 'SSH is back after the reboot. Waiting 30 s before reconnecting (ufw rate-limits new SSH connections).'
         Start-Sleep -Seconds 30
         # /tmp is cleared at boot; upload the same bundle again for the verify-only pass.
-        & (Join-Path $PSScriptRoot 'upload-vps.ps1') -Server "${User}@$Ip" -Port $SshPort -IdentityFile $identity -ModelPath $modelPath -Provision
+        & (Join-Path $PSScriptRoot 'upload-vps.ps1') -Server "${User}@$Ip" -Port $SshPort -IdentityFile $identity -ModelPath $modelPath -YuNetModelPath $yunetModelPath -SFaceModelPath $sfaceModelPath -Provision
         $verifyFields = [ordered]@{ MODE = 'verify'; SUDO_USER_NAME = $User; SSH_PORT = "$SshPort" }
         $session = @(Invoke-ProvisionSession $User $SshPort $verifyFields)[-1]
         if ($session.ExitCode -ne 0 -or $session.InputFailed) { Stop-ProvisionFailure $session $false }

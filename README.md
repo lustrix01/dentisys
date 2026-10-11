@@ -187,7 +187,7 @@ DentiSys starts and works without this; biometric attendance just reports that i
    MEDIAPIPE_FACE_LANDMARKER_SHA256=64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff
    ```
 
-   Also set the `BIOMETRIC_HAAR_*`, `BIOMETRIC_QUALITY_*`, `BIOMETRIC_LBPH_*`, `BIOMETRIC_MATCH_COUNT`, `BIOMETRIC_BLINK_THRESHOLD`, and `BIOMETRIC_HEAD_TURN_RATIO` values from the table in [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Keep `DEV_MOCK_BIOMETRIC_ENABLED=false`.
+   Also set the `BIOMETRIC_YUNET_*`, `BIOMETRIC_SFACE_*`, `BIOMETRIC_MIN_FACE_PX`, `BIOMETRIC_QUALITY_*`, `BIOMETRIC_MATCH_COUNT`, `BIOMETRIC_BLINK_THRESHOLD`, and `BIOMETRIC_HEAD_TURN_RATIO` values from the table in [docs/biometric-calibration-deployment.md](docs/biometric-calibration-deployment.md). Keep `DEV_MOCK_BIOMETRIC_ENABLED=false`.
 
 4. Run `.\scripts\start-dev.ps1`. `docker compose ps` should show `biometric` as healthy.
 

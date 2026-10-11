@@ -7,6 +7,8 @@ param(
     [int]$Port = 22,
     [string]$IdentityFile,
     [string]$ModelPath = '..\dentisys-biometric-assets\face_landmarker.task',
+    [string]$YuNetModelPath = '..\dentisys-biometric-assets\face_detection_yunet_2023mar.onnx',
+    [string]$SFaceModelPath = '..\dentisys-biometric-assets\face_recognition_sface_2021dec.onnx',
     [switch]$SkipModel,
     [switch]$Deploy,
     [switch]$Provision
@@ -62,22 +64,29 @@ try {
     if ($Provision) { $bundleFiles += @('scripts/provision-vps.sh', 'scripts/harden-vps.sh') }
     Invoke-Native git (@('archive', '--format=tar.gz', '-o', $archive, 'HEAD') + $bundleFiles)
     $uploadFiles = @($archive)
-    $uploadModel = $false
+    $uploadModels = @()
     if (-not $SkipModel) {
-        # Resolve relative model paths from the repository, and transfer a fixed filename.
-        $model = (Resolve-Path -LiteralPath $ModelPath).Path
-        if (-not (Test-Path -LiteralPath $model -PathType Leaf)) { throw 'ModelPath must be a model file.' }
-        $stagedModel = Join-Path $stagingRoot 'face_landmarker.task'
-        Copy-Item -LiteralPath $model -Destination $stagedModel
-        $modelHash = (Get-FileHash -LiteralPath $stagedModel -Algorithm SHA256).Hash.ToLowerInvariant()
-        Write-Host "MEDIAPIPE_FACE_LANDMARKER_SHA256=$modelHash"
-        $remoteHash = (Invoke-Native ssh ($sshArgs + @($Server, 'if [ -f /opt/dentisys/assets/face_landmarker.task ]; then sha256sum /opt/dentisys/assets/face_landmarker.task; fi')) | Out-String).Trim()
-        if (($remoteHash -split '\s+')[0] -eq $modelHash) {
-            Write-Host 'Installed model matches; skipping model upload.'
-        }
-        else {
-            $uploadFiles += $stagedModel
-            $uploadModel = $true
+        $models = @(
+            @{ Path = $ModelPath; Name = 'face_landmarker.task'; HashKey = 'MEDIAPIPE_FACE_LANDMARKER_SHA256' },
+            @{ Path = $YuNetModelPath; Name = 'face_detection_yunet_2023mar.onnx'; HashKey = 'BIOMETRIC_YUNET_SHA256' },
+            @{ Path = $SFaceModelPath; Name = 'face_recognition_sface_2021dec.onnx'; HashKey = 'BIOMETRIC_SFACE_SHA256' }
+        )
+        foreach ($modelInfo in $models) {
+            $model = (Resolve-Path -LiteralPath $modelInfo.Path).Path
+            if (-not (Test-Path -LiteralPath $model -PathType Leaf)) { throw "Model path must be a file: $($modelInfo.Path)" }
+            $stagedModel = Join-Path $stagingRoot $modelInfo.Name
+            Copy-Item -LiteralPath $model -Destination $stagedModel
+            $modelHash = (Get-FileHash -LiteralPath $stagedModel -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Host "$($modelInfo.HashKey)=$modelHash"
+            $remotePath = "/opt/dentisys/assets/$($modelInfo.Name)"
+            $remoteHash = (Invoke-Native ssh ($sshArgs + @($Server, "if [ -f '$remotePath' ]; then sha256sum '$remotePath'; fi")) | Out-String).Trim()
+            if (($remoteHash -split '\s+')[0] -eq $modelHash) {
+                Write-Host "$($modelInfo.Name) already matches; skipping upload."
+            }
+            else {
+                $uploadFiles += $stagedModel
+                $uploadModels += @{ Path = $stagedModel; Name = $modelInfo.Name; Hash = $modelHash }
+            }
         }
     }
     Invoke-Native scp ($scpArgs + $uploadFiles + @("${Server}:/tmp/"))
@@ -92,10 +101,18 @@ try {
         'mkdir -m 0700 -- $stage',
         'tar -xzf /tmp/dentisys-deploy.tar.gz -C $stage'
     )
-    if ($uploadModel) {
+    foreach ($modelInfo in $uploadModels) {
+        $remoteName = $modelInfo.Name
+        $remoteHashPath = "/tmp/$remoteName"
+        $installCommand = if ($Provision) {
+            "install -m 0644 '$remoteHashPath' '/tmp/dentisys-deploy/$remoteName'"
+        }
+        else {
+            "if [ -d /opt/dentisys/assets ]; then install -m 0644 '$remoteHashPath' '/opt/dentisys/assets/$remoteName'; else echo 'deploy-vps.sh first creates /opt/dentisys; model left at $remoteHashPath. Rerun upload-vps.ps1 after its first run to install the model.'; fi"
+        }
         $remoteCommands += @(
-            "echo '$modelHash  /tmp/face_landmarker.task' | sha256sum -c -",
-            $(if ($Provision) { 'install -m 0644 /tmp/face_landmarker.task /tmp/dentisys-deploy/face_landmarker.task' } else { "if [ -d /opt/dentisys/assets ]; then install -m 0644 /tmp/face_landmarker.task /opt/dentisys/assets/face_landmarker.task; else echo 'deploy-vps.sh first creates /opt/dentisys; model left at /tmp/face_landmarker.task. Rerun upload-vps.ps1 after its first run to install the model.'; fi" })
+            "echo '$($modelInfo.Hash)  $remoteHashPath' | sha256sum -c -",
+            $installCommand
         )
     }
     if ($Deploy) { $remoteCommands += 'bash /tmp/dentisys-deploy/scripts/deploy-vps.sh' }

@@ -51,7 +51,8 @@ try {
     $privatePatterns = @(
         '**/.env*', '**/*.key', '**/*.pem', '**/*.p12', '**/*.pfx',
         '**/keys', '**/secrets', '**/backups', '**/*.dump', '**/*.backup', '**/*.sql', '**/*.sql.gz',
-        '**/*.task', '**/face_landmarker*', '**/.docker', '**/id_rsa*', '**/id_ed25519*'
+        '**/*.task', '**/*.onnx', '**/face_landmarker*', '**/face_detection_yunet*',
+        '**/face_recognition_sface*', '**/.docker', '**/id_rsa*', '**/id_ed25519*'
     ) -join "`n"
     $images = @(
         @{ Name = 'web'; Context = $snapshot; Target = 'runtime' },
