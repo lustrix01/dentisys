@@ -1037,6 +1037,17 @@ export const GradeComputation: React.FC = () => {
   const [matrixSaveStatus, setMatrixSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const matrixDirtyRef = useRef(false);
   const matrixDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Unsaved scores (e.g. Auto-save off): let the browser ask before closing or reloading.
+  useEffect(() => {
+    const warnUnsaved = (event: BeforeUnloadEvent) => {
+      if (!singleDirtyRef.current && !matrixDirtyRef.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnUnsaved);
+    return () => window.removeEventListener('beforeunload', warnUnsaved);
+  }, []);
   const matrixScoresRef = useRef<Record<string, Record<string, string>>>({});
 
   const availableActivityTypes = useMemo(() => {
@@ -1345,15 +1356,13 @@ export const GradeComputation: React.FC = () => {
     if (matrixDebounceTimerRef.current) {
       clearTimeout(matrixDebounceTimerRef.current);
     }
-    // Auto-save off: scores wait for the manual Save button.
-    if (!autoSaveEnabled) return;
     matrixDebounceTimerRef.current = setTimeout(() => {
       performSaveMatrixScores(false);
     }, 1000);
   };
 
   const handleMatrixScoreBlur = () => {
-    if (autoSaveEnabled && matrixDirtyRef.current) {
+    if (matrixDirtyRef.current) {
       if (matrixDebounceTimerRef.current) {
         clearTimeout(matrixDebounceTimerRef.current);
       }
