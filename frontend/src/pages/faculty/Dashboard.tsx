@@ -242,10 +242,15 @@ export const Dashboard: React.FC = () => {
       showFeedback('Please enter a valid score (0-100).', 'error');
       return;
     }
+    const outcomeContradictsScore = remedialOutcome === 'passed' ? scoreVal < 50 : scoreVal >= 50;
+    if (outcomeContradictsScore) {
+      showFeedback('The selected outcome does not match the score. 50% or higher passes.', 'error');
+      return;
+    }
     const selected = pendingRemedials.find(row => row.id === selectedRemedialId);
     if (!selected) return;
     try {
-      await saveFacultyRemedialApi({
+      const saved = await saveFacultyRemedialApi({
         enrollmentId: selected.record.enrollmentId,
         studentId: selected.record.studentId,
         classId: selected.record.classId,
@@ -260,6 +265,7 @@ export const Dashboard: React.FC = () => {
         },
       });
 
+      let attempt2Failed = false;
       if (selected.attemptNumber === 1 && scoreVal < 50 && reattemptDate.trim().length > 0) {
         try {
           await saveFacultyRemedialApi({
@@ -271,7 +277,7 @@ export const Dashboard: React.FC = () => {
             notes: 'Scheduled for Attempt 2 re-attempt',
           });
         } catch {
-          // Attempt 1 was saved successfully
+          attempt2Failed = true; // Attempt 1 is already saved
         }
       }
 
@@ -280,7 +286,9 @@ export const Dashboard: React.FC = () => {
       setRemedialNotes('');
       setReattemptDate('');
       setRemedialOutcome('passed');
-      showFeedback('Remedial exam result recorded successfully. Student notified.', 'success');
+      const notifiedText = saved.notification?.created === true ? ' Student notified.' : '';
+      if (attempt2Failed) showFeedback(`Attempt 1 was saved but Attempt 2 could not be scheduled. Schedule it again from Retention Monitoring.${notifiedText}`, 'error');
+      else showFeedback(`Remedial exam result recorded successfully.${notifiedText}`, 'success');
       loadDashboard();
     } catch (err) {
       showFeedback(err instanceof Error ? err.message : 'Unable to persist the remedial result.', 'error');

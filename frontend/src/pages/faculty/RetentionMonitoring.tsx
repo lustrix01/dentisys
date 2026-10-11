@@ -660,16 +660,6 @@ export const RetentionMonitoring: React.FC = () => {
 
   const handleSelectOutcome = (outcome: 'pass' | 'fail') => {
     setResolveOutcome(outcome);
-    const num = Number(remedialScore);
-    if (outcome === 'pass') {
-      if (!Number.isFinite(num) || num < 50) {
-        setRemedialScore('80');
-      }
-    } else {
-      if (!Number.isFinite(num) || num >= 50) {
-        setRemedialScore('45');
-      }
-    }
   };
 
   const handleScoreChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -711,6 +701,12 @@ export const RetentionMonitoring: React.FC = () => {
       return;
     }
 
+    const outcomeContradictsScore = resolveOutcome === 'pass' ? score < 50 : resolveOutcome === 'fail' ? score >= 50 : false;
+    if (outcomeContradictsScore) {
+      showFeedback('The selected outcome does not match the score. 50% or higher passes.', 'error');
+      return;
+    }
+
     if (pendingAttemptNumber(selectedResolveProgression) !== resolveAttemptNumber) {
       showFeedback('This remedial attempt is no longer pending. Refresh the authoritative records and try again.', 'error');
       return;
@@ -718,7 +714,7 @@ export const RetentionMonitoring: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await saveFacultyRemedialApi({
+      const saved = await saveFacultyRemedialApi({
         enrollmentId: selectedResolveRecord.enrollmentId,
         studentId: selectedResolveRecord.studentId,
         classId: selectedResolveRecord.classId,
@@ -727,6 +723,7 @@ export const RetentionMonitoring: React.FC = () => {
         notes: resolveNotes.trim().length > 0 ? resolveNotes.trim() : null,
       });
 
+      let attempt2Failed = false;
       if (resolveAttemptNumber === 1 && score < 50 && reattemptDate.trim().length > 0) {
         try {
           await saveFacultyRemedialApi({
@@ -738,22 +735,26 @@ export const RetentionMonitoring: React.FC = () => {
             notes: 'Scheduled for Attempt 2 re-attempt',
           });
         } catch {
-          // Attempt 1 was saved successfully
+          attempt2Failed = true; // Attempt 1 is already saved
         }
       }
 
       const refreshed = await refreshRetention();
       resetResolveForm();
+      const notified = saved.notification?.created === true;
+      const notifiedText = notified ? ' Student notified in their portal account.' : '';
       const outcomeMsg = score >= 50
-        ? 'Remedial exam passed! Student cleared and notified in their portal account.'
+        ? `Remedial exam passed! Student cleared.${notifiedText}`
         : resolveAttemptNumber === 1
-          ? (reattemptDate.trim()
-              ? 'Attempt 1 marked for Re-attempt and Attempt 2 scheduled. Student notified in their portal account.'
-              : 'Attempt 1 marked for Re-attempt. Student notified in their portal account.')
-          : 'Attempt 2 recorded as not passed. Student moved to Cost Recovery and notified in their portal account.';
+          ? (attempt2Failed
+              ? `Attempt 1 was saved but Attempt 2 could not be scheduled. Schedule it again from Retention Monitoring.${notifiedText}`
+              : reattemptDate.trim()
+                ? `Attempt 1 marked for Re-attempt and Attempt 2 scheduled.${notifiedText}`
+                : `Attempt 1 marked for Re-attempt.${notifiedText}`)
+          : `Attempt 2 recorded as not passed. Student moved to Cost Recovery.${notifiedText}`;
 
       setNotification({
-        type: refreshed ? 'success' : 'info',
+        type: attempt2Failed ? 'info' : refreshed ? 'success' : 'info',
         message: refreshed
           ? outcomeMsg
           : `${outcomeMsg} (authoritative list could not be refreshed)`,
