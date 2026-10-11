@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSecretaryWorksheet } from './fixtures';
 import type { Page } from '@playwright/test';
 
 const ENABLED_RUNTIME_CONFIG = {
@@ -114,7 +114,8 @@ test.describe('P02 development safety seams', () => {
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
     await page.click('a[href="/secretary/attendance"]');
-    await page.getByRole('button', { name: 'New attendance session', exact: true }).click();
+    await openSecretaryWorksheet(page);
+    await page.getByRole('link', { name: 'Start Session', exact: true }).click();
     await page.getByRole('button', { name: /Locate My GPS/i }).click();
     await expect(page.getByText(/BU Dental Room Location Verified/i)).toBeVisible();
     await page.getByRole('button', { name: /Start Class Session Now/i }).click();

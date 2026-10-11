@@ -146,8 +146,6 @@ test.describe('Assessment transmutation UI coverage', () => {
     const scoreInput = page.getByRole('spinbutton').nth(0);
     await scoreInput.fill('25');
     await page.getByRole('button', { name: 'Save Scores Sheet' }).click();
-    // Saving asks for confirmation first.
-    await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect.poll(() => postedScorePayload).not.toBeNull();
     await expect.poll(() => computeRequestCount).toBe(1);
     expect(persistedScores['assessment-1']).toEqual([{
@@ -181,8 +179,6 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByLabel('Enable Auto-Save on score input blur').uncheck();
     await reloadedScoreInput.fill('30');
     await page.getByRole('button', { name: 'Save Scores Sheet' }).click();
-    // Saving asks for confirmation first.
-    await page.getByRole('button', { name: 'Confirm', exact: true }).click();
     await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Scores Saved Successfully!' })).toHaveCount(0);
     await expect(reloadedScoreInput).toHaveValue('30');
@@ -330,7 +326,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     const createForm = page.locator('form').last();
     await expect(createForm.getByText('Target Class / Section')).toBeVisible();
     await expect(createForm.getByText('CLINIC-4A', { exact: true })).toBeVisible();
-    await createForm.getByLabel('Category Type').selectOption({ label: 'Quiz (90%)' });
+    await createForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) }).selectOption({ label: 'Quiz (90%)' });
     await page.getByRole('button', { name: /Attendance Linking & Transmutation/i }).click();
     const toggle = page.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i });
     await expect(toggle).toBeVisible();
@@ -371,8 +367,8 @@ test.describe('Assessment transmutation UI coverage', () => {
     await expect(page.getByPlaceholder('e.g. Molar Crown Prep quiz')).toHaveValue('Unlinked assessment survives refresh');
     await expect(assessmentForm.locator('input[type="number"]').first()).toHaveValue('50');
     await expect(assessmentForm.locator('input[type="date"]')).toHaveValue(String(postedAssessment?.dueDate));
-    await expect(assessmentForm.getByLabel('Category Type')).toHaveValue(String(postedAssessment?.gradingCategoryId));
-    await expect(assessmentForm.getByLabel('Grading Period')).toHaveValue('Midterm');
+    await expect(assessmentForm.locator('select', { has: page.locator('option', { hasText: 'Select grading category' }) })).toHaveValue(String(postedAssessment?.gradingCategoryId));
+    await expect(assessmentForm.locator('select', { has: page.locator('option[value="Final"]') })).toHaveValue('Midterm');
     await expect(assessmentForm.getByRole('checkbox', { name: /Enable attendance-linked transmutation/i })).toBeChecked();
     await page.getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('button', { name: 'Student Scores Entry' }).click();

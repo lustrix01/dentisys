@@ -1,4 +1,4 @@
-import { test as base, expect, Route } from '@playwright/test';
+import { test as base, expect, Route, Page } from '@playwright/test';
 
 type RuntimeConfig = {
   environment: 'test';
@@ -258,3 +258,10 @@ export const test = base.extend<{ mockApi: void }>({
 });
 
 export { expect };
+
+// Secretary Attendance Monitoring opens on the Assigned Classes grid; this enters the roll-call worksheet
+// (optionally on a given Manila date, since the worksheet defaults to today).
+export async function openSecretaryWorksheet(page: Page, date?: string) {
+  await page.getByRole('button', { name: 'View Attendance', exact: true }).first().click();
+  if (date) await page.locator('input[type="date"]').fill(date);
+}

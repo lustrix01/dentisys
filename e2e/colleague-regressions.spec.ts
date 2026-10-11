@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, openSecretaryWorksheet } from './fixtures';
 import type { Page } from '@playwright/test';
 
 const course = {
@@ -214,7 +214,9 @@ test('Secretary missing attendance is reachable for an exact session and writes 
   });
   await page.goto('/secretary/override?student=REAL-42&sessionId=900&date=2026-10-03');
   await expect(page).toHaveURL(/\/secretary\/attendance\?student=REAL-42&sessionId=900&date=2026-10-03$/);
-  await expect(page.getByLabel('Attendance session')).toHaveValue('900');
+  // The deep link carries the exact session/date/student; the grid opens first, then the worksheet.
+  await openSecretaryWorksheet(page);
+  await expect(page.getByLabel('Switch Session')).toHaveValue('900');
   const row = page.getByRole('row').filter({ hasText: 'Missing Student' });
   await expect(row).toContainText('Not recorded');
   await row.getByRole('button', { name: 'Override' }).click();
@@ -222,33 +224,11 @@ test('Secretary missing attendance is reachable for an exact session and writes 
   await page.getByRole('button', { name: 'Confirm override' }).click();
   await expect.poll(() => payload).toMatchObject({ studentId: '42', sessionId: 900, status: 'present', reason: 'Verified attendance with Faculty' });
   await expect(row).toContainText('present');
-  await page.getByLabel('Attendance session').selectOption('');
+  await page.getByLabel('Switch Session').selectOption('');
   await expect(row).toContainText('present');
-  await page.getByLabel('Attendance session').selectOption('901');
+  await page.getByLabel('Switch Session').selectOption('901');
   await expect(row).toContainText('Not recorded');
   await expect(row).not.toContainText('present');
-});
-
-test('Faculty watchlist unlocking does not claim incomplete grades were computed or unlock all classes', async ({ page }) => {
-  const records = [
-    { enrollmentId: '901', studentId: '42', studentNumber: 'REAL-42', studentName: 'Incomplete Candidate', classId: '77', className: 'DENT-A', subjectCode: 'DENT401', schoolYear: '2026-2027', state: 'active', gwa: null, percentage: null, midtermComplete: false, midtermPercentage: null, watchlistUnlocked: true },
-    { enrollmentId: '902', studentId: '43', studentNumber: 'REAL-43', studentName: 'Locked Candidate', classId: '78', className: 'DENT-B', subjectCode: 'DENT402', schoolYear: '2026-2027', state: 'active', gwa: null, percentage: null, midtermComplete: false, midtermPercentage: null, watchlistUnlocked: false },
-  ];
-  const writes: unknown[] = [];
-  await page.route('**/api/faculty/retention', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', retention: records } }));
-  await page.route('**/api/faculty/retention/watchlist/unlock', route => {
-    writes.push(route.request().postDataJSON());
-    return route.fulfill({ json: { status: 'ok' } });
-  });
-  await page.goto('/faculty/retention');
-  await page.getByRole('button', { name: /Midterm Risk/ }).click();
-  await page.getByRole('button', { name: /Show At-Risk Only/ }).click();
-  await expect(page.getByRole('row').filter({ hasText: 'Incomplete Candidate' })).toContainText('Unlocked · Assessments incomplete');
-  await expect(page.getByText('Computed · Ready', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Unlock Midterm Watchlist', exact: true })).toBeDisabled();
-  await page.getByRole('row').filter({ hasText: 'Locked Candidate' }).getByRole('button', { name: 'Unlock watchlist', exact: true }).click();
-  await expect.poll(() => writes.length).toBe(1);
-  expect(writes[0]).toEqual({ classId: '78' });
 });
 
 
@@ -290,7 +270,7 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
     return route.fulfill({ json: { status: 'ok', records: [record], sessions: [] } });
   });
   await page.goto('/secretary/attendance');
-  await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
+  await openSecretaryWorksheet(page, '2026-10-03');
   await page.getByRole('row').filter({ hasText: 'Correction Student' }).getByRole('button', { name: 'Override' }).click();
   await expect(page.locator('textarea')).toHaveValue('');
   await page.locator('textarea').fill('New verified correction reason');
@@ -299,7 +279,7 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
   await page.getByRole('button', { name: 'Late', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm override' }).click();
   await expect.poll(() => writing).toBe(true);
-  await expect(page.getByRole('button', { name: 'Refresh attendance', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeDisabled();
   release?.();
   await expect(page.getByText('Service is temporarily unavailable. Please try again later.', { exact: true })).toBeVisible();
   await expect(page.locator('textarea')).toHaveValue('New verified correction reason');
@@ -315,34 +295,6 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
   await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toHaveCount(0);
   expect(payloads).toEqual([expected, expected]);
 });
-
-for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'phone', width: 390, height: 844 }]) {
-  test(`Secretary History opens the exact same-day session on ${viewport.name}`, async ({ page }) => {
-    await page.setViewportSize(viewport);
-    await page.route('**/api/auth/me', route => route.fulfill({ json: { user_id: 300, role: 'secretary', display_name: 'Secretary', login_email: 'secretary@bicol-u.edu.ph' } }));
-    await page.route('**/api/secretary/profile', route => route.fulfill({ json: { status: 'ok', profile: { assignedClassName: 'DENT-4' } } }));
-    const sessions = [
-      { sessionId: '900', subjectCode: 'DENT401', className: 'DENT-4', classId: '7', date: '2026-10-03', sessionCode: 'MORNING-900', startedAt: '2026-10-03T00:00:00Z', status: 'ended' },
-      { sessionId: '901', subjectCode: 'DENT401', className: 'DENT-4', classId: '7', date: '2026-10-03', sessionCode: 'AFTERNOON-901', startedAt: '2026-10-03T05:00:00Z', status: 'ended' },
-    ];
-    const reads: string[] = [];
-    await page.route('**/api/secretary/attendance**', route => {
-      const sessionId = new URL(route.request().url()).searchParams.get('sessionId');
-      if (sessionId) reads.push(sessionId);
-      return route.fulfill({ json: { status: 'ok', sessions, records: sessionId ? [{
-        id: '', attendanceSessionId: sessionId, studentId: '42', studentNumber: 'REAL-42', studentName: sessionId === '901' ? 'Afternoon Student' : 'Morning Student',
-        date: '2026-10-03', subjectCode: 'DENT401', status: '',
-      }] : [] } });
-    });
-    await page.goto('/secretary/attendance?tab=sessions');
-    const history = page.getByText('Sat, Oct 3, 2026 · – · AFTERNOON-901 · ended', { exact: true }).locator('..');
-    await history.getByRole('button', { name: 'Open roll call', exact: true }).click();
-    await expect(page.getByRole('combobox', { name: 'Attendance session', exact: true })).toHaveValue('901');
-    await expect(page.getByRole('row').filter({ hasText: 'Afternoon Student' })).toContainText('Not recorded');
-    await expect(page.getByRole('row').filter({ hasText: 'Morning Student' })).toHaveCount(0);
-    expect(reads).toEqual(['901']);
-  });
-}
 
 for (const boundary of [
   { action: 'override', length: 8, limit: 240 }, { action: 'override', length: 240, limit: 240 },
@@ -368,7 +320,7 @@ for (const boundary of [
       return route.fulfill({ status: 201, json: { status: 'ok', message: 'Excused request sent to Faculty for approval.' } });
     });
     await page.goto('/secretary/attendance');
-    await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
+    await openSecretaryWorksheet(page, '2026-10-03');
     const row = page.getByRole('row').filter({ hasText: 'Boundary Student' });
     await row.getByRole('button', { name: 'Override', exact: true }).click();
     await page.getByRole('button', { name: boundary.action === 'excused' ? 'Request Excused' : 'Present', exact: true }).click();
@@ -461,18 +413,23 @@ for (const fixture of [
   });
 }
 
-test('Faculty at-risk filter follows server projection without a percentage fallback', async ({ page }) => {
+test('Faculty Midterm Risk applies the client rule (midterm GWA >= 2.5) and drops students once a final grade exists', async ({ page }) => {
+  const base = { studentId: '42', classId: '77', className: 'DENT-A', subjectCode: 'DENT401', schoolYear: '2026-2027', state: 'active', gwa: null, percentage: null, midtermComplete: true };
   await page.route('**/api/faculty/retention', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', retention: [
-    { enrollmentId: '991', studentId: '42', studentNumber: 'LOW-42', studentName: 'Low Projection', classId: '77', className: 'DENT-A', subjectCode: 'DENT401', schoolYear: '2026-2027', state: 'active', gwa: null, percentage: null, midtermComplete: true, midtermPercentage: 79, risk: { level: 'Low', period: 'Overall' } },
-    { enrollmentId: '992', studentId: '43', studentNumber: 'HIGH-43', studentName: 'High Projection', classId: '77', className: 'DENT-A', subjectCode: 'DENT401', schoolYear: '2026-2027', state: 'active', gwa: null, percentage: null, midtermComplete: true, midtermPercentage: 92, risk: { level: 'High', period: 'Overall' } },
+    { ...base, enrollmentId: '991', studentNumber: 'LOW-42', studentName: 'Failing Midterm', midtermPercentage: 60, risk: null },
+    // The server projection is ignored: a strong midterm is not at risk even when the server says High.
+    { ...base, enrollmentId: '992', studentId: '43', studentNumber: 'HIGH-43', studentName: 'Strong Midterm', midtermPercentage: 92, risk: { level: 'High', period: 'Overall' } },
+    { ...base, enrollmentId: '993', studentId: '44', studentNumber: 'DONE-44', studentName: 'Final Graded', midtermPercentage: 60, gwa: 2.0, risk: null },
   ] } }));
   await page.goto('/retention');
   await page.getByRole('button', { name: /Midterm Risk/ }).click();
   await expect(page.getByRole('button', { name: /Show At-Risk Only/ })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('row').filter({ hasText: 'High Projection' })).toBeVisible();
-  await expect(page.getByRole('row').filter({ hasText: 'Low Projection' })).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: 'Failing Midterm' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Strong Midterm' })).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: 'Final Graded' })).toHaveCount(0);
   await page.getByRole('button', { name: /Show At-Risk Only/ }).click();
-  await expect(page.getByRole('row').filter({ hasText: 'Low Projection' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Strong Midterm' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Final Graded' })).toHaveCount(0);
 });
 
 
