@@ -498,6 +498,8 @@ Participation and Recitation are assessment-source categories unless Faculty
 explicitly selects the supported Attendance source. Separate Lecture/Laboratory
 attendance calculations are outside this amendment.
 
+Owner-approved amendment (2026-10-12): The Grade Weights screen no longer offers an Attendance source selector. Participation and Recitation are always assessment-source categories.
+
 Existing overall and ungrouped period configurations, assessment and category
 identifiers, raw scores, history and saved grades remain preserved. Existing
 configurations continue their saved calculation until explicitly converted;
@@ -534,6 +536,8 @@ never be replaced automatically by default values.
 **Status: APPROVED**
 
 Faculty may send At-Risk and Privacy Consent notices to their students using the institutional email template. When the email mode is `custom`, every outgoing email is delivered to Mailpit, and only recipients on the configured allowlist also receive it by real email; Faculty notices to other recipients are recorded in history as "Suppressed (test mode)". In `mailpit` mode all email goes to Mailpit only; in `smtp` mode all email is delivered normally.
+
+Owner-approved amendment (2026-10-12): Email Management has three tabs: Student invitations, Secretary, and History. Faculty At-Risk and Privacy Consent notices are not offered. The delivery modes (`custom`, `mailpit`, `smtp`) are unchanged for all other email.
 
 ---
 
@@ -821,6 +825,8 @@ A revoked session is treated as if it never happened. Its attendance records do 
 
 Owner decision (2026-10-10): A scheduled session may be edited until it opens. Editable fields are the same as at creation except the class section: date, opening time, Present cutoff, Late cutoff, class end time, room, biometric and geofence settings, location, and radius. Faculty may edit scheduled sessions for classes they are authorized to manage, including sessions a Secretary created for that class. A Secretary may edit only scheduled sessions they created. Edits follow the creation rules for timing, past dates, and overlaps; a session does not overlap with itself. Active, ended, and revoked sessions cannot be edited. Each edit is recorded in the audit trail with actor, timestamp, and previous and new values. Editing does not create or change attendance records.
 
+Owner-approved amendment (2026-10-12): In the current interface only Faculty edit scheduled sessions; the Secretary has no Edit action. The server rule above is unchanged.
+
 ## ATT-002 — Geofencing and location privacy
 
 **Status: APPROVED**
@@ -1016,6 +1022,8 @@ Owner decision (2026-09-29) — Risk levels (Faculty Retention Monitoring and Mi
 
 Owner-approved amendment (2026-10-03): The Student midterm advisory uses the existing server-calculated Faculty Midterm Watchlist risk projection. High and At Risk results show an informational advisory; Low does not. Missing or insufficient assessment data remains Pending/Unavailable. A manual watchlist unlock changes visibility only. This advisory never assigns remediation or changes the final-grade 2.50 trigger.
 
+Owner-approved amendment (2026-10-12): The Faculty Midterm Watchlist has no lock and no manual unlock. It lists students whose midterm grades are complete, who have no final course grade yet, and whose exact midterm grade is 2.50 or worse. A student leaves the list once a final course grade exists. At-risk students are listed first. The badge shows the server risk level when available; otherwise High if the exact midterm grade is 3.00 or worse, else At Risk. This supersedes the 2026-09-24 lock/unlock rule. The Student advisory (2026-10-03) and the risk levels (2026-09-29) are unchanged.
+
 Owner decision (2026-10-09, provisional pending BUCDM confirmation): A percentage converts to the 1.00–5.00 grade by linear interpolation between 97% = 1.00, 94% = 1.25, 91% = 1.50, 88% = 1.75, 85% = 2.00, 82% = 2.25, 80% = 2.50, 78% = 2.75 and 75% = 3.00. 97% or more is 1.00; below 75% is 5.00. Server and client use the same conversion. Grades are stored and displayed rounded to two decimals, but the 2.50 remediation trigger and risk levels compare the exact unrounded grade, so rounding never creates a remediation flag. Only 80.00% or below reaches 2.50.
 
 ## UI-004 - Email and invitations (PDF pages 5, 7-8)
@@ -1031,6 +1039,8 @@ Adopt the source Attendance Monitoring interface, consolidating Start Attendance
 Use the source start-session presentation with PDF-directed improvements. Existing ATT rules still govern timing, geofence, ownership, correction, history, and Excused approval. A source delete/relaunch control does not authorize erasing attendance history or reusing verification.
 
 Owner decision (2026-10-10): Attendance Monitoring separates session management from student records. A Sessions view shows the live session, upcoming sessions with Edit and Revoke, and past sessions, plus a "New attendance session" action placed apart from every session list. A Roll call view shows student attendance for a selected session. The Secretary uses the same structure. Session timing may be entered with quick choices or custom values that keep the window lengths when the opening time changes, and exact times are always available; timing validation is unchanged.
+
+Owner-approved amendment (2026-10-12): Attendance Monitoring shows an Assigned Classes grid and a Worksheet for the selected class. A session modal has two tabs: Current Session, and Upcoming Sessions with countdowns. There is no past-sessions list. Session timing uses exact times only; quick choices are removed. The Secretary sees the same layout in the blue palette. Timing validation and the other ATT rules are unchanged.
 
 ## CLS-002 - Current-year creation and historical classes (PDF page 9)
 
