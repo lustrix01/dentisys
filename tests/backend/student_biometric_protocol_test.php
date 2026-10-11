@@ -70,7 +70,28 @@ if ($sidecar !== '') {
     biometric_protocol_expect(
         str_contains($sidecar, 'AESGCM(storage_key())')
             && str_contains($sidecar, 'temporary.write_bytes(encrypted)'),
-        'Sidecar protects LBPH references with AES-GCM and atomic temporary writes'
+        'Sidecar protects SFace references with AES-GCM and atomic temporary writes'
+    );
+    biometric_protocol_expect(
+        str_contains($sidecar, 'cv2.FaceDetectorYN')
+            && str_contains($sidecar, 'cv2.FaceRecognizerSF')
+            && str_contains($sidecar, 'sface/'),
+        'Sidecar uses YuNet detection, SFace recognition, and SFace references'
+    );
+    biometric_protocol_expect(
+        !str_contains($sidecar, 'cv2.face.LBPH')
+            && !str_contains($sidecar, 'CascadeClassifier'),
+        'Sidecar has no LBPH recognizer or Haar cascade'
+    );
+    $verifyStart = strpos($sidecar, 'def verify():');
+    $verifyEnd = strpos($sidecar, "@app.post(\"/v1/guidance\")", $verifyStart === false ? 0 : $verifyStart);
+    $verifySource = $verifyStart === false || $verifyEnd === false
+        ? ''
+        : substr($sidecar, $verifyStart, $verifyEnd - $verifyStart);
+    biometric_protocol_expect(
+        str_contains($verifySource, 'not reference.startswith("sface/")')
+            && str_contains($verifySource, 'Biometric reference is invalid.'),
+        'Verification refuses legacy LBPH references before reading a template'
     );
 } else {
     fwrite(STDOUT, "PASS: Sidecar file check skipped (not mounted in container environment)\n");

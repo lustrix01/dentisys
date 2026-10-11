@@ -261,7 +261,7 @@ function student_biometric_expire_if_needed(
     }
 
     // Expiration is a privacy lifecycle event, not just a display state. The
-    // protected LBPH object must be removed before metadata is invalidated so
+    // protected biometric object must be removed before metadata is invalidated so
     // a later enrollment cannot leave an expired usable reference behind.
     if ($row['protected_object_reference'] !== null) {
         student_biometric_sidecar_revoke($config, (string) $row['protected_object_reference']);

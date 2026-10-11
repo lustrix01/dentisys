@@ -143,7 +143,7 @@ for ($i = 0; $i < 20; $i++) {
     biometric_expect_true(count($actions) === 2 && count(array_unique($actions)) === 2, 'Each liveness challenge has exactly two distinct actions');
 }
 
-$auditState = audit_redact_state(['protected_object_reference' => 'lbph/opaque', 'status' => 'active']);
+$auditState = audit_redact_state(['protected_object_reference' => 'sface/opaque', 'status' => 'active']);
 biometric_expect_same('[REDACTED]', $auditState['protected_object_reference'], 'Audit state redacts protected biometric references');
 
 $migration = file_get_contents(dirname(__DIR__, 2) . '/database/migrations/011_student_biometric_attendance.sql');

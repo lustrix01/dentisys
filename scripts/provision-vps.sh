@@ -49,7 +49,7 @@ declare -A input=()
 while IFS= read -r -d '' key; do
   [[ "$key" != END ]] || break
   case "$key" in
-    MODE|SUDO_USER_NAME|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_HAAR_SCALE_FACTOR|BIOMETRIC_HAAR_MIN_NEIGHBORS|BIOMETRIC_HAAR_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_LBPH_RADIUS|BIOMETRIC_LBPH_NEIGHBORS|BIOMETRIC_LBPH_GRID_X|BIOMETRIC_LBPH_GRID_Y|BIOMETRIC_LBPH_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
+    MODE|SUDO_USER_NAME|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_YUNET_SCORE_THRESHOLD|BIOMETRIC_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_SFACE_COSINE_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
     *) fail 'Unexpected input field.' ;;
   esac
   [[ ! -v "input[$key]" ]] || fail 'Duplicate input field.'
@@ -80,7 +80,7 @@ else
 fi
 # Validate every fresh answer before changing the host.
 if [[ "$mode" != verify && ! -f "$env_file" ]]; then
-  for key in GHCR_USERNAME SMTP_USER SMTP_PASS TRAEFIK_ACME_EMAIL FIRST_DEAN_FIRST_NAME FIRST_DEAN_LAST_NAME FIRST_DEAN_EMAIL PGADMIN_DEFAULT_EMAIL PGADMIN_DEFAULT_PASSWORD ALLOWED_EMAIL_DOMAINS STUDENT_AUTH_ENABLED BIOMETRIC_SIDECAR_ENABLED BIOMETRIC_HAAR_SCALE_FACTOR BIOMETRIC_HAAR_MIN_NEIGHBORS BIOMETRIC_HAAR_MIN_FACE_PX BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE BIOMETRIC_LBPH_RADIUS BIOMETRIC_LBPH_NEIGHBORS BIOMETRIC_LBPH_GRID_X BIOMETRIC_LBPH_GRID_Y BIOMETRIC_LBPH_THRESHOLD BIOMETRIC_MATCH_COUNT BIOMETRIC_BLINK_THRESHOLD BIOMETRIC_HEAD_TURN_RATIO; do
+  for key in GHCR_USERNAME SMTP_USER SMTP_PASS TRAEFIK_ACME_EMAIL FIRST_DEAN_FIRST_NAME FIRST_DEAN_LAST_NAME FIRST_DEAN_EMAIL PGADMIN_DEFAULT_EMAIL PGADMIN_DEFAULT_PASSWORD ALLOWED_EMAIL_DOMAINS STUDENT_AUTH_ENABLED BIOMETRIC_SIDECAR_ENABLED BIOMETRIC_YUNET_SCORE_THRESHOLD BIOMETRIC_MIN_FACE_PX BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE BIOMETRIC_SFACE_COSINE_THRESHOLD BIOMETRIC_MATCH_COUNT BIOMETRIC_BLINK_THRESHOLD BIOMETRIC_HEAD_TURN_RATIO; do
     [[ -n "${input[$key]:-}" && "${input[$key]}" != *replace_with_* ]] || fail "Missing fresh configuration: $key."
   done
   [[ "${input[GHCR_USERNAME]}" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]] || fail 'Invalid GHCR username.'
@@ -149,22 +149,27 @@ fi
 unset admin_password
 handoff_staging
 
-phase 'B. Server environment and face model'
+phase 'B. Server environment and face models'
 install -d -m 0750 -o "$admin_user" -g "$(id -gn "$admin_user")" "$deploy_dir" "$deploy_dir/assets"
-model="$source_dir/face_landmarker.task"
-if [[ -f "$model" ]]; then
+model_names=(face_landmarker.task face_detection_yunet_2023mar.onnx face_recognition_sface_2021dec.onnx)
+model_hash_keys=(MEDIAPIPE_FACE_LANDMARKER_SHA256 BIOMETRIC_YUNET_SHA256 BIOMETRIC_SFACE_SHA256)
+model_labels=('Face Landmarker' 'YuNet' 'SFace')
+for index in "${!model_names[@]}"; do
+  model="${source_dir}/${model_names[$index]}"
+  asset="$deploy_dir/assets/${model_names[$index]}"
+  if [[ ! -f "$model" ]]; then model="$asset"; fi
+  [[ -f "$model" ]] || fail "Uploaded or installed ${model_labels[$index]} model is missing."
   if [[ -f "$env_file" ]]; then
     uploaded_hash="$(sha256sum "$model")"
-    configured_hash="$(env_value MEDIAPIPE_FACE_LANDMARKER_SHA256)"
-    [[ "${uploaded_hash%% *}" == "${configured_hash,,}" ]] || fail 'Uploaded model differs from the preserved server checksum. Existing model was left untouched.'
+    configured_hash="$(env_value "${model_hash_keys[$index]}")"
+    [[ "${uploaded_hash%% *}" == "${configured_hash,,}" ]] || fail "Uploaded ${model_labels[$index]} model differs from the preserved server checksum. Existing model was left untouched."
   fi
-  if ! cmp -s "$model" "$deploy_dir/assets/face_landmarker.task"; then
-    install -m 0644 -o "$admin_user" -g "$(id -gn "$admin_user")" "$model" "$deploy_dir/assets/face_landmarker.task"
+  if ! cmp -s "$model" "$asset"; then
+    install -m 0644 -o "$admin_user" -g "$(id -gn "$admin_user")" "$model" "$asset"
   else
-    echo 'SKIP: installed face model already matches.'
+    echo "SKIP: installed ${model_labels[$index]} model already matches."
   fi
-fi
-[[ -f "$deploy_dir/assets/face_landmarker.task" ]] || fail 'Uploaded or installed face model is missing.'
+done
 if [[ -f "$env_file" ]]; then
   [[ "$(stat -c '%a' "$env_file")" == 600 ]] || fail 'Existing server .env must have mode 0600; it was left untouched.'
   echo 'SKIP: existing /opt/dentisys/.env preserved byte-for-byte; no passwords or signing keys regenerated.'
@@ -188,6 +193,10 @@ else
   for key in DB_PASS DB_ADMIN_PASS; do values["$key"]="${values[$key]//+/-}"; values["$key"]="${values[$key]//\//_}"; values["$key"]="${values[$key]//=}"; done
   model_hash="$(sha256sum "$deploy_dir/assets/face_landmarker.task")"
   values[MEDIAPIPE_FACE_LANDMARKER_SHA256]="${model_hash%% *}"
+  model_hash="$(sha256sum "$deploy_dir/assets/face_detection_yunet_2023mar.onnx")"
+  values[BIOMETRIC_YUNET_SHA256]="${model_hash%% *}"
+  model_hash="$(sha256sum "$deploy_dir/assets/face_recognition_sface_2021dec.onnx")"
+  values[BIOMETRIC_SFACE_SHA256]="${model_hash%% *}"
   # Only the VPS gets an environment file; publish the private file atomically.
   env_temp="$(mktemp "$deploy_dir/.env.provision.XXXXXX")"
   while IFS= read -r line || [[ -n "$line" ]]; do

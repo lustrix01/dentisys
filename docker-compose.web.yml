@@ -60,24 +60,25 @@ services:
     environment:
       BIOMETRIC_SIDECAR_SHARED_SECRET: ${BIOMETRIC_SIDECAR_SHARED_SECRET:?Set BIOMETRIC_SIDECAR_SHARED_SECRET for the biometric sidecar.}
       BIOMETRIC_STORAGE_KEY_B64: ${BIOMETRIC_STORAGE_KEY_B64:?Set BIOMETRIC_STORAGE_KEY_B64 for the biometric sidecar.}
-      BIOMETRIC_HAAR_SCALE_FACTOR: ${BIOMETRIC_HAAR_SCALE_FACTOR:?Set biometric Haar calibration.}
-      BIOMETRIC_HAAR_MIN_NEIGHBORS: ${BIOMETRIC_HAAR_MIN_NEIGHBORS:?Set biometric Haar calibration.}
-      BIOMETRIC_HAAR_MIN_FACE_PX: ${BIOMETRIC_HAAR_MIN_FACE_PX:?Set biometric Haar calibration.}
+      BIOMETRIC_YUNET_SCORE_THRESHOLD: ${BIOMETRIC_YUNET_SCORE_THRESHOLD:?Set the YuNet score threshold.}
+      BIOMETRIC_MIN_FACE_PX: ${BIOMETRIC_MIN_FACE_PX:?Set the minimum biometric face size.}
       BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE: ${BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE:?Set biometric quality calibration.}
-      BIOMETRIC_LBPH_RADIUS: ${BIOMETRIC_LBPH_RADIUS:?Set biometric LBPH calibration.}
-      BIOMETRIC_LBPH_NEIGHBORS: ${BIOMETRIC_LBPH_NEIGHBORS:?Set biometric LBPH calibration.}
-      BIOMETRIC_LBPH_GRID_X: ${BIOMETRIC_LBPH_GRID_X:?Set biometric LBPH calibration.}
-      BIOMETRIC_LBPH_GRID_Y: ${BIOMETRIC_LBPH_GRID_Y:?Set biometric LBPH calibration.}
-      BIOMETRIC_LBPH_THRESHOLD: ${BIOMETRIC_LBPH_THRESHOLD:?Set biometric LBPH calibration.}
+      BIOMETRIC_SFACE_COSINE_THRESHOLD: ${BIOMETRIC_SFACE_COSINE_THRESHOLD:?Set the SFace cosine threshold.}
       BIOMETRIC_MATCH_COUNT: ${BIOMETRIC_MATCH_COUNT:?Set biometric matching calibration.}
       BIOMETRIC_BLINK_THRESHOLD: ${BIOMETRIC_BLINK_THRESHOLD:?Set biometric liveness calibration.}
       BIOMETRIC_HEAD_TURN_RATIO: ${BIOMETRIC_HEAD_TURN_RATIO:?Set biometric liveness calibration.}
       MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH: /app/models/face_landmarker.task
       MEDIAPIPE_FACE_LANDMARKER_SHA256: ${MEDIAPIPE_FACE_LANDMARKER_SHA256:?Set the Face Landmarker SHA-256 checksum.}
+      BIOMETRIC_YUNET_MODEL_PATH: /app/models/face_detection_yunet_2023mar.onnx
+      BIOMETRIC_YUNET_SHA256: ${BIOMETRIC_YUNET_SHA256:?Set the YuNet model SHA-256 checksum.}
+      BIOMETRIC_SFACE_MODEL_PATH: /app/models/face_recognition_sface_2021dec.onnx
+      BIOMETRIC_SFACE_SHA256: ${BIOMETRIC_SFACE_SHA256:?Set the SFace model SHA-256 checksum.}
       BIOMETRIC_STORAGE_DIR: /var/lib/dentisys-biometric
     volumes:
       - dentisys_biometric_data:/var/lib/dentisys-biometric
       - ${MEDIAPIPE_FACE_LANDMARKER_MODEL_HOST_PATH:?Set the host path to the Face Landmarker model.}:/app/models/face_landmarker.task:ro
+      - ${BIOMETRIC_YUNET_MODEL_HOST_PATH:?Set the host path to the YuNet model.}:/app/models/face_detection_yunet_2023mar.onnx:ro
+      - ${BIOMETRIC_SFACE_MODEL_HOST_PATH:?Set the host path to the SFace model.}:/app/models/face_recognition_sface_2021dec.onnx:ro
     expose:
       - "8000"
     healthcheck:
