@@ -1033,6 +1033,9 @@ export const GradeComputation: React.FC = () => {
   const singleDirtyRef = useRef(false);
   const singleDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const singleScoresRef = useRef<Record<string, { score: string; remarks: string }>>({});
+  // Cleared stored scores not yet sent: only a manual save deletes them; they stay empty meanwhile.
+  const singlePendingClearRef = useRef<{ assessmentId: string; ids: Set<string> }>({ assessmentId: '', ids: new Set() });
+  const matrixPendingClearRef = useRef<Set<string>>(new Set());
 
   const [matrixSaveStatus, setMatrixSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const matrixDirtyRef = useRef(false);
@@ -1113,9 +1116,22 @@ export const GradeComputation: React.FC = () => {
         remarks: match?.remarks || ''
       };
     });
+    const pending = singlePendingClearRef.current;
+    // Same sheet with a pending clear: keep the current inputs so in-progress typing is not lost.
+    if (pending.assessmentId === selectedAssessmentId && pending.ids.size > 0
+      && activeStudents.every(student => student.id in singleScoresRef.current)) {
+      setScoresInputState({ ...singleScoresRef.current });
+      singleDirtyRef.current = true;
+      return;
+    }
+    const keep = pending.assessmentId === selectedAssessmentId
+      ? [...pending.ids].filter(id => initialInputs[id] && singleScoresRef.current[id]?.score === '')
+      : [];
+    keep.forEach(id => { initialInputs[id] = { ...initialInputs[id], score: '' }; });
+    singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: new Set(keep) };
     setScoresInputState(initialInputs);
     singleScoresRef.current = initialInputs;
-    singleDirtyRef.current = false;
+    singleDirtyRef.current = keep.length > 0;
     setSingleSaveStatus('saved');
     setIsScoresSavedAlert(false);
   }, [selectedAssessmentId, activeStudents, assessmentScores]);
@@ -1148,12 +1164,14 @@ export const GradeComputation: React.FC = () => {
 
     let hasErrors = false;
     const saveList: FacultyScoreEntry[] = [];
+    const cleared = new Set<string>();
     const currentScores = singleScoresRef.current;
 
     Object.entries(currentScores).forEach(([studentId, val]) => {
       if (val.score === '') {
         if (hasStoredScore(selectedAssessmentId, studentId)) {
-          saveList.push({ studentId, score: null, remarks: val.remarks });
+          if (isManual) saveList.push({ studentId, score: null, remarks: val.remarks });
+          else cleared.add(studentId);
         }
         return;
       }
@@ -1178,16 +1196,18 @@ export const GradeComputation: React.FC = () => {
     }
 
     if (saveList.length === 0) {
-      singleDirtyRef.current = false;
+      singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: cleared };
+      singleDirtyRef.current = cleared.size > 0;
       return;
     }
 
     setSingleSaveStatus('saving');
     try {
       await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
+      singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: cleared };
       saveAssessmentScores(selectedAssessmentId, saveList);
       await refreshPersistedGrades(activeAssessment.classId);
-      singleDirtyRef.current = false;
+      singleDirtyRef.current = cleared.size > 0;
       setSingleSaveStatus('saved');
       setIsScoresSavedAlert(true);
       if (isManual) {
@@ -1251,7 +1271,7 @@ export const GradeComputation: React.FC = () => {
 
   // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
   useEffect(() => {
-    if (matrixDirtyRef.current) return;
+    if (matrixDirtyRef.current && matrixPendingClearRef.current.size === 0) return;
     const matrix: Record<string, Record<string, string>> = {};
     activeStudents.forEach(student => {
       matrix[student.id] = {};
@@ -1260,9 +1280,25 @@ export const GradeComputation: React.FC = () => {
         matrix[student.id][ass.id] = match ? match.score.toString() : '';
       });
     });
+    // Same grid with a pending clear: keep the current inputs so in-progress typing is not lost.
+    if (matrixPendingClearRef.current.size > 0
+      && activeStudents.every(student => activeAssessments.every(ass => ass.id in (matrixScoresRef.current[student.id] || {})))) {
+      setMatrixScoresState({ ...matrixScoresRef.current });
+      matrixDirtyRef.current = true;
+      return;
+    }
+    const keep = new Set<string>();
+    matrixPendingClearRef.current.forEach(key => {
+      const [studentId, assessmentId] = key.split('|');
+      if (matrix[studentId]?.[assessmentId] && matrixScoresRef.current[studentId]?.[assessmentId] === '') {
+        matrix[studentId][assessmentId] = '';
+        keep.add(key);
+      }
+    });
+    matrixPendingClearRef.current = keep;
     setMatrixScoresState(matrix);
     matrixScoresRef.current = matrix;
-    matrixDirtyRef.current = false;
+    matrixDirtyRef.current = keep.size > 0;
     setMatrixSaveStatus('saved');
   }, [activeStudents, activeAssessments, assessmentScores]);
 
@@ -1273,6 +1309,7 @@ export const GradeComputation: React.FC = () => {
     let hasErrors = false;
     let saveCount = 0;
     let clearedCount = 0;
+    const cleared = new Set<string>();
     const batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }> = [];
     const currentScores = matrixScoresRef.current;
 
@@ -1283,8 +1320,12 @@ export const GradeComputation: React.FC = () => {
         const existingMatch = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
         if (valStr === '') {
           if (existingMatch) {
-            scores.push({ studentId: student.id, score: null, remarks: existingMatch.remarks || '' });
-            clearedCount++;
+            if (isManual) {
+              scores.push({ studentId: student.id, score: null, remarks: existingMatch.remarks || '' });
+              clearedCount++;
+            } else {
+              cleared.add(`${student.id}|${ass.id}`);
+            }
           }
           return;
         }
@@ -1309,13 +1350,15 @@ export const GradeComputation: React.FC = () => {
       if (isManual) {
         showFeedback('There are no scores to save.', 'info');
       }
-      matrixDirtyRef.current = false;
+      matrixPendingClearRef.current = cleared;
+      matrixDirtyRef.current = cleared.size > 0;
       return;
     }
 
     setMatrixSaveStatus('saving');
     try {
       await saveFacultyScoreBatchesApi(batches);
+      matrixPendingClearRef.current = cleared;
       batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
 
       const targetClassId = selectedClassId || availableClasses[0]?.id;
@@ -1323,7 +1366,7 @@ export const GradeComputation: React.FC = () => {
         await refreshPersistedGrades(targetClassId);
       }
       setMatrixRefreshKey(key => key + 1);
-      matrixDirtyRef.current = false;
+      matrixDirtyRef.current = cleared.size > 0;
       setMatrixSaveStatus('saved');
       setIsMatrixSavedAlert(true);
       if (isManual) {
