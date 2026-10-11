@@ -85,7 +85,9 @@ Twenty usable samples are required. Failed quality or liveness samples do not
 count; the sidecar may accept no more than 30 usable samples. The sidecar
 performs exactly-one-face YuNet detection, temporary liveness action matching in
 the server-issued order, and encrypted SFace template generation (usable samples
-averaged into one normalized template). Raw frames and per-frame embeddings exist
+averaged into one normalized template). Each challenge action must be shown on a
+frame whose usable face matches the new template, with the MediaPipe landmarks
+on that same face; otherwise enrollment fails with `liveness_failed`. Raw frames and per-frame embeddings exist
 only in request memory and are not stored. Enrollments made before 2026-10-11
 are legacy `lbph/` references that never verify; see the migration note in
 `docs/biometric-calibration-deployment.md`.
@@ -111,6 +113,9 @@ The server evaluates the session status, configured opening/Present/Late
 windows, consent, enrollment expiry, geofence, challenge, liveness, and strict
 authenticated-Student 1:1 SFace verification (cosine similarity of each usable
 frame to the template; at least `MATCH_COUNT` frames must reach the threshold).
+Each challenge action must also be shown on one of those matching frames, with
+the MediaPipe landmarks on the matched face, so another face cannot perform the
+challenge; otherwise the result is `biometric_verification_failed`.
 It assigns `present` or `late`
 using server time in `Asia/Manila`, writes one persisted attendance row, and
 records an audit event. Client timestamps, client attendance status, and local

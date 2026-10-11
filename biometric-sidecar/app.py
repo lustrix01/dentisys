@@ -148,53 +148,43 @@ def decode_frame(data: bytes) -> np.ndarray:
     return image
 
 
-FACE_ISSUE_MESSAGES = {
-    "no_face": "Capture must contain exactly one visible face.",
-    "multiple_faces": "Capture must contain exactly one visible face.",
-    "low_quality": "Capture quality is insufficient.",
-}
-
-
 _YUNET_LOCK = threading.Lock()
 _SFACE_LOCK = threading.Lock()
+_LANDMARKER_LOCK = threading.Lock()
 
 
-def assess_face(image: np.ndarray, config: Calibration) -> tuple[np.ndarray | None, str | None]:
-    """Return an aligned face crop for a usable frame, or its quality issue."""
+def detect_face(image: np.ndarray, config: Calibration) -> tuple[np.ndarray | None, np.ndarray | None, str | None]:
+    """Return the YuNet face row and aligned crop for a usable frame, or its quality issue."""
     height, width = image.shape[:2]
     detector = yunet_detector()
     with _YUNET_LOCK:
         detector.setInputSize((width, height))
         _, faces = detector.detect(image)
     if faces is None or len(faces) == 0:
-        return None, "no_face"
+        return None, None, "no_face"
     faces = [
         face for face in faces
         if float(face[2]) >= config.min_face_px and float(face[3]) >= config.min_face_px
     ]
     if len(faces) == 0:
-        return None, "no_face"
+        return None, None, "no_face"
     if len(faces) > 1:
-        return None, "multiple_faces"
+        return None, None, "multiple_faces"
     face = faces[0]
     with _SFACE_LOCK:
         crop = face_recognizer().alignCrop(image, face)
     if crop is None or crop.size == 0:
-        return None, "low_quality"
+        return None, None, "low_quality"
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     if float(cv2.Laplacian(gray, cv2.CV_64F).var()) < config.quality_laplacian_variance:
-        return None, "low_quality"
-    return crop, None
+        return None, None, "low_quality"
+    return face, crop, None
 
 
-def face_crop(image: np.ndarray, config: Calibration) -> np.ndarray:
-    crop, issue = assess_face(image, config)
-    if issue is not None or crop is None:
-        raise BiometricError(
-            FACE_ISSUE_MESSAGES.get(issue or "low_quality", "Capture quality is insufficient."),
-            "quality_failed",
-        )
-    return crop
+def assess_face(image: np.ndarray, config: Calibration) -> tuple[np.ndarray | None, str | None]:
+    """Return an aligned face crop for a usable frame, or its quality issue."""
+    _, crop, issue = detect_face(image, config)
+    return crop, issue
 
 
 @lru_cache(maxsize=1)
@@ -259,10 +249,12 @@ def face_recognizer():
 
 def landmark_points(image: np.ndarray) -> list[tuple[float, float]]:
     rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    result = face_landmarker().detect(mp.Image(
-        image_format=mp.ImageFormat.SRGB,
-        data=rgb,
-    ))
+    landmarker = face_landmarker()
+    with _LANDMARKER_LOCK:
+        result = landmarker.detect(mp.Image(
+            image_format=mp.ImageFormat.SRGB,
+            data=rgb,
+        ))
     if not result.face_landmarks:
         raise BiometricError("Liveness face landmarks could not be detected.", "liveness_failed")
     height, width = image.shape[:2]
@@ -271,11 +263,6 @@ def landmark_points(image: np.ndarray) -> list[tuple[float, float]]:
 
 def distance(a: tuple[float, float], b: tuple[float, float]) -> float:
     return float(np.linalg.norm(np.asarray(a) - np.asarray(b)))
-
-
-def liveness_action(image: np.ndarray, config: Calibration) -> str | None:
-    points = landmark_points(image)
-    return liveness_action_from_points(points, config)
 
 
 def liveness_action_from_points(points: list[tuple[float, float]], config: Calibration) -> str | None:
@@ -329,15 +316,70 @@ def validate_actions(raw: str | None) -> list[str]:
     return actions
 
 
-def verify_liveness(images: Iterable[np.ndarray], actions: list[str], config: Calibration) -> None:
+def challenge_completed(observations: Iterable[tuple[str | None, bool]], actions: list[str]) -> bool:
+    """Check the ordered actions; a frame's action counts only when that frame is eligible."""
     required_index = 0
-    for image in images:
-        detected = liveness_action(image, config)
-        if detected is not None and detected == actions[required_index]:
+    for detected, eligible in observations:
+        if eligible and detected is not None and detected == actions[required_index]:
             required_index += 1
             if required_index == len(actions):
-                return
-    raise BiometricError("Liveness challenge was not completed.", "liveness_failed")
+                return True
+    return False
+
+
+def same_face(points: list[tuple[float, float]], face: np.ndarray) -> bool:
+    """The landmarked face is the YuNet face when its nose tip lies inside the YuNet box."""
+    x, y, width, height = (float(value) for value in face[:4])
+    nose_x, nose_y = points[1]
+    return x <= nose_x <= x + width and y <= nose_y <= y + height
+
+
+def frame_points(images: list[np.ndarray]):
+    """Return a cached per-frame landmark lookup; None when no landmarks are found."""
+    cache: dict[int, list[tuple[float, float]] | None] = {}
+
+    def points(index: int) -> list[tuple[float, float]] | None:
+        if index not in cache:
+            try:
+                cache[index] = landmark_points(images[index])
+            except BiometricError as error:
+                if error.code != "liveness_failed":
+                    raise
+                cache[index] = None
+        return cache[index]
+
+    return points
+
+
+def verify_liveness(images: list[np.ndarray], points, actions: list[str], config: Calibration) -> None:
+    def observations():
+        for index in range(len(images)):
+            found = points(index)
+            if found is None:
+                raise BiometricError("Liveness face landmarks could not be detected.", "liveness_failed")
+            yield liveness_action_from_points(found, config), True
+
+    if not challenge_completed(observations(), actions):
+        raise BiometricError("Liveness challenge was not completed.", "liveness_failed")
+
+
+def liveness_bound_to_face(
+    points,
+    faces: list[np.ndarray | None],
+    matched: list[bool],
+    actions: list[str],
+    config: Calibration,
+) -> bool:
+    """Check that the actions were performed by the matched face itself."""
+    def observations():
+        for index, face in enumerate(faces):
+            found = points(index) if matched[index] and face is not None else None
+            if found is None or not same_face(found, face):
+                yield None, False
+                continue
+            yield liveness_action_from_points(found, config), True
+
+    return challenge_completed(observations(), actions)
 
 
 def reference_token(reference: str, kind: str) -> str:
@@ -437,27 +479,34 @@ def enrollment():
     config = calibration()
     actions = validate_actions(request.form.get("challengeActions"))
     images = uploaded_images()
-    crops: list[np.ndarray] = []
+    faces: list[np.ndarray | None] = []
+    crops: list[np.ndarray | None] = []
     for image in images:
-        try:
-            crop = face_crop(image, config)
-        except BiometricError as error:
-            if error.code != "quality_failed":
-                raise
-            continue
+        face, crop, _ = detect_face(image, config)
+        faces.append(face)
         crops.append(crop)
-    if len(crops) < 20:
+    usable_indices = [index for index, crop in enumerate(crops) if crop is not None]
+    if len(usable_indices) < 20:
         raise BiometricError("At least twenty usable enrollment samples are required.", "quality_failed")
     # Head-turn frames often fail the frontal detector, so liveness is checked
     # on every uploaded frame, in upload order.
-    verify_liveness(images, actions, config)
-    usable = min(len(crops), 30)
-    embeddings = [face_embedding(crop) for crop in crops[:usable]]
-    template = np.mean(np.stack(embeddings).astype(np.float64), axis=0)
+    points = frame_points(images)
+    verify_liveness(images, points, actions, config)
+    usable = min(len(usable_indices), 30)
+    embeddings = {index: face_embedding(crops[index]) for index in usable_indices}
+    template = np.mean(np.stack([embeddings[index] for index in usable_indices[:usable]]).astype(np.float64), axis=0)
     norm = float(np.linalg.norm(template))
     if not np.isfinite(template).all() or not np.isfinite(norm) or norm <= 0:
         raise BiometricError("Biometric service is unavailable.", "biometric_service_unavailable", 503)
-    template_bytes = np.asarray(template / norm, dtype="<f4").tobytes()
+    template = template / norm
+    # The challenge must be performed by the face being enrolled.
+    matched = [
+        index in embeddings and float(np.dot(embeddings[index], template)) >= config.sface_cosine_threshold
+        for index in range(len(images))
+    ]
+    if not liveness_bound_to_face(points, faces, matched, actions, config):
+        raise BiometricError("Liveness challenge was not completed.", "liveness_failed")
+    template_bytes = np.asarray(template, dtype="<f4").tobytes()
     reference = "sface/" + uuid.uuid4().hex
     path = model_reference_path(reference)
     encrypted = encrypt_model(template_bytes, reference)
@@ -479,27 +528,31 @@ def verify():
         raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
     actions = validate_actions(request.form.get("challengeActions"))
     images = uploaded_images()
-    verify_liveness(images, actions, config)
+    points = frame_points(images)
+    verify_liveness(images, points, actions, config)
     if not reference.startswith("sface/"):
         raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
     model = decrypt_model(model_reference_path(reference).read_bytes(), reference)
     template = template_from_bytes(model)
-    matches = 0
+    faces: list[np.ndarray | None] = []
+    matched: list[bool] = []
     usable = 0
     for image in images:
-        try:
-            crop = face_crop(image, config)
-        except BiometricError as error:
-            if error.code != "quality_failed":
-                raise
+        face, crop, _ = detect_face(image, config)
+        faces.append(face)
+        if crop is None:
+            matched.append(False)
             continue
         usable += 1
         similarity = float(np.dot(face_embedding(crop), template))
-        if similarity >= config.sface_cosine_threshold:
-            matches += 1
+        matched.append(similarity >= config.sface_cosine_threshold)
     if usable < config.match_count:
         raise BiometricError("Not enough clear face frames were captured. Face the camera in good light and retry.", "quality_failed")
-    if matches < config.match_count:
+    if sum(matched) < config.match_count:
+        raise BiometricError("Face could not be verified.", "biometric_verification_failed")
+    # The challenge must be performed by the matched face, not by another
+    # face shown alongside or between the matching frames.
+    if not liveness_bound_to_face(points, faces, matched, actions, config):
         raise BiometricError("Face could not be verified.", "biometric_verification_failed")
     return jsonify({"ok": True, "verified": True})
 
