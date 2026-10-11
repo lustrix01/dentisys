@@ -147,7 +147,23 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const config = useRuntimeConfig();
   const studentPrototypeEnabled = isStudentPrototypeAllowed(user, config, 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('dentisys_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('dentisys_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   // Faculty sidebar badge: server-computed at-risk and remedial counts for the
@@ -600,66 +616,102 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Sidebar Navigation — fixed on desktop, drawer on mobile */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} border-r border-slate-200/80 dark:border-slate-800 p-5 flex flex-col transition-all duration-300 ease-out ${
-          isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        } ${isSidebarCollapsed ? 'md:w-20' : 'md:w-72'}`}
+        className={`fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-all duration-300 ease-out ${
+          isSidebarCollapsed ? 'px-3 py-5 md:w-20 overflow-visible' : 'p-5 md:w-72 overflow-y-auto'
+        } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
       >
-        
         {/* Brand Logo & Desktop Collapse Toggle */}
-        <div className="flex items-center justify-between mb-8 px-1.5 relative">
-          <div className="flex items-center space-x-3 min-w-0">
-            <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className={`w-10 h-10 rounded-full object-cover shadow-lg ${colors.logoRing} flex-shrink-0`} />
+        <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center mb-6' : 'justify-between mb-8'} px-1 relative`}>
+          <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'} min-w-0`}>
+            <img
+              src="/bu-cdm-logo.png"
+              alt="BU CDM Logo"
+              className={`w-10 h-10 rounded-full object-cover shadow-lg ${colors.logoRing} flex-shrink-0 transition-transform duration-300`}
+            />
             {!isSidebarCollapsed && (
-              <div className="transition-opacity duration-300">
-                <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+              <div className="transition-opacity duration-300 min-w-0">
+                <h1 className="font-heading font-extrabold text-xl tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5 truncate">
                   DentiSYS
                 </h1>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase truncate">
                   BU College of Dental Medicine
                 </p>
               </div>
             )}
           </div>
 
-          {/* Desktop collapse button */}
+          {/* Cleanly Docked Desktop Collapse Toggle Button */}
           <button
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            className="hidden md:flex absolute -right-8 top-1/2 transform -translate-y-1/2 p-1.5 rounded-full glass border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-650 dark:hover:text-slate-200 z-50 shadow-md"
-            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            type="button"
+            onClick={handleToggleCollapse}
+            className="hidden md:flex absolute -right-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 shadow-md items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 cursor-pointer"
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {isSidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
           </button>
         </div>
 
+        {/* Secretary / Student Role Switcher */}
         {user?.role === 'secretary' && (
-          <div className="mb-5 rounded-xl bg-slate-200/60 dark:bg-slate-800 p-1 flex gap-1" aria-label="Account view">
+          <div
+            className={`mb-4 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 p-1 flex ${
+              isSidebarCollapsed ? 'flex-col items-center gap-1' : 'gap-1'
+            }`}
+            aria-label="Account view"
+          >
             <Link
               to="/secretary/attendance"
               onClick={() => setIsSidebarOpen(false)}
               aria-current={!linkedStudentView ? 'page' : undefined}
-              title="Secretary view"
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold ${!linkedStudentView ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500'}`}
+              className={`group relative flex items-center justify-center rounded-lg transition-all ${
+                isSidebarCollapsed ? 'w-10 h-10' : 'flex-1 px-2 py-2 gap-1.5 text-[11px]'
+              } font-bold ${
+                !linkedStudentView
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
             >
-              <UserCheck className="w-3.5 h-3.5" />{!isSidebarCollapsed && 'Secretary'}
+              <UserCheck className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span>Secretary</span>}
+              {isSidebarCollapsed && (
+                <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
+                  Secretary View
+                  <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
+                </div>
+              )}
             </Link>
+
             <button
               type="button"
               disabled={!user.student}
               aria-pressed={linkedStudentView}
-              title={user.student ? 'Your linked Student view' : 'A linked Student identity is required'}
               onClick={() => {
                 setIsSidebarOpen(false);
                 navigate('/student/dashboard');
               }}
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed ${linkedStudentView ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm' : 'text-slate-500'}`}
+              className={`group relative flex items-center justify-center rounded-lg transition-all ${
+                isSidebarCollapsed ? 'w-10 h-10' : 'flex-1 px-2 py-2 gap-1.5 text-[11px]'
+              } font-bold disabled:opacity-40 disabled:cursor-not-allowed ${
+                linkedStudentView
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
             >
-              <User className="w-3.5 h-3.5" />{!isSidebarCollapsed && 'Student'}
+              <User className="w-4 h-4 shrink-0" />
+              {!isSidebarCollapsed && <span>Student</span>}
+              {isSidebarCollapsed && (
+                <div className="pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 text-white text-xs font-bold rounded-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap shadow-xl border border-slate-700/50 flex items-center">
+                  Student View
+                  <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
+                </div>
+              )}
             </button>
           </div>
         )}
 
         {/* Navigation Items */}
-        <nav className="flex-1 space-y-1.5 overflow-y-auto">
+        <nav className={`flex-1 space-y-1 ${isSidebarCollapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden'}`}>
           {navItems.map((item, idx) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
@@ -668,38 +720,65 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
             return (
               <React.Fragment key={item.name + idx}>
                 {item.sectionHeader && (
-                  <div className={`px-3 ${idx === 0 ? 'pt-1' : 'pt-4'} pb-1.5`}>
+                  <div className={`${isSidebarCollapsed ? 'py-2 px-1' : 'px-3 pt-3 pb-1.5'}`}>
                     {!isSidebarCollapsed ? (
                       <span className="text-[10px] font-extrabold uppercase tracking-widest text-blue-600 dark:text-blue-400 opacity-90 block">
                         {item.sectionHeader}
                       </span>
                     ) : (
-                      idx > 0 && <div className="border-t border-slate-200/60 dark:border-slate-800/60 my-2" />
+                      <div className="w-8 mx-auto border-t border-slate-200/80 dark:border-slate-800" />
                     )}
                   </div>
                 )}
                 <Link
                   to={item.path}
                   onClick={() => setIsSidebarOpen(false)}
-                  className={`flex items-center justify-between px-3 py-3 rounded-2xl transition-all duration-300 group ${
+                  className={`relative group flex items-center transition-all duration-200 ${
+                    isSidebarCollapsed
+                      ? 'w-11 h-11 mx-auto justify-center rounded-2xl'
+                      : 'justify-between px-3 py-3 rounded-2xl'
+                  } ${
                     isActive
-                      ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive}`
+                      ? `bg-gradient-to-r ${colors.bgGradient} ${colors.textActive} shadow-xs`
                       : `text-slate-600 dark:text-slate-300 ${colors.hoverBg}`
                   }`}
-                  title={item.badge === 'retention' ? `${retentionBadgeCount ?? 0} students needing attention in the current school year` : isSidebarCollapsed ? item.name : undefined}
+                  title={!isSidebarCollapsed && item.badge === 'retention' ? `${retentionBadgeCount ?? 0} students needing attention in the current school year` : undefined}
                 >
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${
+                  <div className={`flex items-center min-w-0 ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
+                    <Icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110 ${
                       isActive ? colors.iconActive : `text-slate-400 dark:text-slate-400 ${colors.iconHover}`
                     }`} />
                     {!isSidebarCollapsed && (
                       <span className="text-sm font-medium truncate transition-opacity duration-300">{item.name}</span>
                     )}
                   </div>
+
+                  {/* Normal badge when expanded */}
                   {badgeValue !== undefined && !isSidebarCollapsed && (
                     <span aria-label={item.badge === 'retention' ? `${badgeValue} students needing attention in the current school year` : undefined} className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
                       {badgeValue}
                     </span>
+                  )}
+
+                  {/* Alert badge dot when collapsed */}
+                  {badgeValue !== undefined && isSidebarCollapsed && (
+                    <span
+                      aria-label={item.badge === 'retention' ? `${badgeValue} students needing attention in the current school year` : undefined}
+                      className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
+                    />
+                  )}
+
+                  {/* Instant Floating Flyout Tooltip when collapsed (Raycast/Linear style) */}
+                  {isSidebarCollapsed && (
+                    <div className="pointer-events-none absolute left-full ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold rounded-xl shadow-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap flex items-center gap-2 border border-slate-700/50">
+                      <span>{item.name}</span>
+                      {badgeValue !== undefined && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-rose-500 text-white">
+                          {badgeValue}
+                        </span>
+                      )}
+                      <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
+                    </div>
                   )}
                 </Link>
               </React.Fragment>
@@ -708,9 +787,18 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         </nav>
 
         {/* Sidebar Footer / User Profile Summary */}
-        <div className="pt-4 mt-auto border-t border-slate-200/80 dark:border-slate-800/80 flex items-center space-x-3 px-1.5 min-w-0">
-          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} flex-shrink-0 shadow-sm`}>
-            {initials}
+        <div className={`pt-4 mt-auto border-t border-slate-200/80 dark:border-slate-800/80 flex items-center ${
+          isSidebarCollapsed ? 'justify-center px-0' : 'space-x-3 px-1.5'
+        } min-w-0`}>
+          <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${colors.avatarBg} flex items-center justify-center ${colors.avatarText} flex-shrink-0 shadow-sm group relative cursor-pointer`}>
+            <span className="font-extrabold text-xs">{initials}</span>
+            {isSidebarCollapsed && (
+              <div className="pointer-events-none absolute left-full ml-3 px-3 py-1.5 bg-slate-900/95 dark:bg-slate-800/95 backdrop-blur-md text-white text-xs font-bold rounded-xl shadow-xl opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-150 z-50 whitespace-nowrap border border-slate-700/50">
+                <div>{currentUser.name}</div>
+                <div className="text-[10px] text-slate-400 font-normal">{ROLE_TITLES[currentUser.role] || ''}</div>
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 bg-slate-900/95 dark:bg-slate-800/95 rotate-45 border-l border-b border-slate-700/50" />
+              </div>
+            )}
           </div>
           {!isSidebarCollapsed && (
             <div className="flex-1 min-w-0 transition-opacity duration-300">
