@@ -4323,14 +4323,9 @@ function handle_faculty_grades_compute(): void
                     ];
                     continue;
                 }
-                $midtermPercentage = $midterm['percentage'] !== null
-                    ? (float) (($group['componentMode'] ?? 'combined') === 'lecture_laboratory'
-                        ? $midterm['unroundedPercentage'] : $midterm['percentage'])
-                    : 0.0;
-                $finalPercentage = $final['percentage'] !== null
-                    ? (float) (($group['componentMode'] ?? 'combined') === 'lecture_laboratory'
-                        ? $final['unroundedPercentage'] : $final['percentage'])
-                    : 0.0;
+                // Exact period values are blended; only the final course percentage is rounded.
+                $midtermPercentage = $midterm['percentage'] !== null ? (float) $midterm['unroundedPercentage'] : 0.0;
+                $finalPercentage = $final['percentage'] !== null ? (float) $final['unroundedPercentage'] : 0.0;
                 $percentage = round(
                     ($midtermPercentage * $midtermWeight / 100)
                     + ($finalPercentage * $finalWeight / 100),
@@ -5822,7 +5817,7 @@ function faculty_risk_level(callable $percentageAfter): ?array
         if ($percentage === null) {
             return null;
         }
-        if (faculty_percentage_to_gwa_exact(round($percentage, 2)) >= RETENTION_GWA_TRIGGER) {
+        if (faculty_percentage_to_gwa_exact($percentage) >= RETENTION_GWA_TRIGGER) {
             return ['level' => $n <= 2 ? 'High' : 'At Risk', 'assumedAssessments' => $n];
         }
     }

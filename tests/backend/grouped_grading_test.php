@@ -280,4 +280,29 @@ assert_grouped_grading(
     'Legacy combined period calculations retain their saved assessment and Attendance math'
 );
 
+// Combined periods expose exact values so the Midterm+Final blend never uses
+// the rounded display percentages: 70/30 of 80.004 and 80.014 is 80.007 (80.01),
+// while the rounded 80.00 and 80.01 would give 80.003 (80.00).
+$combinedPeriod = static fn(string $period, float $score): array => faculty_compute_period_result($pdo, [
+    'componentMode' => 'combined',
+    'assessments' => [$assessment(7100, 1701, $period, $score)],
+    'attendanceDateRanges' => ['midterm' => ['startDate' => null, 'endDate' => null], 'final' => ['startDate' => null, 'endDate' => null]],
+], $period, [[
+    'category_id' => 1701,
+    'name' => 'Quiz',
+    'weight' => 100,
+    'sort_order' => 1,
+    'source_kind' => 'assessment',
+]]);
+$exactMidterm = $combinedPeriod('Midterm', 80.004);
+$exactFinal = $combinedPeriod('Final', 80.014);
+$exactBlend = round($exactMidterm['unroundedPercentage'] * 70 / 100 + $exactFinal['unroundedPercentage'] * 30 / 100, 2);
+$roundedBlend = round($exactMidterm['percentage'] * 70 / 100 + $exactFinal['percentage'] * 30 / 100, 2);
+assert_grouped_grading(
+    $exactMidterm['percentage'] === 80.0 && $exactFinal['percentage'] === 80.01
+        && abs($exactMidterm['unroundedPercentage'] - 80.004) < 1e-9
+        && $exactBlend === 80.01 && $roundedBlend === 80.0,
+    'Combined periods expose exact percentages whose blend differs from the rounded-period blend'
+);
+
 echo "ALL GROUPED GRADING TESTS PASSED.\n";

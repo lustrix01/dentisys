@@ -9,7 +9,7 @@ import {
   saveFacultyCostRecoveryApi,
   updateFacultyRetentionStatusApi,
 } from '../../services/apiClient';
-import { percentageToGWA } from '../../utils/gradeHelper';
+import { percentageToGWA, percentageToGWAExact } from '../../utils/gradeHelper';
 import type {
   FacultyRetentionRecord,
   FacultyRetentionState,
@@ -89,7 +89,7 @@ const isMidtermAtRisk = (record: FacultyRetentionRecord): boolean => {
   if (isFiniteNumber(record.gwa)) {
     return false;
   }
-  const gwa = percentageToGWA(record.midtermPercentage);
+  const gwa = percentageToGWAExact(record.midtermPercentage);
   return gwa >= 2.5; // 2.5 midterm grade is already at risk
 };
 
@@ -1043,7 +1043,7 @@ export const RetentionMonitoring: React.FC = () => {
                         <RiskBadge
                           risk={
                             record.risk ?? {
-                              level: isFiniteNumber(record.midtermPercentage) && percentageToGWA(record.midtermPercentage) >= 3.0 ? 'High' : 'At Risk',
+                              level: isFiniteNumber(record.midtermPercentage) && percentageToGWAExact(record.midtermPercentage) >= 3.0 ? 'High' : 'At Risk',
                               assumedAssessments: 0,
                               period: 'Midterm',
                             }

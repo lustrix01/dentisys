@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { percentageToGWA } from '../utils/gradeHelper.ts';
+import { percentageToGWAExact } from '../utils/gradeHelper.ts';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const retentionPage = fs.readFileSync(path.join(currentDirectory, '../pages/faculty/RetentionMonitoring.tsx'), 'utf8');
@@ -75,22 +75,26 @@ test('Subject-level risk rules do not fabricate client-derived decisions', () =>
 test('Midterm watchlist lists completed midterms without a final grade, at 2.50 or worse, and keeps server risk', () => {
   const body = retentionPage.match(/const isMidtermAtRisk = \(record: FacultyRetentionRecord\): boolean => \{([\s\S]*?)\r?\n\};/)?.[1];
   assert.ok(body);
-  const isAtRisk = new Function('record', 'isFiniteNumber', 'percentageToGWA', body);
+  const isAtRisk = new Function('record', 'isFiniteNumber', 'percentageToGWAExact', body);
   const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
   for (const [record, expected] of [
     [{ midtermComplete: true, midtermPercentage: 70, gwa: null }, true],
     [{ midtermComplete: true, midtermPercentage: 80, gwa: null }, true],
+    [{ midtermComplete: true, midtermPercentage: 80.01, gwa: null }, false],
     [{ midtermComplete: true, midtermPercentage: 90, gwa: null }, false],
     [{ midtermComplete: true, midtermPercentage: 70, gwa: 2.75 }, false],
     [{ midtermComplete: true, midtermPercentage: null, gwa: null }, false],
     [{ midtermComplete: false, midtermPercentage: 70, gwa: null }, false],
-  ] as const) assert.equal(isAtRisk(record, finite, percentageToGWA), expected);
+  ] as const) assert.equal(isAtRisk(record, finite, percentageToGWAExact), expected);
+  // Badge fallback uses the exact grade: 75.00% is 3.00 (High), 75.01% is just under (At Risk).
+  assert.ok(percentageToGWAExact(75) >= 3.0);
+  assert.ok(percentageToGWAExact(75.01) < 3.0);
   // The list, the count, and the At-Risk filter share the same rule; the badge prefers the server record.
   assert.match(retentionPage, /filteredRecords\.filter\(isMidtermAtRisk\)\.length/);
   assert.match(retentionPage, /if \(!showAtRiskOnly\) return computedRecords;/);
   assert.match(retentionPage, /return computedRecords\.filter\(isMidtermAtRisk\);/);
   assert.match(retentionPage, /record\.risk \?\? \{/);
-  assert.match(retentionPage, /percentageToGWA\(record\.midtermPercentage\) >= 3\.0 \? 'High' : 'At Risk'/);
+  assert.match(retentionPage, /percentageToGWAExact\(record\.midtermPercentage\) >= 3\.0 \? 'High' : 'At Risk'/);
   assert.match(retentionPage, /if \(!risk\) return <span[^>]*>Not enough data<\/span>/);
   // Lock/unlock was removed on purpose (owhie8 UI, Owner-approved).
   assert.doesNotMatch(retentionPage, /unlockFacultyWatchlistApi|watchlistUnlocked|isMidtermRiskVisible/);
