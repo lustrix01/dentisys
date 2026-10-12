@@ -100,7 +100,8 @@ test('grading matrix groups assessments by period and category and shows server 
   expect(previewRequests).toBeGreaterThan(0);
 });
 
-async function mockMatrixClass(page: import('@playwright/test').Page, scores: Record<string, number>, setup?: () => Promise<void>) {
+// setup: extra routes registered last (they take precedence); wide: 3 students and 6 assessments for the Pin layout.
+async function mockMatrixClass(page: import('@playwright/test').Page, scores: Record<string, number>, { setup, wide = false }: { setup?: () => Promise<void>; wide?: boolean } = {}) {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   await page.route('**/api/auth/login', route => route.fulfill(json({ type: 'direct_login', access_token: 'mock-faculty-token' })));
   await page.route('**/api/auth/me', route => route.fulfill(json({ id: 200, login_email: 'faculty@bicol-u.edu.ph', display_name: 'Prof. Jane Doe', role: 'faculty' })));
@@ -111,8 +112,13 @@ async function mockMatrixClass(page: import('@playwright/test').Page, scores: Re
     { id: '24', studentId: '2023-5510', name: 'Owhie Santillan Lumbang', email: 'owhie@bicol-u.edu.ph', yearLevel: 4, status: 'active',
       classSections: [{ classId: '7', className: 'CLINIC-4A', enrollmentId: '24' }],
       enrolledSubjects: [{ code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, isClinical: true, components: { quizzes: 0, exams: 0, practicum: 0, attendance: 0 }, grade: 0, hasRemedial: false, classId: '7', enrollmentId: '24' }] },
+    ...(wide ? [['25', '2023-5511', 'Rosario Maria Cristina Dela Cruz-Villanueva'], ['26', '2023-5512', 'Paolo Reyes']] : []).map(([id, studentId, name]) => (
+      { id, studentId, name, email: `${id}@bicol-u.edu.ph`, yearLevel: 4, status: 'active',
+        classSections: [{ classId: '7', className: 'CLINIC-4A', enrollmentId: id }],
+        enrolledSubjects: [{ code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, isClinical: true, components: { quizzes: 0, exams: 0, practicum: 0, attendance: 0 }, grade: 0, hasRemedial: false, classId: '7', enrollmentId: id }] }
+    )),
   ])));
-  await page.route('**/api/faculty/assessments', route => route.fulfill(json(['lo-1', 'lo-2'].map((id, i) => (
+  await page.route('**/api/faculty/assessments', route => route.fulfill(json((wide ? ['lo-1', 'lo-2', 'lo-3', 'lo-4', 'lo-5', 'lo-6'] : ['lo-1', 'lo-2']).map((id, i) => (
     { id, title: `LO ${i + 1}`, type: 'Quiz', subjectCode: 'CLIN401', classId: '7', gradingPeriod: 'Midterm', gradingCategoryId: 71, maxScore: 50, status: 'Active', dueDate: '2026-08-20', createdAt: '2026-08-10' }
   )))));
   await page.route('**/api/faculty/scores**', async (route) => {
@@ -183,7 +189,7 @@ async function mockTwoStudentsSlowSave(page: import('@playwright/test').Page) {
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   const server: Record<string, number> = {};
   const posts: Array<Array<{ assessmentId: string; scores: Array<{ studentId: string; score: number | null }> }>> = [];
-  await mockMatrixClass(page, {}, async () => {
+  await mockMatrixClass(page, {}, { setup: async () => {
     await page.route('**/api/faculty/students', route => route.fulfill(json([['24', 'Bea', 'Alvarez'], ['25', 'Carlo', 'Bautista']].map(([id, first, last]) => (
       { id, studentId: `2023-55${id}`, name: `${first} ${last}`, email: `${first}@bicol-u.edu.ph`, yearLevel: 4, status: 'active',
         classSections: [{ classId: '7', className: 'CLINIC-4A', enrollmentId: id }],
@@ -203,7 +209,7 @@ async function mockTwoStudentsSlowSave(page: import('@playwright/test').Page) {
       await route.fulfill(json({ status: 'ok', assessmentId, scores: ['24', '25'].filter(id => `${assessmentId}|${id}` in server)
         .map(id => ({ id: `s-${assessmentId}-${id}`, studentId: id, score: server[`${assessmentId}|${id}`], remarks: '', submittedAt: '2026-09-15T00:00:00Z' })) }));
     });
-  });
+  } });
   return { server, posts };
 }
 
@@ -247,4 +253,35 @@ test('matrix keeps and saves a cell typed while another save is in flight', asyn
   await expect(carlo).toHaveValue('40');
   await expect(page.getByText('All changes saved')).toBeVisible();
   expect(posts.flat().some(b => b.scores.some(e => e.studentId === '25' && e.score === 40))).toBe(true);
+});
+
+// The gate's Vite server runs without Tailwind, so this checks the Pin state and pinning classes;
+// the pinned layout itself was verified on screenshots at 412/768 and desktop (1280+) stays unchanged.
+test('Pin switches which student columns are pinned below xl and is hidden on desktop', async ({ page }) => {
+  await page.setViewportSize({ width: 412, height: 915 });
+  await mockMatrixClass(page, {}, { wide: true });
+  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  const pin = page.getByRole('group', { name: 'Pin student columns' });
+  await expect(pin).toBeVisible();
+  await expect(pin.locator('..')).toHaveClass(/(^|\s)xl:hidden(\s|$)/);
+  const nameOnly = pin.getByRole('button', { name: 'Full Name', exact: true });
+  const both = pin.getByRole('button', { name: 'ID Number + Full Name' });
+  await expect(nameOnly).toHaveAttribute('aria-pressed', 'true');
+  await expect(both).toHaveAttribute('aria-pressed', 'false');
+  const box = page.locator('div.overflow-x-auto.overflow-y-auto');
+  const idCell = box.getByRole('cell', { name: '2023-5510', exact: true });
+  const nameCell = box.getByRole('cell', { name: 'Owhie Santillan Lumbang', exact: true });
+  const sticky = /(^|\s)max-xl:sticky(\s|$)/;
+  await expect(nameCell).toHaveClass(sticky);
+  await expect(nameCell).toHaveClass(/max-xl:left-0/);
+  await expect(idCell).not.toHaveClass(sticky);
+  await both.click();
+  await expect(both).toHaveAttribute('aria-pressed', 'true');
+  await expect(nameOnly).toHaveAttribute('aria-pressed', 'false');
+  await expect(idCell).toHaveClass(sticky);
+  await expect(idCell).toHaveClass(/max-xl:left-0/);
+  await expect(nameCell).toHaveClass(/max-xl:left-\[104px\]/);
+  // Both columns keep their own cells: ID Number and Full Name are never merged.
+  await expect(idCell).toHaveText('2023-5510');
+  await expect(nameCell).toHaveText('Owhie Santillan Lumbang');
 });

@@ -80,6 +80,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
+  const [pinBoth, setPinBoth] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<'all' | 'midterm' | 'final'>('all');
   const [componentFilter, setComponentFilter] = useState<'all' | 'lecture' | 'laboratory'>('all');
 
@@ -339,6 +340,11 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
   };
 
   const th = 'px-2 py-2 text-center border border-slate-200 dark:border-slate-800';
+  // Below xl the student columns stay pinned at the left edge; at xl and above these classes do nothing.
+  const pinId = `max-xl:w-[104px] max-xl:min-w-[104px] max-xl:max-w-[104px] ${pinBoth ? 'max-xl:sticky max-xl:left-0' : ''}`;
+  const pinName = `max-xl:w-[140px] max-xl:min-w-[140px] max-xl:max-w-[140px] max-xl:sticky ${pinBoth ? 'max-xl:left-[104px]' : 'max-xl:left-0'} max-xl:shadow-[1px_0_0_#cbd5e1] dark:max-xl:shadow-[1px_0_0_#334155]`;
+  const pinHead = 'max-xl:z-20 max-xl:bg-slate-50 dark:max-xl:bg-slate-900';
+  const pinBody = 'max-xl:z-[5] max-xl:bg-white dark:max-xl:bg-slate-900';
   const computedCell = 'px-2 py-2 text-center font-mono text-slate-600 dark:text-slate-300 bg-slate-50/70 dark:bg-slate-900/40';
   const totalCell = 'px-2 py-2 text-center font-mono font-bold text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800/60';
 
@@ -371,6 +377,27 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
+          </div>
+
+          <div className="flex items-center gap-1.5 xl:hidden">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pin:</span>
+            <div role="group" aria-label="Pin student columns" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-850 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
+              {([['Full Name', false], ['ID Number + Full Name', true]] as const).map(([label, both]) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={pinBoth === both}
+                  onClick={() => setPinBoth(both)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                    pinBoth === both
+                      ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {periodMode && (
@@ -486,8 +513,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
             {/* ROW 2: Component Separation (Lecture vs Laboratory) */}
             <tr>
-              <th className={th} rowSpan={periodMode ? 3 : 1}>ID Number</th>
-              <th className={`${th} min-w-[200px] text-left`} rowSpan={periodMode ? 3 : 1}>Full Name</th>
+              <th className={`${th} ${pinId} ${pinBoth ? pinHead : ''}`} rowSpan={periodMode ? 3 : 1}>ID Number</th>
+              <th className={`${th} ${pinName} ${pinHead} min-w-[200px] text-left`} rowSpan={periodMode ? 3 : 1}>Full Name</th>
               {periodMode && visiblePeriods.map(period => (
                 <React.Fragment key={`${period.key}-comps`}>
                   {getVisibleComponents(period.key).map(comp => (
@@ -611,8 +638,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               const computed = result?.status === 'computed';
               return (
                 <tr key={student.id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/20">
-                  <td className="px-3 py-2 font-mono text-[11px] text-slate-500 whitespace-nowrap">{student.studentId}</td>
-                  <td className="px-3 py-2 font-bold text-slate-800 dark:text-slate-200">{student.name}</td>
+                  <td className={`px-3 py-2 font-mono text-[11px] text-slate-500 whitespace-nowrap ${pinId} ${pinBoth ? pinBody : ''}`}>{student.studentId}</td>
+                  <td className={`px-3 py-2 font-bold text-slate-800 dark:text-slate-200 ${pinName} ${pinBody}`}>{student.name}</td>
                   {periodMode && visiblePeriods.map(period => (
                     <React.Fragment key={period.key}>
                       {getVisibleComponents(period.key).map(comp => (

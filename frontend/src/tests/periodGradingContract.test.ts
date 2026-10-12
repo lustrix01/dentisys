@@ -83,8 +83,8 @@ test('Matrix renders exactly one identity header and matching ID and name body c
     const compiled = ts.transpileModule(`return (<table>${jsx}</table>);`, {
       fileName: 'identity.tsx', compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
     }).outputText;
-    return renderToStaticMarkup(new Function('React', 'periodMode', 'th', 'student', compiled)(
-      React, periodMode, '', { name: 'Alice Reyes', studentId: 'DENT-001' }
+    return renderToStaticMarkup(new Function('React', 'periodMode', 'th', 'student', 'pinId', 'pinName', 'pinHead', 'pinBody', 'pinBoth', compiled)(
+      React, periodMode, '', { name: 'Alice Reyes', studentId: 'DENT-001' }, '', '', '', '', false
     ));
   };
   const line = (text: string) => matrix.split('\n').find(row => row.includes(text))!.trim();
