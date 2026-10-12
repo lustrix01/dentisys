@@ -318,7 +318,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const renderNotificationsDropdown = () => (
     <>
       <div className="fixed inset-0 z-40" onClick={() => setIsNotificationsOpen(false)} />
-      <div className="absolute right-0 mt-3 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-4 z-50 max-h-[28rem] flex flex-col animate-fade-in">
+      <div className="absolute right-0 mt-3 w-80 sm:w-96 max-md:left-4 max-md:right-4 max-md:w-auto max-md:mt-2 max-md:top-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-4 z-50 max-h-[28rem] flex flex-col animate-fade-in">
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-2">
           <div className="flex items-center gap-2">
             <h3 className="font-heading font-semibold text-sm text-slate-800 dark:text-slate-100">
@@ -515,7 +515,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
         <div className="flex items-center space-x-2.5">
           {/* Mobile Notification Bell */}
-          <div className="relative">
+          <div className="relative max-md:static">
             <button
               type="button"
               onClick={() => {

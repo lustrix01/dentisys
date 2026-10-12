@@ -425,7 +425,7 @@ export const Dashboard: React.FC = () => {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search assigned courses (e.g. CLIN401), students, or student IDs..."
+                placeholder="Search courses or students…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs outline-none focus:ring-2 focus:ring-clinical-500 dark:text-slate-100 placeholder-slate-400"
@@ -561,7 +561,7 @@ export const Dashboard: React.FC = () => {
 
             <div className="space-y-2.5 text-xs">
               {activeSubjects.slice(0, 2).map((subj, idx) => (
-                <div key={subj.code} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div key={subj.code} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between max-xl:flex-col max-xl:items-stretch max-xl:gap-2">
                   <div className="flex items-center gap-3">
                     <div className="w-7 h-7 rounded-xl bg-clinical-50 dark:bg-clinical-950/60 text-clinical-600 dark:text-clinical-400 flex items-center justify-center font-bold text-xs">
                       {idx + 1}
@@ -571,7 +571,7 @@ export const Dashboard: React.FC = () => {
                       <p className="text-[10px] text-slate-400">{subj.name}</p>
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 bg-clinical-100 text-clinical-700 dark:bg-clinical-950 dark:text-clinical-300 rounded-md">
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-clinical-100 text-clinical-700 dark:bg-clinical-950 dark:text-clinical-300 rounded-md max-xl:self-start max-xl:ml-10">
                     {(() => {
                       const match = facultyClasses.find(c => c.courseCode === subj.code && c.isCurrentSchoolYear !== false)
                         ?? facultyClasses.find(c => c.courseCode === subj.code);

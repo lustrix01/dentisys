@@ -577,7 +577,7 @@ export const AttendanceList: React.FC = () => {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                 {[1, 2, 3].map((n) => (
                   <div key={n} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 animate-pulse space-y-3">
                     <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-1/3" />
@@ -594,7 +594,7 @@ export const AttendanceList: React.FC = () => {
                 </p>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
                 {assignedClassCards.map((c) => {
                   return (
                     <div
@@ -656,13 +656,13 @@ export const AttendanceList: React.FC = () => {
                       </div>
 
                       {/* Card Bottom Row: Students Count & Actions */}
-                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap xl:flex-nowrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
                           <Users className="w-4 h-4 text-slate-400" />
                           <span>{c.enrolledCount} Students</span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap xl:flex-nowrap">
                           {/* View Session button */}
                           <button
                             type="button"
@@ -947,7 +947,7 @@ export const AttendanceList: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
             <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Enrolled</span>
               <span className="text-xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{filtered.length}</span>

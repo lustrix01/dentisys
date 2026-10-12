@@ -801,8 +801,8 @@ export const StartSession: React.FC = () => {
 
               {/* GPS Location Acquisition Block */}
               <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-100">
+                <div className="flex items-center justify-between max-xl:flex-wrap max-xl:gap-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-100 max-xl:w-full">
                     <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     <span>Secretary Room GPS Location</span>
                   </div>
@@ -810,7 +810,7 @@ export const StartSession: React.FC = () => {
                     type="button"
                     onClick={handleAcquireGps}
                     disabled={isLocating}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50 max-xl:flex-1 max-xl:basis-0 max-xl:justify-center max-xl:whitespace-nowrap"
                   >
                     <RefreshCw className={`w-3 h-3 ${isLocating ? 'animate-spin' : ''}`} />
                     <span>{isLocating ? 'Locating...' : 'Locate My GPS'}</span>
@@ -818,7 +818,7 @@ export const StartSession: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowGpsMap(shown => !shown)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-600 text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-600 text-blue-700 dark:text-blue-300 text-[11px] font-bold transition-all cursor-pointer max-xl:flex-1 max-xl:basis-0 max-xl:justify-center max-xl:whitespace-nowrap"
                   >
                     <MapPin className="w-3 h-3" />
                     <span>{showGpsMap ? 'Hide map' : 'Pick on map'}</span>

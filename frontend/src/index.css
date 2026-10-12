@@ -37,6 +37,16 @@
   border: 1px solid rgba(67, 160, 71, 0.1);
 }
 
+/* Native <select> popups follow the app theme (dark mode is the .dark class on <html>). */
+.dark select {
+  color-scheme: dark;
+}
+.dark select option,
+.dark select optgroup {
+  background-color: #1e293b;
+  color: #f1f5f9;
+}
+
 /* Reusable glow and animations */
 .glow-clinical {
   box-shadow: 0 0 25px -5px rgba(67, 160, 71, 0.2);

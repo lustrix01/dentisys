@@ -1443,7 +1443,7 @@ export const Attendance: React.FC = () => {
 
                     {/* Target Frame Oval Overlay */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className={`w-52 h-64 rounded-[50%] border-2 transition-all ${capturePhase !== 'idle'
+                      <div className={`w-52 h-64 max-sm:h-[80%] max-sm:w-auto max-sm:aspect-[13/16] rounded-[50%] border-2 transition-all ${capturePhase !== 'idle'
                         ? 'border-blue-400 shadow-[0_0_25px_rgba(59,130,246,0.5)]'
                         : 'border-white/60 border-dashed'
                         }`} />

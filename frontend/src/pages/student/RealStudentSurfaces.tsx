@@ -363,7 +363,7 @@ export const RealStudentDashboard: React.FC = () => {
               </div>
             ))}
           </div>
-          <button onClick={() => navigate('/student/attendance')} className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"><Camera className="w-4 h-4" />Go to Attendance Check-In</button>
+          <button onClick={() => navigate('/student/attendance')} className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-1.5 lg:max-xl:flex-col lg:max-xl:gap-1 text-center cursor-pointer"><Camera className="w-4 h-4 shrink-0" />Go to Attendance Check-In</button>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
           <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" /><h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">Designated Attendance Location</h4></div>
