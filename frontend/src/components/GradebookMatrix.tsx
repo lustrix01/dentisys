@@ -9,6 +9,7 @@ import {
 } from '../services/apiClient';
 import { Search, X } from 'lucide-react';
 import { percentageToGWA } from '../utils/gradeHelper';
+import GradeValue from './GradeValue';
 
 interface MatrixStudent {
   id: string;
@@ -655,7 +656,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                               {format(pct)}
                             </td>
                             <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Final Midterm Grade' : 'Final Grade'} (1.00–5.00): ${periodEquivalentGrade(pct)}`}>
-                              {periodEquivalentGrade(pct)}
+                              <GradeValue percentage={pct}>{periodEquivalentGrade(pct)}</GradeValue>
                             </td>
                           </>
                         );
@@ -668,7 +669,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                         {computed ? format(result?.percentage) : '—'}
                       </td>
                       <td className={`${totalCell} bg-emerald-50 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-100 font-extrabold`}>
-                        {computed ? format(result?.gwa) : '—'}
+                        {computed ? <GradeValue percentage={result?.percentage}>{format(result?.gwa)}</GradeValue> : '—'}
                       </td>
                     </>
                   )}

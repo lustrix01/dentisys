@@ -28,6 +28,7 @@ const PRINT_STYLES = `
 import { getAdminReportsSummaryApi, getAdminSettingsApi, revokeStudentBiometricApi } from '../../services/apiClient';
 import { Modal } from '../../components/Modal';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
+import GradeValue from '../../components/GradeValue';
 
 const csvEscapeField = (value: unknown) => {
   const text = String(value ?? '—');
@@ -487,7 +488,7 @@ export const DeanReports: React.FC = () => {
                         <td className="py-2.5 px-3">{sub.isClinical ? (sub.components?.practicum !== undefined ? `${sub.components.practicum}%` : '—') : '—'}</td>
                         <td className="py-2.5 px-3">{sub.components?.attendance !== undefined ? `${sub.components.attendance}%` : '—'}</td>
                         <td className={`py-2.5 px-3 font-extrabold ${failsRetention(sub) ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          {sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? Number(sub.grade).toFixed(2) : '—'}
+                          {sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? <GradeValue percentage={sub.percentage}>{Number(sub.grade).toFixed(2)}</GradeValue> : '—'}
                         </td>
                         <td className="py-2.5 px-3">
                           {sub.hasRemedial

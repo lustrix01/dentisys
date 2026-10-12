@@ -28,6 +28,7 @@ import type { PersonNameParts } from '../../components/PersonNameFields';
 import type {
   StudentAcademicProfile,
 } from '../../types';
+import GradeValue from '../../components/GradeValue';
 
 export const StudentUnavailable: React.FC<{ title: string }> = ({ title }) => (
   <div className="max-w-3xl mx-auto pt-6 animate-fade-in" role="status">
@@ -319,7 +320,7 @@ export const RealStudentDashboard: React.FC = () => {
                         <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{cls.className}</td>
                         <td className="py-3 px-4 text-center font-bold">{cls.units}</td>
                         <td className="py-3 px-4 text-center font-mono font-bold">
-                          {cls.grade !== null ? cls.grade.toFixed(2) : (
+                          {cls.grade !== null ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(2)}</GradeValue> : (
                             <span className="text-slate-400 font-normal">Pending</span>
                           )}
                         </td>

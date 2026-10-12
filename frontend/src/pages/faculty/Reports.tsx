@@ -49,6 +49,7 @@ import {
   type FacultyRetentionRecord,
   type FacultyAttendanceWorksheetRosterItem,
 } from '../../services/apiClient';
+import GradeValue from '../../components/GradeValue';
 
 function csvCell(value: unknown): string {
   const text = value === null || value === undefined ? '' : String(value);
@@ -859,7 +860,7 @@ export const Reports: React.FC = () => {
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
                         <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.finalPercentage)}</td>
                         <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                          {formatCourseGrade(evaluation)}
+                          {evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)}
                         </td>
                         <td className="px-5 py-3.5">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${

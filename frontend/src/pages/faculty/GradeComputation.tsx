@@ -84,6 +84,7 @@ import type {
   PeriodCategoryDraftRow,
   PeriodComponentEvaluation
 } from '../../utils/periodGradingHelper';
+import GradeValue from '../../components/GradeValue';
 
 export interface EditorCategoryRow {
   tempId: string;
@@ -5093,7 +5094,7 @@ export const GradeComputation: React.FC = () => {
                           </td>
                           <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
                             {evalResult.overallGwa !== null ? (
-                              evalResult.overallGwa.toFixed(2)
+                              <GradeValue percentage={evalResult.overallPercentage}>{evalResult.overallGwa.toFixed(2)}</GradeValue>
                             ) : evalResult.historicalGwa !== null ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium" title="Prior persisted grade; current recomputation is incomplete">
                                 Prior: {evalResult.historicalGwa.toFixed(2)} (Historical)
@@ -5140,7 +5141,7 @@ export const GradeComputation: React.FC = () => {
                         <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
                         <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
                         <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                          {hasGrade ? subj.grade.toFixed(2) : '—'}
+                          {hasGrade ? <GradeValue percentage={evalResult.overallPercentage}>{subj.grade.toFixed(2)}</GradeValue> : '—'}
                         </td>
                         <td className="px-5 py-3">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${!hasGrade
