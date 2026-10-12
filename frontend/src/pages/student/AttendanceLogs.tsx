@@ -145,7 +145,7 @@ export const AttendanceLogs: React.FC = () => {
     <div className="space-y-6 max-w-6xl mx-auto pb-12 animate-fade-in">
 
       {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Session Attendance Logs
@@ -184,30 +184,30 @@ export const AttendanceLogs: React.FC = () => {
 
       {/* Summary metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-left">
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Total Recorded Sessions</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 break-words">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Total Recorded Sessions</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 break-words xl:break-normal">
             {totalCount}
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Attendance Rate</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words xl:break-normal">
             {attendanceRate !== null ? `${attendanceRate}%` : '—'}
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">On-Time Check-Ins</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 break-words">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">On-Time Check-Ins</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 break-words xl:break-normal">
             {presentCount}
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Late Entries</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1 break-words">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Late Entries</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1 break-words xl:break-normal">
             {lateCount}
           </span>
           {excusedCount > 0 && <span className="text-[10px] text-slate-400 block mt-0.5">{excusedCount} excused</span>}

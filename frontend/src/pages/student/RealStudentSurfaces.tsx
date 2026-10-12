@@ -58,7 +58,7 @@ export function StudentIdentityFields({ profile }: { profile?: StudentAcademicPr
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 border-b border-slate-100 dark:border-slate-800 pb-6">
         <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-extrabold text-2xl shadow-lg shadow-blue-500/20 shrink-0">{initials}</div>
         <div className="space-y-1.5 flex-1 min-w-0">
-          <h2 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 break-words">{displayName}</h2>
+          <h2 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 break-words xl:break-normal">{displayName}</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 break-all">{loginEmail}</p>
           <span className="inline-flex px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 text-[11px] font-bold">Student · {studentNum}</span>
         </div>
@@ -73,7 +73,7 @@ export function StudentIdentityFields({ profile }: { profile?: StudentAcademicPr
         ].map(([label, value]) => (
           <div key={label} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{label}</span>
-            <p className="font-bold text-slate-800 dark:text-slate-100 text-sm break-words">{value || '—'}</p>
+            <p className="font-bold text-slate-800 dark:text-slate-100 text-sm break-words xl:break-normal">{value || '—'}</p>
           </div>
         ))}
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/70 dark:border-slate-800 space-y-1">
@@ -158,7 +158,7 @@ export const RealStudentDashboard: React.FC = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {student.name}!
@@ -198,49 +198,49 @@ export const RealStudentDashboard: React.FC = () => {
           <h2 className="text-xl font-bold font-heading text-slate-800 dark:text-slate-100 mt-0.5">Academic Progress Overview</h2>
         </div>
       {/* Summary KPI Cards (Preserves nulls without converting to 0!) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-5 gap-3">
-        <Card className="p-4 flex flex-col justify-between min-w-0 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+        <Card className="p-4 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
+          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words xl:break-normal">
             Enrolled Classes
           </span>
-          <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 break-words">
+          <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 break-words xl:break-normal">
             {summary.classCount}
           </span>
         </Card>
 
-        <Card className="p-4 flex flex-col justify-between min-w-0 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words">
+        <Card className="p-4 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
+          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words xl:break-normal">
             Overall GWA
           </span>
-          <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words">
+          <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words xl:break-normal">
             {typeof summary.gwa === 'number' ? summary.gwa.toFixed(2) : '—'}
           </span>
         </Card>
 
-        <Card className="p-4 flex flex-col justify-between min-w-0 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words">
+        <Card className="p-4 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
+          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words xl:break-normal">
             Attendance Rate
           </span>
-          <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 break-words">
+          <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 break-words xl:break-normal">
             {typeof summary.attendanceRate === 'number' ? `${summary.attendanceRate}%` : '—'}
           </span>
         </Card>
 
-        <Card className="p-4 flex flex-col justify-between min-w-0 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words">
+        <Card className="p-4 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
+          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words xl:break-normal">
             Clinical Hours
           </span>
-          <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 break-words">
+          <span className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 break-words xl:break-normal">
             {summary.clinicalHoursCompleted} hrs
           </span>
         </Card>
 
-        <Card className="p-4 flex flex-col justify-between min-w-0 bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words">
+        <Card className="p-4 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
+          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words xl:break-normal">
             Retention Alerts
           </span>
           <span
-            className={`text-2xl font-extrabold block mt-1 break-words ${
+            className={`text-2xl font-extrabold block mt-1 break-words xl:break-normal ${
               summary.retentionAlerts > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'
             }`}
           >

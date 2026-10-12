@@ -420,7 +420,7 @@ export const FacultyInvitation: React.FC = () => {
             <Users className="h-5 w-5 text-accent-600" />
             <span>Invitation status</span>
           </CardTitle>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap xl:flex-nowrap gap-2">
             <select
               aria-label="Filter Faculty invitations by status"
               value={statusFilter}

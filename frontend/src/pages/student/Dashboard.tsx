@@ -110,7 +110,7 @@ export const Dashboard: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
 
       {/* 1. Clean Top Header */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {studentName}!
@@ -231,31 +231,31 @@ export const Dashboard: React.FC = () => {
             </div>
 
             {/* 4 Metric Boxes */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 2xl:grid-cols-4 gap-3 text-left">
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Attendance Rate</span>
-                <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5 break-words">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3 text-left">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
+                <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5 break-words xl:break-normal">
                   {overallAttendanceRate !== null ? `${overallAttendanceRate}%` : '—'}
                 </span>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Today Sessions</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Today Sessions</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {todaySessions.filter(s => s.timeInStatus === 'done').length} / {todaySessions.length} <span className="text-[10px] font-normal text-slate-400">done</span>
                 </span>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Face Biometrics</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Face Biometrics</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {isFaceRegistered ? 'Active ✓' : 'Pending'}
                 </span>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Enrolled Subjects</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Enrolled Subjects</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {enrolledSubjects.length}
                 </span>
               </div>

@@ -324,7 +324,7 @@ export const Dashboard: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-fade-in">
       
       {/* 1. Clean Top Header */}
-      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Welcome back, {user?.display_name || 'Faculty Member'}
@@ -379,38 +379,38 @@ export const Dashboard: React.FC = () => {
 
             {/* Consolidated Faculty Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 text-left">
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">
                   {schoolYear === 'current' ? 'Currently Assigned Classes' : schoolYear === 'all' ? 'Assigned Classes (All Years)' : `Assigned Classes (${schoolYear})`}
                 </span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words">
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {dashboardKpis?.kpis.activeClasses ?? 0}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Active Students</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Active Students</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {facultyTotalStudents}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Attendance Rate</span>
-                <span className="text-lg font-extrabold text-clinical-600 dark:text-clinical-400 block mt-0.5 break-words">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
+                <span className="text-lg font-extrabold text-clinical-600 dark:text-clinical-400 block mt-0.5 break-words xl:break-normal">
                   {(() => {
                     const rate = classAttendanceRate ?? dashboardKpis?.kpis.averageAttendance ?? null;
                     return rate === null ? 'N/A' : `${rate}%`;
                   })()}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">At-Risk Watchlist</span>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">At-Risk Watchlist</span>
                 <span className={`text-lg font-extrabold block mt-0.5 ${atRiskCount > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-100'}`}>
                   {atRiskCount}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between gap-1 min-w-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Pending Remedials</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Pending Remedials</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
                   {dashboardKpis?.kpis.remedialCount ?? 0}
                 </span>
               </div>

@@ -215,12 +215,12 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 no-print">
         {cards.map(({ label, count, icon: Icon, iconClass, surface }) => (
-          <Card key={label} className={`p-4 flex items-center justify-between gap-3 border ${surface}`}>
-            <div className="min-w-0">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 break-words">{label}</p>
+          <Card key={label} className={`p-4 flex items-center justify-between gap-3 xl:gap-0 border ${surface}`}>
+            <div className="min-w-0 xl:min-w-[auto]">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 break-words xl:break-normal">{label}</p>
               <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{count}</p>
             </div>
-            <div className={`p-2.5 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900/60 ${iconClass}`}>
+            <div className={`p-2.5 shrink-0 xl:shrink rounded-xl bg-white/70 dark:bg-slate-900/60 ${iconClass}`}>
               <Icon className="w-5 h-5" />
             </div>
           </Card>
@@ -344,14 +344,14 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
             ...(role === 'admin' ? { Reason: selected.reason || '—' } : {}),
           }).map(([label, value]) => (
             <div key={label} className={label === 'Description' || label === 'Device' || label === 'Reason' ? 'col-span-2' : ''}>
-              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 break-words">{label}</p>
-              <p className="mt-1 font-medium text-slate-700 dark:text-slate-300 break-words">{value}</p>
+              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 break-words xl:break-normal">{label}</p>
+              <p className="mt-1 font-medium text-slate-700 dark:text-slate-300 break-words xl:break-normal">{value}</p>
             </div>
           ))}
           {selected && role === 'admin' && (['Before', 'After'] as const).map(label => (
             <div key={label} className="col-span-2">
-              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 break-words">{label}</p>
-              <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-50 dark:bg-slate-900 p-2 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 break-words xl:break-normal">{label}</p>
+              <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-slate-50 dark:bg-slate-900 p-2 text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words xl:break-normal">
                 {formatState(label === 'Before' ? selected.beforeState : selected.afterState)}
               </pre>
             </div>

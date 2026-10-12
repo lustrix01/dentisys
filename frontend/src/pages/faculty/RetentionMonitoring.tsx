@@ -911,7 +911,7 @@ export const RetentionMonitoring: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 w-full md:w-auto min-w-0">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap items-stretch sm:items-center gap-2.5 w-full md:w-auto min-w-0 xl:min-w-[auto]">
           {/* School Year Selector Filter Pill (Defaults to Current School Year) */}
           <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
             <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -941,7 +941,7 @@ export const RetentionMonitoring: React.FC = () => {
               {classOptions.map(([classId, label]) => <option key={classId} value={classId}>{label}</option>)}
             </select>
           </div>
-          <div className="relative w-full sm:w-56 sm:min-w-[10rem]">
+          <div className="relative w-full sm:w-56 sm:min-w-[10rem] xl:min-w-[auto]">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" placeholder="Search..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs" />
           </div>
