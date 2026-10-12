@@ -1032,6 +1032,8 @@ Owner-approved amendment (2026-10-12): Calculations keep exact values through ev
 
 Owner decision (2026-10-12): In Single Activity View, an Auto-save toggle controls automatic saving. When it is on, a new or changed score saves when Faculty leave the field; when it is off, only the Save button saves. Full Matrix View always auto-saves the same way. Clearing a saved score is applied only by a manual Save (Save Scores Sheet or Save All Matrix Scores); until then the field is highlighted in amber and the Save button shows "(N to clear)". A save requested while another save is running runs right after it, and a manual Save stays manual. The browser warns before Faculty leave the page with unsaved or failed scores.
 
+Owner decision (2026-10-12): The Single Activity View Auto-save setting is remembered in this browser across page reloads; it starts on until Faculty change it.
+
 Owner decision (2026-10-12): In Single Activity View, switching assessment, class or course while scores are unsaved (Auto-save off, or a cleared saved score awaiting Save) asks "Discard unsaved scores?"; Cancel keeps the current assessment and its typed scores.
 
 Owner decision (2026-10-12): Changing the period or category filter so the current assessment leaves the list asks "Discard unsaved scores?" while scores are unsaved; Cancel keeps the filter. The search box never switches the assessment while scores are unsaved; the current assessment stays selected and is listed as "Current:".
