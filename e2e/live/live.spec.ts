@@ -395,9 +395,11 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   );
   await page.getByText('Enforce GPS Geofence Verification').click();
   const sessionWindow = manilaSessionWindow();
-  const openingTimeInput = page.getByLabel('Opening Time', { exact: true });
-  const presentCutoffInput = page.getByLabel('Present Cutoff', { exact: true });
-  const lateCutoffInput = page.getByLabel('Late Cutoff', { exact: true });
+  // The timing labels are not programmatically associated with their inputs; the input is the label's next sibling.
+  const timeInputAfter = (label: string) => page.getByText(label, { exact: true }).locator('xpath=following-sibling::input');
+  const openingTimeInput = timeInputAfter('Opening Time');
+  const presentCutoffInput = timeInputAfter('Present Cutoff');
+  const lateCutoffInput = timeInputAfter('Late Cutoff');
   await expect(openingTimeInput).toHaveCount(1);
   await expect(presentCutoffInput).toHaveCount(1);
   await expect(lateCutoffInput).toHaveCount(1);
@@ -493,7 +495,6 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   const classesPayload = await jsonResponse(classesRes);
   expect(classesPayload.classes.length).toBeGreaterThan(0);
   const targetClass = currentAssignedClass(classesPayload);
-  const targetCourseId = String(targetClass.courseId);
   const targetCsId = String(targetClass.id ?? targetClass.csId);
 
   // 3. Create a fresh enrolled student in this section to guarantee an unrecorded attendance row
@@ -515,24 +516,22 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
 
   // 4. Navigate directly to /attendance
   await page.goto('/attendance');
-  await page.getByRole('tab', { name: 'Roll call', exact: true }).click();
 
-  // Verify header and initial empty worksheet state
+  // Verify header and the Assigned Classes grid (the roll call opens from a class card)
   await expect(page.getByRole('main').getByRole('heading', { name: /Attendance Monitoring/i })).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText(/Please select an Assigned Course and Class Section/i)).toBeVisible();
+  await expect(page.getByText('My Assigned Classes')).toBeVisible();
+  const openWorksheet = async () => {
+    const card = page.locator('div.group').filter({ hasText: String(targetClass.courseCode) }).first();
+    await card.getByRole('button', { name: 'View Attendance', exact: true }).click();
+  };
 
   // Clear any legacy localStorage to verify Attendance Monitoring does not write to it
   await page.evaluate(() => localStorage.removeItem('dentisys_attendance'));
 
-  // 5. Select Course and Section
-  const courseSelect = page.getByLabel('Assigned course', { exact: true });
-  await courseSelect.selectOption(targetCourseId);
-
-  const sectionSelect = page.getByLabel('Class section', { exact: true });
-  await sectionSelect.selectOption(targetCsId);
+  // 5. Open the class worksheet
+  await openWorksheet();
 
   // Wait for worksheet to load from PostgreSQL
-  await expect(page.getByText(/Please select an Assigned Course and Class Section/i)).toHaveCount(0);
   const studentRow = page.locator('tbody tr').filter({ hasText: studentFullName });
   await expect(studentRow).toBeVisible();
 
@@ -569,8 +568,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   // Even if localStorage is cleared completely, state restores from PostgreSQL
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.getByLabel('Assigned course', { exact: true }).selectOption(targetCourseId);
-  await page.getByLabel('Class section', { exact: true }).selectOption(targetCsId);
+  await openWorksheet();
 
   // Verify row still displays Present from PostgreSQL
   const studentRowAfterReload = page.locator('tbody tr').filter({ hasText: studentFullName });
@@ -612,8 +610,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   // 9. Refresh browser again to confirm correction persists in PostgreSQL
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await page.getByLabel('Assigned course', { exact: true }).selectOption(targetCourseId);
-  await page.getByLabel('Class section', { exact: true }).selectOption(targetCsId);
+  await openWorksheet();
 
   const studentRowAfterCorrectionReload = page.locator('tbody tr').filter({ hasText: studentFullName });
   await expect(studentRowAfterCorrectionReload.getByTestId('attendance-status').getByText('Late', { exact: true })).toBeVisible();
@@ -694,7 +691,7 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
   // Check if categories already exist or if it's unconfigured
   await expect(page.locator('input[placeholder*="Category name"]').first()).toBeVisible();
 
-  const isUnsavedPreset = await page.getByText(/Suggested starting preset — unsaved/i).first().isVisible();
+  const isUnsavedPreset = await page.getByText(/^\s*Suggested starting preset.*unsaved\s*$/i).first().isVisible();
   const isLegacyCombinedPeriod = checkConfigData.configuration?.schemaMode === 'periods'
     && checkConfigData.configuration?.componentMode !== 'lecture_laboratory';
 
@@ -763,8 +760,8 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
     const initialNameInputs = page.locator('input[placeholder*="Category name"]');
     await expect(initialNameInputs.nth(0)).toHaveValue('Term Exam');
     await expect(page.locator('#period-component-mode')).toHaveCount(0);
-    await expect(page.getByLabel('Lecture contribution (%)')).toHaveValue('60');
-    await expect(page.getByLabel('Laboratory contribution (%)')).toHaveValue('40');
+    await expect(page.locator('#lecture-component-weight')).toHaveValue('60');
+    await expect(page.locator('#laboratory-component-weight')).toHaveValue('40');
     await expect(page.locator('#midterm-ratio-input')).toHaveValue('30');
     await expect(page.locator('#final-ratio-input')).toHaveValue('70');
 
@@ -822,7 +819,8 @@ test('authoritative faculty grade weights: load offering, configure dynamic cate
       await expect(initialNameInputs.nth(0)).toHaveValue('Term Exam');
     }
 
-    // Fill attendance date ranges
+    // Fill attendance date ranges (collapsed by default)
+    await page.getByText(/Faculty-Defined Attendance Date Ranges/).click();
     await page.locator('#midterm-start-date').fill('2026-08-01');
     await page.locator('#midterm-end-date').fill('2026-10-15');
     await page.locator('#final-start-date').fill('2026-10-20');
