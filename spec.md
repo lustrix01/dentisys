@@ -1008,6 +1008,8 @@ a separate authorized action.
 
 The complete `owhie_backend` interface is the visual and interaction baseline to migrate into `lighthal5`, supplemented by the nine-page `UI Changes.pdf`. This replaces earlier visual baselines and functional-first priorities. Scope includes every role, route, navigation item, form, table, dialog, style, asset, and responsive state, not only the illustrated screens.
 
+Owner decision (2026-10-13): Below 1280 px wide (phones, tablets and small laptops), every control, card and text MUST stay inside its box, and columns and data formats MUST match desktop: never merged, reordered or dropped. Desktop (1280 px and wider) keeps its layout. When the user has not chosen, the sidebar starts collapsed to icons on screens 768-1023 px wide; a saved open or collapsed choice wins.
+
 Delivery order is (1) copy the entire UI, (2) normalize the database to third normal form and support the UI's data, (3) connect frontend and backend and repair regressions. Tests may fail during intermediate UI migration; retain the failures as tracked work. Visual parity is not functional completion or proof of persistence.
 
 The source branch defines the interface, not automatic approval of its backend semantics. Explicit requirements below govern PDF/source differences. Unaffected authentication, permissions, privacy, history preservation, Docker/PostgreSQL, and authoritative-data rules remain in force. Unresolved behavior remains OPEN.
@@ -1015,6 +1017,8 @@ The source branch defines the interface, not automatic approval of its backend s
 ## UI-002 - Score entry, deadlines, and weights (PDF pages 1-3)
 
 Provide Single Activity View and Full Matrix View, including course/class filters, for entering one activity or multiple student/activity scores. Both ultimately use the same authoritative score records.
+
+Owner decision (2026-10-13): Below 1280 px wide, Full Matrix View shows a Pin switch (Full Name, or ID Number + Full Name; default Full Name) that keeps the chosen student columns at the left edge while the matrix scrolls sideways. ID Number and Full Name stay separate columns. At 1280 px and wider the switch is hidden and the matrix is unchanged.
 
 Allow a blank due date for activities without a deadline. The Owner clarified on 2026-09-24 that activity due dates MAY overlap, including multiple activities in one class and activities across classes, Faculty, and courses. This corrects the PDF's no-overlap instruction; no collision restriction or uniqueness constraint applies to due dates. A blank due date is allowed; GRD-001's optional attendance link is unaffected.
 
