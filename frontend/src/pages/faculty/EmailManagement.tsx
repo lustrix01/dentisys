@@ -384,7 +384,7 @@ export const EmailManagement: React.FC = () => {
       {/* 2. Control Bar: Tabs & Pill Filter Dropdowns Below */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         {/* Tabs Navigation */}
-        <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit overflow-x-auto">
+        <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit max-w-full overflow-x-auto">
           <button
             onClick={() => { setTab('student_invites'); setSelected([]); }}
             className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
@@ -421,7 +421,7 @@ export const EmailManagement: React.FC = () => {
         </div>
 
         {/* Filters & Search Bar Positioned Below */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full lg:w-auto">
+        <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2.5 w-full xl:w-auto">
           {/* Class Section Filter Dropdown */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 shadow-xs hover:border-emerald-500 transition-colors">
             <select
@@ -453,7 +453,7 @@ export const EmailManagement: React.FC = () => {
           </div>
 
           {/* Search Bar */}
-          <div className="relative w-full sm:w-56">
+          <div className="relative w-full xl:w-56">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"

@@ -145,7 +145,7 @@ export const AttendanceLogs: React.FC = () => {
     <div className="space-y-6 max-w-6xl mx-auto pb-12 animate-fade-in">
 
       {/* 1. Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Session Attendance Logs
@@ -183,31 +183,31 @@ export const AttendanceLogs: React.FC = () => {
       )}
 
       {/* Summary metric cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-left">
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Recorded Sessions</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-left">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Total Recorded Sessions</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 break-words">
             {totalCount}
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Attendance Rate</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words">
             {attendanceRate !== null ? `${attendanceRate}%` : '—'}
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">On-Time Check-Ins</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">On-Time Check-Ins</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 break-words">
             {presentCount}
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Late Entries</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1">
+        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Late Entries</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1 break-words">
             {lateCount}
           </span>
           {excusedCount > 0 && <span className="text-[10px] text-slate-400 block mt-0.5">{excusedCount} excused</span>}
@@ -215,8 +215,8 @@ export const AttendanceLogs: React.FC = () => {
       </div>
 
       {/* Search & Filter Controls */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full sm:w-80">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col lg:flex-row gap-3 lg:items-center justify-between">
+        <div className="relative w-full lg:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -227,7 +227,7 @@ export const AttendanceLogs: React.FC = () => {
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
           <div className="flex items-center gap-1.5 text-xs text-slate-500">
             <Filter className="w-3.5 h-3.5" />
             <span className="text-[11px] font-bold uppercase tracking-wider">Filter:</span>

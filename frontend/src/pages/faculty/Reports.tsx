@@ -665,9 +665,9 @@ export const Reports: React.FC = () => {
       </div>
 
       {/* Unified Course, Class, and School Year Selector Bar */}
-      <Card className="p-4 flex flex-col md:flex-row gap-4 items-center no-print">
+      <Card className="p-4 flex flex-col xl:flex-row gap-4 xl:items-center no-print">
         {/* School Year Filter */}
-        <div className="w-full md:w-52">
+        <div className="w-full xl:w-52">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
             <CalendarDays className="w-3 h-3 text-clinical-600" />
             School Year
@@ -687,7 +687,7 @@ export const Reports: React.FC = () => {
         </div>
 
         {/* Active Course */}
-        <div className="w-full md:flex-1">
+        <div className="w-full xl:flex-1">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
             value={selectedSubjectCode}
@@ -716,7 +716,7 @@ export const Reports: React.FC = () => {
         </div>
 
         {/* Active Section / Class */}
-        <div className="w-full md:w-56">
+        <div className="w-full xl:w-56">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
           <select
             value={selectedClassId}
@@ -737,10 +737,10 @@ export const Reports: React.FC = () => {
       </Card>
 
       {/* Navigation Sub-Tabs Bar - Consistent with other faculty portals */}
-      <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm no-print">
+      <div className="flex flex-wrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm no-print">
         <button
           onClick={() => setReportTab('academic')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             reportTab === 'academic' 
               ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
               : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -751,7 +751,7 @@ export const Reports: React.FC = () => {
 </button>
         <button
           onClick={() => setReportTab('retention')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             reportTab === 'retention' 
               ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
               : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -762,7 +762,7 @@ export const Reports: React.FC = () => {
         </button>
         <button
           onClick={() => setReportTab('attendance')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             reportTab === 'attendance' 
               ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
               : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -773,7 +773,7 @@ export const Reports: React.FC = () => {
         </button>
         <button
           onClick={() => setReportTab('analytics')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
             reportTab === 'analytics' 
               ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' 
               : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'

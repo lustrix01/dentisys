@@ -3003,8 +3003,8 @@ export const GradeComputation: React.FC = () => {
       </div>
 
       {/* Unified Class and Course Selector Bar for All Tabs */}
-      <Card className="p-4 flex flex-col md:flex-row gap-4 items-center">
-        <div className="w-full md:flex-1">
+      <Card className="p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
+        <div className="w-full xl:flex-1">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
             value={selectedSubjectCode}
@@ -3029,7 +3029,7 @@ export const GradeComputation: React.FC = () => {
                 setSelectedClassId('');
               }
             }}
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
+            className="w-full px-2 sm:px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500"
           >
             {activeCourses.length === 0 ? (
               <option value="">No active courses for current school year</option>
@@ -3043,7 +3043,7 @@ export const GradeComputation: React.FC = () => {
           </select>
         </div>
 
-        <div className="w-full md:w-56">
+        <div className="w-full xl:w-56">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
           <select
             value={selectedClassId}
@@ -3073,10 +3073,10 @@ export const GradeComputation: React.FC = () => {
       </Card>
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
+      <div className="flex flex-wrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
         <button
           onClick={() => setActiveSubTab('scores')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <ClipboardCheck className="w-4 h-4" />
@@ -3084,7 +3084,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('assessments')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'assessments' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <FileText className="w-4 h-4" />
@@ -3092,7 +3092,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('components')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'components' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Settings className="w-4 h-4" />
@@ -3100,7 +3100,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('summaries')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'summaries' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Printer className="w-4 h-4" />
@@ -3108,7 +3108,7 @@ export const GradeComputation: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveSubTab('import')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+          className={`flex-1 min-w-[10.5rem] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'import' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
             }`}
         >
           <Upload className="w-4 h-4" />
@@ -3253,7 +3253,7 @@ export const GradeComputation: React.FC = () => {
                         </div>
 
                         {/* Search & Category Row */}
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-2">
                           <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                             <input
@@ -3422,7 +3422,7 @@ export const GradeComputation: React.FC = () => {
                       <p className="text-[10px] text-slate-400 mt-0.5">Use Enter / Down / Up arrow keys to quickly navigate between student score boxes.</p>
                     </div>
 
-                    <div className="relative w-full sm:w-56">
+                    <div className="relative w-full sm:w-56 sm:shrink-0">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                       <input
                         type="text"

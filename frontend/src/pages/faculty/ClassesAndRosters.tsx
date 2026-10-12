@@ -1238,11 +1238,11 @@ export const ClassesAndRosters: React.FC = () => {
         </div>
 
         {/* Filters & Search Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full xl:w-auto xl:max-w-3xl">
+        <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2.5 w-full xl:w-auto xl:max-w-3xl">
           {/* Dropdowns Wrapper */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1">
+          <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2 flex-1">
             {/* Class Section Filter Dropdown Pill */}
-            <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs flex-1 hover:border-emerald-500 transition-colors">
+            <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs flex-1 xl:min-w-[12rem] hover:border-emerald-500 transition-colors">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <BookMarked className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <select
@@ -1259,7 +1259,7 @@ export const ClassesAndRosters: React.FC = () => {
             </div>
 
             {/* School Year Selector Filter Pill */}
-            <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs flex-1 hover:border-emerald-500 transition-colors">
+            <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs flex-1 xl:min-w-[12rem] hover:border-emerald-500 transition-colors">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <select
@@ -1277,7 +1277,7 @@ export const ClassesAndRosters: React.FC = () => {
           </div>
 
           {/* Search Input Pill */}
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full xl:w-64">
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"

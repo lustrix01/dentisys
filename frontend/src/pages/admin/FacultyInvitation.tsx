@@ -309,8 +309,8 @@ export const FacultyInvitation: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <form onSubmit={handleCreateInvitation} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
                 Prefix
                 <select
                   value={prefix}
@@ -323,7 +323,7 @@ export const FacultyInvitation: React.FC = () => {
                 </select>
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-3">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
                 First name *
                 <input
                   required
@@ -334,7 +334,7 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
                 Middle name
                 <input
                   value={middleName}
@@ -344,7 +344,7 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-3">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
                 Last name *
                 <input
                   required
@@ -355,7 +355,7 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-2">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-2">
                 Suffix
                 <input
                   value={suffix}
@@ -366,8 +366,8 @@ export const FacultyInvitation: React.FC = () => {
               </label>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-            <div className="space-y-1 sm:col-span-9">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+            <div className="space-y-1 lg:col-span-9">
               <label htmlFor="admin-faculty-create-email" className="text-xs font-bold text-slate-700 dark:text-slate-300">
                 Institutional email *
               </label>
@@ -399,7 +399,7 @@ export const FacultyInvitation: React.FC = () => {
               </datalist>
             </div>
 
-            <div className="sm:col-span-3 self-end pb-[18px]">
+            <div className="lg:col-span-3 self-end pb-[18px]">
               <button
                 type="submit"
                 disabled={sending}
@@ -420,7 +420,7 @@ export const FacultyInvitation: React.FC = () => {
             <Users className="h-5 w-5 text-accent-600" />
             <span>Invitation status</span>
           </CardTitle>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <select
               aria-label="Filter Faculty invitations by status"
               value={statusFilter}
@@ -434,7 +434,7 @@ export const FacultyInvitation: React.FC = () => {
               <option value="Accepted">Accepted</option>
               <option value="Not invited">Not invited</option>
             </select>
-            <div className="relative w-full sm:w-64">
+            <div className="relative min-w-[10rem] flex-1 sm:w-64 sm:flex-none">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 aria-label="Search Faculty invitations"
@@ -553,8 +553,8 @@ export const FacultyInvitation: React.FC = () => {
                 <p className="text-[11px] text-slate-400">This legacy invitation has one stored display name. It is kept intact; name parts are not guessed.</p>
               </div>
             ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-3">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-3">
                 Prefix
                 <select
                   value={editPrefix}
@@ -567,7 +567,7 @@ export const FacultyInvitation: React.FC = () => {
                 </select>
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-4">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-4">
                 First name *
                 <input
                   required
@@ -577,7 +577,7 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-5">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-5">
                 Middle name
                 <input
                   value={editMiddleName}
@@ -586,7 +586,7 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-8">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-8">
                 Last name *
                 <input
                   required
@@ -596,7 +596,7 @@ export const FacultyInvitation: React.FC = () => {
                 />
               </label>
 
-              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 sm:col-span-4">
+              <label className="space-y-1 text-xs font-bold text-slate-700 dark:text-slate-300 lg:col-span-4">
                 Suffix
                 <input
                   value={editSuffix}

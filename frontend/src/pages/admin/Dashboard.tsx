@@ -128,34 +128,34 @@ export const Dashboard: React.FC = () => {
             </div>
 
             {/* Consolidated Admin Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-left">
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Faculty</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 text-left">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Total Faculty</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words">
                   {totalFaculty}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Students</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Total Students</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words">
                   {totalStudents}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Good Standing</span>
-                <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 block mt-0.5">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Good Standing</span>
+                <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 block mt-0.5 break-words">
                   {goodStanding}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">At-Risk Count</span>
-                <span className="text-lg font-extrabold text-amber-600 dark:text-amber-400 block mt-0.5">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">At-Risk Count</span>
+                <span className="text-lg font-extrabold text-amber-600 dark:text-amber-400 block mt-0.5 break-words">
                   {atRisk}
                 </span>
               </div>
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
-                <span className="text-lg font-extrabold text-accent-600 dark:text-accent-400 block mt-0.5">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between gap-1 min-w-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words">Attendance Rate</span>
+                <span className="text-lg font-extrabold text-accent-600 dark:text-accent-400 block mt-0.5 break-words">
                   {typeof attendanceRate === 'number' ? `${attendanceRate}%` : '—'}
                 </span>
               </div>
