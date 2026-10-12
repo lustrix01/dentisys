@@ -99,3 +99,80 @@ test('grading matrix groups assessments by period and category and shows server 
   await expect(row).toContainText('10.00');
   expect(previewRequests).toBeGreaterThan(0);
 });
+
+async function mockMatrixClass(page: import('@playwright/test').Page, scores: Record<string, number>) {
+  const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route('**/api/auth/login', route => route.fulfill(json({ type: 'direct_login', access_token: 'mock-faculty-token' })));
+  await page.route('**/api/auth/me', route => route.fulfill(json({ id: 200, login_email: 'faculty@bicol-u.edu.ph', display_name: 'Prof. Jane Doe', role: 'faculty' })));
+  await page.route('**/api/faculty/classes', route => route.fulfill(json({ status: 'ok', classes: [
+    { id: '7', csId: 7, csName: 'CLINIC-4A', courseId: 7, courseCode: 'CLIN401', courseName: 'Clinical Dentistry I', semester: '1ST', schoolYear: '2026-2027', isCurrentSchoolYear: true, status: 'Active' },
+  ] })));
+  await page.route('**/api/faculty/students', route => route.fulfill(json([
+    { id: '24', studentId: '2023-5510', name: 'Owhie Santillan Lumbang', email: 'owhie@bicol-u.edu.ph', yearLevel: 4, status: 'active',
+      classSections: [{ classId: '7', className: 'CLINIC-4A', enrollmentId: '24' }],
+      enrolledSubjects: [{ code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, isClinical: true, components: { quizzes: 0, exams: 0, practicum: 0, attendance: 0 }, grade: 0, hasRemedial: false, classId: '7', enrollmentId: '24' }] },
+  ])));
+  await page.route('**/api/faculty/assessments', route => route.fulfill(json(['lo-1', 'lo-2'].map((id, i) => (
+    { id, title: `LO ${i + 1}`, type: 'Quiz', subjectCode: 'CLIN401', classId: '7', gradingPeriod: 'Midterm', gradingCategoryId: 71, maxScore: 50, status: 'Active', dueDate: '2026-08-20', createdAt: '2026-08-10' }
+  )))));
+  await page.route('**/api/faculty/scores**', async (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as { batches?: Array<{ assessmentId: string; scores: Array<{ score: number | null }> }>; assessmentId: string; scores: Array<{ score: number | null }> };
+      const batches = body.batches ?? [body];
+      batches.forEach(batch => { if (batch.scores[0].score !== null) scores[batch.assessmentId] = batch.scores[0].score; });
+      await route.fulfill(json({ status: 'ok', savedCount: batches.length }));
+      return;
+    }
+    const assessmentId = new URL(route.request().url()).searchParams.get('assessmentId') || '';
+    await route.fulfill(json({ status: 'ok', assessmentId, scores: assessmentId in scores
+      ? [{ id: `s-${assessmentId}`, studentId: '24', score: scores[assessmentId], remarks: '', submittedAt: '2026-09-15T00:00:00Z' }] : [] }));
+  });
+  await page.route('**/api/faculty/grading-config?*', route => route.fulfill(json({ status: 'ok', configuration: {
+    id: 'cfg-7', course: { id: 7, code: 'CLIN401', name: 'Clinical Dentistry I' }, semester: '1ST', schoolYear: '2026-2027', version: 1,
+    schemaMode: 'periods', termRatio: { midterm: 40, final: 60 }, categories: [],
+    midtermCategories: [{ id: 71, name: 'Learning Outputs', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment' }],
+    finalCategories: [],
+  } })));
+  await page.route('**/api/faculty/grades/compute', route => route.fulfill(json({ status: 'ok', preview: true, results: [] })));
+  await page.goto('/login');
+  await page.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
+  await page.fill('input[type="password"]', 'Password123!');
+  await page.click('button[type="submit"]');
+  await expect(page).toHaveURL('/');
+  await page.goto('/grades');
+  await page.getByRole('button', { name: 'Student Scores Entry' }).click();
+}
+
+test('single activity auto-save toggle is remembered across reloads', async ({ page }) => {
+  await mockMatrixClass(page, {});
+  const toggle = page.getByLabel('Enable Auto-Save on score input blur');
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await page.reload();
+  await page.getByRole('button', { name: 'Student Scores Entry' }).click();
+  await expect(page.getByLabel('Enable Auto-Save on score input blur')).not.toBeChecked();
+  await page.getByLabel('Enable Auto-Save on score input blur').check();
+  await page.reload();
+  await page.getByRole('button', { name: 'Student Scores Entry' }).click();
+  await expect(page.getByLabel('Enable Auto-Save on score input blur')).toBeChecked();
+});
+
+test('matrix keeps an invalid typed cell while other cells refresh from the server', async ({ page }) => {
+  const scores: Record<string, number> = {};
+  await mockMatrixClass(page, scores);
+  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  const lo1 = page.getByLabel('LO 1 score for Owhie Santillan Lumbang');
+  const lo2 = page.getByLabel('LO 2 score for Owhie Santillan Lumbang');
+  await lo2.fill('99');
+  await lo2.blur();
+  await expect(lo2).toHaveValue('99');
+  // A server score change from the Single Activity View (auto-saved) must reach the grid while LO 2 stays red.
+  await page.getByRole('button', { name: 'Single Activity View' }).click();
+  const single = page.getByRole('spinbutton').nth(0);
+  await single.fill('30');
+  await single.blur();
+  await expect.poll(() => scores['lo-1']).toBe(30);
+  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  await expect(lo1).toHaveValue('30');
+  await expect(lo2).toHaveValue('99');
+});

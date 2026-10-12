@@ -1027,7 +1027,13 @@ export const GradeComputation: React.FC = () => {
   const [scoreSearch, setScoreSearch] = useState('');
   const [scoresInputState, setScoresInputState] = useState<Record<string, { score: string; remarks: string }>>({});
   const [isScoresSavedAlert, setIsScoresSavedAlert] = useState(false);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('dentisys_grading_autosave') !== 'false';
+    } catch {
+      return true;
+    }
+  });
 
   // Auto-save status states
   const [singleSaveStatus, setSingleSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
@@ -1058,6 +1064,7 @@ export const GradeComputation: React.FC = () => {
     return () => window.removeEventListener('beforeunload', warnUnsaved);
   }, []);
   const matrixScoresRef = useRef<Record<string, Record<string, string>>>({});
+  const matrixBaselineRef = useRef<Record<string, Record<string, string>>>({});
 
   const availableActivityTypes = useMemo(() => {
     const types = new Set<string>();
@@ -1289,34 +1296,34 @@ export const GradeComputation: React.FC = () => {
 
   // Initialize Matrix Scores State whenever activeAssessments, activeStudents, or assessmentScores change
   useEffect(() => {
-    if (matrixDirtyRef.current && matrixPendingClearRef.current.size === 0) return;
+    const server: Record<string, Record<string, string>> = {};
     const matrix: Record<string, Record<string, string>> = {};
+    const keep = new Set<string>();
+    let dirty = false;
     activeStudents.forEach(student => {
+      server[student.id] = {};
       matrix[student.id] = {};
       activeAssessments.forEach(ass => {
         const match = assessmentScores.find(s => s.assessmentId === ass.id && s.studentId === student.id);
-        matrix[student.id][ass.id] = match ? match.score.toString() : '';
+        const serverValue = match ? match.score.toString() : '';
+        server[student.id][ass.id] = serverValue;
+        matrix[student.id][ass.id] = serverValue;
+        // A local value that differs from the last server baseline is an unsaved edit: keep it.
+        const local = matrixScoresRef.current[student.id]?.[ass.id];
+        const base = matrixBaselineRef.current[student.id]?.[ass.id];
+        if (local !== undefined && base !== undefined && local !== base) {
+          matrix[student.id][ass.id] = local;
+          // "5.0" saved as 5 is not an unsaved change.
+          if (local !== serverValue && !(local !== '' && serverValue !== '' && Number(local) === Number(serverValue))) dirty = true;
+          if (local === '' && serverValue !== '') keep.add(`${student.id}|${ass.id}`);
+        }
       });
     });
-    // Same grid with a pending clear: keep the current inputs so in-progress typing is not lost.
-    if (matrixPendingClearRef.current.size > 0
-      && activeStudents.every(student => activeAssessments.every(ass => ass.id in (matrixScoresRef.current[student.id] || {})))) {
-      setMatrixScoresState({ ...matrixScoresRef.current });
-      matrixDirtyRef.current = true;
-      return;
-    }
-    const keep = new Set<string>();
-    matrixPendingClearRef.current.forEach(key => {
-      const [studentId, assessmentId] = key.split('|');
-      if (matrix[studentId]?.[assessmentId] && matrixScoresRef.current[studentId]?.[assessmentId] === '') {
-        matrix[studentId][assessmentId] = '';
-        keep.add(key);
-      }
-    });
+    matrixBaselineRef.current = server;
     matrixPendingClearRef.current = keep;
     setMatrixScoresState(matrix);
     matrixScoresRef.current = matrix;
-    matrixDirtyRef.current = keep.size > 0;
+    matrixDirtyRef.current = dirty;
     setMatrixSaveStatus('saved');
   }, [activeStudents, activeAssessments, assessmentScores]);
 
@@ -3354,7 +3361,12 @@ export const GradeComputation: React.FC = () => {
                         type="checkbox"
                         id="autosave"
                         checked={autoSaveEnabled}
-                        onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+                        onChange={(e) => {
+                          setAutoSaveEnabled(e.target.checked);
+                          try {
+                            localStorage.setItem('dentisys_grading_autosave', String(e.target.checked));
+                          } catch {}
+                        }}
                         className="rounded border-slate-300 text-clinical-600 focus:ring-clinical-500"
                       />
                       <label htmlFor="autosave" className="text-xs text-slate-555 font-semibold">
