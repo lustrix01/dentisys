@@ -115,3 +115,24 @@ export const computeOverallGWA = (subjects: EnrolledSubject[]): number => {
 
   return totalUnits > 0 ? Math.round((weightedGradeSum / totalUnits) * 100) / 100 : 3.0;
 };
+
+// Single Activity view filter predicate, shared by the assessment list and the filter-change guard.
+export const matchesActivityFilters = (
+  a: Pick<Assessment, 'type' | 'title'> & Partial<Pick<Assessment, 'gradingPeriod'>>,
+  period: 'all' | 'Midterm' | 'Final',
+  type: string,
+  search: string,
+): boolean => {
+  if (period !== 'all' && (a.gradingPeriod ?? 'Midterm') !== period) return false;
+  if (type !== 'all' && (a.type || '').trim() !== type) return false;
+  const q = search.toLowerCase().trim();
+  if (q && !(a.title || '').toLowerCase().includes(q) && !(a.type || '').toLowerCase().includes(q)) return false;
+  return true;
+};
+
+// Save-status chip label for the Single Activity view.
+export const saveStatusBadge = (status: string, unsaved: boolean): { kind: 'saving' | 'error' | 'unsaved' | 'saved'; label: string } =>
+  status === 'saving' ? { kind: 'saving', label: 'Saving...' }
+    : status === 'error' ? { kind: 'error', label: 'Save failed' }
+    : unsaved ? { kind: 'unsaved', label: 'Unsaved changes' }
+    : { kind: 'saved', label: 'All changes saved' };

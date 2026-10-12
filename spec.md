@@ -1034,6 +1034,12 @@ Owner decision (2026-10-12): In Single Activity View, an Auto-save toggle contro
 
 Owner decision (2026-10-12): In Single Activity View, switching assessment, class or course while scores are unsaved (Auto-save off, or a cleared saved score awaiting Save) asks "Discard unsaved scores?"; Cancel keeps the current assessment and its typed scores.
 
+Owner decision (2026-10-12): Changing the period or category filter so the current assessment leaves the list asks "Discard unsaved scores?" while scores are unsaved; Cancel keeps the filter. The search box never switches the assessment while scores are unsaved; the current assessment stays selected and is listed as "Current:".
+
+Owner decision (2026-10-12): The save chip next to Save Scores Sheet and Save All Matrix Scores shows the save state: "Saving...", "Save failed", "Unsaved changes" or "All changes saved".
+
+Owner decision (2026-10-12): In Single Activity View and Full Matrix View, auto-save saves every valid score and holds back only scores that are negative or over the assessment maximum; those stay red and unsaved until fixed. A manual Save still refuses while any score is invalid.
+
 ## UI-004 - Email and invitations (PDF pages 5, 7-8)
 
 All email-entry controls default to `@bicol-u.edu.ph`, allowing local-part-only entry. Complete existing addresses and other server-allowed domains remain supported under AUTH-004. Preserve addresses and prevent duplicated suffixes; this default does not impose a single-domain restriction.

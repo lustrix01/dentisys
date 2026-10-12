@@ -78,7 +78,7 @@ import {
   generateGradeSummaryCSV,
   isPeriodComputeResult
 } from '../../utils/periodGradingHelper';
-import { percentageToGWAExact } from '../../utils/gradeHelper';
+import { percentageToGWAExact, matchesActivityFilters, saveStatusBadge } from '../../utils/gradeHelper';
 import type {
   PeriodDraftState,
   PeriodCategoryDraftRow,
@@ -1078,26 +1078,13 @@ export const GradeComputation: React.FC = () => {
   }, [activeAssessments]);
 
   const singleActivityFilteredAssessments = useMemo(() => {
-    return activeAssessments.filter(a => {
-      if (activityFilterPeriod !== 'all') {
-        const period = a.gradingPeriod ?? 'Midterm';
-        if (period !== activityFilterPeriod) return false;
-      }
-      if (activityFilterType !== 'all') {
-        if ((a.type || '').trim() !== activityFilterType) return false;
-      }
-      if (activityFilterSearch.trim()) {
-        const q = activityFilterSearch.toLowerCase().trim();
-        const matchTitle = (a.title || '').toLowerCase().includes(q);
-        const matchType = (a.type || '').toLowerCase().includes(q);
-        if (!matchTitle && !matchType) return false;
-      }
-      return true;
-    });
+    return activeAssessments.filter(a => matchesActivityFilters(a, activityFilterPeriod, activityFilterType, activityFilterSearch));
   }, [activeAssessments, activityFilterPeriod, activityFilterType, activityFilterSearch]);
 
   // Set default assessment when subject/class or filter changes
   useEffect(() => {
+    // Never switch away from a sheet with unsaved scores (e.g. while typing in the search box).
+    if (hasUnsavedSingleScores()) return;
     if (singleActivityFilteredAssessments.length > 0) {
       if (!singleActivityFilteredAssessments.some(a => a.id === selectedAssessmentId)) {
         setSelectedAssessmentId(singleActivityFilteredAssessments[0].id);
@@ -1124,7 +1111,9 @@ export const GradeComputation: React.FC = () => {
     });
     const pending = singlePendingClearRef.current;
     // Same sheet with a pending clear: keep the current inputs so in-progress typing is not lost.
-    if (pending.assessmentId === selectedAssessmentId && pending.ids.size > 0
+    // Likewise while an invalid score is still typed (held back by auto-save).
+    if (pending.assessmentId === selectedAssessmentId
+      && (pending.ids.size > 0 || hasInvalidSingleScore())
       && activeStudents.every(student => student.id in singleScoresRef.current)) {
       setScoresInputState({ ...singleScoresRef.current });
       singleDirtyRef.current = true;
@@ -1171,7 +1160,7 @@ export const GradeComputation: React.FC = () => {
       return;
     }
 
-    let hasErrors = false;
+    let invalidCount = 0;
     const saveList: FacultyScoreEntry[] = [];
     const cleared = new Set<string>();
     const currentScores = singleScoresRef.current;
@@ -1187,7 +1176,7 @@ export const GradeComputation: React.FC = () => {
 
       const num = parseFloat(val.score);
       if (isNaN(num) || num < 0 || num > activeAssessment.maxScore) {
-        hasErrors = true;
+        invalidCount++;
       } else {
         saveList.push({
           studentId,
@@ -1197,16 +1186,15 @@ export const GradeComputation: React.FC = () => {
       }
     });
 
-    if (hasErrors) {
-      if (isManual) {
-        showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
-      }
+    // Auto-save skips invalid scores (kept as typed, dirty stays true); manual save refuses outright.
+    if (invalidCount > 0 && isManual) {
+      showFeedback('Some scores are invalid. Scores cannot exceed the assessment maximum.', 'error');
       return;
     }
 
     if (saveList.length === 0) {
       singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: cleared };
-      singleDirtyRef.current = cleared.size > 0;
+      singleDirtyRef.current = cleared.size > 0 || invalidCount > 0;
       return;
     }
 
@@ -1223,9 +1211,9 @@ export const GradeComputation: React.FC = () => {
       singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: cleared };
       saveAssessmentScores(selectedAssessmentId, saveList);
       await refreshPersistedGrades(activeAssessment.classId);
-      singleDirtyRef.current = cleared.size > 0;
+      singleDirtyRef.current = cleared.size > 0 || invalidCount > 0;
       setSingleSaveStatus('saved');
-      setIsScoresSavedAlert(true);
+      setIsScoresSavedAlert(invalidCount === 0);
       if (isManual) {
         showFeedback(`Saved ${saveList.filter(e => e.score !== null).length} scores successfully!`, 'success');
       }
@@ -1257,10 +1245,30 @@ export const GradeComputation: React.FC = () => {
   };
 
   // Cleared saved scores wait for manual Save, so they count as unsaved even with Auto-save on.
+  function hasInvalidSingleScore(): boolean {
+    if (!activeAssessment) return false;
+    return Object.values(singleScoresRef.current).some(v => !validateSingleScore(v.score, activeAssessment.maxScore));
+  }
+
+  function hasUnsavedSingleScores(): boolean {
+    return (!autoSaveEnabled && singleDirtyRef.current) || singlePendingClearRef.current.ids.size > 0 || hasInvalidSingleScore();
+  }
+
   const confirmDiscardUnsavedScores = async (): Promise<boolean> => {
-    const unsaved = (!autoSaveEnabled && singleDirtyRef.current) || singlePendingClearRef.current.ids.size > 0;
-    if (!unsaved) return true;
+    if (!hasUnsavedSingleScores()) return true;
     return requestConfirmation('You have unsaved scores for this assessment. Switching will discard them. Continue?', 'Discard unsaved scores?');
+  };
+
+  // Period/category change: ask only when the current assessment would drop out of the list.
+  const changeActivityFilter = async (period: 'all' | 'Midterm' | 'Final', type: string) => {
+    if (activeAssessment && !matchesActivityFilters(activeAssessment, period, type, activityFilterSearch)) {
+      if (!await confirmDiscardUnsavedScores()) return;
+      // Discarded: drop the unsaved state so the auto-select effect may switch assessments.
+      singleDirtyRef.current = false;
+      singlePendingClearRef.current = { assessmentId: '', ids: new Set() };
+    }
+    setActivityFilterPeriod(period);
+    setActivityFilterType(type);
   };
 
   const handleScoreBlur = async (_studentId: string) => {
@@ -1335,7 +1343,7 @@ export const GradeComputation: React.FC = () => {
       return;
     }
 
-    let hasErrors = false;
+    let invalidCount = 0;
     let saveCount = 0;
     let clearedCount = 0;
     const cleared = new Set<string>();
@@ -1360,7 +1368,7 @@ export const GradeComputation: React.FC = () => {
         }
         const num = parseFloat(valStr);
         if (isNaN(num) || num < 0 || num > ass.maxScore) {
-          hasErrors = true;
+          invalidCount++;
         } else {
           scores.push({ studentId: student.id, score: num, remarks: existingMatch?.remarks || '' });
           saveCount++;
@@ -1369,10 +1377,9 @@ export const GradeComputation: React.FC = () => {
       if (scores.length > 0) batches.push({ assessmentId: ass.id, scores });
     }
 
-    if (hasErrors) {
-      if (isManual) {
-        showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
-      }
+    // Auto-save skips invalid cells (kept as typed, dirty stays true); manual save refuses outright.
+    if (invalidCount > 0 && isManual) {
+      showFeedback('Some scores in the matrix are invalid (exceed max score or negative).', 'error');
       return;
     }
     if (batches.length === 0) {
@@ -1380,7 +1387,7 @@ export const GradeComputation: React.FC = () => {
         showFeedback('There are no scores to save.', 'info');
       }
       matrixPendingClearRef.current = cleared;
-      matrixDirtyRef.current = cleared.size > 0;
+      matrixDirtyRef.current = cleared.size > 0 || invalidCount > 0;
       return;
     }
 
@@ -1402,9 +1409,9 @@ export const GradeComputation: React.FC = () => {
         await refreshPersistedGrades(targetClassId);
       }
       setMatrixRefreshKey(key => key + 1);
-      matrixDirtyRef.current = cleared.size > 0;
+      matrixDirtyRef.current = cleared.size > 0 || invalidCount > 0;
       setMatrixSaveStatus('saved');
-      setIsMatrixSavedAlert(true);
+      setIsMatrixSavedAlert(invalidCount === 0);
       if (isManual) {
         showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
       }
@@ -3110,17 +3117,13 @@ export const GradeComputation: React.FC = () => {
 
                 <div className="flex items-center gap-2.5">
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-                    {matrixSaveStatus === 'saving' ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
-                        <span className="text-clinical-600 dark:text-clinical-400">Auto-saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span className="text-emerald-700 dark:text-emerald-400">Auto-save on</span>
-                      </>
-                    )}
+                    {(() => {
+                      const badge = saveStatusBadge(matrixSaveStatus, matrixDirtyRef.current || matrixPendingClearRef.current.size > 0);
+                      if (badge.kind === 'saving') return (<><RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" /><span className="text-clinical-600 dark:text-clinical-400">{badge.label}</span></>);
+                      if (badge.kind === 'error') return (<><AlertCircle className="w-3.5 h-3.5 text-rose-600" /><span className="text-rose-700 dark:text-rose-400">{badge.label}</span></>);
+                      if (badge.kind === 'unsaved') return (<><AlertTriangle className="w-3.5 h-3.5 text-amber-600" /><span className="text-amber-700 dark:text-amber-400">{badge.label}</span></>);
+                      return (<><Check className="w-3.5 h-3.5 text-emerald-600" /><span className="text-emerald-700 dark:text-emerald-400">{badge.label}</span></>);
+                    })()}
                   </div>
                   <button
                     onClick={handleSaveMatrixScores}
@@ -3172,7 +3175,7 @@ export const GradeComputation: React.FC = () => {
                         <div className="flex items-center gap-1 bg-slate-200/60 dark:bg-slate-800 p-0.5 rounded-lg">
                           <button
                             type="button"
-                            onClick={() => setActivityFilterPeriod('all')}
+                            onClick={() => changeActivityFilter('all', activityFilterType)}
                             className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
                               activityFilterPeriod === 'all'
                                 ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
@@ -3183,7 +3186,7 @@ export const GradeComputation: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setActivityFilterPeriod('Midterm')}
+                            onClick={() => changeActivityFilter('Midterm', activityFilterType)}
                             className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
                               activityFilterPeriod === 'Midterm'
                                 ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
@@ -3194,7 +3197,7 @@ export const GradeComputation: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setActivityFilterPeriod('Final')}
+                            onClick={() => changeActivityFilter('Final', activityFilterType)}
                             className={`flex-1 py-1 text-center rounded-md text-[11px] font-bold transition-all ${
                               activityFilterPeriod === 'Final'
                                 ? 'bg-white dark:bg-slate-900 text-clinical-600 dark:text-clinical-400 shadow-2xs'
@@ -3229,7 +3232,7 @@ export const GradeComputation: React.FC = () => {
 
                           <select
                             value={activityFilterType}
-                            onChange={(e) => setActivityFilterType(e.target.value)}
+                            onChange={(e) => changeActivityFilter(activityFilterPeriod, e.target.value)}
                             className="w-full px-2 py-1.5 rounded-lg border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
                             <option value="all">All Categories</option>
@@ -3280,6 +3283,12 @@ export const GradeComputation: React.FC = () => {
                             }}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
+                            {activeAssessment && !singleActivityFilteredAssessments.some(a => a.id === activeAssessment.id) && (
+                              <option value={activeAssessment.id}>
+                                Current: {activityFilterPeriod === 'all' && activeAssessment.gradingPeriod ? `[${activeAssessment.gradingPeriod}] ` : ''}
+                                {activeAssessment.title} ({activeAssessment.type || 'Assessment'} • Max: {activeAssessment.maxScore})
+                              </option>
+                            )}
                             {singleActivityFilteredAssessments.map((ass) => (
                               <option key={ass.id} value={ass.id}>
                                 {activityFilterPeriod === 'all' && ass.gradingPeriod ? `[${ass.gradingPeriod}] ` : ''}
@@ -3450,17 +3459,13 @@ export const GradeComputation: React.FC = () => {
                   {selectedAssessmentId && filteredScoreStudents.length > 0 && (
                     <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800/80 flex justify-end items-center gap-2.5">
                       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs">
-                        {singleSaveStatus === 'saving' ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" />
-                            <span className="text-clinical-600 dark:text-clinical-400">Auto-saving...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            <span className="text-emerald-700 dark:text-emerald-400">Auto-save on</span>
-                          </>
-                        )}
+                        {(() => {
+                          const badge = saveStatusBadge(singleSaveStatus, singleDirtyRef.current || singlePendingClearRef.current.ids.size > 0);
+                          if (badge.kind === 'saving') return (<><RefreshCw className="w-3.5 h-3.5 animate-spin text-clinical-600" /><span className="text-clinical-600 dark:text-clinical-400">{badge.label}</span></>);
+                          if (badge.kind === 'error') return (<><AlertCircle className="w-3.5 h-3.5 text-rose-600" /><span className="text-rose-700 dark:text-rose-400">{badge.label}</span></>);
+                          if (badge.kind === 'unsaved') return (<><AlertTriangle className="w-3.5 h-3.5 text-amber-600" /><span className="text-amber-700 dark:text-amber-400">{badge.label}</span></>);
+                          return (<><Check className="w-3.5 h-3.5 text-emerald-600" /><span className="text-emerald-700 dark:text-emerald-400">{badge.label}</span></>);
+                        })()}
                       </div>
                       <button
                         onClick={handleManualSaveScores}
