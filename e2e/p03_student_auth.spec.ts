@@ -369,6 +369,104 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(main.getByRole('button', { name: 'Show next 7 days' })).toBeVisible();
   });
 
+  test('Take attendance starts check-in and scrolls to the liveness stage', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 700 });
+    const student = {
+      user_id: 28, login_email: 'upcoming.student@bicol-u.edu.ph', display_name: 'Upcoming Student', role: 'student',
+      session_uuid: 'upcoming-student-session', authentication_source: 'password',
+      student: { student_id: 28, student_number: 'P03-UPCOMING', status: 'active' },
+    };
+    const open = {
+      id: 901, sessionId: '901', courseCode: 'OPEN101', courseName: 'OPEN101 Course', sessionDate: '2026-10-12',
+      openingTime: '09:00', presentCutoff: '10:30', lateCutoff: '11:00', classEndTime: '12:00',
+      status: 'active', captureOpen: true, captureStatus: 'present', alreadyRecordedStatus: null,
+    };
+    await page.route('**/api/runtime-config', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        ...ENABLED_RUNTIME_CONFIG,
+        providers: { ...ENABLED_RUNTIME_CONFIG.providers, biometrics: { active: 'sidecar' } },
+      }) });
+    });
+    await page.route('**/api/auth/refresh', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'upcoming-student-token', user: { user_id: 28 } }) });
+    });
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(student) });
+    });
+    await page.route('**/api/student/biometric/profile', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', consentGranted: true, enrollmentStatus: 'active', enrolledAt: '2026-09-27T08:00:00+08:00',
+        expiresAt: '2026-12-20', usableSampleCount: 28, requiredUsableSamples: 20, manualFallbackAvailable: true,
+      }) });
+    });
+    await page.route('**/api/student/attendance/sessions/active', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [open] }) });
+    });
+    await page.route('**/api/student/attendance/sessions/upcoming**', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', range: 'week', timezone: 'Asia/Manila', serverNow: '2026-10-12T02:00:00Z', sessions: [open],
+      }) });
+    });
+
+    await page.goto('/student/attendance');
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Take attendance' }).click();
+    const stage = main.getByRole('heading', { name: 'Active Liveness & Face Verification' });
+    await expect(stage).toBeVisible();
+    await expect(stage).toBeInViewport();
+  });
+
+  test('Take attendance without an active face registration asks to register instead of starting', async ({ page }) => {
+    const open = {
+      id: 901, sessionId: '901', courseCode: 'OPEN101', courseName: 'OPEN101 Course', sessionDate: '2026-10-12',
+      openingTime: '09:00', presentCutoff: '10:30', lateCutoff: '11:00', classEndTime: '12:00',
+      status: 'active', captureOpen: true, captureStatus: 'present', alreadyRecordedStatus: null,
+    };
+    await page.route('**/api/runtime-config', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        ...ENABLED_RUNTIME_CONFIG,
+        providers: { ...ENABLED_RUNTIME_CONFIG.providers, biometrics: { active: 'sidecar' } },
+      }) });
+    });
+    await page.route('**/api/auth/refresh', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'upcoming-student-token', user: { user_id: 28 } }) });
+    });
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        user_id: 28, login_email: 'upcoming.student@bicol-u.edu.ph', display_name: 'Upcoming Student', role: 'student',
+        session_uuid: 'upcoming-student-session', authentication_source: 'password',
+        student: { student_id: 28, student_number: 'P03-UPCOMING', status: 'active' },
+      }) });
+    });
+    await page.route('**/api/student/biometric/profile', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', consentGranted: false, enrollmentStatus: 'not_enrolled', usableSampleCount: 0,
+        requiredUsableSamples: 20, manualFallbackAvailable: true,
+      }) });
+    });
+    await page.route('**/api/student/attendance/sessions/active', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [open] }) });
+    });
+    await page.route('**/api/student/attendance/sessions/upcoming**', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', range: 'week', timezone: 'Asia/Manila', serverNow: '2026-10-12T02:00:00Z', sessions: [open],
+      }) });
+    });
+
+    await page.goto('/student/attendance');
+    const main = page.getByRole('main');
+    const dialog = page.locator('body > div.fixed.inset-0'); // Modal portal; has no dialog role
+    await main.getByRole('button', { name: 'Take attendance' }).click();
+    await expect(dialog.getByRole('heading', { name: 'Face registration required' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
+
+    await main.getByRole('button', { name: 'Take attendance' }).click();
+    await dialog.getByRole('button', { name: 'Register Face' }).click();
+    await expect(page).toHaveURL('/student/face-registration');
+  });
+
   test('development-mock Student retains the gated prototype subtree and actions', async ({ page }) => {
     await page.route('**/api/runtime-config', async route => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({

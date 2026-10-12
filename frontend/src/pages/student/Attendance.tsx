@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { requestConfirmation } from '../../components/FeedbackCenter';
 import {
   Camera,
   MapPin,
@@ -227,6 +228,7 @@ export const Attendance: React.FC = () => {
   const [canRetryUpload, setCanRetryUpload] = useState<boolean>(false);
 
   // Camera & Abort Refs
+  const stagePanelRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const cameraAbortRef = useRef<AbortController | null>(null);
@@ -382,14 +384,24 @@ export const Attendance: React.FC = () => {
   const currentSelectedSession = activeSessions.find(s => s.id === selectedSessionId) || activeSessions[0] || null;
 
   // --- AUTHORITATIVE ATTENDANCE PROCESS ---
-  const handleStartAuthoritativeCheckIn = async () => {
-    if (!currentSelectedSession) return;
+  const scrollStagePanelIntoView = () => {
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    stagePanelRef.current?.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+  };
+
+  useEffect(() => {
+    if (checkInStage === 'location' || checkInStage === 'camera') scrollStagePanelIntoView();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkInStage]);
+
+  const handleStartAuthoritativeCheckIn = async (session = currentSelectedSession) => {
+    if (!session) return;
     setFailureNotice(null);
     setAuthError(null);
     setLocationStatus(null);
     setVerificationResult(null);
 
-    const requiresGeofence = Boolean(currentSelectedSession.geofenceRequired ?? currentSelectedSession.geofenceEnabled);
+    const requiresGeofence = Boolean(session.geofenceRequired ?? session.geofenceEnabled);
 
     // 1. Location acquisition if session requires geofencing
     if (requiresGeofence) {
@@ -1168,7 +1180,26 @@ export const Attendance: React.FC = () => {
                             {selectable && !sess.alreadyRecordedStatus && (
                               <button
                                 type="button"
-                                onClick={() => { if (checkInStage === 'idle') setSelectedSessionId(sess.id); }}
+                                onClick={() => {
+                                  if (checkInStage !== 'idle') return;
+                                  setSelectedSessionId(sess.id);
+                                  const target = activeSessions.find(s => s.id === sess.id);
+                                  if (!target) return;
+                                  if (isAuthoritativeActiveEnrolled(profile?.enrollmentStatus)) {
+                                    void handleStartAuthoritativeCheckIn(target);
+                                  } else {
+                                    const reEnroll = profile?.enrollmentStatus === 'expired' || profile?.enrollmentStatus === 'revoked';
+                                    void requestConfirmation(
+                                      `${profile?.enrollmentStatus === 'expired'
+                                        ? 'Your biometric enrollment expired for this semester. Face re-registration is required.'
+                                        : profile?.enrollmentStatus === 'revoked'
+                                        ? 'Your biometric profile was revoked. Please consent and re-register.'
+                                        : 'Face registration required before taking automated session attendance.'} ${reEnroll ? 'Re-enroll now?' : 'Register now?'}`,
+                                      'Face registration required',
+                                      reEnroll ? 'Re-Enroll' : 'Register Face',
+                                    ).then(confirmed => { if (confirmed) navigate('/student/face-registration'); });
+                                  }
+                                }}
                                 className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold cursor-pointer"
                               >
                                 Take attendance
@@ -1293,7 +1324,7 @@ export const Attendance: React.FC = () => {
 
               {/* CAMERA / LIVENESS SCANNER STAGE */}
               {checkInStage === 'camera' && currentSelectedSession && (
-                <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-5 animate-fade-in">
+                <div ref={stagePanelRef} className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-5 animate-fade-in">
                   <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0">
@@ -1443,7 +1474,7 @@ export const Attendance: React.FC = () => {
 
               {/* ACQUIRING LOCATION OVERLAY */}
               {checkInStage === 'location' && (
-                <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4 animate-fade-in">
+                <div ref={stagePanelRef} className="bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4 animate-fade-in">
                   <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto" />
                   <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
                     Acquiring Location…

@@ -7,6 +7,7 @@ type ToastDetail = { message: string; kind: FeedbackKind };
 type ConfirmDetail = {
   message: string;
   title?: string;
+  confirmLabel?: string;
   resolve: (confirmed: boolean) => void;
 };
 
@@ -17,11 +18,11 @@ export function showFeedback(message: string, kind: FeedbackKind = 'info'): void
   window.dispatchEvent(new CustomEvent<ToastDetail>(TOAST_EVENT, { detail: { message, kind } }));
 }
 
-export function requestConfirmation(message: string, title = 'Confirm action'): Promise<boolean> {
+export function requestConfirmation(message: string, title = 'Confirm action', confirmLabel = 'Confirm'): Promise<boolean> {
   return new Promise((resolve) => {
     window.dispatchEvent(
       new CustomEvent<ConfirmDetail>(CONFIRM_EVENT, {
-        detail: { message, title, resolve },
+        detail: { message, title, confirmLabel, resolve },
       }),
     );
   });
@@ -93,7 +94,7 @@ export const FeedbackCenter: React.FC = () => {
               Cancel
             </button>
             <button type="button" onClick={() => settle(true)} className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700">
-              Confirm
+              {confirmation?.confirmLabel || 'Confirm'}
             </button>
           </div>
         </div>
