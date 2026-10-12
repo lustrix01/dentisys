@@ -835,11 +835,13 @@ Owner-approved amendment (2026-10-12): In the current interface only Faculty edi
 
 **Implementation: research prototype implemented**
 
-Geofencing is enabled by default for new biometric attendance sessions. Authorized Faculty or Secretary may disable it per session, select the session location on an embedded OpenStreetMap map, which can also center on the creator's current location, and configure the permitted radius. The default radius is 100 meters and radius values are configured and stored in meters. Only map tiles are requested from the tile provider; no Student data is sent to it.
+Owner decision (2026-10-12): Geofencing is off by default for new attendance sessions. Authorized Faculty or Secretary may disable it per session, select the session location on an embedded OpenStreetMap map, which can also center on the creator's current location, and configure the permitted radius. The default radius is 100 meters and radius values are configured and stored in meters. Only map tiles are requested from the tile provider; no Student data is sent to it.
 
 Owner decision (2026-10-11): The radius MUST be between 50 and 2,000 meters inclusive when a session is created or edited; other values are rejected. The minimum allows for phone GPS error indoors, and the maximum is more than twice the widest span of the BU Legazpi West campus (about 790 m), so a session pinned anywhere on that campus can cover all of it while a mistyped radius cannot cover a whole city.
 
 Student coordinates MAY be used temporarily to evaluate whether the Student is inside the permitted radius. Exact Student GPS coordinates MUST NOT be permanently stored and no Student location history may be created. Geofence passed/failed, configured session location and radius, and an audit timestamp may be retained. If enabled geofencing is denied or unavailable, automated biometric attendance cannot complete and manual fallback applies.
+
+Owner decision (2026-10-12): Before the face capture, the Student's location is checked against the session location and radius, and the Student is told whether they are inside, how far they are from the session location and the allowed radius. A location fix is used only when its reported accuracy is no worse than the radius and at most 100 meters; otherwise the Student is asked to retry, and after two imprecise attempts is directed to the Class Secretary or Course Instructor for manual attendance. The server repeats the check at submission. Coordinates and accuracy are not stored.
 
 ## ATT-003 — Attendance timing and final absence resolution
 
