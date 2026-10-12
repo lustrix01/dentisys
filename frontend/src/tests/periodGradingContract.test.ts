@@ -22,19 +22,20 @@ import type { FacultyLegacyComputedResult, FacultyPeriodModeComputedResult, Facu
 
 test('Grade Weights banner shows the current schema and the saved or unsaved badges', () => {
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
-  const start = source.indexOf('<span>BU Dental Medicine Schema Active:');
+  const start = source.indexOf('<span>BU Dental Medicine {loadedConfig');
   assert.ok(start >= 0);
   const banner = source.slice(start, source.indexOf('</span>', start) + '</span>'.length);
   const compiled = ts.transpileModule(`return (${banner});`, {
     fileName: 'banner.tsx',
     compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const render = (midterm: string, final: string) => renderToStaticMarkup(
-    new Function('React', 'componentWeights', 'termRatio', compiled)(
-      React, { lecture: '60', laboratory: '40' }, { midterm, final }
+  const render = (loadedConfig: object | null, midterm: string, final: string) => renderToStaticMarkup(
+    new Function('React', 'loadedConfig', 'componentWeights', 'termRatio', compiled)(
+      React, loadedConfig, { lecture: '60', laboratory: '40' }, { midterm, final }
     )
   );
-  assert.equal(render('35', '65'), '<span>BU Dental Medicine Schema Active: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
+  assert.equal(render({ version: 1 }, '35', '65'), '<span>BU Dental Medicine Schema Active: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
+  assert.equal(render(null, '35', '65'), '<span>BU Dental Medicine Default Grade Weights: Lecture 60% / Lab 40% • Midterm 35% / Final 65%</span>');
   // Unsaved edits replace the banner; saved versus unsaved presets are badges.
   assert.match(source, /\{isDirty \? \(/);
   assert.match(source, /You have unsaved changes\. Adjust weights or categories directly below, then click Save Grade Weights\./);
@@ -1068,6 +1069,8 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
   const calls: Array<Array<{ studentId: string; score: number | null }>> = [];
   const statuses: string[] = [];
   const feedback: string[] = [];
+  const prompts: string[][] = [];
+  let confirmAnswer = true;
   const timers: Array<{ fn: () => void; ms: number; cancelled: boolean }> = [];
   let save = async () => {};
   let singleState: Record<string, { score: string; remarks: string }> = { student: { score: '10', remarks: '' } };
@@ -1108,40 +1111,64 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
     refreshPersistedGrades: async () => {},
     setIsScoresSavedAlert: () => {},
     showFeedback: (message: string) => feedback.push(message),
+    requestConfirmation: async (message: string, title: string) => { prompts.push([title, message]); return confirmAnswer; },
     setTimeout: (fn: () => void, ms: number) => { const timer = { fn, ms, cancelled: false }; timers.push(timer); return timer; },
     clearTimeout: (timer: { cancelled: boolean } | null) => { if (timer) timer.cancelled = true; },
   };
   const compiled = ts.transpileModule(handlers, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const exposed = mode === 'single' ? 'return { handleScoreChange, handleScoreBlur, handleManualSaveScores };'
+  const exposed = mode === 'single' ? 'return { handleScoreChange, handleScoreBlur, handleManualSaveScores, confirmDiscardUnsavedScores };'
     : 'return { handleScoreChange: (_student, value) => handleMatrixScoreChange(_student, "assessment", value), handleScoreBlur: handleMatrixScoreBlur, handleManualSaveScores: handleSaveMatrixScores };';
   const actions = new Function(...Object.keys(context), compiled + exposed)(...Object.values(context));
   // Saves run unawaited from the handlers, so let the async work finish before asserting.
   const settle = () => new Promise<void>(resolve => setImmediate(resolve));
   const fire = (ms: number) => { for (const timer of timers.splice(0)) if (timer.ms === ms && !timer.cancelled) timer.fn(); };
   const pending = (ms: number) => timers.filter(timer => timer.ms === ms && !timer.cancelled).length;
-  return { actions, context, calls, statuses, feedback, settle, fire, pending, setSave: (next: () => Promise<void>) => { save = next; } };
+  return { actions, context, calls, statuses, feedback, prompts, answer: (value: boolean) => { confirmAnswer = value; }, settle, fire, pending, setSave: (next: () => Promise<void>) => { save = next; } };
 }
 
-test('Score entry saves 1 s after typing and on leaving a field, only while Auto-save is on; manual Save needs no confirmation', async () => {
+test('Switching assessment, class or course asks first only when scores are unsaved', async () => {
+  const clean = scoreSaveHarness('single', false);
+  assert.equal(await clean.actions.confirmDiscardUnsavedScores(), true);
+  assert.equal(clean.prompts.length, 0, 'clean state never prompts');
+
+  const dirtyOff = scoreSaveHarness('single', false);
+  dirtyOff.actions.handleScoreChange('student', '20', 'score');
+  dirtyOff.answer(false);
+  assert.equal(await dirtyOff.actions.confirmDiscardUnsavedScores(), false, 'Cancel keeps the current selection');
+  assert.deepEqual(dirtyOff.prompts[0][0], 'Discard unsaved scores?');
+  dirtyOff.answer(true);
+  assert.equal(await dirtyOff.actions.confirmDiscardUnsavedScores(), true);
+  assert.equal(dirtyOff.prompts.length, 2);
+
+  const dirtyOn = scoreSaveHarness('single', true);
+  dirtyOn.actions.handleScoreChange('student', '20', 'score');
+  assert.equal(await dirtyOn.actions.confirmDiscardUnsavedScores(), true);
+  assert.equal(dirtyOn.prompts.length, 0, 'Auto-save on and dirty alone does not prompt');
+
+  const clearing = scoreSaveHarness('single', true);
+  clearing.context.singlePendingClearRef.current.ids.add('student');
+  await clearing.actions.confirmDiscardUnsavedScores();
+  assert.equal(clearing.prompts.length, 1, 'pending cleared scores prompt even with Auto-save on');
+});
+
+test('Score entry saves when leaving a field, only while Auto-save is on; manual Save needs no confirmation', async () => {
   const h = scoreSaveHarness();
   h.actions.handleScoreChange('student', '20', 'score');
   assert.equal(h.calls.length, 0, 'typing alone must not save');
-  assert.equal(h.pending(1000), 1, 'saves 1 second after typing stops');
-  h.fire(1000);
+  assert.equal(h.pending(1000), 0, 'typing alone never saves or schedules a save');
+  await h.actions.handleScoreBlur('student');
   await h.settle();
   assert.equal(h.calls.length, 1);
   assert.equal(h.calls[0][0].score, 20);
   h.actions.handleScoreChange('student', '25', 'score');
   await h.actions.handleScoreBlur('student');
   await h.settle();
-  assert.equal(h.pending(1000), 0, 'leaving the field replaces the pending timer');
   assert.equal(h.calls.length, 2);
   assert.equal(h.calls[1][0].score, 25);
 
   const off = scoreSaveHarness('single', false);
   off.actions.handleScoreChange('student', '20', 'score');
   await off.actions.handleScoreBlur('student');
-  off.fire(1000);
   await off.settle();
   assert.equal(off.calls.length, 0, 'Auto-save off saves nothing by itself');
   await off.actions.handleManualSaveScores();
@@ -1205,8 +1232,8 @@ test('Matrix always auto-saves, applies clears only on manual Save, and queues t
   const h = scoreSaveHarness('matrix');
   h.actions.handleScoreChange('student', '20');
   assert.equal(h.calls.length, 0, 'typing alone must not save');
-  assert.equal(h.pending(1000), 1);
-  h.fire(1000);
+  assert.equal(h.pending(1000), 0, 'typing alone never saves or schedules a save');
+  await h.actions.handleScoreBlur();
   await h.settle();
   assert.equal(h.calls[0][0].score, 20);
 

@@ -440,6 +440,8 @@ For period configurations, the overall percentage is the Midterm percentage mult
 
 Owner decision (2026-09-28): Every class offering must have a saved grade-weight configuration before assessments are created or grades are computed. There is no fallback formula. A class without saved weights is reported as "grade weights required", and its existing results are preserved. Category weights must be greater than 0. The Grade Weights editor is shared by all sections of an offering. On first save, existing unlinked assessments are linked to categories by name, ignoring case and simple plurals ("Quiz" matches "Quizzes"); assessments that cannot be matched are assigned to a category by the Faculty member before the save completes.
 
+Owner decision (2026-10-12): Until a course's grade weights are saved once, the Grade Weights banner reads "BU Dental Medicine Default Grade Weights"; after the first save it reads "BU Dental Medicine Schema Active".
+
 Saving configuration does not automatically rewrite persisted grade results. An authorized recomputation applies the saved configuration while preserving raw scores and GRD-001 transmutation behavior.
 
 In period configurations, any authoritative Attendance-source category uses
@@ -1028,7 +1030,9 @@ Owner decision (2026-10-09, provisional pending BUCDM confirmation): A percentag
 
 Owner-approved amendment (2026-10-12): Calculations keep exact values through every step: category, period, course percentage and grade. Only the final course percentage and grade are rounded to two decimals for storage and display. Wherever a grade is shown, hovering, focusing or tapping it shows the exact grade and percentage.
 
-Owner decision (2026-10-12): In Single Activity View, an Auto-save toggle controls automatic saving. When it is on, a new or changed score saves 1 second after typing stops and when Faculty leave the field; when it is off, only the Save button saves. Full Matrix View always auto-saves the same way. Clearing a saved score is applied only by a manual Save (Save Scores Sheet or Save All Matrix Scores); until then the field is highlighted in amber and the Save button shows "(N to clear)". A save requested while another save is running runs right after it, and a manual Save stays manual. The browser warns before Faculty leave the page with unsaved or failed scores.
+Owner decision (2026-10-12): In Single Activity View, an Auto-save toggle controls automatic saving. When it is on, a new or changed score saves when Faculty leave the field; when it is off, only the Save button saves. Full Matrix View always auto-saves the same way. Clearing a saved score is applied only by a manual Save (Save Scores Sheet or Save All Matrix Scores); until then the field is highlighted in amber and the Save button shows "(N to clear)". A save requested while another save is running runs right after it, and a manual Save stays manual. The browser warns before Faculty leave the page with unsaved or failed scores.
+
+Owner decision (2026-10-12): In Single Activity View, switching assessment, class or course while scores are unsaved (Auto-save off, or a cleared saved score awaiting Save) asks "Discard unsaved scores?"; Cancel keeps the current assessment and its typed scores.
 
 ## UI-004 - Email and invitations (PDF pages 5, 7-8)
 

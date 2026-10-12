@@ -1032,7 +1032,6 @@ export const GradeComputation: React.FC = () => {
   // Auto-save status states
   const [singleSaveStatus, setSingleSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const singleDirtyRef = useRef(false);
-  const singleDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const singleScoresRef = useRef<Record<string, { score: string; remarks: string }>>({});
   // Cleared stored scores not yet sent: only a manual save deletes them; they stay empty meanwhile.
   const singlePendingClearRef = useRef<{ assessmentId: string; ids: Set<string> }>({ assessmentId: '', ids: new Set() });
@@ -1047,7 +1046,6 @@ export const GradeComputation: React.FC = () => {
 
   const [matrixSaveStatus, setMatrixSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const matrixDirtyRef = useRef(false);
-  const matrixDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Unsaved scores (e.g. Auto-save off): let the browser ask before closing or reloading.
   useEffect(() => {
@@ -1256,30 +1254,22 @@ export const GradeComputation: React.FC = () => {
       return next;
     });
     setIsScoresSavedAlert(false);
+  };
 
-    if (singleDebounceTimerRef.current) {
-      clearTimeout(singleDebounceTimerRef.current);
-    }
-    // Auto-save off: scores wait for the manual Save button.
-    if (!autoSaveEnabled) return;
-    singleDebounceTimerRef.current = setTimeout(() => {
-      performSaveSingleScores(false);
-    }, 1000);
+  // Cleared saved scores wait for manual Save, so they count as unsaved even with Auto-save on.
+  const confirmDiscardUnsavedScores = async (): Promise<boolean> => {
+    const unsaved = (!autoSaveEnabled && singleDirtyRef.current) || singlePendingClearRef.current.ids.size > 0;
+    if (!unsaved) return true;
+    return requestConfirmation('You have unsaved scores for this assessment. Switching will discard them. Continue?', 'Discard unsaved scores?');
   };
 
   const handleScoreBlur = async (_studentId: string) => {
     if (autoSaveEnabled && singleDirtyRef.current) {
-      if (singleDebounceTimerRef.current) {
-        clearTimeout(singleDebounceTimerRef.current);
-      }
       performSaveSingleScores(false);
     }
   };
 
   const handleManualSaveScores = async () => {
-    if (singleDebounceTimerRef.current) {
-      clearTimeout(singleDebounceTimerRef.current);
-    }
     performSaveSingleScores(true);
   };
 
@@ -1443,28 +1433,15 @@ export const GradeComputation: React.FC = () => {
       return next;
     });
     setIsMatrixSavedAlert(false);
-
-    if (matrixDebounceTimerRef.current) {
-      clearTimeout(matrixDebounceTimerRef.current);
-    }
-    matrixDebounceTimerRef.current = setTimeout(() => {
-      performSaveMatrixScores(false);
-    }, 1000);
   };
 
   const handleMatrixScoreBlur = () => {
     if (matrixDirtyRef.current) {
-      if (matrixDebounceTimerRef.current) {
-        clearTimeout(matrixDebounceTimerRef.current);
-      }
       performSaveMatrixScores(false);
     }
   };
 
   const handleSaveMatrixScores = async () => {
-    if (matrixDebounceTimerRef.current) {
-      clearTimeout(matrixDebounceTimerRef.current);
-    }
     performSaveMatrixScores(true);
   };
 
@@ -2982,6 +2959,7 @@ export const GradeComputation: React.FC = () => {
             value={selectedSubjectCode}
             onChange={async (e) => {
               const newCode = e.target.value;
+              if (!await confirmDiscardUnsavedScores()) return;
               const matchOffering = facultyOfferings.find(o => o.courseCode === newCode);
               if (matchOffering && matchOffering.key !== selectedOfferingKey) {
                 // Asks before discarding unsaved grade weights and clears the previous course's draft.
@@ -3018,8 +2996,9 @@ export const GradeComputation: React.FC = () => {
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Section / Class</label>
           <select
             value={selectedClassId}
-            onChange={(e) => {
+            onChange={async (e) => {
               const newClassId = e.target.value;
+              if (!await confirmDiscardUnsavedScores()) return;
               setSelectedClassId(newClassId);
               const classItem = currentYearActiveClasses.find(c => c.id === newClassId);
               if (classItem && classItem.courseCode && classItem.courseCode !== selectedSubjectCode) {
@@ -3294,7 +3273,11 @@ export const GradeComputation: React.FC = () => {
                         ) : (
                           <select
                             value={selectedAssessmentId}
-                            onChange={(e) => setSelectedAssessmentId(e.target.value)}
+                            onChange={async (e) => {
+                              const next = e.target.value;
+                              if (!await confirmDiscardUnsavedScores()) return;
+                              setSelectedAssessmentId(next);
+                            }}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
                           >
                             {singleActivityFilteredAssessments.map((ass) => (
@@ -4158,7 +4141,7 @@ export const GradeComputation: React.FC = () => {
                     <div className="p-3 sm:p-3.5 rounded-2xl bg-clinical-50/70 dark:bg-clinical-950/30 border border-clinical-200/80 dark:border-clinical-800/50 flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-2 text-clinical-800 dark:text-clinical-200 font-semibold">
                         <CheckCircle className="w-4 h-4 text-clinical-600 dark:text-clinical-400 shrink-0" />
-                        <span>BU Dental Medicine Schema Active: Lecture {componentWeights.lecture}% / Lab {componentWeights.laboratory}% • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
+                        <span>BU Dental Medicine {loadedConfig ? 'Schema Active' : 'Default Grade Weights'}: Lecture {componentWeights.lecture}% / Lab {componentWeights.laboratory}% • Midterm {termRatio.midterm}% / Final {termRatio.final}%</span>
                       </div>
                       <span className="text-[11px] font-bold text-clinical-600 dark:text-clinical-400 shrink-0">
                         Directly editable
