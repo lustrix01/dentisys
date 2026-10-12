@@ -148,10 +148,13 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const studentPrototypeEnabled = isStudentPrototypeAllowed(user, config, 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    // Owner decision: upright tablets (768-1023px) start collapsed unless the user has chosen before.
+    const tabletDefault = typeof window !== 'undefined' && window.innerWidth >= 768 && window.innerWidth < 1024;
     try {
-      return localStorage.getItem('dentisys_sidebar_collapsed') === 'true';
+      const saved = localStorage.getItem('dentisys_sidebar_collapsed');
+      return saved === null ? tabletDefault : saved === 'true';
     } catch {
-      return false;
+      return tabletDefault;
     }
   });
 
