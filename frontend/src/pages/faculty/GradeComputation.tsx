@@ -1038,6 +1038,8 @@ export const GradeComputation: React.FC = () => {
   // Auto-save status states
   const [singleSaveStatus, setSingleSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('saved');
   const singleDirtyRef = useRef(false);
+  // Last server values loaded for one assessment: a typed value that differs from it is an unsaved edit.
+  const singleBaselineRef = useRef<{ assessmentId: string; inputs: Record<string, { score: string; remarks: string }> }>({ assessmentId: '', inputs: {} });
   const singleScoresRef = useRef<Record<string, { score: string; remarks: string }>>({});
   // Cleared stored scores not yet sent: only a manual save deletes them; they stay empty meanwhile.
   const singlePendingClearRef = useRef<{ assessmentId: string; ids: Set<string> }>({ assessmentId: '', ids: new Set() });
@@ -1117,6 +1119,9 @@ export const GradeComputation: React.FC = () => {
       };
     });
     const pending = singlePendingClearRef.current;
+    const baseline = singleBaselineRef.current;
+    const server = initialInputs;
+    singleBaselineRef.current = { assessmentId: selectedAssessmentId, inputs: server };
     // Same sheet with a pending clear: keep the current inputs so in-progress typing is not lost.
     // Likewise while an invalid score is still typed (held back by auto-save).
     if (pending.assessmentId === selectedAssessmentId
@@ -1127,14 +1132,32 @@ export const GradeComputation: React.FC = () => {
       return;
     }
     const keep = pending.assessmentId === selectedAssessmentId
-      ? [...pending.ids].filter(id => initialInputs[id] && singleScoresRef.current[id]?.score === '')
+      ? [...pending.ids].filter(id => server[id] && singleScoresRef.current[id]?.score === '')
       : [];
-    keep.forEach(id => { initialInputs[id] = { ...initialInputs[id], score: '' }; });
+    // Same sheet refreshed (e.g. a save finished): keep fields typed since the last server load.
+    let dirty = keep.length > 0;
+    const merged: Record<string, { score: string; remarks: string }> = {};
+    Object.entries(server).forEach(([id, srv]) => {
+      const local = singleScoresRef.current[id];
+      const base = baseline.inputs[id];
+      merged[id] = { ...srv };
+      if (baseline.assessmentId !== selectedAssessmentId || !local || !base) return;
+      if (local.score !== base.score) {
+        merged[id].score = local.score;
+        // "5.0" saved as 5 is not an unsaved change.
+        if (local.score !== srv.score && !(local.score !== '' && srv.score !== '' && Number(local.score) === Number(srv.score))) dirty = true;
+      }
+      if (local.remarks !== base.remarks) {
+        merged[id].remarks = local.remarks;
+        if (local.remarks !== srv.remarks) dirty = true;
+      }
+    });
+    keep.forEach(id => { merged[id] = { ...merged[id], score: '' }; });
     singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: new Set(keep) };
-    setScoresInputState(initialInputs);
-    singleScoresRef.current = initialInputs;
-    singleDirtyRef.current = keep.length > 0;
-    setSingleSaveStatus('saved');
+    setScoresInputState(merged);
+    singleScoresRef.current = merged;
+    singleDirtyRef.current = dirty;
+    setSingleSaveStatus(singleSavingRef.current ? 'saving' : 'saved');
     setIsScoresSavedAlert(false);
   }, [selectedAssessmentId, activeStudents, assessmentScores]);
 
@@ -1218,9 +1241,15 @@ export const GradeComputation: React.FC = () => {
       singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: cleared };
       saveAssessmentScores(selectedAssessmentId, saveList);
       await refreshPersistedGrades(activeAssessment.classId);
-      singleDirtyRef.current = cleared.size > 0 || invalidCount > 0;
+      // Scores typed while this request ran are still unsent.
+      const unsent = Object.entries(singleScoresRef.current).some(([studentId, val]) => {
+        if (val.score === '' || !validateSingleScore(val.score, activeAssessment.maxScore)) return false;
+        const sent = saveList.find(e => e.studentId === studentId);
+        return !sent || sent.score !== parseFloat(val.score) || (sent.remarks || '') !== val.remarks;
+      });
+      singleDirtyRef.current = cleared.size > 0 || invalidCount > 0 || unsent;
       setSingleSaveStatus('saved');
-      setIsScoresSavedAlert(invalidCount === 0);
+      setIsScoresSavedAlert(invalidCount === 0 && !unsent);
       if (isManual) {
         showFeedback(`Saved ${saveList.filter(e => e.score !== null).length} scores successfully!`, 'success');
       }
@@ -1324,7 +1353,7 @@ export const GradeComputation: React.FC = () => {
     setMatrixScoresState(matrix);
     matrixScoresRef.current = matrix;
     matrixDirtyRef.current = dirty;
-    setMatrixSaveStatus('saved');
+    setMatrixSaveStatus(matrixSavingRef.current ? 'saving' : 'saved');
   }, [activeStudents, activeAssessments, assessmentScores]);
 
   // Emptied fields that still have a stored score; only a manual save deletes them.
@@ -1416,9 +1445,17 @@ export const GradeComputation: React.FC = () => {
         await refreshPersistedGrades(targetClassId);
       }
       setMatrixRefreshKey(key => key + 1);
-      matrixDirtyRef.current = cleared.size > 0 || invalidCount > 0;
+      // Cells typed while this request ran are still unsent.
+      const unsent = activeAssessments.some(ass => activeStudents.some(student => {
+        const val = matrixScoresRef.current[student.id]?.[ass.id] ?? '';
+        const num = parseFloat(val);
+        if (val === '' || isNaN(num) || num < 0 || num > ass.maxScore) return false;
+        const sent = batches.find(b => b.assessmentId === ass.id)?.scores.find(e => e.studentId === student.id);
+        return !sent || sent.score !== num;
+      }));
+      matrixDirtyRef.current = cleared.size > 0 || invalidCount > 0 || unsent;
       setMatrixSaveStatus('saved');
-      setIsMatrixSavedAlert(invalidCount === 0);
+      setIsMatrixSavedAlert(invalidCount === 0 && !unsent);
       if (isManual) {
         showFeedback(`Saved ${saveCount} grades across matrix successfully!`, 'success');
       }
