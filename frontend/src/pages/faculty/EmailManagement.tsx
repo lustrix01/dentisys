@@ -382,12 +382,12 @@ export const EmailManagement: React.FC = () => {
       )}
 
       {/* 2. Control Bar: Tabs & Pill Filter Dropdowns Below */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         {/* Tabs Navigation */}
-        <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-fit max-w-full overflow-x-auto">
+        <div className="flex flex-wrap xl:flex-nowrap items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full xl:w-fit max-w-full overflow-x-auto">
           <button
             onClick={() => { setTab('student_invites'); setSelected([]); }}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex-auto xl:flex-initial text-center px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               tab === 'student_invites'
                 ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -398,7 +398,7 @@ export const EmailManagement: React.FC = () => {
 
           <button
             onClick={() => { setTab('secretary'); setSelected([]); }}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex-auto xl:flex-initial text-center px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               tab === 'secretary'
                 ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -410,7 +410,7 @@ export const EmailManagement: React.FC = () => {
 
           <button
             onClick={() => { setTab('history'); setSelected([]); }}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            className={`flex-auto xl:flex-initial text-center px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               tab === 'history'
                 ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'

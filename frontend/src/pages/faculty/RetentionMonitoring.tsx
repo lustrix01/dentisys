@@ -860,7 +860,7 @@ export const RetentionMonitoring: React.FC = () => {
           <button
             type="button"
             onClick={() => { setActiveTab('watchlist'); setSearchQuery(''); }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex flex-auto md:flex-none justify-center md:justify-start items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'watchlist'
                 ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -876,7 +876,7 @@ export const RetentionMonitoring: React.FC = () => {
           <button
             type="button"
             onClick={() => { setActiveTab('remedials'); setSearchQuery(''); }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex flex-auto md:flex-none justify-center md:justify-start items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'remedials'
                 ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -894,7 +894,7 @@ export const RetentionMonitoring: React.FC = () => {
           <button
             type="button"
             onClick={() => { setActiveTab('midterm'); setSearchQuery(''); }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`flex flex-auto md:flex-none justify-center md:justify-start items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'midterm'
                 ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'

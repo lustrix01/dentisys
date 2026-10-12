@@ -351,10 +351,10 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* 2-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
         
         {/* Main Workspace Column (Spans 8) */}
-        <div className="lg:col-span-8 space-y-6">
+        <div className="xl:col-span-8 space-y-6">
           
           {/* 2. Faculty Workspace Card */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 border border-slate-200/80 dark:border-slate-800 shadow-xs hover:shadow-md transition-all">
@@ -470,7 +470,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Right Sidebar Panel (Spans 4) */}
-        <div className="lg:col-span-4 space-y-5">
+        <div className="xl:col-span-4 space-y-5">
           
           {/* Widget 1: Announcements */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
