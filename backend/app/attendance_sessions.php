@@ -114,7 +114,10 @@ function attendance_session_timing_from_request(array $data): array
     $late = attendance_session_parse_time($data, 'lateCutoff');
 
     if ($opening === null && $present === null && $late === null) {
-        return [null, null, null];
+        throw new ValidationException([[
+            'field' => 'openingTime',
+            'message' => 'Opening time, Present cutoff, and Late cutoff are required.',
+        ]]);
     }
 
     if ($opening === null || $present === null || $late === null) {

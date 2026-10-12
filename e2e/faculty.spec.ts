@@ -1537,6 +1537,25 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(payloads).toEqual([{ sessionId: '710', room: 'Lab 6' }]);
     });
 
+    test('clearing all three times shows the server error and keeps the dialog open', async ({ page }) => {
+      const payloads: Record<string, unknown>[] = [];
+      await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: { ...mockWorksheetSectionA, managedSessions: [baseSession] } } }));
+      await page.route('**/api/faculty/attendance/session/update', route => {
+        payloads.push(route.request().postDataJSON());
+        return route.fulfill({ status: 422, json: { status: 'error', code: 'VALIDATION_ERROR', message: 'Validation failed.', errors: [{ field: 'openingTime', message: 'Opening time, Present cutoff, and Late cutoff are required.' }] } });
+      });
+      await page.goto('/attendance');
+      await openWorksheet(page, 'CLIN401 - Section A');
+      await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+      await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      for (const label of ['Opening time', 'Present cutoff', 'Late cutoff']) await page.getByLabel(label, { exact: true }).fill('');
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByRole('alert')).toContainText('Opening time, Present cutoff, and Late cutoff are required.');
+      expect(payloads).toEqual([{ sessionId: '710', openingTime: '', presentCutoff: '', lateCutoff: '' }]);
+      await expect(page.getByLabel('Room or session location')).toBeVisible();
+    });
+
     test('turning geofence off sends geofenceEnabled false and no biometric field', async ({ page }) => {
       const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
       await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();

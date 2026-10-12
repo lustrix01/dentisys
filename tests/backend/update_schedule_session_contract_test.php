@@ -93,3 +93,18 @@ foreach (['faculty', 'secretary'] as $role) {
         edit_schedule_assert($e->getErrors() === [['field' => 'classEndTime', 'message' => 'Class end time must be at or after the Late cutoff.']], "{$role} update preserves the creation end-time validation message");
     }
 }
+
+// Every session needs all three times: create and the final merged edit values (shared parser).
+$timingErrors = static function (callable $fn): array { try { $fn(); } catch (ValidationException $e) { return $e->getErrors(); } return []; };
+$required = [['field' => 'openingTime', 'message' => 'Opening time, Present cutoff, and Late cutoff are required.']];
+$together = [['field' => 'openingTime', 'message' => 'Opening time, Present cutoff, and Late cutoff must be provided together.']];
+$noTimes = array_diff_key($payload, ['openingTime' => 1, 'presentCutoff' => 1, 'lateCutoff' => 1]);
+edit_schedule_assert($timingErrors(fn() => attendance_session_timing_from_request($noTimes)) === $required, 'Create parsing rejects a session with no times');
+edit_schedule_assert($timingErrors(fn() => attendance_session_timing_from_request(array_merge($noTimes, ['openingTime' => '08:00']))) === $together, 'Create parsing still rejects partial times');
+foreach (['faculty', 'secretary'] as $role) {
+    edit_schedule_assert($timingErrors(fn() => attendance_session_update_values($noTimes, $config, $role)) === $required, "{$role} edit with no times is rejected");
+    $stored = ['session_date' => $date, 'opening_time' => '08:00:00', 'present_cutoff_time' => '09:00:00', 'late_cutoff_time' => '10:00:00', 'class_end_time' => '11:00:00', 'room' => 'Room 1', 'biometric_required' => false, 'geofence_enabled' => false, 'geofence_latitude' => null, 'geofence_longitude' => null, 'geofence_radius_meters' => null];
+    $cleared = ['openingTime' => '', 'presentCutoff' => '', 'lateCutoff' => ''];
+    edit_schedule_assert($timingErrors(fn() => attendance_session_update_values(attendance_session_merge_stored_request($cleared, $stored, $role), $config, $role)) === $required, "{$role} edit clearing all times is rejected");
+    edit_schedule_assert(attendance_session_update_values(attendance_session_merge_stored_request(['room' => 'X'], $stored, $role), $config, $role)['opening_time'] === '08:00:00', "{$role} edit keeping stored times is accepted");
+}

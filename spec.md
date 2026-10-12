@@ -833,6 +833,8 @@ Owner-approved amendment (2026-10-12): In the current interface the session date
 
 Owner decision (2026-10-12): The edit form opens showing the session's saved values, never blanks or default values. An edit updates only what the user changed. Every field the user did not change (date, times, room, biometric, geofence, location, radius) keeps its saved value; for example, changing the room and turning on biometric leaves geofence as it was, and changing geofence and the room leaves biometric as it was. The edit form sends only the changed fields, and the server keeps the saved value of any field an edit does not send. Geofence starting off (ATT-002) applies only to new sessions.
 
+Owner decision (2026-10-12): Every attendance session, created or edited, must have an opening time, Present cutoff and Late cutoff. A session without them is rejected.
+
 ## ATT-002 — Geofencing and location privacy
 
 **Status: APPROVED**

@@ -565,6 +565,9 @@ expect_same($sessionCode, $activeSessionBody['activeSession']['sessionCode'] ?? 
     'csId' => $secretarySessionClassId,
     'sessionDate' => $sessionDate,
     'sessionCode' => $sessionCode . '-DUPLICATE',
+    'openingTime' => $sessionOpeningTime,
+    'presentCutoff' => $sessionPresentCutoff,
+    'lateCutoff' => $sessionLateCutoff,
 ]);
 expect_same(409, $duplicateSessionStatus, 'Second active session for the same class is rejected');
 expect_same('error', $duplicateSessionBody['status'] ?? null, 'Duplicate active session returns the standard error payload');
@@ -592,6 +595,9 @@ expect_true($unassignedClassId > 0, 'Integration fixture exposes an unassigned c
     'classEndTime' => '23:59',
     'csId' => $unassignedClassId,
     'sessionDate' => $sessionDate,
+    'openingTime' => $sessionOpeningTime,
+    'presentCutoff' => $sessionPresentCutoff,
+    'lateCutoff' => $sessionLateCutoff,
 ]);
 expect_same(403, $unassignedSessionStatus, 'Secretary cannot start a session for an unassigned class');
 
@@ -599,6 +605,9 @@ expect_same(403, $unassignedSessionStatus, 'Secretary cannot start a session for
     'classEndTime' => '23:59',
     'csId' => 999999,
     'sessionDate' => $sessionDate,
+    'openingTime' => $sessionOpeningTime,
+    'presentCutoff' => $sessionPresentCutoff,
+    'lateCutoff' => $sessionLateCutoff,
 ]);
 expect_same(403, $invalidSectionStatus, 'Secretary cannot start a session for an invalid or unauthorized class section');
 
@@ -692,6 +701,9 @@ expect_same(409, $repeatEndStatus, 'Ending an already-ended session returns a co
     'csId' => $secretarySessionClassId,
     'sessionDate' => $sessionDate,
     'geofenceEnabled' => true,
+    'openingTime' => $sessionOpeningTime,
+    'presentCutoff' => $sessionPresentCutoff,
+    'lateCutoff' => $sessionLateCutoff,
 ]);
 expect_same(422, $geofenceNoLocationStatus, 'Secretary cannot start a geofenced session without a session location');
 expect_same('geofenceLatitude', $geofenceNoLocationBody['errors'][0]['field'] ?? null, 'Missing geofence location is reported on geofenceLatitude');
@@ -1461,6 +1473,9 @@ expect_true($facultyGeofenceClassId > 0, 'Seed Faculty owns an active class for 
     'classEndTime' => '23:59',
     'csId' => $facultyGeofenceClassId,
     'geofenceEnabled' => true,
+    'openingTime' => '08:00',
+    'presentCutoff' => '09:00',
+    'lateCutoff' => '10:00',
     'geofenceRadiusMeters' => 100,
     'latitude' => 13.1436,
     'longitude' => 123.7438,
