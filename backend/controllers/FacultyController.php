@@ -4855,7 +4855,7 @@ function handle_faculty_attendance_session_create(): void
             $presentCutoff,
             $lateCutoff
         );
-        $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', $biometricRequired);
+        $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', false);
         $latitude = attendance_session_request_float($data, 'geofenceLatitude', -90, 90);
         $longitude = attendance_session_request_float($data, 'geofenceLongitude', -180, 180);
         $radius = attendance_session_request_float($data, 'geofenceRadiusMeters', ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS, ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS);

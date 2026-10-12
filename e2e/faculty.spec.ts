@@ -788,6 +788,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     const date = page.getByLabel('Session date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
+    await expect(page.getByRole('checkbox', { name: /Geofence/ })).not.toBeChecked(); // ATT-002: off by default
     await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
     await page.locator('form').getByRole('button', { name: 'Schedule Session', exact: true }).click();
     await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
@@ -1483,12 +1484,89 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.getByLabel('Room or session location').fill('Changed room');
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('created by Faculty Jane Doe');
-    expect(payloads).toEqual([{ sessionId: '700', sessionDate: session.sessionDate, room: 'Changed room', openingTime: '08:00', presentCutoff: '08:30', lateCutoff: '10:30', classEndTime: '11:30', biometricRequired: false, geofenceEnabled: true, geofenceRadiusMeters: 250, geofenceLatitude: 13.15, geofenceLongitude: 123.75 }]);
+    expect(payloads).toEqual([{ sessionId: '700', room: 'Changed room' }]);
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
     await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
     expect(payloads[1]).toEqual(payloads[0]);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByLabel('Room or session location')).toHaveValue('Changed room');
+  });
+
+  test.describe('Faculty edit form sends only what changed', () => {
+    const baseSession = { sessionId: '710', sessionDate: '2099-10-03', sessionCode: 'EDIT-710', status: 'scheduled', room: 'Lab 5', openingTime: '07:45', presentCutoff: '08:20', lateCutoff: '09:40', classEndTime: '10:15', biometricRequired: true, geofenceEnabled: false, geofenceLatitude: null, geofenceLongitude: null, geofenceRadiusMeters: 250, createdByRole: 'faculty' };
+    async function openEdit(page: import('@playwright/test').Page, session: Record<string, unknown>) {
+      const payloads: Record<string, unknown>[] = [];
+      await page.route('**/api/faculty/attendance?*', route => route.fulfill({ json: { status: 'ok', worksheet: { ...mockWorksheetSectionA, managedSessions: [session] } } }));
+      await page.route('**/api/faculty/attendance/session/update', route => {
+        payloads.push(route.request().postDataJSON());
+        return route.fulfill({ json: { status: 'ok', session } });
+      });
+      await page.goto('/attendance');
+      await openWorksheet(page, 'CLIN401 - Section A');
+      await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+      await page.getByRole('button', { name: /Upcoming Sessions/ }).click();
+      await page.getByRole('button', { name: 'Edit', exact: true }).click();
+      return payloads;
+    }
+
+    test('opens with the exact saved values when geofence is off', async ({ page }) => {
+      await openEdit(page, baseSession);
+      await expect(page.getByText('Date: 2099-10-03 (Asia/Manila)', { exact: true })).toBeVisible();
+      await expect(page.getByLabel('Room or session location')).toHaveValue('Lab 5');
+      await expect(page.getByLabel('Opening time', { exact: true })).toHaveValue('07:45');
+      await expect(page.getByLabel('Present cutoff', { exact: true })).toHaveValue('08:20');
+      await expect(page.getByLabel('Late cutoff', { exact: true })).toHaveValue('09:40');
+      await expect(page.getByLabel('Class end time', { exact: true })).toHaveValue('10:15');
+      await expect(page.getByRole('checkbox', { name: /Face biometric/ })).toBeChecked();
+      await expect(page.getByRole('checkbox', { name: /Geofence/ })).not.toBeChecked();
+      await expect(page.getByLabel('Allowed radius (meters)')).toHaveCount(0);
+    });
+
+    test('opens with the saved radius and pin when geofence is on, not the 100 m default', async ({ page }) => {
+      await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75, geofenceRadiusMeters: 250 });
+      await expect(page.getByRole('checkbox', { name: /Geofence/ })).toBeChecked();
+      await expect(page.getByLabel('Allowed radius (meters)')).toHaveValue('250');
+      await expect(page.getByText('Location set: 13.15, 123.75')).toBeVisible();
+    });
+
+    test('changing only the room sends the session id and room', async ({ page }) => {
+      const payloads = await openEdit(page, baseSession);
+      await page.getByLabel('Room or session location').fill('Lab 6');
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+      expect(payloads).toEqual([{ sessionId: '710', room: 'Lab 6' }]);
+    });
+
+    test('turning geofence off sends geofenceEnabled false and no biometric field', async ({ page }) => {
+      const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
+      await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+      expect(payloads).toEqual([{ sessionId: '710', geofenceEnabled: false }]);
+    });
+
+    test('turning geofence on sends the setting with the location and radius', async ({ page }) => {
+      const payloads = await openEdit(page, { ...baseSession, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
+      await page.getByRole('checkbox', { name: /Geofence/ }).check();
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+      expect(payloads).toEqual([{ sessionId: '710', geofenceEnabled: true, geofenceRadiusMeters: 250, geofenceLatitude: 13.15, geofenceLongitude: 123.75 }]);
+    });
+
+    test('changing only the radius of a geofenced session sends only the radius', async ({ page }) => {
+      const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
+      await page.getByLabel('Allowed radius (meters)').fill('300');
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+      expect(payloads).toEqual([{ sessionId: '710', geofenceRadiusMeters: 300 }]);
+    });
+
+    test('saving with no change sends no request and closes the form', async ({ page }) => {
+      const payloads = await openEdit(page, baseSession);
+      await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Save Changes', exact: true })).toHaveCount(0);
+      expect(payloads).toEqual([]);
+    });
   });
 
   test.describe('Faculty Grade Weights Editor', () => {

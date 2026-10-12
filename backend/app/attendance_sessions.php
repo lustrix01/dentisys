@@ -254,6 +254,41 @@ function attendance_session_fetch_for_manager(
     return $row === false ? null : $row;
 }
 
+/**
+ * An edit changes only what the request sends: every unsent field keeps its stored value, so the
+ * normal parser and validation run on the final merged values. Stored geofence location is only
+ * carried over while the final geofence is on.
+ */
+function attendance_session_merge_stored_request(array $data, array $session, string $role): array
+{
+    $stored = [
+        'sessionDate' => $session['session_date'],
+        'openingTime' => $session['opening_time'] !== null ? substr((string) $session['opening_time'], 0, 5) : null,
+        'presentCutoff' => $session['present_cutoff_time'] !== null ? substr((string) $session['present_cutoff_time'], 0, 5) : null,
+        'lateCutoff' => $session['late_cutoff_time'] !== null ? substr((string) $session['late_cutoff_time'], 0, 5) : null,
+        'classEndTime' => $session['class_end_time'] !== null ? substr((string) $session['class_end_time'], 0, 5) : null,
+        'room' => $session['room'],
+        'biometricRequired' => attendance_session_bool($session['biometric_required']),
+        'geofenceEnabled' => attendance_session_bool($session['geofence_enabled']),
+    ];
+    // A sent alias must not be shadowed by the stored primary key.
+    if (array_key_exists('date', $data)) { unset($stored['sessionDate']); }
+    if ($role === 'secretary') {
+        if (array_key_exists('requireFace', $data)) { unset($stored['biometricRequired']); }
+        if (array_key_exists('requireGeo', $data)) { unset($stored['geofenceEnabled']); }
+    }
+    $merged = $data + $stored;
+    $geoKey = array_key_exists('geofenceEnabled', $merged) ? 'geofenceEnabled' : 'requireGeo';
+    if (filter_var($merged[$geoKey] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+        $merged += [
+            'geofenceLatitude' => $session['geofence_latitude'],
+            'geofenceLongitude' => $session['geofence_longitude'],
+            'geofenceRadiusMeters' => $session['geofence_radius_meters'],
+        ];
+    }
+    return $merged;
+}
+
 /** Preserve each role's creation parsing, defaults, aliases and validation messages. */
 function attendance_session_update_values(array $data, array $config, string $role): array
 {
@@ -278,12 +313,12 @@ function attendance_session_update_values(array $data, array $config, string $ro
     }
     attendance_session_require_timing_for_biometric($biometricRequired, $openingTime, $presentCutoff, $lateCutoff);
     if ($role === 'faculty') {
-        $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', $biometricRequired);
+        $geofenceEnabled = attendance_session_request_bool($data, 'geofenceEnabled', false);
         $latitude = attendance_session_request_float($data, 'geofenceLatitude', -90, 90);
         $longitude = attendance_session_request_float($data, 'geofenceLongitude', -180, 180);
         $radius = attendance_session_request_float($data, 'geofenceRadiusMeters', ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS, ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS);
     } else {
-        $geofenceEnabled = secretary_attendance_session_bool($data, array_key_exists('geofenceEnabled', $data) ? 'geofenceEnabled' : 'requireGeo', $biometricRequired);
+        $geofenceEnabled = secretary_attendance_session_bool($data, array_key_exists('geofenceEnabled', $data) ? 'geofenceEnabled' : 'requireGeo', false);
         $latitude = secretary_attendance_session_optional_float($data, 'geofenceLatitude', -90, 90);
         $longitude = secretary_attendance_session_optional_float($data, 'geofenceLongitude', -180, 180);
         $radius = secretary_attendance_session_optional_float($data, 'geofenceRadiusMeters', ATTENDANCE_GEOFENCE_RADIUS_MIN_METERS, ATTENDANCE_GEOFENCE_RADIUS_MAX_METERS);
@@ -326,7 +361,6 @@ function attendance_session_update(PDO $pdo, array $config, array $authCtx, arra
     if ($sessionId === null || $sessionId <= 0 || $sessionId > 2147483647) {
         throw new AttendanceSessionException('A valid attendance session ID is required.', 400, 'BAD_REQUEST');
     }
-    $values = attendance_session_update_values($data, $config, $role);
     $userId = (int) $authCtx['user_id'];
     $session = attendance_session_fetch_for_manager($pdo, $userId, $role, $sessionId);
     if ($session === null) {
@@ -358,6 +392,7 @@ function attendance_session_update(PDO $pdo, array $config, array $authCtx, arra
         if (academic_class_section_is_past($pdo, $csId)) {
             throw new AttendanceSessionException('Past school-year classes are view-only.', 409, 'CONFLICT');
         }
+        $values = attendance_session_update_values(attendance_session_merge_stored_request($data, $session, $role), $config, $role);
         $conflict = attendance_session_booking_conflict($pdo, $csId, $values['session_date'], $values['opening_time'], $values['class_end_time'], $sessionId);
         if ($conflict !== null) {
             throw new AttendanceSessionException($conflict, 409, 'CONFLICT');

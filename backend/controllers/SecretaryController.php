@@ -1312,7 +1312,7 @@ function handle_secretary_attendance_session_start(): void
         $geofenceEnabled = secretary_attendance_session_bool(
             $data,
             array_key_exists('geofenceEnabled', $data) ? 'geofenceEnabled' : 'requireGeo',
-            $biometricRequired
+            false
         );
         $latitude = secretary_attendance_session_optional_float($data, 'geofenceLatitude', -90, 90);
         $longitude = secretary_attendance_session_optional_float($data, 'geofenceLongitude', -180, 180);

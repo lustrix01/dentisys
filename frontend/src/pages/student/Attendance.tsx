@@ -29,6 +29,7 @@ import {
   createBiometricLivenessChallenge,
   requestBiometricLivenessGuidance,
   submitBiometricAttendance,
+  checkStudentAttendanceLocation,
   isTransportOrBiometricUnavailable,
 } from '../../services/apiClient';
 import {
@@ -157,6 +158,59 @@ const UPCOMING_PILL_CLASSES: Record<'open' | 'late' | 'soon' | 'done' | 'idle', 
   idle: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
 
+const LOCATION_REQUIRED_MESSAGE = 'Location is required for this session. Allow location for this site, or ask your Class Secretary or Course Instructor to record your attendance.';
+
+type LocationReading = { latitude: number; longitude: number; accuracy: number };
+
+function formatMeters(value: number): string {
+  return Math.round(value).toLocaleString('en-US');
+}
+
+/**
+ * Watches GPS for up to 20 s and keeps the most accurate reading (ATT-002).
+ * Stops early at <= 30 m, or at 5 s when every reading is worse than 1,000 m.
+ * Resolves null when no reading arrived (denied/unsupported/cancelled); `registerCancel` lets the caller abort.
+ */
+function acquireBestPosition(
+  onProgress: (accuracy: number) => void,
+  registerCancel: (cancel: (() => void) | null) => void,
+): Promise<LocationReading | null> {
+  return new Promise(resolve => {
+    if (!('geolocation' in navigator)) {
+      resolve(null);
+      return;
+    }
+    let best: LocationReading | null = null;
+    let watchId = -1;
+    let finished = false;
+    const finish = (value: LocationReading | null): void => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(maxTimer);
+      window.clearTimeout(coarseTimer);
+      if (watchId >= 0) navigator.geolocation.clearWatch(watchId);
+      registerCancel(null);
+      resolve(value);
+    };
+    const maxTimer = window.setTimeout(() => finish(best), 20000);
+    const coarseTimer = window.setTimeout(() => {
+      if (best && best.accuracy > 1000) finish(best);
+    }, 5000);
+    registerCancel(() => finish(null));
+    watchId = navigator.geolocation.watchPosition(
+      position => {
+        const { latitude, longitude, accuracy } = position.coords;
+        if (!best || accuracy < best.accuracy) best = { latitude, longitude, accuracy };
+        onProgress(best.accuracy);
+        if (best.accuracy <= 30) finish(best);
+      },
+      () => finish(best),
+      { enableHighAccuracy: true, maximumAge: 0 },
+    );
+    if (finished) navigator.geolocation.clearWatch(watchId);
+  });
+}
+
 function formatAction(action: LivenessAction): { title: string; instruction: string } {
   switch (action) {
     case 'blink':
@@ -201,6 +255,10 @@ export const Attendance: React.FC = () => {
   const [checkInStage, setCheckInStage] = useState<'idle' | 'location' | 'camera' | 'verifying' | 'result'>('idle');
   const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
+  const [locationProblem, setLocationProblem] = useState<string | null>(null);
+  const locateRunRef = useRef(0);
+  const locateCancelRef = useRef<(() => void) | null>(null);
+  const impreciseRef = useRef<{ sessionId: number | null; count: number }>({ sessionId: null, count: 0 });
   const [livenessChallenge, setLivenessChallenge] = useState<LivenessChallengeResponse | null>(null);
   const [verificationResult, setVerificationResult] = useState<BiometricAttendanceResponse | null>(null);
   const [failureNotice, setFailureNotice] = useState<string | null>(null);
@@ -254,6 +312,8 @@ export const Attendance: React.FC = () => {
   // Teardown camera and abort in-flight operations on unmount
   useEffect(() => {
     return () => {
+      locateRunRef.current += 1;
+      locateCancelRef.current?.();
       abortCaptureRef.current = true;
       captureRunRef.current += 1;
       guidanceAbortRef.current?.abort();
@@ -401,39 +461,50 @@ export const Attendance: React.FC = () => {
     setLocationStatus(null);
     setVerificationResult(null);
 
+    setLocationProblem(null);
+
     const requiresGeofence = Boolean(session.geofenceRequired ?? session.geofenceEnabled);
 
-    // 1. Location acquisition if session requires geofencing
+    // 1. Location check (ATT-002) before the face capture, only if the session is geofenced.
     if (requiresGeofence) {
+      if (impreciseRef.current.sessionId !== session.id) impreciseRef.current = { sessionId: session.id, count: 0 };
       setCheckInStage('location');
-      setLocationStatus('Obtaining temporary GPS coordinates for session geofence check…');
-
-      if (!('geolocation' in navigator)) {
-        setFailureNotice('Geolocation is not supported by your browser. Please contact your Class Secretary or Faculty for manual attendance.');
-        setCheckInStage('idle');
+      setLocationStatus('Locating you…');
+      const runId = ++locateRunRef.current;
+      const reading = await acquireBestPosition(
+        accuracy => setLocationStatus(`Locating you… ±${formatMeters(accuracy)} m`),
+        cancel => { locateCancelRef.current = cancel; },
+      );
+      if (locateRunRef.current !== runId) return;
+      if (!reading) {
+        setLocationProblem(LOCATION_REQUIRED_MESSAGE);
         return;
       }
-
+      setLocationStatus('Checking your location…');
       try {
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0,
-          });
-        });
-
-        setLocationCoords({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        });
-        setLocationStatus('Temporary location acquired. Proceeding to liveness challenge…');
+        const check = await checkStudentAttendanceLocation({ sessionId: session.id, ...reading });
+        if (locateRunRef.current !== runId) return;
+        if (check.result === 'outside') {
+          const distance = check.distanceMeters ?? 0;
+          const radius = check.radiusMeters ?? 0;
+          setLocationProblem(`You are about ${formatMeters(distance)} m from the session location. Allowed: within ${formatMeters(radius)} m (about ${formatMeters(Math.max(0, distance - radius))} m too far). GPS accuracy ±${formatMeters(reading.accuracy)} m.`);
+          return;
+        }
+        if (check.result === 'imprecise') {
+          impreciseRef.current.count += 1;
+          setLocationProblem(impreciseRef.current.count >= 2
+            ? "Your phone can't get a precise enough location here. Ask your Class Secretary or Course Instructor to record your attendance."
+            : reading.accuracy > 1000
+              ? 'Precise location seems to be off. Turn on Precise Location for your browser (iPhone: Settings > Privacy > Location Services; Android: Location > Google Location Accuracy), then retry.'
+              : `Your location is too imprecise (±${formatMeters(reading.accuracy)} m). Turn on Wi-Fi (you don't need to connect), move near a window or doorway, then retry.`);
+          return;
+        }
       } catch {
-        setFailureNotice('Location access was denied or timed out. This session requires geofencing. Please enable location or report to your Class Secretary or Course Instructor for manual attendance.');
-        setCheckInStage('idle');
+        if (locateRunRef.current !== runId) return;
+        setLocationProblem('Your location could not be checked right now. Please retry.');
         return;
       }
+      setLocationCoords(reading);
     } else {
       setLocationCoords(null);
     }
@@ -577,6 +648,7 @@ export const Attendance: React.FC = () => {
       setPendingAttendancePayload(null);
       setCanRetryUpload(false);
       setVerificationResult(result);
+      impreciseRef.current = { sessionId: null, count: 0 };
       setCheckInStage('result');
       void loadAuthoritativeData();
     } catch (err) {
@@ -717,6 +789,10 @@ export const Attendance: React.FC = () => {
   };
 
   const handleCancelAttendance = () => {
+    locateRunRef.current += 1;
+    locateCancelRef.current?.();
+    setLocationProblem(null);
+    impreciseRef.current = { sessionId: null, count: 0 };
     const submissionInFlight = Boolean(uploadAbortRef.current || pendingAttendancePayload);
     abortCaptureRef.current = true;
     captureRunRef.current += 1;
@@ -1475,13 +1551,46 @@ export const Attendance: React.FC = () => {
               {/* ACQUIRING LOCATION OVERLAY */}
               {checkInStage === 'location' && (
                 <div ref={stagePanelRef} className="bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4 animate-fade-in">
-                  <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto" />
-                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                    Acquiring Location…
-                  </h3>
-                  <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                    {locationStatus || 'Obtaining temporary GPS coordinates for session geofence check…'}
-                  </p>
+                  {locationProblem ? (
+                    <>
+                      <AlertCircle className="w-10 h-10 text-amber-600 mx-auto" />
+                      <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Location Check</h3>
+                      <p role="alert" className="text-xs text-slate-600 dark:text-slate-300 max-w-sm mx-auto leading-relaxed">{locationProblem}</p>
+                      <div className="flex justify-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelAttendance}
+                          className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { void handleStartAuthoritativeCheckIn(currentSelectedSession); }}
+                          className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto" />
+                      <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                        Acquiring Location…
+                      </h3>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                        {locationStatus || 'Locating you…'}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleCancelAttendance}
+                        className="px-3.5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 

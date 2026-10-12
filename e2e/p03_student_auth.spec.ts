@@ -416,6 +416,109 @@ test.describe('P03 Student identity and authentication', () => {
     await expect(stage).toBeInViewport();
   });
 
+  async function openGeofencedAttendance(page: Page, geofenceEnabled: boolean, locationChecks: unknown[], reply: (n: number) => Record<string, unknown>): Promise<void> {
+    await page.setViewportSize({ width: 1280, height: 700 });
+    const open = {
+      id: 901, sessionId: '901', courseCode: 'OPEN101', courseName: 'OPEN101 Course', sessionDate: '2026-10-12',
+      openingTime: '09:00', presentCutoff: '10:30', lateCutoff: '11:00', classEndTime: '12:00',
+      status: 'active', captureOpen: true, captureStatus: 'present', alreadyRecordedStatus: null, geofenceEnabled,
+    };
+    await page.route('**/api/runtime-config', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        ...ENABLED_RUNTIME_CONFIG,
+        providers: { ...ENABLED_RUNTIME_CONFIG.providers, biometrics: { active: 'sidecar' } },
+      }) });
+    });
+    await page.route('**/api/auth/refresh', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ access_token: 'geo-student-token', user: { user_id: 28 } }) });
+    });
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        user_id: 28, login_email: 'upcoming.student@bicol-u.edu.ph', display_name: 'Upcoming Student', role: 'student',
+        session_uuid: 'geo-student-session', authentication_source: 'password',
+        student: { student_id: 28, student_number: 'P03-UPCOMING', status: 'active' },
+      }) });
+    });
+    await page.route('**/api/student/biometric/profile', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', consentGranted: true, enrollmentStatus: 'active', enrolledAt: '2026-09-27T08:00:00+08:00',
+        expiresAt: '2026-12-20', usableSampleCount: 28, requiredUsableSamples: 20, manualFallbackAvailable: true,
+      }) });
+    });
+    await page.route('**/api/student/attendance/sessions/active', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [open] }) });
+    });
+    await page.route('**/api/student/attendance/sessions/upcoming**', async route => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', range: 'week', timezone: 'Asia/Manila', serverNow: '2026-10-12T02:00:00Z', sessions: [open],
+      }) });
+    });
+    await page.route('**/api/student/attendance/location-check', async route => {
+      locationChecks.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        status: 'ok', geofenceEnabled: true, radiusMeters: 100, accuracyLimitMeters: 100, ...reply(locationChecks.length),
+      }) });
+    });
+    await page.goto('/student/attendance');
+  }
+
+  test('geofenced Take attendance: inside the radius opens the face stage in view', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 13.1436, longitude: 123.7438, accuracy: 20 });
+    const checks: unknown[] = [];
+    await openGeofencedAttendance(page, true, checks, () => ({ result: 'inside', distanceMeters: 12, accuracyMeters: 20 }));
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Take attendance' }).click();
+    const stage = main.getByRole('heading', { name: 'Active Liveness & Face Verification' });
+    await expect(stage).toBeVisible();
+    await expect(stage).toBeInViewport();
+    expect(checks).toEqual([{ sessionId: 901, latitude: 13.1436, longitude: 123.7438, accuracy: 20 }]);
+  });
+
+  test('geofenced Take attendance: outside the radius shows the distance and no camera', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 13.1436, longitude: 123.7438, accuracy: 20 });
+    await openGeofencedAttendance(page, true, [], () => ({ result: 'outside', distanceMeters: 2400, accuracyMeters: 20 }));
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Take attendance' }).click();
+    await expect(main.getByText('You are about 2,400 m from the session location. Allowed: within 100 m (about 2,300 m too far). GPS accuracy ±20 m.')).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
+  });
+
+  test('geofenced Take attendance: a second imprecise result directs the Student to manual attendance', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 13.1436, longitude: 123.7438, accuracy: 25 });
+    await openGeofencedAttendance(page, true, [], () => ({ result: 'imprecise', distanceMeters: 5, accuracyMeters: 25 }));
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Take attendance' }).click();
+    await expect(main.getByText(/Your location is too imprecise \(±25 m\)\. Turn on Wi-Fi/)).toBeVisible();
+    await main.getByRole('button', { name: 'Retry' }).click();
+    await expect(main.getByText("Your phone can't get a precise enough location here. Ask your Class Secretary or Course Instructor to record your attendance.")).toBeVisible();
+    await expect(main.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
+  });
+
+  test('geofenced Take attendance: denied location permission says location is required and skips the check', async ({ page, context }) => {
+    await context.clearPermissions();
+    const checks: unknown[] = [];
+    await openGeofencedAttendance(page, true, checks, () => ({ result: 'inside', distanceMeters: 1, accuracyMeters: 1 }));
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Take attendance' }).click();
+    await expect(main.getByText('Location is required for this session. Allow location for this site, or ask your Class Secretary or Course Instructor to record your attendance.')).toBeVisible();
+    await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toHaveCount(0);
+    expect(checks).toHaveLength(0);
+  });
+
+  test('non-geofenced Take attendance never asks for location', async ({ page }) => {
+    const checks: unknown[] = [];
+    await openGeofencedAttendance(page, false, checks, () => ({ result: 'not_required' }));
+    const main = page.getByRole('main');
+    await main.getByRole('button', { name: 'Take attendance' }).click();
+    await expect(main.getByRole('heading', { name: 'Active Liveness & Face Verification' })).toBeVisible();
+    expect(checks).toHaveLength(0);
+  });
+
   test('Take attendance without an active face registration asks to register instead of starting', async ({ page }) => {
     const open = {
       id: 901, sessionId: '901', courseCode: 'OPEN101', courseName: 'OPEN101 Course', sessionDate: '2026-10-12',

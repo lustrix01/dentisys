@@ -686,6 +686,7 @@ function handle_student_attendance_biometric(): void
         $frames = student_biometric_uploaded_frames();
         $latitude = student_biometric_post_float('latitude', -90, 90);
         $longitude = student_biometric_post_float('longitude', -180, 180);
+        $accuracy = student_biometric_post_float('accuracy');
         $pdo->beginTransaction();
         try {
             $session = attendance_session_fetch_for_student($pdo, $sessionId, $studentId, true);
@@ -738,9 +739,17 @@ function handle_student_attendance_biometric(): void
                 $pdo->rollBack();
                 throw new StudentBiometricException('Biometric enrollment is not active.', 409, 'biometric_not_enrolled');
             }
-            if (!student_biometric_geofence_passes($session, $latitude, $longitude)) {
+            $location = student_biometric_location_decision($session, $latitude, $longitude, $accuracy);
+            if ($location['result'] === 'imprecise' && $latitude !== null && $longitude !== null) {
                 $pdo->rollBack();
-                throw new StudentBiometricException('You are outside the permitted attendance location.', 409, 'geofence_failed');
+                throw new StudentBiometricException('Your location is too imprecise to confirm. Retry, or ask for manual attendance.', 409, 'location_imprecise');
+            }
+            if (!in_array($location['result'], ['not_required', 'inside'], true)) {
+                $pdo->rollBack();
+                $message = $location['distanceMeters'] !== null
+                    ? "You are about {$location['distanceMeters']} m from the session location; allowed within {$location['radiusMeters']} m."
+                    : 'You are outside the permitted attendance location.';
+                throw new StudentBiometricException($message, 409, 'geofence_failed');
             }
             $challenge = student_biometric_consume_challenge(
                 $pdo,
@@ -834,9 +843,63 @@ function handle_student_attendance_biometric(): void
         }
     } catch (Throwable $e) {
         if ($studentId > 0 && $authCtx !== [] && $config !== [] && $e instanceof StudentBiometricException
-            && in_array($e->errorCode, ['geofence_failed', 'liveness_failed', 'quality_failed', 'biometric_verification_failed', 'biometric_service_unavailable'], true)) {
+            && in_array($e->errorCode, ['geofence_failed', 'location_imprecise', 'liveness_failed', 'quality_failed', 'biometric_verification_failed', 'biometric_service_unavailable'], true)) {
             student_biometric_failure_audit($config, $authCtx, $context, $studentId, 'biometric_verification_failed', $e->errorCode);
         }
+        student_biometric_emit_exception($e);
+    }
+}
+
+/** Pre-capture location check (ATT-002). Stores and logs nothing about the coordinates. */
+function handle_student_attendance_location_check(): void
+{
+    try {
+        [$config, $pdo, $authCtx, $identity] = student_biometric_controller_context();
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
+        $body = request_body();
+        if (!$body['has_body']) {
+            throw new StudentBiometricException('Request body required.', 400, 'BAD_REQUEST');
+        }
+        $data = $body['data'];
+        $sessionId = $data['sessionId'] ?? null;
+        $sessionId = is_int($sessionId) || (is_string($sessionId) && ctype_digit($sessionId)) ? (int) $sessionId : 0;
+        if ($sessionId <= 0) {
+            throw new StudentBiometricException('A valid attendance session is required.', 422, 'VALIDATION_ERROR');
+        }
+        $number = static function (string $field, float $min, float $max, bool $required) use ($data): ?float {
+            $value = $data[$field] ?? null;
+            if ($value === null || $value === '') {
+                if ($required) {
+                    throw new StudentBiometricException('Location value is required.', 422, 'VALIDATION_ERROR');
+                }
+                return null;
+            }
+            if (!is_numeric($value) || !is_finite((float) $value) || (float) $value < $min || (float) $value > $max) {
+                throw new StudentBiometricException('Location value is invalid.', 422, 'VALIDATION_ERROR');
+            }
+            return (float) $value;
+        };
+        $latitude = $number('latitude', -90, 90, true);
+        $longitude = $number('longitude', -180, 180, true);
+        $accuracy = $number('accuracy', -1.0e9, 1.0e9, false);
+        $session = attendance_session_fetch_for_student($pdo, $sessionId, $identity['student_id']);
+        if ($session === null || strtolower((string) $session['status']) !== 'active') {
+            throw new StudentBiometricException('Attendance session is not active for this Student.', 409, 'session_not_active');
+        }
+        // Read-only: expiry housekeeping happens at submit, not on a check that stores nothing.
+        $profile = student_biometric_profile($pdo, $identity['student_id']);
+        if ($profile === null || $profile['consent_status'] !== 'approved') {
+            throw new StudentBiometricException('Biometric consent is required before attendance capture.', 409, 'consent_required');
+        }
+        if ($profile['enrollment_status'] !== 'active' || $profile['protected_object_reference'] === null) {
+            throw new StudentBiometricException('Biometric enrollment is not active.', 409, 'biometric_not_enrolled');
+        }
+        $decision = student_biometric_location_decision($session, $latitude, $longitude, $accuracy);
+        json_response([
+            'status' => 'ok',
+            'geofenceEnabled' => attendance_session_bool($session['geofence_enabled']),
+        ] + $decision, 200);
+    } catch (Throwable $e) {
         student_biometric_emit_exception($e);
     }
 }

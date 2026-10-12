@@ -64,7 +64,7 @@ export const StartSession: React.FC = () => {
   const [lateCutoffStr, setLateCutoffStr] = useState('12:00');
   const [classEndTimeStr, setClassEndTimeStr] = useState('13:00');
   const [requireFace, setRequireFace] = useState(true);
-  const [requireGeo, setRequireGeo] = useState(true);
+  const [requireGeo, setRequireGeo] = useState(false);
   // Same default as the server and the Faculty form (100 m).
   const [geofenceRadius, setGeofenceRadius] = useState(100);
 
@@ -997,6 +997,7 @@ export const StartSession: React.FC = () => {
                   <option value={200}>200 meters (BU Dental Building / Room)</option>
                   <option value={500}>500 meters (Campus Wide)</option>
                 </select>
+                <p className="text-[11px] text-slate-400">Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.</p>
               </div>
 
               {/* Requirement Checkboxes */}

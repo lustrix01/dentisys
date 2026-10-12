@@ -1219,7 +1219,8 @@ export function createFacultyAttendanceSessionApi(data: {
 }
 
 export function updateFacultyAttendanceSessionApi(
-  data: Omit<Parameters<typeof createFacultyAttendanceSessionApi>[0], 'csId' | 'classSectionId' | 'subjectCode' | 'topic'> & { sessionId: string | number }
+  // An edit sends only the fields the user changed; the server keeps every field it is not sent.
+  data: Partial<Omit<Parameters<typeof createFacultyAttendanceSessionApi>[0], 'csId' | 'classSectionId' | 'subjectCode' | 'topic'>> & { sessionId: string | number }
 ): Promise<{ status: string; session: NonNullable<FacultyAttendanceWorksheet['attendanceSession']> }> {
   return request('POST', '/faculty/attendance/session/update', data);
 }
@@ -2209,6 +2210,24 @@ export async function getStudentUpcomingAttendanceSessions(
 
 export function submitBiometricAttendance(formData: FormData, signal?: AbortSignal): Promise<BiometricAttendanceResponse> {
   return request<BiometricAttendanceResponse>('POST', '/student/attendance/biometric', formData, undefined, 30000, signal);
+}
+
+export interface StudentLocationCheckResponse {
+  status: 'ok';
+  geofenceEnabled: boolean;
+  result: 'not_required' | 'inside' | 'outside' | 'imprecise';
+  distanceMeters: number | null;
+  radiusMeters: number | null;
+  accuracyMeters: number | null;
+  accuracyLimitMeters: number | null;
+}
+
+/** Pre-capture location check (ATT-002); the server stores nothing. */
+export function checkStudentAttendanceLocation(
+  payload: { sessionId: number; latitude: number; longitude: number; accuracy: number },
+  signal?: AbortSignal,
+): Promise<StudentLocationCheckResponse> {
+  return request<StudentLocationCheckResponse>('POST', '/student/attendance/location-check', payload, undefined, 15000, signal);
 }
 
 export async function getStudentAttendanceLogs(params?: {

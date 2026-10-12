@@ -176,6 +176,48 @@ foreach (['session_date' => $sessionEditPayload['sessionDate'], 'opening_time' =
 }
 [$unchangedEditStatus] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $sessionEditPayload);
 expect_same(200, $unchangedEditStatus, 'An unchanged scheduled edit does not conflict with itself');
+$keepGeoPayload = $sessionEditPayload;
+unset($keepGeoPayload['biometricRequired'], $keepGeoPayload['geofenceEnabled'], $keepGeoPayload['geofenceLatitude'], $keepGeoPayload['geofenceLongitude'], $keepGeoPayload['geofenceRadiusMeters']);
+[$keepGeoStatus, $keepGeoBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $keepGeoPayload);
+expect_same(200, $keepGeoStatus, 'Faculty edit omitting the geofence setting succeeds: ' . json_encode($keepGeoBody));
+expect_same(true, $keepGeoBody['session']['geofenceEnabled'] ?? null, 'Edit omitting the geofence setting keeps the session geofenced');
+expect_same(13.1391, $keepGeoBody['session']['geofenceLatitude'] ?? null, 'Edit omitting the geofence setting keeps the stored latitude');
+expect_same(123.7438, $keepGeoBody['session']['geofenceLongitude'] ?? null, 'Edit omitting the geofence setting keeps the stored longitude');
+expect_same(125.0, (float) ($keepGeoBody['session']['geofenceRadiusMeters'] ?? 0), 'Edit omitting the geofence setting keeps the stored radius');
+expect_same(true, $keepGeoBody['session']['biometricRequired'] ?? null, 'Edit omitting the biometric setting keeps it on');
+$editSession = static function (array $fields) use ($seedFacultyAccessToken, $queuedId): array {
+    [$status, $body] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, ['sessionId' => $queuedId] + $fields);
+    return [$status, $body['session'] ?? [], $body];
+};
+// An edit updates only what it sends (ATT-002).
+[$roomOnlyStatus, $roomOnly] = $editSession(['room' => 'Only Room ' . $scheduleSuffix]);
+expect_same(200, $roomOnlyStatus, 'Edit sending only the room succeeds');
+expect_same('Only Room ' . $scheduleSuffix, $roomOnly['room'] ?? null, 'Room-only edit changes the room');
+foreach (['sessionDate', 'openingTime', 'presentCutoff', 'lateCutoff', 'classEndTime', 'biometricRequired', 'geofenceEnabled', 'geofenceLatitude', 'geofenceLongitude'] as $keptField) {
+    expect_same($sessionEditPayload[$keptField], $roomOnly[$keptField] ?? null, 'Room-only edit keeps ' . $keptField);
+}
+expect_same(125.0, (float) ($roomOnly['geofenceRadiusMeters'] ?? 0), 'Room-only edit keeps the radius');
+[$geoOffStatus, $geoOff] = $editSession(['geofenceEnabled' => false]);
+expect_same(200, $geoOffStatus, 'Edit sending only geofenceEnabled false succeeds');
+expect_same(false, $geoOff['geofenceEnabled'] ?? null, 'Geofence-off edit turns the geofence off');
+expect_same(true, $geoOff['biometricRequired'] ?? null, 'Geofence-off edit keeps biometric');
+expect_same('Only Room ' . $scheduleSuffix, $geoOff['room'] ?? null, 'Geofence-off edit keeps the room');
+[$geoOnStatus, $geoOn] = $editSession(['geofenceEnabled' => true, 'geofenceLatitude' => 13.15, 'geofenceLongitude' => 123.75]);
+expect_same(200, $geoOnStatus, 'Edit sending only geofenceEnabled true with a location succeeds');
+expect_same(true, $geoOn['geofenceEnabled'] ?? null, 'Geofence-on edit turns the geofence on');
+expect_same(13.15, $geoOn['geofenceLatitude'] ?? null, 'Geofence-on edit stores the sent latitude');
+expect_same(true, $geoOn['biometricRequired'] ?? null, 'Geofence-on edit keeps biometric');
+expect_same('Only Room ' . $scheduleSuffix, $geoOn['room'] ?? null, 'Geofence-on edit keeps the room');
+[$bioOnlyStatus, $bioOnly] = $editSession(['biometricRequired' => false]);
+expect_same(200, $bioOnlyStatus, 'Edit sending only biometricRequired succeeds');
+expect_same(false, $bioOnly['biometricRequired'] ?? null, 'Biometric-only edit turns biometric off');
+expect_same(true, $bioOnly['geofenceEnabled'] ?? null, 'Biometric-only edit keeps the geofence');
+expect_same(13.15, $bioOnly['geofenceLatitude'] ?? null, 'Biometric-only edit keeps the location');
+[$badPresentStatus] = $editSession(['presentCutoff' => '10:20']);
+expect_same(422, $badPresentStatus, 'A presentCutoff after the stored lateCutoff is rejected');
+[$goodPresentStatus, $goodPresent] = $editSession(['presentCutoff' => '09:20']);
+expect_same(200, $goodPresentStatus, 'A presentCutoff inside the stored times is accepted');
+expect_same(['08:10', '09:20', '10:10', '10:50'], [$goodPresent['openingTime'] ?? null, $goodPresent['presentCutoff'] ?? null, $goodPresent['lateCutoff'] ?? null, $goodPresent['classEndTime'] ?? null], 'presentCutoff-only edit keeps the other stored times');
 [$restoreQueueStatus] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $queuePayload + ['sessionId' => $queuedId]);
 expect_same(200, $restoreQueueStatus, 'Scheduled edit can restore the original date and times');
 [$secretaryForbiddenEditStatus, $secretaryForbiddenEditBody] = integration_http_json('/api/secretary/attendance/session/update', $secretaryAccessToken, $queuePayload + ['sessionId' => $queuedId]);
@@ -187,6 +229,12 @@ expect_same(200, $facultySecretaryEditStatus, 'Faculty edits the class Secretary
 expect_same('11:15', $facultySecretaryEditBody['session']['openingTime'] ?? null, 'Faculty changes the Secretary-created opening time');
 [$secretaryOwnEditStatus] = integration_http_json('/api/secretary/attendance/session/update', $secretaryAccessToken, $laterPayload + ['sessionId' => $laterId]);
 expect_same(200, $secretaryOwnEditStatus, 'Secretary edits their own session after a Faculty edit');
+[$aliasOnStatus, $aliasOnBody] = integration_http_json('/api/secretary/attendance/session/update', $secretaryAccessToken, ['sessionId' => $laterId, 'requireGeo' => true, 'geofenceLatitude' => 13.1, 'geofenceLongitude' => 123.7]);
+expect_same(200, $aliasOnStatus, 'Secretary requireGeo true edit succeeds');
+expect_same(true, $aliasOnBody['session']['geofenceEnabled'] ?? null, 'Secretary requireGeo overrides the stored off geofence');
+[$aliasOffStatus, $aliasOffBody] = integration_http_json('/api/secretary/attendance/session/update', $secretaryAccessToken, ['sessionId' => $laterId, 'requireGeo' => false]);
+expect_same(200, $aliasOffStatus, 'Secretary requireGeo false edit succeeds');
+expect_same(false, $aliasOffBody['session']['geofenceEnabled'] ?? null, 'Secretary requireGeo overrides the stored on geofence');
 [$overlapEditStatus, $overlapEditBody] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $laterPayload + ['sessionId' => $queuedId]);
 expect_same(409, $overlapEditStatus, 'Editing cannot overlap another scheduled session');
 expect_same('CONFLICT', $overlapEditBody['code'] ?? null, 'Edit overlap keeps the existing conflict code');

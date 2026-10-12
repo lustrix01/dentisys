@@ -373,6 +373,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     const date = page.getByLabel('Session date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
+    await expect(page.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked(); // ATT-002: off by default
     await page.getByRole('checkbox', { name: /Geolocation|Geofence/ }).uncheck();
     await page.getByRole('button', { name: 'Schedule Class Session', exact: true }).click();
     await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
@@ -509,7 +510,6 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await page.goto('/secretary/start-session');
     await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
 
-    await page.getByText('Enforce GPS Geofence Verification').click();
     await page.getByRole('button', { name: /Start Class Session Now/i }).click();
 
     await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
@@ -544,6 +544,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
 
     await page.goto('/secretary/start-session');
+    await page.getByText('Enforce GPS Geofence Verification').click();
     await page.getByRole('button', { name: 'Pick on map' }).click();
     const map = page.getByRole('application', { name: 'Session location map' });
     await expect(map).toBeVisible();
@@ -663,7 +664,6 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     });
 
     await page.goto('/secretary/start-session');
-    await page.getByText('Enforce GPS Geofence Verification').click();
     await page.getByRole('button', { name: /Start Class Session Now/i }).click();
 
     await expect(page.getByText('An active attendance session already exists for this class section.')).toBeVisible();

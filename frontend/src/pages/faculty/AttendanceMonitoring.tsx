@@ -37,6 +37,8 @@ import {
   FacultyManagedAttendanceSession,
 } from '../../services/apiClient';
 
+const RADIUS_HINT = 'Indoors, use 150 m or more; phone GPS is often off by 50–100 m inside buildings.';
+
 type SupportedStatus = 'present' | 'absent' | 'late' | 'excused';
 
 const STATUS_ORDER: SupportedStatus[] = ['present', 'late', 'absent', 'excused'];
@@ -221,7 +223,7 @@ export const AttendanceMonitoring: React.FC = () => {
   const [endError, setEndError] = useState<string | null>(null);
   const [submittingEnd, setSubmittingEnd] = useState(false);
   const [biometricRequired, setBiometricRequired] = useState(true);
-  const [geofenceEnabled, setGeofenceEnabled] = useState(true);
+  const [geofenceEnabled, setGeofenceEnabled] = useState(false);
   const [geofenceRadius, setGeofenceRadius] = useState(100);
   const [submittingSession, setSubmittingSession] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -315,12 +317,17 @@ export const AttendanceMonitoring: React.FC = () => {
   const [isEditSessionOpen, setIsEditSessionOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<FacultyManagedAttendanceSession | null>(null);
   const [editRoom, setEditRoom] = useState('');
-  const [editOpeningTime, setEditOpeningTime] = useState('08:00');
-  const [editPresentCutoff, setEditPresentCutoff] = useState('09:00');
-  const [editLateCutoff, setEditLateCutoff] = useState('12:00');
-  const [editClassEndTime, setEditClassEndTime] = useState('13:00');
-  const [editBiometricRequired, setEditBiometricRequired] = useState(true);
-  const [editGeofenceEnabled, setEditGeofenceEnabled] = useState(true);
+  const [editOpeningTime, setEditOpeningTime] = useState('');
+  const [editPresentCutoff, setEditPresentCutoff] = useState('');
+  const [editLateCutoff, setEditLateCutoff] = useState('');
+  const [editClassEndTime, setEditClassEndTime] = useState('');
+  const [editBiometricRequired, setEditBiometricRequired] = useState(false);
+  const [editGeofenceEnabled, setEditGeofenceEnabled] = useState(false);
+  // The saved values the form opened with; an edit sends only what differs from these.
+  const [editOriginal, setEditOriginal] = useState<{
+    room: string; openingTime: string; presentCutoff: string; lateCutoff: string; classEndTime: string;
+    biometricRequired: boolean; geofenceEnabled: boolean; radius: number; location: { latitude: number; longitude: number } | null;
+  } | null>(null);
   const [editGeofenceRadius, setEditGeofenceRadius] = useState(100);
   const [editLocation, setEditLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showEditMap, setShowEditMap] = useState(false);
@@ -606,19 +613,31 @@ export const AttendanceMonitoring: React.FC = () => {
   // Open Edit Session Modal
   const handleOpenEditSession = (session: FacultyManagedAttendanceSession | NonNullable<FacultyAttendanceWorksheet['attendanceSession']>) => {
     setEditingSession(session as FacultyManagedAttendanceSession);
-    setEditRoom(session.room || '');
-    setEditOpeningTime(session.openingTime || '08:00');
-    setEditPresentCutoff(session.presentCutoff || '09:00');
-    setEditLateCutoff(session.lateCutoff || '12:00');
-    setEditClassEndTime(session.classEndTime || '13:00');
-    setEditBiometricRequired(session.biometricRequired !== false);
-    setEditGeofenceEnabled(session.geofenceEnabled !== false);
-    setEditGeofenceRadius(session.geofenceRadiusMeters || 100);
-    if (session.geofenceLatitude && session.geofenceLongitude) {
-      setEditLocation({ latitude: session.geofenceLatitude, longitude: session.geofenceLongitude });
-    } else {
-      setEditLocation(null);
-    }
+    // Show exactly what is saved; the 100 m radius is only a starting value for turning geofence on.
+    const location = session.geofenceLatitude != null && session.geofenceLongitude != null
+      ? { latitude: session.geofenceLatitude, longitude: session.geofenceLongitude }
+      : null;
+    const original = {
+      room: session.room ?? '',
+      openingTime: session.openingTime ?? '',
+      presentCutoff: session.presentCutoff ?? '',
+      lateCutoff: session.lateCutoff ?? '',
+      classEndTime: session.classEndTime ?? '',
+      biometricRequired: session.biometricRequired === true,
+      geofenceEnabled: session.geofenceEnabled === true,
+      radius: session.geofenceRadiusMeters ?? 100,
+      location,
+    };
+    setEditOriginal(original);
+    setEditRoom(original.room);
+    setEditOpeningTime(original.openingTime);
+    setEditPresentCutoff(original.presentCutoff);
+    setEditLateCutoff(original.lateCutoff);
+    setEditClassEndTime(original.classEndTime);
+    setEditBiometricRequired(original.biometricRequired);
+    setEditGeofenceEnabled(original.geofenceEnabled);
+    setEditGeofenceRadius(original.radius);
+    setEditLocation(location);
     setShowEditMap(false);
     setEditError(null);
     setIsEditSessionOpen(true);
@@ -627,7 +646,35 @@ export const AttendanceMonitoring: React.FC = () => {
   // Submit Session Updates
   const handleUpdateSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSession) return;
+    if (!editingSession || !editOriginal) return;
+
+    const changes: Omit<Parameters<typeof updateFacultyAttendanceSessionApi>[0], 'sessionId'> = {};
+    if (editRoom.trim() !== editOriginal.room.trim()) changes.room = editRoom.trim();
+    if (editOpeningTime !== editOriginal.openingTime) changes.openingTime = editOpeningTime;
+    if (editPresentCutoff !== editOriginal.presentCutoff) changes.presentCutoff = editPresentCutoff;
+    if (editLateCutoff !== editOriginal.lateCutoff) changes.lateCutoff = editLateCutoff;
+    if (editClassEndTime !== editOriginal.classEndTime) changes.classEndTime = editClassEndTime;
+    if (editBiometricRequired !== editOriginal.biometricRequired) changes.biometricRequired = editBiometricRequired;
+    if (editGeofenceEnabled !== editOriginal.geofenceEnabled) {
+      changes.geofenceEnabled = editGeofenceEnabled;
+      if (editGeofenceEnabled) {
+        changes.geofenceRadiusMeters = editGeofenceRadius;
+        changes.geofenceLatitude = editLocation?.latitude;
+        changes.geofenceLongitude = editLocation?.longitude;
+      }
+    } else if (editGeofenceEnabled) {
+      if (editGeofenceRadius !== editOriginal.radius) changes.geofenceRadiusMeters = editGeofenceRadius;
+      if (editLocation?.latitude !== editOriginal.location?.latitude || editLocation?.longitude !== editOriginal.location?.longitude) {
+        changes.geofenceLatitude = editLocation?.latitude;
+        changes.geofenceLongitude = editLocation?.longitude;
+      }
+    }
+    if (Object.keys(changes).length === 0) {
+      // Nothing changed: no request, just close.
+      setIsEditSessionOpen(false);
+      setEditingSession(null);
+      return;
+    }
 
     setSubmittingEdit(true);
     const writeScope = beginWorksheetMutation();
@@ -635,18 +682,7 @@ export const AttendanceMonitoring: React.FC = () => {
     try {
       await updateFacultyAttendanceSessionApi({
         sessionId: editingSession.sessionId,
-        // Without the date the server moves the session to today.
-        sessionDate: editingSession.sessionDate || selectedDate,
-        room: editRoom.trim() || undefined,
-        openingTime: editOpeningTime,
-        presentCutoff: editPresentCutoff,
-        lateCutoff: editLateCutoff,
-        classEndTime: editClassEndTime,
-        biometricRequired: editBiometricRequired,
-        geofenceEnabled: editGeofenceEnabled,
-        geofenceRadiusMeters: editGeofenceEnabled ? editGeofenceRadius : undefined,
-        geofenceLatitude: editGeofenceEnabled ? editLocation?.latitude : undefined,
-        geofenceLongitude: editGeofenceEnabled ? editLocation?.longitude : undefined,
+        ...changes,
       });
 
       setIsEditSessionOpen(false);
@@ -1671,7 +1707,7 @@ export const AttendanceMonitoring: React.FC = () => {
             {geofenceEnabled && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/70 dark:bg-emerald-950/20">
                 <div className="flex items-center justify-between gap-3">
-                  <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span><input type="number" min={25} max={1000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
+                  <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span><input type="number" min={50} max={2000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /><small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small></label>
                   <button type="button" onClick={handleAcquireSessionLocation} disabled={locatingSession} className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"><Navigation className="w-3.5 h-3.5" />{locatingSession ? 'Locating…' : 'Use device location'}</button>
                   <button type="button" onClick={() => setShowSessionMap(shown => !shown)} className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-emerald-600 px-3 py-2.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300"><MapPin className="w-3.5 h-3.5" />{showSessionMap ? 'Hide map' : 'Pick on map'}</button>
                 </div>
@@ -2084,6 +2120,7 @@ export const AttendanceMonitoring: React.FC = () => {
                       onChange={(event) => setEditGeofenceRadius(Number(event.target.value))}
                       className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                     />
+                    <small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small>
                   </label>
                   <button
                     type="button"

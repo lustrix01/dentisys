@@ -607,6 +607,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'POST',
+        'path' => '/api/student/attendance/location-check',
+        'handler' => 'handle_student_attendance_location_check',
+        'has_params' => false,
+    ],
+    [
         'method' => 'GET',
         'path' => '/api/student/attendance/logs',
         'handler' => 'handle_student_attendance_logs',

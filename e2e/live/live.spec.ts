@@ -393,7 +393,8 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   const startPromise = page.waitForResponse(
     response => response.url().includes('/api/secretary/attendance/session') && response.request().method() === 'POST'
   );
-  await page.getByText('Enforce GPS Geofence Verification').click();
+  // ATT-002: geofence is off by default, so no toggle is needed for a session without a location.
+  await expect(page.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked();
   const sessionWindow = manilaSessionWindow();
   // The timing labels are not programmatically associated with their inputs; the input is the label's next sibling.
   const timeInputAfter = (label: string) => page.getByText(label, { exact: true }).locator('xpath=following-sibling::input');

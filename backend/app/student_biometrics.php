@@ -853,22 +853,45 @@ function student_biometric_haversine_meters(float $lat1, float $lon1, float $lat
     return $earthRadius * 2 * atan2(sqrt($a), sqrt(max(0.0, 1 - $a)));
 }
 
-function student_biometric_geofence_passes(array $session, ?float $latitude, ?float $longitude): bool
+const STUDENT_BIOMETRIC_MAX_ACCURACY_METERS = 100.0;
+
+/**
+ * Location decision shared by the pre-capture check and the submit endpoint (ATT-002).
+ * result: not_required | inside | outside | imprecise. Nothing here is stored.
+ */
+function student_biometric_location_decision(array $session, ?float $latitude, ?float $longitude, ?float $accuracy): array
 {
     if (!attendance_session_bool($session['geofence_enabled'] ?? false)) {
-        return true;
+        return ['result' => 'not_required', 'distanceMeters' => null, 'radiusMeters' => null,
+            'accuracyMeters' => null, 'accuracyLimitMeters' => null];
     }
-    if ($latitude === null || $longitude === null
-        || $session['geofence_latitude'] === null || $session['geofence_longitude'] === null
-        || $session['geofence_radius_meters'] === null) {
-        return false;
+    $radius = $session['geofence_radius_meters'] !== null ? (float) $session['geofence_radius_meters'] : null;
+    $limit = $radius !== null ? min($radius, STUDENT_BIOMETRIC_MAX_ACCURACY_METERS) : null;
+    $accuracyValid = $accuracy !== null && is_finite($accuracy) && $accuracy > 0;
+    $out = [
+        'result' => 'imprecise', 'distanceMeters' => null,
+        'radiusMeters' => $radius !== null ? (int) round($radius) : null,
+        'accuracyMeters' => $accuracyValid ? (int) round($accuracy) : null,
+        'accuracyLimitMeters' => $limit !== null ? (int) round($limit) : null,
+    ];
+    if ($latitude === null || $longitude === null || $radius === null
+        || $session['geofence_latitude'] === null || $session['geofence_longitude'] === null) {
+        return $out;
     }
-    return student_biometric_haversine_meters(
-        $latitude,
-        $longitude,
-        (float) $session['geofence_latitude'],
-        (float) $session['geofence_longitude']
-    ) <= (float) $session['geofence_radius_meters'];
+    $distance = student_biometric_haversine_meters(
+        $latitude, $longitude, (float) $session['geofence_latitude'], (float) $session['geofence_longitude']
+    );
+    $out['distanceMeters'] = (int) round($distance);
+    if (!$accuracyValid || $accuracy > $limit) {
+        return $out;
+    }
+    $out['result'] = $distance <= $radius ? 'inside' : 'outside';
+    return $out;
+}
+
+function student_biometric_geofence_passes(array $session, ?float $latitude, ?float $longitude, ?float $accuracy = null): bool
+{
+    return in_array(student_biometric_location_decision($session, $latitude, $longitude, $accuracy)['result'], ['not_required', 'inside'], true);
 }
 
 function student_biometric_record_audit(
