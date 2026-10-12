@@ -60,7 +60,7 @@ export default function GradeValue({ percentage, children, className }: Props) {
       onBlur: () => setShown(false),
     },
     children,
-    React.createElement('span', { id, role: 'tooltip', className: 'sr-only print:hidden' }, tip),
+    React.createElement('span', { id, role: 'tooltip', hidden: true }, tip),
     shown && typeof document !== 'undefined'
       ? createPortal(React.createElement('span', { ref: bubbleRef, 'aria-hidden': true, 'data-grade-tip': '', className: BUBBLE }, tip), document.body)
       : null,
