@@ -215,6 +215,8 @@ Existing session behavior includes:
 * logout/revocation;
 * account/token invalidation behavior.
 
+The browser's session-refresh request MUST be allowed to complete when the page reloads, navigates or closes (e.g. `fetch` `keepalive`), so a rotation the server committed is not lost by the client. Presenting an already-used refresh token is treated as reuse and revokes the session, except within the existing short concurrent-refresh window (409 `REFRESH_IN_PROGRESS`).
+
 Google credentials MUST NOT replace the DentiSys application-session model.
 
 ## AUTH-008 — Authentication provenance

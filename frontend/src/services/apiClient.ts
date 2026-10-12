@@ -30,8 +30,8 @@ import type {
 import {
   normalizeStudentActiveSession,
   normalizeStudentAttendanceLogRecord,
-} from './attendanceNormalization';
-export { normalizeStudentActiveSession, normalizeStudentAttendanceLogRecord } from './attendanceNormalization';
+} from './attendanceNormalization.ts';
+export { normalizeStudentActiveSession, normalizeStudentAttendanceLogRecord } from './attendanceNormalization.ts';
 
 
 const configuredBase = import.meta.env?.VITE_API_BASE_URL?.trim();
@@ -241,6 +241,8 @@ async function request<T>(
   tokenOverride?: string,
   timeoutMs = 15000,
   signal?: AbortSignal,
+  // keepalive lets a refresh finish even if the page reloads/closes after the server rotated the token
+  keepalive = false,
 ): Promise<T> {
   const headers: Record<string, string> = {
     accept: 'application/json',
@@ -274,6 +276,7 @@ async function request<T>(
       credentials: 'include',
       body: body !== undefined ? (isFormData ? (body as BodyInit) : JSON.stringify(body)) : undefined,
       signal: controller.signal,
+      ...(keepalive ? { keepalive: true } : {}),
     });
   } catch {
     if (signal?.aborted) {
@@ -466,11 +469,11 @@ export function refreshSession(): Promise<{ access_token: string; user: { user_i
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
-        return await request<{ access_token: string; user: { user_id: number } }>('POST', '/auth/refresh');
+        return await request<{ access_token: string; user: { user_id: number } }>('POST', '/auth/refresh', undefined, undefined, 15000, undefined, true);
       } catch (error) {
         if (error instanceof ApiError && error.status === 409 && error.code === 'REFRESH_IN_PROGRESS') {
           await new Promise(resolve => setTimeout(resolve, 150));
-          return request<{ access_token: string; user: { user_id: number } }>('POST', '/auth/refresh');
+          return request<{ access_token: string; user: { user_id: number } }>('POST', '/auth/refresh', undefined, undefined, 15000, undefined, true);
         }
         throw error;
       }
@@ -2128,7 +2131,7 @@ export function saveFacultyGradingConfigApi(
 }
 
 // RFC 6238 TOTP Helpers & Per-User Secret Generation
-export { base32Decode, generateBase32Secret, computeTotpCode, verifyTotpCode } from '../utils/totp';
+export { base32Decode, generateBase32Secret, computeTotpCode, verifyTotpCode } from '../utils/totp.ts';
 
 // --- Authoritative Student Biometric & Attendance APIs ---
 
