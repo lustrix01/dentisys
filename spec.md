@@ -893,7 +893,7 @@ Students contact Secretary or Faculty outside DentiSys. Current scope has no Stu
 
 **Status: APPROVED**
 
-Students see scheduled and open attendance sessions for their own active class enrollments on the Daily Attendance page. By default this covers today and the next 7 days, with an option to view all upcoming sessions. Revoked and ended sessions are not listed. Times are shown in Asia/Manila; countdowns use server time, are informational only, and never decide attendance. Listing a session does not change attendance eligibility or timing. On Daily Attendance, "Take attendance" on an open session starts the check-in for that session and scrolls to its location or camera step.
+Students see scheduled and open attendance sessions for their own active class enrollments on the Daily Attendance page. By default this covers today and the next 7 days, with an option to view all upcoming sessions. Revoked and ended sessions are not listed. Times are shown in Asia/Manila; countdowns use server time, are informational only, and never decide attendance. Listing a session does not change attendance eligibility or timing. On Daily Attendance, "Take attendance" on an open session starts the check-in for that session and scrolls to its location or camera step; if face registration is not active, it asks the student to register their face, with an option to cancel.
 
 ## DEL-001 — Image publishing and deployment
 
