@@ -1,5 +1,7 @@
 # VPS demonstration deployment
 
+> For day-to-day releases (demo and production) follow the [release guide](release-guide.md). This file is the detailed reference for the server setup.
+
 This is the Owner-approved DEL-001 demonstration on one Ubuntu LTS VPS for the
 team and invited volunteer Faculty and Students. It is not production or the
 BIO-002 real Student deployment. Only team members may enroll facial biometrics.

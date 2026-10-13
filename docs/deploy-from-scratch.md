@@ -134,7 +134,7 @@ Site: https://<ip-with-dashes>.sslip.io
 | Manual attendance | Secretary/Faculty marks a Student | Record and audit entry |
 | Email | Invitations, remedial notices | Arrive in the inbox |
 | Reports and audit | Dean → Reports, Audit Trail | Data loads; CSV/PDF export |
-| Rolling update | `.\scripts\publish-images.ps1` | Watchtower updates one copy at a time, no downtime |
+| Rolling update | See the [release guide](release-guide.md) | Watchtower updates one copy at a time, no downtime |
 
 ## 6. Releasing changes later
 
@@ -164,6 +164,7 @@ Later releases: `git checkout <approved sha>`, then `.\scripts\promote-prod.ps1 
 | `UNPROTECTED PRIVATE KEY FILE` / `bad permissions` | Other Windows accounts can read the `.pem` | Copy it to `%USERPROFILE%\.ssh\`, then `icacls <pem> /inheritance:r /grant:r "$($env:USERDOMAIN)\$($env:USERNAME):R"`; the launcher prints the exact commands |
 | "host key changed" / rebuilt instance on the same IP | Your PC remembers the old instance's key | Rerun with `-NewInstance` and compare the fingerprint with EC2 → *Get system log* |
 | SSH timeout | Security Group blocks the port, or the instance is down | Check the inbound rules for 22 (first run) / 2202 |
+| `exit 255` / `Connection timed out` right after `SSH is back after the reboot` | The firewall rate-limits new SSH connections (about 6 in 30 s); the post-reboot checks open several in a row. Seen on both the demo and production setups. | The install already passed before the reboot. Open `https://<site>/api/health`: if it shows `"status":"ok"`, the setup is done. |
 | `no space left on device` while pulling images | 8 GB default disk | Resize the EBS volume to 30 GB, run `sudo growpart /dev/nvme0n1 1` and `sudo resize2fs /dev/nvme0n1p1`, rerun |
 | `Server provisioning failed` | See the `ERROR:` lines printed above it | Full log: `ssh ... 'sudo tail -n 80 /var/log/dentisys-provision.log'` (as `ubuntu` on 22 before the SSH switch, as `<user>` on 2202 after) |
 | Account mismatch at the probe | The server was set up with a different `-User` | Rerun with the original `-User` |
