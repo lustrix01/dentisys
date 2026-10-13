@@ -67,6 +67,7 @@ services:
       BIOMETRIC_MATCH_COUNT: ${BIOMETRIC_MATCH_COUNT:?Set biometric matching calibration.}
       BIOMETRIC_BLINK_THRESHOLD: ${BIOMETRIC_BLINK_THRESHOLD:?Set biometric liveness calibration.}
       BIOMETRIC_HEAD_TURN_RATIO: ${BIOMETRIC_HEAD_TURN_RATIO:?Set biometric liveness calibration.}
+      BIOMETRIC_DIAGNOSTIC_SCORES: ${BIOMETRIC_DIAGNOSTIC_SCORES:-}
       MEDIAPIPE_FACE_LANDMARKER_MODEL_PATH: /app/models/face_landmarker.task
       MEDIAPIPE_FACE_LANDMARKER_SHA256: ${MEDIAPIPE_FACE_LANDMARKER_SHA256:?Set the Face Landmarker SHA-256 checksum.}
       BIOMETRIC_YUNET_MODEL_PATH: /app/models/face_detection_yunet_2023mar.onnx

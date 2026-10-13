@@ -537,15 +537,32 @@ def verify():
     faces: list[np.ndarray | None] = []
     matched: list[bool] = []
     usable = 0
+    scores: list[float | None] = []
+    issues: list[str | None] = []
     for image in images:
-        face, crop, _ = detect_face(image, config)
+        face, crop, issue = detect_face(image, config)
         faces.append(face)
+        issues.append(issue)
         if crop is None:
             matched.append(False)
+            scores.append(None)
             continue
         usable += 1
         similarity = float(np.dot(face_embedding(crop), template))
+        scores.append(similarity)
         matched.append(similarity >= config.sface_cosine_threshold)
+    if os.getenv("BIOMETRIC_DIAGNOSTIC_SCORES", "").strip() == "1":
+        # shortcut: hardcoded trial proposals, remove after the 2026-10 sibling calibration trial
+        trials = {"current": (config.sface_cosine_threshold, config.match_count), "0.55/5": (0.55, 5), "0.55/6": (0.55, 6)}
+        decisions = {}
+        for name, (threshold, count) in trials.items():
+            hits = [score is not None and score >= threshold for score in scores]
+            decisions[name] = usable >= count and sum(hits) >= count and liveness_bound_to_face(points, faces, hits, actions, config)
+        app.logger.warning("biometric_diagnostic_scores " + json.dumps({
+            "studentId": request.form.get("studentId", ""),
+            "frames": [{"score": None if s is None else round(s, 3), "issue": i} for s, i in zip(scores, issues)],
+            "decisions": decisions,
+        }, separators=(",", ":")))
     if usable < config.match_count:
         raise BiometricError("Not enough clear face frames were captured. Face the camera in good light and retry.", "quality_failed")
     if sum(matched) < config.match_count:
