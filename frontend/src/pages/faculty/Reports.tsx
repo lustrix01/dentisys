@@ -1268,7 +1268,7 @@ export const Reports: React.FC = () => {
             {reportTab === 'academic' && (isLectureLaboratoryMode ? (
               <>
                 <tr>
-                  <th className="l" rowSpan={2}>Student Number</th>
+                  <th className="l" rowSpan={2}>Student No.</th>
                   <th className="l" rowSpan={2}>Student Name</th>
                   <th className="band" scope="colgroup" colSpan={3}>Midterm</th>
                   <th className="band" scope="colgroup" colSpan={3}>Finals</th>
@@ -1286,7 +1286,7 @@ export const Reports: React.FC = () => {
               </>
             ) : (
               <tr>
-                <th className="l">Student Number</th>
+                <th className="l">Student No.</th>
                 <th className="l">Student Name</th>
                 <th>Midterm</th>
                 <th>Final</th>
@@ -1296,7 +1296,7 @@ export const Reports: React.FC = () => {
             ))}
             {reportTab === 'retention' && (
               <tr>
-                <th className="l">Student Number</th>
+                <th className="l">Student No.</th>
                 <th className="l">Student Name</th>
                 <th>Standing GWA</th>
                 <th>Standing Status</th>
@@ -1306,7 +1306,7 @@ export const Reports: React.FC = () => {
             {reportTab === 'attendance' && (
               <tr>
                 <th className="l">Date</th>
-                <th className="l">Student Number</th>
+                <th className="l">Student No.</th>
                 <th className="l">Student Name</th>
                 <th className="l">Course Code</th>
                 <th className="l">Status</th>
