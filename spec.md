@@ -913,6 +913,8 @@ Students see scheduled and open attendance sessions for their own active class e
 
 Owner decision (2026-10-09): A demonstration deployment on one cloud VPS is approved for testing by the DentiSys team and invited volunteer Faculty and Students. It is not a production deployment and not the BIO-002 real Student deployment.
 
+Owner decision (2026-10-14): Two VPS environments. **Demo** (this DEL-001 deployment): Claude builds and pushes `:demo` images through a dedicated GitHub bot account that can write only the demo image packages, and may operate the demo VPS, including a loopback-only test entrance reached by SSH tunnel. **Production**: a separate VPS set up with the same scripts and hardening, running separate image packages (`dentisys-*-prod`, tag `:prod`). Production images are never rebuilt: after the Owner and Claude both approve the demo, the Owner promotes the exact demo images of the approved commit with one script. Claude has no access to the production VPS, its credentials or the `-prod` packages. Production keeps real biometrics disabled until the BIO-002 review and pgAdmin off by default.
+
 Approved infrastructure, and nothing beyond it:
 
 * Traefik as the only public entry point (ports 80 and 443), with HTTP redirected to HTTPS and Let's Encrypt certificates for one hostname (initially a DuckDNS name; changing the hostname needs no amendment).
