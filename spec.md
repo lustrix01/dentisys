@@ -964,6 +964,8 @@ Faculty may edit authorized class-section fields through audited server-side API
 
 Owner decision (2026-10-01): Each lecture/laboratory meeting stores its weekday, start time and end time separately; different days may use different times. Existing schedules are preserved.
 
+Owner decision (2026-10-13): Saving a class schedule is blocked when one of its meetings overlaps, on the same weekday, a meeting of another active class section in the same school year that either uses the same room (any Faculty) or has the same instructor (any room). A meeting that starts exactly when another ends does not overlap. Rooms have their own schedules, and an instructor cannot teach two classes at the same time.
+
 ## ID-001 - Split Student identity
 **Status: CURRENT**
 
