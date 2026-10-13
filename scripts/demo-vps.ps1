@@ -2,11 +2,12 @@
 # Settings come from ~/.dentisys/demo.env (outside the repo). Demo only: never point it at production.
 #   ./scripts/demo-vps.ps1 run "<command>"
 #   ./scripts/demo-vps.ps1 upload <local-file> <remote-path>
+#   ./scripts/demo-vps.ps1 wait-deploy <sha>   (after publish-images.ps1: waits until the VPS runs sha-<sha>)
 #   ./scripts/demo-vps.ps1 tunnel-start | tunnel-stop | status
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('run', 'upload', 'tunnel-start', 'tunnel-stop', 'status')]
+    [ValidateSet('run', 'upload', 'wait-deploy', 'tunnel-start', 'tunnel-stop', 'status')]
     [string]$Action,
     [Parameter(Position = 1)]
     [string]$Command,
@@ -88,6 +89,36 @@ switch ($Action) {
         # scp takes -P for the port; the last element of Get-SshArgs is user@host.
         $scpArgs = @('-P', $s['DEMO_SSH_PORT']) + $a[0..1] + $a[4..($a.Count - 2)] + @($Command, "$($a[-1]):$RemotePath")
         & scp @scpArgs
+        exit $LASTEXITCODE
+    }
+    'wait-deploy' {
+        if ($Command -notmatch '^[0-9a-f]{7,40}$') { throw 'Usage: demo-vps.ps1 wait-deploy <commit sha, as printed by publish-images.ps1>' }
+        # One SSH session polls on the server (ufw rate-limits repeated SSH logins).
+        # Watchtower pulls :demo; this pulls sha-<sha> only to learn its image ID, then untags it.
+        $remote = @'
+set -u
+sha='@SHA@'; deadline=$(( $(date +%s) + 900 )); d() { sudo -n docker "$@"; }
+declare -A want
+for svc in web frontend biometric; do
+  ref=$(d inspect --format '{{.Config.Image}}' "dentisys-$svc-1" 2>/dev/null) || { echo "ERROR: dentisys-$svc-1 is not running."; exit 1; }
+  ref="${ref%:*}:sha-$sha"
+  d --config /opt/dentisys/.docker pull -q "$ref" >/dev/null || { echo "ERROR: cannot pull $ref (not published, or the server's GHCR token expired)."; exit 1; }
+  want[$svc]=$(d image inspect --format '{{.Id}}' "$ref"); d rmi "$ref" >/dev/null
+done
+while :; do
+  pending=''
+  for svc in web frontend biometric; do
+    for c in $(d ps -a --format '{{.Names}}' | grep -E "^dentisys-$svc-[0-9]+$"); do
+      read -r img health <<<"$(d inspect --format '{{.Image}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$c")"
+      [[ "$img" == "${want[$svc]}" && "$health" =~ ^(healthy|none)$ ]] || pending+=" $c($health)"
+    done
+  done
+  [[ -z "$pending" ]] && { echo "Deployed: web, frontend and biometric run sha-$sha and are healthy."; exit 0; }
+  (( $(date +%s) >= deadline )) && { echo "ERROR: after 15 minutes still not on sha-$sha:$pending"; exit 1; }
+  echo "$(date +%H:%M:%S) waiting for:$pending"; sleep 30
+done
+'@
+        & ssh @(Get-SshArgs $s) "echo $([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($remote.Replace('@SHA@', $Command).Replace("`r`n", "`n")))) | base64 -d | bash"
         exit $LASTEXITCODE
     }
     'tunnel-start' {
