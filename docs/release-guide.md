@@ -3,6 +3,16 @@
 The checklist for shipping a change. It covers who does each step, the exact commands, and what to do when something fails.
 Server setup itself is in [deploy-from-scratch.md](deploy-from-scratch.md). The rules behind this guide are in `spec.md` DEL-001 (Owner decision 2026-10-14).
 
+## Where work happens: localhost → demo → production
+
+| Place | Address | Used for |
+|---|---|---|
+| Localhost | `http://localhost:5173` (Docker stack on the PC) | Building new features and changing existing ones. Code changes show up here immediately. |
+| Demo | `https://52-76-136-13.sslip.io` | Testing the finished, pushed version live in the cloud, with fictional data. The Owner and Claude approve it here. |
+| Production | The production `sslip.io` address | Real use with real data. It only receives versions approved on the demo. |
+
+Nothing is edited directly on the demo or production. They only receive versions that came through localhost.
+
 ## Who does what
 
 | | Demo | Production |
