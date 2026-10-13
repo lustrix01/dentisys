@@ -24,11 +24,13 @@ Claude never runs `promote-prod.ps1` and never touches the production server, it
 | 4 | Database migrations (only if the release adds them) | Claude | `.\scripts\demo-vps.ps1 migrate`. It backs up the database first. Watchtower alone is not enough. |
 | 5 | Wait until the demo runs the new version | Claude | `.\scripts\demo-vps.ps1 wait-deploy <sha>`. It waits up to 15 minutes for every container to run that sha and be healthy. |
 | 6 | Test the demo | Claude | `.\scripts\demo-test.ps1` signs in as each role through the tunnel at `http://localhost:15180`, plus any checks specific to the feature. |
-| 7 | Report | Claude → Owner | Pass/fail in chat. The change doc is updated only when the Owner asks. |
+| 7 | Report | Claude → Owner | Pass/fail in chat, ending with the approved sha and the exact command: `.\scripts\promote-prod.ps1 -Sha <sha>`. The change doc is updated only when the Owner asks. |
 | 8 | Approve the demo | Owner, then Claude | Both say "approved". Open the demo yourself: `https://52-76-136-13.sslip.io`. |
 | 9 | Promote to production | **Owner** | See below. |
 
 ### Step 9: promote to production (Owner)
+
+Use the sha from Claude's demo report (the version tested on the demo), not simply the newest commit. To look one up: `git rev-parse --short=12 HEAD`. A sha with no published demo images is refused before anything changes.
 
 ```powershell
 git checkout <approved sha>
