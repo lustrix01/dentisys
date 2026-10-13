@@ -3990,7 +3990,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.getByRole('button', { name: 'Export CSV' }).click();
       const download = await downloadPromise;
       const csv = await readFile((await download.path())!, 'utf8');
-      expect(csv).toContain('Student ID,Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks');
+      expect(csv).toContain('Student Number,Student Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks');
       expect(csv).toContain('"DENT-007","Alice Reyes","CLIN401","81.0%","91.0%","87.0","93.0%","83.0%","89.0","1.65"');
       expect(csv).toContain('"DENT-008","Bea Santos","CLIN401","Unavailable (recompute required)","Unavailable (recompute required)","72.0","Unavailable (recompute required)","Unavailable (recompute required)","84.0","2.15"');
       expect(csv).toContain('"DENT-009","Caleb Reyes","CLIN401","Pending","Pending","N/A","Pending","Pending","N/A","Prior: 2.45 (Historical)","PENDING"');

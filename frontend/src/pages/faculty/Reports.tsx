@@ -507,8 +507,8 @@ export const Reports: React.FC = () => {
 
     if (type === 'academic') {
       headers = isLectureLaboratoryMode
-        ? 'Student ID,Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks\n'
-        : 'Student ID,Name,Course Code,Midterm %,Final %,Grade,Remarks\n';
+        ? 'Student Number,Student Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks\n'
+        : 'Student Number,Student Name,Course Code,Midterm %,Final %,Grade,Remarks\n';
       rows = studentsInSelectedSubject.map((student: any) => {
         const subj = subjectForSelection(student);
         const evaluation = courseEvaluation(subj);
@@ -534,7 +534,7 @@ export const Reports: React.FC = () => {
       }).join('\n');
       fileName = `${selectedSubjectCode || 'Course'}_Academic_Report.csv`;
     } else if (type === 'retention') {
-      headers = 'Student ID,Name,Standing GWA,Warning Count,Risk Level,Remedial Status\n';
+      headers = 'Student Number,Student Name,Standing GWA,Warning Count,Risk Level,Remedial Status\n';
       rows = facultyStudents.map((student: any) => {
         const warningCount = retentionUnavailable ? null : (student.enrolledSubjects || []).filter((sub: any) =>
           assignedSubjects.includes(sub.code)
@@ -546,7 +546,7 @@ export const Reports: React.FC = () => {
       }).join('\n');
       fileName = `Retention_Report.csv`;
     } else {
-      headers = 'Date,Student ID,Name,Subject Code,Status\n';
+      headers = 'Date,Student Number,Student Name,Course Code,Status\n';
       rows = attendanceRecords
         .map(record => [
           record.date,
@@ -1224,7 +1224,7 @@ export const Reports: React.FC = () => {
         const schoolYear = selectedClass?.schoolYear || currentSchoolYear;
         const term = selectedClass?.semester
           ? `${selectedClass.semester}, S.Y. ${schoolYear}`
-          : schoolYear ? `S.Y. ${schoolYear}` : 'Academic Year';
+          : schoolYear ? `S.Y. ${schoolYear}` : 'School Year';
         const generated = formatPrintedAt(printedAt ?? new Date());
         const rowCount = reportTab === 'academic' ? studentsInSelectedSubject.length : reportTab === 'retention' ? facultyStudents.length : attendanceRecords.length;
         const academicRows = reportTab === 'academic' ? studentsInSelectedSubject.map((student: any) => {
@@ -1268,7 +1268,7 @@ export const Reports: React.FC = () => {
             {reportTab === 'academic' && (isLectureLaboratoryMode ? (
               <>
                 <tr>
-                  <th className="l" rowSpan={2}>Student ID</th>
+                  <th className="l" rowSpan={2}>Student Number</th>
                   <th className="l" rowSpan={2}>Student Name</th>
                   <th className="band" scope="colgroup" colSpan={3}>Midterm</th>
                   <th className="band" scope="colgroup" colSpan={3}>Finals</th>
@@ -1286,7 +1286,7 @@ export const Reports: React.FC = () => {
               </>
             ) : (
               <tr>
-                <th className="l">Student ID</th>
+                <th className="l">Student Number</th>
                 <th className="l">Student Name</th>
                 <th>Midterm</th>
                 <th>Final</th>
@@ -1296,7 +1296,7 @@ export const Reports: React.FC = () => {
             ))}
             {reportTab === 'retention' && (
               <tr>
-                <th className="l">Student ID</th>
+                <th className="l">Student Number</th>
                 <th className="l">Student Name</th>
                 <th>Standing GWA</th>
                 <th>Standing Status</th>
@@ -1306,9 +1306,9 @@ export const Reports: React.FC = () => {
             {reportTab === 'attendance' && (
               <tr>
                 <th className="l">Date</th>
-                <th className="l">Student ID</th>
-                <th className="l">Name</th>
-                <th className="l">Subject</th>
+                <th className="l">Student Number</th>
+                <th className="l">Student Name</th>
+                <th className="l">Course Code</th>
                 <th className="l">Status</th>
               </tr>
             )}

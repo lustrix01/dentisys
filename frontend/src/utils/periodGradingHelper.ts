@@ -397,8 +397,8 @@ export function generateGradeSummaryCSV(
 
   if (isPeriodMode) {
     const headers = componentMode === 'lecture_laboratory'
-      ? 'Student ID,Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status\n'
-      : 'Student ID,Name,Midterm %,Final %,Overall GWA,Status\n';
+      ? 'Student Number,Student Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status\n'
+      : 'Student Number,Student Name,Midterm %,Final %,Overall GWA,Status\n';
     const rows = students
       .map(student => {
         const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
@@ -468,7 +468,7 @@ export function generateGradeSummaryCSV(
   }
 
   // Legacy Overall Mode
-  const headers = 'Student ID,Name,Quizzes,Practicum,Exams,Attendance,Overall GWA,Remarks\n';
+  const headers = 'Student Number,Student Name,Quizzes,Practicum,Exams,Attendance,Overall GWA,Remarks\n';
   const rows = students
     .map(student => {
       const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);

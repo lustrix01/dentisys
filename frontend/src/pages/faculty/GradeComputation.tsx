@@ -5591,7 +5591,7 @@ export const GradeComputation: React.FC = () => {
               isLectureLaboratoryMode ? (
                 <>
                   <tr>
-                    <th className="l" rowSpan={2}>Student ID</th>
+                    <th className="l" rowSpan={2}>Student Number</th>
                     <th className="l" rowSpan={2}>Student Name</th>
                     <th className="band" scope="colgroup" colSpan={3}>Midterm</th>
                     <th className="band" scope="colgroup" colSpan={3}>Finals</th>
@@ -5609,7 +5609,7 @@ export const GradeComputation: React.FC = () => {
                 </>
               ) : (
                 <tr>
-                  <th className="l">Student ID</th>
+                  <th className="l">Student Number</th>
                   <th className="l">Student Name</th>
                   <th>Midterm %</th>
                   <th>Final %</th>
@@ -5619,7 +5619,7 @@ export const GradeComputation: React.FC = () => {
               )
             ) : (
               <tr>
-                <th className="l">Student ID</th>
+                <th className="l">Student Number</th>
                 <th className="l">Student Name</th>
                 <th>Quizzes</th>
                 <th>Practicum</th>

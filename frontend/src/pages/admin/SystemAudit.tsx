@@ -137,7 +137,7 @@ export const DeanReports: React.FC = () => {
     let fileName = '';
 
     if (activeTab === 'students') {
-      csv = `Dean's Student Summary Report\nGenerated: ${ts}\n\nStudent ID,Name,Class,Year Level,GWA,Status,Face Enrolled\n`;
+      csv = `Dean's Student Summary Report\nGenerated: ${ts}\n\nStudent Number,Student Name,Class,Year Level,GWA,Status,Face Enrolled\n`;
       csv += filtered.map(s => {
         const gwaStr = s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : 'N/A';
         return `${s.studentId},"${s.name}",${csvEscapeField(s.className || '—')},${s.yearLevel},${gwaStr},${s.status},${s.faceEnrolled ? 'Yes' : 'No'}`;
@@ -145,7 +145,7 @@ export const DeanReports: React.FC = () => {
       fileName = `Student_Summary_${ts.replace(/[: ]/g, '-')}.csv`;
 
     } else if (activeTab === 'academic') {
-      csv = `Academic Grade Report\nGenerated: ${ts}\n\nStudent ID,Name,Subject Code,Subject Name,Grade,Has Remedial\n`;
+      csv = `Academic Grade Report\nGenerated: ${ts}\n\nStudent Number,Student Name,Course Code,Course Name,Grade,Has Remedial\n`;
       csv += filtered.flatMap((s: any) =>
         (s.enrolledSubjects || []).map((sub: any) => {
           const gradeStr = sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? Number(sub.grade).toFixed(2) : 'N/A';
@@ -155,7 +155,7 @@ export const DeanReports: React.FC = () => {
       fileName = `Academic_Report_${ts.replace(/[: ]/g, '-')}.csv`;
 
     } else if (activeTab === 'retention') {
-      csv = `Retention Status Report\nGenerated: ${ts}\n\nStudent ID,Name,Class,GWA,Status,Pending Remedials\n`;
+      csv = `Retention Status Report\nGenerated: ${ts}\n\nStudent Number,Student Name,Class,GWA,Status,Pending Remedials\n`;
       csv += filtered.map((s: any) => {
         const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
         const gwaStr = s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : 'N/A';
@@ -164,7 +164,7 @@ export const DeanReports: React.FC = () => {
       fileName = `Retention_Report_${ts.replace(/[: ]/g, '-')}.csv`;
 
     } else {
-      csv = `Attendance Report\nGenerated: ${ts}\n\nStudent ID,Name,Subject Code,Date,Status\n`;
+      csv = `Attendance Report\nGenerated: ${ts}\n\nStudent Number,Student Name,Course Code,Date,Status\n`;
       const relevantIds = new Set(filtered.map(s => s.id));
       csv += attendanceRecords
         .filter(r => relevantIds.has(r.studentId))
