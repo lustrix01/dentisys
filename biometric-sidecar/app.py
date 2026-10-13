@@ -304,12 +304,12 @@ def guidance_action(image: np.ndarray, config: Calibration) -> tuple[str | None,
     return liveness_action_from_points(points, config), True
 
 
-def validate_actions(raw: str | None) -> list[str]:
+def validate_actions(raw: str | None, expected: int) -> list[str]:
     try:
         actions = json.loads(raw or "[]")
     except json.JSONDecodeError as exc:
         raise BiometricError("Liveness challenge is invalid.", "liveness_failed") from exc
-    if not isinstance(actions, list) or len(actions) != 2 or len(set(actions)) != 2:
+    if not isinstance(actions, list) or len(actions) != expected or len(set(actions)) != expected:
         raise BiometricError("Liveness challenge is invalid.", "liveness_failed")
     if any(action not in {"blink", "turn_left", "turn_right"} for action in actions):
         raise BiometricError("Liveness challenge is invalid.", "liveness_failed")
@@ -477,7 +477,7 @@ def health():
 @app.post("/v1/enrollment")
 def enrollment():
     config = calibration()
-    actions = validate_actions(request.form.get("challengeActions"))
+    actions = validate_actions(request.form.get("challengeActions"), 2)
     images = uploaded_images()
     faces: list[np.ndarray | None] = []
     crops: list[np.ndarray | None] = []
@@ -526,7 +526,7 @@ def verify():
     reference = request.form.get("protectedObjectReference", "")
     if not reference:
         raise BiometricError("Biometric reference is invalid.", "biometric_service_unavailable", 503)
-    actions = validate_actions(request.form.get("challengeActions"))
+    actions = validate_actions(request.form.get("challengeActions"), 1)
     images = uploaded_images()
     points = frame_points(images)
     verify_liveness(images, points, actions, config)

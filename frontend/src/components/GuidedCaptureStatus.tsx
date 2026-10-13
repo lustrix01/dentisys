@@ -24,7 +24,7 @@ export function livenessActionTitle(action: LivenessAction): string {
 
 interface GuidedCaptureStatusProps {
   phase: GuidedCapturePhase;
-  actions: [LivenessAction, LivenessAction] | null;
+  actions: LivenessAction[] | null;
   nextActionLabel?: string;
   instruction: string;
   lastActionSuccess: string | null;
@@ -59,7 +59,7 @@ export const GuidedCaptureStatus: React.FC<GuidedCaptureStatusProps> = ({
   const heading = phase === 'uploading'
     ? uploadingLabel
     : waitingAction
-      ? `Action ${phase === 'phase2_action1' ? 1 : 2} of 2: ${livenessActionTitle(waitingAction)}`
+      ? `Action ${phase === 'phase2_action1' ? 1 : 2} of ${actions?.length ?? 2}: ${livenessActionTitle(waitingAction)}`
       : phase === 'complete'
         ? 'Last step: look forward and hold still'
         : 'Look forward and hold still';

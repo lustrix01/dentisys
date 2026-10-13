@@ -218,7 +218,7 @@ export interface LivenessChallengeRequest {
 export interface LivenessChallengeResponse {
   challengeId: string;
   challengeToken: string;
-  actions: [LivenessAction, LivenessAction];
+  actions: LivenessAction[];
   expiresAt: string;
 }
 

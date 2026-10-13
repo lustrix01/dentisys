@@ -20,7 +20,8 @@ export interface GuidedFrameGuidance {
 }
 
 export interface GuidedCaptureOptions {
-  actions: [LivenessAction, LivenessAction];
+  /** One action (attendance) or two (enrollment). */
+  actions: LivenessAction[];
   targetFrames: number;
   maxAttempts?: number;
   /** Epoch milliseconds after which capture stops (set a few seconds before the challenge expires). */
@@ -73,11 +74,11 @@ function actionInstruction(action: LivenessAction): string {
   }
 }
 
-/** Split the neutral samples into the three neutral steps (before, between and after the actions). */
-export function neutralSegments(neutralTarget: number): [number, number, number] {
-  const base = Math.floor(neutralTarget / 3);
-  const extra = neutralTarget - base * 3;
-  return [base + (extra > 0 ? 1 : 0), base + (extra > 1 ? 1 : 0), base];
+/** Split the neutral samples into the neutral steps (before, between and after the actions). */
+export function neutralSegments(neutralTarget: number, count = 3): number[] {
+  const base = Math.floor(neutralTarget / count);
+  const extra = neutralTarget - base * count;
+  return Array.from({ length: count }, (_, i) => (i === count - 1 ? base : base + (extra > i ? 1 : 0)));
 }
 
 /**
@@ -99,16 +100,18 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
   const samplingIntervalMs = options.samplingIntervalMs ?? 140;
   const successPauseMs = options.successPauseMs ?? 1000;
   const issueAfterFrames = options.issueAfterFrames ?? 3;
-  const targetFrames = Math.min(30, Math.max(20, options.targetFrames));
+  const targetFrames = Math.min(30, options.targetFrames);
   const maxAttempts = options.maxAttempts
     ?? (options.deadlineMs !== undefined ? Number.POSITIVE_INFINITY : targetFrames * 8);
   const maxConsecutiveAnalyzeFailures = options.maxConsecutiveAnalyzeFailures ?? 3;
-  const segments = neutralSegments(targetFrames - 2);
+  const actionCount = options.actions.length;
+  const doneStep = actionCount * 2 + 1;
+  const segments = neutralSegments(targetFrames - actionCount, actionCount + 1);
 
   const frames: CapturedFrame[] = [];
   let nextOrder = 0;
   let attempts = 0;
-  // Steps: 0 neutral, 1 action 1, 2 neutral, 3 action 2, 4 neutral, 5 done.
+  // Steps: 0 neutral, 1 action 1, 2 neutral, [3 action 2, 4 neutral,] then done.
   let step = 0;
   let segmentCount = 0;
   let sawFace = false;
@@ -119,7 +122,7 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
   let reportedIssue: GuidanceIssue | null = null;
   let deadlineReached = false;
 
-  const isActionStep = (): boolean => step === 1 || step === 3;
+  const isActionStep = (): boolean => step % 2 === 1 && step < doneStep;
   const actionIndex = (): 0 | 1 => (step >= 3 ? 1 : 0);
   const selectedFrames = (): Blob[] =>
     [...frames].sort((a, b) => a.order - b.order).map(item => item.frame);
@@ -148,7 +151,7 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
 
   options.onPhase('phase1_neutral', 'Look directly into the camera and hold still.');
 
-  while (step < 5 && attempts < maxAttempts) {
+  while (step < doneStep && attempts < maxAttempts) {
     if (options.deadlineMs !== undefined && now() >= options.deadlineMs) {
       deadlineReached = true;
       break;
@@ -206,8 +209,8 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
         if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
         step += 1;
         segmentCount = 0;
-        if (step === 4) {
-          options.onPhase('complete', 'Both actions done. Look forward and hold still while we finish.');
+        if (step === doneStep - 1) {
+          options.onPhase('complete', `${actionCount === 1 ? 'Action' : 'Both actions'} done. Look forward and hold still while we finish.`);
         } else {
           options.onPhase('phase1_neutral', 'Return to a neutral forward position, then hold still.');
         }
@@ -226,18 +229,18 @@ export async function runGuidedCapture(options: GuidedCaptureOptions): Promise<G
       if (segmentCount >= segmentTarget) {
         step += 1;
         segmentCount = 0;
-        if (step < 5) {
+        if (step < doneStep) {
           const index = actionIndex();
           options.onPhase(actionPhase(index), actionInstruction(options.actions[index]));
         }
       }
     }
 
-    if (step < 5) await wait(samplingIntervalMs);
+    if (step < doneStep) await wait(samplingIntervalMs);
   }
 
   if (options.isCancelled()) return { status: 'cancelled', frames: selectedFrames() };
-  if (step === 5) {
+  if (step === doneStep) {
     return { status: 'complete', frames: selectedFrames() };
   }
   return {

@@ -182,14 +182,12 @@ test('Liveness Contract: challenge returns actions and one-time challengeToken s
   const mockChallenge: LivenessChallengeResponse = {
     challengeId: 'chal-uuid-12345',
     challengeToken: 'tok_live_abc123xyz',
-    actions: ['blink', 'turn_left'],
+    actions: ['blink'],
     expiresAt: new Date(Date.now() + 60000).toISOString(),
   };
 
-  assert.equal(mockChallenge.actions.length, 2);
-  assert.notEqual(mockChallenge.actions[0], mockChallenge.actions[1]);
+  assert.equal(mockChallenge.actions.length, 1);
   assert.ok(validActions.has(mockChallenge.actions[0]));
-  assert.ok(validActions.has(mockChallenge.actions[1]));
   assert.equal(mockChallenge.challengeToken, 'tok_live_abc123xyz');
 
   // Verify attendance submission includes both challengeId and challengeToken in FormData
@@ -613,7 +611,7 @@ test('Biometric Error Classification: transport/503 allows retry while semantic 
   assert.equal(isTransportOrBiometricUnavailable(invalidChallengeError), false);
 });
 
-test('Guided Capture Frame Contract: 3-phase capture collects 25 candidate frames within [20, 30] limits', () => {
+test('Guided Capture Frame Contract: 3-phase capture collects 25 candidate frames within [20, 30] limits (enrollment shape)', () => {
   // Phase 1 (Neutral Frontal): 8 frames
   const phase1Frames = 8;
   // Phase 2 (Action 1): 9 frames

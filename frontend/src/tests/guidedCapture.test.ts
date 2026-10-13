@@ -236,3 +236,53 @@ test('guided capture stops at the challenge deadline with a restartable reason',
   assert.equal(result.status, 'timeout');
   if (result.status === 'timeout') assert.equal(result.reason, 'challenge_expired');
 });
+
+test('guided capture with one action: neutral, action, neutral and returns targetFrames frames', async () => {
+  const phases: GuidedCapturePhase[] = [];
+  // targetFrames 9 -> 8 neutral samples split 4 / 4.
+  const guidance: Array<{ detectedAction: LivenessAction | null; faceDetected: boolean }> = [
+    ...Array(4).fill(neutral),
+    { detectedAction: 'blink', faceDetected: true },
+    ...Array(4).fill(neutral),
+  ];
+  const waits: number[] = [];
+  let captureCount = 0;
+
+  const result = await runGuidedCapture({
+    actions: ['blink'],
+    targetFrames: 9,
+    successPauseMs: 300,
+    captureFrame: async () => frame(captureCount++),
+    analyzeFrame: async () => guidance.shift() ?? neutral,
+    isCancelled: () => false,
+    onPhase: phase => phases.push(phase),
+    onFrameCount: () => undefined,
+    wait: async milliseconds => { waits.push(milliseconds); },
+  });
+
+  assert.equal(result.status, 'complete');
+  assert.equal(result.frames.length, 9);
+  assert.equal(guidance.length, 0);
+  assert.deepEqual(phases, ['phase1_neutral', 'phase2_action1', 'complete']);
+  assert.equal(waits.filter(milliseconds => milliseconds === 300).length, 1);
+  assert.deepEqual(await Promise.all(result.frames.map(blob => blob.text())), ['0', '1', '2', '3', '4', '5', '6', '7', '8']);
+});
+
+test('guided capture honours a targetFrames value below 20', async () => {
+  let captureCount = 0;
+  const result = await runGuidedCapture({
+    actions: ['turn_left', 'blink'],
+    targetFrames: 8,
+    captureFrame: async () => frame(captureCount++),
+    analyzeFrame: async frameBlob => (
+      // frames 2 and 5 are the action frames (2 neutral, action, 2 neutral, action, 2 neutral)
+      { detectedAction: null, faceDetected: true, ...(captureCount === 3 ? { detectedAction: 'turn_left' as const } : {}), ...(captureCount === 7 ? { detectedAction: 'blink' as const } : {}) }
+    ),
+    isCancelled: () => false,
+    onPhase: () => undefined,
+    onFrameCount: () => undefined,
+    wait: async () => undefined,
+  });
+  assert.equal(result.status, 'complete');
+  assert.equal(result.frames.length, 8);
+});

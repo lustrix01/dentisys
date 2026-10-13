@@ -139,8 +139,9 @@ try {
 biometric_expect_true($manualTimingAccepted, 'Biometric-required sessions reject missing timing while manual sessions remain allowed');
 
 for ($i = 0; $i < 20; $i++) {
-    $actions = student_biometric_actions();
-    biometric_expect_true(count($actions) === 2 && count(array_unique($actions)) === 2, 'Each liveness challenge has exactly two distinct actions');
+    $actions = student_biometric_actions('enrollment');
+    biometric_expect_true(count($actions) === 2 && count(array_unique($actions)) === 2, 'Each enrollment liveness challenge has exactly two distinct actions');
+    biometric_expect_true(count(student_biometric_actions('attendance')) === 1, 'Each attendance liveness challenge has exactly one action');
 }
 
 $auditState = audit_redact_state(['protected_object_reference' => 'sface/opaque', 'status' => 'active']);

@@ -662,7 +662,7 @@ export const Attendance: React.FC = () => {
         setPendingAttendancePayload(payload);
         setCanRetryUpload(true);
         const msg = err instanceof Error ? err.message : 'Biometric service or network connection is temporarily unavailable.';
-        setFailureNotice(`${msg} Your 30 verification frames and server challenge have been preserved. You can click "Retry Submission" to resubmit with the existing idempotency key, or report to your Class Secretary or Course Instructor for authorized manual check-in.`);
+        setFailureNotice(`${msg} Your verification frames and server challenge have been preserved. You can click "Retry Submission" to resubmit with the existing idempotency key, or report to your Class Secretary or Course Instructor for authorized manual check-in.`);
         setCheckInStage('camera');
       } else {
         // Semantic rejection: consume challenge and return to idle
@@ -709,7 +709,8 @@ export const Attendance: React.FC = () => {
       setCaptureIssue(null);
       const result = await runGuidedCapture({
         actions: livenessChallenge.actions,
-        targetFrames: 30,
+        targetFrames: 9,
+        successPauseMs: 300,
         deadlineMs: livenessChallenge.expiresAt
           ? new Date(livenessChallenge.expiresAt).getTime() - 5000
           : undefined,
@@ -1463,7 +1464,7 @@ export const Attendance: React.FC = () => {
                     lastActionSuccess={lastActionSuccess}
                     issue={captureIssue}
                     capturedCount={capturedFrameCount}
-                    totalCount={30}
+                    totalCount={9}
                     uploadingLabel="Sending verification"
                   />
 
@@ -1538,7 +1539,7 @@ export const Attendance: React.FC = () => {
                           ) : (
                             <>
                               <Camera className="w-4 h-4" />
-                              <span>Start Guided Biometric Check-in (up to 30 Frames)</span>
+                              <span>Start Guided Biometric Check-in</span>
                             </>
                           )}
                         </button>

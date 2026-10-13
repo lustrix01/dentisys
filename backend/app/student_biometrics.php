@@ -367,11 +367,11 @@ function student_biometric_expiry_due(PDO $pdo, int $studentId, ?string $storedE
     return ($storedExpiry !== null && $storedExpiry < $today) || ($latest !== null && $latest['endDate'] < $today);
 }
 
-function student_biometric_actions(): array
+function student_biometric_actions(string $purpose): array
 {
     $actions = ['blink', 'turn_left', 'turn_right'];
     shuffle($actions);
-    return array_slice($actions, 0, 2);
+    return array_slice($actions, 0, $purpose === 'attendance' ? 1 : 2);
 }
 
 function student_biometric_issue_challenge(
@@ -390,7 +390,7 @@ function student_biometric_issue_challenge(
     $now = attendance_session_now_utc();
     $expires = $now->modify('+' . $ttl . ' seconds');
     $rawToken = base64url_encode(random_bytes(32));
-    $actions = student_biometric_actions();
+    $actions = student_biometric_actions($purpose);
     $metadata = json_encode([
         'purpose' => $purpose,
         'attendance_session_id' => $attendanceSessionId,
@@ -582,7 +582,8 @@ function student_biometric_validate_guidance_challenge(
         throw new StudentBiometricException('Biometric challenge has expired.', 422, 'challenge_expired');
     }
     $actions = array_values($metadata['actions'] ?? []);
-    if (count($actions) !== 2 || count(array_unique($actions)) !== 2) {
+    $expected = $purpose === 'attendance' ? 1 : 2;
+    if (count($actions) !== $expected || count(array_unique($actions)) !== $expected) {
         throw new StudentBiometricException('Biometric challenge is invalid.', 422, 'challenge_invalid');
     }
     return ['actions' => $actions, 'tokenId' => (int) $row['token_id']];
