@@ -138,12 +138,12 @@ Site: https://<ip-with-dashes>.sslip.io
 
 ## 6. Releasing changes later
 
-| Change | Command (from your PC) |
+Follow the [release guide](release-guide.md). It covers who publishes the demo images, migrations, testing the demo, and promoting to production.
+
+| Other change | What to do |
 |---|---|
-| Application code only | `.\scripts\publish-images.ps1` — Watchtower rolls it out within ~5 minutes with zero downtime |
-| Database migration | `.\scripts\sync-vps-db.ps1 -Server <user>@<ip> -Port 2202 -IdentityFile <pem>` (preview), then add `-Apply -Publish` |
-| Compose files or server scripts | Rerun `provision-vps.ps1` with the same `-User`; it asks only for the sudo password and GHCR token, keeps `.env` and data |
-| Backups | Nightly at 02:17 into `/opt/dentisys/backups`; copy them off with the commands in [vps-deployment.md](vps-deployment.md#copy-backups-off-the-server) |
+| Compose files or server scripts | Rerun `provision-vps.ps1` with the same `-User` (add `-Production` for production). It asks only for the sudo password and the GHCR token, and keeps `.env` and data. |
+| Backups | Nightly at 02:17 into `/opt/dentisys/backups`. Copy them off with the commands in [vps-deployment.md](vps-deployment.md#copy-backups-off-the-server). |
 
 ## Production VPS
 

@@ -7,6 +7,7 @@ Start with the [README](../README.md) to set up DentiSys. [spec.md](../spec.md) 
 - [Development environment details](development-environment.md): pgAdmin, demo data, Google Sign-In, real e-mail, phone testing, and the disposable test stack.
 - [Single-server mode](single-server.md): the unfinished private-network deployment prototype.
 - [Deploying DentiSys from scratch](deploy-from-scratch.md): the step-by-step, one-command VPS deployment guide for developers.
+- [Release guide](release-guide.md): from an approved change to the demo and production servers, who does each step, and token renewals.
 - [VPS demonstration deployment](vps-deployment.md): the DEL-001 GHCR, HTTPS, update and backup runbook.
 - [Demo accounts](demo-accounts.md): development-only credentials.
 - [Manual demo readiness checklist](manual-demo-readiness.md)
