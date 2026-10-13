@@ -1,0 +1,44 @@
+# Demo VPS only: a local-only entrance so the demo can be tested through an SSH tunnel
+# (scripts/demo-vps.ps1 tunnel-start). Never start this on production.
+# It listens on 127.0.0.1 of the VPS only and forwards to Traefik with the demo's
+# public hostname, so requests take the same path as public traffic.
+# Start (separate project; the main stack is untouched):
+#   sudo docker compose -p dentisys-tunnel --env-file /opt/dentisys/.env -f docker-compose.demo-tunnel.yml up -d
+name: dentisys-tunnel
+
+services:
+  entrance:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      # 8025 is one of the two ports harden-vps.sh lets SSH forward to (Mailpit is not used on the VPS).
+      - "127.0.0.1:8025:80"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN to the demo hostname.}
+    configs:
+      - source: entrance
+        target: /etc/nginx/templates/default.conf.template
+    networks:
+      - dentisys
+
+configs:
+  entrance:
+    content: |
+      server {
+          listen 80;
+          location / {
+              proxy_pass https://traefik:443;
+              proxy_ssl_server_name on;
+              proxy_ssl_name $${APP_DOMAIN};
+              proxy_set_header Host $${APP_DOMAIN};
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $$http_upgrade;
+              proxy_set_header Connection $$http_connection;
+              client_max_body_size 25m;
+          }
+      }
+
+networks:
+  dentisys:
+    name: dentisys_default
+    external: true
