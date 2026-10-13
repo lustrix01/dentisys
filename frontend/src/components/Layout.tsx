@@ -501,14 +501,14 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const breadcrumbs = getBreadcrumbs();
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative overflow-clip font-sans">
+    <div className="min-h-screen print:min-h-0 print:bg-white bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col relative overflow-clip print:overflow-visible font-sans">
       
       {/* Background Subtle Gradient Blobs */}
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] aspect-square rounded-full bg-accent-200/25 dark:bg-accent-950/30 blur-[120px] pointer-events-none z-0" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] aspect-square rounded-full bg-clinical-200/25 dark:bg-clinical-950/20 blur-[120px] pointer-events-none z-0" />
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] aspect-square rounded-full bg-accent-200/25 dark:bg-accent-950/30 blur-[120px] pointer-events-none z-0 print:hidden" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50%] aspect-square rounded-full bg-clinical-200/25 dark:bg-clinical-950/20 blur-[120px] pointer-events-none z-0 print:hidden" />
 
       {/* Mobile Header */}
-      <header className="md:hidden flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-40 relative z-10">
+      <header className="print:hidden md:hidden flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-40 relative z-10">
         <div className="flex items-center space-x-2">
           <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-9 h-9 rounded-full object-cover" />
           <span className="font-heading font-bold text-xl tracking-tight bg-gradient-to-r from-clinical-600 to-accent-600 dark:from-clinical-400 dark:to-accent-400 bg-clip-text text-transparent">
@@ -619,7 +619,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Sidebar Navigation — fixed on desktop, drawer on mobile */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-all duration-300 ease-out ${
+        className={`print:hidden fixed inset-y-0 left-0 z-50 bg-gradient-to-b ${colors.sidebarGradient} border-r border-slate-200/80 dark:border-slate-800 flex flex-col transition-all duration-300 ease-out ${
           isSidebarCollapsed ? 'px-3 py-5 md:w-20 overflow-visible' : 'p-5 md:w-72 overflow-y-auto'
         } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
       >
@@ -815,12 +815,12 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       </aside>
 
       {/* Main Container — offset by sidebar width, fills remaining height, scrolls independently */}
-      <div className={`flex-1 flex flex-col min-w-0 min-h-screen overflow-clip relative z-10 transition-all duration-300 ${
+      <div className={`print:!ml-0 flex-1 flex flex-col min-w-0 min-h-screen overflow-clip print:overflow-visible print:min-h-0 relative z-10 transition-all duration-300 ${
         isSidebarCollapsed ? 'md:ml-20' : 'md:ml-72'
       }`}>
         
         {/* Desktop Header */}
-        <header className="hidden md:flex items-center justify-between px-8 py-4 border-b border-slate-200/40 dark:border-slate-900/40 bg-white/30 dark:bg-slate-950/20 backdrop-blur-md sticky top-0 z-30">
+        <header className="print:!hidden hidden md:flex items-center justify-between px-8 py-4 border-b border-slate-200/40 dark:border-slate-900/40 bg-white/30 dark:bg-slate-950/20 backdrop-blur-md sticky top-0 z-30">
           
           {/* Dynamic Breadcrumbs Area */}
           <div className="flex flex-col space-y-1">
@@ -947,7 +947,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
         </header>
 
         {/* Scrollable Content Body */}
-        <main className="flex-1 p-6 md:p-8">
+        <main className="flex-1 p-6 md:p-8 print:!p-0">
           {currentUser.role === 'student' && isDevelopmentMockStudent(user, config) && !studentPrototypeEnabled && (
             <div className="mb-6 p-4 rounded-2xl border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
               Student attendance and biometric workflows are development-only browser prototypes. No authoritative attendance record or facial template is written while the explicit P02 providers are disabled.
@@ -961,7 +961,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       {isSidebarOpen && (
         <div
           onClick={() => setIsSidebarOpen(false)}
-          className="fixed inset-0 bg-slate-900/20 backdrop-blur-xs z-40 md:hidden"
+          className="print:hidden fixed inset-0 bg-slate-900/20 backdrop-blur-xs z-40 md:hidden"
         />
       )}
     </div>

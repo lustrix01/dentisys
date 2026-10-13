@@ -31,6 +31,8 @@ import {
   Zap,
   RotateCcw
 } from 'lucide-react';
+import { flushSync } from 'react-dom';
+import { PrintStyle, PrintHeader, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Student, EnrolledSubject, GradeComponents, Assessment, AssessmentScore } from '../../types';
@@ -2852,6 +2854,7 @@ export const GradeComputation: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const handleExportPDF = () => {
     recordAudit({
       action: 'Exported grade PDF',
@@ -2859,6 +2862,7 @@ export const GradeComputation: React.FC = () => {
       description: `Exported printable PDF grade ledger for ${selectedSubjectCode}.`,
       status: 'Success',
     });
+    flushSync(() => setPrintedAt(new Date()));
     window.print();
   };
 
@@ -2990,7 +2994,7 @@ export const GradeComputation: React.FC = () => {
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
 
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-205 dark:border-slate-800 pb-4">
+      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-205 dark:border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Calculator className="w-6 h-6 text-clinical-550" />
@@ -3003,7 +3007,7 @@ export const GradeComputation: React.FC = () => {
       </div>
 
       {/* Unified Class and Course Selector Bar for All Tabs */}
-      <Card className="p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
+      <Card className="no-print p-4 flex flex-col xl:flex-row gap-4 xl:items-center">
         <div className="w-full xl:flex-1">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Active Course</label>
           <select
@@ -3073,7 +3077,7 @@ export const GradeComputation: React.FC = () => {
       </Card>
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex flex-wrap xl:flex-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
+      <div className="no-print flex flex-wrap xl:flex-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-2xl shadow-sm">
         <button
           onClick={() => setActiveSubTab('scores')}
           className={`flex-1 min-w-[10.5rem] xl:min-w-[auto] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeSubTab === 'scores' ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10' : 'text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-800/40'
@@ -5452,52 +5456,20 @@ export const GradeComputation: React.FC = () => {
       {/* ----------------------------------------------------
           PRINT LAYOUT SCREEN (HIDDEN NORMALLY)
       ---------------------------------------------------- */}
-      <div className="print-only hidden p-8 bg-white text-slate-900 space-y-6 font-sans">
-        <div className="text-center space-y-1.5 border-b-2 border-slate-800 pb-5 mb-6">
-          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Bicol University · College of Dental Medicine</p>
-          <h2 className="font-heading font-black text-2xl tracking-tight uppercase text-slate-900 mt-1">Class Grade Ledger Report</h2>
-          <div className="flex flex-wrap justify-center items-center gap-3 text-xs text-slate-600 mt-2 font-medium"><span><strong className="text-slate-800">Course:</strong> {selectedSubjectCode} {activeSubjectName ? `(${activeSubjectName})` : ''}</span><span>•</span><span><strong className="text-slate-800">Section:</strong> {selectedClassId || '—'}</span><span>•</span><span><strong className="text-slate-800">Term:</strong> {currentSchoolYear ? `S.Y. ${currentSchoolYear}` : 'Current Academic Year'}</span><span>•</span><span><strong className="text-slate-800">Date:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span></div>
-        </div>
-
-        <table className="w-full border-collapse border border-slate-300 text-xs">
-          <thead>
-            {isPeriodMode ? (
-              <tr className="bg-slate-100 text-left font-bold uppercase">
-                <th className="border border-slate-300 px-4 py-2">Student ID</th>
-                <th className="border border-slate-300 px-4 py-2">Student Name</th>
-                {isLectureLaboratoryMode ? (
-                  <>
-                    <th className="border border-slate-300 px-4 py-2 text-center">Midterm Lecture %</th>
-                    <th className="border border-slate-300 px-4 py-2 text-center">Midterm Laboratory %</th>
-                    <th className="border border-slate-300 px-4 py-2 text-center">Midterm %</th>
-                    <th className="border border-slate-300 px-4 py-2 text-center">Finals Lecture %</th>
-                    <th className="border border-slate-300 px-4 py-2 text-center">Finals Laboratory %</th>
-                    <th className="border border-slate-300 px-4 py-2 text-center">Finals %</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="border border-slate-300 px-4 py-2 text-center">Midterm %</th>
-                    <th className="border border-slate-300 px-4 py-2 text-center">Final %</th>
-                  </>
-                )}
-                <th className="border border-slate-300 px-4 py-2 text-center">Final Grade (Overall GWA)</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Remarks</th>
-              </tr>
-            ) : (
-              <tr className="bg-slate-100 text-left font-bold uppercase">
-                <th className="border border-slate-300 px-4 py-2">Student ID</th>
-                <th className="border border-slate-300 px-4 py-2">Student Name</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Quizzes</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Practicum</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Exams</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Attendance</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Final Grade (Overall GWA)</th>
-                <th className="border border-slate-300 px-4 py-2 text-center">Remarks</th>
-              </tr>
-            )}
-          </thead>
-          <tbody>
-            {sortedSummaryStudents.map(student => {
+      {(() => {
+        const printTitle = 'Class Grade Ledger Report';
+        const printClass = availableClasses.find(c => c.id === selectedClassId);
+        const section = printClass?.csName || selectedClassId || '—';
+        const schoolYear = printClass?.schoolYear || currentSchoolYear;
+        const term = printClass?.semester
+          ? `${printClass.semester}, S.Y. ${schoolYear}`
+          : schoolYear ? `S.Y. ${schoolYear}` : 'Current Academic Year';
+        const generated = formatPrintedAt(printedAt ?? new Date());
+        const widths = !isPeriodMode ? [11, 27, 9, 9, 9, 9, 12, 14]
+          : isLectureLaboratoryMode ? [9, 19, 8.5, 8.5, 7.5, 8.5, 8.5, 7.5, 10, 12.5]
+          : [11, 31, 12, 12, 16, 18];
+        const bodyRows =
+            sortedSummaryStudents.map(student => {
               const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
               const computeRes = subj?.enrollmentId ? computeResultsByEnrollment.get(String(subj.enrollmentId)) : null;
 
@@ -5542,24 +5514,24 @@ export const GradeComputation: React.FC = () => {
 
                 return (
                   <tr key={student.id}>
-                    <td className="border border-slate-300 px-4 py-2 font-mono">{student.studentId}</td>
-                    <td className="border border-slate-300 px-4 py-2 font-bold">{student.name}</td>
+                    <td className="id">{student.studentId}</td>
+                    <td className="nm">{student.name}</td>
                     {isLectureLaboratoryMode && (
                       <>
-                        <td className="border border-slate-300 px-4 py-2 text-center font-mono">{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
-                        <td className="border border-slate-300 px-4 py-2 text-center font-mono">{formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus)}</td>
+                        <td className={printCellClass(formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus))}>{formatComponentResultCell(evalResult.midtermComponents?.lecture, evalResult.midtermStatus)}</td>
+                        <td className={printCellClass(formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus))}>{formatComponentResultCell(evalResult.midtermComponents?.laboratory, evalResult.midtermStatus)}</td>
                       </>
                     )}
-                    <td className="border border-slate-300 px-4 py-2 text-center font-mono">{midtermStr}</td>
+                    <td className={printCellClass(midtermStr)}>{midtermStr}</td>
                     {isLectureLaboratoryMode && (
                       <>
-                        <td className="border border-slate-300 px-4 py-2 text-center font-mono">{formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus)}</td>
-                        <td className="border border-slate-300 px-4 py-2 text-center font-mono">{formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus)}</td>
+                        <td className={printCellClass(formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus))}>{formatComponentResultCell(evalResult.finalComponents?.lecture, evalResult.finalStatus)}</td>
+                        <td className={printCellClass(formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus))}>{formatComponentResultCell(evalResult.finalComponents?.laboratory, evalResult.finalStatus)}</td>
                       </>
                     )}
-                    <td className="border border-slate-300 px-4 py-2 text-center font-mono">{finalStr}</td>
-                    <td className="border border-slate-300 px-4 py-2 text-center font-extrabold">{gwaStr}</td>
-                    <td className="border border-slate-300 px-4 py-2 text-center font-bold text-[10px]">{remarksStr}</td>
+                    <td className={printCellClass(finalStr)}>{finalStr}</td>
+                    <td className={`grade ${printCellClass(gwaStr)}`}>{gwaStr}</td>
+                    <td className={`l ${printCellClass(remarksStr)}`}>{remarksStr}</td>
                   </tr>
                 );
               }
@@ -5576,33 +5548,95 @@ export const GradeComputation: React.FC = () => {
 
               return (
                 <tr key={student.id}>
-                  <td className="border border-slate-300 px-4 py-2 font-mono">{student.studentId}</td>
-                  <td className="border border-slate-300 px-4 py-2 font-bold">{student.name}</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center font-extrabold">{hasGrade ? subj.grade.toFixed(2) : '—'}</td>
-                  <td className="border border-slate-300 px-4 py-2 text-center font-bold text-[10px]">{remarksStr}</td>
+                  <td className="id">{student.studentId}</td>
+                  <td className="nm">{student.name}</td>
+                  <td>{subj && typeof subj.components?.quizzes === 'number' ? `${subj.components.quizzes.toFixed(1)}%` : '—'}</td>
+                  <td>{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
+                  <td>{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
+                  <td>{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
+                  <td className="grade">{hasGrade ? subj.grade.toFixed(2) : '—'}</td>
+                  <td className={`l ${printCellClass(remarksStr)}`}>{remarksStr}</td>
                 </tr>
               );
-            })}
-          </tbody>
+            });
+        const needsLegend = isPeriodMode && isLectureLaboratoryMode && sortedSummaryStudents.some(student => {
+          const subj = student.enrolledSubjects.find(sub => sub.code === selectedSubjectCode);
+          const computeRes = subj?.enrollmentId ? computeResultsByEnrollment.get(String(subj.enrollmentId)) : null;
+          const ev = extractPeriodEvaluation(subj, computeRes, isPeriodMode);
+          return [
+            formatComponentResultCell(ev.midtermComponents?.lecture, ev.midtermStatus),
+            formatComponentResultCell(ev.midtermComponents?.laboratory, ev.midtermStatus),
+            formatComponentResultCell(ev.finalComponents?.lecture, ev.finalStatus),
+            formatComponentResultCell(ev.finalComponents?.laboratory, ev.finalStatus),
+          ].includes('Unavailable (recompute required)');
+        });
+        return (
+      <div className="print-only hidden bg-white text-slate-900 font-sans ps">
+        <PrintStyle title={printTitle} running={`${printTitle} · ${selectedSubjectCode} · ${section} · S.Y. ${schoolYear}`} generated={generated} />
+        <PrintHeader
+          title={printTitle}
+          sub={`${selectedSubjectCode}${activeSubjectName ? ` · ${activeSubjectName}` : ''}`}
+          rows={[
+            ['Section', section],
+            ['Term', term],
+            ['Faculty', user?.display_name ?? ''],
+            ['Students', String(sortedSummaryStudents.length)],
+            ['Date', generated],
+          ]}
+        />
+        <table>
+          <colgroup>{widths.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
+          <thead>
+            {isPeriodMode ? (
+              isLectureLaboratoryMode ? (
+                <>
+                  <tr>
+                    <th className="l" rowSpan={2}>Student ID</th>
+                    <th className="l" rowSpan={2}>Student Name</th>
+                    <th className="band" scope="colgroup" colSpan={3}>Midterm</th>
+                    <th className="band" scope="colgroup" colSpan={3}>Finals</th>
+                    <th rowSpan={2}>Final Grade (Overall GWA)</th>
+                    <th className="l" rowSpan={2}>Remarks</th>
+                  </tr>
+                  <tr>
+                    <th scope="col" aria-label="Midterm Lecture %">Lecture %</th>
+                    <th scope="col" aria-label="Midterm Laboratory %">Laboratory %</th>
+                    <th scope="col" aria-label="Midterm %">Midterm %</th>
+                    <th scope="col" aria-label="Finals Lecture %">Lecture %</th>
+                    <th scope="col" aria-label="Finals Laboratory %">Laboratory %</th>
+                    <th scope="col" aria-label="Finals %">Finals %</th>
+                  </tr>
+                </>
+              ) : (
+                <tr>
+                  <th className="l">Student ID</th>
+                  <th className="l">Student Name</th>
+                  <th>Midterm %</th>
+                  <th>Final %</th>
+                  <th>Final Grade (Overall GWA)</th>
+                  <th className="l">Remarks</th>
+                </tr>
+              )
+            ) : (
+              <tr>
+                <th className="l">Student ID</th>
+                <th className="l">Student Name</th>
+                <th>Quizzes</th>
+                <th>Practicum</th>
+                <th>Exams</th>
+                <th>Attendance</th>
+                <th>Final Grade (Overall GWA)</th>
+                <th className="l">Remarks</th>
+              </tr>
+            )}
+          </thead>
+          <tbody>{bodyRows}</tbody>
         </table>
-
-        <div className="break-inside-avoid flex justify-between items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
-          <div className="text-center w-40">
-            <div className="h-0.5 w-full bg-slate-400 mb-1" />
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Dean of Dentistry Seal</p>
-          </div>
-
-          <div className="text-center w-48">
-            <p className="font-bold">{user?.display_name}</p>
-            <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Assigned Faculty Signature</p>
-          </div>
-        </div>
+        {needsLegend && <PrintLegend />}
+        <PrintSignatures faculty={user?.display_name} seal />
       </div>
+        );
+      })()}
 
       {/* ASSESSMENT ADD/EDIT MODAL */}
       <Modal

@@ -64,7 +64,7 @@ export const FeedbackCenter: React.FC = () => {
       {toast && (
         <div
           role={toast.kind === 'error' ? 'alert' : 'status'}
-          className={`fixed right-5 top-5 z-[100] flex max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 text-xs font-semibold shadow-xl ${
+          className={`print:hidden fixed right-5 top-5 z-[100] flex max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 text-xs font-semibold shadow-xl ${
             toast.kind === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
               : toast.kind === 'error'

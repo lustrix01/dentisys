@@ -32,6 +32,8 @@ import {
   Cell,
   Legend
 } from 'recharts';
+import { flushSync } from 'react-dom';
+import { PrintStyle, PrintHeader, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
@@ -491,7 +493,9 @@ export const Reports: React.FC = () => {
 
   const totalPagesInSubject = Math.ceil(studentsInSelectedSubject.length / pageSize) || 1;
 
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const handlePrint = () => {
+    flushSync(() => setPrintedAt(new Date()));
     window.print();
   };
 
@@ -1212,131 +1216,149 @@ export const Reports: React.FC = () => {
       {/* ----------------------------------------------------
           PRINT LAYOUT SHEETS PRINT AREA
       ---------------------------------------------------- */}
-      <div className="print-only hidden p-8 bg-white text-slate-900 space-y-6 font-sans">
-        
-        {/* school header */}
-        <div className="text-center space-y-1.5 border-b-2 border-slate-800 pb-5 mb-6">
-          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Bicol University · College of Dental Medicine</p>
-          <h2 className="font-heading font-black text-2xl tracking-tight uppercase text-slate-900 mt-1">Official Academic & Evaluations Report</h2>
-          <div className="flex flex-wrap justify-center items-center gap-3 text-xs text-slate-600 mt-2 font-medium"><span><strong className="text-slate-800">Course:</strong> {selectedSubjectCode || 'Course'}</span><span>•</span><span><strong className="text-slate-800">Section:</strong> {selectedClass?.csName || selectedClassId || 'All Sections'}</span><span>•</span><span><strong className="text-slate-800">Term:</strong> {currentSchoolYear ? `S.Y. ${currentSchoolYear}` : 'Academic Year'}</span><span>•</span><span><strong className="text-slate-800">Date:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span></div>
-        </div>
-
-        {/* Dynamic content printing tables */}
-        {reportTab === 'academic' && (
-          <div className="space-y-4">
-            <h3 className="font-bold text-xs uppercase tracking-wider">Academic Grade Ledger ({selectedSubjectCode})</h3>
-            <table className="w-full border-collapse border border-slate-350 text-[11px]">
-              <thead>
-                <tr className="bg-slate-100 text-left font-bold uppercase">
-                  <th className="border border-slate-300 px-3 py-2">Student ID</th>
-                  <th className="border border-slate-300 px-3 py-2">Student Name</th>
-                  {isLectureLaboratoryMode && <th className="border border-slate-300 px-3 py-2 text-center">Midterm Lecture %</th>}
-                  {isLectureLaboratoryMode && <th className="border border-slate-300 px-3 py-2 text-center">Midterm Laboratory %</th>}
-                  <th className="border border-slate-300 px-3 py-2 text-center">Midterm</th>
-                  {isLectureLaboratoryMode && <th className="border border-slate-300 px-3 py-2 text-center">Finals Lecture %</th>}
-                  {isLectureLaboratoryMode && <th className="border border-slate-300 px-3 py-2 text-center">Finals Laboratory %</th>}
-                  <th className="border border-slate-300 px-3 py-2 text-center">{isLectureLaboratoryMode ? 'Finals' : 'Final'}</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Grade</th>
-                  <th className="border border-slate-300 px-3 py-2">Remarks</th>
+      {(() => {
+        const printTitle = 'Official Academic & Evaluations Report';
+        const printCaption = reportTab === 'academic' ? `Academic Grade Ledger (${selectedSubjectCode})` : reportTab === 'retention' ? 'Retention watch ledger' : `Attendance Register ledger (${attendanceDate})`;
+        const course = selectedClass?.courseCode || selectedSubjectCode || 'Course';
+        const section = selectedClass?.csName || selectedClassId || 'All Sections';
+        const schoolYear = selectedClass?.schoolYear || currentSchoolYear;
+        const term = selectedClass?.semester
+          ? `${selectedClass.semester}, S.Y. ${schoolYear}`
+          : schoolYear ? `S.Y. ${schoolYear}` : 'Academic Year';
+        const generated = formatPrintedAt(printedAt ?? new Date());
+        const rowCount = reportTab === 'academic' ? studentsInSelectedSubject.length : reportTab === 'retention' ? facultyStudents.length : attendanceRecords.length;
+        const academicRows = reportTab === 'academic' ? studentsInSelectedSubject.map((student: any) => {
+          const subj = subjectForSelection(student);
+          const evaluation = courseEvaluation(subj);
+          return {
+            student,
+            midLec: formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus),
+            midLab: formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus),
+            mid: formatPercent(evaluation.midtermPercentage),
+            finLec: formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus),
+            finLab: formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus),
+            fin: formatPercent(evaluation.finalPercentage),
+            grade: formatCourseGrade(evaluation),
+            remark: courseRemark(student, subj),
+          };
+        }) : [];
+        const needsLegend = academicRows.some(r => [r.midLec, r.midLab, r.finLec, r.finLab].includes('Unavailable (recompute required)'));
+        const widths = reportTab === 'retention' ? [12, 34, 13, 15, 26]
+          : reportTab === 'attendance' ? [13, 13, 40, 14, 20]
+          : isLectureLaboratoryMode ? [9, 19, 8.5, 8.5, 7.5, 8.5, 8.5, 7.5, 10, 12.5]
+          : [11, 31, 12, 12, 16, 18];
+        return (
+      <div className="print-only hidden bg-white text-slate-900 font-sans ps">
+        <PrintStyle title={printTitle} running={`${printTitle} · ${course} · ${section} · S.Y. ${schoolYear}`} generated={generated} />
+        <PrintHeader
+          title={printTitle}
+          sub={`${course}${selectedClass?.courseName ? ` · ${selectedClass.courseName}` : ''}`}
+          rows={[
+            ['Section', section],
+            ['Term', term],
+            ['Faculty', user?.display_name ?? ''],
+            ['Students', String(rowCount)],
+            ['Date', generated],
+          ]}
+        />
+        <h3 className="font-bold text-[9.5px] uppercase tracking-wider mb-1.5">{printCaption}</h3>
+        <table>
+          <colgroup>{widths.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
+          <thead>
+            {reportTab === 'academic' && (isLectureLaboratoryMode ? (
+              <>
+                <tr>
+                  <th className="l" rowSpan={2}>Student ID</th>
+                  <th className="l" rowSpan={2}>Student Name</th>
+                  <th className="band" scope="colgroup" colSpan={3}>Midterm</th>
+                  <th className="band" scope="colgroup" colSpan={3}>Finals</th>
+                  <th rowSpan={2}>Grade</th>
+                  <th className="l" rowSpan={2}>Remarks</th>
                 </tr>
-              </thead>
-              <tbody>
-                {studentsInSelectedSubject.map((student: any) => {
-                  const subj = subjectForSelection(student);
-                  const evaluation = courseEvaluation(subj);
-                  return (
-                    <tr key={student.id}>
-                      <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
-                      {isLectureLaboratoryMode && <td className="border border-slate-300 px-3 py-1.5 text-center">{formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)}</td>}
-                      {isLectureLaboratoryMode && <td className="border border-slate-300 px-3 py-1.5 text-center">{formatComponentResult(evaluation.midtermComponents?.laboratory, evaluation.midtermStatus)}</td>}
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{formatPercent(evaluation.midtermPercentage)}</td>
-                      {isLectureLaboratoryMode && <td className="border border-slate-300 px-3 py-1.5 text-center">{formatComponentResult(evaluation.finalComponents?.lecture, evaluation.finalStatus)}</td>}
-                      {isLectureLaboratoryMode && <td className="border border-slate-300 px-3 py-1.5 text-center">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{formatPercent(evaluation.finalPercentage)}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center font-extrabold">{formatCourseGrade(evaluation)}</td>
-                      <td className="border border-slate-300 px-3 py-1.5">{courseRemark(student, subj)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {reportTab === 'retention' && (
-          <div className="space-y-4">
-            <h3 className="font-bold text-xs uppercase tracking-wider">Retention watch ledger</h3>
-            <table className="w-full border-collapse border border-slate-350 text-[11px]">
-              <thead>
-                <tr className="bg-slate-100 text-left font-bold uppercase">
-                  <th className="border border-slate-300 px-3 py-2">Student ID</th>
-                  <th className="border border-slate-300 px-3 py-2">Student Name</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Standing GWA</th>
-                  <th className="border border-slate-300 px-3 py-2 text-center">Standing Status</th>
-                  <th className="border border-slate-300 px-3 py-2">Remedials Status</th>
+                <tr>
+                  <th scope="col" aria-label="Midterm Lecture %">Lecture %</th>
+                  <th scope="col" aria-label="Midterm Laboratory %">Laboratory %</th>
+                  <th scope="col" aria-label="Midterm">Midterm %</th>
+                  <th scope="col" aria-label="Finals Lecture %">Lecture %</th>
+                  <th scope="col" aria-label="Finals Laboratory %">Laboratory %</th>
+                  <th scope="col" aria-label="Finals">Finals %</th>
                 </tr>
-              </thead>
-              <tbody>
-                {facultyStudents.map((student: any) => {
-                  const gwa = standingGwa(student);
-                  return (
-                    <tr key={student.id}>
-                      <td className="border border-slate-300 px-3 py-1.5 font-mono">{student.studentId}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 font-bold">{student.name}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center">{gwa !== null ? gwa.toFixed(2) : '—'}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-center capitalize">{retentionUnavailable ? 'Unavailable' : student.status}</td>
-                      <td className="border border-slate-300 px-3 py-1.5 text-slate-500">
-                        {remedialStatusFor(student)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {reportTab === 'attendance' && (
-          <div className="space-y-4">
-            <h3 className="font-bold text-xs uppercase tracking-wider">Attendance Register ledger ({attendanceDate})</h3>
-            <table className="w-full border-collapse border border-slate-350 text-[11px]">
-              <thead>
-                <tr className="bg-slate-100 text-left font-bold uppercase">
-                  <th className="border border-slate-300 px-3 py-2">Date</th>
-                  <th className="border border-slate-300 px-3 py-2">Student ID</th>
-                  <th className="border border-slate-300 px-3 py-2">Name</th>
-                  <th className="border border-slate-300 px-3 py-2">Subject</th>
-                  <th className="border border-slate-300 px-3 py-2">Status</th>
+              </>
+            ) : (
+              <tr>
+                <th className="l">Student ID</th>
+                <th className="l">Student Name</th>
+                <th>Midterm</th>
+                <th>Final</th>
+                <th>Grade</th>
+                <th className="l">Remarks</th>
+              </tr>
+            ))}
+            {reportTab === 'retention' && (
+              <tr>
+                <th className="l">Student ID</th>
+                <th className="l">Student Name</th>
+                <th>Standing GWA</th>
+                <th>Standing Status</th>
+                <th className="l">Remedials Status</th>
+              </tr>
+            )}
+            {reportTab === 'attendance' && (
+              <tr>
+                <th className="l">Date</th>
+                <th className="l">Student ID</th>
+                <th className="l">Name</th>
+                <th className="l">Subject</th>
+                <th className="l">Status</th>
+              </tr>
+            )}
+          </thead>
+          <tbody>
+            {reportTab === 'academic' && academicRows.map(r => (
+              <tr key={r.student.id}>
+                <td className="id">{r.student.studentId}</td>
+                <td className="nm">{r.student.name}</td>
+                {isLectureLaboratoryMode && <td className={printCellClass(r.midLec)}>{r.midLec}</td>}
+                {isLectureLaboratoryMode && <td className={printCellClass(r.midLab)}>{r.midLab}</td>}
+                <td className={printCellClass(r.mid)}>{r.mid}</td>
+                {isLectureLaboratoryMode && <td className={printCellClass(r.finLec)}>{r.finLec}</td>}
+                {isLectureLaboratoryMode && <td className={printCellClass(r.finLab)}>{r.finLab}</td>}
+                <td className={printCellClass(r.fin)}>{r.fin}</td>
+                <td className={`grade ${printCellClass(r.grade)}`}>{r.grade}</td>
+                <td className={`l ${printCellClass(r.remark)}`}>{r.remark}</td>
+              </tr>
+            ))}
+            {reportTab === 'retention' && facultyStudents.map((student: any) => {
+              const gwa = standingGwa(student);
+              const gwaText = gwa !== null ? gwa.toFixed(2) : '—';
+              const status = retentionUnavailable ? 'Unavailable' : student.status;
+              const remedial = remedialStatusFor(student);
+              return (
+                <tr key={student.id}>
+                  <td className="id">{student.studentId}</td>
+                  <td className="nm">{student.name}</td>
+                  <td className={printCellClass(gwaText)}>{gwaText}</td>
+                  <td className={`cap ${printCellClass(status)}`}>{status}</td>
+                  <td className={`l ${printCellClass(remedial)}`}>{remedial}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {attendanceRecords.map(record => {
-                    return (
-                      <tr key={record.enrollmentId}>
-                        <td className="border border-slate-300 px-3 py-1.5 font-mono">{record.date}</td>
-                        <td className="border border-slate-300 px-3 py-1.5 font-mono">{record.studentNumber || '—'}</td>
-                        <td className="border border-slate-300 px-3 py-1.5 font-bold">{record.studentName || 'Student name unavailable'}</td>
-                        <td className="border border-slate-300 px-3 py-1.5 font-mono">{selectedClass?.courseCode || '—'}</td>
-                        <td className="border border-slate-300 px-3 py-1.5 capitalize">{record.status || 'Not recorded'}</td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Faculty signature */}
-        <div className="break-inside-avoid flex justify-end items-end mt-12 pt-8 border-t border-dashed border-slate-300 text-xs">
-          <div className="text-center w-48">
-            <p className="font-bold">{user?.display_name}</p>
-            <div className="h-0.5 w-full bg-slate-400 mt-1 mb-1" />
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Faculty</p>
-          </div>
-        </div>
-
+              );
+            })}
+            {reportTab === 'attendance' && attendanceRecords.map(record => (
+              <tr key={record.enrollmentId}>
+                <td className="id">{record.date}</td>
+                <td className="id">{record.studentNumber || '—'}</td>
+                <td className="nm">{record.studentName || 'Student name unavailable'}</td>
+                <td className="id">{selectedClass?.courseCode || '—'}</td>
+                <td className="l cap">{record.status || 'Not recorded'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {needsLegend && <PrintLegend />}
+        <PrintSignatures faculty={user?.display_name} />
       </div>
+        );
+      })()}
 
     </div>
   );
