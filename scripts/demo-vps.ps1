@@ -3,11 +3,12 @@
 #   ./scripts/demo-vps.ps1 run "<command>"
 #   ./scripts/demo-vps.ps1 upload <local-file> <remote-path>
 #   ./scripts/demo-vps.ps1 wait-deploy <sha>   (after publish-images.ps1: waits until the VPS runs sha-<sha>)
+#   ./scripts/demo-vps.ps1 migrate   (backs up and applies new database migrations via sync-vps-db.ps1; required before a release that adds migrations)
 #   ./scripts/demo-vps.ps1 tunnel-start | tunnel-stop | status
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('run', 'upload', 'wait-deploy', 'tunnel-start', 'tunnel-stop', 'status')]
+    [ValidateSet('run', 'upload', 'wait-deploy', 'migrate', 'tunnel-start', 'tunnel-stop', 'status')]
     [string]$Action,
     [Parameter(Position = 1)]
     [string]$Command,
@@ -119,6 +120,10 @@ while :; do
 done
 '@
         & ssh @(Get-SshArgs $s) "echo $([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($remote.Replace('@SHA@', $Command).Replace("`r`n", "`n")))) | base64 -d | bash"
+        exit $LASTEXITCODE
+    }
+    'migrate' {
+        & (Join-Path $PSScriptRoot 'sync-vps-db.ps1') -Server "$($s['DEMO_SSH_USER'])@$($s['DEMO_SSH_HOST'])" -Port ([int]$s['DEMO_SSH_PORT']) -IdentityFile $s['DEMO_SSH_KEY'] -Apply
         exit $LASTEXITCODE
     }
     'tunnel-start' {

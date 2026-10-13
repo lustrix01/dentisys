@@ -145,6 +145,18 @@ Site: https://<ip-with-dashes>.sslip.io
 | Compose files or server scripts | Rerun `provision-vps.ps1` with the same `-User`; it asks only for the sudo password and GHCR token, keeps `.env` and data |
 | Backups | Nightly at 02:17 into `/opt/dentisys/backups`; copy them off with the commands in [vps-deployment.md](vps-deployment.md#copy-backups-off-the-server) |
 
+## Production VPS
+
+Production is a second server with its own images (`dentisys-*-prod`, tag `:prod`). Production images are never built: the Owner promotes the exact demo images of the approved commit. Claude has no access to the production server, its credentials or the `-prod` packages.
+
+First setup, in this order:
+1. Check out the approved commit and run `.\scripts\promote-prod.ps1 -Sha <approved> -DryRun`, then without `-DryRun`. Without `~\.dentisys\prod.env` it promotes the images only.
+2. AWS steps as in section 2, with a NEW key pair that has a passphrase.
+3. `.\scripts\provision-vps.ps1 -Ip <ip> -KeyFile <pem> -Production`. It writes the `-prod:prod` images, forces `BIOMETRIC_SIDECAR_ENABLED=false` (until the BIO-002 review), disables pgAdmin and skips the database tunnel. The GHCR token it asks for is your own classic token with `read:packages` (the bot cannot read `-prod` packages).
+4. Create `$HOME\.dentisys\prod.env` with `PROD_SSH_HOST`, `PROD_SSH_PORT` (default 2202), `PROD_SSH_USER` (default devops) and `PROD_SSH_KEY`.
+
+Later releases: `git checkout <approved sha>`, then `.\scripts\promote-prod.ps1 -Sha <sha>`. It syncs migrations (with a backup) first, copies the images, checks the digests and waits for Watchtower. A release with database migrations must go through this script (or `sync-vps-db.ps1 -Apply`; on the demo, `demo-vps.ps1 migrate`); never rely on Watchtower alone.
+
 ## 7. Troubleshooting
 
 | Symptom | Cause | Fix |

@@ -10,6 +10,7 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$SshPort = 2202,
     [switch]$NoDbTunnel,
+    [switch]$Production,
     [switch]$NewInstance,
     [string]$User = 'devops'
 )
@@ -19,6 +20,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $address = $null
 if (-not [Net.IPAddress]::TryParse($Ip, [ref]$address) -or $address.ToString() -ne $Ip) { throw 'Ip must be an IPv4 address.' }
 if ($User -cnotmatch '^[a-z_][a-z0-9_-]{0,31}\z' -or $User -in @('root', 'ubuntu')) { throw 'User must be a lowercase Linux username other than root or ubuntu.' }
+if ($Production) { $NoDbTunnel = [switch]::new($true) }
 if ($Domain -and $Domain -notmatch '\.') { throw 'Domain must be a hostname, without a scheme, port or path.' }
 function Invoke-Native {
     param([string]$Command, [string[]]$Arguments)
@@ -157,7 +159,8 @@ try {
     $newInstanceCommand = ".\scripts\provision-vps.ps1 -Ip $Ip -KeyFile '" + $identity.Replace("'", "''") + "'"
     if ($Domain) { $newInstanceCommand += " -Domain '$Domain'" }
     if ($SshPort -ne 2202) { $newInstanceCommand += " -SshPort $SshPort" }
-    if ($NoDbTunnel) { $newInstanceCommand += ' -NoDbTunnel' }
+    if ($Production) { $newInstanceCommand += ' -Production' }
+    elseif ($NoDbTunnel) { $newInstanceCommand += ' -NoDbTunnel' }
     if ($User -ne 'devops') { $newInstanceCommand += " -User $User" }
     $newInstanceCommand += ' -NewInstance'
     if ($NewInstance) { Reset-InstanceHostKeys }
@@ -248,6 +251,7 @@ try {
         NO_DB_TUNNEL = "$($NoDbTunnel.IsPresent)".ToLowerInvariant()
         SG_CONFIRMED = 'true'
     }
+    if ($Production) { $answers.IMAGE_SET = 'prod' }
     $password = Read-Secret "$User sudo password"
     $passwordAgain = $null
     if ($fresh) {
@@ -269,9 +273,17 @@ try {
         $answers.FIRST_DEAN_FIRST_NAME = Read-Answer 'First Dean first name'
         $answers.FIRST_DEAN_LAST_NAME = Read-Answer 'First Dean last name'
         $answers.FIRST_DEAN_EMAIL = Read-Answer 'First Dean email'
-        $answers.PGADMIN_DEFAULT_EMAIL = Read-Answer 'pgAdmin email' $answers.SMTP_USER
-        if ($answers.PGADMIN_DEFAULT_EMAIL -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw 'Enter a valid pgAdmin email.' }
-        $answers.PGADMIN_DEFAULT_PASSWORD = Read-Secret 'pgAdmin password'
+        if ($Production) {
+            # pgAdmin is off by default on production; the server accepts these placeholders when it is disabled.
+            $answers.PGADMIN_ENABLED = 'false'
+            $answers.PGADMIN_DEFAULT_EMAIL = 'disabled@example.invalid'
+            $answers.PGADMIN_DEFAULT_PASSWORD = 'unused'
+        }
+        else {
+            $answers.PGADMIN_DEFAULT_EMAIL = Read-Answer 'pgAdmin email' $answers.SMTP_USER
+            if ($answers.PGADMIN_DEFAULT_EMAIL -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') { throw 'Enter a valid pgAdmin email.' }
+            $answers.PGADMIN_DEFAULT_PASSWORD = Read-Secret 'pgAdmin password'
+        }
         $allowedDefault = $defaults['ALLOWED_EMAIL_DOMAINS']
         if (-not $allowedDefault) { $allowedDefault = $defaults['ALLOWED_EMAIL_DOMAIN'] }
         $answers.ALLOWED_EMAIL_DOMAINS = Read-Answer 'ALLOWED_EMAIL_DOMAINS (comma-separated)' $allowedDefault
@@ -279,6 +291,11 @@ try {
         if ($answers.FIRST_DEAN_EMAIL -notmatch '^[^@\s]+@([^@\s]+)$' -or $Matches[1].ToLowerInvariant() -notin $allowed) { throw 'First Dean email must use an allowed domain.' }
         $answers.GOOGLE_CLIENT_ID = Read-Answer 'GOOGLE_CLIENT_ID' $defaults['GOOGLE_CLIENT_ID'] -Optional
         foreach ($name in 'STUDENT_AUTH_ENABLED', 'BIOMETRIC_SIDECAR_ENABLED') {
+            if ($Production -and $name -eq 'BIOMETRIC_SIDECAR_ENABLED') {
+                $answers[$name] = 'false'
+                Write-Host 'BIOMETRIC_SIDECAR_ENABLED=false: real biometrics stay off in production until the BIO-002 review (spec).'
+                continue
+            }
             $answers[$name] = (Read-Answer $name 'true').ToLowerInvariant()
             if ($answers[$name] -notin @('true', 'false')) { throw "$name must be true or false." }
         }
@@ -295,14 +312,18 @@ try {
     }
 
     Write-Host "`n=== Confirm provisioning ==="
+    if ($Production) { Write-Host 'Environment: PRODUCTION (images ghcr.io/<namespace>/dentisys-*-prod:prod; pgAdmin off; biometrics off; no database tunnel).' }
+    else { Write-Host 'Environment: demo (images ghcr.io/<namespace>/dentisys-*:demo).' }
     Write-Host "Server: $Ip; SSH: $loginUser on $loginPort -> $User on $SshPort; site: https://$siteDomain"
     Write-Host "Loopback database/Mailpit tunnels: $(-not $NoDbTunnel); existing server .env retained: $envExists"
     Write-Host "$User password: ********; GHCR token: ********"
     foreach ($entry in $answers.GetEnumerator()) {
         if ($entry.Value -is [Security.SecureString]) { if ($entry.Key -ne 'GHCR_TOKEN') { Write-Host "$($entry.Key): ********" }; continue }
-        if ($entry.Key -notin @('MODE', 'SUDO_USER_NAME', 'IP', 'DOMAIN', 'SSH_PORT', 'NO_DB_TUNNEL', 'SG_CONFIRMED')) { Write-Host "$($entry.Key): $($entry.Value)" }
+        if ($entry.Key -notin @('MODE', 'SUDO_USER_NAME', 'IP', 'DOMAIN', 'SSH_PORT', 'NO_DB_TUNNEL', 'SG_CONFIRMED', 'IMAGE_SET')) { Write-Host "$($entry.Key): $($entry.Value)" }
     }
-    Write-Host "AWS checklist: TCP $SshPort from your IP and 80/443 open; hostname resolves to the Elastic IP; images :demo already published."
+    $imageNote = 'images :demo already published'
+    if ($Production) { $imageNote = 'images :prod already promoted with promote-prod.ps1' }
+    Write-Host "AWS checklist: TCP $SshPort from your IP and 80/443 open; hostname resolves to the Elastic IP; $imageNote."
     Write-Host 'Have Session Manager or configured Instance Connect recovery ready. This command changes only the VPS.'
     $confirmation = Read-Host 'Press Enter to confirm the AWS checklist and start (anything else cancels)'
     if ($confirmation -ne '') { throw 'Cancelled before upload or server changes.' }

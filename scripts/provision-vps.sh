@@ -49,7 +49,7 @@ declare -A input=()
 while IFS= read -r -d '' key; do
   [[ "$key" != END ]] || break
   case "$key" in
-    MODE|SUDO_USER_NAME|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_YUNET_SCORE_THRESHOLD|BIOMETRIC_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_SFACE_COSINE_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
+    MODE|SUDO_USER_NAME|IP|DOMAIN|SSH_PORT|NO_DB_TUNNEL|SG_CONFIRMED|GHCR_USERNAME|GHCR_TOKEN|SMTP_USER|SMTP_PASS|TRAEFIK_ACME_EMAIL|FIRST_DEAN_FIRST_NAME|FIRST_DEAN_LAST_NAME|FIRST_DEAN_EMAIL|PGADMIN_DEFAULT_EMAIL|PGADMIN_DEFAULT_PASSWORD|PGADMIN_ENABLED|IMAGE_SET|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_SIDECAR_ENABLED|BIOMETRIC_YUNET_SCORE_THRESHOLD|BIOMETRIC_MIN_FACE_PX|BIOMETRIC_QUALITY_LAPLACIAN_VARIANCE|BIOMETRIC_SFACE_COSINE_THRESHOLD|BIOMETRIC_MATCH_COUNT|BIOMETRIC_BLINK_THRESHOLD|BIOMETRIC_HEAD_TURN_RATIO|BIOMETRIC_CHALLENGE_TTL_SECONDS) ;;
     *) fail 'Unexpected input field.' ;;
   esac
   [[ ! -v "input[$key]" ]] || fail 'Duplicate input field.'
@@ -84,6 +84,7 @@ if [[ "$mode" != verify && ! -f "$env_file" ]]; then
     [[ -n "${input[$key]:-}" && "${input[$key]}" != *replace_with_* ]] || fail "Missing fresh configuration: $key."
   done
   [[ "${input[GHCR_USERNAME]}" =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]] || fail 'Invalid GHCR username.'
+  [[ "${input[PGADMIN_ENABLED]:-true}" =~ ^(true|false)$ && "${input[IMAGE_SET]:-demo}" =~ ^(demo|prod)$ ]] || fail 'Invalid PGADMIN_ENABLED or IMAGE_SET.'
   [[ "${input[STUDENT_AUTH_ENABLED]}" =~ ^(true|false)$ && "${input[BIOMETRIC_SIDECAR_ENABLED]}" =~ ^(true|false)$ ]] || fail 'Feature switches must be true or false.'
   domain="${input[DOMAIN]:-}"
   if [[ -z "$domain" ]]; then
@@ -177,16 +178,19 @@ else
   declare -A values=()
   for key in "${!input[@]}"; do
     case "$key" in
-      SMTP_*|TRAEFIK_ACME_EMAIL|FIRST_DEAN_*|PGADMIN_DEFAULT_*|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_*) values["$key"]="${input[$key]}" ;;
+      SMTP_*|TRAEFIK_ACME_EMAIL|FIRST_DEAN_*|PGADMIN_*|ALLOWED_EMAIL_DOMAINS|GOOGLE_CLIENT_ID|STUDENT_AUTH_ENABLED|BIOMETRIC_*) values["$key"]="${input[$key]}" ;;
     esac
   done
   values[APP_DOMAIN]="$domain"
   values[SMTP_FROM]="${input[SMTP_USER]}"
   values[GHCR_USERNAME]="${input[GHCR_USERNAME]}"
   namespace="${input[GHCR_USERNAME],,}"
-  values[WEB_IMAGE]="ghcr.io/$namespace/dentisys-web:demo"
-  values[FRONTEND_IMAGE]="ghcr.io/$namespace/dentisys-frontend:demo"
-  values[BIOMETRIC_IMAGE]="ghcr.io/$namespace/dentisys-biometric:demo"
+  # Production runs the separate -prod packages promoted by promote-prod.ps1.
+  image_suffix='' image_tag=demo
+  if [[ "${input[IMAGE_SET]:-demo}" == prod ]]; then image_suffix=-prod image_tag=prod; fi
+  values[WEB_IMAGE]="ghcr.io/$namespace/dentisys-web$image_suffix:$image_tag"
+  values[FRONTEND_IMAGE]="ghcr.io/$namespace/dentisys-frontend$image_suffix:$image_tag"
+  values[BIOMETRIC_IMAGE]="ghcr.io/$namespace/dentisys-biometric$image_suffix:$image_tag"
   for key in DB_PASS DB_ADMIN_PASS JWT_SIGNING_KEY_B64 MFA_ENCRYPTION_KEY_B64 AUDIT_MAC_KEY_B64 BIOMETRIC_STORAGE_KEY_B64 BIOMETRIC_SIDECAR_SHARED_SECRET; do
     values["$key"]="$(openssl rand -base64 32)"
   done
