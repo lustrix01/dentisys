@@ -339,6 +339,10 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Attendance Reports' }).click();
     await expect(sheet).toContainText('Attendance by Class');
     await expect(sheet.locator('tbody tr').last()).toContainText('2023-0102');
+
+    // In print only the sheet shows: the on-screen report tables must be hidden.
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('table:not(.print-only table)').first()).toBeHidden();
   });
 
   test('Activity log print sheet has the seven columns and a row per loaded log', async ({ page }) => {
@@ -360,5 +364,9 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(sheet.locator('tbody tr').first().locator('td.bad')).toHaveText('Failed');
     await expect(sheet.locator('tbody tr').nth(1).locator('td').last()).toHaveText('—');
     await expect(sheet).toContainText('2 shown of 2');
+
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('table:not(.print-only table)').first()).toBeHidden();
+    await expect(page.locator('h1', { hasText: 'System Audit Trail' })).toBeHidden();
   });
 });

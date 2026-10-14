@@ -366,7 +366,7 @@ export const DeanReports: React.FC = () => {
       </Modal>
 
       {/* ── Printable Report Area ──────────────────────────── */}
-      <div>
+      <div className="no-print">
         {/* ── STUDENT SUMMARIES ────────────────────────────── */}
         {activeTab === 'students' && (
           <Card>

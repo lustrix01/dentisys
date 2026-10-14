@@ -184,7 +184,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
         <div>
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{title}</h1>
           <p className="text-xs text-slate-400 mt-1">{subtitle}</p>
@@ -202,7 +202,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
       </div>
 
       {role === 'faculty' && (
-        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-800 dark:text-blue-300">
+        <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-800 dark:text-blue-300 no-print">
           <p className="font-bold">Faculty Workspace Activity</p>
           <p className="mt-1">
             This view contains your own Faculty actions. System-wide audit trail access remains reserved for Administrators, while Faculty email dispatch activity is tracked under <strong>Email Management</strong>.
@@ -211,7 +211,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
       )}
 
       {error && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between no-print">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
@@ -258,7 +258,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
         </CardContent>
       </Card>
 
-      <Card className="p-0 overflow-hidden">
+      <Card className="p-0 overflow-hidden no-print">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800/80">
           <CardTitle className="flex items-center gap-2 text-sm">
             <ShieldCheck className={`w-4.5 h-4.5 ${theme.icon}`} />
