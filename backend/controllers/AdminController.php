@@ -11,6 +11,22 @@ if (!function_exists('sanitize_for_log')) {
     }
 }
 
+function handle_admin_email_logs(): void
+{
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = admin_verify_auth($pdo, $config);
+        json_response([
+            'status' => 'ok',
+            'actions' => email_history_actions($pdo, (int) $authCtx['user_id']),
+        ], 200);
+    } catch (\Throwable $e) {
+        error_log('Admin email logs error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
 function admin_verify_auth(PDO $pdo, array $config): array
 {
     $authHeader = request_header('Authorization') ?? '';

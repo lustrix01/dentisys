@@ -1,3 +1,4 @@
+import type { EmailAction } from '../components/email/emailHistory';
 import type {
   LoginResponse,
   EnrollStartResponse,
@@ -375,7 +376,7 @@ export function getStudentInvitation(token: string): Promise<{ status: string; i
   return request('GET', `/auth/student/invitation?token=${encodeURIComponent(token)}`);
 }
 
-export function createStudentInvitation(data: { studentId: string; classId: string }): Promise<{
+export function createStudentInvitation(data: { studentId: string; classId: string; emailActionId?: string }): Promise<{
   status: string;
   invitation: { studentId: string; classId: string; email: string; expiresAt: string };
   delivery_status: string;
@@ -584,7 +585,7 @@ export function activateFacultyInvitation(token: string, password: string): Prom
   return request('POST', '/auth/faculty/activate', { token, password });
 }
 
-export function inviteSecretaryApi(data: { student_name: string; student_number?: string; cs_id: number; email: string }): Promise<{ status: string; invitationId: string | null; token: string | null; invitation_link: string | null; delivery_status: string; message: string }> {
+export function inviteSecretaryApi(data: { student_name: string; student_number?: string; cs_id: number; email: string; emailActionId?: string }): Promise<{ status: string; invitationId: string | null; token: string | null; invitation_link: string | null; delivery_status: string; message: string }> {
   return request('POST', '/secretary/invite', data);
 }
 
@@ -1631,19 +1632,12 @@ export function sendFacultyEmailApi(data: {
   return request('POST', '/faculty/send-email', data);
 }
 
-export function getFacultyEmailLogsApi(): Promise<{
-  status: string;
-  logs: Array<{
-    id: string;
-    recipient: string;
-    recipientEmail?: string;
-    subject: string;
-    type: string;
-    sentAt: string;
-    status: 'Sent' | 'Failed' | 'Suppressed';
-  }>;
-}> {
+export function getFacultyEmailLogsApi(): Promise<{ status: string; actions: EmailAction[] }> {
   return request('GET', '/faculty/email-logs');
+}
+
+export function getAdminEmailLogsApi(): Promise<{ status: string; actions: EmailAction[] }> {
+  return request('GET', '/admin/email-logs');
 }
 
 // Class Management API Services

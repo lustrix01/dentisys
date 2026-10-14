@@ -169,6 +169,12 @@ return [
         'has_params' => false,
     ],
     [
+        'method' => 'GET',
+        'path' => '/api/admin/email-logs',
+        'handler' => 'handle_admin_email_logs',
+        'has_params' => false,
+    ],
+    [
         'method' => 'POST',
         'path' => '/api/admin/faculty-invitations',
         'handler' => 'handle_admin_faculty_invitation_create',

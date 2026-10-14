@@ -1097,11 +1097,12 @@ export const ClassesAndRosters: React.FC = () => {
       return accountStatus === 'none' || accountStatus === 'pending';
     });
     const alreadyRegistered = filteredStudents.length - invitable.length;
+    const emailActionId = crypto.randomUUID(); // one id for the whole bulk click
     const results = await Promise.all(invitable.map(async student => {
       const classId = invitationClassId(student);
       if (!classId) return { issued: false, deliveryFailed: false };
       try {
-        const response = await createStudentInvitation({ studentId: student.id, classId });
+        const response = await createStudentInvitation({ studentId: student.id, classId, emailActionId });
         return { issued: true, deliveryFailed: response.delivery_status === 'Failed' };
       } catch {
         return { issued: false, deliveryFailed: false };

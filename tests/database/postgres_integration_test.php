@@ -284,6 +284,7 @@ $expectedMigrations = [
     '044_scheduled_attendance_sessions.sql',
     '045_lecture_laboratory_grading.sql',
     '046_academic_terms.sql',
+    '047_email_outbox_action.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -1878,6 +1879,31 @@ $facultyTokenStatesStmt->execute([(int) $facultyInvitationAccount['user_id']]);
 $facultyTokenStates = $facultyTokenStatesStmt->fetch(PDO::FETCH_ASSOC);
 expect_same(1, (int) ($facultyTokenStates['live_count'] ?? 0), 'Faculty reissue leaves exactly one unconsumed live token');
 expect_same(2, (int) ($facultyTokenStates['revoked_count'] ?? 0), 'Faculty reissue revokes every previous invitation token');
+// Email History: the Dean's Faculty invitations (create, email correction, reissue) are recorded under the Dean.
+$deanSenderId = (int) $pdo->query("SELECT user_id FROM user_accounts WHERE login_email = 'admin@bicol-u.edu.ph'")->fetchColumn();
+$deanInvitationRowsStmt = $pdo->prepare('SELECT email_type, status, sender_user_id, message_body, action_uuid FROM email_outbox WHERE recipient_email = ? ORDER BY email_id');
+$deanInvitationRowsStmt->execute([$facultyInvitationEmail]);
+$deanInvitationRows = $deanInvitationRowsStmt->fetchAll(PDO::FETCH_ASSOC);
+$deanInvitationTypes = array_values(array_unique(array_column($deanInvitationRows, 'email_type')));
+sort($deanInvitationTypes);
+expect_same(['Faculty Invitation', 'Faculty Invitation (email corrected)', 'Faculty Invitation (reissued)'], $deanInvitationTypes, 'Dean create, email correction and reissue are each recorded in the outbox');
+expect_same([$deanSenderId], array_values(array_unique(array_map('intval', array_column($deanInvitationRows, 'sender_user_id')))), 'Dean invitation outbox rows are owned by the Dean');
+expect_true(count(array_filter($deanInvitationRows, static fn(array $row): bool => in_array($row['status'], ['Sent', 'Suppressed'], true))) === count($deanInvitationRows), 'Dean invitation outbox rows are finished as Sent or Suppressed');
+expect_true(count(array_unique(array_column($deanInvitationRows, 'action_uuid'))) === count($deanInvitationRows), 'Each Dean invitation email is its own send action');
+[$adminLogsStatus, $adminLogsBody] = integration_http_get_json('/api/admin/email-logs', $adminAccessToken);
+expect_same(200, $adminLogsStatus, 'The Dean can read the Email History');
+$deanLoggedTypes = array_values(array_unique(array_map(
+    static fn(array $action): string => (string) $action['type'],
+    array_filter($adminLogsBody['actions'] ?? [], static fn(array $action): bool => ($action['recipients'][0]['email'] ?? null) === $facultyInvitationEmail)
+)));
+sort($deanLoggedTypes);
+expect_same($deanInvitationTypes, $deanLoggedTypes, 'The Dean Email History lists the invitation actions');
+$deanLogsJson = json_encode($adminLogsBody, JSON_THROW_ON_ERROR);
+expect_true(!str_contains($deanLogsJson, 'message_body') && !str_contains($deanLogsJson, '"subject"') && !str_contains($deanLogsJson, 'activate-faculty'), 'The Dean Email History never returns subjects, bodies or token links');
+[$facultyAdminLogsStatus] = integration_http_get_json('/api/admin/email-logs', $facultyAccessToken);
+expect_same(403, $facultyAdminLogsStatus, 'Faculty cannot read the Dean Email History');
+[, $facultyOwnLogsBody] = integration_http_get_json('/api/faculty/email-logs', $facultyAccessToken);
+expect_true(!str_contains(json_encode($facultyOwnLogsBody, JSON_THROW_ON_ERROR), $facultyInvitationEmail), 'Faculty Email History never shows the Dean invitations');
 [$facultyListStatus, $facultyListBody] = integration_http_get_json('/api/admin/faculty-invitations', $adminAccessToken);
 expect_same(200, $facultyListStatus, 'Admin can view Faculty invitation state');
 $listedFacultyInvitation = array_values(array_filter($facultyListBody['invitations'] ?? [], static fn(array $item): bool => $item['email'] === $facultyInvitationEmail))[0] ?? null;
@@ -2899,6 +2925,39 @@ $suppressedMailpitCopies = array_filter(
     static fn(array $message): bool => ($message['Subject'] ?? '') === 'Integration suppressed notice'
 );
 expect_same(1, count($suppressedMailpitCopies), 'CUSTOM mode still delivers the suppressed notice to Mailpit, once');
+
+// Email History groups the outbox by send action for the signed-in sender only.
+$historyActionId = '5d0f6c1e-8a3b-4c5d-9e7f-1a2b3c4d5e6f';
+foreach ([1, 2] as $historyPass) {
+    integration_http_json('/api/faculty/send-email', $seedFacultyAccessToken, [
+        'studentIds' => ['26'], 'emailType' => 'Other', 'subject' => 'History grouping subject', 'message' => 'History grouping body.',
+        'emailActionId' => $historyActionId,
+    ]);
+}
+integration_http_json('/api/faculty/send-email', $seedFacultyAccessToken, [
+    'studentIds' => ['26'], 'emailType' => 'Other', 'subject' => 'History grouping subject', 'message' => 'History grouping body.',
+    'emailActionId' => 'not-a-uuid',
+]);
+$historySenderId = (int) $pdo->query("SELECT sender_user_id FROM email_outbox WHERE action_uuid = '{$historyActionId}' LIMIT 1")->fetchColumn();
+expect_true($historySenderId > 0, 'A valid emailActionId is stored as the send action');
+expect_same(1, (int) $pdo->query("SELECT COUNT(*) FROM email_outbox WHERE subject = 'History grouping subject' AND action_uuid <> '{$historyActionId}' AND action_uuid ~ '^[0-9a-f-]{36}$'")->fetchColumn(), 'An invalid emailActionId is replaced by a server-generated one');
+$pdo->prepare("INSERT INTO email_outbox (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, created_at) VALUES (?, 'legacy.history@bicol-u.edu.ph', 'Legacy Recipient', 'Legacy subject', 'Other', 'Legacy body', 'Sent', ?, '2000-01-01 00:00:00')")
+    ->execute([$historySenderId, 'e1000000-0000-4000-8000-' . bin2hex(random_bytes(6))]);
+$legacyHistoryEmailId = (int) $pdo->query("SELECT email_id FROM email_outbox WHERE recipient_email = 'legacy.history@bicol-u.edu.ph'")->fetchColumn();
+[$historyStatus, $historyBody] = integration_http_get_json('/api/faculty/email-logs', $seedFacultyAccessToken);
+expect_same(200, $historyStatus, 'Faculty can read their Email History');
+$historyActions = $historyBody['actions'] ?? [];
+$groupedHistory = array_values(array_filter($historyActions, static fn(array $action): bool => $action['id'] === $historyActionId))[0] ?? null;
+expect_same(2, count($groupedHistory['recipients'] ?? []), 'A multi-recipient send is one action with each recipient');
+expect_same(['Suppressed', 'Suppressed'], array_column($groupedHistory['recipients'] ?? [], 'status'), 'The action keeps per-recipient delivery status');
+$legacyHistory = array_values(array_filter($historyActions, static fn(array $action): bool => $action['id'] === 'mail-' . $legacyHistoryEmailId))[0] ?? null;
+expect_same(1, count($legacyHistory['recipients'] ?? []), 'A row without an action id is its own one-recipient action');
+expect_same('2000-01-01 00:00:00', substr((string) ($legacyHistory['sentAt'] ?? ''), 0, 19), 'A legacy action falls back to the row creation time');
+$historyJson = json_encode($historyBody, JSON_THROW_ON_ERROR);
+expect_true(!str_contains($historyJson, 'History grouping subject') && !str_contains($historyJson, 'Legacy body') && !array_key_exists('logs', $historyBody), 'Email History never returns subjects or bodies');
+[, $otherHistoryBody] = integration_http_get_json('/api/admin/email-logs', $adminAccessToken);
+expect_true(!str_contains(json_encode($otherHistoryBody, JSON_THROW_ON_ERROR), 'legacy.history@bicol-u.edu.ph'), 'Another sender never sees these actions');
+$pdo->prepare('DELETE FROM email_outbox WHERE email_id = ?')->execute([$legacyHistoryEmailId]);
 
 // Owner decision: a computed grade that moves an enrollment into remedial, or
 // clears it, notifies the Student once per change. Rolled back afterwards.

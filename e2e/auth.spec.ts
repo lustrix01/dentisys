@@ -152,6 +152,10 @@ test.describe('Auth Module E2E Tests', () => {
       const invitation = invitations.find(item => item.email === body.email);
       await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', delivery_status: 'Sent', invitation }) });
     });
+    await page.route('**/api/admin/email-logs', async route => {
+      const actions = invitations.length === 0 ? [] : [{ id: 'act-1', type: 'Faculty Invitation', sentAt: '2026-10-15 01:00:00', recipients: [{ name: 'Test Faculty', email: 'test.faculty@bicol-u.edu.ph', status: 'Sent', failureReason: null }] }];
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', actions }) });
+    });
     await page.route('**/api/admin/faculty-invitations/reissue', async route => {
       const body = route.request().postDataJSON() as { id: string };
       reissuePayload = body;
@@ -177,6 +181,9 @@ test.describe('Auth Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Send invite' }).click();
     await expect(page.getByRole('cell', { name: 'test.faculty@bicol-u.edu.ph' })).toBeVisible();
     await expect(page.getByRole('cell', { name: 'Pending' })).toBeVisible();
+    await expect(page.getByText('Email history', { exact: true })).toBeVisible();
+    await expect(page.getByText('Invitation emails you sent. View-only.')).toBeVisible();
+    await expect(page.getByRole('table').filter({ hasText: 'Date Sent' }).getByText('Faculty Invitation', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Reissue' }).click();
     await expect(page.getByText(/Invitation sent to test.faculty@bicol-u.edu.ph/)).toBeVisible();
     expect(reissuePayload).toEqual({ id: '17' });

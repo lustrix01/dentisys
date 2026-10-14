@@ -137,11 +137,11 @@ test.describe('Faculty Module E2E Tests', () => {
         if (path === '/api/faculty/assessments') return json([]);
         if (path === '/api/faculty/attendance') return json({ status: 'ok', records: [] });
         if (path === '/api/secretary/invitations') return json([]);
-        if (path === '/api/faculty/email-logs') return json({ status: 'ok', logs: emailLogs });
+        if (path === '/api/faculty/email-logs') return json({ status: 'ok', actions: emailLogs });
         if (path === '/api/faculty/student-invitations' && request.method() === 'POST') {
           const payload = request.postDataJSON() as Record<string, unknown>;
           invitationPayloads.push(payload);
-          emailLogs = [{ id: 'mail-student-42', recipient: 'Canonical Student', recipientEmail: 'student@bicol-u.edu.ph', subject: 'DentiSys Student Invitation', type: 'Student Invitation', sentAt: '2026-09-20T00:00:00Z', status: 'Failed' }];
+          emailLogs = [{ id: 'mail-1', type: 'Student Invitation', sentAt: '2026-09-20T00:00:00Z', recipients: [{ name: 'Canonical Student', email: 'student@bicol-u.edu.ph', status: 'Failed', failureReason: 'SMTP delivery failed or is not configured.' }] }];
           return json({ status: 'ok', message: 'Student invitation issued, but email delivery failed.', delivery_status: 'Failed' }, 201);
         }
         return json(request.method() === 'GET' ? [] : { status: 'ok', message: 'ok' });
@@ -167,15 +167,17 @@ test.describe('Faculty Module E2E Tests', () => {
       await expect(appPage.getByText('Student invitations: 1 issued, 1 email deliveries failed, 1 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation Issued · Delivery Failed')).toBeVisible();
       await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
-      await expect(appPage.getByRole('cell', { name: 'Student Invitation', exact: true })).toBeVisible();
-      await expect(appPage.getByText('Failed', { exact: true })).toBeVisible();
+      const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
+      await expect(historyTable.getByText('Student Invitation', { exact: true })).toBeVisible();
+      await expect(historyTable.getByText('1 failed', { exact: true })).toBeVisible();
+      await expect(historyTable.getByText('Subject')).toHaveCount(0);
       // The history type filter matches the stored email types.
       const historyTypeFilter = appPage.locator('select', { has: appPage.locator('option', { hasText: 'All email categories' }) });
       await historyTypeFilter.selectOption('Privacy Consent');
-      await expect(appPage.getByRole('cell', { name: 'Student Invitation', exact: true })).toHaveCount(0);
+      await expect(historyTable.getByText('Student Invitation', { exact: true })).toHaveCount(0);
       await historyTypeFilter.selectOption('Student Invitation');
-      await expect(appPage.getByRole('cell', { name: 'Student Invitation', exact: true })).toBeVisible();
-      expect(invitationPayloads).toEqual([{ studentId: '42', classId: '77' }]);
+      await expect(historyTable.getByText('Student Invitation', { exact: true })).toBeVisible();
+      expect(invitationPayloads).toEqual([{ studentId: '42', classId: '77', emailActionId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/) }]);
     } finally {
       await appPage.close();
     }
@@ -346,9 +348,9 @@ test.describe('Faculty Module E2E Tests', () => {
         if (path === '/api/runtime-config') return json({ status: 'ok', environment: 'test', allowed_email_domains: ['bicol-u.edu.ph'], providers: { identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, email: { active: 'mailpit' }, biometrics: { active: 'disabled' }, location: { active: 'disabled' } }, features: { browser_attendance_prototype: false, student_auth_enabled: false } });
         if (path === '/api/faculty/students') return json([{ id: '42', studentId: 'P03-42', name: 'Canonical Student', email: 'student@bicol-u.edu.ph', yearLevel: 4, status: 'active', classSections: [{ classId: '77', className: 'Section 4-A', enrollmentId: '88' }] }]);
         if (path === '/api/secretary/invitations') return json([]);
-        if (path === '/api/faculty/email-logs') return json({ status: 'ok', logs: emailLogs });
+        if (path === '/api/faculty/email-logs') return json({ status: 'ok', actions: emailLogs });
         if (path === '/api/faculty/student-invitations' && request.method() === 'POST') {
-          emailLogs = [{ id: 'mail-student-42', recipient: 'Canonical Student', recipientEmail: 'student@bicol-u.edu.ph', subject: 'DentiSys Student Invitation', type: 'Student Invitation', sentAt: '2026-09-20T00:00:00Z', status: 'Sent' }];
+          emailLogs = [{ id: 'mail-1', type: 'Student Invitation', sentAt: '2026-09-20T00:00:00Z', recipients: [{ name: 'Canonical Student', email: 'student@bicol-u.edu.ph', status: 'Sent', failureReason: null }] }];
           return json({ status: 'ok', message: 'Student invitation issued and sent.', delivery_status: 'Sent' }, 201);
         }
         return json(request.method() === 'GET' ? [] : { status: 'ok', message: 'ok' });
@@ -366,7 +368,52 @@ test.describe('Faculty Module E2E Tests', () => {
       await expect(appPage.getByText('Invitation Sent')).toBeVisible();
       await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
       await expect(appPage.getByRole('table').getByText('Student Invitation', { exact: true })).toBeVisible();
-      await expect(appPage.getByText('Sent', { exact: true })).toBeVisible();
+      await expect(appPage.getByText('1 sent', { exact: true })).toBeVisible();
+    } finally {
+      await appPage.close();
+    }
+  });
+
+  test('Email History shows a multi-recipient send as one row that expands to its recipients', async ({ page }) => {
+    const appPage = await page.context().newPage();
+    try {
+      await appPage.route('**/api/**', async route => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+        if (path === '/api/auth/refresh') return json({ status: 'error', message: 'Authentication required.' }, 401);
+        if (path === '/api/auth/login') return json({ type: 'direct_login', access_token: 'mock-faculty-token' });
+        if (path === '/api/auth/me') return json({ id: 200, login_email: 'faculty@bicol-u.edu.ph', display_name: 'Prof. Jane Doe', role: 'faculty' });
+        if (path === '/api/runtime-config') return json({
+          status: 'ok', environment: 'test', allowed_email_domains: ['bicol-u.edu.ph'],
+          providers: { identity: { password: { enabled: true }, google: { enabled: false, client_id: null }, development_mock: { enabled: false } }, email: { active: 'mailpit' }, biometrics: { active: 'disabled' }, location: { active: 'disabled' } },
+          features: { browser_attendance_prototype: false, student_auth_enabled: false },
+        });
+        if (path === '/api/faculty/email-logs') return json({ status: 'ok', actions: [{
+          id: 'act-1', type: 'At-Risk Notification', sentAt: '2026-10-14T01:00:00Z', recipients: [
+            { name: 'Ana Student', email: 'ana@bicol-u.edu.ph', status: 'Sent', failureReason: null },
+            { name: 'Ben Student', email: 'ben@bicol-u.edu.ph', status: 'Failed', failureReason: 'SMTP delivery failed or is not configured.' },
+            { name: 'Cara Student', email: 'cara@bicol-u.edu.ph', status: 'Sent', failureReason: null },
+          ],
+        }] });
+        return json(request.method() === 'GET' ? [] : { status: 'ok', message: 'ok' });
+      });
+      await appPage.goto('/login');
+      await appPage.fill('input[inputmode="email"]', 'faculty@bicol-u.edu.ph');
+      await appPage.fill('input[type="password"]', 'Password123!');
+      await appPage.click('button[type="submit"]');
+      await expect(appPage).toHaveURL('/');
+      await appPage.evaluate(() => { window.history.pushState({}, '', '/email-management'); window.dispatchEvent(new PopStateEvent('popstate')); });
+      await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
+      const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
+      await expect(historyTable.getByText('3 recipients', { exact: true })).toBeVisible();
+      await expect(historyTable.getByText('2 sent', { exact: true })).toBeVisible();
+      await expect(historyTable.getByText('1 failed', { exact: true })).toBeVisible();
+      await expect(historyTable.getByText('ben@bicol-u.edu.ph')).toHaveCount(0);
+      await historyTable.getByRole('button', { name: /At-Risk Notification/ }).click();
+      await expect(historyTable.getByText('ana@bicol-u.edu.ph')).toBeVisible();
+      await expect(historyTable.getByText('cara@bicol-u.edu.ph')).toBeVisible();
+      await expect(historyTable.getByText('SMTP delivery failed or is not configured.')).toBeVisible();
     } finally {
       await appPage.close();
     }

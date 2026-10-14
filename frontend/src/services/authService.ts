@@ -141,6 +141,7 @@ export const createSecretaryInvitation = async (input: {
   facultyName: string;
   className: string;
   classId: string;
+  emailActionId?: string;
 }): Promise<{ success: boolean; message: string; invitation?: SecretaryInvitation }> => {
   try {
     const res = await inviteSecretaryApi({
@@ -148,6 +149,7 @@ export const createSecretaryInvitation = async (input: {
       student_number: input.studentId,
       cs_id: Number(input.classId),
       email: input.email,
+      emailActionId: input.emailActionId,
     });
     if (!res.invitationId) {
       // The Student already had an account and was appointed directly.

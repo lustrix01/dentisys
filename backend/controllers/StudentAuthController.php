@@ -88,7 +88,7 @@ function handle_student_invitation_create(): void
             return;
         }
         $data = $body['data'];
-        if (array_diff(array_keys($data), ['studentId', 'classId']) !== []) {
+        if (array_diff(array_keys($data), ['studentId', 'classId', 'emailActionId']) !== []) {
             student_auth_error_response('Invalid request.', 400);
             return;
         }
@@ -275,13 +275,13 @@ function handle_student_invitation_create(): void
             $messageBody = student_auth_activation_email($student, $invitationLink, (string) ($authCtx['display_name'] ?? ''));
             $outbox = $pdo->prepare(
                 "INSERT INTO email_outbox
-                 (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)
-                 VALUES (?, ?, ?, ?, 'Student Invitation', ?, 'Pending', ?) RETURNING email_id"
+                 (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
+                 VALUES (?, ?, ?, ?, 'Student Invitation', ?, 'Pending', ?, ?) RETURNING email_id"
             );
             $outbox->execute([
                 $authCtx['user_id'], $email,
                 student_auth_student_display_name($student),
-                $subject, $messageBody, uuid_v4_string(),
+                $subject, $messageBody, uuid_v4_string(), email_action_uuid($data),
             ]);
             $emailId = (int) $outbox->fetchColumn();
 

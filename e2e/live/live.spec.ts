@@ -273,13 +273,13 @@ test('faculty can create a student and enrollment with returned identifiers', as
     headers: { Authorization: `Bearer ${credentials.access_token}` },
   });
   const logsPayload = await jsonResponse(logs);
-  expect(logsPayload.logs).toEqual(expect.arrayContaining([
+  expect(logsPayload.actions).toEqual(expect.arrayContaining([
     expect.objectContaining({
-      id: `mail-${deliveryPayload.deliveries[0].id}`,
-      subject,
-      status: 'Sent',
+      type: 'Other',
+      recipients: [expect.objectContaining({ status: 'Sent' })],
     }),
   ]));
+  expect(JSON.stringify(logsPayload)).not.toContain(subject);
 
   const mailpit = await page.request.get(`${mailpitBaseUrl}/api/v1/messages`);
   const mailpitPayload = await jsonResponse(mailpit);

@@ -226,3 +226,48 @@ function send_email(
     );
     return $result['sent'];
 }
+
+// One id per send action (one click). A client-supplied emailActionId is kept
+// only when it is a UUID v4; rows are always written under the authenticated sender.
+function email_action_uuid(array $data): string
+{
+    $id = $data['emailActionId'] ?? null;
+    return is_string($id) && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $id) === 1
+        ? strtolower($id)
+        : uuid_v4_string();
+}
+
+// Email History: the sender's last 100 send actions with all recipients.
+// Never selects subject or message_body.
+function email_history_actions(PDO $pdo, int $senderUserId): array
+{
+    $stmt = $pdo->prepare(
+        "WITH rows AS (
+             SELECT email_id, COALESCE(action_uuid, 'mail-' || email_id) AS action_key,
+                    recipient_email, recipient_name, email_type, status, sent_at, failure_reason, created_at
+               FROM email_outbox
+              WHERE sender_user_id = ?
+         ), acts AS (
+             SELECT action_key, MIN(COALESCE(sent_at, created_at)) AS action_at
+               FROM rows GROUP BY action_key
+              ORDER BY action_at DESC, action_key DESC LIMIT 100
+         )
+         SELECT r.action_key, a.action_at, r.email_type, r.recipient_email, r.recipient_name,
+                r.status, r.failure_reason
+           FROM rows r JOIN acts a ON a.action_key = r.action_key
+          ORDER BY a.action_at DESC, r.action_key DESC, r.email_id ASC"
+    );
+    $stmt->execute([$senderUserId]);
+    $actions = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $key = (string) $r['action_key'];
+        $actions[$key] ??= ['id' => $key, 'type' => $r['email_type'], 'sentAt' => $r['action_at'], 'recipients' => []];
+        $actions[$key]['recipients'][] = [
+            'name' => $r['recipient_name'] ?: $r['recipient_email'],
+            'email' => $r['recipient_email'],
+            'status' => $r['status'],
+            'failureReason' => $r['failure_reason'],
+        ];
+    }
+    return array_values($actions);
+}

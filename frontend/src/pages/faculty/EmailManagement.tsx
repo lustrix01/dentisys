@@ -18,7 +18,8 @@ import {
 import { Card } from '../../components/Card';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { EmailHistoryTable, EmailLog } from '../../components/email/EmailHistoryTable';
+import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
+import type { EmailAction } from '../../components/email/emailHistory';
 import { EmailPreviewModal, EmailPreviewType } from '../../components/email/EmailPreviewModal';
 import {
   createSecretaryInvitation,
@@ -32,7 +33,7 @@ import { getFacultyStudentsApi, getFacultyClassesApi } from '../../services/apiC
 
 type Tab = 'student_invites' | 'secretary' | 'history';
 
-const initialLogs: EmailLog[] = [];
+const initialLogs: EmailAction[] = [];
 
 export const EmailManagement: React.FC = () => {
   const { user } = useAuth();
@@ -120,7 +121,7 @@ export const EmailManagement: React.FC = () => {
   const [previewType, setPreviewType] = useState<EmailPreviewType>('consent');
   const [previewStudentId, setPreviewStudentId] = useState('');
   
-  const [logs, setLogs] = useState<EmailLog[]>(initialLogs);
+  const [logs, setLogs] = useState<EmailAction[]>(initialLogs);
   const [studentInvitationStates, setStudentInvitationStates] = useState<Record<string, { status: 'Sent' | 'Failed' | 'Pending' | 'Suppressed'; sentAt: string }>>({});
   const [secretaryInvs, setSecretaryInvs] = useState<SecretaryInvitation[]>([]);
   // Development-only activation links, returned once when an invitation is issued.
@@ -144,13 +145,15 @@ export const EmailManagement: React.FC = () => {
     setLoadingLogs(true);
     try {
       const res = await import('../../services/apiClient').then(m => m.getFacultyEmailLogsApi());
-        if (Array.isArray(res.logs)) {
-          setLogs(res.logs as EmailLog[]);
+        if (Array.isArray(res.actions)) {
+          setLogs(res.actions);
           const latestByEmail: Record<string, { status: 'Sent' | 'Failed' | 'Pending' | 'Suppressed'; sentAt: string }> = {};
-          for (const log of res.logs) {
-            if (log.type !== 'Student Invitation' || !log.recipientEmail) continue;
-            const key = log.recipientEmail.toLowerCase();
-            if (!latestByEmail[key]) latestByEmail[key] = { status: log.status, sentAt: log.sentAt };
+          for (const action of res.actions) {
+            if (action.type !== 'Student Invitation') continue;
+            for (const recipient of action.recipients) {
+              const key = recipient.email.toLowerCase();
+              if (!latestByEmail[key]) latestByEmail[key] = { status: recipient.status, sentAt: action.sentAt };
+            }
           }
           setStudentInvitationStates(latestByEmail);
         }
@@ -213,6 +216,7 @@ export const EmailManagement: React.FC = () => {
     setIsSending(true);
     setNotice(null);
 
+    const emailActionId = crypto.randomUUID(); // one id per click, shared by every request below
     if (tab === 'secretary') {
       // Send Secretary Invitations for selected students
       let count = 0;
@@ -232,6 +236,7 @@ export const EmailManagement: React.FC = () => {
           facultyName: user?.display_name || 'Faculty Member',
           className: student.classSections?.find(section => section.classId === classId)?.className ?? '',
           classId,
+          emailActionId,
         });
 
         if (res.success) {
@@ -275,7 +280,7 @@ export const EmailManagement: React.FC = () => {
           continue;
         }
         try {
-          const response = await createStudentInvitation({ studentId: student.id, classId });
+          const response = await createStudentInvitation({ studentId: student.id, classId, emailActionId });
           successCount++;
           if (response.delivery_status === 'Failed') deliveryFailedCount++;
         } catch {
@@ -742,7 +747,7 @@ export const EmailManagement: React.FC = () => {
             <p className="text-xs text-slate-400">Complete transmission audit ledger for student notifications & invitations.</p>
           </div>
 
-          <EmailHistoryTable logs={logs} search={search} onSearch={setSearch} filter={historyTypeFilter} onFilter={setHistoryTypeFilter} />
+          <EmailHistoryTable actions={logs} search={search} onSearch={setSearch} filter={historyTypeFilter} onFilter={setHistoryTypeFilter} />
         </Card>
       )}
 

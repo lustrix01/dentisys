@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock,
   Edit3,
+  Mail,
   RefreshCw,
   Search,
   Send,
@@ -15,11 +16,14 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
+import type { EmailAction } from '../../components/email/emailHistory';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
 import { validateBicolUEmail } from '../../services/authService';
 import {
   createFacultyInvitation,
   type FacultyInvitation as FacultyInvitationRecord,
+  getAdminEmailLogsApi,
   getFacultyInvitations,
   reissueFacultyInvitation,
   updateFacultyInvitation,
@@ -43,6 +47,8 @@ export const FacultyInvitation: React.FC = () => {
 
   const [invitations, setInvitations] = useState<FacultyInvitationRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [emailActions, setEmailActions] = useState<EmailAction[]>([]);
+  const [emailSearch, setEmailSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -84,6 +90,12 @@ export const FacultyInvitation: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Unable to load Faculty invitations.');
     } finally {
       setLoading(false);
+    }
+    try {
+      const history = await getAdminEmailLogsApi();
+      setEmailActions(Array.isArray(history?.actions) ? history.actions : []);
+    } catch {
+      // The invitation result stays visible if the history refresh fails.
     }
   }, []);
 
@@ -522,6 +534,18 @@ export const FacultyInvitation: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </Card>
+
+      {/* Email history (view-only) */}
+      <Card className="p-6">
+        <CardHeader className="mb-4 flex flex-col justify-between gap-1 border-b border-slate-100 p-0 pb-4 dark:border-slate-800">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Mail className="h-5 w-5 text-accent-600" />
+            <span>Email history</span>
+          </CardTitle>
+          <p className="text-xs text-slate-500">Invitation emails you sent. View-only.</p>
+        </CardHeader>
+        <EmailHistoryTable actions={emailActions} search={emailSearch} onSearch={setEmailSearch} />
       </Card>
 
       {/* Edit Invitation Modal */}

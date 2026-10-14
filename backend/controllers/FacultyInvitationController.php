@@ -9,6 +9,42 @@ if (!function_exists('sanitize_for_log')) {
     }
 }
 
+// Sends a Dean invitation email and records it in email_outbox (Email History).
+// An outbox failure never blocks the invitation itself.
+function faculty_invitation_send_recorded(PDO $pdo, array $config, int $senderId, string $email, string $name, string $subject, string $type, string $body): bool
+{
+    $emailId = 0;
+    try {
+        $insert = $pdo->prepare(
+            "INSERT INTO email_outbox
+             (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
+             VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?, ?) RETURNING email_id"
+        );
+        $insert->execute([$senderId, mb_strtolower($email), $name, $subject, $type, $body, uuid_v4_string(), uuid_v4_string()]);
+        $emailId = (int) $insert->fetchColumn();
+    } catch (Throwable $e) {
+        error_log('Faculty invitation outbox write error: ' . sanitize_for_log($e));
+    }
+    $sent = send_email($email, $subject, $body, $config, true);
+    if ($emailId > 0) {
+        try {
+            if ($sent && !email_reaches_recipient($email, $config)) {
+                $status = 'Suppressed';
+                $failure = 'Custom e-mail mode: the recipient is not on the allowlist; delivered to Mailpit only.';
+            } else {
+                $status = $sent ? 'Sent' : 'Failed';
+                $failure = $sent ? null : 'SMTP delivery failed or is not configured.';
+            }
+            $sentAt = $status === 'Sent' ? (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u') : null;
+            $pdo->prepare('UPDATE email_outbox SET status = ?, sent_at = ?, failure_reason = ? WHERE email_id = ?')
+                ->execute([$status, $sentAt, $failure, $emailId]);
+        } catch (Throwable $e) {
+            error_log('Faculty invitation outbox update error: ' . sanitize_for_log($e));
+        }
+    }
+    return $sent;
+}
+
 function faculty_invitation_token(): string
 {
     return base64url_encode(random_bytes(32));
@@ -431,7 +467,7 @@ function handle_admin_faculty_invitation_create(): void
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
         $subject = 'DentiSys Faculty Invitation';
         $message = email_faculty_invitation_html($name, $email, $link);
-        $sent = send_email($email, $subject, $message, $config, true);
+        $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation', $message);
         $showDevLink = !empty($config['show_dev_invitation_link']);
         json_response([
             'status' => 'ok',
@@ -587,12 +623,15 @@ function handle_admin_faculty_invitation_update(): void
         $pdo->commit();
 
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
-        $sent = send_email(
-            $email,
-            'DentiSys Faculty Invitation Updated',
-            email_faculty_invitation_html($name, $email, $link, true),
+        $sent = faculty_invitation_send_recorded(
+            $pdo,
             $config,
-            true
+            (int) $actor['user_id'],
+            $email,
+            $name,
+            'DentiSys Faculty Invitation Updated',
+            'Faculty Invitation (email corrected)',
+            email_faculty_invitation_html($name, $email, $link, true)
         );
         json_response([
             'status' => 'ok',
@@ -821,7 +860,7 @@ function handle_admin_faculty_invitation_reissue(): void
         $link = app_url($config, '/activate-faculty', ['token' => $token]);
         $subject = 'DentiSys Faculty Invitation';
         $message = email_faculty_invitation_html($name, $email, $link);
-        $sent = send_email($email, $subject, $message, $config, true);
+        $sent = faculty_invitation_send_recorded($pdo, $config, (int) $actor['user_id'], $email, $name, $subject, 'Faculty Invitation (reissued)', $message);
         $showDevLink = !empty($config['show_dev_invitation_link']);
         json_response([
             'status' => 'ok',

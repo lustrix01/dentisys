@@ -7065,14 +7065,15 @@ function handle_faculty_email_send(): void
         $facultySignature = (string) ($authCtx['display_name'] ?? '');
         $insert = $pdo->prepare(
             "INSERT INTO email_outbox
-             (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)
-             VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?) RETURNING email_id"
+             (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
+             VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?, ?) RETURNING email_id"
         );
         $finish = $pdo->prepare(
             "UPDATE email_outbox
              SET status = ?, sent_at = ?, failure_reason = ?
              WHERE email_id = ?"
         );
+        $actionUuid = email_action_uuid($data);
         $results = [];
         foreach ($validatedRecipients as $recipient) {
             $recipientName = trim((string) $recipient['student_name']);
@@ -7091,7 +7092,7 @@ function handle_faculty_email_send(): void
             $messageBody = email_faculty_message_html($recipientName, $facultySignature, $messageText);
             $insert->execute([
                 $authCtx['user_id'], $recipientEmail, $recipientName,
-                $subject, $emailType, $messageBody, $operationUuid,
+                $subject, $emailType, $messageBody, $operationUuid, $actionUuid,
             ]);
             $emailId = (int) $insert->fetchColumn();
             if ($emailId <= 0) {
@@ -7143,32 +7144,9 @@ function handle_faculty_email_logs(): void
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
 
-        $stmt = $pdo->prepare(
-            "SELECT email_id, recipient_email, recipient_name, subject, email_type, status,
-                    sent_at, failure_reason, created_at
-             FROM email_outbox
-             WHERE sender_user_id = ?
-             ORDER BY created_at DESC LIMIT 100"
-        );
-        $stmt->execute([$authCtx['user_id']]);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $mapped = array_map(function ($r) {
-            return [
-                'id' => 'mail-' . $r['email_id'],
-                'recipient' => $r['recipient_name'] ?: $r['recipient_email'],
-                'recipientEmail' => $r['recipient_email'],
-                'subject' => $r['subject'],
-                'type' => $r['email_type'],
-                'sentAt' => $r['sent_at'] ?: $r['created_at'],
-                'status' => $r['status'],
-                'failureReason' => $r['failure_reason'],
-            ];
-        }, $rows);
-
         json_response([
             'status' => 'ok',
-            'logs' => $mapped,
+            'actions' => email_history_actions($pdo, (int) $authCtx['user_id']),
         ], 200);
     } catch (\Throwable $e) {
         error_log('Faculty email logs error: ' . sanitize_for_log($e));

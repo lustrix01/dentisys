@@ -227,10 +227,10 @@ function handle_secretary_invite(): void
         $operationUuid = uuid_v4_string();
         $outbox = $pdo->prepare(
             "INSERT INTO email_outbox
-             (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid)
-             VALUES (?, ?, ?, ?, 'Secretary Invitation', ?, 'Pending', ?) RETURNING email_id"
+             (sender_user_id, recipient_email, recipient_name, subject, email_type, message_body, status, operation_uuid, action_uuid)
+             VALUES (?, ?, ?, ?, 'Secretary Invitation', ?, 'Pending', ?, ?) RETURNING email_id"
         );
-        $outbox->execute([$authCtx['user_id'], $email, $studentName, $subject, $body, $operationUuid]);
+        $outbox->execute([$authCtx['user_id'], $email, $studentName, $subject, $body, $operationUuid, email_action_uuid($data)]);
         $emailId = (int) $outbox->fetchColumn();
         $sent = send_email($email, $subject, $body, $config);
         $finish = $pdo->prepare(
