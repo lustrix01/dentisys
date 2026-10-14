@@ -33,7 +33,7 @@ import {
   Legend
 } from 'recharts';
 import { flushSync } from 'react-dom';
-import { PrintStyle, PrintHeader, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
+import { PrintStyle, PrintHeader, PrintCaption, PrintLegend, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
@@ -1261,7 +1261,7 @@ export const Reports: React.FC = () => {
             ['Date', generated],
           ]}
         />
-        <h3 className="font-bold text-[9.5px] uppercase tracking-wider mb-1.5">{printCaption}</h3>
+        <PrintCaption>{printCaption}</PrintCaption>
         <table>
           <colgroup>{widths.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
           <thead>
