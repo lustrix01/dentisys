@@ -1,7 +1,7 @@
 import React from 'react';
 
-// Shared print (Export PDF) pieces for the faculty reports. The sheet is hidden on screen
-// (.print-only) and only styled while a faculty page that renders <PrintStyle> is mounted.
+// Shared print (Export PDF) pieces for the faculty and Dean reports and the activity logs. The sheet is
+// hidden on screen (.print-only) and only styled while a page that renders <PrintStyle> is mounted.
 
 const cssString = (value: string) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/[\r\n]+/g, ' ')}"`;
 
@@ -15,13 +15,13 @@ export const printCellClass = (value: unknown): string => {
   return '';
 };
 
-export const PrintStyle: React.FC<{ title: string; running: string; generated: string }> = ({ title, running, generated }) => (
+export const PrintStyle: React.FC<{ title: string; running: string; generated: string; note?: string }> = ({ title, running, generated, note }) => (
   <style>{`
 @page { size: landscape; margin: 10mm;
   /* = --ps-fs-xs; @page boxes can't use vars */
   @top-left { content: ${cssString(running)}; font-size: 8.5px; color: #64748b; }
   @top-right { content: "continued"; font-size: 8.5px; color: #64748b; }
-  @bottom-left { content: ${cssString(`DentiSys · ${title} · ${generated}`)}; font-size: 8.5px; color: #64748b; }
+  @bottom-left { content: ${cssString(`DentiSys · ${title} · ${generated}${note ? ` · ${note}` : ''}`)}; font-size: 8.5px; color: #64748b; }
   @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8.5px; color: #64748b; }
 }
 @page :first { @top-left { content: none; } @top-right { content: none; } }
@@ -30,6 +30,7 @@ export const PrintStyle: React.FC<{ title: string; running: string; generated: s
 /* collapses with .ps-head margin: 32px = 12px + caption (14px line + 6px) */
 .ps .ps-head + table { margin-top: 32px; }
 .ps .ps-caption { font-size: var(--ps-fs-base); line-height: 14px; margin: 0 0 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.ps table + .ps-caption { margin-top: 12px; }
 .ps .ps-eyebrow { font-size: var(--ps-fs-sm); }
 .ps .ps-title { font-size: var(--ps-fs-title); }
 .ps .ps-sub { font-size: var(--ps-fs-md); }
@@ -54,7 +55,7 @@ export const PrintStyle: React.FC<{ title: string; running: string; generated: s
 );
 
 export const PrintHeader: React.FC<{ title: string; sub: string; rows: [string, string][] }> = ({ title, sub, rows }) => (
-  <div className="grid grid-cols-2 gap-6 items-end ps-head border-b-2 border-slate-900 pb-2">
+  <div className="grid grid-cols-[1fr_auto] gap-6 items-end ps-head border-b-2 border-slate-900 pb-2">
     <div>
       <p className="ps-eyebrow font-extrabold uppercase tracking-widest text-slate-600">Bicol University · College of Dental Medicine</p>
       <h2 className="ps-title font-heading font-extrabold leading-tight text-slate-900">{title}</h2>
@@ -79,7 +80,7 @@ export const PrintLegend: React.FC = () => (
   </p>
 );
 
-export const PrintSignatures: React.FC<{ faculty?: string; seal?: boolean }> = ({ faculty, seal }) => (
+export const PrintSignatures: React.FC<{ faculty?: string; seal?: boolean; role?: string }> = ({ faculty, seal, role = 'Faculty' }) => (
   <div className={`break-inside-avoid mt-[26px] flex items-end ps-sig ${seal ? 'justify-between' : 'justify-end'}`}>
     {seal && (
       <div className="text-center w-56">
@@ -90,7 +91,7 @@ export const PrintSignatures: React.FC<{ faculty?: string; seal?: boolean }> = (
     <div className="text-center w-56">
       <p className="font-bold">{faculty}</p>
       <div className="h-px w-full bg-slate-900 mt-1 mb-1" />
-      <p className="ps-sig-role text-slate-500 font-bold uppercase tracking-wider">Faculty</p>
+      <p className="ps-sig-role text-slate-500 font-bold uppercase tracking-wider">{role}</p>
     </div>
   </div>
 );

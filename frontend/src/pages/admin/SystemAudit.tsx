@@ -16,19 +16,13 @@ import { percentageToGWAExact } from '../../utils/gradeHelper';
 
 type ReportTab = 'students' | 'academic' | 'retention' | 'attendance';
 
-const PRINT_STYLES = `
-@media print {
-  body * { visibility: hidden !important; }
-  #dean-report-print, #dean-report-print * { visibility: visible !important; }
-  #dean-report-print { position: absolute; left: 0; top: 0; width: 100%; font-size: 11px; }
-  .no-print { display: none !important; }
-  @page { margin: 1.2cm; }
-}`;
-
 import { getAdminReportsSummaryApi, getAdminSettingsApi, revokeStudentBiometricApi } from '../../services/apiClient';
 import { Modal } from '../../components/Modal';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import GradeValue from '../../components/GradeValue';
+import { flushSync } from 'react-dom';
+import { useAuth } from '../../context/AuthContext';
+import { PrintStyle, PrintHeader, PrintCaption, PrintSignatures, formatPrintedAt, printCellClass } from '../../components/PrintSheet';
 
 const csvEscapeField = (value: unknown) => {
   const text = String(value ?? '—');
@@ -39,6 +33,8 @@ const csvEscapeField = (value: unknown) => {
 };
 
 export const DeanReports: React.FC = () => {
+  const { user } = useAuth();
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const [retentionThreshold, setRetentionThreshold] = useState(2.5);
   // Flags by grade, comparing the exact grade so rounding never creates a flag (spec 2026-10-09).
   const failsRetention = (sub: any): boolean => {
@@ -185,7 +181,27 @@ export const DeanReports: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const handlePrint = () => { recordAudit({ action: 'Generated report PDF', module: 'Reports & Analytics', description: `Opened ${activeTab} report for PDF printing.`, status: 'Success' }); window.print(); };
+  const handlePrint = () => {
+    recordAudit({ action: 'Generated report PDF', module: 'Reports & Analytics', description: `Opened ${activeTab} report for PDF printing.`, status: 'Success' });
+    flushSync(() => setPrintedAt(new Date()));
+    window.print();
+  };
+
+  // Attendance tab: per-class summary and the history rows, shared by the screen and the PDF.
+  const classSummaries = Array.from(new Set(filtered.map(s => s.classId).filter(Boolean))).map(cls => {
+    const clsStudents = filtered.filter(s => s.classId === cls);
+    const recs = attendanceRecords.filter(r => clsStudents.some(s => s.id === r.studentId));
+    const total = recs.length;
+    const present = recs.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
+    return { cls, count: clsStudents.length, name: clsStudents[0]?.className || cls, total, rate: total > 0 ? Math.round((present / total) * 100) : 0 };
+  });
+  const historyRows = (() => {
+    const filteredIds = new Set(filtered.map(s => s.id));
+    return attendanceRecords
+      .filter(r => filteredIds.has(r.studentId))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 200);
+  })();
 
   // ── Status badge ─────────────────────────────────────────
   const StatusBadge = ({ status }: { status: string }) => {
@@ -210,12 +226,8 @@ export const DeanReports: React.FC = () => {
     { id: 'attendance', label: 'Attendance Reports', icon: <CalendarDays className="w-3.5 h-3.5" /> },
   ];
 
-  const now = new Date().toLocaleString('en-PH', { dateStyle: 'full', timeStyle: 'short' });
-
   return (
     <div className="space-y-6 max-w-7xl mx-auto animate-fade-in">
-      <style>{PRINT_STYLES}</style>
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
         <div>
@@ -354,14 +366,7 @@ export const DeanReports: React.FC = () => {
       </Modal>
 
       {/* ── Printable Report Area ──────────────────────────── */}
-      <div id="dean-report-print">
-        {/* Report Header (shows on print) */}
-        <div className="hidden print:block mb-6 border-b-2 border-slate-300 pb-4">
-          <h1 className="text-xl font-extrabold">Bicol University College of Dental Medicine</h1>
-          <h2 className="text-base font-bold mt-1">{tabs.find(t => t.id === activeTab)?.label} — Dean's Office</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Generated: {now} · Filtered: {filtered.length} records</p>
-        </div>
-
+      <div>
         {/* ── STUDENT SUMMARIES ────────────────────────────── */}
         {activeTab === 'students' && (
           <Card>
@@ -480,7 +485,7 @@ export const DeanReports: React.FC = () => {
                     (s.enrolledSubjects || []).map((sub: any) => (
                       <tr key={`${s.id}-${sub.code}`} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                         <td className="py-2.5 px-3 font-bold text-slate-800 dark:text-slate-200">{s.name}</td>
-                        <td className="py-2.5 px-3 text-slate-500">{s.classId}</td>
+                        <td className="py-2.5 px-3 text-slate-500">{s.className || '—'}</td>
                         <td className="py-2.5 px-3 font-mono text-slate-500">{sub.code}</td>
                         <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 max-w-[180px] truncate">{sub.name}</td>
                         <td className="py-2.5 px-3">{sub.components?.quizzes !== undefined ? `${sub.components.quizzes}%` : '—'}</td>
@@ -583,19 +588,13 @@ export const DeanReports: React.FC = () => {
           <div className="space-y-4">
             {/* Per-class summary */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Array.from(new Set(filtered.map(s => s.classId).filter(Boolean))).map(cls => {
-                const clsStudents = filtered.filter(s => s.classId === cls);
-                const clsName = clsStudents[0]?.className || cls;
-                const recs = attendanceRecords.filter(r => clsStudents.some(s => s.id === r.studentId));
-                const total = recs.length;
-                const present = recs.filter(r => r.status === 'present' || r.status === 'late' || r.status === 'excused').length;
-                const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+              {classSummaries.map(({ cls, count, name: clsName, total, rate }) => {
                 return (
                   <Card key={cls} className="p-4">
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <p className="font-bold text-sm text-slate-800 dark:text-slate-200">{clsName}</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">{clsStudents.length} students · {total} records</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{count} students · {total} records</p>
                       </div>
                       <span className={`text-2xl font-extrabold font-heading ${rate >= 90 ? 'text-emerald-600' : rate >= 80 ? 'text-amber-600' : 'text-rose-600'}`}>{rate}%</span>
                     </div>
@@ -628,11 +627,7 @@ export const DeanReports: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
                     {(() => {
-                      const filteredIds = new Set(filtered.map(s => s.id));
-                      const rows = attendanceRecords
-                        .filter(r => filteredIds.has(r.studentId))
-                        .sort((a, b) => b.date.localeCompare(a.date))
-                        .slice(0, 200);
+                      const rows = historyRows;
                       if (rows.length === 0) return (
                         <tr><td colSpan={5} className="py-8 text-center text-slate-400">No attendance records match the current filters.</td></tr>
                       );
@@ -663,14 +658,148 @@ export const DeanReports: React.FC = () => {
             </Card>
           </div>
         )}
-
-        {/* Print footer */}
-        <div className="hidden print:block mt-8 pt-4 border-t border-slate-300 text-[10px] text-slate-500 flex justify-between">
-          <span>BU College of Dental Medicine — Confidential Academic Document</span>
-          <span>{now}</span>
-        </div>
       </div>
 
+      {(() => {
+        const tabLabel = tabs.find(t => t.id === activeTab)?.label ?? '';
+        const captions: Record<ReportTab, string> = {
+          students: 'Student Information & Academic Standing',
+          academic: 'Grade Summaries & Subject Performance',
+          retention: 'Retention Status Report',
+          attendance: 'Student Attendance History',
+        };
+        const generated = formatPrintedAt(printedAt ?? new Date());
+        const sy = schoolYear === 'current' ? (currentSchoolYear ?? 'Current') : schoolYear;
+        const classLabel = classFilter === 'all' ? 'All classes' : (students.find(s => s.classId === classFilter)?.className || classFilter);
+        const statusLabels: Record<string, string> = { active: 'Good Standing', warning: 'Warning', critical: 'Critical', remedial: 'Remedial', cleared: 'Cleared' };
+        const statusLabel = statusFilter === 'all' ? 'All statuses' : (statusLabels[statusFilter] ?? statusFilter);
+        const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—');
+        const pending = (s: any) => (Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0);
+        const standingBad = (s: any) => ['warning', 'critical', 'remedial'].includes(String(s.status || '').toLowerCase());
+        const academicRows = activeTab === 'academic'
+          ? filtered.flatMap((s: any) => (s.enrolledSubjects || []).map((sub: any) => ({ s, sub })))
+          : [];
+        const rowCount = activeTab === 'academic' ? academicRows.length : activeTab === 'attendance' ? historyRows.length : filtered.length;
+        const widths: Record<ReportTab, number[]> = {
+          students: [11, 22, 17, 7, 8, 13, 12, 10],
+          academic: [9, 14, 10, 8, 16, 7, 7, 8, 8, 6, 7],
+          retention: [11, 22, 14, 8, 11, 9, 13, 12],
+          attendance: [12, 13, 28, 22, 15, 10],
+        };
+        const cols = (w: number[]) => <colgroup>{w.map((x, i) => <col key={i} style={{ width: `${x}%` }} />)}</colgroup>;
+        return (
+          <div className="print-only hidden bg-white text-slate-900 font-sans ps">
+            <PrintStyle title={tabLabel} running={`${tabLabel} · Dean's Office · S.Y. ${sy}`} generated={generated} note="Confidential Academic Document" />
+            <PrintHeader
+              title={tabLabel}
+              sub="Dean's Office"
+              rows={[
+                ['Office', "Dean's Office"],
+                ['School Year', sy],
+                ['Filters', `${classLabel} · ${statusLabel}${search ? ` · Search: "${search}"` : ''}`],
+                ['Records', String(rowCount)],
+                ['Date', generated],
+              ]}
+            />
+            {activeTab === 'attendance' && (
+              <>
+                <PrintCaption>Attendance by Class</PrintCaption>
+                <table>
+                  {cols([40, 20, 20, 20])}
+                  <thead><tr><th className="l">Class</th><th>Students</th><th>Records</th><th>Attendance Rate</th></tr></thead>
+                  <tbody>
+                    {classSummaries.map(c => (
+                      <tr key={c.cls}><td className="nm">{c.name}</td><td>{c.count}</td><td>{c.total}</td><td>{c.rate}%</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+            <PrintCaption>{captions[activeTab]}</PrintCaption>
+            <table>
+              {cols(widths[activeTab])}
+              <thead>
+                {activeTab === 'students' && (
+                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th>Year</th><th>GWA</th><th>Status</th><th>Face ID</th><th>Remedials</th></tr>
+                )}
+                {activeTab === 'academic' && (
+                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th className="l">Course Code</th><th className="l">Course Name</th><th>Quizzes</th><th>Exams</th><th>Practicum</th><th>Attendance</th><th>Grade</th><th>Remedial</th></tr>
+                )}
+                {activeTab === 'retention' && (
+                  <tr><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th>GWA</th><th>Standing</th><th>Clinic Hrs</th><th>Pending Remedials</th><th>Flagged Subjects</th></tr>
+                )}
+                {activeTab === 'attendance' && (
+                  <tr><th className="l">Date</th><th className="l">Student No.</th><th className="l">Student Name</th><th className="l">Class</th><th className="l">Course Code</th><th>Status</th></tr>
+                )}
+              </thead>
+              <tbody>
+                {activeTab === 'students' && filtered.map((s: any) => (
+                  <tr key={s.id}>
+                    <td className="id">{s.studentId}</td>
+                    <td className="nm">{s.name}</td>
+                    <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
+                    <td>Year {s.yearLevel}</td>
+                    <td className={`grade ${printCellClass(gwa(s))}`}>{gwa(s)}</td>
+                    <td className={`cap ${standingBad(s) ? 'bad' : ''}`}>{s.status}</td>
+                    <td>{s.faceEnrolled ? 'Enrolled' : 'Not enrolled'}</td>
+                    <td>{pending(s)}</td>
+                  </tr>
+                ))}
+                {activeTab === 'academic' && academicRows.map(({ s, sub }: any) => {
+                  const pct = (v: unknown) => (v !== undefined ? `${v}%` : '—');
+                  const grade = sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? Number(sub.grade).toFixed(2) : '—';
+                  const practicum = sub.isClinical ? pct(sub.components?.practicum) : '—';
+                  return (
+                    <tr key={`${s.id}-${sub.code}`}>
+                      <td className="id">{s.studentId}</td>
+                      <td className="nm">{s.name}</td>
+                      <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
+                      <td className="id">{sub.code}</td>
+                      <td className="l">{sub.name}</td>
+                      <td className={printCellClass(pct(sub.components?.quizzes))}>{pct(sub.components?.quizzes)}</td>
+                      <td className={printCellClass(pct(sub.components?.exams))}>{pct(sub.components?.exams)}</td>
+                      <td className={printCellClass(practicum)}>{practicum}</td>
+                      <td className={printCellClass(pct(sub.components?.attendance))}>{pct(sub.components?.attendance)}</td>
+                      <td className={`grade ${failsRetention(sub) ? 'bad' : printCellClass(grade)}`}>{grade}</td>
+                      <td className={sub.hasRemedial ? 'bad' : 'ph'}>{sub.hasRemedial ? 'Yes' : '—'}</td>
+                    </tr>
+                  );
+                })}
+                {activeTab === 'retention' && filtered.map((s: any) => {
+                  const flagged = (s.enrolledSubjects || []).filter(failsRetention).length;
+                  const pend = pending(s);
+                  return (
+                    <tr key={s.id}>
+                      <td className="id">{s.studentId}</td>
+                      <td className="nm">{s.name}</td>
+                      <td className={`l ${printCellClass(s.className || '—')}`}>{s.className || '—'}</td>
+                      <td className={`grade ${standingBad(s) ? 'bad' : printCellClass(gwa(s))}`}>{gwa(s)}</td>
+                      <td className={`cap ${standingBad(s) ? 'bad' : ''}`}>{s.status}</td>
+                      <td>{s.clinicHoursCompleted}h</td>
+                      <td className={pend > 0 ? 'bad' : ''}>{pend > 0 ? `${pend} Pending` : 'None'}</td>
+                      <td className={flagged > 0 ? 'bad' : ''}>{flagged > 0 ? `${flagged} Subject${flagged > 1 ? 's' : ''}` : 'Clear'}</td>
+                    </tr>
+                  );
+                })}
+                {activeTab === 'attendance' && historyRows.map((r, i) => {
+                  const st = students.find(x => x.id === r.studentId);
+                  return (
+                    <tr key={i}>
+                      <td className="id">{r.date}</td>
+                      <td className="id">{st?.studentId || '—'}</td>
+                      <td className="nm">{st?.name || '—'}</td>
+                      <td className={`l ${printCellClass(r.className || '—')}`}>{r.className || '—'}</td>
+                      <td className="id">{r.subjectCode}</td>
+                      <td className={`cap ${r.status === 'absent' ? 'bad' : ''}`}>{r.status}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <PrintSignatures faculty={user?.display_name} role="Dean" />
+          </div>
+        );
+      })()}
     </div>
   );
 };

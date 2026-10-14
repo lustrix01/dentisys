@@ -4,6 +4,9 @@ import type { AuditLog, AuditRole, AuditStatus } from '../services/auditService'
 import { getAdminAuditLogsApi, getFacultyActivityApi, getSecretaryActivityApi } from '../services/apiClient';
 import { Card, CardContent, CardHeader, CardTitle } from './Card';
 import { Modal } from './Modal';
+import { flushSync } from 'react-dom';
+import { useAuth } from '../context/AuthContext';
+import { PrintStyle, PrintHeader, PrintCaption, formatPrintedAt } from './PrintSheet';
 
 type Props = { role: AuditRole; title: string; subtitle: string; allLogs?: boolean; accent: 'accent' | 'clinical' | 'blue' };
 const themes = {
@@ -33,6 +36,8 @@ function formatState(value: unknown): string {
 
 export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs = false, accent }) => {
   const theme = themes[accent];
+  const { user } = useAuth();
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [moduleFilter, setModuleFilter] = useState('all');
@@ -165,6 +170,11 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
     URL.revokeObjectURL(link.href);
   };
 
+  const handlePrint = () => {
+    flushSync(() => setPrintedAt(new Date()));
+    window.print();
+  };
+
   const cards = [
     { label: 'Success', count: statusCounts?.Success ?? logs.filter(log => log.status === 'Success').length, icon: CheckCircle2, iconClass: theme.icon, surface: theme.surface },
     { label: 'Warning', count: statusCounts?.Warning ?? logs.filter(log => log.status === 'Warning').length, icon: AlertTriangle, iconClass: 'text-amber-500', surface: 'border-amber-200/60 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/15' },
@@ -184,7 +194,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
             <Download className="w-4 h-4" />
             Export CSV
           </button>
-          <button onClick={() => window.print()} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-white text-xs font-bold ${theme.button}`}>
+          <button onClick={handlePrint} className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-white text-xs font-bold ${theme.button}`}>
             <FileText className="w-4 h-4" />
             Print PDF
           </button>
@@ -323,6 +333,52 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
           </div>
         </div>
       )}
+
+      {(() => {
+        const generated = formatPrintedAt(printedAt ?? new Date());
+        const filterLabel = [
+          allLogs ? `Role: ${roleFilter === 'all' ? 'All' : roleFilter}` : '',
+          `Module: ${moduleFilter === 'all' ? 'All' : moduleFilter}`,
+          `Status: ${statusFilter === 'all' ? 'All' : statusFilter}`,
+          date ? `Date: ${date}` : '',
+          query ? `Search: "${query}"` : '',
+        ].filter(Boolean).join(' · ');
+        return (
+          <div className="print-only hidden bg-white text-slate-900 font-sans ps">
+            <PrintStyle title={title} running={`${title} · ${role === 'admin' ? "Dean's Office" : user?.display_name ?? ''}`} generated={generated} note="Confidential Academic Document" />
+            <PrintHeader
+              title={title}
+              sub={role === 'admin' ? "Dean's Office" : user?.display_name ?? ''}
+              rows={[
+                ['Filters', filterLabel],
+                ['Sort', sort === 'newest' ? 'Newest first' : 'Oldest first'],
+                ['Records', `${filtered.length} shown of ${isServerFiltered ? total : filtered.length}`],
+                ['Date', generated],
+              ]}
+            />
+            <PrintCaption>Activity records</PrintCaption>
+            <table>
+              <colgroup>{[14, 20, 8, 15, 11, 8, 24].map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
+              <thead>
+                <tr><th className="l">Timestamp</th><th className="l">User</th><th className="l">Role</th><th className="l">Action</th><th className="l">Module</th><th>Status</th><th className="l">Details</th></tr>
+              </thead>
+              <tbody>
+                {filtered.map(log => (
+                  <tr key={log.id}>
+                    <td className="l">{new Date(log.timestamp).toLocaleString()}</td>
+                    <td className="l"><strong>{log.userDisplayName || log.userName}</strong>{log.userDisplayName && log.userEmail && <><br />{log.userEmail}</>}</td>
+                    <td className="l cap">{log.userRole}</td>
+                    <td className="l">{log.action}</td>
+                    <td className="l">{log.module}</td>
+                    <td className={log.status === 'Failed' ? 'bad' : ''}>{log.status}</td>
+                    <td className={`l ${log.description ? '' : 'ph'}`}>{log.description || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
 
       <Modal isOpen={Boolean(selected)} onClose={() => setSelected(null)} title="Audit log details">
         <div className="grid grid-cols-2 gap-4 text-xs">

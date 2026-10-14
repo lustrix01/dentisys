@@ -192,7 +192,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await mockDeanReportSummary(page);
     await page.goto('/admin/reports');
 
-    const studentTable = page.getByRole('table');
+    const studentTable = page.locator('table:not(.print-only table)');
     const alexSummaryRow = studentTable.getByRole('row').filter({ hasText: '2023-0101' });
     await expect(alexSummaryRow.getByRole('cell').nth(0)).toHaveText('2023-0101');
     await expect(alexSummaryRow.getByRole('cell').nth(2)).toHaveText('CLINIC, "4A" Special');
@@ -211,7 +211,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await classFilter.selectOption('all');
 
     await page.getByRole('button', { name: 'Retention Reports' }).click();
-    const retentionTable = page.getByRole('table');
+    const retentionTable = page.locator('table:not(.print-only table)');
     const alexRetentionRow = retentionTable.getByRole('row').filter({ hasText: 'Alex Example' });
     await expect(alexRetentionRow.getByRole('cell').nth(1)).toHaveText('CLINIC, "4A" Special');
     await expect(alexRetentionRow.getByRole('cell').nth(2)).toHaveText('2.25');
@@ -224,7 +224,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(missingNameRetentionRow.getByRole('cell').nth(3)).toContainText('active');
 
     await page.getByRole('button', { name: 'Attendance Reports' }).click();
-    const attendanceTable = page.getByRole('table');
+    const attendanceTable = page.locator('table:not(.print-only table)');
     const historicalAttendanceRow = attendanceTable.getByRole('row').filter({ hasText: 'CLIN401-HISTORY' });
     await expect(historicalAttendanceRow.getByRole('cell').nth(0)).toHaveText('2026-09-22');
     await expect(historicalAttendanceRow.getByRole('cell').nth(1)).toHaveText('Alex Example');
@@ -239,7 +239,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
   test('Dean Student Summary and Retention CSVs escape readable class names and preserve report values', async ({ page }) => {
     await mockDeanReportSummary(page, [...deanReportStudents, ...deanReportFormulaStudents]);
     await page.goto('/admin/reports');
-    await expect(page.getByRole('table').getByRole('row').filter({ hasText: '2023-0101' })).toBeVisible();
+    await expect(page.locator('table:not(.print-only table)').getByRole('row').filter({ hasText: '2023-0101' })).toBeVisible();
     await page.evaluate(() => {
       (window as any).__deanReportCsvBlobs = [];
       const createObjectURL = URL.createObjectURL.bind(URL);
@@ -313,5 +313,52 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(events).toContainText('Dr. Roberto Santos');
     await expect(events).toContainText('faculty@bicol-u.edu.ph');
     await expect(events).toContainText('Recomputed grades: 30 computed');
+  });
+
+  test('Dean report print sheet lists every filtered row and uses student numbers and class names', async ({ page }) => {
+    const many = Array.from({ length: 14 }, (_, i) => ({
+      id: String(300 + i), studentId: `2023-03${String(i).padStart(2, '0')}`, name: `Bulk Student ${i}`, yearLevel: 2, status: 'active',
+      overallGWA: 1.75, faceEnrolled: true, classId: '21', className: 'CLINIC-4A', clinicHoursCompleted: 2,
+      enrolledSubjects: [{ code: 'CLIN401', name: 'Oral Surgery', grade: 1.75, isClinical: false, components: { quizzes: 90 } }], remedialExams: [],
+    }));
+    await mockDeanReportSummary(page, [...many, ...deanReportStudents]);
+    await page.goto('/admin/reports');
+    await expect(page.locator('table:not(.print-only table)').getByRole('row')).toHaveCount(11);
+
+    const sheet = page.locator('.print-only');
+    await expect(sheet.locator('th', { hasText: 'Student No.' })).toBeAttached();
+    await expect(sheet.locator('tbody tr')).toHaveCount(16);
+    await expect(sheet).toContainText('Bulk Student 13');
+
+    await page.getByRole('button', { name: 'Academic Reports' }).click();
+    const row = sheet.locator('tbody tr').first();
+    await expect(sheet.locator('tbody tr')).toHaveCount(15);
+    await expect(row.locator('td').nth(2)).toHaveText('CLINIC-4A');
+    await expect(page.locator('table:not(.print-only table)').getByRole('row').nth(1).getByRole('cell').nth(1)).toHaveText('CLINIC-4A');
+
+    await page.getByRole('button', { name: 'Attendance Reports' }).click();
+    await expect(sheet).toContainText('Attendance by Class');
+    await expect(sheet.locator('tbody tr').last()).toContainText('2023-0102');
+  });
+
+  test('Activity log print sheet has the seven columns and a row per loaded log', async ({ page }) => {
+    await page.route('**/api/admin/audit-logs*', route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok', total: 2, page: 1, pageSize: 50, modules: ['auth'], statusCounts: { Success: 1, Warning: 0, Failed: 1 },
+        logs: [
+          { id: 'a', timestamp: '2026-09-17T10:00:00Z', userName: 'x@bicol-u.edu.ph', userDisplayName: 'Ex User', userEmail: 'x@bicol-u.edu.ph', userRole: 'faculty', action: 'login_failed', module: 'auth', description: 'Bad password.', status: 'Failed' },
+          { id: 'b', timestamp: '2026-09-17T09:00:00Z', userName: 'y@bicol-u.edu.ph', userRole: 'admin', action: 'login', module: 'auth', description: '', status: 'Success' },
+        ],
+      }),
+    }));
+    await page.goto('/admin/audit-trail');
+    const sheet = page.locator('.print-only');
+    await expect(sheet.locator('tbody tr')).toHaveCount(2);
+    await expect(sheet.locator('thead th')).toHaveText(['Timestamp', 'User', 'Role', 'Action', 'Module', 'Status', 'Details']);
+    await expect(sheet.locator('tbody tr').first()).toContainText('Ex User');
+    await expect(sheet.locator('tbody tr').first().locator('td.bad')).toHaveText('Failed');
+    await expect(sheet.locator('tbody tr').nth(1).locator('td').last()).toHaveText('—');
+    await expect(sheet).toContainText('2 shown of 2');
   });
 });

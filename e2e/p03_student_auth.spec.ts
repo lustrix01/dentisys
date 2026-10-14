@@ -736,10 +736,10 @@ test.describe('P03 Student identity and authentication', () => {
       });
     });
     await page.goto('/admin/audit-trail');
-    await expect(page.getByText('student_auth_eligibility_denied')).toBeVisible();
-    await expect(page.getByText('faculty_profile_updated')).toBeVisible();
+    await expect(page.getByText('student_auth_eligibility_denied').first()).toBeVisible();
+    await expect(page.getByText('faculty_profile_updated').first()).toBeVisible();
     await page.locator('select').first().selectOption('student');
-    await expect(page.getByText('student_auth_eligibility_denied')).toBeVisible();
-    await expect(page.getByText('faculty_profile_updated')).toHaveCount(0);
+    await expect(page.getByText('student_auth_eligibility_denied').first()).toBeVisible();
+    await expect(page.getByText('faculty_profile_updated').first()).toHaveCount(0);
   });
 });
