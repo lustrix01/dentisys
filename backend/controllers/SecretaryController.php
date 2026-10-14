@@ -1862,8 +1862,9 @@ function handle_secretary_attendance_get(): void
              JOIN class_sections cs ON cs.cs_id = e.cs_id
              JOIN courses c ON c.course_id = cs.course_id
              WHERE cs.secretary_user_id = ?
-               AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')";
-        $recordParams = [$authCtx['user_id']];
+               AND (r.attendance_session_id = ? OR NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked'))";
+        // A revoked session stays view-only: its own saved records show when it is selected.
+        $recordParams = [$authCtx['user_id'], $sessionId];
         if ($date !== null) {
             $recordSql .= ' AND r.session_date = ?';
             $recordParams[] = $date;
@@ -1969,6 +1970,13 @@ function handle_secretary_attendance_get(): void
     }
 }
 
+function secretary_attendance_session_is_revoked(PDO $pdo, int $sessionId): bool
+{
+    $stmt = $pdo->prepare("SELECT 1 FROM attendance_sessions WHERE session_id = ? AND status = 'revoked'");
+    $stmt->execute([$sessionId]);
+    return $stmt->fetchColumn() !== false;
+}
+
 function handle_secretary_attendance_override(): void
 {
     $context = [
@@ -2039,8 +2047,13 @@ function handle_secretary_attendance_override(): void
             if ($targetRecordId <= 0 && $recordId === 0 && $sessionId > 0) {
                 // No record yet: record manual attendance for this session.
                 $session = secretary_attendance_session_fetch($pdo, (int) $authCtx['user_id'], $sessionId, null, true);
-                if ($session === null || strtolower((string) $session['status']) === 'revoked') {
+                if ($session === null) {
                     throw new ValidationException([['field' => 'sessionId', 'message' => 'Attendance session was not found in an assigned class.']]);
+                }
+                if (strtolower((string) $session['status']) === 'revoked') {
+                    $pdo->rollBack();
+                    safe_error_response('This session was revoked. Its attendance is view-only.', 409);
+                    return;
                 }
                 if ($session['status'] === 'scheduled') {
                     throw new ValidationException(['sessionId' => 'Attendance has not opened for this scheduled session.']);
@@ -2131,6 +2144,13 @@ function handle_secretary_attendance_override(): void
             }
             if ($sessionId > 0 && (int) ($targetRecord['attendance_session_id'] ?? 0) !== $sessionId) {
                 throw new ValidationException([['field' => 'sessionId', 'message' => 'Attendance record does not belong to the selected session.']]);
+            }
+            if (($targetRecord['attendance_session_id'] ?? null) !== null
+                && secretary_attendance_session_is_revoked($pdo, (int) $targetRecord['attendance_session_id'])
+            ) {
+                $pdo->rollBack();
+                safe_error_response('This session was revoked. Its attendance is view-only.', 409);
+                return;
             }
             if (academic_class_section_is_past($pdo, $targetCsId)) {
                 $pdo->rollBack();
@@ -2275,6 +2295,14 @@ function handle_secretary_excused_request_create(): void
                         }
                     }
                 }
+            }
+            $revokedLinked = $recordId <= 0
+                ? ($session ?? null) !== null && strtolower((string) $session['status']) === 'revoked'
+                : $target !== null && $target['attendance_session_id'] !== null && secretary_attendance_session_is_revoked($pdo, (int) $target['attendance_session_id']);
+            if ($revokedLinked) {
+                $pdo->rollBack();
+                safe_error_response('This session was revoked. Its attendance is view-only.', 409);
+                return;
             }
             if ($target === null) {
                 $pdo->rollBack();

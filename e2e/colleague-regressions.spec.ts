@@ -224,11 +224,48 @@ test('Secretary missing attendance is reachable for an exact session and writes 
   await page.getByRole('button', { name: 'Confirm override' }).click();
   await expect.poll(() => payload).toMatchObject({ studentId: '42', sessionId: 900, status: 'present', reason: 'Verified attendance with Faculty' });
   await expect(row).toContainText('present');
-  await page.getByLabel('Switch Session').selectOption('');
-  await expect(row).toContainText('present');
   await page.getByLabel('Switch Session').selectOption('901');
   await expect(row).toContainText('Not recorded');
   await expect(row).not.toContainText('present');
+  await page.getByLabel('Switch Session').selectOption('900');
+  await expect(row).toContainText('present');
+  await page.getByLabel('Switch Session').selectOption('');
+  await expect(page.getByText('Choose a session to manage its attendance.')).toBeVisible();
+  await expect(row).toHaveCount(0);
+});
+
+test('Secretary revoked sessions are hidden by default, revealed on request and view-only', async ({ page }) => {
+  await page.route('**/api/secretary/profile', route => route.fulfill({ json: { status: 'ok', profile: { assignedClassName: 'DENT-4' } } }));
+  await page.route('**/api/auth/me', route => route.fulfill({ json: { user_id: 300, role: 'secretary', display_name: 'Secretary', login_email: 'secretary@bicol-u.edu.ph' } }));
+  const base = { subjectCode: 'DENT401', classId: '7', date: '2026-10-03' };
+  const sessions = [
+    { ...base, sessionId: '900', sessionCode: 'SESSION-900', status: 'active' },
+    { ...base, sessionId: '901', sessionCode: 'SESSION-901', status: 'revoked' },
+  ];
+  const record = { id: '501', attendanceSessionId: '901', studentId: '42', studentNumber: 'REAL-42', studentName: 'Revoked Student', date: base.date, subjectCode: base.subjectCode, status: 'present', verificationMethod: 'biometric' };
+  await page.route('**/api/secretary/attendance**', route => {
+    const selected = new URL(route.request().url()).searchParams.get('sessionId');
+    return route.fulfill({ json: { status: 'ok', sessions, records: selected === '901' ? [record] : [] } });
+  });
+  await page.goto('/secretary/attendance');
+  await openSecretaryWorksheet(page, base.date);
+  const picker = page.getByLabel('Switch Session');
+  await expect(picker).toHaveValue('900');
+  await expect(picker.locator('option', { hasText: 'SESSION-901' })).toHaveCount(0);
+  const revokedSwitch = page.getByRole('group', { name: 'Revoked sessions' });
+  await expect(revokedSwitch.getByRole('button', { name: 'Hide' })).toHaveAttribute('aria-pressed', 'true');
+  await revokedSwitch.getByRole('button', { name: 'Show (1)' }).click();
+  await expect(picker.locator('option', { hasText: 'SESSION-901' })).toContainText('(revoked)');
+  await picker.selectOption('901');
+  const row = page.getByRole('row').filter({ hasText: 'Revoked Student' });
+  await expect(row).toContainText('present');
+  await expect(page.getByText('Session Revoked', { exact: true })).toBeVisible();
+  await expect(page.getByText('Revoked sessions cannot be overridden.')).toBeVisible();
+  await expect(row).toContainText('View-only');
+  await expect(page.getByRole('button', { name: 'Override', exact: true })).toHaveCount(0);
+  await revokedSwitch.getByRole('button', { name: 'Hide' }).click();
+  await expect(picker).toHaveValue('');
+  await expect(page.getByText('Choose a session to manage its attendance.')).toBeVisible();
 });
 
 
@@ -265,9 +302,10 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
         writing = false;
         return route.fulfill({ status: 503, json: { status: 'error', message: 'Temporary save failure.' } });
       }
+      Object.assign(record, { status: 'late' });
       return route.fulfill({ json: { status: 'ok', record: { id: '501', overrideAt: '2026-10-03T02:00:00+08:00' } } });
     }
-    return route.fulfill({ json: { status: 'ok', records: [record], sessions: [] } });
+    return route.fulfill({ json: { status: 'ok', records: [record], sessions: [{ sessionId: '900', subjectCode: 'DENT401', date: '2026-10-03', sessionCode: 'SESSION-900', status: 'active' }] } });
   });
   await page.goto('/secretary/attendance');
   await openSecretaryWorksheet(page, '2026-10-03');
@@ -310,9 +348,10 @@ for (const boundary of [
     await page.route('**/api/secretary/attendance**', route => {
       if (route.request().method() === 'POST') {
         overrides.push(route.request().postDataJSON());
+        Object.assign(record, { status: 'present' });
         return route.fulfill({ json: { status: 'ok', record: { id: '501' } } });
       }
-      return route.fulfill({ json: { status: 'ok', records: [record], sessions: [] } });
+      return route.fulfill({ json: { status: 'ok', records: [record], sessions: [{ sessionId: '900', subjectCode: 'DENT401', date: '2026-10-03', sessionCode: 'SESSION-900', status: 'active' }] } });
     });
     await page.route('**/api/secretary/excused-requests', route => {
       if (route.request().method() !== 'POST') return route.fulfill({ json: { status: 'ok', requests: [] } });

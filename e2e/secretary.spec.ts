@@ -81,7 +81,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
     };
     await page.route('**/api/secretary/attendance**', async (route) => {
       if (route.request().url().includes('/override')) { overrideCalled = true; }
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [], records: [record] }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [{ sessionId: '900', subjectCode: 'CLIN401', date: '2026-09-20', sessionCode: 'SESSION-900', status: 'active' }], records: [record] }) });
     });
     await page.route('**/api/secretary/profile', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', profile: { assignedClassName: 'CLINIC-4B' } }) });

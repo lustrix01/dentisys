@@ -902,6 +902,95 @@ $manualActivityRows = array_values(array_filter(
 expect_same([null, 'present', 'secretary'], [array_key_exists('previousStatus', $manualActivityRows[0] ?? []) ? $manualActivityRows[0]['previousStatus'] : 'missing', $manualActivityRows[0]['newStatus'] ?? null, $manualActivityRows[0]['actorRole'] ?? null], 'A manual Secretary record appears with no previous status');
 [$attendanceActivityDeniedStatus] = integration_http_get_json('/api/faculty/attendance-activity', $secretaryAccessToken);
 expect_same(403, $attendanceActivityDeniedStatus, 'Secretary cannot read the Faculty Class Attendance Activity endpoint');
+// A revoked session is view-only for Secretary and Faculty attendance writes, and its records stay out of the day view.
+$revokedViewOwners = $pdo->prepare('SELECT secretary_user_id, instructor_user_id FROM class_sections WHERE cs_id = ?');
+$revokedViewOwners->execute([$secretarySessionClassId]);
+$revokedViewOwner = $revokedViewOwners->fetch(PDO::FETCH_ASSOC);
+$revokedViewSessionStmt = $pdo->prepare(
+    "INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, status, ended_at, revoked_at)
+     VALUES (?, ?, ?, ?, ?, 'revoked', CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
+     RETURNING session_id"
+);
+$revokedViewCode = 'REVOKED-VIEW-' . strtoupper(bin2hex(random_bytes(4)));
+$revokedViewSessionStmt->execute([
+    $secretarySessionClassId, (int) $revokedViewOwner['secretary_user_id'], (int) $revokedViewOwner['secretary_user_id'],
+    $sessionDate, $revokedViewCode,
+]);
+$revokedViewSessionId = (int) $revokedViewSessionStmt->fetchColumn();
+$revokedViewRecordStmt = $pdo->prepare(
+    "INSERT INTO attendance_records (enrollment_id, attendance_session_id, session_date, session_code, status, verification_method, time_recorded)
+     VALUES (?, ?, ?, ?, 'present', 'integration_fixture', CURRENT_TIMESTAMP(6))
+     RETURNING record_id"
+);
+$revokedViewRecordStmt->execute([$sessionEnrollmentId, $revokedViewSessionId, $sessionDate, $revokedViewCode]);
+$revokedViewRecordId = (int) $revokedViewRecordStmt->fetchColumn();
+$revokedViewEnrollmentStmt = $pdo->prepare('SELECT enrollment_id FROM enrollments WHERE student_id = ? AND cs_id = ?');
+$revokedViewEnrollmentStmt->execute([$lateEnrollStudentId, $secretarySessionClassId]);
+$revokedViewLateEnrollmentId = (int) $revokedViewEnrollmentStmt->fetchColumn();
+$revokedViewMessage = 'This session was revoked. Its attendance is view-only.';
+
+[$revokedViewSecretaryFixStatus, $revokedViewSecretaryFixBody] = integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, [
+    'studentId' => (string) $sessionStudentId,
+    'sessionId' => (string) $revokedViewSessionId,
+    'status' => 'late',
+    'reason' => 'Try fixing a revoked session',
+]);
+expect_same(409, $revokedViewSecretaryFixStatus, 'Secretary cannot correct a record of a revoked session');
+expect_same($revokedViewMessage, $revokedViewSecretaryFixBody['message'] ?? null, 'Secretary correction of a revoked session explains it is view-only');
+[$revokedViewSecretaryNewStatus, $revokedViewSecretaryNewBody] = integration_http_json('/api/secretary/attendance/override', $secretaryAccessToken, [
+    'studentId' => (string) $lateEnrollStudentId,
+    'sessionId' => (string) $revokedViewSessionId,
+    'status' => 'present',
+    'reason' => 'Try recording in a revoked session',
+]);
+expect_same(409, $revokedViewSecretaryNewStatus, 'Secretary cannot record new attendance in a revoked session');
+expect_same($revokedViewMessage, $revokedViewSecretaryNewBody['message'] ?? null, 'Secretary new record in a revoked session explains it is view-only');
+[$revokedViewFacultyFixStatus, $revokedViewFacultyFixBody] = integration_http_json('/api/faculty/attendance/override', $facultyActivityAccessToken, [
+    'recordId' => $revokedViewRecordId,
+    'status' => 'absent',
+    'reason' => 'Try fixing a revoked session',
+]);
+expect_same(409, $revokedViewFacultyFixStatus, 'Faculty cannot correct a record of a revoked session');
+expect_same('SESSION_REVOKED', $revokedViewFacultyFixBody['code'] ?? null, 'Faculty correction of a revoked session uses the revoked code');
+expect_same($revokedViewMessage, $revokedViewFacultyFixBody['message'] ?? null, 'Faculty correction of a revoked session explains it is view-only');
+[$revokedViewFacultyNewStatus, $revokedViewFacultyNewBody] = integration_http_json('/api/faculty/attendance/override', $facultyActivityAccessToken, [
+    'csId' => (string) $secretarySessionClassId,
+    'enrollmentId' => (string) $revokedViewLateEnrollmentId,
+    'sessionDate' => $sessionDate,
+    'sessionId' => (string) $revokedViewSessionId,
+    'status' => 'present',
+]);
+expect_same(409, $revokedViewFacultyNewStatus, 'Faculty cannot record new attendance in a revoked session');
+expect_same('SESSION_REVOKED', $revokedViewFacultyNewBody['code'] ?? null, 'Faculty new record in a revoked session uses the revoked code');
+[$revokedViewExcusedStatus] = integration_http_json('/api/secretary/excused-requests', $secretaryAccessToken, [
+    'studentId' => (string) $sessionStudentId,
+    'recordId' => (string) $revokedViewRecordId,
+    'reason' => 'Medical certificate for a revoked session',
+]);
+expect_same(409, $revokedViewExcusedStatus, 'Secretary cannot request Excused for a revoked session record');
+[$revokedViewExcusedSessionStatus] = integration_http_json('/api/secretary/excused-requests', $secretaryAccessToken, [
+    'studentId' => (string) $lateEnrollStudentId,
+    'sessionId' => (string) $revokedViewSessionId,
+    'reason' => 'Medical certificate for a revoked session',
+]);
+expect_same(409, $revokedViewExcusedSessionStatus, 'Secretary cannot request Excused for a revoked session');
+$revokedViewRecordStatusStmt = $pdo->prepare('SELECT status, override_reason FROM attendance_records WHERE record_id = ?');
+$revokedViewRecordStatusStmt->execute([$revokedViewRecordId]);
+expect_same(['present', null], array_values($revokedViewRecordStatusStmt->fetch(PDO::FETCH_ASSOC)), 'Refused writes leave the revoked session record unchanged');
+$revokedViewCountStmt = $pdo->prepare('SELECT COUNT(*) FROM attendance_records WHERE attendance_session_id = ?');
+$revokedViewCountStmt->execute([$revokedViewSessionId]);
+expect_same(1, (int) $revokedViewCountStmt->fetchColumn(), 'Refused writes create no record in the revoked session');
+
+[$revokedViewListStatus, $revokedViewListBody] = integration_http_get_json('/api/secretary/attendance?sessionId=' . $revokedViewSessionId, $secretaryAccessToken);
+expect_same(200, $revokedViewListStatus, 'Secretary worksheet opens a revoked session');
+expect_same(
+    [(string) $revokedViewRecordId],
+    array_column(array_filter($revokedViewListBody['records'] ?? [], static fn(array $row): bool => ($row['status'] ?? '') !== 'not_recorded'), 'id'),
+    'Secretary worksheet returns the saved records of the selected revoked session'
+);
+[, $revokedViewDayBody] = integration_http_get_json('/api/secretary/attendance?date=' . $sessionDate, $secretaryAccessToken);
+expect_true(!in_array((string) $revokedViewRecordId, array_column($revokedViewDayBody['records'] ?? [], 'id'), true), 'Revoked session records stay out of the day view');
+
 echo "PASS: Persistent Secretary attendance-session integration coverage completed.\n";
 
 // ATT-006: the Secretary requests Excused; only Faculty approve or reject it.

@@ -5196,9 +5196,15 @@ function handle_faculty_excused_request_decide(): void
                 if ($request['attendance_session_id'] !== null) {
                     $sessionState = $pdo->prepare('SELECT status FROM attendance_sessions WHERE session_id = ? FOR UPDATE');
                     $sessionState->execute([(int) $request['attendance_session_id']]);
-                    if (in_array($sessionState->fetchColumn(), ['scheduled', 'revoked'], true)) {
+                    $sessionStatus = $sessionState->fetchColumn();
+                    if (in_array($sessionStatus, ['scheduled', 'revoked'], true)) {
                         $pdo->rollBack();
-                        safe_error_response('The session must be open or ended before Excused attendance can be approved.', 409);
+                        safe_error_response(
+                            $sessionStatus === 'revoked'
+                                ? 'This session was revoked. Its attendance is view-only.'
+                                : 'The session must be open or ended before Excused attendance can be approved.',
+                            409
+                        );
                         return;
                     }
                 }
@@ -5548,6 +5554,17 @@ function handle_faculty_attendance_override(): void
             ) {
                 $pdo->rollBack();
                 faculty_attendance_error_response('Existing attendance session linkage cannot be reassigned.', 409, 'ATTENDANCE_SESSION_MISMATCH');
+                return;
+            }
+        }
+
+        $linkedSessionId = $target['attendance_session_id'] ?? $requestedSessionId;
+        if ($linkedSessionId !== null) {
+            $revokedStmt = $pdo->prepare("SELECT 1 FROM attendance_sessions WHERE session_id = ? AND status = 'revoked'");
+            $revokedStmt->execute([(int) $linkedSessionId]);
+            if ($revokedStmt->fetchColumn() !== false) {
+                $pdo->rollBack();
+                faculty_attendance_error_response('This session was revoked. Its attendance is view-only.', 409, 'SESSION_REVOKED');
                 return;
             }
         }

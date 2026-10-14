@@ -49,9 +49,7 @@ Maintain a realistic development dataset (Faculty, Students, courses, sections, 
 
 ## 4.1 Dean My Activity
 
-**Status: Not started.** Faculty and Secretary have My Activity endpoints; the Dean has none.
-
-The Dean gets My Activity limited to the Dean's own significant actions, separate from System Audit. Record significant actions only (create, update, revoke, accept, promote/demote, invitations, grade and attendance changes, remedials, name and security changes, 2FA enrolment, Google linking, biometric enrolment), never navigation or page reads, and never sensitive payloads such as biometric templates.
+**Status: Dropped (Owner, 2026-10-15).** The Dean's Audit Trail already shows the Dean's own actions through its role filter, with better filters than Faculty and Secretary My Activity. No separate page.
 
 ## 4.2 Dean Dashboard
 
@@ -117,6 +115,8 @@ Build Email History from the email outbox/delivery records and relevant audit ev
 
 Owner decisions (2026-10-08): include every email actually sent; each user sees only the emails they sent; one row per action that expands to its recipients with per-recipient delivery status; show only what is needed (action, recipients, status, time, failure reason), never the email body; view-only, no resend; emails sent before the outbox link existed are hidden. Open: whether purely automatic emails (no human sender) appear anywhere — proposed: not shown.
 
+Owner decisions (2026-10-15, demo approved: [Email History Demo](https://claude.ai/artifact/BCMUpwpEDC85EjtiWDw3L8)): these replace the "hidden" rule above — emails sent before action grouping exists stay visible, each as its own one-recipient action. Columns are Action, Recipients, Status (per-status counts), Date sent; the Subject column is removed; opening an action lists each recipient with status and, when failed, the failure reason. The tab counter counts actions; the last 100 actions load with all their recipients. The Dean's Faculty invitations (send, reissue, email correction) are recorded in the outbox and listed in an "Email history" card on the Faculty Invitations page, below Invitation status; the Dean's history starts with the first invitation after deploy. Automatic emails (password reset, first-Dean invitation) are not shown anywhere.
+
 Testing must never email real or real-looking addresses (spam risk): automated tests use mocks or Mailpit only, and manual checks need `EMAIL_PROVIDER=mailpit`, or `custom` with an `EMAIL_TEST_ALLOWLIST` of Owner-controlled addresses.
 
 ---
@@ -147,6 +147,8 @@ Add filters for attendance status, overridden/original state and Student search,
 
 Owner decisions (2026-10-08): applies to both the Faculty and Secretary override screens; a single date, then a session on that date, then its records; Student search by name/surname or student number; filters for status, overridden/original and how attendance was recorded (biometric, Faculty manual, Secretary manual); revoked sessions are hidden by default, shown labelled Revoked and view-only when included, never overridable (check current behaviour first and ask before changing it); no pagination — a bounded scrolling list with a sticky header.
 
+Owner decisions (2026-10-15, demo approved: [Revoked Sessions Demo](https://claude.ai/artifact/VuauttgUzBW7gCd5WFgnnr)): the server refuses every attendance write aimed at a revoked session ("This session was revoked. Its attendance is view-only."). Both session pickers hide revoked sessions behind a "Revoked sessions: Hide / Show (n)" switch in the Pin-switch design (default Hide, not remembered); shown sessions keep the lowercase status "revoked"; switching to Hide closes an open revoked session. An open revoked session is view-only (no Override, no Mark-all) on both screens, and the Secretary also sees its saved records. A date with only revoked sessions says how many are hidden. The Faculty session picker also appears whenever the date has a revoked session. The Secretary "All recorded results" option is removed; the worksheet opens on the live session, otherwise "Choose a session". New filters on both screens: Overridden (All / Overridden / Original) and Recorded by (All / Biometric / Faculty manual / Secretary manual).
+
 ---
 
 # 8. Login usability
@@ -158,6 +160,8 @@ Owner decisions (2026-10-08): applies to both the Faculty and Secretary override
 ## 8.2 2FA settings confirmation hardening
 
 **Status: Not started.** Regenerating recovery codes and turning 2FA off confirm with an authenticator code but have no handler-level attempt limit, and recovery-code regeneration writes no audit event.
+
+Owner decisions (2026-10-15): both actions get the existing per-user limit used for name-change confirmation, 10 attempts per 5 minutes. Whether to audit recovery-code regeneration is on hold for the Owner.
 
 ---
 

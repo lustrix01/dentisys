@@ -23,6 +23,11 @@ import {
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
+import {
+  REVOKED_SESSION_VIEW_ONLY_NOTE, countRevokedSessions, matchesRollCallFilters, revokedHiddenText, visibleSessions,
+  type OverriddenFilter, type RecordedByFilter,
+} from '../../utils/attendanceRollCall';
 import {
   getSecretaryAttendanceApi,
   getSecretaryProfileApi,
@@ -158,6 +163,10 @@ export const AttendanceList: React.FC = () => {
   const loadRequest = useRef(0);
   const saving = useRef(false);
   const [status, setStatus] = useState('all');
+  const [overriddenFilter, setOverriddenFilter] = useState<OverriddenFilter>('all');
+  const [recordedByFilter, setRecordedByFilter] = useState<RecordedByFilter>('all');
+  // Revoked sessions are hidden until asked for; not remembered between visits.
+  const [showRevoked, setShowRevoked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -378,6 +387,16 @@ export const AttendanceList: React.FC = () => {
     return () => { ++sessionRequest.current; };
   }, [sessionId, refreshVersion]);
 
+  // Once per date, open that date's active session; otherwise the user chooses one.
+  const autoSelectedDate = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading || autoSelectedDate.current === date) return;
+    autoSelectedDate.current = date;
+    if (sessionId) return;
+    const active = sessions.find(s => s.status === 'active' && (!date || (s.sessionDate || s.date) === date));
+    if (active) setSessionId(active.sessionId);
+  }, [loading, date, sessions, sessionId]);
+
   // Dynamically classify Current Session (happening right now) vs Upcoming Sessions (scheduled in the future)
   const { liveCurrentSession, upcomingSessions } = useMemo(() => {
     let current: SessionItem | null = null;
@@ -462,8 +481,9 @@ export const AttendanceList: React.FC = () => {
   // Filtered Roster for Worksheet View
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return (sessionId ? sessionRecords : records).filter((record) => {
+    return (sessionId ? sessionRecords : []).filter((record) => {
       if (date && record.date !== date) return false;
+      if (!matchesRollCallFilters(record, overriddenFilter, recordedByFilter)) return false;
       if (selectedSubject !== 'all' && record.subjectCode !== selectedSubject) return false;
       if (status !== 'all') {
         if (status === 'unrecorded') {
@@ -475,7 +495,18 @@ export const AttendanceList: React.FC = () => {
       if (!needle) return true;
       return record.studentName.toLocaleLowerCase().includes(needle) || record.studentNumber.toLocaleLowerCase().includes(needle) || record.subjectCode.toLocaleLowerCase().includes(needle);
     });
-  }, [date, query, records, sessionRecords, sessionId, status, selectedSubject]);
+  }, [date, query, sessionRecords, sessionId, status, selectedSubject, overriddenFilter, recordedByFilter]);
+
+  const dateSessions = useMemo(() => sessions.filter(s => !date || (s.sessionDate || s.date) === date), [sessions, date]);
+  const revokedSessionCount = countRevokedSessions(dateSessions);
+  const shownSessions = visibleSessions(dateSessions, showRevoked);
+  const allSessionsHidden = dateSessions.length > 0 && shownSessions.length === 0;
+  const openSession = sessions.find(s => s.sessionId === sessionId);
+  const revokedSessionOpen = openSession?.status === 'revoked';
+  const handleRevokedSwitch = (show: boolean) => {
+    setShowRevoked(show);
+    if (!show && revokedSessionOpen) setSessionId('');
+  };
 
   // Attendance rate & straightforward counts (strictly adheres to backend contract tests)
   const attended = filtered.filter((record) => record.status === 'present' || record.status === 'late' || record.status === 'excused').length;
@@ -896,12 +927,40 @@ export const AttendanceList: React.FC = () => {
                     <option value="unrecorded">Unresolved ({filtered.length - recorded})</option>
                   </select>
                 </div>
+
+                <div className="w-full sm:w-44 shrink-0">
+                  <select
+                    aria-label="Overridden"
+                    value={overriddenFilter}
+                    onChange={(e) => setOverriddenFilter(e.target.value as OverriddenFilter)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="all">Overridden: All</option>
+                    <option value="overridden">Overridden</option>
+                    <option value="original">Original</option>
+                  </select>
+                </div>
+
+                <div className="w-full sm:w-44 shrink-0">
+                  <select
+                    aria-label="Recorded by"
+                    value={recordedByFilter}
+                    onChange={(e) => setRecordedByFilter(e.target.value as RecordedByFilter)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="all">Recorded by: All</option>
+                    <option value="biometric">Biometric</option>
+                    <option value="faculty">Faculty manual</option>
+                    <option value="secretary">Secretary manual</option>
+                  </select>
+                </div>
               </div>
             </div>
 
             {/* Optional Sessions Switcher */}
-            {sessions.length > 0 && (
+            {dateSessions.length > 0 && (
               <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs">
+                {shownSessions.length > 0 && (
                 <label className="flex items-center gap-2 font-bold text-slate-600 dark:text-slate-300">
                   <span className="text-[10px] uppercase tracking-wider text-slate-400">Switch Session:</span>
                   <select
@@ -910,17 +969,39 @@ export const AttendanceList: React.FC = () => {
                     onChange={(e) => setSessionId(e.target.value)}
                     className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                   >
-                    <option value="">All recorded results</option>
-                    {sessions.map((s) => (
+                    <option value="">Choose a session</option>
+                    {shownSessions.map((s) => (
                       <option key={s.sessionId} value={s.sessionId}>
                         {s.subjectCode} · {s.date} · {s.sessionCode} ({s.status})
                       </option>
                     ))}
                   </select>
                 </label>
+                )}
+                {revokedSessionCount > 0 && (
+                  <RevokedSessionsSwitch showRevoked={showRevoked} revokedCount={revokedSessionCount} disabled={submitting} onChange={handleRevokedSwitch} />
+                )}
               </div>
             )}
           </Card>
+
+          {revokedSessionOpen && openSession && (
+            <div className="p-4 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 space-y-1 text-xs shadow-xs">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
+                  <Ban className="w-3 h-3 text-rose-600" />
+                  Session Revoked
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-300 font-extrabold text-[10px] uppercase tracking-wider">
+                  View-only
+                </span>
+                <span className="font-mono text-slate-500 font-bold">Code: {openSession.sessionCode}</span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-300">
+                Biometric capture is closed; further student submissions are blocked. All recorded attendance is preserved. {REVOKED_SESSION_VIEW_ONLY_NOTE}
+              </p>
+            </div>
+          )}
 
           {/* 3. Summary Count Cards (Straightforward counts) */}
           <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-3 shadow-xs">
@@ -975,6 +1056,13 @@ export const AttendanceList: React.FC = () => {
           </div>
 
           {/* 4. Main Worksheet Register */}
+          {allSessionsHidden || !sessionId ? (
+            <Card className="p-6 text-center">
+              <p role="status" className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                {allSessionsHidden ? revokedHiddenText(revokedSessionCount) : 'Choose a session to manage its attendance.'}
+              </p>
+            </Card>
+          ) : (
           <Card className="p-0 overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-xs">
             <div className="max-h-[560px] overflow-y-auto overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-xs border-collapse">
@@ -1055,6 +1143,9 @@ export const AttendanceList: React.FC = () => {
 
                         {/* Column 5: ACTIONS */}
                         <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
+                          {revokedSessionOpen ? (
+                            <span className="text-xs font-bold text-slate-400">View-only</span>
+                          ) : (
                           <button
                             type="button"
                             onClick={() => handleOpenOverride(record)}
@@ -1063,6 +1154,7 @@ export const AttendanceList: React.FC = () => {
                             <Pencil className="w-3.5 h-3.5 text-slate-500" />
                             <span>Override</span>
                           </button>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -1071,6 +1163,7 @@ export const AttendanceList: React.FC = () => {
               </table>
             </div>
           </Card>
+          )}
         </div>
       )}
 
