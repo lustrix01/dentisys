@@ -733,9 +733,38 @@ test('CSV Generation: exports distinct period percentages without copying overal
 
   assert.equal(lines[0], 'Student Number,Student Name,Midterm %,Final %,Overall GWA,Status');
   // Student 1: distinct Midterm 88.75%, Final 90.00%, Overall GWA 1.75
-  assert.equal(lines[1], 'DENT-001,"Alice Reyes",88.75%,90.00%,1.75,PASS');
+  assert.equal(lines[1], '"DENT-001","Alice Reyes","88.75%","90.00%","1.75","PASS"');
   // Student 2: Midterm Incomplete (Missing Date Range), Final 90.00%, Overall GWA Incomplete
-  assert.equal(lines[2], 'DENT-002,"Bob Santos",Incomplete (Missing Date Range),90.00%,Incomplete,INCOMPLETE');
+  assert.equal(lines[2], '"DENT-002","Bob Santos","Incomplete (Missing Date Range)","90.00%","Incomplete","INCOMPLETE"');
+});
+
+test('CSV Generation: combined period row with a comma in the midterm reason still has exactly 6 columns', () => {
+  const dummyStudents = [
+    {
+      id: 's9',
+      studentId: 'DENT-009',
+      name: 'Reyes, Alice',
+      enrolledSubjects: [
+        {
+          code: 'CLIN401',
+          grade: 0,
+          components: {
+            calculationMode: 'authoritative_periods',
+            periods: {
+              midterm: { period: 'Midterm', status: 'incomplete', percentage: null, categories: [], incomplete: [{ reason: 'missing_quiz,_exam' }] },
+              final: { period: 'Final', status: 'computed', percentage: 90.0, categories: [], incomplete: [] },
+            },
+          },
+        },
+      ],
+    },
+  ] as any;
+  const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
+  const row = csv.split('\n')[1];
+  const cells = Array.from(row.matchAll(/"((?:[^"]|"")*)"(?:,|$)/g), m => m[1]);
+  assert.equal(cells.length, 6);
+  assert.equal(cells[1], 'Reyes, Alice');
+  assert.equal(cells[2], 'Incomplete (missing quiz, exam)');
 });
 
 test('CSV Generation: incomplete recomputation with prior GWA marks status INCOMPLETE and records prior grade only when server confirmed', () => {
@@ -817,9 +846,9 @@ test('CSV Generation: incomplete recomputation with prior GWA marks status INCOM
   const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
   const lines = csv.trim().split('\n');
   // Student 3 has previouslyPersisted: true -> Prior: 2.00 (Historical)
-  assert.equal(lines[1], 'DENT-003,"Clara Santos",Incomplete (Unresolved Attendance),85.00%,Prior: 2.00 (Historical),INCOMPLETE');
+  assert.equal(lines[1], '"DENT-003","Clara Santos","Incomplete (Unresolved Attendance)","85.00%","Prior: 2.00 (Historical)","INCOMPLETE"');
   // Student 4 has previouslyPersisted: false -> Incomplete (no fallback to subj.grade 2.50)
-  assert.equal(lines[2], 'DENT-004,"Danilo Cruz",Incomplete (Unresolved Attendance),85.00%,Incomplete,INCOMPLETE');
+  assert.equal(lines[2], '"DENT-004","Danilo Cruz","Incomplete (Unresolved Attendance)","85.00%","Incomplete","INCOMPLETE"');
 });
 
 test('CSV Generation: uncomputed period mode outputs Pending and PENDING', () => {
@@ -857,7 +886,7 @@ test('CSV Generation: uncomputed period mode outputs Pending and PENDING', () =>
   const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
   const lines = csv.trim().split('\n');
   assert.equal(lines[0], 'Student Number,Student Name,Midterm %,Final %,Overall GWA,Status');
-  assert.equal(lines[1], 'DENT-005,"Elena Ramos",Pending,Pending,Pending,PENDING');
+  assert.equal(lines[1], '"DENT-005","Elena Ramos","Pending","Pending","Pending","PENDING"');
 });
 
 test('CSV Generation: legacy mode exports accurately labeled overall columns without duplicating overall grade', () => {
@@ -895,7 +924,7 @@ test('CSV Generation: legacy mode exports accurately labeled overall columns wit
   const csv = generateGradeSummaryCSV(dummyStudents, 'ANAT101', false);
   const lines = csv.trim().split('\n');
   assert.equal(lines[0], 'Student Number,Student Name,Quizzes,Practicum,Exams,Attendance,Overall GWA,Remarks');
-  assert.equal(lines[1], 'DENT-004,"David Lim",85.0%,90.0%,88.0%,95.0%,1.50,PASS');
+  assert.equal(lines[1], '"DENT-004","David Lim","85.0%","90.0%","88.0%","95.0%","1.50","PASS"');
 });
 
 test('Lecture/Laboratory evaluation exposes all four period components and grouped CSV headers', () => {

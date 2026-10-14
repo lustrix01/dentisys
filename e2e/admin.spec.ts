@@ -251,23 +251,25 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
 
     await page.getByRole('button', { name: 'Export CSV' }).click();
     const summaryCsv = await captureDeanReportCsv(page);
-    expect(summaryCsv).toContain('2023-0101,"Alex Example","CLINIC, ""4A""\nSpecial",4,2.25,warning,No');
-    expect(summaryCsv).toContain('2023-0102,"Missing Class Name","—",3,N/A,active,No');
+    expect(summaryCsv.replace(/^\uFEFF/, '')).toMatch(/^Student Number,Student Name,Class,/);
+    expect(summaryCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","4","2.25","warning","No"');
+    expect(summaryCsv).toContain('"2023-0102","Missing Class Name","—","3","N/A","active","No"');
     const escapedFormulaClassFields = [
-      '2023-0103,"Equals Formula","\'=1+1"',
-      '2023-0104,"Plus Formula","\'+SUM(1,1)"',
-      '2023-0105,"Minus Formula","\'-1+1"',
-      '2023-0106,"At Formula","\'@SUM(1,1)"',
-      '2023-0107,"Leading Tab Formula","\'\t=1+1"',
-      '2023-0108,"Leading Control Formula","\'\u0001@SUM(1,1)"',
+      '"2023-0103","Equals Formula","\'=1+1"',
+      '"2023-0104","Plus Formula","\'+SUM(1,1)"',
+      '"2023-0105","Minus Formula","\'-1+1"',
+      '"2023-0106","At Formula","\'@SUM(1,1)"',
+      '"2023-0107","Leading Tab Formula","\'\t=1+1"',
+      '"2023-0108","Leading Control Formula","\'\u0001@SUM(1,1)"',
     ];
     for (const classField of escapedFormulaClassFields) expect(summaryCsv).toContain(classField);
 
     await page.getByRole('button', { name: 'Retention Reports' }).click();
     await page.getByRole('button', { name: 'Export CSV' }).click();
     const retentionCsv = await captureDeanReportCsv(page);
-    expect(retentionCsv).toContain('2023-0101,"Alex Example","CLINIC, ""4A""\nSpecial",2.25,warning,1');
-    expect(retentionCsv).toContain('2023-0102,"Missing Class Name","—",N/A,active,0');
+    expect(retentionCsv.replace(/^\uFEFF/, '')).toMatch(/^Student Number,Student Name,Class,GWA,/);
+    expect(retentionCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","2.25","warning","1"');
+    expect(retentionCsv).toContain('"2023-0102","Missing Class Name","—","N/A","active","0"');
     for (const classField of escapedFormulaClassFields) expect(retentionCsv).toContain(classField);
   });
 

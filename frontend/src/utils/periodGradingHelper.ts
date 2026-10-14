@@ -461,7 +461,7 @@ export function generateGradeSummaryCSV(
             statusVal,
           ].map(groupedCsvCell).join(',');
         }
-        return `${student.studentId},"${student.name}",${midtermVal},${finalVal},${gwaVal},${statusVal}`;
+        return [student.studentId, student.name, midtermVal, finalVal, gwaVal, statusVal].map(groupedCsvCell).join(',');
       })
       .join('\n');
     return headers + rows;
@@ -480,7 +480,7 @@ export function generateGradeSummaryCSV(
       const statusText = subj && typeof subj.grade === 'number' && subj.grade > 0
         ? (subj.grade === 5.0 ? 'FAILED' : 'PASS')
         : 'UNCOMPUTED';
-      return `${student.studentId},"${student.name}",${quizzes},${practicum},${exams},${attendance},${gradeVal},${statusText}`;
+      return [student.studentId, student.name, quizzes, practicum, exams, attendance, gradeVal, statusText].map(groupedCsvCell).join(',');
     })
     .join('\n');
   return headers + rows;

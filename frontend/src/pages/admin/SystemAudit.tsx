@@ -133,45 +133,45 @@ export const DeanReports: React.FC = () => {
     let fileName = '';
 
     if (activeTab === 'students') {
-      csv = `Dean's Student Summary Report\nGenerated: ${ts}\n\nStudent Number,Student Name,Class,Year Level,GWA,Status,Face Enrolled\n`;
+      csv = `Student Number,Student Name,Class,Year Level,GWA,Status,Face Enrolled\n`;
       csv += filtered.map(s => {
         const gwaStr = s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : 'N/A';
-        return `${s.studentId},"${s.name}",${csvEscapeField(s.className || '—')},${s.yearLevel},${gwaStr},${s.status},${s.faceEnrolled ? 'Yes' : 'No'}`;
+        return [s.studentId, s.name, s.className || '—', s.yearLevel, gwaStr, s.status, s.faceEnrolled ? 'Yes' : 'No'].map(csvEscapeField).join(',');
       }).join('\n');
       fileName = `Student_Summary_${ts.replace(/[: ]/g, '-')}.csv`;
 
     } else if (activeTab === 'academic') {
-      csv = `Academic Grade Report\nGenerated: ${ts}\n\nStudent Number,Student Name,Course Code,Course Name,Grade,Has Remedial\n`;
+      csv = `Student Number,Student Name,Course Code,Course Name,Grade,Has Remedial\n`;
       csv += filtered.flatMap((s: any) =>
         (s.enrolledSubjects || []).map((sub: any) => {
           const gradeStr = sub.grade !== null && sub.grade !== undefined && Number(sub.grade) > 0 ? Number(sub.grade).toFixed(2) : 'N/A';
-          return `${s.studentId},"${s.name}",${sub.code},"${sub.name}",${gradeStr},${sub.hasRemedial ? 'Yes' : 'No'}`;
+          return [s.studentId, s.name, sub.code, sub.name, gradeStr, sub.hasRemedial ? 'Yes' : 'No'].map(csvEscapeField).join(',');
         })
       ).join('\n');
       fileName = `Academic_Report_${ts.replace(/[: ]/g, '-')}.csv`;
 
     } else if (activeTab === 'retention') {
-      csv = `Retention Status Report\nGenerated: ${ts}\n\nStudent Number,Student Name,Class,GWA,Status,Pending Remedials\n`;
+      csv = `Student Number,Student Name,Class,GWA,Status,Pending Remedials\n`;
       csv += filtered.map((s: any) => {
         const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
         const gwaStr = s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : 'N/A';
-        return `${s.studentId},"${s.name}",${csvEscapeField(s.className || '—')},${gwaStr},${s.status},${pendingRem}`;
+        return [s.studentId, s.name, s.className || '—', gwaStr, s.status, pendingRem].map(csvEscapeField).join(',');
       }).join('\n');
       fileName = `Retention_Report_${ts.replace(/[: ]/g, '-')}.csv`;
 
     } else {
-      csv = `Attendance Report\nGenerated: ${ts}\n\nStudent Number,Student Name,Course Code,Date,Status\n`;
+      csv = `Student Number,Student Name,Course Code,Date,Status\n`;
       const relevantIds = new Set(filtered.map(s => s.id));
       csv += attendanceRecords
         .filter(r => relevantIds.has(r.studentId))
         .map(r => {
           const s = students.find(st => st.id === r.studentId);
-          return `${s?.studentId || '-'},"${s?.name || '-'}",${r.subjectCode},${r.date},${r.status}`;
+          return [s?.studentId || '-', s?.name || '-', r.subjectCode, r.date, r.status].map(csvEscapeField).join(',');
         }).join('\n');
       fileName = `Attendance_Report_${ts.replace(/[: ]/g, '-')}.csv`;
     }
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;

@@ -162,9 +162,12 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, allLogs
           log.targetType ? `${log.targetType} #${log.targetId ?? ''}` : '', log.description, log.reason ?? '', log.status, log.ipAddress ?? '', log.device ?? '']
         : [log.timestamp, log.userName, log.userRole, log.action, log.module, log.description, log.status])
     ];
-    const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
+    // Formula guard: a leading = + - @ (after whitespace/control chars) is prefixed with ' so spreadsheets do not run it.
+    // eslint-disable-next-line no-control-regex
+    const cell = (value: unknown) => { const text = String(value); return `"${(/^[\s\u0000-\u001f\u007f-\u009f]*[=+\-@]/u.test(text) ? `'${text}` : text).replaceAll('"', '""')}"`; };
+    const csv = rows.map(row => row.map(cell).join(',')).join('\n');
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    link.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }));
     link.download = `dentisys-audit-trail-${new Date().toISOString().slice(0, 10)}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
