@@ -109,7 +109,7 @@ Use search, filters, a sticky header, bounded scrolling and clear status control
 
 ## 5.8 Email History from the outbox
 
-**Status: Partial.** The history screen exists, but each Email Management action is not shown to be linked to its outbox/delivery record.
+**Status: Done (2026-10-15).** Email History groups each send action from the outbox (migration 047) with per-recipient status and failure reasons; the Dean's Faculty invitations have their own history.
 
 Build Email History from the email outbox/delivery records and relevant audit events, not a separate log.
 
@@ -141,7 +141,7 @@ Remove redundant information and Quick Actions that repeat the sidebar; keep ope
 
 ## 7.2 Manual Override filtering
 
-**Status: Partial.** Session selection exists; filtering by date, then session on that date, then records is not implemented, and no large-list test exists.
+**Status: Done (2026-10-15).** Date, then session, then records on both screens; revoked sessions are view-only and hidden by default; Overridden and Recorded by filters added.
 
 Add filters for attendance status, overridden/original state and Student search, so users never scroll an unbounded list to reach a record.
 
