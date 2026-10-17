@@ -10,6 +10,7 @@ import type {
   GradingComponentEnum,
 } from '../services/apiClient.ts';
 import type { Student, EnrolledSubject } from '../types/index.ts';
+import { formatGrade } from './gradeHelper.ts';
 
 export function isPeriodComputeResult(
   result: FacultyGradeComputeResult
@@ -426,9 +427,9 @@ export function generateGradeSummaryCSV(
 
         const gwaVal =
           evalResult.overallGwa !== null
-            ? evalResult.overallGwa.toFixed(1)
+            ? formatGrade(evalResult.overallGwa)
             : evalResult.historicalGwa !== null
-            ? `Prior: ${evalResult.historicalGwa.toFixed(1)} (Historical)`
+            ? `Prior: ${formatGrade(evalResult.historicalGwa)} (Historical)`
             : evalResult.statusText === 'PENDING'
             ? 'Pending'
             : 'Incomplete';
@@ -476,7 +477,7 @@ export function generateGradeSummaryCSV(
       const practicum = subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—';
       const exams = subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—';
       const attendance = subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—';
-      const gradeVal = subj && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade.toFixed(1) : '—';
+      const gradeVal = subj && typeof subj.grade === 'number' && subj.grade > 0 ? formatGrade(subj.grade) : '—';
       const statusText = subj && typeof subj.grade === 'number' && subj.grade > 0
         ? (subj.grade === 5.0 ? 'FAILED' : 'PASS')
         : 'UNCOMPUTED';

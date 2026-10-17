@@ -322,7 +322,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
         body: JSON.stringify({
           status: 'ok', currentSchoolYear: '2026-2027', schoolYearFilter: '2026-2027', availableSchoolYears: ['2026-2027'],
           kpis: { totalStudents: 10, totalFaculty: 3, goodStanding: 9, atRisk: 2, remedialCount: 1, attendanceRate: 91 },
-          gwaBuckets: [{ range: '1.0–1.5', count: 2, color: '#000' }, { range: '3.0+', count: 1, color: '#000' }],
+          gwaBuckets: [{ range: '1.0–1.5', count: 2, color: '#000' }, { range: 'Above 3.0', count: 1, color: '#000' }],
           statusCounts: { active: 9, remedial: 1 },
           classAttendance: [{ name: 'CLINIC-4A', rate: 92 }],
           recentAuditEvents: [

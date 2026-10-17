@@ -9,6 +9,7 @@ import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAcademicRetentionApi } from '../../services/apiClient';
 import type { Student, StudentAcademicClass } from '../../types';
 import GradeValue from '../../components/GradeValue';
+import { formatGrade } from '../../utils/gradeHelper';
 
 type RemedialStage =
   | 'none'
@@ -132,7 +133,7 @@ const GradePill: React.FC<{ grade: number | null; percentage?: number | null }> 
       <span className={`font-mono font-bold text-sm ${
         isSafe ? 'text-emerald-600 dark:text-emerald-400' : isLimit ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
       }`}>
-        <GradeValue percentage={percentage}>{grade.toFixed(1)}</GradeValue>
+        <GradeValue percentage={percentage} grade={grade}>{formatGrade(grade)}</GradeValue>
       </span>
       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
         isSafe
@@ -291,7 +292,7 @@ export const RetentionMonitoring: React.FC = () => {
               <thead><tr><th className="p-2">Course</th><th className="p-2">Sample Grade</th><th className="p-2">Sample Standing</th></tr></thead>
               <tbody>{sampleSubjects.length === 0 && <tr><td colSpan={3} className="p-2">No sample courses available.</td></tr>}{sampleSubjects.map(subject => <tr key={subject.code}>
                 <td className="p-2">{subject.code} · {subject.name}</td>
-                <td className="p-2 font-mono">{subject.grade.toFixed(1)}</td>
+                <td className="p-2 font-mono">{formatGrade(subject.grade)}</td>
                 <td className="p-2">{threshold === null ? 'Unavailable' : subject.isClinical && subject.grade >= threshold ? 'Sample retention review' : 'No sample retention review'}</td>
               </tr>)}</tbody>
             </table>
@@ -554,7 +555,7 @@ export const RetentionMonitoring: React.FC = () => {
             {remedialReviewRecords.length > 0 && <h3 className="md:col-span-2 font-bold text-sm">Retention Review / Unassigned</h3>}
             {remedialReviewRecords.map(cls => <Card key={cls.enrollmentId} className="p-4 border border-slate-200 dark:border-slate-800 space-y-2">
               <h4 className="text-xs font-bold"><span className="font-mono text-blue-600 mr-2">{cls.courseCode}</span>{cls.courseName}</h4>
-              <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue>}</p>
+              <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>}</p>
               <p className="text-xs">Retention: {cls.retentionState || 'State unavailable'}</p>
               <p className="text-[10px] text-slate-500">{cls.semester} · {cls.schoolYear}</p>
               <p className="text-xs font-semibold">{readRemedialProgression(cls).stage === 'none' ? 'No remedial attempt assigned.' : 'Remedial progression needs Faculty review.'}</p>
@@ -582,7 +583,7 @@ export const RetentionMonitoring: React.FC = () => {
                       <p className="text-[10px] text-slate-400">Instructor: {cls.instructorName || 'Faculty'}</p>
                     </div>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                      Grade: {cls.grade !== null ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue> : '—'}
+                      Grade: {cls.grade !== null ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : '—'}
                     </span>
                   </div>
 
@@ -700,7 +701,7 @@ export const RetentionMonitoring: React.FC = () => {
                           {typeof cls.midtermEvaluation?.percentage === 'number' ? `${cls.midtermEvaluation.percentage.toFixed(1)}%` : 'Pending'}
                         </td>
                         <td className="py-3.5 px-4 text-center font-mono font-extrabold text-amber-600 dark:text-amber-400">
-                          {typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage} period="Midterm">{cls.midtermEvaluation.grade.toFixed(1)}</GradeValue> : 'Pending'}
+                          {typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage} period="Midterm" grade={cls.midtermEvaluation.grade}>{formatGrade(cls.midtermEvaluation.grade)}</GradeValue> : 'Pending'}
                         </td>
                         <td className="py-3.5 px-4 text-slate-500">
                           <span className="block font-bold">At Risk · Midterm</span>

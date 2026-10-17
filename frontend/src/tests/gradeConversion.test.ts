@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { percentageToGWA, percentageToGWAExact } from '../utils/gradeHelper.ts';
+import { formatGrade, percentageToGWA, percentageToGWAExact } from '../utils/gradeHelper.ts';
 
 // [percentage, Midterm grade, Final/course grade]; identical list lives in tests/backend/faculty_grading_test.php.
 const CASES: Array<[number, number, number]> = [
@@ -62,4 +62,9 @@ test('BUCDM conversion: float drift cannot drop a whole percent', () => {
 test('Remediation boundary: 84% or below is 2.5 or worse, 85% is 2.4', () => {
   assert.ok(percentageToGWAExact(84.99) >= 2.5);
   assert.ok(percentageToGWAExact(85) < 2.5);
+});
+
+test('formatGrade trims one trailing zero and never rounds saved two-decimal grades', () => {
+  const cases: Array<[number, string]> = [[2.6, '2.6'], [2.5, '2.5'], [1.0, '1.0'], [2.33, '2.33'], [2.46, '2.46'], [2.45, '2.45'], [5.0, '5.0']];
+  for (const [grade, text] of cases) assert.equal(formatGrade(grade), text);
 });

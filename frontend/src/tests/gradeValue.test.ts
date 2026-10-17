@@ -18,3 +18,8 @@ test('GradeValue keeps the rounded text and exposes the exact grade as an access
 test('GradeValue leaves the text unwrapped without a percentage', () => {
   assert.equal(renderToStaticMarkup(React.createElement(GradeValue, { percentage: null }, '2.50')), '2.50');
 });
+
+test('GradeValue tooltip shows the saved grade instead of recomputing it', () => {
+  const html = renderToStaticMarkup(React.createElement(GradeValue, { percentage: 81.38, grade: 2.5 }, '2.5'));
+  assert.match(html, /Exact: 2\.5 \(81\.38%\)/);
+});

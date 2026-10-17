@@ -168,10 +168,9 @@ function handle_admin_dashboard_kpis(): void
         $atRiskStudents = [];
 
         $gwa1_15 = 0;
-        $gwa15_2 = 0;
-        $gwa2_25 = 0;
+        $gwa16_24 = 0;
         $gwa25_3 = 0;
-        $gwa3plus = 0;
+        $gwaAbove3 = 0;
 
         foreach ($students as $s) {
             $riskScore = (int) ($s['risk_score'] ?? 0);
@@ -186,14 +185,12 @@ function handle_admin_dashboard_kpis(): void
                 $gwa = (float) $s['final_gwa'];
                 if ($gwa <= 1.5) {
                     $gwa1_15++;
-                } elseif ($gwa <= 2.0) {
-                    $gwa15_2++;
                 } elseif ($gwa < 2.5) {
-                    $gwa2_25++;
+                    $gwa16_24++;
                 } elseif ($gwa <= 3.0) {
                     $gwa25_3++;
                 } else {
-                    $gwa3plus++;
+                    $gwaAbove3++;
                 }
             }
         }
@@ -275,10 +272,9 @@ function handle_admin_dashboard_kpis(): void
             'facultyList' => $facultyList,
             'gwaBuckets' => [
                 ['range' => '1.0–1.5', 'count' => $gwa1_15, 'color' => '#10B981'],
-                ['range' => '1.5–2.0', 'count' => $gwa15_2, 'color' => '#34D399'],
-                ['range' => '2.0–2.5', 'count' => $gwa2_25, 'color' => '#F59E0B'],
+                ['range' => '1.6–2.4', 'count' => $gwa16_24, 'color' => '#F59E0B'],
                 ['range' => '2.5–3.0', 'count' => $gwa25_3, 'color' => '#F97316'],
-                ['range' => '3.0+', 'count' => $gwa3plus, 'color' => '#EF4444'],
+                ['range' => 'Above 3.0', 'count' => $gwaAbove3, 'color' => '#EF4444'],
             ],
             'statusCounts' => [
                 'active' => $goodStanding,

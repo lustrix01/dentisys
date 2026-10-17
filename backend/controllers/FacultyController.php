@@ -4066,7 +4066,7 @@ function faculty_notify_grade_retention_change(PDO $pdo, array $before, string $
     }
     $course = (string) $before['course_code'];
     $section = (string) $before['cs_name'];
-    $grade = number_format($gwa, 1, '.', '');
+    $grade = preg_replace('/0$/', '', number_format($gwa, 2, '.', ''));
     if ($current === 'remedial') {
         $title = "Remedial required in {$course}";
         $body = "Your computed grade in {$course} ({$section}) is {$grade}, which requires a remedial exam. Your Faculty will schedule it; see Retention for details.";

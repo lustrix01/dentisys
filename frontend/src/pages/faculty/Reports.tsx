@@ -38,7 +38,7 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Student, AttendanceRecord, Assessment, AssessmentScore } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
-import { effectiveAssessmentPercentage, gwaToDescription } from '../../utils/gradeHelper';
+import { effectiveAssessmentPercentage, formatGrade, gwaToDescription } from '../../utils/gradeHelper';
 import { extractPeriodEvaluation, type PeriodComponentEvaluation } from '../../utils/periodGradingHelper';
 
 import {
@@ -392,9 +392,9 @@ export const Reports: React.FC = () => {
   );
   const formatCourseGrade = (evaluation: ReturnType<typeof courseEvaluation>) =>
     evaluation.overallGwa !== null
-      ? evaluation.overallGwa.toFixed(1)
+      ? formatGrade(evaluation.overallGwa)
       : evaluation.historicalGwa !== null
-        ? `Prior: ${evaluation.historicalGwa.toFixed(1)} (Historical)`
+        ? `Prior: ${formatGrade(evaluation.historicalGwa)} (Historical)`
         : 'Pending';
   const formatComponentResult = (
     component: PeriodComponentEvaluation | undefined,
@@ -542,7 +542,7 @@ export const Reports: React.FC = () => {
         ).length;
         const riskLevel = retentionUnavailable ? 'UNAVAILABLE' : atRiskCourses && atRiskCourses > 0 ? 'At Risk' : '';
         const gwa = standingGwa(student);
-        return [student.studentId, student.name, gwa !== null ? gwa.toFixed(1) : 'N/A', atRiskCourses ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)].map(csvCell).join(',');
+        return [student.studentId, student.name, gwa !== null ? gwa.toFixed(2) : 'N/A', atRiskCourses ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)].map(csvCell).join(',');
       }).join('\n');
       fileName = `Retention_Report.csv`;
     } else {
@@ -573,10 +573,10 @@ export const Reports: React.FC = () => {
   // section. A grade of 2.50 or worse triggers remedial (UI-003).
   const gradeHistogramData = (() => {
     const buckets = [
-      { name: '1.00–1.50', count: 0 },
-      { name: '1.75–2.25', count: 0 },
-      { name: '2.50–3.00', count: 0 },
-      { name: '5.00', count: 0 },
+      { name: '1.0–1.5', count: 0 },
+      { name: '1.6–2.4', count: 0 },
+      { name: '2.5–3.0', count: 0 },
+      { name: 'Above 3.0', count: 0 },
       { name: 'Pending', count: 0 },
     ];
     studentsInSelectedSubject.forEach((student: any) => {
@@ -862,7 +862,7 @@ export const Reports: React.FC = () => {
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.finalComponents?.laboratory, evaluation.finalStatus)}</td>}
                         <td className="px-5 py-3.5 text-center font-mono">{formatPercent(evaluation.finalPercentage)}</td>
                         <td className="px-5 py-3.5 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                          {evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)}
+                          {evaluation.overallGwa !== null ? <GradeValue percentage={evaluation.overallPercentage} grade={evaluation.overallGwa}>{formatCourseGrade(evaluation)}</GradeValue> : formatCourseGrade(evaluation)}
                         </td>
                         <td className="px-5 py-3.5">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${
@@ -973,7 +973,7 @@ export const Reports: React.FC = () => {
                         <span className="text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
                       </td>
                       <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
-                        {gwa !== null ? gwa.toFixed(1) : '—'}
+                        {gwa !== null ? gwa.toFixed(2) : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-center font-semibold text-rose-500">{retentionUnavailable ? 'Unavailable' : warnings.length}</td>
                       <td className="px-5 py-3.5 text-center">
@@ -1328,7 +1328,7 @@ export const Reports: React.FC = () => {
             ))}
             {reportTab === 'retention' && facultyStudents.map((student: any) => {
               const gwa = standingGwa(student);
-              const gwaText = gwa !== null ? gwa.toFixed(1) : '—';
+              const gwaText = gwa !== null ? gwa.toFixed(2) : '—';
               const status = retentionUnavailable ? 'Unavailable' : student.status;
               const remedial = remedialStatusFor(student);
               return (

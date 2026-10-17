@@ -29,6 +29,7 @@ import type {
   StudentAcademicProfile,
 } from '../../types';
 import GradeValue from '../../components/GradeValue';
+import { formatGrade } from '../../utils/gradeHelper';
 
 export const StudentUnavailable: React.FC<{ title: string }> = ({ title }) => (
   <div className="max-w-3xl mx-auto pt-6 animate-fade-in" role="status">
@@ -213,7 +214,7 @@ export const RealStudentDashboard: React.FC = () => {
             Overall GWA
           </span>
           <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words xl:break-normal">
-            {typeof summary.gwa === 'number' ? summary.gwa.toFixed(1) : '—'}
+            {typeof summary.gwa === 'number' ? summary.gwa.toFixed(2) : '—'}
           </span>
         </Card>
 
@@ -320,7 +321,7 @@ export const RealStudentDashboard: React.FC = () => {
                         <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{cls.className}</td>
                         <td className="py-3 px-4 text-center font-bold">{cls.units}</td>
                         <td className="py-3 px-4 text-center font-mono font-bold">
-                          {cls.grade !== null ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue> : (
+                          {cls.grade !== null ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : (
                             <span className="text-slate-400 font-normal">Pending</span>
                           )}
                         </td>

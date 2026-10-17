@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { percentageToGWAExact } from '../utils/gradeHelper.ts';
+import { formatGrade, percentageToGWAExact } from '../utils/gradeHelper.ts';
 
 type Props = {
   /** Percentage the grade equivalent is derived from; without a finite one nothing is wrapped. */
@@ -10,6 +10,8 @@ type Props = {
   className?: string;
   /** Midterm period grades use the 3.1-4.0 band below 75%; default is Final / course grade. */
   period?: 'Midterm' | 'Final';
+  /** Saved grade shown in the tooltip instead of recomputing it (grades saved under an older scale keep their value). */
+  grade?: number | null;
 };
 
 const BUBBLE =
@@ -22,7 +24,7 @@ const BUBBLE =
  * text; the visible bubble is an aria-hidden copy portalled to <body> with fixed coordinates so scroll
  * containers and overflow:hidden cards cannot clip it.
  */
-export default function GradeValue({ percentage, children, className, period = 'Final' }: Props) {
+export default function GradeValue({ percentage, children, className, period = 'Final', grade }: Props) {
   const id = useId();
   const triggerRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLSpanElement>(null);
@@ -48,7 +50,8 @@ export default function GradeValue({ percentage, children, className, period = '
   }, [shown]);
 
   if (typeof percentage !== 'number' || !Number.isFinite(percentage)) return React.createElement(React.Fragment, null, children);
-  const tip = `Exact: ${percentageToGWAExact(percentage, period).toFixed(1)} (${percentage.toFixed(2)}%)`;
+  const exact = typeof grade === 'number' && Number.isFinite(grade) ? grade : percentageToGWAExact(percentage, period);
+  const tip = `Exact: ${formatGrade(exact)} (${percentage.toFixed(2)}%)`;
   return React.createElement(
     'span',
     {

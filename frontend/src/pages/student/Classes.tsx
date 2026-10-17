@@ -22,6 +22,7 @@ import { StudentUnavailable } from './RealStudentSurfaces';
 import { getStudentAcademicClassesApi } from '../../services/apiClient';
 import type { StudentAcademicClass } from '../../types';
 import GradeValue from '../../components/GradeValue';
+import { formatGrade } from '../../utils/gradeHelper';
 
 interface ParsedSchedule {
   room: string;
@@ -456,7 +457,7 @@ export const Classes: React.FC = () => {
                       </div>
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-x-4 gap-y-2 text-xs">
-                      <span>Course Grade: <strong>{typeof cls.grade === 'number' ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue> : 'Pending'}</strong></span>
+                      <span>Course Grade: <strong>{typeof cls.grade === 'number' ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : 'Pending'}</strong></span>
                       <span>Score %: <strong>{typeof cls.percentage === 'number' ? `${cls.percentage.toFixed(2)}%` : 'Pending'}</strong></span>
                       <span>Clinical Hours Completed: <strong>{typeof cls.clinicHoursCompleted === 'number' ? `${cls.clinicHoursCompleted} hrs` : 'Unavailable'}</strong></span>
                       <span className={cls.retentionState?.toLowerCase() === 'remedial' ? 'text-amber-700 dark:text-amber-300 font-bold' : ''}>Retention: <strong>{cls.retentionState?.toLowerCase() === 'remedial' ? cls.retentionState : cls.grade === null ? 'Pending' : cls.retentionState || 'Unavailable'}</strong></span>
@@ -524,7 +525,7 @@ export const Classes: React.FC = () => {
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700">
                             <span className="font-semibold text-slate-400 text-[11px]">Final Grade:</span>
                             <span className="font-bold text-blue-600 dark:text-blue-400 font-mono">
-                              <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue> {cls.percentage !== null ? `(${cls.percentage.toFixed(1)}%)` : ''}
+                              <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> {cls.percentage !== null ? `(${cls.percentage.toFixed(1)}%)` : ''}
                             </span>
                           </div>
                         )}
@@ -541,7 +542,7 @@ export const Classes: React.FC = () => {
                       <span className="font-medium">Read only</span>
                     </div>
                     <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-x-4 gap-y-2 text-xs">
-                      <span>Course Grade: <strong>{typeof cls.grade === 'number' ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue> : 'Pending'}</strong></span>
+                      <span>Course Grade: <strong>{typeof cls.grade === 'number' ? <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue> : 'Pending'}</strong></span>
                       <span>Score %: <strong>{typeof cls.percentage === 'number' ? `${cls.percentage.toFixed(2)}%` : 'Pending'}</strong></span>
                       <span>Clinical Hours Completed: <strong>{typeof cls.clinicHoursCompleted === 'number' ? `${cls.clinicHoursCompleted} hrs` : 'Unavailable'}</strong></span>
                       <span className={cls.retentionState?.toLowerCase() === 'remedial' ? 'text-amber-700 dark:text-amber-300 font-bold' : ''}>Retention: <strong>{cls.retentionState?.toLowerCase() === 'remedial' ? cls.retentionState : cls.grade === null ? 'Pending' : cls.retentionState || 'Unavailable'}</strong></span>
@@ -562,7 +563,7 @@ export const Classes: React.FC = () => {
           <tbody>{otherClasses.map(cls => <tr key={cls.enrollmentId}>
             <td className="p-2">{cls.courseCode} · {cls.courseName} · {cls.className}</td>
             <td className="p-2">{cls.schoolYear || 'Unavailable'}</td>
-            <td className="p-2">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue>}</td>
+            <td className="p-2">{cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage} grade={cls.grade}>{formatGrade(cls.grade)}</GradeValue>}</td>
             <td className="p-2">{cls.percentage === null ? 'Pending' : `${cls.percentage}%`}</td>
             <td className="p-2">{cls.clinicHoursCompleted} hrs</td>
             <td className="p-2">{cls.retentionState || 'Unavailable'}</td>
@@ -588,7 +589,7 @@ const DevelopmentClasses: React.FC = () => {
           const rate = calculateClassAttendanceRate(attendanceRecords.filter(record => record.studentId === student?.id && record.subjectCode === subject.code));
           return <Card key={subject.code} className="p-5 space-y-2">
             <h2 className="font-bold">{subject.code} · {subject.name}</h2>
-            <p>{subject.units} Academic Units · Sample grade: {subject.grade.toFixed(1)}</p>
+            <p>{subject.units} Academic Units · Sample grade: {formatGrade(subject.grade)}</p>
             <p>Sample attendance: {rate === null ? 'Unavailable' : `${rate}%`}</p>
           </Card>;
         })}

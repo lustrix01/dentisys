@@ -8,7 +8,7 @@ import {
   saveFacultyRemedialApi,
   saveFacultyCostRecoveryApi,
 } from '../../services/apiClient';
-import { percentageToGWA } from '../../utils/gradeHelper';
+import { formatGrade, percentageToGWA } from '../../utils/gradeHelper';
 import type {
   FacultyRetentionRecord,
   FacultyRetentionState,
@@ -986,7 +986,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
                     <td className="py-3.5 px-4 font-mono">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
                     <td className="py-3.5 px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
-                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage}>{record.gwa.toFixed(1)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
+                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage} grade={record.gwa}>{formatGrade(record.gwa)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
                     <td className="py-3.5 px-4"><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
                     <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button></div></td>
                   </tr>
@@ -1010,7 +1010,7 @@ export const RetentionMonitoring: React.FC = () => {
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage}>{row.record.gwa.toFixed(1)}</GradeValue> : <span className="text-[10px] font-medium text-slate-400">Grade unavailable</span>}</td>
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage} grade={row.record.gwa}>{formatGrade(row.record.gwa)}</GradeValue> : <span className="text-[10px] font-medium text-slate-400">Grade unavailable</span>}</td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       {(() => {
                         const activeAttemptNumber = row.progression.attempts.length === 2
@@ -1104,7 +1104,7 @@ export const RetentionMonitoring: React.FC = () => {
                         )}
                         {typeof row.progression.costRecoveryGrade === 'number' && (
                           <span className="text-[10px] text-slate-500 font-mono">
-                            Cost recovery: {row.progression.costRecoveryGrade.toFixed(1)}
+                            Cost recovery: {formatGrade(row.progression.costRecoveryGrade)}
                           </span>
                         )}
                         {row.progression.legacyUnclassified && (
@@ -1347,7 +1347,7 @@ export const RetentionMonitoring: React.FC = () => {
                 {renderStatusBadge(selectedPolicyRecord.state)}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Final Grade</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? <GradeValue percentage={selectedPolicyRecord.percentage}>{selectedPolicyRecord.gwa.toFixed(1)}</GradeValue> : 'Unavailable'}</span></div>
+                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Final Grade</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? <GradeValue percentage={selectedPolicyRecord.percentage} grade={selectedPolicyRecord.gwa}>{formatGrade(selectedPolicyRecord.gwa)}</GradeValue> : 'Unavailable'}</span></div>
                 <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Recorded score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
               </div>
             </div>

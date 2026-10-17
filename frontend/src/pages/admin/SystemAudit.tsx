@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { recordAudit } from '../../services/auditService';
-import { percentageToGWAExact } from '../../utils/gradeHelper';
+import { formatGrade, percentageToGWAExact } from '../../utils/gradeHelper';
 
 type ReportTab = 'students' | 'retention' | 'attendance';
 
@@ -290,7 +290,7 @@ export const DeanReports: React.FC = () => {
       csv += filtered.map(s => {
         const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
         const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(1) : 'N/A';
+        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : 'N/A';
         return [s.studentId, s.name, s.className || '—', s.yearLevel, gradeStr, s.status, s.faceEnrolled ? 'Yes' : 'No'].map(csvEscapeField).join(',');
       }).join('\n');
       fileName = `Student_Summary_${ts.replace(/[: ]/g, '-')}.csv`;
@@ -301,7 +301,7 @@ export const DeanReports: React.FC = () => {
         const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
         const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
         const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(1) : 'N/A';
+        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : 'N/A';
         return [s.studentId, s.name, s.className || '—', gradeStr, s.status, pendingRem].map(csvEscapeField).join(',');
       }).join('\n');
       fileName = `Retention_Report_${ts.replace(/[: ]/g, '-')}.csv`;
@@ -696,7 +696,7 @@ export const DeanReports: React.FC = () => {
                           <td className="py-3 px-3 text-slate-500">Year {s.yearLevel}</td>
                           <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">
                             {gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? (
-                              <GradeValue percentage={sub?.percentage}>{Number(gradeVal).toFixed(1)}</GradeValue>
+                              <GradeValue percentage={sub?.percentage} grade={Number(gradeVal)}>{formatGrade(Number(gradeVal))}</GradeValue>
                             ) : (
                               <span className="text-slate-400 font-normal">—</span>
                             )}
@@ -1034,7 +1034,7 @@ export const DeanReports: React.FC = () => {
                           <td className="py-3 px-3 text-slate-500">{s.className || '—'}</td>
                           <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">
                             {gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? (
-                              <GradeValue percentage={sub?.percentage}>{Number(gradeVal).toFixed(1)}</GradeValue>
+                              <GradeValue percentage={sub?.percentage} grade={Number(gradeVal)}>{formatGrade(Number(gradeVal))}</GradeValue>
                             ) : (
                               <span className="text-slate-400 font-normal">—</span>
                             )}
@@ -1439,7 +1439,7 @@ export const DeanReports: React.FC = () => {
           : (classFilter === 'all' ? 'All classes' : (students.find(s => s.classId === classFilter)?.className || classFilter));
         const statusLabels: Record<string, string> = { active: 'Good Standing', remedial: 'Remedial', cleared: 'Cleared' };
         const statusLabel = statusFilter === 'all' ? 'All statuses' : (statusLabels[statusFilter] ?? statusFilter);
-        const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(1) : '—');
+        const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—');
         const pending = (s: any) => (Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0);
         const standingBad = (s: any) => String(s.status || '').toLowerCase() === 'remedial';
         const rowCount = activeTab === 'attendance' ? historyRows.length : filtered.length;
@@ -1495,7 +1495,7 @@ export const DeanReports: React.FC = () => {
                 {activeTab === 'students' && filtered.map((s: any) => {
                   const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
                   const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(1) : '—';
+                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : '—';
                   return (
                     <tr key={s.id}>
                       <td className="id">{s.studentId}</td>
@@ -1512,7 +1512,7 @@ export const DeanReports: React.FC = () => {
                 {activeTab === 'retention' && filtered.map((s: any) => {
                   const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
                   const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(1) : '—';
+                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? formatGrade(Number(gradeVal)) : '—';
                   const flagged = (s.enrolledSubjects || []).filter(failsRetention).length;
                   const pend = pending(s);
                   return (

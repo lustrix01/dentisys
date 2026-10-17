@@ -39,6 +39,9 @@ export const percentageToGWAExact = (pct: number, period: 'Midterm' | 'Final' = 
   return tenths / 10;
 };
 
+/** Course/period grade text: two decimals with one trailing zero trimmed (2.60 -> 2.6, 2.33 stays), so old saved grades are never rounded. */
+export const formatGrade = (grade: number): string => grade.toFixed(2).replace(/0$/, '');
+
 export const percentageToGWA = (pct: number, period: 'Midterm' | 'Final' = 'Final'): number =>
   percentageToGWAExact(pct, period);
 
