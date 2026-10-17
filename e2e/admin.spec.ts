@@ -51,6 +51,11 @@ const mockDeanReportSummary = async (page: Page, students = deanReportStudents) 
   }));
 };
 
+// Opens a class card on the current Reports tab (the footer reads View Students / Retention / History).
+const openClassCard = async (page: Page, name: string) => {
+  await page.locator('div.cursor-pointer').filter({ has: page.locator('h3', { hasText: name }) }).getByText(/^View /).click();
+};
+
 const captureDeanReportCsv = async (page: Page) => page.evaluate(async () => {
   const blobs = (window as any).__deanReportCsvBlobs as Blob[];
   const blob = blobs[blobs.length - 1];
@@ -189,28 +194,42 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
   });
 
   test('Dean report tables show supplied class names and preserve class filtering and report values', async ({ page }) => {
-    await mockDeanReportSummary(page);
+    const unassigned = { ...deanReportStudents[1], id: '109', studentId: '2023-0109', name: 'No Class Student', classId: null, className: null };
+    await mockDeanReportSummary(page, [...deanReportStudents, unassigned]);
     await page.goto('/admin/reports');
 
+    // Student Summaries opens on class cards: no on-screen table until a class is opened.
+    await expect(page.locator('table:not(.print-only table)')).toHaveCount(0);
     const studentTable = page.locator('table:not(.print-only table)');
+
+    // Class filtering through the drill-down: only that class's students appear.
+    await openClassCard(page, 'CLINIC');
+    await expect(studentTable.getByRole('row')).toHaveCount(2);
     const alexSummaryRow = studentTable.getByRole('row').filter({ hasText: '2023-0101' });
     await expect(alexSummaryRow.getByRole('cell').nth(0)).toHaveText('2023-0101');
     await expect(alexSummaryRow.getByRole('cell').nth(2)).toHaveText('CLINIC, "4A" Special');
     await expect(alexSummaryRow.getByRole('cell').nth(4)).toHaveText('2.25');
     await expect(alexSummaryRow.getByRole('cell').nth(5)).toContainText('warning');
+    await expect(studentTable).toContainText('Alex Example');
+    await expect(studentTable).not.toContainText('Missing Class Name');
+    await page.getByRole('button', { name: /Back/ }).click();
+
+    await openClassCard(page, 'Class 22');
+    await expect(studentTable.getByRole('row')).toHaveCount(2);
+    await expect(studentTable).not.toContainText('Alex Example');
     const missingNameSummaryRow = studentTable.getByRole('row').filter({ hasText: '2023-0102' });
     await expect(missingNameSummaryRow.getByRole('cell').nth(2)).toHaveText('—');
     await expect(missingNameSummaryRow.getByRole('cell').nth(4)).toHaveText('—');
+    await page.getByRole('button', { name: /Back/ }).click();
 
-    const classFilter = page.locator('select').first();
-    await expect(classFilter.locator('option[value="21"]')).toContainText('CLINIC, "4A"');
-    await classFilter.selectOption('21');
+    // Students without a class are listed under the Unassigned card.
+    await openClassCard(page, 'Unassigned');
     await expect(studentTable.getByRole('row')).toHaveCount(2);
-    await expect(studentTable).toContainText('Alex Example');
-    await expect(studentTable).not.toContainText('Missing Class Name');
-    await classFilter.selectOption('all');
+    await expect(studentTable.getByRole('row').filter({ hasText: '2023-0109' })).toContainText('No Class Student');
+    await page.getByRole('button', { name: /Back/ }).click();
 
     await page.getByRole('button', { name: 'Retention Reports' }).click();
+    await openClassCard(page, 'CLINIC');
     const retentionTable = page.locator('table:not(.print-only table)');
     const alexRetentionRow = retentionTable.getByRole('row').filter({ hasText: 'Alex Example' });
     await expect(alexRetentionRow.getByRole('cell').nth(1)).toHaveText('CLINIC, "4A" Special');
@@ -218,28 +237,33 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(alexRetentionRow.getByRole('cell').nth(3)).toContainText('warning');
     await expect(alexRetentionRow.getByRole('cell').nth(4)).toHaveText('18h');
     await expect(alexRetentionRow.getByRole('cell').nth(5)).toContainText('1 Pending');
+    await page.getByRole('button', { name: /Back/ }).click();
+    await openClassCard(page, 'Class 22');
     const missingNameRetentionRow = retentionTable.getByRole('row').filter({ hasText: 'Missing Class Name' });
     await expect(missingNameRetentionRow.getByRole('cell').nth(1)).toHaveText('—');
     await expect(missingNameRetentionRow.getByRole('cell').nth(2)).toHaveText('—');
     await expect(missingNameRetentionRow.getByRole('cell').nth(3)).toContainText('active');
 
     await page.getByRole('button', { name: 'Attendance Reports' }).click();
+    await openClassCard(page, 'CLINIC');
     const attendanceTable = page.locator('table:not(.print-only table)');
     const historicalAttendanceRow = attendanceTable.getByRole('row').filter({ hasText: 'CLIN401-HISTORY' });
     await expect(historicalAttendanceRow.getByRole('cell').nth(0)).toHaveText('2026-09-22');
-    await expect(historicalAttendanceRow.getByRole('cell').nth(1)).toHaveText('Alex Example');
-    await expect(historicalAttendanceRow.getByRole('cell').nth(2)).toHaveText('CLINIC-4A at attendance');
-    await expect(historicalAttendanceRow.getByRole('cell').nth(2)).not.toContainText('CLINIC, "4A"');
-    await expect(historicalAttendanceRow.getByRole('cell').nth(4)).toContainText('present');
+    await expect(historicalAttendanceRow.getByRole('cell').nth(2)).toHaveText('Alex Example');
+    await expect(historicalAttendanceRow.getByRole('cell').nth(3)).toHaveText('CLINIC-4A at attendance');
+    await expect(historicalAttendanceRow.getByRole('cell').nth(3)).not.toContainText('CLINIC, "4A"');
+    await expect(historicalAttendanceRow.getByRole('cell').nth(5)).toContainText('present');
+    await page.getByRole('button', { name: /Back/ }).click();
+    await openClassCard(page, 'Class 22');
     const missingNameAttendanceRow = attendanceTable.getByRole('row').filter({ hasText: 'CLIN402-HISTORY' });
-    await expect(missingNameAttendanceRow.getByRole('cell').nth(2)).toHaveText('—');
-    await expect(missingNameAttendanceRow.getByRole('cell').nth(4)).toContainText('absent');
+    await expect(missingNameAttendanceRow.getByRole('cell').nth(3)).toHaveText('Class 22');
+    await expect(missingNameAttendanceRow.getByRole('cell').nth(5)).toContainText('absent');
   });
 
   test('Dean Student Summary and Retention CSVs escape readable class names and preserve report values', async ({ page }) => {
     await mockDeanReportSummary(page, [...deanReportStudents, ...deanReportFormulaStudents]);
     await page.goto('/admin/reports');
-    await expect(page.locator('table:not(.print-only table)').getByRole('row').filter({ hasText: '2023-0101' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Class 22' })).toBeVisible();
     await page.evaluate(() => {
       (window as any).__deanReportCsvBlobs = [];
       const createObjectURL = URL.createObjectURL.bind(URL);
@@ -267,7 +291,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Retention Reports' }).click();
     await page.getByRole('button', { name: 'Export CSV' }).click();
     const retentionCsv = await captureDeanReportCsv(page);
-    expect(retentionCsv.replace(/^\uFEFF/, '')).toMatch(/^Student Number,Student Name,Class,GWA,/);
+    expect(retentionCsv.replace(/^\uFEFF/, '')).toMatch(/^Student Number,Student Name,Class,Grade,/);
     expect(retentionCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","2.25","warning","1"');
     expect(retentionCsv).toContain('"2023-0102","Missing Class Name","—","N/A","active","0"');
     for (const classField of escapedFormulaClassFields) expect(retentionCsv).toContain(classField);
@@ -325,23 +349,36 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     }));
     await mockDeanReportSummary(page, [...many, ...deanReportStudents]);
     await page.goto('/admin/reports');
-    await expect(page.locator('table:not(.print-only table)').getByRole('row')).toHaveCount(11);
+    const screenTable = page.locator('table:not(.print-only table)');
+    await expect(screenTable).toHaveCount(0);
 
     const sheet = page.locator('.print-only');
     await expect(sheet.locator('th', { hasText: 'Student No.' })).toBeAttached();
     await expect(sheet.locator('tbody tr')).toHaveCount(16);
     await expect(sheet).toContainText('Bulk Student 13');
 
-    await page.getByRole('button', { name: 'Academic Reports' }).click();
-    const row = sheet.locator('tbody tr').first();
+    // Opening a class: first page of its 15 students (10 + header) on screen, the sheet lists only that class.
+    await openClassCard(page, 'CLINIC-4A');
+    await expect(screenTable.getByRole('row')).toHaveCount(11);
     await expect(sheet.locator('tbody tr')).toHaveCount(15);
+    await expect(sheet).not.toContainText('2023-0102');
+    await page.getByRole('button', { name: /Back/ }).click();
+
+    // The former Academic Reports tab no longer exists; Retention lists every student on the sheet.
+    await page.getByRole('button', { name: 'Retention Reports' }).click();
+    const row = sheet.locator('tbody tr').first();
+    await expect(sheet.locator('tbody tr')).toHaveCount(16);
     await expect(row.locator('td').nth(2)).toHaveText('CLINIC-4A');
-    await expect(page.locator('table:not(.print-only table)').getByRole('row').nth(1).getByRole('cell').nth(1)).toHaveText('CLINIC-4A');
+    await openClassCard(page, 'CLINIC-4A');
+    await expect(screenTable.getByRole('row').nth(1).getByRole('cell').nth(1)).toHaveText('CLINIC-4A');
+    await page.getByRole('button', { name: /Back/ }).click();
 
     await page.getByRole('button', { name: 'Attendance Reports' }).click();
     await expect(sheet).toContainText('Attendance by Class');
     await expect(sheet.locator('tbody tr').last()).toContainText('2023-0102');
 
+    await page.getByRole('button', { name: 'Student Summaries' }).click();
+    await openClassCard(page, 'CLINIC-4A');
     // In print only the sheet shows: the on-screen report tables must be hidden.
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('table:not(.print-only table)').first()).toBeHidden();

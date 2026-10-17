@@ -202,7 +202,7 @@ export const DeanReports: React.FC = () => {
   const filtered = useMemo(() => {
     return students.filter((s: any) => {
       const targetClass = selectedClassId ? selectedClassId : classFilter;
-      const matchClass = targetClass === 'all' || s.classId === targetClass;
+      const matchClass = targetClass === 'all' || (s.classId || 'unassigned') === targetClass;
       const matchStatus = statusFilter === 'all' || s.status === statusFilter;
       const matchSearch = !search
         || s.name.toLowerCase().includes(search.toLowerCase())
