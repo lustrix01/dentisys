@@ -146,6 +146,7 @@ done
         if (-not (Get-Listener $localPort)) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue; throw 'Tunnel did not open within 15 seconds.' }
         Write-Host "Tunnel open (PID $($proc.Id)): http://localhost:$localPort/"
         Show-AppCheck $localPort
+        exit 0
     }
     'tunnel-stop' {
         $listener = Get-Listener $localPort
