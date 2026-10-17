@@ -326,7 +326,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
           statusCounts: { active: 9, remedial: 1 },
           classAttendance: [{ name: 'CLINIC-4A', rate: 92 }],
           recentAuditEvents: [
-            { id: '1', occurredAt: '2026-09-30T01:00:00Z', actorName: 'Dr. Roberto Santos', actorEmail: 'faculty@bicol-u.edu.ph', actorRole: 'faculty', module: 'grading', action: 'grades_recomputed', description: 'Recomputed grades: 30 computed, 0 not computed.', status: 'Success' },
+            { id: 'e:1', occurredAt: '2026-09-30T09:00:00+08:00', who: { name: 'Dr. Roberto Santos', email: 'faculty@bicol-u.edu.ph', role: 'faculty', roleLabel: 'Faculty' }, whoText: null, what: 'Recomputed grades', area: 'Grading', record: 'CLIN401 · CLINIC-4A', change: '30 computed', status: 'Success', isSignIn: false, batch: null, details: { fromWhere: { ip: null, device: null }, reason: null, changes: [] } },
           ],
         }),
       });
@@ -337,8 +337,10 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.getByRole('region', { name: 'Attendance by class' })).toBeVisible();
     const events = page.getByRole('region', { name: 'Latest audit events' });
     await expect(events).toContainText('Dr. Roberto Santos');
-    await expect(events).toContainText('faculty@bicol-u.edu.ph');
-    await expect(events).toContainText('Recomputed grades: 30 computed');
+    await expect(events).toContainText('Faculty');
+    await expect(events).toContainText('Recomputed grades');
+    await expect(events).toContainText('CLIN401 · CLINIC-4A');
+    await expect(events).toContainText('30 computed');
   });
 
   test('Dean report print sheet lists every filtered row and uses student numbers and class names', async ({ page }) => {
@@ -384,25 +386,26 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await expect(page.locator('table:not(.print-only table)').first()).toBeHidden();
   });
 
-  test('Activity log print sheet has the seven columns and a row per loaded log', async ({ page }) => {
+  test('Activity log print sheet has the six columns and a row per member of a batch', async ({ page }) => {
+    const base = { area: 'Sign-in & security', isSignIn: false, batch: null, details: { fromWhere: { ip: null, device: null }, reason: null, changes: [] } };
     await page.route('**/api/admin/audit-logs*', route => route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify({
-        status: 'ok', total: 2, page: 1, pageSize: 50, modules: ['auth'], statusCounts: { Success: 1, Warning: 0, Failed: 1 },
-        logs: [
-          { id: 'a', timestamp: '2026-09-17T10:00:00Z', userName: 'x@bicol-u.edu.ph', userDisplayName: 'Ex User', userEmail: 'x@bicol-u.edu.ph', userRole: 'faculty', action: 'login_failed', module: 'auth', description: 'Bad password.', status: 'Failed' },
-          { id: 'b', timestamp: '2026-09-17T09:00:00Z', userName: 'y@bicol-u.edu.ph', userRole: 'admin', action: 'login', module: 'auth', description: '', status: 'Success' },
+        status: 'ok', total: 2, page: 1, pageSize: 50, areas: ['Sign-in & security', 'People & accounts'],
+        attention: { failedSignIns: 1, securityAlerts: 0, mfaTurnedOff: 0 },
+        entries: [
+          { ...base, id: 'e:1', occurredAt: '2026-09-17T10:00:00+08:00', who: null, whoText: 'Unknown account (typed: x@bicol-u.edu.ph)', what: 'Sign-in failed', record: '—', change: '—', status: 'Failed' },
+          { ...base, id: 'b:2', occurredAt: '2026-09-17T09:00:00+08:00', who: { name: 'Dean Admin', email: 'd@bicol-u.edu.ph', role: 'admin', roleLabel: 'Dean' }, whoText: null, what: 'Imported students', area: 'People & accounts', record: 'CLINIC-4A', change: '2 added', status: 'Success', batch: { count: 2, members: [{ record: 'Ana Cruz', change: 'added' }, { record: 'Ben Lim', change: 'added' }] } },
         ],
       }),
     }));
     await page.goto('/admin/audit-trail');
     const sheet = page.locator('.print-only');
-    await expect(sheet.locator('tbody tr')).toHaveCount(2);
-    await expect(sheet.locator('thead th')).toHaveText(['Timestamp', 'User', 'Role', 'Action', 'Module', 'Status', 'Details']);
-    await expect(sheet.locator('tbody tr').first()).toContainText('Ex User');
+    await expect(sheet.locator('tbody tr')).toHaveCount(3);
+    await expect(sheet.locator('thead th')).toHaveText(['When', 'Who', 'What', 'Record', 'Change', 'Status']);
+    await expect(sheet.locator('tbody tr').first()).toContainText('Unknown account');
     await expect(sheet.locator('tbody tr').first().locator('td.bad')).toHaveText('Failed');
-    await expect(sheet.locator('tbody tr').nth(1).locator('td').last()).toHaveText('—');
-    await expect(sheet).toContainText('2 shown of 2');
+    await expect(sheet.locator('tbody tr').nth(2)).toContainText('Ben Lim');
 
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('table:not(.print-only table)').first()).toBeHidden();

@@ -169,7 +169,6 @@ function handle_google_login(): void
         }
 
         $challenge = google_issue_link_challenge($config, $matching, $claims['sub']);
-        google_auth_audit($pdo, $config, $context, 'google_link_required', 'Success', (int) $matching['user_id'], 'Google identity requires explicit account linking.');
         auth_controller_emit(auth_build_no_store_json_response([
             'type' => 'account_link_required',
             'account_link_required' => true,

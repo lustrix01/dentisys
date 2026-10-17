@@ -179,7 +179,8 @@ function account_identity_change_own_name(PDO $pdo, array $config, array $authCt
         update_account_identity($pdo, $userId, $name, null, $parts);
         audit_record_action(
             $pdo, $config, $authCtx, 'account', 'profile_updated', 'user_account', (string) $userId,
-            'Updated own profile name.', ['after' => ['name' => $name]]
+            "Changed own name from {$currentName} to {$name}.",
+            ['before' => ['name' => $currentName], 'after' => ['name' => $name]]
         );
         $pdo->commit();
 

@@ -21,6 +21,7 @@ require_once __DIR__ . '/mfa.php';
 require_once __DIR__ . '/account_identity.php';
 require_once __DIR__ . '/ratelimit.php';
 require_once __DIR__ . '/audit.php';
+require_once __DIR__ . '/audit_catalogue.php';
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/email_template.php';
 require_once __DIR__ . '/auth.php';

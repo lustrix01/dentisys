@@ -140,6 +140,10 @@ function handle_mfa_settings_recovery_codes(): void
             foreach ($recovery['hashes'] as $hash) {
                 $insert->execute([$authCtx['user_id'], $hash, $nowSql]);
             }
+            audit_record_action(
+                $pdo, $config, $authCtx, 'mfa', 'mfa_recovery_codes_regenerated', 'user_account', (string) $authCtx['user_id'],
+                'Regenerated recovery codes.'
+            );
             $pdo->commit();
         } catch (\Throwable $e) {
             if ($pdo->inTransaction()) {

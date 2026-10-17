@@ -25,6 +25,10 @@ try {
     # Windows PowerShell treats native stderr warnings as errors under 'Stop'.
     $ErrorActionPreference = 'Continue'
     & npx playwright test -c playwright.live.config.ts $Spec
-    exit $LASTEXITCODE
+    $liveExit = $LASTEXITCODE
+    # Read-only audit chain check inside the demo web container (first run records the baseline).
+    & (Join-Path $PSScriptRoot 'demo-vps.ps1') run 'sudo -n docker exec dentisys-web-1 php /var/www/html/backend/bin/audit-verify-chain.php'
+    if ($LASTEXITCODE -ne 0) { Write-Host 'Audit chain check FAILED on the demo.'; exit 1 }
+    exit $liveExit
 }
 finally { Pop-Location }

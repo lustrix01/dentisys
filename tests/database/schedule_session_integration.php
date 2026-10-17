@@ -168,12 +168,13 @@ expect_same('faculty', $sessionEditAuditRow['actor_role'] ?? null, 'Scheduled ed
 expect_same((int) $pdo->query("SELECT user_id FROM user_accounts WHERE login_email = 'faculty@bicol-u.edu.ph'")->fetchColumn(), (int) ($sessionEditAuditRow['actor_user_id'] ?? 0), 'Scheduled edit audit records the acting user ID');
 $sessionEditBefore = json_decode($sessionEditAuditRow['before_state_json'], true);
 $sessionEditAfter = json_decode($sessionEditAuditRow['after_state_json'], true);
-foreach (['session_date' => $queueDate, 'opening_time' => '08:00:00', 'present_cutoff_time' => '09:00:00', 'late_cutoff_time' => '10:00:00', 'class_end_time' => '11:00:00', 'room' => null, 'biometric_required' => false, 'geofence_enabled' => false, 'geofence_latitude' => null, 'geofence_longitude' => null, 'geofence_radius_meters' => null, 'status' => 'scheduled'] as $field => $value) {
+foreach (['session_date' => $queueDate, 'opening_time' => '08:00:00', 'present_cutoff_time' => '09:00:00', 'late_cutoff_time' => '10:00:00', 'class_end_time' => '11:00:00', 'room' => null, 'biometric_required' => false, 'geofence_enabled' => false, 'geofence_latitude' => null, 'geofence_longitude' => null, 'geofence_radius_meters' => null] as $field => $value) {
     expect_true(array_key_exists($field, $sessionEditBefore) && $sessionEditBefore[$field] === $value, 'Edit audit preserves previous ' . $field);
 }
-foreach (['session_date' => $sessionEditPayload['sessionDate'], 'opening_time' => '08:10:00', 'present_cutoff_time' => '09:10:00', 'late_cutoff_time' => '10:10:00', 'class_end_time' => '10:50:00', 'room' => $sessionEditPayload['room'], 'biometric_required' => true, 'geofence_enabled' => true, 'geofence_latitude' => '13.139100', 'geofence_longitude' => '123.743800', 'geofence_radius_meters' => '125.00', 'status' => 'scheduled'] as $field => $value) {
+foreach (['session_date' => $sessionEditPayload['sessionDate'], 'opening_time' => '08:10:00', 'present_cutoff_time' => '09:10:00', 'late_cutoff_time' => '10:10:00', 'class_end_time' => '10:50:00', 'room' => $sessionEditPayload['room'], 'biometric_required' => true, 'geofence_enabled' => true, 'geofence_latitude' => '13.139100', 'geofence_longitude' => '123.743800', 'geofence_radius_meters' => '125.00'] as $field => $value) {
     expect_same($value, $sessionEditAfter[$field] ?? null, 'Edit audit records new ' . $field);
 }
+expect_true(!array_key_exists('status', $sessionEditBefore) && !array_key_exists('status', $sessionEditAfter), 'Edit audit records only changed fields (status unchanged)');
 [$unchangedEditStatus] = integration_http_json('/api/faculty/attendance/session/update', $seedFacultyAccessToken, $sessionEditPayload);
 expect_same(200, $unchangedEditStatus, 'An unchanged scheduled edit does not conflict with itself');
 $keepGeoPayload = $sessionEditPayload;

@@ -286,6 +286,7 @@ $expectedMigrations = [
     '046_academic_terms.sql',
     '047_email_outbox_action.sql',
     '048_computed_retention_only.sql',
+    '049_audit_chain_baseline.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -760,9 +761,9 @@ expect_same((string) $secretarySecondClassId, (string) ($secretarySelectedKpiBod
 [$secretaryActivityStatus, $secretaryActivityBody] = integration_http_get_json('/api/secretary/activity', $secretaryAccessToken);
 expect_same(200, $secretaryActivityStatus, 'Secretary activity read returns HTTP 200');
 $secretarySessionActivity = array_values(array_filter(
-    $secretaryActivityBody['activity'] ?? [],
-    static fn(array $event): bool => ($event['action'] ?? $event['actionCode'] ?? null) === 'attendance_session_started'
-        && str_contains((string) ($event['description'] ?? ''), $sessionCode)
+    $secretaryActivityBody['entries'] ?? [],
+    static fn(array $event): bool => ($event['what'] ?? null) === 'Attendance session created'
+        && str_contains((string) ($event['record'] ?? ''), $sessionCode)
 ));
 expect_true(count($secretarySessionActivity) >= 1, 'Secretary activity is scoped to the authenticated Secretary and includes its session event');
 [$facultyActivityDeniedStatus] = integration_http_get_json('/api/faculty/activity', $secretaryAccessToken);
@@ -774,21 +775,21 @@ expect_same(403, $facultyActivityDeniedStatus, 'Secretary cannot read the Facult
 expect_same(200, $facultyActivityLoginStatus, 'Faculty activity integration login returns HTTP 200');
 $facultyActivityAccessToken = (string) ($facultyActivityLoginBody['access_token'] ?? '');
 expect_true($facultyActivityAccessToken !== '', 'Faculty activity integration login returns an access token');
-[$facultyActivityStatus, $facultyActivityBody] = integration_http_get_json('/api/faculty/activity?limit=100', $facultyActivityAccessToken);
+[$facultyActivityStatus, $facultyActivityBody] = integration_http_get_json('/api/faculty/activity', $facultyActivityAccessToken);
 expect_same(200, $facultyActivityStatus, 'Faculty activity read returns HTTP 200');
 $facultyScopedSessionActivity = array_values(array_filter(
-    $facultyActivityBody['activity'] ?? [],
-    static fn(array $event): bool => ($event['action'] ?? $event['actionCode'] ?? null) === 'attendance_session_started'
-        && str_contains((string) ($event['description'] ?? ''), $sessionCode)
+    $facultyActivityBody['entries'] ?? [],
+    static fn(array $event): bool => ($event['what'] ?? null) === 'Attendance session created'
+        && str_contains((string) ($event['record'] ?? ''), $sessionCode)
 ));
 expect_same(0, count($facultyScopedSessionActivity), 'My Activity leaves out the Secretary\'s session events in the Faculty member\'s class');
-expect_same([], array_values(array_filter($facultyActivityBody['activity'] ?? [], static fn(array $event): bool => ($event['userRole'] ?? '') !== 'faculty')), 'My Activity contains only the Faculty member\'s own actions');
-[$facultyActivityRefreshStatus, $facultyActivityRefreshBody] = integration_http_get_json('/api/faculty/activity?limit=100', $facultyActivityAccessToken);
+expect_same([], array_values(array_filter($facultyActivityBody['entries'] ?? [], static fn(array $event): bool => ($event['who']['role'] ?? '') !== 'faculty')), 'My Activity contains only the Faculty member\'s own actions');
+[$facultyActivityRefreshStatus, $facultyActivityRefreshBody] = integration_http_get_json('/api/faculty/activity', $facultyActivityAccessToken);
 expect_same(200, $facultyActivityRefreshStatus, 'Faculty activity refresh remains available');
-if (($facultyActivityBody['activity'] ?? []) !== []) {
+if (($facultyActivityBody['entries'] ?? []) !== []) {
     expect_same(
-        $facultyActivityBody['activity'][0]['id'] ?? null,
-        $facultyActivityRefreshBody['activity'][0]['id'] ?? null,
+        $facultyActivityBody['entries'][0]['id'] ?? null,
+        $facultyActivityRefreshBody['entries'][0]['id'] ?? null,
         'Faculty activity refresh returns the same authoritative latest event'
     );
 }
@@ -1076,10 +1077,11 @@ $pdo->prepare(
 [$deanDashboardStatus, $deanDashboardBody] = integration_http_get_json('/api/admin/dashboard/kpis', $adminAccessToken);
 expect_same(200, $deanDashboardStatus, 'Dean Dashboard data loads');
 $deanRecentEvents = $deanDashboardBody['recentAuditEvents'] ?? null;
-expect_true(is_array($deanRecentEvents) && count($deanRecentEvents) >= 1 && count($deanRecentEvents) <= 5, 'Dean Dashboard returns up to the latest 5 audit events');
-$latestAuditEventId = (string) $pdo->query("SELECT event_id FROM audit_events WHERE action_code <> 'refresh_rotation' ORDER BY occurred_at DESC, event_id DESC LIMIT 1")->fetchColumn();
-expect_same($latestAuditEventId, (string) ($deanRecentEvents[0]['id'] ?? ''), 'The newest audit event is listed first');
-expect_true(array_key_exists('actorName', $deanRecentEvents[0] ?? []) && array_key_exists('actorEmail', $deanRecentEvents[0] ?? []), 'Each event carries the recorded name and e-mail');
+expect_true(is_array($deanRecentEvents) && count($deanRecentEvents) >= 1 && count($deanRecentEvents) <= 20, 'Dean Dashboard returns up to the newest 20 overview entries');
+[$deanOverviewStatus, $deanOverviewBody] = integration_http_get_json('/api/admin/audit-logs', $adminAccessToken);
+expect_same(200, $deanOverviewStatus, 'Dean Audit Trail overview loads');
+expect_same(array_column(array_slice($deanOverviewBody['entries'] ?? [], 0, count($deanRecentEvents)), 'id'), array_column($deanRecentEvents, 'id'), 'The Dashboard lists the newest Audit Trail overview entries in the same order');
+expect_true(array_key_exists('who', $deanRecentEvents[0] ?? []) && array_key_exists('occurredAt', $deanRecentEvents[0] ?? []), 'Each Dashboard entry carries the recorded name and Manila time');
 [$adminSettingsGetStatus, $adminSettingsGetBody] = integration_http_get_json('/api/admin/settings', $adminAccessToken);
 expect_same(200, $adminSettingsGetStatus, 'Existing Admin transmutation defaults can be read through the API');
 $adminSettingsBefore = $adminSettingsGetBody['settings'] ?? [];
@@ -4559,7 +4561,7 @@ $auditResult = audit_finish_operation($pdo, $auditContext, [
     'user_agent' => 'PostgreSQL Integration Test',
     'device_id' => 'integration-device',
     'device_name' => 'integration',
-], str_repeat('M', 32), ['test' => 'before'], ['test' => 'after']);
+], base64_decode(getenv('AUDIT_MAC_KEY_B64') ?: 'ZGVudGlzeXMtZGV2LWF1ZGl0LW1hYy1rZXktMzJiaXQ=', true), ['test' => 'before'], ['test' => 'after']);
 $pdo->commit();
 expect_true($auditResult['sequence_number'] > 0, 'Audit event writes through PostgreSQL');
 
@@ -6864,28 +6866,28 @@ expect_same(1, (int) $mfaRevokeAuditStmt->fetchColumn(), 'Disabling authenticato
 
 // Dean audit trail: server-side filters and paging, with target, reason and
 // the display name recorded at the time.
-[$auditTrailStatus, $auditTrailBody] = integration_http_get_json('/api/admin/audit-logs?module=mfa&query=' . rawurlencode('mfa-revoke-') . '&pageSize=10', $adminAccessToken);
+[$auditTrailStatus, $auditTrailBody] = integration_http_get_json('/api/admin/audit-logs?area=' . rawurlencode('Sign-in & security') . '&q=' . rawurlencode('mfa-revoke-'), $adminAccessToken);
 expect_same(200, $auditTrailStatus, 'Dean audit trail loads');
 $auditTrailRevoke = null;
-foreach ($auditTrailBody['logs'] ?? [] as $auditTrailRow) {
-    if (($auditTrailRow['action'] ?? null) === 'mfa_revoked' && ($auditTrailRow['targetId'] ?? null) === (string) $revokeMfaFixture['user_id']) {
+foreach ($auditTrailBody['entries'] ?? [] as $auditTrailRow) {
+    if (($auditTrailRow['details']['technical']['actionCode'] ?? null) === 'mfa_revoked' && str_starts_with((string) ($auditTrailRow['who']['email'] ?? ''), 'mfa-revoke-')) {
         $auditTrailRevoke = $auditTrailRow;
     }
 }
 expect_true(is_array($auditTrailRevoke), 'Dean audit trail returns the MFA revoke event');
-expect_same('user_account', $auditTrailRevoke['targetType'] ?? null, 'Audit trail rows include the target type');
-expect_same('Revoked by account owner', $auditTrailRevoke['reason'] ?? null, 'Audit trail rows include the reason');
-expect_same('Google MFA Integration User', $auditTrailRevoke['userDisplayName'] ?? null, 'Audit trail rows include the display name recorded at the time');
-expect_true(str_starts_with((string) ($auditTrailRevoke['userEmail'] ?? ''), 'mfa-revoke-'), 'Audit trail rows include the actor email');
-expect_true(in_array('mfa', $auditTrailBody['modules'] ?? [], true) && in_array('auth', $auditTrailBody['modules'] ?? [], true), 'Audit trail module list is not narrowed by the module filter');
-[$auditPageOneStatus, $auditPageOne] = integration_http_get_json('/api/admin/audit-logs?pageSize=2&page=1', $adminAccessToken);
-[$auditPageTwoStatus, $auditPageTwo] = integration_http_get_json('/api/admin/audit-logs?pageSize=2&page=2', $adminAccessToken);
+expect_same('2FA turned off', $auditTrailRevoke['what'] ?? null, 'Audit trail rows carry the readable label');
+expect_same('Sign-in & security', $auditTrailRevoke['area'] ?? null, 'Audit trail rows carry their area');
+expect_same('Revoked by account owner', $auditTrailRevoke['details']['reason'] ?? null, 'Audit trail rows include the reason');
+expect_same('Google MFA Integration User', $auditTrailRevoke['who']['name'] ?? null, 'Audit trail rows include the display name recorded at the time');
+expect_true(preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+08:00$/', (string) ($auditTrailRevoke['occurredAt'] ?? '')) === 1, 'Audit trail times are Asia/Manila ISO-8601');
+expect_true(in_array('Sign-in & security', $auditTrailBody['areas'] ?? [], true) && in_array('People & accounts', $auditTrailBody['areas'] ?? [], true), 'Audit trail area list is not narrowed by the area filter');
+expect_true(($auditTrailBody['attention']['mfaTurnedOff'] ?? 0) >= 1, 'Audit trail attention counts include the 2FA turned off event');
+[$auditPageOneStatus, $auditPageOne] = integration_http_get_json('/api/admin/audit-logs?page=1', $adminAccessToken);
+[$auditPageTwoStatus, $auditPageTwo] = integration_http_get_json('/api/admin/audit-logs?page=2', $adminAccessToken);
 expect_same([200, 200], [$auditPageOneStatus, $auditPageTwoStatus], 'Audit trail pages load');
-expect_same(2, count($auditPageOne['logs'] ?? []), 'Audit trail honours the page size');
-$auditTrailDbTotal = (int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE action_code <> 'refresh_rotation'")->fetchColumn();
-expect_same($auditTrailDbTotal, (int) ($auditPageOne['total'] ?? -1), 'Audit trail total counts every event, not a capped page');
-expect_true(($auditPageOne['logs'][0]['id'] ?? null) !== ($auditPageTwo['logs'][0]['id'] ?? null), 'Audit trail page 2 returns different rows');
-[$auditBadDateStatus] = integration_http_get_json('/api/admin/audit-logs?date=yesterday', $adminAccessToken);
+expect_same(min(50, (int) ($auditPageOne['total'] ?? 0)), count($auditPageOne['entries'] ?? []), 'Audit trail pages hold 50 entries');
+expect_true(($auditPageOne['entries'][0]['id'] ?? null) !== ($auditPageTwo['entries'][0]['id'] ?? ''), 'Audit trail page 2 returns different rows');
+[$auditBadDateStatus] = integration_http_get_json('/api/admin/audit-logs?from=yesterday', $adminAccessToken);
 expect_same(422, $auditBadDateStatus, 'Audit trail rejects a malformed date');
 
 // BIO-002 / BIO-005: the Dean can revoke an enrollment, an inactive Student's
@@ -6996,7 +6998,7 @@ expect_same(200, $clearScoreStatus, 'Faculty can clear a stored score');
 expect_same(1, $clearScoreBody['clearedCount'] ?? null, 'Clearing reports the cleared score');
 expect_same(null, $batchScore($batchAssessmentA), 'A cleared score is deleted');
 $clearAuditStmt = $pdo->prepare(
-    "SELECT before_state_json FROM audit_events
+    "SELECT after_state_json FROM audit_events
       WHERE action_code = 'assessment_scores_saved' AND target_id = ? ORDER BY sequence_number DESC LIMIT 1"
 );
 $clearAuditStmt->execute([(string) $batchAssessmentA]);
@@ -7265,5 +7267,7 @@ $endedAuditStmt->execute();
 expect_true((int) $endedAuditStmt->fetchColumn() >= 4, 'Appointments and their end are audited');
 
 require __DIR__ . '/grouped_grading_integration.php';
+require __DIR__ . '/audit_read_integration.php';
+require __DIR__ . '/audit_chain_integration.php';
 
 echo "ALL POSTGRESQL INTEGRATION TESTS PASSED.\n";

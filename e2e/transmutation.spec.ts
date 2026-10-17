@@ -131,7 +131,7 @@ test.describe('Assessment transmutation UI coverage', () => {
         remarks: score.remarks || '',
         submittedAt: '2026-09-19T08:00:00Z',
       }));
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', savedCount: 1 }) });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', savedCount: 1, results: [{ status: 'computed' }] }) });
     });
     await page.route('**/api/faculty/grades/compute', async (route) => {
       computeRequestCount += 1;
@@ -142,12 +142,13 @@ test.describe('Assessment transmutation UI coverage', () => {
     await page.getByRole('link', { name: 'Grade Computation' }).click();
     await expect(page.getByRole('heading', { name: 'Bea Alonzo' })).toBeVisible();
     await page.waitForLoadState('networkidle');
-    await page.getByLabel('Enable Auto-Save on score input blur').uncheck();
+    await page.getByLabel('Enable Auto-Save').uncheck();
     const scoreInput = page.getByRole('spinbutton').nth(0);
     await scoreInput.fill('25');
     await page.getByRole('button', { name: 'Save Scores Sheet' }).click();
     await expect.poll(() => postedScorePayload).not.toBeNull();
-    await expect.poll(() => computeRequestCount).toBe(1);
+    // The save recomputes grades itself and returns the results; no separate compute call.
+    expect(computeRequestCount).toBe(0);
     expect(persistedScores['assessment-1']).toEqual([{
       id: 'score-24',
       studentId: '24',
@@ -176,13 +177,13 @@ test.describe('Assessment transmutation UI coverage', () => {
     expect(scoreGetAssessmentIds).toContain('assessment-2');
 
     failScoreSave = true;
-    await page.getByLabel('Enable Auto-Save on score input blur').uncheck();
+    await page.getByLabel('Enable Auto-Save').uncheck();
     await reloadedScoreInput.fill('30');
     await page.getByRole('button', { name: 'Save Scores Sheet' }).click();
     await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Scores Saved Successfully!' })).toHaveCount(0);
     await expect(reloadedScoreInput).toHaveValue('30');
-    expect(computeRequestCount).toBe(1);
+    expect(computeRequestCount).toBe(0);
   });
 
   test('admin renders and saves transmutation defaults from API values', async ({ page }) => {

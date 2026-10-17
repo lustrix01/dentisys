@@ -135,7 +135,7 @@ function responseFor(pathname: string, method: string): unknown {
   if (pathname.endsWith('/faculty/students') || pathname.endsWith('/faculty/assessments')) return [];
   if (pathname.endsWith('/faculty/courses')) return { status: 'ok', courses: [] };
   if (pathname.endsWith('/faculty/classes')) return { status: 'ok', classes: [] };
-  if (pathname.endsWith('/faculty/activity')) return { status: 'ok', activity: [] };
+  if (pathname.endsWith('/faculty/activity')) return { status: 'ok', entries: [], total: 0, page: 1, pageSize: 50, areas: [] };
   if (pathname.endsWith('/faculty/attendance-activity')) return { status: 'ok', activity: [] };
   if (pathname.endsWith('/excused-requests')) return { status: 'ok', requests: [] };
   if (pathname === '/api/faculty/grading-config') {

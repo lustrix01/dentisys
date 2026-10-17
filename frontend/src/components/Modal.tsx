@@ -8,6 +8,8 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** Below the sm breakpoint the dialog fills the screen (audit details). */
+  fullScreenOnMobile?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -16,6 +18,7 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   children,
   size = 'md',
+  fullScreenOnMobile = false,
 }) => {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -47,7 +50,7 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center overflow-y-auto ${fullScreenOnMobile ? 'p-0 sm:p-4' : 'p-4'}`}>
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-slate-900/40 dark:bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300"
@@ -56,7 +59,7 @@ export const Modal: React.FC<ModalProps> = ({
 
       {/* Modal Content */}
       <div 
-        className={`relative w-full ${sizeClasses[size]} glass rounded-3xl shadow-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden transform transition-all duration-300 scale-100 max-h-[90vh] flex flex-col`}
+        className={`relative w-full ${sizeClasses[size]} glass shadow-2xl border border-slate-200/60 dark:border-slate-800/60 overflow-hidden transform transition-all duration-300 scale-100 flex flex-col ${fullScreenOnMobile ? 'h-full max-h-full rounded-none sm:h-auto sm:max-h-[90vh] sm:rounded-3xl' : 'max-h-[90vh] rounded-3xl'}`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40">

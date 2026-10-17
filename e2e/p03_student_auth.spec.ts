@@ -712,34 +712,32 @@ test.describe('P03 Student identity and authentication', () => {
     });
     await page.route('**/api/admin/audit-logs*', async route => {
       const role = new URL(route.request().url()).searchParams.get('role');
+      const common = { area: 'Sign-in & security', isSignIn: false, batch: null, details: { fromWhere: { ip: '127.0.0.1', device: 'Browser' }, reason: null, changes: [] } };
       const studentEvent = {
-        id: 'student-event', timestamp: '2026-09-17T10:00:00Z', userName: 'Student account', userRole: 'student',
-        action: 'student_auth_eligibility_denied', module: 'auth', description: 'Student authentication eligibility denied.',
-        status: 'Failed', ipAddress: '127.0.0.1', device: 'Browser',
+        ...common, id: 'e:student', occurredAt: '2026-09-17T10:00:00+08:00',
+        who: { name: 'Student account', email: null, role: 'student', roleLabel: 'Student' }, whoText: null,
+        what: 'Student sign-in denied', record: '—', change: '—', status: 'Failed',
       };
       const facultyEvent = {
-        id: 'faculty-event', timestamp: '2026-09-17T09:00:00Z', userName: 'Faculty account', userRole: 'faculty',
-        action: 'faculty_profile_updated', module: 'profile', description: 'Faculty profile updated.',
-        status: 'Success', ipAddress: '127.0.0.1', device: 'Browser',
+        ...common, id: 'e:faculty', occurredAt: '2026-09-17T09:00:00+08:00', area: 'People & accounts',
+        who: { name: 'Faculty account', email: null, role: 'faculty', roleLabel: 'Faculty' }, whoText: null,
+        what: 'Profile updated', record: 'Faculty account', change: '1 field changed', status: 'Success',
       };
+      const entries = role === 'student' ? [studentEvent] : [studentEvent, facultyEvent];
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify((() => {
-          const logs = role === 'student' ? [studentEvent] : [studentEvent, facultyEvent];
-          return {
-            status: 'ok', logs, total: logs.length, page: 1, pageSize: 50,
-            statusCounts: { Success: logs.filter(log => log.status === 'Success').length, Warning: 0, Failed: logs.filter(log => log.status === 'Failed').length },
-            modules: ['auth', 'profile'],
-          };
-        })()),
+        body: JSON.stringify({
+          status: 'ok', entries, total: entries.length, page: 1, pageSize: 50, areas: ['Sign-in & security', 'People & accounts'],
+          attention: { failedSignIns: 1, securityAlerts: 0, mfaTurnedOff: 0 },
+        }),
       });
     });
     await page.goto('/admin/audit-trail');
-    await expect(page.getByText('student_auth_eligibility_denied').first()).toBeVisible();
-    await expect(page.getByText('faculty_profile_updated').first()).toBeVisible();
-    await page.locator('select').first().selectOption('student');
-    await expect(page.getByText('student_auth_eligibility_denied').first()).toBeVisible();
-    await expect(page.getByText('faculty_profile_updated').first()).toHaveCount(0);
+    await expect(page.getByText('Student sign-in denied').first()).toBeVisible();
+    await expect(page.getByText('Profile updated').first()).toBeVisible();
+    await page.getByLabel('Role', { exact: true }).selectOption('student');
+    await expect(page.getByText('Student sign-in denied').first()).toBeVisible();
+    await expect(page.getByText('Profile updated')).toHaveCount(0);
   });
 });

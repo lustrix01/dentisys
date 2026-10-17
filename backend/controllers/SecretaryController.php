@@ -855,30 +855,10 @@ function handle_faculty_secretary_remove(): void
 
 function secretary_activity_rows(PDO $pdo, int $userId, int $limit = 20): array
 {
+    // Same Entry objects as My Activity: own rows, no sign-ins, newest first.
     $limit = max(1, min(100, $limit));
-    $stmt = $pdo->prepare(
-        'SELECT event_id AS id, occurred_at AS timestamp, actor_username AS user_name,
-                actor_role AS user_role, action_code AS action, module_code AS module,
-                description, event_status AS status, ip_address, user_agent
-           FROM audit_events
-          WHERE actor_user_id = ?
-            AND action_code <> \'refresh_rotation\'
-          ORDER BY occurred_at DESC, event_id DESC
-          LIMIT ' . $limit
-    );
-    $stmt->execute([$userId]);
-    return array_map(static fn(array $row): array => [
-        'id' => (string) $row['id'],
-        'timestamp' => attendance_session_timestamp($row['timestamp']),
-        'userName' => $row['user_name'] ?? null,
-        'userRole' => $row['user_role'] ?? null,
-        'action' => $row['action'] ?? null,
-        'module' => $row['module'] ?? null,
-        'description' => $row['description'] ?? '',
-        'status' => $row['status'] ?? null,
-        'ipAddress' => $row['ip_address'] ?? null,
-        'device' => $row['user_agent'] ?? null,
-    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+    $result = audit_read_entries($pdo, ['user_id' => $userId, 'role' => 'secretary'], audit_read_params([], 'secretary'));
+    return array_slice($result['entries'], 0, $limit);
 }
 
 function handle_secretary_dashboard_kpis(): void
@@ -1051,11 +1031,13 @@ function handle_secretary_activity_get(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
-        $limit = (int) ($_GET['limit'] ?? 50);
-        json_response([
-            'status' => 'ok',
-            'activity' => secretary_activity_rows($pdo, (int) $authCtx['user_id'], $limit),
-        ], 200);
+        json_response(['status' => 'ok'] + audit_read_entries(
+            $pdo,
+            ['user_id' => (int) $authCtx['user_id'], 'role' => 'secretary'],
+            audit_read_params($_GET, 'secretary')
+        ), 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Secretary activity error: ' . sanitize_for_log($e));
         safe_error_response('Unable to read Secretary activity.', 500);
@@ -1417,7 +1399,7 @@ function handle_secretary_attendance_session_start(): void
                 'scope_cs_id' => $csId,
                 'target_type' => 'attendance_session',
                 'target_id' => (string) $sessionId,
-                'description' => "Started attendance session '{$sessionCode}' for class section #{$csId}.",
+                'description' => 'Started attendance session for ' . audit_class_label($pdo, $csId) . " on {$sessionDate}.",
                 'reason' => null,
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],
@@ -1607,7 +1589,7 @@ function handle_secretary_attendance_session_end(): void
                 'scope_cs_id' => (int) $session['cs_id'],
                 'target_type' => 'attendance_session',
                 'target_id' => (string) $sessionId,
-                'description' => "Ended attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.",
+                'description' => 'Ended attendance session for ' . audit_class_label($pdo, (int) $session['cs_id']) . " on {$session['session_date']}.",
                 'reason' => null,
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],
@@ -1727,7 +1709,7 @@ function handle_secretary_attendance_session_revoke(): void
             $update->execute([$nowSql, $authCtx['user_id'], $reason, $nowSql, $sessionId]);
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_revoked', $sessionId, (int) $session['cs_id'],
-                "Revoked attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.", $reason,
+                'Revoked attendance session for ' . audit_class_label($pdo, (int) $session['cs_id']) . " on {$session['session_date']}.", $reason,
                 ['session_id' => $sessionId, 'status' => $session['status']],
                 ['session_id' => $sessionId, 'status' => 'revoked', 'revoked_at' => $nowSql]
             );
@@ -2019,7 +2001,7 @@ function handle_secretary_attendance_override(): void
         try {
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
 
-            $lookupSql = "SELECT r.record_id, r.attendance_session_id, r.status, cs.cs_id
+            $lookupSql = "SELECT r.record_id, r.attendance_session_id, r.status, cs.cs_id, s.student_id
                           FROM attendance_records r
                           JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                           JOIN students s ON s.student_id = e.student_id
@@ -2117,7 +2099,7 @@ function handle_secretary_attendance_override(): void
                     'scope_cs_id' => (int) $session['cs_id'],
                     'target_type' => 'attendance_record',
                     'target_id' => (string) $createdRecordId,
-                    'description' => "Manual attendance recorded for student {$enrollment['student_number']} as '{$status}'. Reason: {$reason}",
+                    'description' => 'Manual attendance recorded for ' . audit_student_label($pdo, (int) $enrollment['student_id']) . " as '{$status}'. Reason: {$reason}",
                     'reason' => $reason,
                     'http_method' => $context['http_method'],
                     'endpoint' => $context['endpoint'],
@@ -2191,7 +2173,7 @@ function handle_secretary_attendance_override(): void
                 'scope_cs_id' => $targetCsId,
                 'target_type' => 'attendance_record',
                 'target_id' => (string) $targetRecordId,
-                'description' => "Manual attendance override applied for student ID {$studentId} to status '{$status}'. Reason: {$reason}",
+                'description' => 'Manual attendance override applied for ' . audit_student_label($pdo, (int) $targetRecord['student_id']) . " to status '{$status}'. Reason: {$reason}",
                 'reason' => $reason,
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],

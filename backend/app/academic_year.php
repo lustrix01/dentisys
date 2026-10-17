@@ -287,8 +287,21 @@ function academic_term_save(PDO $pdo, array $config, array $actor, array $data, 
         $update = $pdo->prepare('UPDATE biometric_profiles SET reference_expires_on = ?, reference_term_id = ?, reference_cs_id = ?, updated_at = CURRENT_TIMESTAMP(6) WHERE profile_id = ?');
         $update->execute([$latest['endDate'] ?? $term['end_date'], $latest !== null ? $latest['termId'] : $id, $latest['cs_id'] ?? $profile['reference_cs_id'], $profile['profile_id']]);
     }
-    audit_record_action($pdo, $config, $actor, 'settings', $old === null ? 'academic_term_created' : 'academic_term_updated', 'academic_term', (string) $id,
-        'Set dates for ' . $term['semester'] . ' ' . $term['school_year'] . '.', ['before' => $old, 'after' => $term + ['id' => $id, 'updatedEnrollments' => count($profiles)]]);
+    $description = 'Set dates for ' . $term['semester'] . ' ' . $term['school_year'] . '.';
+    if ($old === null) {
+        audit_record_action($pdo, $config, $actor, 'settings', 'academic_term_created', 'academic_term', (string) $id,
+            $description, ['after' => $term + ['id' => $id, 'updatedEnrollments' => count($profiles)]]);
+    } else {
+        // R3/R4: no row when the dates did not change; otherwise only the changed dates.
+        $changed = audit_changed_fields(
+            ['start_date' => $old['start_date'], 'end_date' => $old['end_date']],
+            ['start_date' => $term['start_date'], 'end_date' => $term['end_date']]
+        );
+        if ($changed !== null) {
+            audit_record_action($pdo, $config, $actor, 'settings', 'academic_term_updated', 'academic_term', (string) $id,
+                $description, ['before' => $changed[0], 'after' => $changed[1] + ['updatedEnrollments' => count($profiles)]]);
+        }
+    }
     return ['id' => $id, 'updatedEnrollments' => count($profiles), 'confirmationRequired' => false];
 }
 

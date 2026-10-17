@@ -2,6 +2,46 @@
 
 declare(strict_types=1);
 
+/**
+ * Record a wrong sign-in 2FA code in its own short transaction (the main one
+ * rolls back). Best effort like auth_audit_denial(); never stores the code.
+ */
+function mfa_audit_wrong_code(PDO $pdo, array $config, array $locked, array $context, string $kind, string $endpoint): void
+{
+    try {
+        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+        $pdo->beginTransaction();
+        try {
+            $auditCtx = audit_begin_operation($pdo);
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'mfa',
+                'action_code' => 'mfa_verification_failed',
+                'event_status' => 'Failed',
+                'actor_user_id' => (int) $locked['user_id'],
+                'actor_username' => $locked['login_email'],
+                'actor_role' => $locked['role'],
+                'actor_display_name' => $locked['display_name'],
+                'session_id' => null,
+                'target_type' => 'user_account',
+                'target_id' => (string) $locked['user_id'],
+                'description' => 'Wrong ' . $kind . ' during sign-in.',
+                'reason' => 'Wrong ' . $kind,
+                'http_method' => 'POST',
+                'endpoint' => $endpoint,
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey, null, ['code_type' => $kind]);
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+    } catch (\Throwable $e) {
+        error_log(sprintf('Wrong-code audit skipped [%s]: %s', $context['request_id'] ?? '?', $e->getMessage()));
+    }
+}
+
 function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, array $context): array
 {
     $userId = (int) $tokenClaims['sub'];
@@ -29,10 +69,6 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
         if ((int) $locked['token_version'] !== $tokenVersion) {
             throw new ChallengeException('Token version mismatch.');
         }
-
-        // Student eligibility may append denial evidence on an independent
-        // connection; take the audit-chain lock only after those checks.
-        $auditCtx = audit_begin_operation($pdo);
 
         $stmt = $pdo->prepare(
             "SELECT mfa_status FROM security_tokens
@@ -98,26 +134,7 @@ function mfa_runtime_enroll_start(PDO $pdo, array $config, array $tokenClaims, a
         $stmt->execute();
         $credentialId = (int) $stmt->fetchColumn();
 
-        audit_finish_operation($pdo, $auditCtx, [
-            'module_code' => 'mfa',
-            'action_code' => 'mfa_enrollment_started',
-            'event_status' => 'Success',
-            'actor_user_id' => $userId,
-            'actor_username' => $locked['login_email'],
-            'actor_role' => $locked['role'],
-            'actor_display_name' => $locked['display_name'],
-            'session_id' => null,
-            'target_type' => 'security_token',
-            'target_id' => (string) $credentialId,
-            'description' => 'MFA enrollment initiated.',
-            'reason' => null,
-            'http_method' => 'POST',
-            'endpoint' => '/api/auth/mfa/enroll/start',
-            'request_id' => $context['request_id'],
-            'ip_address' => $context['ip_address'],
-            'user_agent' => $context['user_agent'],
-        ], $macKey);
-
+        // Enrollment start is not audited (SEC-005); completion is.
         $pdo->commit();
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) { $pdo->rollBack(); }
@@ -292,6 +309,7 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
 
     challenge_state_attempt($rateStorage, $jti, 'mfa_challenge', 'complete_login');
 
+    $wrongKind = null;
     $pdo->beginTransaction();
     try {
         $locked = auth_lock_user_for_session($pdo, $userId);
@@ -348,6 +366,7 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
         );
 
         if (!$result['valid']) {
+            $wrongKind = 'authenticator code';
             throw new MfaException('Invalid verification code.');
         }
 
@@ -399,6 +418,9 @@ function mfa_runtime_verify(PDO $pdo, array $config, array $tokenClaims, string 
         $pdo->commit();
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        if ($wrongKind !== null) {
+            mfa_audit_wrong_code($pdo, $config, $locked, $context, $wrongKind, '/api/auth/mfa/verify');
+        }
         throw $e;
     }
 
@@ -423,6 +445,7 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
 
     $canonical = mfa_normalize_recovery_code($code);
 
+    $wrongKind = null;
     $pdo->beginTransaction();
     try {
         $locked = auth_lock_user_for_session($pdo, $userId);
@@ -458,6 +481,7 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
         }
 
         if ($matchedRow === null) {
+            $wrongKind = 'recovery code';
             throw new MfaException('Invalid recovery code.');
         }
 
@@ -469,6 +493,7 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
         }
 
         if ($matchCount !== 1) {
+            $wrongKind = 'recovery code';
             throw new MfaException('Invalid recovery code.');
         }
 
@@ -511,6 +536,9 @@ function mfa_runtime_recover(PDO $pdo, array $config, array $tokenClaims, string
         $pdo->commit();
     } catch (\Throwable $e) {
         if ($pdo->inTransaction()) { $pdo->rollBack(); }
+        if ($wrongKind !== null) {
+            mfa_audit_wrong_code($pdo, $config, $locked, $context, $wrongKind, '/api/auth/mfa/recover');
+        }
         throw $e;
     }
 

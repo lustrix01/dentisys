@@ -132,6 +132,9 @@ const calculateCategoryWeightSummary = (rows: PeriodCategoryDraftRow[]): Categor
   };
 };
 
+// Auto-save waits this long without typing (audit contract 5.4).
+const AUTO_SAVE_IDLE_MS = 10_000;
+
 const formatComponentResultCell = (
   component: PeriodComponentEvaluation | undefined,
   periodStatus: 'computed' | 'incomplete' | 'unconfigured' | 'pending'
@@ -1050,6 +1053,11 @@ export const GradeComputation: React.FC = () => {
   const singleSavingRef = useRef(false);
   const singleQueuedRef = useRef<{ manual: boolean } | null>(null);
   const saveSingleRef = useRef<(isManual?: boolean) => Promise<void>>(async () => {});
+  // Auto-save waits for AUTO_SAVE_IDLE_MS without typing; a pending timer means unsent edits.
+  const singleDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matrixDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedAssessmentIdRef = useRef('');
+  selectedAssessmentIdRef.current = selectedAssessmentId;
   const matrixSavingRef = useRef(false);
   const matrixQueuedRef = useRef<{ manual: boolean } | null>(null);
   const saveMatrixRef = useRef<(isManual?: boolean) => Promise<void>>(async () => {});
@@ -1060,7 +1068,8 @@ export const GradeComputation: React.FC = () => {
   // Unsaved scores (e.g. Auto-save off): let the browser ask before closing or reloading.
   useEffect(() => {
     const warnUnsaved = (event: BeforeUnloadEvent) => {
-      if (!singleDirtyRef.current && !matrixDirtyRef.current) return;
+      if (!singleDirtyRef.current && !matrixDirtyRef.current
+        && !singleDebounceTimerRef.current && !matrixDebounceTimerRef.current) return;
       event.preventDefault();
       event.returnValue = '';
     };
@@ -1170,14 +1179,12 @@ export const GradeComputation: React.FC = () => {
     return !isNaN(num) && num >= 0 && num <= maxScore;
   };
 
-  const refreshPersistedGrades = async (classId: string): Promise<void> => {
-    try {
-      const response = await computeFacultyGradesApi(classId);
-      if (response.results.some(result => result.status === 'incomplete_attendance')) {
-        showFeedback('Scores saved. Some grades remain incomplete until linked attendance is available.', 'info');
-      }
-    } catch {
+  // The save endpoint recomputes the class's grades itself and returns the results.
+  const showRecomputeNotice = (response?: { results?: FacultyGradeComputeResult[]; recomputeFailed?: boolean }): void => {
+    if (response?.recomputeFailed) {
       showFeedback('Scores saved, but persisted grade recomputation could not complete.', 'info');
+    } else if (response?.results?.some(result => result.status === 'incomplete_attendance')) {
+      showFeedback('Scores saved. Some grades remain incomplete until linked attendance is available.', 'info');
     }
   };
 
@@ -1238,11 +1245,17 @@ export const GradeComputation: React.FC = () => {
       singleQueuedRef.current = null;
       if (queued) setTimeout(() => saveSingleRef.current(queued.manual), 0);
     };
+    const savedAssessmentId = selectedAssessmentId;
     try {
-      await saveFacultyAssessmentScoresApi(selectedAssessmentId, saveList);
-      singlePendingClearRef.current = { assessmentId: selectedAssessmentId, ids: cleared };
-      saveAssessmentScores(selectedAssessmentId, saveList);
-      await refreshPersistedGrades(activeAssessment.classId);
+      const response = await saveFacultyAssessmentScoresApi(savedAssessmentId, saveList);
+      saveAssessmentScores(savedAssessmentId, saveList);
+      showRecomputeNotice(response);
+      // The sheet was switched while saving (the save ran on leaving it): nothing more to do here.
+      if (selectedAssessmentIdRef.current !== savedAssessmentId) {
+        finish();
+        return;
+      }
+      singlePendingClearRef.current = { assessmentId: savedAssessmentId, ids: cleared };
       // Scores typed while this request ran are still unsent.
       const unsent = Object.entries(singleScoresRef.current).some(([studentId, val]) => {
         if (val.score === '' || !validateSingleScore(val.score, activeAssessment.maxScore)) return false;
@@ -1266,8 +1279,23 @@ export const GradeComputation: React.FC = () => {
   };
   saveSingleRef.current = performSaveSingleScores;
 
+  // Auto-save: 10 s after the last edit (each edit restarts the wait), or at once when the sheet is left.
+  const scheduleSingleAutoSave = () => {
+    if (singleDebounceTimerRef.current) clearTimeout(singleDebounceTimerRef.current);
+    singleDebounceTimerRef.current = autoSaveEnabled
+      ? setTimeout(() => { singleDebounceTimerRef.current = null; saveSingleRef.current(false); }, AUTO_SAVE_IDLE_MS)
+      : null;
+  };
+  const flushSingleAutoSave = () => {
+    if (!singleDebounceTimerRef.current) return;
+    clearTimeout(singleDebounceTimerRef.current);
+    singleDebounceTimerRef.current = null;
+    saveSingleRef.current(false);
+  };
+
   const handleScoreChange = (studentId: string, val: string, field: 'score' | 'remarks') => {
     singleDirtyRef.current = true;
+    scheduleSingleAutoSave();
     setScoresInputState(prev => {
       const next = {
         ...prev,
@@ -1302,6 +1330,7 @@ export const GradeComputation: React.FC = () => {
     if (activeAssessment && !matchesActivityFilters(activeAssessment, period, type, activityFilterSearch)) {
       if (!await confirmDiscardUnsavedScores()) return;
       // Discarded: drop the unsaved state so the auto-select effect may switch assessments.
+      flushSingleAutoSave();
       singleDirtyRef.current = false;
       singlePendingClearRef.current = { assessmentId: '', ids: new Set() };
     }
@@ -1309,13 +1338,9 @@ export const GradeComputation: React.FC = () => {
     setActivityFilterType(type);
   };
 
-  const handleScoreBlur = async (_studentId: string) => {
-    if (autoSaveEnabled && singleDirtyRef.current) {
-      performSaveSingleScores(false);
-    }
-  };
-
   const handleManualSaveScores = async () => {
+    if (singleDebounceTimerRef.current) clearTimeout(singleDebounceTimerRef.current);
+    singleDebounceTimerRef.current = null;
     performSaveSingleScores(true);
   };
 
@@ -1438,14 +1463,10 @@ export const GradeComputation: React.FC = () => {
       if (queued) setTimeout(() => saveMatrixRef.current(queued.manual), 0);
     };
     try {
-      await saveFacultyScoreBatchesApi(batches);
+      const response = await saveFacultyScoreBatchesApi(batches);
       matrixPendingClearRef.current = cleared;
       batches.forEach(batch => saveAssessmentScores(batch.assessmentId, batch.scores));
-
-      const targetClassId = selectedClassId || availableClasses[0]?.id;
-      if (targetClassId) {
-        await refreshPersistedGrades(targetClassId);
-      }
+      showRecomputeNotice(response);
       setMatrixRefreshKey(key => key + 1);
       // Cells typed while this request ran are still unsent.
       const unsent = activeAssessments.some(ass => activeStudents.some(student => {
@@ -1472,8 +1493,21 @@ export const GradeComputation: React.FC = () => {
   };
   saveMatrixRef.current = performSaveMatrixScores;
 
+  // Same rule as the single sheet; the matrix always auto-saves.
+  const scheduleMatrixAutoSave = () => {
+    if (matrixDebounceTimerRef.current) clearTimeout(matrixDebounceTimerRef.current);
+    matrixDebounceTimerRef.current = setTimeout(() => { matrixDebounceTimerRef.current = null; saveMatrixRef.current(false); }, AUTO_SAVE_IDLE_MS);
+  };
+  const flushMatrixAutoSave = () => {
+    if (!matrixDebounceTimerRef.current) return;
+    clearTimeout(matrixDebounceTimerRef.current);
+    matrixDebounceTimerRef.current = null;
+    saveMatrixRef.current(false);
+  };
+
   const handleMatrixScoreChange = (studentId: string, assessmentId: string, value: string) => {
     matrixDirtyRef.current = true;
+    scheduleMatrixAutoSave();
     setMatrixScoresState(prev => {
       const next = {
         ...prev,
@@ -1488,13 +1522,9 @@ export const GradeComputation: React.FC = () => {
     setIsMatrixSavedAlert(false);
   };
 
-  const handleMatrixScoreBlur = () => {
-    if (matrixDirtyRef.current) {
-      performSaveMatrixScores(false);
-    }
-  };
-
   const handleSaveMatrixScores = async () => {
+    if (matrixDebounceTimerRef.current) clearTimeout(matrixDebounceTimerRef.current);
+    matrixDebounceTimerRef.current = null;
     performSaveMatrixScores(true);
   };
 
@@ -1553,6 +1583,14 @@ export const GradeComputation: React.FC = () => {
     setScoresInputState(initialInputs);
     setIsScoresSavedAlert(false);
   };
+
+  const flushAllAutoSave = () => {
+    flushSingleAutoSave();
+    flushMatrixAutoSave();
+  };
+  // Switching view or tab, or leaving the page inside the app, saves a pending wait at once.
+  useEffect(() => { flushAllAutoSave(); }, [scoreEntryMode, activeSubTab]);
+  useEffect(() => () => flushAllAutoSave(), []);
 
   // Filter roster for scores entry (default sorted alphabetically by last name)
   const filteredScoreStudents = useMemo(() => {
@@ -3013,6 +3051,7 @@ export const GradeComputation: React.FC = () => {
             onChange={async (e) => {
               const newCode = e.target.value;
               if (!await confirmDiscardUnsavedScores()) return;
+              flushAllAutoSave();
               const matchOffering = facultyOfferings.find(o => o.courseCode === newCode);
               if (matchOffering && matchOffering.key !== selectedOfferingKey) {
                 // Asks before discarding unsaved grade weights and clears the previous course's draft.
@@ -3052,6 +3091,7 @@ export const GradeComputation: React.FC = () => {
             onChange={async (e) => {
               const newClassId = e.target.value;
               if (!await confirmDiscardUnsavedScores()) return;
+              flushAllAutoSave();
               setSelectedClassId(newClassId);
               const classItem = currentYearActiveClasses.find(c => c.id === newClassId);
               if (classItem && classItem.courseCode && classItem.courseCode !== selectedSubjectCode) {
@@ -3195,7 +3235,6 @@ export const GradeComputation: React.FC = () => {
                     scores={matrixScoresState}
                     pendingClearKeys={matrixPendingClears}
                     onScoreChange={handleMatrixScoreChange}
-                    onScoreBlur={handleMatrixScoreBlur}
                     isValidScore={validateSingleScore}
                     refreshKey={matrixRefreshKey}
                   />
@@ -3325,6 +3364,7 @@ export const GradeComputation: React.FC = () => {
                             onChange={async (e) => {
                               const next = e.target.value;
                               if (!await confirmDiscardUnsavedScores()) return;
+                              flushSingleAutoSave();
                               setSelectedAssessmentId(next);
                             }}
                             className="w-full px-4 py-2.5 rounded-xl border border-slate-205 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-clinical-500"
@@ -3402,6 +3442,10 @@ export const GradeComputation: React.FC = () => {
                         checked={autoSaveEnabled}
                         onChange={(e) => {
                           setAutoSaveEnabled(e.target.checked);
+                          if (!e.target.checked && singleDebounceTimerRef.current) {
+                            clearTimeout(singleDebounceTimerRef.current);
+                            singleDebounceTimerRef.current = null;
+                          }
                           try {
                             localStorage.setItem('dentisys_grading_autosave', String(e.target.checked));
                           } catch {}
@@ -3409,7 +3453,7 @@ export const GradeComputation: React.FC = () => {
                         className="rounded border-slate-300 text-clinical-600 focus:ring-clinical-500"
                       />
                       <label htmlFor="autosave" className="text-xs text-slate-555 font-semibold">
-                        Enable Auto-Save on score input blur
+                        Enable Auto-Save (saves 10 seconds after you stop typing)
                       </label>
                     </div>
                   </CardContent>
@@ -3485,7 +3529,6 @@ export const GradeComputation: React.FC = () => {
                                     }
                                   }}
                                   onChange={(e) => handleScoreChange(student.id, e.target.value, 'score')}
-                                  onBlur={() => handleScoreBlur(student.id)}
                                   title={singlePendingClears.has(student.id) ? 'Cleared — click Save to apply' : undefined}
                                   className={`w-28 px-3 py-1.5 rounded-xl border text-xs text-center font-bold focus:outline-none ${!isValid
                                     ? 'border-rose-500 focus:ring-rose-500 bg-rose-50/50'

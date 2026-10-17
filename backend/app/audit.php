@@ -86,6 +86,13 @@ function audit_finish_operation(
 
     $eventUuid = uuid_v4_string();
 
+    // R12: one id per screen action, sent by the browser; ignored unless a valid UUID.
+    if (empty($event['operation_uuid']) && function_exists('request_header')) {
+        $batch = request_header('X-Audit-Batch-Id');
+        $event['operation_uuid'] = ($batch !== null && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $batch) === 1)
+            ? strtolower($batch) : null;
+    }
+
     $beforeStateJson = null;
     $beforeStateHash = null;
     if ($beforeState !== null) {
@@ -282,6 +289,53 @@ function audit_record_action(
         'ip_address' => $request['ip_address'] ?? null,
         'user_agent' => $request['user_agent'] ?? null,
     ], $macKey, $extra['before'] ?? null, $extra['after'] ?? null);
+}
+
+/**
+ * R3/R4: keep only the fields whose value differs. Returns [before, after]
+ * with just those fields, or null when nothing changed.
+ */
+function audit_changed_fields(array $before, array $after): ?array
+{
+    $b = [];
+    $a = [];
+    foreach (array_unique(array_merge(array_keys($before), array_keys($after))) as $key) {
+        $old = $before[$key] ?? null;
+        $new = $after[$key] ?? null;
+        if ($old != $new || ($old === null) !== ($new === null)) {
+            $b[$key] = $old;
+            $a[$key] = $new;
+        }
+    }
+
+    return $b === [] ? null : [$b, $a];
+}
+
+/** R7: readable class name for descriptions; falls back to the id only if the class is gone. */
+function audit_class_label(PDO $pdo, int $csId): string
+{
+    $stmt = $pdo->prepare('SELECT cs_name FROM class_sections WHERE cs_id = ?');
+    $stmt->execute([$csId]);
+    return (string) ($stmt->fetchColumn() ?: "class #{$csId}");
+}
+
+/** R7: "Name (student number)" for descriptions. */
+function audit_student_label(PDO $pdo, int $studentId): string
+{
+    $stmt = $pdo->prepare(
+        "SELECT s.student_number,
+                COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                COALESCE(pi.first_name, s.first_name) AS first_name,
+                COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                COALESCE(pi.last_name, s.last_name) AS last_name,
+                COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix
+           FROM students s LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+          WHERE s.student_id = ?"
+    );
+    $stmt->execute([$studentId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row ? account_identity_display_name($row) . ' (' . $row['student_number'] . ')' : "student #{$studentId}";
 }
 
 function uuid_v4_string(): string

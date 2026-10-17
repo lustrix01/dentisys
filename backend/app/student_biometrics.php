@@ -932,5 +932,6 @@ function student_biometric_record_audit(
         'request_id' => $context['request_id'] ?? null,
         'ip_address' => $context['ip_address'] ?? null,
         'user_agent' => $context['user_agent'] ?? null,
+        'operation_uuid' => $context['operation_uuid'] ?? null,
     ], $macKey, $beforeState, $afterState);
 }

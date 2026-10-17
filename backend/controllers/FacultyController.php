@@ -40,42 +40,13 @@ function faculty_verify_auth(PDO $pdo, array $config): array
 }
 
 /**
- * Return significant audit events that the authenticated Faculty member is
- * allowed to review.  This intentionally mirrors the existing Secretary
- * activity projection and the non-Admin scope used by the Admin audit query:
- * the Faculty's own events plus events scoped to one of the Faculty's class
- * sections.  Raw audit state, credentials, and provider details are never
- * selected for this read surface.
+ * My Activity: the Faculty member's own audit rows only (class work included),
+ * filtered, grouped and paged on the server (docs/contracts/audit-logging.md).
+ * Attendance changes made by others are in Class Attendance Activity.
  */
-function faculty_activity_rows(PDO $pdo, int $userId, int $limit = 100): array
+function faculty_activity_rows(PDO $pdo, int $userId, array $query): array
 {
-    $limit = max(1, min(100, $limit));
-    $stmt = $pdo->prepare(
-        'SELECT event_id AS id, occurred_at AS timestamp, actor_username AS user_name,
-                actor_role AS user_role, action_code AS action, module_code AS module,
-                description, event_status AS status, ip_address, user_agent
-           FROM audit_events
-          WHERE action_code <> \'refresh_rotation\'
-            AND actor_user_id = ?
-          ORDER BY occurred_at DESC, event_id DESC
-          LIMIT ' . $limit
-    );
-    // My Activity: only the Faculty member's own actions. Attendance changes
-    // made by others in their classes are in Class Attendance Activity.
-    $stmt->execute([$userId]);
-
-    return array_map(static fn(array $row): array => [
-        'id' => (string) $row['id'],
-        'timestamp' => attendance_session_timestamp($row['timestamp']),
-        'userName' => $row['user_name'] ?? null,
-        'userRole' => $row['user_role'] ?? null,
-        'action' => $row['action'] ?? null,
-        'module' => $row['module'] ?? null,
-        'description' => $row['description'] ?? '',
-        'status' => $row['status'] ?? null,
-        'ipAddress' => $row['ip_address'] ?? null,
-        'device' => $row['user_agent'] ?? null,
-    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+    return audit_read_entries($pdo, ['user_id' => $userId, 'role' => 'faculty'], audit_read_params($query, 'faculty'));
 }
 
 function handle_faculty_activity_get(): void
@@ -84,12 +55,10 @@ function handle_faculty_activity_get(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
-        $limit = (int) ($_GET['limit'] ?? 100);
 
-        json_response([
-            'status' => 'ok',
-            'activity' => faculty_activity_rows($pdo, (int) $authCtx['user_id'], $limit),
-        ], 200);
+        json_response(['status' => 'ok'] + faculty_activity_rows($pdo, (int) $authCtx['user_id'], $_GET), 200);
+    } catch (ValidationException $e) {
+        validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
         error_log('Faculty activity error: ' . sanitize_for_log($e));
         safe_error_response('Unable to read Faculty activity.', 500);
@@ -665,7 +634,7 @@ function handle_faculty_student_create(): void
         $className = (string) $classInfo->fetchColumn();
         audit_record_action(
             $pdo, $config, $authCtx, 'student', 'student_created', 'student', (string) $newId,
-            "Registered Student {$studentNumber} and enrolled them in {$className}.",
+            "Registered " . audit_student_label($pdo, $newId) . " and enrolled them in {$className}.",
             ['scope_cs_id' => $csId, 'after' => ['studentNumber' => $studentNumber, 'enrollmentId' => $enrollmentId]]
         );
 
@@ -941,27 +910,31 @@ function handle_faculty_student_update(array $params = []): void
             throw new RuntimeException('Updated Student could not be reloaded.');
         }
 
-        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
-        $auditCtx = audit_begin_operation($pdo);
-        audit_finish_operation($pdo, $auditCtx, [
-            'module_code' => 'class_management',
-            'action_code' => 'student_update',
-            'event_status' => 'Success',
-            'actor_user_id' => $authCtx['user_id'],
-            'actor_username' => $authCtx['login_email'],
-            'actor_role' => $authCtx['role'],
-            'actor_display_name' => $authCtx['display_name'],
-            'session_id' => $authCtx['session_id'],
-            'target_type' => 'student',
-            'target_id' => (string) $studentId,
-            'description' => 'Updated Student roster profile fields.',
-            'reason' => null,
-            'http_method' => $context['http_method'],
-            'endpoint' => $context['endpoint'],
-            'request_id' => $context['request_id'],
-            'ip_address' => $context['ip_address'],
-            'user_agent' => $context['user_agent'],
-        ], $macKey, $before, $after);
+        // R3/R4: no row when nothing changed; otherwise only the changed fields.
+        $changed = audit_changed_fields($before, $after);
+        if ($changed !== null) {
+            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+            $auditCtx = audit_begin_operation($pdo);
+            audit_finish_operation($pdo, $auditCtx, [
+                'module_code' => 'class_management',
+                'action_code' => 'student_update',
+                'event_status' => 'Success',
+                'actor_user_id' => $authCtx['user_id'],
+                'actor_username' => $authCtx['login_email'],
+                'actor_role' => $authCtx['role'],
+                'actor_display_name' => $authCtx['display_name'],
+                'session_id' => $authCtx['session_id'],
+                'target_type' => 'student',
+                'target_id' => (string) $studentId,
+                'description' => 'Updated roster profile of ' . audit_student_label($pdo, $studentId) . '.',
+                'reason' => null,
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey, $changed[0], $changed[1]);
+        }
         // BIO-005: an inactive Student's usable biometric reference is deleted.
         if (isset($status) && $status !== 'active') {
             student_biometric_invalidate(
@@ -3564,7 +3537,8 @@ function handle_faculty_assessments_save(): void
                 $existingStmt = $pdo->prepare(
                     "SELECT a.grading_category_id, a.transmutation_enabled, a.transmutation_minimum_percentage,
                             a.transmutation_maximum_percentage, a.attendance_session_date,
-                            a.attendance_session_code
+                            a.attendance_session_code, a.title, a.type, a.grading_period, a.max_score,
+                            a.weight, a.due_date, a.instructions, a.status
                      FROM assessments a
                      JOIN class_sections cs ON cs.cs_id = a.cs_id
                      WHERE a.assessment_id = ? AND cs.instructor_user_id = ?"
@@ -3749,12 +3723,52 @@ function handle_faculty_assessments_save(): void
                 $assessmentId = (int) $stmt->fetchColumn();
             }
             $persisted[] = ['id' => (string) $assessmentId, 'classId' => (string) $csId, 'title' => $title];
-            audit_record_action(
-                $pdo, $config, $authCtx, 'grading', $existing !== null ? 'assessment_updated' : 'assessment_created',
-                'assessment', (string) $assessmentId,
-                ($existing !== null ? 'Updated' : 'Created') . " assessment \"{$title}\" ({$period}, max {$maxScore}).",
-                ['scope_cs_id' => $csId, 'after' => ['title' => $title, 'type' => $type, 'gradingPeriod' => $period, 'maxScore' => number_format($maxScore, 2, '.', ''), 'gradingCategoryId' => $gradingCategoryId]]
-            );
+            if ($existing === null) {
+                audit_record_action(
+                    $pdo, $config, $authCtx, 'grading', 'assessment_created',
+                    'assessment', (string) $assessmentId,
+                    "Created assessment \"{$title}\" ({$period}, max {$maxScore}).",
+                    ['scope_cs_id' => $csId, 'after' => ['title' => $title, 'type' => $type, 'gradingPeriod' => $period, 'maxScore' => number_format($maxScore, 2, '.', ''), 'gradingCategoryId' => $gradingCategoryId]]
+                );
+            } else {
+                // Only fields that actually changed are recorded; no change, no row.
+                $text = static fn(mixed $v): ?string => $v === null || $v === '' ? null : (string) $v;
+                $fields = [
+                    'title' => [$existing['title'], $title],
+                    'type' => [$existing['type'], $type],
+                    'gradingPeriod' => [$existing['grading_period'], $period],
+                    'maxScore' => [faculty_grade_text($existing['max_score']), faculty_grade_text($maxScore)],
+                    'weight' => [faculty_grade_text($existing['weight']), faculty_grade_text($weight)],
+                    'gradingCategoryId' => [$text($existing['grading_category_id']), $text($gradingCategoryId)],
+                    'dueDate' => [$text($existing['due_date']), $text($item['dueDate'] ?? null)],
+                    'instructions' => [$text($existing['instructions']), $text($item['instructions'] ?? null)],
+                    'status' => [$existing['status'], $item['status'] ?? 'Active'],
+                    'transmutationEnabled' => [
+                        filter_var($existing['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false',
+                        $transmutationEnabled ? 'true' : 'false',
+                    ],
+                    'transmutationMinimumPercentage' => [faculty_grade_text($existing['transmutation_minimum_percentage']), faculty_grade_text($minimumPercentage)],
+                    'transmutationMaximumPercentage' => [faculty_grade_text($existing['transmutation_maximum_percentage']), faculty_grade_text($maximumPercentage)],
+                    'attendanceSessionDate' => [$text($existing['attendance_session_date']), $attendanceSessionDate],
+                    'attendanceSessionCode' => [$text($existing['attendance_session_code']), $attendanceSessionCode],
+                ];
+                $beforeState = [];
+                $afterState = [];
+                foreach ($fields as $field => [$was, $now]) {
+                    if ($was !== $now) {
+                        $beforeState[$field] = $was;
+                        $afterState[$field] = $now;
+                    }
+                }
+                if ($afterState !== []) {
+                    audit_record_action(
+                        $pdo, $config, $authCtx, 'grading', 'assessment_updated',
+                        'assessment', (string) $assessmentId,
+                        'Changed ' . implode(', ', array_keys($afterState)) . " of {$title} ({$period}) in " . faculty_audit_class_label($pdo, $csId) . '.',
+                        ['scope_cs_id' => $csId, 'before' => $beforeState, 'after' => $afterState]
+                    );
+                }
+            }
         }
         $pdo->commit();
 
@@ -3850,6 +3864,19 @@ function handle_faculty_assessment_delete(): void
             safe_error_response('Past school-year classes are view-only.', 409);
             return;
         }
+        $details = $pdo->prepare(
+            "SELECT a.title, a.type, a.grading_period, a.max_score, cs.cs_name
+               FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id WHERE a.assessment_id = ?"
+        );
+        $details->execute([$assessmentId]);
+        $deletedAssessment = $details->fetch(PDO::FETCH_ASSOC);
+        $storedScores = $pdo->prepare("SELECT student_id, score, remarks FROM assessment_scores WHERE assessment_id = ? ORDER BY student_id");
+        $storedScores->execute([$assessmentId]);
+        $deletedScores = faculty_audit_label_changes($pdo, array_map(static fn(array $row): array => [
+            'studentId' => (string) $row['student_id'],
+            'score' => faculty_grade_text($row['score']),
+            'remarks' => $row['remarks'],
+        ], $storedScores->fetchAll(PDO::FETCH_ASSOC)));
         $scores = $pdo->prepare("DELETE FROM assessment_scores WHERE assessment_id = ?");
         $scores->execute([$assessmentId]);
         $assessment = $pdo->prepare("DELETE FROM assessments WHERE assessment_id = ?");
@@ -3859,8 +3886,16 @@ function handle_faculty_assessment_delete(): void
         }
         audit_record_action(
             $pdo, $config, $authCtx, 'grading', 'assessment_deleted', 'assessment', (string) $assessmentId,
-            "Deleted assessment #{$assessmentId} and {$scores->rowCount()} score(s).",
-            ['scope_cs_id' => (int) $ownedAssessment['cs_id'], 'before' => ['assessmentId' => $assessmentId, 'scoreCount' => $scores->rowCount()]]
+            "Deleted {$deletedAssessment['title']} ({$deletedAssessment['grading_period']}) in {$deletedAssessment['cs_name']} with {$scores->rowCount()} scores.",
+            ['scope_cs_id' => (int) $ownedAssessment['cs_id'], 'before' => [
+                'assessmentId' => $assessmentId,
+                'title' => $deletedAssessment['title'],
+                'type' => $deletedAssessment['type'],
+                'gradingPeriod' => $deletedAssessment['grading_period'],
+                'maxScore' => faculty_grade_text($deletedAssessment['max_score']),
+                'scoreCount' => $scores->rowCount(),
+                'scores' => $deletedScores,
+            ]]
         );
         $pdo->commit();
         json_response([
@@ -3874,6 +3909,21 @@ function handle_faculty_assessment_delete(): void
         error_log('Faculty assessment delete error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
+}
+
+/** Readable audit description of one score save (contract R7). */
+function faculty_scores_audit_description(array $cells, int $gradeMoves, string $classLabel, array $touchedTitles = []): string
+{
+    $scores = count(array_filter($cells, static fn(array $c): bool => $c['field'] === 'score'));
+    $remarks = count($cells) - $scores;
+    $parts = array_filter([
+        $scores > 0 ? "{$scores} " . ($scores === 1 ? 'score' : 'scores') : null,
+        $remarks > 0 ? "{$remarks} " . ($remarks === 1 ? 'remark' : 'remarks') : null,
+    ]);
+    $titles = $cells !== [] ? array_column($cells, 'assessment', 'assessmentId') : $touchedTitles;
+    $where = count($titles) === 1 ? (string) reset($titles) : count($titles) . ' assessments';
+    $text = ($parts === [] ? 'No score changed' : 'Changed ' . implode(' and ', $parts)) . " in {$where} · {$classLabel}";
+    return $text . ($gradeMoves > 0 ? "; {$gradeMoves} " . ($gradeMoves === 1 ? 'grade' : 'grades') . ' moved.' : '.');
 }
 
 function handle_faculty_scores_save(): void
@@ -3898,7 +3948,7 @@ function handle_faculty_scores_save(): void
             return;
         }
         $assessment = $pdo->prepare(
-            "SELECT a.max_score, a.cs_id
+            "SELECT a.max_score, a.cs_id, a.title
              FROM assessments a JOIN class_sections cs ON cs.cs_id = a.cs_id
              WHERE a.assessment_id = ? AND cs.instructor_user_id = ?
              FOR UPDATE OF a"
@@ -3914,12 +3964,18 @@ function handle_faculty_scores_save(): void
                  submitted_at = EXCLUDED.submitted_at,
                  remarks = EXCLUDED.remarks"
         );
-        $previousScore = $pdo->prepare('SELECT score FROM assessment_scores WHERE assessment_id = ? AND student_id = ?');
+        $previousScore = $pdo->prepare('SELECT score, remarks FROM assessment_scores WHERE assessment_id = ? AND student_id = ?');
         $clear = $pdo->prepare('DELETE FROM assessment_scores WHERE assessment_id = ? AND student_id = ?');
 
+        // Ends overdue attendance sessions first, as the Recompute button does,
+        // so the automatic recompute below sees the same linked attendance.
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $pdo->beginTransaction();
         $saved = 0;
         $cleared = 0;
+        $cellChanges = [];
+        $classIds = [];
+        $touchedTitles = [];
         foreach ($batches as $batch) {
             if ($batch instanceof \stdClass) {
                 $batch = get_object_vars($batch);
@@ -3943,8 +3999,12 @@ function handle_faculty_scores_save(): void
                 safe_error_response('At least one score is required.', 422);
                 return;
             }
-            $batchSaved = 0;
-            $clearedScores = [];
+            $classIds[(int) $row['cs_id']] = true;
+            $touchedTitles[(string) $assessmentId] = (string) $row['title'];
+            $cell = static fn(int $studentId, string $field, ?string $before, ?string $after): array => [
+                'studentId' => (string) $studentId, 'assessmentId' => (string) $assessmentId,
+                'assessment' => (string) $row['title'], 'field' => $field, 'before' => $before, 'after' => $after,
+            ];
             foreach ($scores as $scoreRow) {
                 if ($scoreRow instanceof \stdClass) {
                     $scoreRow = get_object_vars($scoreRow);
@@ -3969,10 +4029,11 @@ function handle_faculty_scores_save(): void
                 // A null score clears the cell; the removed value stays in the audit event.
                 if ($scoreRow['score'] === null) {
                     $previousScore->execute([$assessmentId, $studentId]);
-                    $previous = $previousScore->fetchColumn();
+                    $previous = $previousScore->fetch(PDO::FETCH_ASSOC);
                     if ($previous !== false) {
                         $clear->execute([$assessmentId, $studentId]);
-                        $clearedScores[] = ['studentId' => $studentId, 'score' => (string) $previous];
+                        $cleared++;
+                        $cellChanges[] = $cell($studentId, 'score', faculty_grade_text($previous['score']), null);
                     }
                     continue;
                 }
@@ -3982,20 +4043,67 @@ function handle_faculty_scores_save(): void
                     safe_error_response('Every score must belong to the class and be between zero and the assessment maximum.', 422);
                     return;
                 }
-                $upsert->execute([$assessmentId, $studentId, $score, $scoreRow['remarks'] ?? null]);
-                $batchSaved++;
+                // Compare with the stored value first: unchanged cells are not audited.
+                $previousScore->execute([$assessmentId, $studentId]);
+                $previous = $previousScore->fetch(PDO::FETCH_ASSOC);
+                $remarks = $scoreRow['remarks'] ?? null;
+                $upsert->execute([$assessmentId, $studentId, $score, $remarks]);
+                $saved++;
+                if ($previous === false || faculty_grade_text($previous['score']) !== faculty_grade_text($score)) {
+                    $cellChanges[] = $cell($studentId, 'score', $previous === false ? null : faculty_grade_text($previous['score']), faculty_grade_text($score));
+                }
+                $oldRemarks = $previous === false || $previous['remarks'] === '' ? null : $previous['remarks'];
+                $newRemarks = $remarks === '' ? null : ($remarks === null ? null : (string) $remarks);
+                if ($oldRemarks !== $newRemarks) {
+                    $cellChanges[] = $cell($studentId, 'remarks', $oldRemarks, $newRemarks);
+                }
             }
+        }
+
+        // The save itself recomputes the affected classes' grades. A SAVEPOINT keeps a
+        // failed recompute from losing the scores: they still save, with their audit row.
+        $results = [];
+        $gradeChanges = [];
+        $recomputeFailed = false;
+        try {
+            $pdo->exec('SAVEPOINT grade_recompute');
+            $currentSchoolYear = academic_current_school_year($pdo);
+            $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
+            foreach (array_keys($classIds) as $classId) {
+                $computed = faculty_recompute_class_grades($pdo, (int) $authCtx['user_id'], $classId, $currentSchoolYear, $retentionThreshold);
+                array_push($results, ...$computed['results']);
+                array_push($gradeChanges, ...$computed['gradeChanges']);
+            }
+            $pdo->exec('RELEASE SAVEPOINT grade_recompute');
+        } catch (\Throwable $recomputeError) {
+            $pdo->exec('ROLLBACK TO SAVEPOINT grade_recompute');
+            error_log('Faculty score save recompute error: ' . sanitize_for_log($recomputeError));
+            $results = [];
+            $gradeChanges = [];
+            $recomputeFailed = true;
+        }
+
+        // One row per request; none when neither a score/remark nor a grade changed.
+        if ($cellChanges !== [] || $gradeChanges !== []) {
+            $assessmentIds = $cellChanges !== []
+                ? array_values(array_unique(array_column($cellChanges, 'assessmentId')))
+                : array_map('strval', array_keys($touchedTitles));
+            $classId = count($classIds) === 1 ? (int) array_key_first($classIds) : null;
+            $classLabel = $classId !== null ? faculty_audit_class_label($pdo, $classId) : count($classIds) . ' classes';
+            [$targetType, $targetId] = count($assessmentIds) === 1
+                ? ['assessment', $assessmentIds[0]]
+                : ($classId !== null ? ['class_section', (string) $classId] : ['faculty_classes', (string) $authCtx['user_id']]);
             audit_record_action(
-                $pdo, $config, $authCtx, 'grading', 'assessment_scores_saved', 'assessment', (string) $assessmentId,
-                "Saved {$batchSaved} score(s) and cleared " . count($clearedScores) . " for assessment #{$assessmentId}.",
+                $pdo, $config, $authCtx, 'grading', 'assessment_scores_saved', $targetType, $targetId,
+                faculty_scores_audit_description($cellChanges, count($gradeChanges), $classLabel, $touchedTitles),
                 [
-                    'scope_cs_id' => (int) $row['cs_id'],
-                    'before' => $clearedScores === [] ? null : ['clearedScores' => $clearedScores],
-                    'after' => ['assessmentId' => $assessmentId, 'savedCount' => $batchSaved, 'clearedCount' => count($clearedScores)],
+                    'scope_cs_id' => $classId,
+                    'after' => [
+                        'changes' => faculty_audit_label_changes($pdo, $cellChanges),
+                        'gradeChanges' => faculty_audit_label_changes($pdo, $gradeChanges),
+                    ],
                 ]
             );
-            $saved += $batchSaved;
-            $cleared += count($clearedScores);
         }
         $pdo->commit();
         json_response([
@@ -4003,6 +4111,8 @@ function handle_faculty_scores_save(): void
             'message' => 'Student scores persisted successfully.',
             'savedCount' => $saved,
             'clearedCount' => $cleared,
+            'results' => $results,
+            'recomputeFailed' => $recomputeFailed,
         ], 200);
     } catch (\Throwable $e) {
         if (isset($pdo) && $pdo->inTransaction()) { $pdo->rollBack(); }
@@ -4086,6 +4196,424 @@ function faculty_notify_grade_retention_change(PDO $pdo, array $before, string $
     );
 }
 
+/** A grade value as audit state holds it: two decimals, or null when there is none. */
+function faculty_grade_text(mixed $value): ?string
+{
+    return $value === null ? null : number_format((float) $value, 2, '.', '');
+}
+
+/**
+ * Period/final grades that differ from what was stored for one enrollment
+ * (audit contract 5.4). Period values are null for single-schema classes.
+ *
+ * @return list<array{studentId: string, period: string, before: ?string, after: ?string}>
+ */
+function faculty_grade_moves(array $group, mixed $midterm, mixed $final, mixed $course): array
+{
+    $stored = $group['persistedBreakdown']['periods'] ?? [];
+    $pairs = [
+        'Midterm' => [$stored['midterm']['percentage'] ?? null, $midterm],
+        'Final' => [$stored['final']['percentage'] ?? null, $final],
+        'Course grade' => [$group['persistedPercentage'], $course],
+    ];
+    $moves = [];
+    foreach ($pairs as $period => [$before, $after]) {
+        if ($period !== 'Course grade' && $midterm === null && $final === null) {
+            continue;
+        }
+        $beforeText = faculty_grade_text($before);
+        $afterText = faculty_grade_text($after);
+        if ($beforeText !== $afterText) {
+            $moves[] = ['studentId' => (string) $group['studentId'], 'period' => $period, 'before' => $beforeText, 'after' => $afterText];
+        }
+    }
+    return $moves;
+}
+
+/** Student number and name for audit rows, keyed by student id. */
+function faculty_audit_student_labels(PDO $pdo, array $studentIds): array
+{
+    $ids = array_values(array_unique(array_map('intval', $studentIds)));
+    if ($ids === []) {
+        return [];
+    }
+    $stmt = $pdo->prepare(
+        "SELECT s.student_id, s.student_number,
+                COALESCE(pi.name_prefix, s.name_prefix) AS name_prefix,
+                COALESCE(pi.first_name, s.first_name) AS first_name,
+                COALESCE(pi.middle_name, s.middle_name) AS middle_name,
+                COALESCE(pi.last_name, s.last_name) AS last_name,
+                COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix
+           FROM students s LEFT JOIN person_identities pi ON pi.person_id = s.person_id
+          WHERE s.student_id = ANY (CAST(? AS INTEGER[]))"
+    );
+    $stmt->execute(['{' . implode(',', $ids) . '}']);
+    $labels = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        $labels[(int) $row['student_id']] = [
+            'studentNumber' => (string) $row['student_number'],
+            'studentName' => account_identity_display_name($row),
+        ];
+    }
+    return $labels;
+}
+
+/** Adds studentNumber and studentName to audit change entries that carry a studentId. */
+function faculty_audit_label_changes(PDO $pdo, array $changes): array
+{
+    $labels = faculty_audit_student_labels($pdo, array_column($changes, 'studentId'));
+    return array_map(static function (array $change) use ($labels): array {
+        $label = $labels[(int) $change['studentId']] ?? ['studentNumber' => '', 'studentName' => ''];
+        return ['studentNumber' => $label['studentNumber'], 'studentName' => $label['studentName']] + $change;
+    }, $changes);
+}
+
+function faculty_audit_class_label(PDO $pdo, int $csId): string
+{
+    $stmt = $pdo->prepare('SELECT cs_name FROM class_sections WHERE cs_id = ?');
+    $stmt->execute([$csId]);
+    return (string) ($stmt->fetchColumn() ?: "class #{$csId}");
+}
+
+/**
+ * Recompute and save the grades of one faculty member's classes (one class
+ * when $csId > 0). Runs inside the caller's transaction. Returns the compute
+ * results and the period/final grades that moved.
+ *
+ * @return array{results: array, gradeChanges: array}
+ */
+function faculty_recompute_class_grades(PDO $pdo, int $facultyId, int $csId, string $currentSchoolYear, float $retentionThreshold): array
+{
+    $lockEnrollmentsSql =
+        "SELECT e.enrollment_id
+           FROM enrollments e
+           JOIN class_sections cs ON cs.cs_id = e.cs_id
+          WHERE cs.instructor_user_id = ? AND cs.school_year >= ?";
+    $lockEnrollmentParams = [$facultyId, $currentSchoolYear];
+    if ($csId > 0) {
+        $lockEnrollmentsSql .= ' AND e.cs_id = ?';
+        $lockEnrollmentParams[] = $csId;
+    }
+    $lockEnrollmentsSql .= ' FOR UPDATE';
+    $lockEnrollments = $pdo->prepare($lockEnrollmentsSql);
+    $lockEnrollments->execute($lockEnrollmentParams);
+    $lockConfigsSql =
+        "SELECT gc.config_id
+           FROM grading_configs gc
+           JOIN class_sections cs
+             ON cs.instructor_user_id = gc.faculty_user_id
+            AND cs.course_id = gc.course_id
+            AND UPPER(cs.semester) = gc.semester
+            AND UPPER(cs.school_year) = gc.school_year
+          WHERE gc.faculty_user_id = ? AND cs.school_year >= ?";
+    $lockConfigParams = [$facultyId, $currentSchoolYear];
+    if ($csId > 0) {
+        $lockConfigsSql .= ' AND cs.cs_id = ?';
+        $lockConfigParams[] = $csId;
+    }
+    $lockConfigsSql .= ' FOR UPDATE';
+    $lockConfigs = $pdo->prepare($lockConfigsSql);
+    $lockConfigs->execute($lockConfigParams);
+
+    $sql = "SELECT e.enrollment_id, e.student_id, e.cs_id,
+                   COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
+                   COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
+                   e.grade_components_json,
+                   a.assessment_id, a.title, a.grading_period, a.grading_category_id,
+                   a.weight, a.max_score, a.transmutation_enabled,
+                   a.transmutation_minimum_percentage, a.transmutation_maximum_percentage,
+                   a.attendance_session_date, a.attendance_session_code,
+                   gc.config_id, gc.schema_mode, gc.term_midterm_weight, gc.term_final_weight,
+                   gc.component_mode, gc.component_lecture_weight, gc.component_laboratory_weight,
+                   gc.midterm_start_date, gc.midterm_end_date,
+                   gc.final_start_date, gc.final_end_date,
+                   gcat.name AS grading_category_name,
+                   gcat.weight AS grading_category_weight,
+                   gcp.name AS period_category_name,
+                   gcp.weight AS period_category_weight,
+                   gcp.grading_period AS period_category_period,
+                   gcp.source_kind AS period_category_source_kind,
+                   gcp.component AS period_category_component,
+                   sc.score_id, sc.score,
+                   " . faculty_linked_attendance_sql('e.enrollment_id') . " AS linked_attendance_status,
+                   att.attendance_percentage
+            FROM enrollments e
+            JOIN class_sections cs ON cs.cs_id = e.cs_id
+            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+            LEFT JOIN assessments a ON a.cs_id = e.cs_id AND a.status <> 'Archived'
+            LEFT JOIN grading_configs gc
+                   ON gc.faculty_user_id = cs.instructor_user_id
+                  AND gc.course_id = cs.course_id
+                  AND gc.semester = UPPER(cs.semester)
+                  AND gc.school_year = UPPER(cs.school_year)
+            LEFT JOIN grading_categories gcat
+                   ON gcat.config_id = gc.config_id
+                  AND gcat.category_id = a.grading_category_id
+            LEFT JOIN grading_category_period_memberships gcp
+                   ON gcp.category_id = a.grading_category_id
+                  AND gcp.grading_period = a.grading_period
+            LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = e.student_id
+            LEFT JOIN (
+                SELECT enrollment_id,
+                       AVG(CASE
+                           WHEN status IN ('present', 'excused') THEN 100
+                           WHEN status = 'late' THEN 80
+                           WHEN status = 'absent' THEN 0
+                           ELSE NULL
+                       END) AS attendance_percentage
+                FROM attendance_records r
+                WHERE NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
+                GROUP BY enrollment_id
+            ) att ON att.enrollment_id = e.enrollment_id
+            WHERE cs.instructor_user_id = :faculty_id
+              AND cs.school_year >= :school_year";
+    $params = [':faculty_id' => $facultyId, ':school_year' => $currentSchoolYear];
+    if ($csId > 0) {
+        $sql .= " AND e.cs_id = :cs_id";
+        $params[':cs_id'] = $csId;
+    }
+    $sql .= " ORDER BY e.enrollment_id, a.assessment_id";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $results = [];
+    $gradeChanges = [];
+    $grouped = [];
+    foreach ($rows as $row) {
+        $enrollmentId = (string) $row['enrollment_id'];
+            if (!isset($grouped[$enrollmentId])) {
+                $grouped[$enrollmentId] = [
+                    'enrollmentId' => $enrollmentId,
+                    'studentId' => (string) $row['student_id'],
+                    'csId' => (int) $row['cs_id'],
+                    'configId' => $row['config_id'] !== null ? (int) $row['config_id'] : null,
+                    'schemaMode' => $row['schema_mode'] !== null ? (string) $row['schema_mode'] : 'overall',
+                    'componentMode' => $row['component_mode'] !== null ? (string) $row['component_mode'] : 'combined',
+                    'componentWeights' => [
+                        'lecture' => $row['component_lecture_weight'] !== null ? (float) $row['component_lecture_weight'] : null,
+                        'laboratory' => $row['component_laboratory_weight'] !== null ? (float) $row['component_laboratory_weight'] : null,
+                    ],
+                    'termRatio' => [
+                        'midterm' => $row['term_midterm_weight'] !== null ? (float) $row['term_midterm_weight'] : null,
+                        'final' => $row['term_final_weight'] !== null ? (float) $row['term_final_weight'] : null,
+                    ],
+                    'attendanceDateRanges' => [
+                        'midterm' => ['startDate' => $row['midterm_start_date'], 'endDate' => $row['midterm_end_date']],
+                        'final' => ['startDate' => $row['final_start_date'], 'endDate' => $row['final_end_date']],
+                    ],
+                    'persistedPercentage' => $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null,
+                    'persistedGwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
+                    'persistedBreakdown' => $row['grade_components_json'] !== null
+                        ? json_decode((string) $row['grade_components_json'], true)
+                        : null,
+                    'attendancePercentage' => $row['attendance_percentage'] !== null
+                        ? (float) $row['attendance_percentage'] : null,
+                    'assessments' => [],
+                ];
+            }
+            if ($row['config_id'] !== null
+                && ($row['assessment_id'] !== null)
+                && ($row['grading_category_id'] === null
+                    || $row['grading_category_weight'] === null
+                    || ($row['schema_mode'] === 'periods' && $row['period_category_weight'] === null))
+            ) {
+                throw new FacultyGradingConfigurationException(
+                    sprintf(
+                        'Assessment #%s does not have a valid category in the authoritative grading configuration.',
+                        $row['assessment_id']
+                    ),
+                    422,
+                    'GRADING_ASSESSMENT_CATEGORY_INVALID'
+                );
+            }
+            if ($row['assessment_id'] !== null) {
+                $row['_has_score'] = $row['score_id'] !== null;
+                $grouped[$enrollmentId]['assessments'][] = $row;
+            }
+    }
+    // The legacy JSON remains the response-compatible write surface;
+    // migration 020's trigger refreshes the normalized scalar/category
+    // projection atomically.
+    $saveComputedGrade = static function (float $percentage, float $gwa, string $retention, array $breakdown, int|string $enrollmentId) use ($pdo): void {
+        faculty_save_computed_grade($pdo, $percentage, $gwa, $retention, $breakdown, (int) $enrollmentId);
+    };
+    foreach ($grouped as $group) {
+        if ($group['configId'] !== null && $group['schemaMode'] === 'periods') {
+            $midterm = faculty_compute_period_result($pdo, $group, 'Midterm');
+            $final = faculty_compute_period_result($pdo, $group, 'Final');
+            $periodBreakdown = [
+                'calculationMode' => 'authoritative_periods',
+                'termRatio' => $group['termRatio'],
+                'periods' => [
+                    'midterm' => $midterm['breakdown'],
+                    'final' => $final['breakdown'],
+                ],
+                'retentionThreshold' => $retentionThreshold,
+            ];
+            $midtermWeight = (float) ($group['termRatio']['midterm'] ?? 0);
+            $finalWeight = (float) ($group['termRatio']['final'] ?? 0);
+            $midtermRequired = $midtermWeight > 0.0;
+            $finalRequired = $finalWeight > 0.0;
+            if (($midtermRequired && $midterm['status'] !== 'computed')
+                || ($finalRequired && $final['status'] !== 'computed')) {
+                $results[] = [
+                    'status' => 'incomplete_period',
+                    'enrollmentId' => $group['enrollmentId'],
+                    'studentId' => $group['studentId'],
+                    'periods' => [
+                        'midterm' => $midterm['breakdown'],
+                        'final' => $final['breakdown'],
+                    ],
+                    'breakdown' => $periodBreakdown,
+                    'previouslyPersisted' => $group['persistedPercentage'] !== null,
+                    'previousPercentage' => $group['persistedPercentage'],
+                    'previousGwa' => $group['persistedGwa'],
+                ];
+                continue;
+            }
+            // Exact period values are blended; only the final course percentage is rounded.
+            $midtermPercentage = $midterm['percentage'] !== null ? (float) $midterm['unroundedPercentage'] : 0.0;
+            $finalPercentage = $final['percentage'] !== null ? (float) $final['unroundedPercentage'] : 0.0;
+            $percentage = round(
+                ($midtermPercentage * $midtermWeight / 100)
+                + ($finalPercentage * $finalWeight / 100),
+                2
+            );
+            $gwa = faculty_percentage_to_gwa($percentage);
+            $exactGwa = faculty_percentage_to_gwa_exact($percentage);
+            $retention = faculty_course_grade_retention_state($exactGwa, $retentionThreshold);
+            if ($retention === null) {
+                throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
+            }
+            $periodBreakdown['percentage'] = $percentage;
+            $periodBreakdown['gwa'] = $gwa;
+            $periodBreakdown['retentionState'] = $retention;
+            $saveComputedGrade($percentage, $gwa, $retention, $periodBreakdown, $group['enrollmentId']);
+            array_push($gradeChanges, ...faculty_grade_moves($group, $midterm['percentage'], $final['percentage'], $percentage));
+            $results[] = [
+                'status' => 'computed',
+                'enrollmentId' => $group['enrollmentId'],
+                'studentId' => $group['studentId'],
+                'percentage' => $percentage,
+                'gwa' => $gwa,
+                'retentionState' => $retention,
+                'periods' => [
+                    'midterm' => $midterm['breakdown'],
+                    'final' => $final['breakdown'],
+                ],
+                'breakdown' => $periodBreakdown,
+            ];
+            continue;
+        }
+        if ($group['configId'] !== null) {
+            $categoryTotals = [];
+            $missingAssessments = [];
+            foreach ($group['assessments'] as $assessment) {
+                if (!($assessment['_has_score'] ?? false)) {
+                    continue;
+                }
+                $enabled = filter_var($assessment['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN);
+                $effectivePercentage = faculty_effective_assessment_percentage(
+                    (float) $assessment['score'],
+                    (float) $assessment['max_score'],
+                    $enabled,
+                    (float) $assessment['transmutation_minimum_percentage'],
+                    (float) $assessment['transmutation_maximum_percentage'],
+                    $assessment['linked_attendance_status'] !== null
+                        ? (string) $assessment['linked_attendance_status'] : null
+                );
+                if ($effectivePercentage === null) {
+                    $missingAssessments[] = [
+                        'assessmentId' => (string) $assessment['assessment_id'],
+                        'attendanceSessionDate' => $assessment['attendance_session_date'],
+                        'attendanceSessionCode' => $assessment['attendance_session_code'],
+                    ];
+                    continue;
+                }
+                $categoryId = (string) $assessment['grading_category_id'];
+                if (!isset($categoryTotals[$categoryId])) {
+                    $categoryTotals[$categoryId] = [
+                        'categoryId' => (int) $assessment['grading_category_id'],
+                        'name' => $assessment['grading_category_name'],
+                        'weight' => (float) $assessment['grading_category_weight'],
+                        'earnedPoints' => 0.0,
+                        'possiblePoints' => 0.0,
+                    ];
+                }
+                $categoryTotals[$categoryId]['earnedPoints'] +=
+                    ($effectivePercentage / 100) * (float) $assessment['max_score'];
+                $categoryTotals[$categoryId]['possiblePoints'] += (float) $assessment['max_score'];
+            }
+            if ($missingAssessments !== []) {
+                $results[] = [
+                    'status' => 'incomplete_attendance',
+                    'enrollmentId' => $group['enrollmentId'],
+                    'studentId' => $group['studentId'],
+                    'missingAssessments' => $missingAssessments,
+                ];
+                continue;
+            }
+            if ($categoryTotals === []) {
+                continue;
+            }
+            $percentage = 0.0;
+            $categoryBreakdown = [];
+            foreach ($categoryTotals as $category) {
+                if ($category['possiblePoints'] <= 0) {
+                    continue;
+                }
+                $ratio = $category['earnedPoints'] / $category['possiblePoints'];
+                $contribution = $ratio * $category['weight'];
+                $percentage += $contribution;
+                $categoryBreakdown[] = [
+                    'categoryId' => $category['categoryId'],
+                    'name' => $category['name'],
+                    'earnedPoints' => round($category['earnedPoints'], 4),
+                    'possiblePoints' => round($category['possiblePoints'], 4),
+                    'ratio' => round($ratio, 6),
+                    'weight' => round($category['weight'], 4),
+                    'contribution' => round($contribution, 4),
+                ];
+            }
+            $percentage = round($percentage, 2);
+            $gwa = faculty_percentage_to_gwa($percentage);
+            $exactGwa = faculty_percentage_to_gwa_exact($percentage);
+            $retention = faculty_course_grade_retention_state($exactGwa, $retentionThreshold);
+            if ($retention === null) {
+                throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
+            }
+            $breakdown = [
+                'calculationMode' => 'authoritative_categories',
+                'categories' => $categoryBreakdown,
+                'retentionThreshold' => $retentionThreshold,
+            ];
+            $saveComputedGrade($percentage, $gwa, $retention, $breakdown, $group['enrollmentId']);
+            array_push($gradeChanges, ...faculty_grade_moves($group, null, null, $percentage));
+            $results[] = [
+                'status' => 'computed',
+                'enrollmentId' => $group['enrollmentId'],
+                'studentId' => $group['studentId'],
+                'percentage' => $percentage,
+                'gwa' => $gwa,
+                'retentionState' => $retention,
+                'breakdown' => $breakdown,
+            ];
+            continue;
+        }
+
+        // Every class needs saved grade weights; there is no fallback
+        // computation. Existing persisted grades are left unchanged.
+        $results[] = [
+            'status' => 'weights_required',
+            'enrollmentId' => $group['enrollmentId'],
+            'studentId' => $group['studentId'],
+            'message' => 'Grade weights have not been set up for this course. Set them up in the Grade Weights editor, then recompute.',
+        ];
+    }
+    return ['results' => $results, 'gradeChanges' => $gradeChanges];
+}
+
 function handle_faculty_grades_compute(): void
 {
     $pdo = null;
@@ -4119,342 +4647,27 @@ function handle_faculty_grades_compute(): void
         $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
 
         $pdo->beginTransaction();
-        $lockEnrollmentsSql =
-            "SELECT e.enrollment_id
-               FROM enrollments e
-               JOIN class_sections cs ON cs.cs_id = e.cs_id
-              WHERE cs.instructor_user_id = ? AND cs.school_year >= ?";
-        $lockEnrollmentParams = [(int) $authCtx['user_id'], $currentSchoolYear];
-        if ($csId > 0) {
-            $lockEnrollmentsSql .= ' AND e.cs_id = ?';
-            $lockEnrollmentParams[] = $csId;
-        }
-        $lockEnrollmentsSql .= ' FOR UPDATE';
-        $lockEnrollments = $pdo->prepare($lockEnrollmentsSql);
-        $lockEnrollments->execute($lockEnrollmentParams);
-        $lockConfigsSql =
-            "SELECT gc.config_id
-               FROM grading_configs gc
-               JOIN class_sections cs
-                 ON cs.instructor_user_id = gc.faculty_user_id
-                AND cs.course_id = gc.course_id
-                AND UPPER(cs.semester) = gc.semester
-                AND UPPER(cs.school_year) = gc.school_year
-              WHERE gc.faculty_user_id = ? AND cs.school_year >= ?";
-        $lockConfigParams = [(int) $authCtx['user_id'], $currentSchoolYear];
-        if ($csId > 0) {
-            $lockConfigsSql .= ' AND cs.cs_id = ?';
-            $lockConfigParams[] = $csId;
-        }
-        $lockConfigsSql .= ' FOR UPDATE';
-        $lockConfigs = $pdo->prepare($lockConfigsSql);
-        $lockConfigs->execute($lockConfigParams);
-
-        $sql = "SELECT e.enrollment_id, e.student_id, e.cs_id,
-                       COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
-                       COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
-                       e.grade_components_json,
-                       a.assessment_id, a.title, a.grading_period, a.grading_category_id,
-                       a.weight, a.max_score, a.transmutation_enabled,
-                       a.transmutation_minimum_percentage, a.transmutation_maximum_percentage,
-                       a.attendance_session_date, a.attendance_session_code,
-                       gc.config_id, gc.schema_mode, gc.term_midterm_weight, gc.term_final_weight,
-                       gc.component_mode, gc.component_lecture_weight, gc.component_laboratory_weight,
-                       gc.midterm_start_date, gc.midterm_end_date,
-                       gc.final_start_date, gc.final_end_date,
-                       gcat.name AS grading_category_name,
-                       gcat.weight AS grading_category_weight,
-                       gcp.name AS period_category_name,
-                       gcp.weight AS period_category_weight,
-                       gcp.grading_period AS period_category_period,
-                       gcp.source_kind AS period_category_source_kind,
-                       gcp.component AS period_category_component,
-                       sc.score_id, sc.score,
-                       " . faculty_linked_attendance_sql('e.enrollment_id') . " AS linked_attendance_status,
-                       att.attendance_percentage
-                FROM enrollments e
-                JOIN class_sections cs ON cs.cs_id = e.cs_id
-                LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
-                LEFT JOIN assessments a ON a.cs_id = e.cs_id AND a.status <> 'Archived'
-                LEFT JOIN grading_configs gc
-                       ON gc.faculty_user_id = cs.instructor_user_id
-                      AND gc.course_id = cs.course_id
-                      AND gc.semester = UPPER(cs.semester)
-                      AND gc.school_year = UPPER(cs.school_year)
-                LEFT JOIN grading_categories gcat
-                       ON gcat.config_id = gc.config_id
-                      AND gcat.category_id = a.grading_category_id
-                LEFT JOIN grading_category_period_memberships gcp
-                       ON gcp.category_id = a.grading_category_id
-                      AND gcp.grading_period = a.grading_period
-                LEFT JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = e.student_id
-                LEFT JOIN (
-                    SELECT enrollment_id,
-                           AVG(CASE
-                               WHEN status IN ('present', 'excused') THEN 100
-                               WHEN status = 'late' THEN 80
-                               WHEN status = 'absent' THEN 0
-                               ELSE NULL
-                           END) AS attendance_percentage
-                    FROM attendance_records r
-                    WHERE NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
-                    GROUP BY enrollment_id
-                ) att ON att.enrollment_id = e.enrollment_id
-                WHERE cs.instructor_user_id = :faculty_id
-                  AND cs.school_year >= :school_year";
-        $params = [':faculty_id' => $authCtx['user_id'], ':school_year' => $currentSchoolYear];
-        if ($csId > 0) {
-            $sql .= " AND e.cs_id = :cs_id";
-            $params[':cs_id'] = $csId;
-        }
-        $sql .= " ORDER BY e.enrollment_id, a.assessment_id";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $results = [];
-        $grouped = [];
-        foreach ($rows as $row) {
-            $enrollmentId = (string) $row['enrollment_id'];
-                if (!isset($grouped[$enrollmentId])) {
-                    $grouped[$enrollmentId] = [
-                        'enrollmentId' => $enrollmentId,
-                        'studentId' => (string) $row['student_id'],
-                        'csId' => (int) $row['cs_id'],
-                        'configId' => $row['config_id'] !== null ? (int) $row['config_id'] : null,
-                        'schemaMode' => $row['schema_mode'] !== null ? (string) $row['schema_mode'] : 'overall',
-                        'componentMode' => $row['component_mode'] !== null ? (string) $row['component_mode'] : 'combined',
-                        'componentWeights' => [
-                            'lecture' => $row['component_lecture_weight'] !== null ? (float) $row['component_lecture_weight'] : null,
-                            'laboratory' => $row['component_laboratory_weight'] !== null ? (float) $row['component_laboratory_weight'] : null,
-                        ],
-                        'termRatio' => [
-                            'midterm' => $row['term_midterm_weight'] !== null ? (float) $row['term_midterm_weight'] : null,
-                            'final' => $row['term_final_weight'] !== null ? (float) $row['term_final_weight'] : null,
-                        ],
-                        'attendanceDateRanges' => [
-                            'midterm' => ['startDate' => $row['midterm_start_date'], 'endDate' => $row['midterm_end_date']],
-                            'final' => ['startDate' => $row['final_start_date'], 'endDate' => $row['final_end_date']],
-                        ],
-                        'persistedPercentage' => $row['final_percentage'] !== null ? (float) $row['final_percentage'] : null,
-                        'persistedGwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
-                        'persistedBreakdown' => $row['grade_components_json'] !== null
-                            ? json_decode((string) $row['grade_components_json'], true)
-                            : null,
-                        'attendancePercentage' => $row['attendance_percentage'] !== null
-                            ? (float) $row['attendance_percentage'] : null,
-                        'assessments' => [],
-                    ];
-                }
-                if ($row['config_id'] !== null
-                    && ($row['assessment_id'] !== null)
-                    && ($row['grading_category_id'] === null
-                        || $row['grading_category_weight'] === null
-                        || ($row['schema_mode'] === 'periods' && $row['period_category_weight'] === null))
-                ) {
-                    throw new FacultyGradingConfigurationException(
-                        sprintf(
-                            'Assessment #%s does not have a valid category in the authoritative grading configuration.',
-                            $row['assessment_id']
-                        ),
-                        422,
-                        'GRADING_ASSESSMENT_CATEGORY_INVALID'
-                    );
-                }
-                if ($row['assessment_id'] !== null) {
-                    $row['_has_score'] = $row['score_id'] !== null;
-                    $grouped[$enrollmentId]['assessments'][] = $row;
-                }
-        }
-        // The legacy JSON remains the response-compatible write surface;
-        // migration 020's trigger refreshes the normalized scalar/category
-        // projection atomically.
-        $saveComputedGrade = static function (float $percentage, float $gwa, string $retention, array $breakdown, int|string $enrollmentId) use ($pdo): void {
-            faculty_save_computed_grade($pdo, $percentage, $gwa, $retention, $breakdown, (int) $enrollmentId);
-        };
-        foreach ($grouped as $group) {
-            if ($group['configId'] !== null && $group['schemaMode'] === 'periods') {
-                $midterm = faculty_compute_period_result($pdo, $group, 'Midterm');
-                $final = faculty_compute_period_result($pdo, $group, 'Final');
-                $periodBreakdown = [
-                    'calculationMode' => 'authoritative_periods',
-                    'termRatio' => $group['termRatio'],
-                    'periods' => [
-                        'midterm' => $midterm['breakdown'],
-                        'final' => $final['breakdown'],
-                    ],
-                    'retentionThreshold' => $retentionThreshold,
-                ];
-                $midtermWeight = (float) ($group['termRatio']['midterm'] ?? 0);
-                $finalWeight = (float) ($group['termRatio']['final'] ?? 0);
-                $midtermRequired = $midtermWeight > 0.0;
-                $finalRequired = $finalWeight > 0.0;
-                if (($midtermRequired && $midterm['status'] !== 'computed')
-                    || ($finalRequired && $final['status'] !== 'computed')) {
-                    $results[] = [
-                        'status' => 'incomplete_period',
-                        'enrollmentId' => $group['enrollmentId'],
-                        'studentId' => $group['studentId'],
-                        'periods' => [
-                            'midterm' => $midterm['breakdown'],
-                            'final' => $final['breakdown'],
-                        ],
-                        'breakdown' => $periodBreakdown,
-                        'previouslyPersisted' => $group['persistedPercentage'] !== null,
-                        'previousPercentage' => $group['persistedPercentage'],
-                        'previousGwa' => $group['persistedGwa'],
-                    ];
-                    continue;
-                }
-                // Exact period values are blended; only the final course percentage is rounded.
-                $midtermPercentage = $midterm['percentage'] !== null ? (float) $midterm['unroundedPercentage'] : 0.0;
-                $finalPercentage = $final['percentage'] !== null ? (float) $final['unroundedPercentage'] : 0.0;
-                $percentage = round(
-                    ($midtermPercentage * $midtermWeight / 100)
-                    + ($finalPercentage * $finalWeight / 100),
-                    2
-                );
-                $gwa = faculty_percentage_to_gwa($percentage);
-                $exactGwa = faculty_percentage_to_gwa_exact($percentage);
-                $retention = faculty_course_grade_retention_state($exactGwa, $retentionThreshold);
-                if ($retention === null) {
-                    throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
-                }
-                $periodBreakdown['percentage'] = $percentage;
-                $periodBreakdown['gwa'] = $gwa;
-                $periodBreakdown['retentionState'] = $retention;
-                $saveComputedGrade($percentage, $gwa, $retention, $periodBreakdown, $group['enrollmentId']);
-                $results[] = [
-                    'status' => 'computed',
-                    'enrollmentId' => $group['enrollmentId'],
-                    'studentId' => $group['studentId'],
-                    'percentage' => $percentage,
-                    'gwa' => $gwa,
-                    'retentionState' => $retention,
-                    'periods' => [
-                        'midterm' => $midterm['breakdown'],
-                        'final' => $final['breakdown'],
-                    ],
-                    'breakdown' => $periodBreakdown,
-                ];
-                continue;
-            }
-            if ($group['configId'] !== null) {
-                $categoryTotals = [];
-                $missingAssessments = [];
-                foreach ($group['assessments'] as $assessment) {
-                    if (!($assessment['_has_score'] ?? false)) {
-                        continue;
-                    }
-                    $enabled = filter_var($assessment['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN);
-                    $effectivePercentage = faculty_effective_assessment_percentage(
-                        (float) $assessment['score'],
-                        (float) $assessment['max_score'],
-                        $enabled,
-                        (float) $assessment['transmutation_minimum_percentage'],
-                        (float) $assessment['transmutation_maximum_percentage'],
-                        $assessment['linked_attendance_status'] !== null
-                            ? (string) $assessment['linked_attendance_status'] : null
-                    );
-                    if ($effectivePercentage === null) {
-                        $missingAssessments[] = [
-                            'assessmentId' => (string) $assessment['assessment_id'],
-                            'attendanceSessionDate' => $assessment['attendance_session_date'],
-                            'attendanceSessionCode' => $assessment['attendance_session_code'],
-                        ];
-                        continue;
-                    }
-                    $categoryId = (string) $assessment['grading_category_id'];
-                    if (!isset($categoryTotals[$categoryId])) {
-                        $categoryTotals[$categoryId] = [
-                            'categoryId' => (int) $assessment['grading_category_id'],
-                            'name' => $assessment['grading_category_name'],
-                            'weight' => (float) $assessment['grading_category_weight'],
-                            'earnedPoints' => 0.0,
-                            'possiblePoints' => 0.0,
-                        ];
-                    }
-                    $categoryTotals[$categoryId]['earnedPoints'] +=
-                        ($effectivePercentage / 100) * (float) $assessment['max_score'];
-                    $categoryTotals[$categoryId]['possiblePoints'] += (float) $assessment['max_score'];
-                }
-                if ($missingAssessments !== []) {
-                    $results[] = [
-                        'status' => 'incomplete_attendance',
-                        'enrollmentId' => $group['enrollmentId'],
-                        'studentId' => $group['studentId'],
-                        'missingAssessments' => $missingAssessments,
-                    ];
-                    continue;
-                }
-                if ($categoryTotals === []) {
-                    continue;
-                }
-                $percentage = 0.0;
-                $categoryBreakdown = [];
-                foreach ($categoryTotals as $category) {
-                    if ($category['possiblePoints'] <= 0) {
-                        continue;
-                    }
-                    $ratio = $category['earnedPoints'] / $category['possiblePoints'];
-                    $contribution = $ratio * $category['weight'];
-                    $percentage += $contribution;
-                    $categoryBreakdown[] = [
-                        'categoryId' => $category['categoryId'],
-                        'name' => $category['name'],
-                        'earnedPoints' => round($category['earnedPoints'], 4),
-                        'possiblePoints' => round($category['possiblePoints'], 4),
-                        'ratio' => round($ratio, 6),
-                        'weight' => round($category['weight'], 4),
-                        'contribution' => round($contribution, 4),
-                    ];
-                }
-                $percentage = round($percentage, 2);
-                $gwa = faculty_percentage_to_gwa($percentage);
-                $exactGwa = faculty_percentage_to_gwa_exact($percentage);
-                $retention = faculty_course_grade_retention_state($exactGwa, $retentionThreshold);
-                if ($retention === null) {
-                    throw new RuntimeException('Computed course grade did not produce a finite authoritative GWA.');
-                }
-                $breakdown = [
-                    'calculationMode' => 'authoritative_categories',
-                    'categories' => $categoryBreakdown,
-                    'retentionThreshold' => $retentionThreshold,
-                ];
-                $saveComputedGrade($percentage, $gwa, $retention, $breakdown, $group['enrollmentId']);
-                $results[] = [
-                    'status' => 'computed',
-                    'enrollmentId' => $group['enrollmentId'],
-                    'studentId' => $group['studentId'],
-                    'percentage' => $percentage,
-                    'gwa' => $gwa,
-                    'retentionState' => $retention,
-                    'breakdown' => $breakdown,
-                ];
-                continue;
-            }
-
-            // Every class needs saved grade weights; there is no fallback
-            // computation. Existing persisted grades are left unchanged.
-            $results[] = [
-                'status' => 'weights_required',
-                'enrollmentId' => $group['enrollmentId'],
-                'studentId' => $group['studentId'],
-                'message' => 'Grade weights have not been set up for this course. Set them up in the Grade Weights editor, then recompute.',
-            ];
-        }
+        $computed = faculty_recompute_class_grades($pdo, (int) $authCtx['user_id'], $csId, $currentSchoolYear, $retentionThreshold);
+        $results = $computed['results'];
         if ($preview) {
             $pdo->rollBack();
             json_response(['status' => 'ok', 'message' => 'Grade preview computed; nothing was saved.', 'preview' => true, 'results' => $results], 200);
             return;
         }
         $computedCount = count(array_filter($results, static fn(array $result): bool => ($result['status'] ?? '') === 'computed'));
-        audit_record_action(
-            $pdo, $config, $authCtx, 'grading', 'grades_recomputed',
-            $csId > 0 ? 'class_section' : 'faculty_classes', $csId > 0 ? (string) $csId : (string) $authCtx['user_id'],
-            sprintf('Recomputed grades: %d computed, %d not computed.', $computedCount, count($results) - $computedCount),
-            ['scope_cs_id' => $csId > 0 ? $csId : null, 'after' => ['computed' => $computedCount, 'total' => count($results)]]
-        );
+        // No row when no grade changed (audit contract 5.4).
+        if ($computed['gradeChanges'] !== []) {
+            $gradeChanges = faculty_audit_label_changes($pdo, $computed['gradeChanges']);
+            $where = $csId > 0 ? faculty_audit_class_label($pdo, $csId) : 'all classes';
+            audit_record_action(
+                $pdo, $config, $authCtx, 'grading', 'grades_recomputed',
+                $csId > 0 ? 'class_section' : 'faculty_classes', $csId > 0 ? (string) $csId : (string) $authCtx['user_id'],
+                sprintf('Recomputed grades in %s: %d grade(s) changed.', $where, count($gradeChanges)),
+                ['scope_cs_id' => $csId > 0 ? $csId : null, 'after' => [
+                    'computed' => $computedCount, 'total' => count($results), 'gradeChanges' => $gradeChanges,
+                ]]
+            );
+        }
         $pdo->commit();
         json_response([
             'status' => 'ok',
@@ -4898,7 +5111,7 @@ function handle_faculty_attendance_session_create(): void
             $sessionId = (int) $insert->fetchColumn();
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_started', $sessionId, $csId,
-                "Created attendance session '{$sessionCode}' for class section #{$csId}.", null, null,
+                'Created attendance session for ' . audit_class_label($pdo, $csId) . " on {$sessionDate}.", null, null,
                 ['session_id' => $sessionId, 'cs_id' => $csId, 'session_date' => $sessionDate, 'status' => $creationStatus, 'opening_time' => $openingTime, 'present_cutoff_time' => $presentCutoff, 'late_cutoff_time' => $lateCutoff, 'class_end_time' => $classEndTime]
             );
             $pdo->commit();
@@ -5005,7 +5218,7 @@ function handle_faculty_attendance_session_revoke(): void
             $update->execute([$nowSql, $authCtx['user_id'], $reason, $nowSql, $sessionId]);
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_revoked', $sessionId, (int) $session['cs_id'],
-                "Revoked attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.", $reason,
+                'Revoked attendance session for ' . audit_class_label($pdo, (int) $session['cs_id']) . " on {$session['session_date']}.", $reason,
                 ['session_id' => $sessionId, 'status' => $session['status']],
                 ['session_id' => $sessionId, 'status' => 'revoked', 'revoked_at' => $nowSql]
             );
@@ -5086,7 +5299,7 @@ function handle_faculty_attendance_session_end(): void
             $resolvedAbsentCount = attendance_session_resolve_absences($pdo, $sessionId, $now);
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'attendance_session_ended', $sessionId, (int) $session['cs_id'],
-                "Ended attendance session '{$session['session_code']}' for class section #{$session['cs_id']}.", null,
+                'Ended attendance session for ' . audit_class_label($pdo, (int) $session['cs_id']) . " on {$session['session_date']}.", null,
                 ['session_id' => $sessionId, 'status' => 'active'],
                 ['session_id' => $sessionId, 'status' => 'ended', 'ended_at' => $nowSql, 'resolved_absent_count' => $resolvedAbsentCount]
             );
@@ -5675,9 +5888,9 @@ function handle_faculty_attendance_override(): void
             'target_type' => 'attendance_record',
             'target_id' => (string) $target['record_id'],
             'description' => sprintf(
-                'Faculty attendance %s for Student #%s in %s on %s: %s.',
+                'Faculty attendance %s for %s in %s on %s: %s.',
                 $created ? 'recorded' : 'corrected',
-                $target['student_number'],
+                audit_student_label($pdo, (int) $target['student_id']),
                 $target['class_name'] ?? $target['cs_name'],
                 $target['session_date'],
                 $status
@@ -6556,7 +6769,7 @@ function handle_faculty_retention_remedial_save(): void
         }
         audit_record_action(
             $pdo, $config, $authCtx, 'retention', 'retention_remedial_save', 'enrollment', (string) $enrollmentId,
-            "Attempt {$attemptNumber} for enrollment #{$enrollmentId} recorded as {$outcome}.",
+            "Attempt {$attemptNumber} for " . audit_student_label($pdo, (int) $target['student_id']) . ' in ' . audit_class_label($pdo, (int) $target['cs_id']) . " recorded as {$outcome}.",
             ['scope_cs_id' => (int) $target['cs_id'], 'after' => ['attemptNumber' => $attemptNumber, 'outcome' => $outcome, 'notes' => $request['notes']]]
         );
         $pdo->commit();
@@ -7628,28 +7841,36 @@ function handle_faculty_class_update(): void
             }
 
             $after['meetings'] = class_meetings_read($pdo, $after);
-            $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
-            $auditCtx = audit_begin_operation($pdo);
-            audit_finish_operation($pdo, $auditCtx, [
-                'module_code' => 'class_management',
-                'action_code' => 'class_update',
-                'event_status' => 'Success',
-                'actor_user_id' => $authCtx['user_id'],
-                'actor_username' => $authCtx['login_email'],
-                'actor_role' => $authCtx['role'],
-                'actor_display_name' => $authCtx['display_name'],
-                'session_id' => $authCtx['session_id'],
-                'scope_cs_id' => $csId,
-                'target_type' => 'class_section',
-                'target_id' => (string) $csId,
-                'description' => "Updated class section '{$after['cs_name']}'.",
-                'reason' => null,
-                'http_method' => $context['http_method'],
-                'endpoint' => $context['endpoint'],
-                'request_id' => $context['request_id'],
-                'ip_address' => $context['ip_address'],
-                'user_agent' => $context['user_agent'],
-            ], $macKey, $before, $after);
+            // R3/R4: no row when nothing changed; otherwise only the changed fields.
+            // meetings_recorded only flips when a legacy class is first saved with meetings, not a user change.
+            $cmpBefore = $before;
+            $cmpAfter = $after;
+            unset($cmpBefore['meetings_recorded'], $cmpAfter['meetings_recorded']);
+            $changed = audit_changed_fields($cmpBefore, $cmpAfter);
+            if ($changed !== null) {
+                $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+                $auditCtx = audit_begin_operation($pdo);
+                audit_finish_operation($pdo, $auditCtx, [
+                    'module_code' => 'class_management',
+                    'action_code' => 'class_update',
+                    'event_status' => 'Success',
+                    'actor_user_id' => $authCtx['user_id'],
+                    'actor_username' => $authCtx['login_email'],
+                    'actor_role' => $authCtx['role'],
+                    'actor_display_name' => $authCtx['display_name'],
+                    'session_id' => $authCtx['session_id'],
+                    'scope_cs_id' => $csId,
+                    'target_type' => 'class_section',
+                    'target_id' => (string) $csId,
+                    'description' => "Updated class section '{$after['cs_name']}'.",
+                    'reason' => null,
+                    'http_method' => $context['http_method'],
+                    'endpoint' => $context['endpoint'],
+                    'request_id' => $context['request_id'],
+                    'ip_address' => $context['ip_address'],
+                    'user_agent' => $context['user_agent'],
+                ], $macKey, $changed[0], $changed[1]);
+            }
 
             $pdo->commit();
         } catch (Throwable $e) {
@@ -7879,7 +8100,7 @@ function handle_faculty_class_enroll_students(): void
                 'scope_cs_id' => $csId,
                 'target_type' => 'class_section',
                 'target_id' => (string) $csId,
-                'description' => "Enrolled {$enrolledCount} student(s) into class section #{$csId}.",
+                'description' => "Enrolled {$enrolledCount} student(s) into " . audit_class_label($pdo, $csId) . '.',
                 'reason' => null,
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],
@@ -7974,7 +8195,7 @@ function handle_faculty_class_unenroll_student(): void
                 'scope_cs_id' => $csId,
                 'target_type' => 'class_section',
                 'target_id' => (string) $csId,
-                'description' => "Archived Student #{$studentId}'s current membership in class section #{$csId}; historical grades and attendance were preserved.",
+                'description' => 'Removed ' . audit_student_label($pdo, $studentId) . ' from ' . audit_class_label($pdo, $csId) . '; historical grades and attendance were preserved.',
                 'reason' => null,
                 'http_method' => $context['http_method'],
                 'endpoint' => $context['endpoint'],

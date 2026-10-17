@@ -31,10 +31,15 @@ assert_faculty_activity_contract(
     'Faculty activity route is registered'
 );
 assert_faculty_activity_contract(str_contains($handler, 'faculty_verify_auth'), 'Faculty activity requires server-side authentication');
-assert_faculty_activity_contract(str_contains($handler, "'activity' => faculty_activity_rows"), 'Faculty activity returns the exact activity response envelope');
+assert_faculty_activity_contract(str_contains($handler, "faculty_activity_rows(\$pdo, (int) \$authCtx['user_id'], \$_GET)"), 'Faculty activity returns the shared audit read envelope for the signed-in Faculty member');
 $rowsStart = strpos($controller, 'function faculty_activity_rows(');
 $rowsSource = substr($controller, (int) $rowsStart, (int) strpos($controller, 'function handle_faculty_activity_get', (int) $rowsStart) - (int) $rowsStart);
-assert_faculty_activity_contract(str_contains($rowsSource, 'AND actor_user_id = ?') && !str_contains($rowsSource, 'scope_cs_id'), 'My Activity shows only the Faculty member\'s own actions');
+$catalogue = file_get_contents(__DIR__ . '/../../backend/app/audit_catalogue.php');
+assert_faculty_activity_contract(
+    str_contains($rowsSource, "'role' => 'faculty'") && str_contains($rowsSource, '$userId')
+        && str_contains($catalogue, "'e.actor_user_id = ?'") && !str_contains($rowsSource, 'scope_cs_id'),
+    "My Activity shows only the Faculty member's own actions"
+);
 assert_faculty_activity_contract(
     str_contains($routes, "'path' => '/api/faculty/attendance-activity'")
         && str_contains($routes, "'handler' => 'handle_faculty_attendance_activity_get'"),
@@ -43,14 +48,14 @@ assert_faculty_activity_contract(
 assert_faculty_activity_contract(str_contains($controller, 'FROM attendance_record_corrections ac') && str_contains($controller, 'WHERE cs.instructor_user_id = :faculty_id'), 'Class Attendance Activity is limited to the Faculty member\'s classes');
 assert_faculty_activity_contract(!str_contains($handler, 'handle_admin_audit_logs'), 'Faculty activity does not reuse Admin-wide audit handling');
 assert_faculty_activity_contract(!str_contains($controller, 'before_state_json') && !str_contains($controller, 'after_state_json'), 'Faculty activity does not expose raw audit state');
-assert_faculty_activity_contract(str_contains($controller, "LIMIT ' . " . '$limit'), 'Faculty activity bounds the requested refresh payload');
+assert_faculty_activity_contract(str_contains($catalogue, 'LIMIT {$pageSize} OFFSET') && !str_contains($rowsSource, 'LIMIT'), 'Faculty activity pages on the server instead of stopping at the newest 100');
 
 assert_faculty_activity_contract(str_contains($client, 'getFacultyActivityApi'), 'Frontend exposes a typed Faculty activity request');
-assert_faculty_activity_contract(str_contains($client, '`/faculty/activity?limit=${boundedLimit}`'), 'Frontend request targets the Faculty activity endpoint');
-assert_faculty_activity_contract(str_contains($page, 'getFacultyActivityApi(100)'), 'Faculty audit page loads persisted activity');
+assert_faculty_activity_contract(str_contains($client, '`/faculty/activity${auditQueryString(params)}`'), 'Frontend request targets the Faculty activity endpoint');
+assert_faculty_activity_contract(str_contains($page, 'getFacultyActivityApi(p)') && !str_contains($page, 'getFacultyActivityApi(100)'), 'Faculty audit page loads persisted activity from the server, per filter and page');
 assert_faculty_activity_contract(str_contains($page, 'setLoading(false)'), 'Faculty audit page clears loading state after refresh');
 assert_faculty_activity_contract(str_contains($page, 'setError(err instanceof Error ? err.message'), 'Faculty audit page surfaces request errors');
 assert_faculty_activity_contract(str_contains($page, 'No audit records match the selected filters.'), 'Faculty audit page preserves the truthful empty state');
-assert_faculty_activity_contract(str_contains($page, "allLogs || role === 'faculty' ? dbLogs"), 'Faculty audit page preserves authorized class-scoped actors');
+assert_faculty_activity_contract(str_contains($page, "...(role === 'faculty' ? { cls } : {})") && str_contains($page, 'getFacultyClassesApi'), 'Faculty audit page filters by the Faculty member\'s own classes on the server');
 
 echo "ALL FACULTY ACTIVITY CONTRACT TESTS PASSED\n";

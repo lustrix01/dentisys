@@ -31,6 +31,7 @@ $context = [
     'user_agent' => 'backend/bin/expire-lbph-biometrics.php',
     'http_method' => 'CLI',
     'endpoint' => 'bin/expire-lbph-biometrics.php',
+    'operation_uuid' => uuid_v4_string(),
 ];
 
 $candidates = $pdo->prepare(

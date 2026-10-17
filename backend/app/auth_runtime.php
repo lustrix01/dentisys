@@ -642,25 +642,7 @@ function auth_runtime_refresh(PDO $pdo, array $config, array $context, string $r
         $responseTime = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $cookieTtl = max(0, $childExpiryParsed->getTimestamp() - $responseTime->getTimestamp());
 
-        audit_finish_operation($pdo, $auditCtx, [
-            'module_code' => 'auth',
-            'action_code' => 'refresh_rotation',
-            'event_status' => 'Success',
-            'actor_user_id' => (int) $lockedUser['user_id'],
-            'actor_username' => $lockedUser['login_email'],
-            'actor_role' => $lockedUser['role'],
-            'actor_display_name' => $lockedUser['display_name'],
-            'session_id' => (int) $sessionRow['session_id'],
-            'target_type' => 'security_token',
-            'target_id' => (string) $childTokenId,
-            'description' => 'Refresh token rotated.',
-            'http_method' => $context['http_method'],
-            'endpoint' => $context['endpoint'],
-            'request_id' => $context['request_id'],
-            'ip_address' => $context['ip_address'],
-            'user_agent' => $context['user_agent'],
-        ], $macKey);
-
+        // Rotation is not audited (SEC-005); reuse detection above still is.
         $pdo->commit();
 
         return [

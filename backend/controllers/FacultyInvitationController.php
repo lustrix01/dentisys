@@ -601,25 +601,32 @@ function handle_admin_faculty_invitation_update(): void
         $insertToken->execute();
         $tokenId = (int) $insertToken->fetchColumn();
         $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
-        audit_finish_operation($pdo, $auditContext, [
-            'module_code' => 'admin',
-            'action_code' => 'faculty_invitation_edited',
-            'event_status' => 'Success',
-            'actor_user_id' => $actor['user_id'],
-            'actor_username' => $actor['login_email'],
-            'actor_role' => $actor['role'],
-            'actor_display_name' => $actor['display_name'],
-            'session_id' => $actor['session_id'],
-            'target_type' => 'security_token',
-            'target_id' => (string) $tokenId,
-            'description' => "Edited pending Faculty invitation for {$name} ({$email}); previous tokens were revoked.",
-            'reason' => null,
-            'http_method' => $context['http_method'],
-            'endpoint' => $context['endpoint'],
-            'request_id' => $context['request_id'],
-            'ip_address' => $context['ip_address'],
-            'user_agent' => $context['user_agent'],
-        ], $macKey);
+        // R3/R4: the invitation is still reissued, but a re-save with the same name and email writes no row.
+        $changed = audit_changed_fields(
+            ['name' => $account['display_name'], 'email' => $account['login_email']],
+            ['name' => $name, 'email' => $email]
+        );
+        if ($changed !== null) {
+            audit_finish_operation($pdo, $auditContext, [
+                'module_code' => 'admin',
+                'action_code' => 'faculty_invitation_edited',
+                'event_status' => 'Success',
+                'actor_user_id' => $actor['user_id'],
+                'actor_username' => $actor['login_email'],
+                'actor_role' => $actor['role'],
+                'actor_display_name' => $actor['display_name'],
+                'session_id' => $actor['session_id'],
+                'target_type' => 'security_token',
+                'target_id' => (string) $tokenId,
+                'description' => "Edited pending Faculty invitation for {$name} ({$email}); previous tokens were revoked.",
+                'reason' => null,
+                'http_method' => $context['http_method'],
+                'endpoint' => $context['endpoint'],
+                'request_id' => $context['request_id'],
+                'ip_address' => $context['ip_address'],
+                'user_agent' => $context['user_agent'],
+            ], $macKey, $changed[0], $changed[1]);
+        }
         $pdo->commit();
 
         $link = app_url($config, '/activate-faculty', ['token' => $token]);

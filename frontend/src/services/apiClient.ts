@@ -1,3 +1,5 @@
+import type { AuditEntry, AuditListResponse, AuditQuery } from './auditService';
+import { auditQueryString } from './auditService.ts';
 import type { EmailAction } from '../components/email/emailHistory';
 import type {
   LoginResponse,
@@ -244,10 +246,13 @@ async function request<T>(
   signal?: AbortSignal,
   // keepalive lets a refresh finish even if the page reloads/closes after the server rotated the token
   keepalive = false,
+  auditBatchId?: string,
 ): Promise<T> {
   const headers: Record<string, string> = {
     accept: 'application/json',
   };
+  // One id per bulk click: the backend stamps it on every audit row of the request.
+  if (auditBatchId) headers['X-Audit-Batch-Id'] = auditBatchId;
 
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   if (body !== undefined && !isFormData) {
@@ -382,7 +387,7 @@ export function createStudentInvitation(data: { studentId: string; classId: stri
   delivery_status: string;
   message: string;
 }> {
-  return request('POST', '/faculty/student-invitations', data);
+  return request('POST', '/faculty/student-invitations', data, undefined, 15000, undefined, false, data.emailActionId);
 }
 
 export function activateStudent(token: string, password: string): Promise<{ status: string; message: string }> {
@@ -586,7 +591,7 @@ export function activateFacultyInvitation(token: string, password: string): Prom
 }
 
 export function inviteSecretaryApi(data: { student_name: string; student_number?: string; cs_id: number; email: string; emailActionId?: string }): Promise<{ status: string; invitationId: string | null; token: string | null; invitation_link: string | null; delivery_status: string; message: string }> {
-  return request('POST', '/secretary/invite', data);
+  return request('POST', '/secretary/invite', data, undefined, 15000, undefined, false, data.emailActionId);
 }
 
 /** REG-006: remove a Class Secretary appointment; the account returns to Student access. */
@@ -653,17 +658,7 @@ export function getAdminDashboardKpisApi(schoolYear?: string): Promise<SchoolYea
   gwaBuckets: Array<{ range: string; count: number; color: string }>;
   statusCounts: { active: number; remedial: number };
   classAttendance: Array<{ name: string; rate: number }>;
-  recentAuditEvents?: Array<{
-    id: string;
-    occurredAt: string | null;
-    actorName: string | null;
-    actorEmail: string | null;
-    actorRole: string | null;
-    module: string;
-    action: string;
-    description: string;
-    status: string;
-  }>;
+  recentAuditEvents?: AuditEntry[];
 }> {
   return request('GET', `/admin/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }
@@ -687,47 +682,12 @@ export function saveRetentionCriteriaApi(criteria: any[]): Promise<{ status: str
   return request('POST', '/admin/retention/criteria', criteria);
 }
 
-export interface AdminAuditLogPage {
-  status: string;
-  logs: import('./auditService').AuditLog[];
-  total: number;
-  page: number;
-  pageSize: number;
-  statusCounts: Record<'Success' | 'Warning' | 'Failed', number>;
-  modules: string[];
+export function getAdminAuditLogsApi(params?: AuditQuery): Promise<AuditListResponse> {
+  return request('GET', `/admin/audit-logs${auditQueryString(params)}`);
 }
 
-export function getAdminAuditLogsApi(params?: {
-  query?: string; role?: string; module?: string; status?: string; date?: string;
-  sort?: 'newest' | 'oldest'; page?: number; pageSize?: number;
-}): Promise<AdminAuditLogPage> {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params ?? {})) {
-    if (value !== undefined && value !== '') search.set(key, String(value));
-  }
-  const qs = search.toString();
-  return request('GET', `/admin/audit-logs${qs ? `?${qs}` : ''}`);
-}
-
-export interface FacultyActivityRecord {
-  id: string;
-  timestamp: string;
-  userName?: string | null;
-  userRole?: string | null;
-  action?: string | null;
-  module?: string | null;
-  description: string;
-  status?: string | null;
-  ipAddress?: string | null;
-  device?: string | null;
-}
-
-export function getFacultyActivityApi(limit = 100): Promise<{
-  status: string;
-  activity: FacultyActivityRecord[];
-}> {
-  const boundedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
-  return request('GET', `/faculty/activity?limit=${boundedLimit}`);
+export function getFacultyActivityApi(params?: AuditQuery): Promise<AuditListResponse> {
+  return request('GET', `/faculty/activity${auditQueryString(params)}`);
 }
 
 export interface FacultyAttendanceActivityRow {
@@ -994,12 +954,12 @@ export function createStudentApi(data: {
   admissionDate?: string;
   birthdate?: string;
   classId?: string;
-}): Promise<{
+}, auditBatchId?: string): Promise<{
   status: string;
   message: string;
   student: any;
 }> {
-  return request('POST', '/faculty/students', data);
+  return request('POST', '/faculty/students', data, undefined, 15000, undefined, false, auditBatchId);
 }
 
 export function updateFacultyStudentApi(studentId: string | number, data: {
@@ -1180,9 +1140,10 @@ export function getFacultyAttendanceWorksheetApi(params: {
 }
 
 export function recordFacultyInitialAttendanceApi(
-  data: FacultyAttendanceInitialEntryPayload
+  data: FacultyAttendanceInitialEntryPayload,
+  auditBatchId?: string
 ): Promise<FacultyAttendanceMutationResponse> {
-  return request('POST', '/faculty/attendance/override', data);
+  return request('POST', '/faculty/attendance/override', data, undefined, 15000, undefined, false, auditBatchId);
 }
 
 export function correctFacultyAttendanceApi(
@@ -1275,12 +1236,22 @@ export function getFacultyAssessmentScoresApi(assessmentId: string): Promise<{ s
 /** A null score clears that student's stored score. */
 export type FacultyScoreEntry = { studentId: string; score: number | null; remarks?: string };
 
-export function saveFacultyAssessmentScoresApi(assessmentId: string, scores: FacultyScoreEntry[]): Promise<{ status: string; message: string; savedCount: number; clearedCount?: number }> {
+/** A score save also recomputes the class's grades; `results` are the compute results, empty when `recomputeFailed`. */
+export interface FacultySaveScoresResponse {
+  status: string;
+  message: string;
+  savedCount: number;
+  clearedCount?: number;
+  results?: FacultyGradeComputeResult[];
+  recomputeFailed?: boolean;
+}
+
+export function saveFacultyAssessmentScoresApi(assessmentId: string, scores: FacultyScoreEntry[]): Promise<FacultySaveScoresResponse> {
   return request('POST', '/faculty/scores', { assessmentId, scores });
 }
 
 /** Saves several assessments' scores in one transaction (all or nothing). */
-export function saveFacultyScoreBatchesApi(batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }>): Promise<{ status: string; message: string; savedCount: number; clearedCount?: number }> {
+export function saveFacultyScoreBatchesApi(batches: Array<{ assessmentId: string; scores: FacultyScoreEntry[] }>): Promise<FacultySaveScoresResponse> {
   return request('POST', '/faculty/scores', { batches });
 }
 
@@ -1335,7 +1306,7 @@ export function getSecretaryDashboardKpisApi(schoolYear?: string): Promise<Schoo
     todayRecords: number;
     overriddenCount: number;
   };
-  recentActivity: Array<{ id: string; studentName: string; date: string; subjectCode: string; status: string }>;
+  recentActivity: AuditEntry[];
   assignedClass: {
     classId: string;
     className: string;
@@ -1414,22 +1385,8 @@ export function overrideSecretaryAttendanceApi(data: {
   return request('POST', '/secretary/attendance/override', data);
 }
 
-export function getSecretaryActivityApi(limit = 50): Promise<{
-  status: string;
-  activity: Array<{
-    id: string;
-    timestamp: string;
-    userName?: string | null;
-    userRole?: string | null;
-    action?: string | null;
-    module?: string | null;
-    description: string;
-    status?: string | null;
-    ipAddress?: string | null;
-    device?: string | null;
-  }>;
-}> {
-  return request('GET', `/secretary/activity?limit=${limit}`);
+export function getSecretaryActivityApi(params?: AuditQuery): Promise<AuditListResponse> {
+  return request('GET', `/secretary/activity${auditQueryString(params)}`);
 }
 
 export function getSecretaryProfileApi(): Promise<{
@@ -1742,8 +1699,8 @@ export function getAvailableStudentsForClassApi(csId: number): Promise<{
 export function enrollStudentsInClassApi(data: {
   csId: number;
   studentIds: number[];
-}): Promise<{ status: string; message: string; enrolledCount: number }> {
-  return request('POST', '/faculty/classes/enroll', data);
+}, auditBatchId?: string): Promise<{ status: string; message: string; enrolledCount: number }> {
+  return request('POST', '/faculty/classes/enroll', data, undefined, 15000, undefined, false, auditBatchId);
 }
 
 export function unenrollStudentFromClassApi(data: {

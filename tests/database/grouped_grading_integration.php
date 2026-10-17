@@ -397,6 +397,29 @@ expect_same('missing_assessment_score', $groupedMissingResult['periods']['final'
 $groupedPersistedA = $groupedReadGrade($groupedStudentA['enrollmentId']);
 expect_same('85.40', (string) ($groupedPersistedA['final_percentage'] ?? ''), 'Explicit grouped recomputation persists the 85.40 overall result');
 
+// A score save recomputes the class itself and writes exactly one audit row
+// (changed cells plus moved grades); an identical re-save writes none.
+$groupedScoreRows = static fn(): int => (int) $pdo->query("SELECT COUNT(*) FROM audit_events WHERE action_code = 'assessment_scores_saved'")->fetchColumn();
+$groupedSavePayload = static fn(float $score): array => [
+    'assessmentId' => (string) $groupedAssessments['midtermLectureQuiz'],
+    // Keep the fixture remark so only the score changes (omitting it clears it, which is audited too).
+    'scores' => [['studentId' => (string) $groupedStudentA['studentId'], 'score' => $score, 'remarks' => 'Grouped grading integration fixture']],
+];
+$groupedRowsBefore = $groupedScoreRows();
+[$groupedSaveStatus, $groupedSaveBody] = integration_http_json('/api/faculty/scores', $facultyAccessToken, $groupedSavePayload(60.0));
+expect_same(200, $groupedSaveStatus, 'A grouped score save succeeds');
+expect_same(false, $groupedSaveBody['recomputeFailed'] ?? null, 'The save reports a completed recompute');
+expect_true(is_array($groupedSaveBody['results'] ?? null) && $groupedSaveBody['results'] !== [], 'The save returns the recompute results');
+expect_same($groupedRowsBefore + 1, $groupedScoreRows(), 'A score save writes exactly one audit row');
+$groupedSaveAudit = json_decode((string) $pdo->query("SELECT after_state_json FROM audit_events WHERE action_code = 'assessment_scores_saved' ORDER BY sequence_number DESC LIMIT 1")->fetchColumn(), true);
+expect_same(1, count($groupedSaveAudit['changes'] ?? []), 'The row lists the one changed cell');
+expect_same(['50.00', '60.00'], [$groupedSaveAudit['changes'][0]['before'] ?? null, $groupedSaveAudit['changes'][0]['after'] ?? null], 'The cell shows before and after');
+expect_true(($groupedSaveAudit['gradeChanges'] ?? []) !== [], 'The row lists the grades that moved');
+integration_http_json('/api/faculty/scores', $facultyAccessToken, $groupedSavePayload(60.0));
+expect_same($groupedRowsBefore + 1, $groupedScoreRows(), 'Saving identical values writes no audit row');
+integration_http_json('/api/faculty/scores', $facultyAccessToken, $groupedSavePayload(50.0));
+expect_same('85.40', (string) ($groupedReadGrade($groupedStudentA['enrollmentId'])['final_percentage'] ?? ''), 'Restoring the score restores the grade');
+
 // Grouped retention reads must use the same current
 // assessment snapshot when read directly or through the batch cache.
 $groupedRiskRows = [

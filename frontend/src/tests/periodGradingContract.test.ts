@@ -58,7 +58,7 @@ test('Score panels keep one manual Save per view, show the clear count, and warn
   assert.match(source, /checked=\{autoSaveEnabled\}/);
   assert.match(source, /Auto-save on/);
   assert.match(source, /addEventListener\('beforeunload', warnUnsaved\)/);
-  assert.match(source, /if \(!singleDirtyRef\.current && !matrixDirtyRef\.current\) return;/);
+  assert.match(source, /if \(!singleDirtyRef\.current && !matrixDirtyRef\.current\r?\n\s+&& !singleDebounceTimerRef\.current && !matrixDebounceTimerRef\.current\) return;/);
   assert.match(source, /removeEventListener\('beforeunload', warnUnsaved\)/);
 });
 
@@ -1102,11 +1102,14 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
   const filters: string[][] = [];
   let confirmAnswer = true;
   const timers: Array<{ fn: () => void; ms: number; cancelled: boolean }> = [];
-  let save = async () => {};
+  let save: () => Promise<unknown> = async () => {};
+  const notices: unknown[] = [];
   let singleState: Record<string, { score: string; remarks: string }> = { student: { score: '10', remarks: '' }, other: { score: '', remarks: '' } };
   let matrixState: Record<string, Record<string, string>> = { student: { assessment: '10' } };
   const context = {
     autoSaveEnabled,
+    AUTO_SAVE_IDLE_MS: 10_000,
+    selectedAssessmentIdRef: { current: 'assessment' },
     selectedClassId: 'class',
     availableClasses: [],
     activeAssessments: [{ id: 'assessment', maxScore: 100 }],
@@ -1123,7 +1126,7 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
     setMatrixScoresState: (update: (previous: typeof matrixState) => typeof matrixState) => { matrixState = update(matrixState); },
     setMatrixRefreshKey: () => {},
     setIsMatrixSavedAlert: () => {},
-    saveFacultyScoreBatchesApi: async (batches: Array<{ scores: Array<{ studentId: string; score: number | null }> }>) => { calls.push(batches.flatMap(batch => batch.scores)); await save(); },
+    saveFacultyScoreBatchesApi: async (batches: Array<{ scores: Array<{ studentId: string; score: number | null }> }>) => { calls.push(batches.flatMap(batch => batch.scores)); return save(); },
     selectedAssessmentId: 'assessment',
     activeAssessment: { classId: 'class', maxScore: 100, title: 'Quiz', type: 'Quiz', gradingPeriod: 'Midterm' },
     matchesActivityFilters,
@@ -1141,9 +1144,9 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
     hasStoredScore: (_assessmentId: string, studentId: string) => studentId === 'student',
     validateSingleScore: (scoreStr: string, maxScore: number) => { if (!scoreStr) return true; const n = parseFloat(scoreStr); return !isNaN(n) && n >= 0 && n <= maxScore; },
     setScoresInputState: (update: (previous: typeof singleState) => typeof singleState) => { singleState = update(singleState); },
-    saveFacultyAssessmentScoresApi: async (_id: string, scores: Array<{ studentId: string; score: number | null }>) => { calls.push(scores); await save(); },
+    saveFacultyAssessmentScoresApi: async (_id: string, scores: Array<{ studentId: string; score: number | null }>) => { calls.push(scores); return save(); },
     saveAssessmentScores: () => {},
-    refreshPersistedGrades: async () => {},
+    showRecomputeNotice: (response: unknown) => { notices.push(response); },
     setIsScoresSavedAlert: () => {},
     showFeedback: (message: string) => feedback.push(message),
     requestConfirmation: async (message: string, title: string) => { prompts.push([title, message]); return confirmAnswer; },
@@ -1151,14 +1154,14 @@ function scoreSaveHarness(mode: 'single' | 'matrix' = 'single', autoSaveEnabled 
     clearTimeout: (timer: { cancelled: boolean } | null) => { if (timer) timer.cancelled = true; },
   };
   const compiled = ts.transpileModule(handlers, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  const exposed = mode === 'single' ? 'return { handleScoreChange, handleScoreBlur, handleManualSaveScores, confirmDiscardUnsavedScores, changeActivityFilter, hasUnsavedSingleScores };'
-    : 'return { handleCellChange: (student, value) => handleMatrixScoreChange(student, "assessment", value), handleScoreChange: (_student, value) => handleMatrixScoreChange(_student, "assessment", value), handleScoreBlur: handleMatrixScoreBlur, handleManualSaveScores: handleSaveMatrixScores };';
+  const exposed = mode === 'single' ? 'return { handleScoreChange, flush: flushSingleAutoSave, handleManualSaveScores, confirmDiscardUnsavedScores, changeActivityFilter, hasUnsavedSingleScores };'
+    : 'return { handleCellChange: (student, value) => handleMatrixScoreChange(student, "assessment", value), handleScoreChange: (_student, value) => handleMatrixScoreChange(_student, "assessment", value), flush: flushMatrixAutoSave, handleManualSaveScores: handleSaveMatrixScores };';
   const actions = new Function(...Object.keys(context), compiled + exposed)(...Object.values(context));
   // Saves run unawaited from the handlers, so let the async work finish before asserting.
   const settle = () => new Promise<void>(resolve => setImmediate(resolve));
   const fire = (ms: number) => { for (const timer of timers.splice(0)) if (timer.ms === ms && !timer.cancelled) timer.fn(); };
   const pending = (ms: number) => timers.filter(timer => timer.ms === ms && !timer.cancelled).length;
-  return { actions, context, calls, statuses, feedback, prompts, filters, answer: (value: boolean) => { confirmAnswer = value; }, settle, fire, pending, setSave: (next: () => Promise<void>) => { save = next; } };
+  return { actions, context, calls, notices, statuses, feedback, prompts, filters, answer: (value: boolean) => { confirmAnswer = value; }, settle, fire, pending, setSave: (next: () => Promise<unknown>) => { save = next; } };
 }
 
 test('Switching assessment, class or course asks first only when scores are unsaved', async () => {
@@ -1228,24 +1231,38 @@ test('Save badge shows saving, failed, unsaved or all saved', () => {
   assert.deepEqual(saveStatusBadge('saved', false), { kind: 'saved', label: 'All changes saved' });
 });
 
-test('Score entry saves when leaving a field, only while Auto-save is on; manual Save needs no confirmation', async () => {
+test('Score entry auto-saves 10 seconds after typing stops, only while Auto-save is on; manual Save needs no confirmation', async () => {
   const h = scoreSaveHarness();
   h.actions.handleScoreChange('student', '20', 'score');
   assert.equal(h.calls.length, 0, 'typing alone must not save');
-  assert.equal(h.pending(1000), 0, 'typing alone never saves or schedules a save');
-  await h.actions.handleScoreBlur('student');
+  assert.equal(h.pending(10_000), 1, 'typing starts the 10 second wait');
+  h.actions.handleScoreChange('student', '22', 'score');
+  assert.equal(h.pending(10_000), 1, 'each edit restarts the wait instead of adding another');
+  h.fire(10_000);
   await h.settle();
-  assert.equal(h.calls.length, 1);
-  assert.equal(h.calls[0][0].score, 20);
+  assert.equal(h.calls.length, 1, 'a burst of edits is one save');
+  assert.equal(h.calls[0][0].score, 22);
   h.actions.handleScoreChange('student', '25', 'score');
-  await h.actions.handleScoreBlur('student');
+  h.fire(10_000);
   await h.settle();
   assert.equal(h.calls.length, 2);
   assert.equal(h.calls[1][0].score, 25);
 
+  const leaving = scoreSaveHarness();
+  leaving.actions.handleScoreChange('student', '30', 'score');
+  leaving.actions.flush();
+  await leaving.settle();
+  assert.equal(leaving.calls.length, 1, 'switching or leaving saves at once');
+  assert.equal(leaving.calls[0][0].score, 30);
+  assert.equal(leaving.pending(10_000), 0, 'the wait is over once it has saved');
+  leaving.actions.flush();
+  await leaving.settle();
+  assert.equal(leaving.calls.length, 1, 'nothing pending: leaving saves nothing');
+
   const off = scoreSaveHarness('single', false);
   off.actions.handleScoreChange('student', '20', 'score');
-  await off.actions.handleScoreBlur('student');
+  assert.equal(off.pending(10_000), 0, 'Auto-save off schedules nothing');
+  off.actions.flush();
   await off.settle();
   assert.equal(off.calls.length, 0, 'Auto-save off saves nothing by itself');
   await off.actions.handleManualSaveScores();
@@ -1253,6 +1270,39 @@ test('Score entry saves when leaving a field, only while Auto-save is on; manual
   assert.equal(off.calls.length, 1);
   assert.equal(off.calls[0][0].score, 20);
   assert.equal(off.context.singleDirtyRef.current, false);
+
+  const manual = scoreSaveHarness();
+  manual.actions.handleScoreChange('student', '40', 'score');
+  await manual.actions.handleManualSaveScores();
+  await manual.settle();
+  assert.equal(manual.pending(10_000), 0, 'Save cancels the wait');
+  manual.fire(10_000);
+  await manual.settle();
+  assert.equal(manual.calls.length, 1);
+
+  const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../pages/faculty/GradeComputation.tsx'), 'utf8');
+  const warn = source.slice(source.indexOf('const warnUnsaved'), source.indexOf("window.addEventListener('beforeunload'"));
+  assert.ok(warn.includes('singleDebounceTimerRef.current') && warn.includes('matrixDebounceTimerRef.current'),
+    'the leave-page warning also covers a pending 10 second wait');
+  assert.ok(!source.includes('handleScoreBlur') && !source.includes('onScoreBlur={'), 'leaving a field no longer saves');
+  assert.ok(!source.includes('refreshPersistedGrades'), 'a save no longer calls the compute endpoint separately');
+});
+
+test('A save shows the notice for the recompute results the server returned', async () => {
+  const h = scoreSaveHarness();
+  const response = { results: [{ status: 'incomplete_attendance' }], recomputeFailed: false };
+  h.setSave(async () => response);
+  h.actions.handleScoreChange('student', '20', 'score');
+  h.actions.flush();
+  await h.settle();
+  assert.deepEqual(h.notices, [response]);
+  const matrix = scoreSaveHarness('matrix');
+  const failed = { results: [], recomputeFailed: true };
+  matrix.setSave(async () => failed);
+  matrix.actions.handleScoreChange('student', '20');
+  matrix.actions.flush();
+  await matrix.settle();
+  assert.deepEqual(matrix.notices, [failed]);
 });
 
 test('Score entry queues the latest edit while a save is in flight and keeps manual saves manual', async () => {
@@ -1260,7 +1310,7 @@ test('Score entry queues the latest edit while a save is in flight and keeps man
   let finish!: () => void;
   h.setSave(() => new Promise<void>(resolve => { finish = resolve; }));
   h.actions.handleScoreChange('student', '20', 'score');
-  await h.actions.handleScoreBlur('student');
+  h.fire(10_000);
   h.actions.handleScoreChange('student', '10', 'score');
   await h.actions.handleManualSaveScores();
   assert.equal(h.calls.length, 1, 'a second save does not start while one is running');
@@ -1280,7 +1330,7 @@ test('Score entry queues the latest edit while a save is in flight and keeps man
 test('Clearing a stored score is applied only by a manual Save, and failed saves remain retryable', async () => {
   const h = scoreSaveHarness();
   h.actions.handleScoreChange('student', '', 'score');
-  await h.actions.handleScoreBlur('student');
+  h.fire(10_000);
   await h.settle();
   assert.equal(h.calls.length, 0, 'auto-save never deletes a stored score');
   assert.equal(h.context.singleScoresRef.current.student.score, '', 'the field stays cleared');
@@ -1294,7 +1344,7 @@ test('Clearing a stored score is applied only by a manual Save, and failed saves
 
   h.setSave(async () => { throw new Error('Offline'); });
   h.actions.handleScoreChange('student', '30', 'score');
-  await h.actions.handleScoreBlur('student');
+  h.fire(10_000);
   await h.settle();
   assert.equal(h.statuses.at(-1), 'error');
   assert.equal(h.context.singleDirtyRef.current, true);
@@ -1309,14 +1359,13 @@ test('Matrix always auto-saves, applies clears only on manual Save, and queues t
   const h = scoreSaveHarness('matrix');
   h.actions.handleScoreChange('student', '20');
   assert.equal(h.calls.length, 0, 'typing alone must not save');
-  assert.equal(h.pending(1000), 0, 'typing alone never saves or schedules a save');
-  await h.actions.handleScoreBlur();
+    h.fire(10_000);
   await h.settle();
   assert.equal(h.calls[0][0].score, 20);
 
   const clearing = scoreSaveHarness('matrix');
   clearing.actions.handleScoreChange('student', '');
-  await clearing.actions.handleScoreBlur();
+  clearing.fire(10_000);
   await clearing.settle();
   assert.equal(clearing.calls.length, 0, 'auto-save never deletes a stored score');
   assert.deepEqual([...clearing.context.matrixPendingClearRef.current], ['student|assessment']);
@@ -1329,9 +1378,9 @@ test('Matrix always auto-saves, applies clears only on manual Save, and queues t
   const queued = scoreSaveHarness('matrix');
   queued.setSave(() => new Promise<void>(resolve => { finish = resolve; }));
   queued.actions.handleScoreChange('student', '30');
-  await queued.actions.handleScoreBlur();
+  queued.fire(10_000);
   queued.actions.handleScoreChange('student', '40');
-  await queued.actions.handleScoreBlur();
+  queued.fire(10_000);
   assert.equal(queued.calls.length, 1);
   queued.setSave(async () => {});
   finish();
@@ -1344,7 +1393,7 @@ test('Matrix always auto-saves, applies clears only on manual Save, and queues t
   const failing = scoreSaveHarness('matrix');
   failing.setSave(async () => { throw new Error('Offline'); });
   failing.actions.handleScoreChange('student', '50');
-  await failing.actions.handleScoreBlur();
+  failing.fire(10_000);
   await failing.settle();
   assert.equal(failing.statuses.at(-1), 'error');
   assert.equal(failing.context.matrixDirtyRef.current, true);
@@ -1359,7 +1408,7 @@ test('Matrix auto-save skips invalid cells and keeps them dirty; manual Save sti
   const partial = scoreSaveHarness('matrix');
   partial.actions.handleCellChange('student', '150');
   partial.actions.handleCellChange('other', '70');
-  await partial.actions.handleScoreBlur();
+  partial.fire(10_000);
   await partial.settle();
   assert.deepEqual(partial.calls, [[{ studentId: 'other', score: 70, remarks: '' }]]);
   assert.equal(partial.context.matrixDirtyRef.current, true);
@@ -1367,7 +1416,7 @@ test('Matrix auto-save skips invalid cells and keeps them dirty; manual Save sti
 
   const onlyInvalid = scoreSaveHarness('matrix');
   onlyInvalid.actions.handleCellChange('student', '150');
-  await onlyInvalid.actions.handleScoreBlur();
+  onlyInvalid.fire(10_000);
   await onlyInvalid.settle();
   assert.equal(onlyInvalid.calls.length, 0);
   assert.equal(onlyInvalid.context.matrixDirtyRef.current, true);
@@ -1385,7 +1434,7 @@ test('Single auto-save skips invalid scores and keeps them dirty; manual Save st
   const partial = scoreSaveHarness('single');
   partial.actions.handleScoreChange('student', '150', 'score');
   partial.actions.handleScoreChange('other', '70', 'score');
-  await partial.actions.handleScoreBlur('other');
+  partial.fire(10_000);
   await partial.settle();
   assert.deepEqual(partial.calls, [[{ studentId: 'other', score: 70, remarks: '' }]]);
   assert.equal(partial.context.singleDirtyRef.current, true);
@@ -1393,7 +1442,7 @@ test('Single auto-save skips invalid scores and keeps them dirty; manual Save st
 
   const onlyInvalid = scoreSaveHarness('single');
   onlyInvalid.actions.handleScoreChange('student', '150', 'score');
-  await onlyInvalid.actions.handleScoreBlur('student');
+  onlyInvalid.fire(10_000);
   await onlyInvalid.settle();
   assert.equal(onlyInvalid.calls.length, 0);
   assert.equal(onlyInvalid.context.singleDirtyRef.current, true);

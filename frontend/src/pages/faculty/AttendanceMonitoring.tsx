@@ -499,6 +499,7 @@ export const AttendanceMonitoring: React.FC = () => {
     const writeScope = beginWorksheetMutation();
     let saved = 0;
     const failed: string[] = [];
+    const auditBatchId = crypto.randomUUID(); // one id per click
     for (const item of targets) {
       try {
         const res = await recordFacultyInitialAttendanceApi({
@@ -507,7 +508,7 @@ export const AttendanceMonitoring: React.FC = () => {
           sessionDate: selectedDate,
           sessionId: worksheet?.attendanceSession?.sessionId ? Number(worksheet.attendanceSession.sessionId) : undefined,
           status: 'present',
-        });
+        }, auditBatchId);
         saved += 1;
         setWorksheet(prev => worksheetScope.current !== writeScope ? prev : prev ? {
           ...prev,

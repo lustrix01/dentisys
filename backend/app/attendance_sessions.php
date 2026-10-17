@@ -422,10 +422,14 @@ function attendance_session_update(PDO $pdo, array $config, array $authCtx, arra
         // Audit the persisted row so NUMERIC rounding is reflected in the after-state.
         $before = attendance_session_update_audit_state(array_intersect_key($session, $values));
         $after = attendance_session_update_audit_state(array_intersect_key($updatedSession, $values));
-        attendance_session_record_audit(
-            $pdo, $config, $authCtx, $context, 'attendance_session_updated', $sessionId, $csId,
-            "Updated attendance session '{$session['session_code']}' for class section #{$csId}.", null, $before, $after
-        );
+        // R3/R4: no row when nothing changed; otherwise only the changed fields.
+        $changed = audit_changed_fields($before, $after);
+        if ($changed !== null) {
+            attendance_session_record_audit(
+                $pdo, $config, $authCtx, $context, 'attendance_session_updated', $sessionId, $csId,
+                'Updated attendance session for ' . audit_class_label($pdo, $csId) . " on {$updatedSession['session_date']}.", null, $changed[0], $changed[1]
+            );
+        }
         $pdo->commit();
         return $updatedSession;
     } catch (PDOException $e) {

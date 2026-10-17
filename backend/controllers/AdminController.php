@@ -57,32 +57,12 @@ function admin_verify_auth(PDO $pdo, array $config): array
     return $authCtx;
 }
 
-/**
- * Latest audit events for the Dean Dashboard, with the actor's name and
- * e-mail as recorded at the time.
- */
-function admin_recent_audit_events(PDO $pdo, int $limit): array
+/** Newest Dean-overview entries for the Dashboard (same Entry shape as the Audit Trail). */
+function admin_recent_audit_events(PDO $pdo, int $deanId, int $limit = 20): array
 {
-    $stmt = $pdo->prepare(
-        "SELECT event_id, occurred_at, actor_display_name, actor_username, actor_role,
-                module_code, action_code, description, event_status
-           FROM audit_events
-          WHERE action_code <> 'refresh_rotation'
-          ORDER BY occurred_at DESC, event_id DESC
-          LIMIT " . max(1, min(20, $limit))
-    );
-    $stmt->execute();
-    return array_map(static fn(array $row): array => [
-        'id' => (string) $row['event_id'],
-        'occurredAt' => attendance_session_timestamp((string) $row['occurred_at']),
-        'actorName' => $row['actor_display_name'],
-        'actorEmail' => $row['actor_username'],
-        'actorRole' => $row['actor_role'],
-        'module' => $row['module_code'],
-        'action' => $row['action_code'],
-        'description' => $row['description'],
-        'status' => $row['event_status'],
-    ], $stmt->fetchAll(PDO::FETCH_ASSOC));
+    $params = audit_read_params([], 'admin');
+    $params['pageSize'] = max(1, min(20, $limit));
+    return audit_read_entries($pdo, ['user_id' => $deanId, 'role' => 'admin'], $params)['entries'];
 }
 
 function handle_admin_dashboard_kpis(): void
@@ -281,7 +261,7 @@ function handle_admin_dashboard_kpis(): void
                 'remedial' => $remedialCount,
             ],
             'classAttendance' => $classAttendance,
-            'recentAuditEvents' => admin_recent_audit_events($pdo, 5),
+            'recentAuditEvents' => admin_recent_audit_events($pdo, (int) $authCtx['user_id']),
             'academicTermReminder' => academic_next_term_reminder(academic_terms_read($pdo), app_local_date($config, attendance_session_now_utc())),
         ], 200);
     } catch (ValidationException $e) {
@@ -399,111 +379,12 @@ function handle_admin_audit_logs(): void
             return;
         }
 
-        $query = trim((string) ($_GET['query'] ?? ''));
-        $role = (string) ($_GET['role'] ?? 'all');
-        $module = (string) ($_GET['module'] ?? 'all');
-        $status = (string) ($_GET['status'] ?? 'all');
-        $date = trim((string) ($_GET['date'] ?? ''));
-        $sortDirection = ($_GET['sort'] ?? 'newest') === 'oldest' ? 'ASC' : 'DESC';
-        $pageSize = max(1, min(200, (int) ($_GET['pageSize'] ?? 50)));
-        $page = max(1, (int) ($_GET['page'] ?? 1));
-        if ($date !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) !== 1) {
-            throw new ValidationException([['field' => 'date', 'message' => 'Date must be YYYY-MM-DD.']]);
-        }
-
-        // Filters are applied here only; the date is the Asia/Manila calendar day.
-        $where = ["action_code <> 'refresh_rotation'"];
-        $params = [];
-        if ($role !== 'all') {
-            $where[] = 'actor_role = ?';
-            $params[] = $role;
-        }
-        if ($module !== 'all') {
-            $where[] = 'module_code = ?';
-            $params[] = $module;
-        }
-        if ($date !== '') {
-            $where[] = "DATE((occurred_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Manila') = ?";
-            $params[] = $date;
-        }
-        if ($query !== '') {
-            $where[] = '(actor_username ILIKE ? OR actor_display_name ILIKE ? OR action_code ILIKE ? OR description ILIKE ?)';
-            array_push($params, "%{$query}%", "%{$query}%", "%{$query}%", "%{$query}%");
-        }
-        // Status counts ignore the status filter, so every card stays meaningful.
-        $countStmt = $pdo->prepare(
-            'SELECT event_status, COUNT(*) FROM audit_events WHERE ' . implode(' AND ', $where) . ' GROUP BY event_status'
+        $result = audit_read_entries(
+            $pdo,
+            ['user_id' => (int) $authCtx['user_id'], 'role' => 'admin'],
+            audit_read_params($_GET, 'admin')
         );
-        $countStmt->execute($params);
-        $statusCounts = ['Success' => 0, 'Warning' => 0, 'Failed' => 0];
-        foreach ($countStmt->fetchAll(PDO::FETCH_KEY_PAIR) as $countStatus => $count) {
-            $statusCounts[(string) $countStatus] = (int) $count;
-        }
-        if ($status !== 'all') {
-            $where[] = 'event_status = ?';
-            $params[] = $status;
-        }
-        $whereSql = implode(' AND ', $where);
-        $totalStmt = $pdo->prepare("SELECT COUNT(*) FROM audit_events WHERE {$whereSql}");
-        $totalStmt->execute($params);
-        $total = (int) $totalStmt->fetchColumn();
-
-        $stmt = $pdo->prepare(
-            "SELECT event_id, occurred_at, actor_username, actor_display_name, actor_role, action_code,
-                    module_code, description, event_status, ip_address, user_agent, target_type,
-                    target_id, reason, before_state_json, after_state_json
-               FROM audit_events
-              WHERE {$whereSql}
-              ORDER BY occurred_at {$sortDirection}, sequence_number {$sortDirection}
-              LIMIT {$pageSize} OFFSET " . (($page - 1) * $pageSize)
-        );
-        $stmt->execute($params);
-        $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // The module list comes from all events, so it does not shrink as filters change.
-        $modules = $pdo->query(
-            "SELECT DISTINCT module_code FROM audit_events
-              WHERE action_code <> 'refresh_rotation' AND module_code IS NOT NULL
-              ORDER BY module_code"
-        )->fetchAll(PDO::FETCH_COLUMN);
-
-        $decodeState = static function (mixed $json): mixed {
-            if ($json === null || $json === '') {
-                return null;
-            }
-            $decoded = json_decode((string) $json, true);
-            return $decoded ?? (string) $json;
-        };
-        // Missing request details stay null; nothing is filled in.
-        $normalized = array_map(static fn(array $l): array => [
-            'id' => (string) $l['event_id'],
-            'timestamp' => attendance_session_timestamp($l['occurred_at']),
-            'userName' => $l['actor_username'] ?? 'System',
-            'userEmail' => $l['actor_username'],
-            'userDisplayName' => $l['actor_display_name'],
-            'userRole' => $l['actor_role'] ?? 'system',
-            'action' => $l['action_code'] ?? 'Operation',
-            'module' => $l['module_code'] ?? 'System',
-            'description' => $l['description'] ?? '',
-            'status' => $l['event_status'] ?? 'Success',
-            'ipAddress' => $l['ip_address'],
-            'device' => $l['user_agent'],
-            'targetType' => $l['target_type'],
-            'targetId' => $l['target_id'],
-            'reason' => $l['reason'],
-            'beforeState' => $decodeState($l['before_state_json']),
-            'afterState' => $decodeState($l['after_state_json']),
-        ], $logs);
-
-        json_response([
-            'status' => 'ok',
-            'logs' => $normalized,
-            'total' => $total,
-            'page' => $page,
-            'pageSize' => $pageSize,
-            'statusCounts' => $statusCounts,
-            'modules' => $modules,
-        ], 200);
+        json_response(['status' => 'ok'] + $result, 200);
     } catch (ValidationException $e) {
         validation_error_response($e->getErrors());
     } catch (\Throwable $e) {
@@ -675,6 +556,9 @@ function handle_admin_settings_update(): void
             return;
         }
         $pdo->beginTransaction();
+        $oldThemeStmt = $pdo->prepare('SELECT theme FROM user_accounts WHERE user_id = ?');
+        $oldThemeStmt->execute([$authCtx['user_id']]);
+        $oldTheme = $oldThemeStmt->fetchColumn();
         $themeStmt = $pdo->prepare("UPDATE user_accounts SET theme = ? WHERE user_id = ?");
         $themeStmt->execute([$theme, $authCtx['user_id']]);
         $transmutationStmt = $pdo->prepare(
@@ -687,21 +571,27 @@ function handle_admin_settings_update(): void
         $transmutationStmt->execute([
             $minimumTransmutation, $maximumTransmutation, $authCtx['user_id'],
         ]);
-        audit_record_action(
-            $pdo, $config, $authCtx, 'settings', 'system_settings_updated', 'system_settings', 'grading_defaults',
-            sprintf('Updated system settings: transmutation %.2f%%-%.2f%%, theme %s.', $minimumTransmutation, $maximumTransmutation, $theme),
-            // Audit state does not accept floats, so percentages are recorded as text.
+        // R3/R4: only the changed settings; no row when nothing changed. Audit state does not accept floats, so percentages are text.
+        $fmt = static fn($v): ?string => $v === null ? null : number_format((float) $v, 2, '.', '');
+        $changed = audit_changed_fields(
             [
-                'before' => ['transmutationDefaults' => [
-                    'minimumPercentage' => isset($existingTransmutation['minimum_percentage']) ? number_format((float) $existingTransmutation['minimum_percentage'], 2, '.', '') : null,
-                    'maximumPercentage' => isset($existingTransmutation['maximum_percentage']) ? number_format((float) $existingTransmutation['maximum_percentage'], 2, '.', '') : null,
-                ]],
-                'after' => ['transmutationDefaults' => [
-                    'minimumPercentage' => number_format($minimumTransmutation, 2, '.', ''),
-                    'maximumPercentage' => number_format($maximumTransmutation, 2, '.', ''),
-                ], 'theme' => $theme],
+                'transmutationMinimumPercentage' => $fmt($existingTransmutation['minimum_percentage'] ?? null),
+                'transmutationMaximumPercentage' => $fmt($existingTransmutation['maximum_percentage'] ?? null),
+                'theme' => $oldTheme === false ? null : $oldTheme,
+            ],
+            [
+                'transmutationMinimumPercentage' => $fmt($minimumTransmutation),
+                'transmutationMaximumPercentage' => $fmt($maximumTransmutation),
+                'theme' => $theme,
             ]
         );
+        if ($changed !== null) {
+            audit_record_action(
+                $pdo, $config, $authCtx, 'settings', 'system_settings_updated', 'system_settings', 'grading_defaults',
+                sprintf('Updated system settings: transmutation %.2f%%-%.2f%%, theme %s.', $minimumTransmutation, $maximumTransmutation, $theme),
+                ['before' => $changed[0], 'after' => $changed[1]]
+            );
+        }
         $pdo->commit();
 
         $settings['retentionThreshold'] = remedial_attempts_course_grade_threshold();

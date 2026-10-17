@@ -155,6 +155,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
     }
 
     setIsImporting(true);
+    const auditBatchId = crypto.randomUUID(); // one id per import run
     let successCount = 0;
     let failCount = 0;
     const errors: string[] = [];
@@ -186,7 +187,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
         if (existing) {
           // The cached roster can resolve an ID, but only the server's
           // idempotent enrollment mutation can confirm current membership.
-          await enrollStudentsInClassApi({ csId: selectedClassId, studentIds: [Number(existing.id)] });
+          await enrollStudentsInClassApi({ csId: selectedClassId, studentIds: [Number(existing.id)] }, auditBatchId);
           successCount++;
           completedKeys.add(student.tempKey);
           continue;
@@ -203,7 +204,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
           yearLevel: student.yearLevel ?? undefined,
           sex: student.sex,
           classId: String(selectedClassId),
-        });
+        }, auditBatchId);
         successCount++;
         completedKeys.add(student.tempKey);
       } catch (createErr: any) {
@@ -219,7 +220,7 @@ export const RosterImportModal: React.FC<RosterImportModalProps> = ({
               await enrollStudentsInClassApi({
                 csId: selectedClassId,
                 studentIds: [Number(existing.id)],
-              });
+              }, auditBatchId);
               successCount++;
               completedKeys.add(student.tempKey);
             } else {

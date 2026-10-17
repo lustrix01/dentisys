@@ -14,11 +14,12 @@ import {
   getFacultyRetentionApi,
   getNotificationsApi,
   saveFacultyRemedialApi,
-  type FacultyActivityRecord,
   type FacultyClassItem,
   type FacultyRetentionRecord,
 } from '../../services/apiClient';
 import type { NotificationItem } from '../../types';
+import type { AuditEntry } from '../../services/auditService';
+import { AuditCompactList } from '../../components/AuditTrailPage';
 
 export const Dashboard: React.FC = () => {
   const { students } = useApp();
@@ -32,7 +33,7 @@ export const Dashboard: React.FC = () => {
   const [retentionError, setRetentionError] = useState('');
   const [announcements, setAnnouncements] = useState<NotificationItem[]>([]);
   const [announcementsError, setAnnouncementsError] = useState('');
-  const [recentActivity, setRecentActivity] = useState<FacultyActivityRecord[]>([]);
+  const [recentActivity, setRecentActivity] = useState<AuditEntry[]>([]);
   const [activityError, setActivityError] = useState('');
   const [facultyClasses, setFacultyClasses] = useState<FacultyClassItem[]>([]);
   // Selected class block state
@@ -46,10 +47,10 @@ export const Dashboard: React.FC = () => {
     setSelectedClassId('');
     setLoading(true);
     setDashboardError('');
-    Promise.allSettled([getFacultyDashboardKpisApi(schoolYear), getFacultyRetentionApi(), getNotificationsApi({ limit: 5 }), getFacultyActivityApi(5), getFacultyClassesApi()])
+    Promise.allSettled([getFacultyDashboardKpisApi(schoolYear), getFacultyRetentionApi(), getNotificationsApi({ limit: 5 }), getFacultyActivityApi(), getFacultyClassesApi()])
       .then(([kpiResult, retentionResult, announcementsResult, activityResult, classesResult]) => {
         if (activityResult.status === 'fulfilled') {
-          setRecentActivity(Array.isArray(activityResult.value.activity) ? activityResult.value.activity : []);
+          setRecentActivity(Array.isArray(activityResult.value.entries) ? activityResult.value.entries.slice(0, 5) : []);
           setActivityError('');
         } else {
           setRecentActivity([]);
@@ -603,14 +604,7 @@ export const Dashboard: React.FC = () => {
               ) : recentActivity.length === 0 ? (
                 <p className="p-2.5 text-slate-500 dark:text-slate-400">No recent activity recorded.</p>
               ) : (
-                recentActivity.map(entry => (
-                  <div key={entry.id} className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-                    <p className="text-slate-700 dark:text-slate-300 text-xs font-medium">{entry.description}</p>
-                    <span className="text-[10px] text-slate-400 block mt-1">
-                      {new Date(entry.timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                ))
+                <AuditCompactList entries={recentActivity} />
               )}
             </div>
           </div>

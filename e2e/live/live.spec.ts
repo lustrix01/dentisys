@@ -155,14 +155,14 @@ test('administrator login, auth/me, reload refresh, settings, and logout invalid
     recovery_code_count: expect.any(Number),
   }));
 
-  const audit = await page.request.get('/api/admin/audit-logs?query=refresh_rotation', {
+  const audit = await page.request.get('/api/admin/audit-logs?signins=1', {
     headers: { Authorization: `Bearer ${credentials.access_token}` },
   });
   const auditPayload = await jsonResponse(audit);
-  // Owner decision 2026-09-27 (D5): token-rotation events are stored but hidden from the audit trail.
-  // The audit trail is paged: { logs, total, page, pageSize, statusCounts, modules }.
-  expect(Array.isArray(auditPayload.logs)).toBeTruthy();
-  expect(auditPayload.logs.some((event: { action?: string }) => event.action === 'refresh_rotation')).toBeFalsy();
+  // SEC-005: token rotation is no longer written, and old rotation rows are never shown.
+  // The audit trail is paged: { entries, total, page, pageSize, areas, attention }.
+  expect(Array.isArray(auditPayload.entries)).toBeTruthy();
+  expect(auditPayload.entries.some((entry: { details?: { technical?: { actionCode?: string } } }) => entry.details?.technical?.actionCode === 'refresh_rotation')).toBeFalsy();
 
   // Stop the mounted application before logging out; otherwise a background
   // UI request (notifications, session refresh) racing the logout reports

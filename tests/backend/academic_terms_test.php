@@ -74,6 +74,18 @@ function audit_record_action(PDO $pdo, array $config, array $actor, string $modu
     term_expect($module === 'settings', 'Terms use Settings audit module');
     $pdo->audits[] = $action;
 }
+// Same contract as audit.php (which this test cannot load next to the stub above).
+function audit_changed_fields(array $before, array $after): ?array
+{
+    $b = $a = [];
+    foreach (array_unique(array_merge(array_keys($before), array_keys($after))) as $key) {
+        if (($before[$key] ?? null) != ($after[$key] ?? null) || (($before[$key] ?? null) === null) !== (($after[$key] ?? null) === null)) {
+            $b[$key] = $before[$key] ?? null;
+            $a[$key] = $after[$key] ?? null;
+        }
+    }
+    return $b === [] ? null : [$b, $a];
+}
 $db = new TermTestPDO();
 $config = app_config(['APP_ENV' => 'test', 'APP_TIMEZONE' => 'Asia/Manila']);
 $actor = ['user_id' => 1];

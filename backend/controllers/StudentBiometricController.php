@@ -167,13 +167,18 @@ function handle_student_biometric_consent(): void
                 $update->execute([$disclosureVersion, $now, $now, $authCtx['user_id'], $authCtx['user_id'], $now, (int) $row['profile_id']]);
             }
             $row = student_biometric_profile($pdo, $identity['student_id'], true);
-            student_biometric_record_audit(
-                $pdo, $config, $authCtx, $context,
-                $granted ? 'biometric_consent_granted' : 'biometric_consent_revoked',
-                $identity['student_id'],
-                $granted ? 'Student granted biometric consent.' : 'Student revoked biometric consent.',
-                null, $before, student_biometric_snapshot($row)
-            );
+            // R3: no row when the consent decision did not change.
+            if ($before === null || $before['consent_status'] !== $row['consent_status']) {
+                student_biometric_record_audit(
+                    $pdo, $config, $authCtx, $context,
+                    $granted ? 'biometric_consent_granted' : 'biometric_consent_revoked',
+                    $identity['student_id'],
+                    $granted ? 'Student granted biometric consent.' : 'Student revoked biometric consent.',
+                    null,
+                    $before === null ? null : ['consent_status' => $before['consent_status']],
+                    ['consent_status' => $row['consent_status']]
+                );
+            }
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) { $pdo->rollBack(); }
@@ -819,7 +824,7 @@ function handle_student_attendance_biometric(): void
             }
             attendance_session_record_audit(
                 $pdo, $config, $authCtx, $context, 'biometric_attendance_recorded', (int) $session['session_id'], (int) $session['cs_id'],
-                "Recorded biometric attendance for Student #{$studentId}.", null, null,
+                'Recorded biometric attendance for ' . audit_student_label($pdo, $studentId) . '.', null, null,
                 ['record_id' => (int) $recordId, 'student_id' => $studentId, 'status' => $decision['status'], 'verification_method' => 'biometric']
             );
             student_biometric_complete_challenge($pdo, (int) $challenge['tokenId'], $idempotencyKey);

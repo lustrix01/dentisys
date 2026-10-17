@@ -152,33 +152,33 @@ async function mockMatrixClass(page: import('@playwright/test').Page, scores: Re
 
 test('single activity auto-save toggle is remembered across reloads', async ({ page }) => {
   await mockMatrixClass(page, {});
-  const toggle = page.getByLabel('Enable Auto-Save on score input blur');
+  const toggle = page.getByLabel('Enable Auto-Save');
   await expect(toggle).toBeChecked();
   await toggle.uncheck();
   await page.reload();
   await page.getByRole('button', { name: 'Student Scores Entry' }).click();
-  await expect(page.getByLabel('Enable Auto-Save on score input blur')).not.toBeChecked();
-  await page.getByLabel('Enable Auto-Save on score input blur').check();
+  await expect(page.getByLabel('Enable Auto-Save')).not.toBeChecked();
+  await page.getByLabel('Enable Auto-Save').check();
   await page.reload();
   await page.getByRole('button', { name: 'Student Scores Entry' }).click();
-  await expect(page.getByLabel('Enable Auto-Save on score input blur')).toBeChecked();
+  await expect(page.getByLabel('Enable Auto-Save')).toBeChecked();
 });
 
 test('matrix keeps an invalid typed cell while other cells refresh from the server', async ({ page }) => {
+  test.setTimeout(60000);
   const scores: Record<string, number> = {};
   await mockMatrixClass(page, scores);
   await page.getByRole('button', { name: 'Full Matrix View' }).click();
   const lo1 = page.getByLabel('LO 1 score for Owhie Santillan Lumbang');
   const lo2 = page.getByLabel('LO 2 score for Owhie Santillan Lumbang');
   await lo2.fill('99');
-  await lo2.blur();
   await expect(lo2).toHaveValue('99');
   // A server score change from the Single Activity View (auto-saved) must reach the grid while LO 2 stays red.
   await page.getByRole('button', { name: 'Single Activity View' }).click();
   const single = page.getByRole('spinbutton').nth(0);
   await single.fill('30');
-  await single.blur();
-  await expect.poll(() => scores['lo-1']).toBe(30);
+  // Auto-save fires 10 seconds after typing stops.
+  await expect.poll(() => scores['lo-1'], { timeout: 20000 }).toBe(30);
   await page.getByRole('button', { name: 'Full Matrix View' }).click();
   await expect(lo1).toHaveValue('30');
   await expect(lo2).toHaveValue('99');
@@ -214,14 +214,14 @@ async function mockTwoStudentsSlowSave(page: import('@playwright/test').Page) {
 }
 
 test('single activity keeps and saves a score typed while another save is in flight', async ({ page }) => {
+  test.setTimeout(90000);
   const { server, posts } = await mockTwoStudentsSlowSave(page);
   const bea = page.getByRole('spinbutton').nth(0);
   const carlo = page.getByRole('spinbutton').nth(1);
   await bea.fill('30');
-  await bea.blur();
-  await expect(page.getByText('Saving...')).toBeVisible();
+  // The 10 second idle wait ends, then the slow save runs.
+  await expect(page.getByText('Saving...')).toBeVisible({ timeout: 15000 });
   await carlo.fill('40');
-  await carlo.blur();
   await expect(page.getByText('Saving...')).toBeVisible();
   // First save finishes: Carlo's 40 stays and the sheet is not reported as saved.
   await expect.poll(() => posts.length).toBe(1);
@@ -229,7 +229,7 @@ test('single activity keeps and saves a score typed while another save is in fli
   await expect(carlo).toHaveValue('40');
   await expect(page.getByText('All changes saved')).toHaveCount(0);
   await expect(page.getByText('Scores Saved Successfully!')).toHaveCount(0);
-  await expect.poll(() => server['lo-1|25'], { timeout: 8000 }).toBe(40);
+  await expect.poll(() => server['lo-1|25'], { timeout: 20000 }).toBe(40);
   await expect(carlo).toHaveValue('40');
   await expect(bea).toHaveValue('30');
   await expect(page.getByText('All changes saved')).toBeVisible();
@@ -237,19 +237,18 @@ test('single activity keeps and saves a score typed while another save is in fli
 });
 
 test('matrix keeps and saves a cell typed while another save is in flight', async ({ page }) => {
+  test.setTimeout(90000);
   const { server, posts } = await mockTwoStudentsSlowSave(page);
   await page.getByRole('button', { name: 'Full Matrix View' }).click();
   const bea = page.getByLabel('LO 1 score for Bea Alvarez');
   const carlo = page.getByLabel('LO 1 score for Carlo Bautista');
   await bea.fill('30');
-  await bea.blur();
-  await expect(page.getByText('Saving...')).toBeVisible();
+  await expect(page.getByText('Saving...')).toBeVisible({ timeout: 15000 });
   await carlo.fill('40');
-  await carlo.blur();
   await expect.poll(() => server['lo-1|24']).toBe(30);
   await expect(carlo).toHaveValue('40');
   await expect(page.getByText('All changes saved')).toHaveCount(0);
-  await expect.poll(() => server['lo-1|25'], { timeout: 8000 }).toBe(40);
+  await expect.poll(() => server['lo-1|25'], { timeout: 20000 }).toBe(40);
   await expect(carlo).toHaveValue('40');
   await expect(page.getByText('All changes saved')).toBeVisible();
   expect(posts.flat().some(b => b.scores.some(e => e.studentId === '25' && e.score === 40))).toBe(true);

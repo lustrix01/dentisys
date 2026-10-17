@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import { getAdminDashboardKpisApi } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
+import { AuditCompactList } from '../../components/AuditTrailPage';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -45,8 +46,7 @@ export const Dashboard: React.FC = () => {
     { label: 'Remedial', count: Number(apiData?.statusCounts?.remedial) || 0, color: '#f97316' },
   ];
   const classAttendance: Array<{ name: string; rate: number }> = apiData?.classAttendance ?? [];
-  const recentAuditEvents: Array<{ id: string; occurredAt: string | null; actorName: string | null; actorEmail: string | null; action: string; description: string; status: string }> =
-    apiData?.recentAuditEvents ?? [];
+  const recentAuditEvents = apiData?.recentAuditEvents ?? [];
   const hasGrades = gradeDistribution.some(bucket => bucket.count > 0);
   const hasStanding = standing.some(item => item.count > 0);
 
@@ -228,20 +228,7 @@ export const Dashboard: React.FC = () => {
             {recentAuditEvents.length === 0 ? (
               <p className="mt-3 text-xs text-slate-400">No audit events recorded yet.</p>
             ) : (
-              <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
-                {recentAuditEvents.map(event => (
-                  <li key={event.id} className="py-2.5 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                    <span className="text-slate-700 dark:text-slate-200">
-                      <span className="font-semibold">{event.actorName || event.actorEmail || 'System'}</span>
-                      {event.actorName && event.actorEmail ? <span className="text-slate-400"> ({event.actorEmail})</span> : null}
-                      {' — '}{event.description}
-                    </span>
-                    <span className="text-slate-400 whitespace-nowrap">
-                      {event.status} · {event.occurredAt ? new Date(event.occurredAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : '—'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-3"><AuditCompactList entries={recentAuditEvents} /></div>
             )}
           </section>
 

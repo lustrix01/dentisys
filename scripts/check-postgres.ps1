@@ -248,6 +248,7 @@ FROM (
 
     Invoke-Compose @('exec', '-T', 'web', 'php', '/var/www/html/tests/database/ui_migration_test.php')
     Invoke-Compose @('exec', '-T', '-e', 'DB_TEST_HOST=db', '-e', 'DB_TEST_PORT=5432', '-e', 'DB_TEST_NAME=dentisys', '-e', 'DB_TEST_USER=dentisys', '-e', 'DB_TEST_PASS=integration-development-password', 'web', 'php', '/var/www/html/tests/database/postgres_integration_test.php')
+    Invoke-Compose @('exec', '-T', 'web', 'php', '/var/www/html/backend/bin/audit-verify-chain.php', '--strict')
 
     & (Join-Path $PSScriptRoot 'smoke.ps1') -BackendUrl $backendBaseUrl
 
