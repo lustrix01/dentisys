@@ -116,8 +116,6 @@ export const DeanReports: React.FC = () => {
       students: any[];
       isArchived: boolean;
       activeCount: number;
-      warningCount: number;
-      criticalCount: number;
       remedialCount: number;
     }>();
 
@@ -142,8 +140,6 @@ export const DeanReports: React.FC = () => {
           students: [],
           isArchived,
           activeCount: 0,
-          warningCount: 0,
-          criticalCount: 0,
           remedialCount: 0,
         });
       }
@@ -152,8 +148,6 @@ export const DeanReports: React.FC = () => {
       if (s.yearLevel && !item.yearLevel) item.yearLevel = s.yearLevel;
       const st = String(s.status || '').toLowerCase();
       if (st === 'active' || st === 'cleared') item.activeCount++;
-      else if (st === 'warning') item.warningCount++;
-      else if (st === 'critical') item.criticalCount++;
       else if (st === 'remedial') item.remedialCount++;
     });
 
@@ -296,7 +290,7 @@ export const DeanReports: React.FC = () => {
       csv += filtered.map(s => {
         const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
         const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(2) : 'N/A';
+        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(1) : 'N/A';
         return [s.studentId, s.name, s.className || '—', s.yearLevel, gradeStr, s.status, s.faceEnrolled ? 'Yes' : 'No'].map(csvEscapeField).join(',');
       }).join('\n');
       fileName = `Student_Summary_${ts.replace(/[: ]/g, '-')}.csv`;
@@ -307,7 +301,7 @@ export const DeanReports: React.FC = () => {
         const pendingRem = Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0;
         const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
         const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(2) : 'N/A';
+        const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(1) : 'N/A';
         return [s.studentId, s.name, s.className || '—', gradeStr, s.status, pendingRem].map(csvEscapeField).join(',');
       }).join('\n');
       fileName = `Retention_Report_${ts.replace(/[: ]/g, '-')}.csv`;
@@ -582,16 +576,6 @@ export const DeanReports: React.FC = () => {
                             {cls.activeCount} Good Standing
                           </span>
                         )}
-                        {cls.warningCount > 0 && (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400">
-                            {cls.warningCount} Warning
-                          </span>
-                        )}
-                        {cls.criticalCount > 0 && (
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400">
-                            {cls.criticalCount} Critical
-                          </span>
-                        )}
                         {cls.remedialCount > 0 && (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-violet-50 dark:bg-violet-950/30 text-violet-700 dark:text-violet-400">
                             {cls.remedialCount} Remedial
@@ -671,8 +655,6 @@ export const DeanReports: React.FC = () => {
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Good Standing</option>
-                    <option value="warning">Warning</option>
-                    <option value="critical">Critical</option>
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
                   </select>
@@ -714,7 +696,7 @@ export const DeanReports: React.FC = () => {
                           <td className="py-3 px-3 text-slate-500">Year {s.yearLevel}</td>
                           <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">
                             {gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? (
-                              <GradeValue percentage={sub?.percentage}>{Number(gradeVal).toFixed(2)}</GradeValue>
+                              <GradeValue percentage={sub?.percentage}>{Number(gradeVal).toFixed(1)}</GradeValue>
                             ) : (
                               <span className="text-slate-400 font-normal">—</span>
                             )}
@@ -837,15 +819,13 @@ export const DeanReports: React.FC = () => {
             </div>
 
             {/* Overall Institutional Retention Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 no-print">
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-3 no-print">
               {[
                 { label: 'Good Standing', val: students.filter((s: any) => s.status === 'active').length, color: 'text-emerald-600' },
-                { label: 'Warning', val: students.filter((s: any) => s.status === 'warning').length, color: 'text-amber-600' },
-                { label: 'Critical', val: students.filter((s: any) => s.status === 'critical').length, color: 'text-rose-600' },
                 { label: 'Remedial', val: students.filter((s: any) => s.status === 'remedial').length, color: 'text-violet-600' },
                 { label: 'Cleared', val: students.filter((s: any) => s.status === 'cleared').length, color: 'text-sky-600' },
-              ].map((item, idx) => (
-                <Card key={item.label} className={`p-2.5 sm:p-3 text-center ${idx === 4 ? 'col-span-2 sm:col-span-1' : ''}`}>
+              ].map(item => (
+                <Card key={item.label} className="p-2.5 sm:p-3 text-center">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{item.label}</p>
                   <p className={`text-xl sm:text-2xl font-extrabold font-heading mt-0.5 ${item.color}`}>{item.val}</p>
                 </Card>
@@ -872,7 +852,7 @@ export const DeanReports: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
                 {displayedClassCards.map(cls => {
-                  const atRisk = cls.warningCount + cls.criticalCount + cls.remedialCount;
+                  const atRisk = cls.remedialCount;
                   return (
                     <div
                       key={cls.id}
@@ -923,16 +903,6 @@ export const DeanReports: React.FC = () => {
                           ) : (
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400">
                               All Clear
-                            </span>
-                          )}
-                          {cls.warningCount > 0 && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400">
-                              {cls.warningCount} Warning
-                            </span>
-                          )}
-                          {cls.criticalCount > 0 && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400">
-                              {cls.criticalCount} Critical
                             </span>
                           )}
                         </div>
@@ -1010,8 +980,6 @@ export const DeanReports: React.FC = () => {
                   >
                     <option value="all">All Statuses</option>
                     <option value="active">Good Standing</option>
-                    <option value="warning">Warning</option>
-                    <option value="critical">Critical</option>
                     <option value="remedial">Remedial</option>
                     <option value="cleared">Cleared</option>
                   </select>
@@ -1021,15 +989,13 @@ export const DeanReports: React.FC = () => {
             </div>
 
             {/* Class-level Summary Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 no-print">
+            <div className="grid grid-cols-3 gap-2.5 sm:gap-3 no-print">
               {[
                 { label: 'Good Standing', val: filtered.filter((s: any) => s.status === 'active').length, color: 'text-emerald-600' },
-                { label: 'Warning', val: filtered.filter((s: any) => s.status === 'warning').length, color: 'text-amber-600' },
-                { label: 'Critical', val: filtered.filter((s: any) => s.status === 'critical').length, color: 'text-rose-600' },
                 { label: 'Remedial', val: filtered.filter((s: any) => s.status === 'remedial').length, color: 'text-violet-600' },
                 { label: 'Cleared', val: filtered.filter((s: any) => s.status === 'cleared').length, color: 'text-sky-600' },
-              ].map((item, idx) => (
-                <Card key={item.label} className={`p-2.5 sm:p-3 text-center ${idx === 4 ? 'col-span-2 sm:col-span-1' : ''}`}>
+              ].map(item => (
+                <Card key={item.label} className="p-2.5 sm:p-3 text-center">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{item.label}</p>
                   <p className={`text-xl sm:text-2xl font-extrabold font-heading mt-0.5 ${item.color}`}>{item.val}</p>
                 </Card>
@@ -1068,7 +1034,7 @@ export const DeanReports: React.FC = () => {
                           <td className="py-3 px-3 text-slate-500">{s.className || '—'}</td>
                           <td className="py-3 px-3 font-extrabold text-slate-700 dark:text-slate-300">
                             {gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? (
-                              <GradeValue percentage={sub?.percentage}>{Number(gradeVal).toFixed(2)}</GradeValue>
+                              <GradeValue percentage={sub?.percentage}>{Number(gradeVal).toFixed(1)}</GradeValue>
                             ) : (
                               <span className="text-slate-400 font-normal">—</span>
                             )}
@@ -1471,11 +1437,11 @@ export const DeanReports: React.FC = () => {
         const classLabel = selectedClassId
           ? (currentSelectedClass?.name || selectedClassId)
           : (classFilter === 'all' ? 'All classes' : (students.find(s => s.classId === classFilter)?.className || classFilter));
-        const statusLabels: Record<string, string> = { active: 'Good Standing', warning: 'Warning', critical: 'Critical', remedial: 'Remedial', cleared: 'Cleared' };
+        const statusLabels: Record<string, string> = { active: 'Good Standing', remedial: 'Remedial', cleared: 'Cleared' };
         const statusLabel = statusFilter === 'all' ? 'All statuses' : (statusLabels[statusFilter] ?? statusFilter);
-        const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(2) : '—');
+        const gwa = (s: any) => (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA).toFixed(1) : '—');
         const pending = (s: any) => (Array.isArray(s.remedialExams) ? s.remedialExams.filter((r: any) => r.status === 'pending').length : 0);
-        const standingBad = (s: any) => ['warning', 'critical', 'remedial'].includes(String(s.status || '').toLowerCase());
+        const standingBad = (s: any) => String(s.status || '').toLowerCase() === 'remedial';
         const rowCount = activeTab === 'attendance' ? historyRows.length : filtered.length;
         const widths: Record<ReportTab, number[]> = {
           students: [12, 22, 17, 8, 10, 13, 10, 8],
@@ -1529,7 +1495,7 @@ export const DeanReports: React.FC = () => {
                 {activeTab === 'students' && filtered.map((s: any) => {
                   const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
                   const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(2) : '—';
+                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(1) : '—';
                   return (
                     <tr key={s.id}>
                       <td className="id">{s.studentId}</td>
@@ -1546,7 +1512,7 @@ export const DeanReports: React.FC = () => {
                 {activeTab === 'retention' && filtered.map((s: any) => {
                   const sub = s.enrolledSubjects?.find((item: any) => item.code === currentSelectedClass?.subjectCode) || s.enrolledSubjects?.[0];
                   const gradeVal = sub?.grade ?? (s.overallGWA !== null && s.overallGWA !== undefined ? Number(s.overallGWA) : null);
-                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(2) : '—';
+                  const gradeStr = gradeVal !== null && gradeVal !== undefined && Number(gradeVal) > 0 ? Number(gradeVal).toFixed(1) : '—';
                   const flagged = (s.enrolledSubjects || []).filter(failsRetention).length;
                   const pend = pending(s);
                   return (

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, CheckCircle2, ChevronRight, Pencil, Plus, Search, Calculator, Filter } from 'lucide-react';
+import { CalendarDays, CheckCircle2, ChevronRight, Plus, Search, Calculator, Filter } from 'lucide-react';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { showFeedback } from '../../components/FeedbackCenter';
@@ -7,9 +7,8 @@ import {
   getFacultyRetentionApi,
   saveFacultyRemedialApi,
   saveFacultyCostRecoveryApi,
-  updateFacultyRetentionStatusApi,
 } from '../../services/apiClient';
-import { percentageToGWA, percentageToGWAExact } from '../../utils/gradeHelper';
+import { percentageToGWA } from '../../utils/gradeHelper';
 import type {
   FacultyRetentionRecord,
   FacultyRetentionState,
@@ -48,19 +47,6 @@ interface RemedialProgressionView {
   clearedAt?: string | null;
 }
 
-function RiskBadge({ risk }: { risk: FacultyRetentionRecord['risk'] }) {
-  if (!risk) return <span className="text-[10px] text-slate-400">Not enough data</span>;
-  const tone = risk.level === 'High'
-    ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
-    : risk.level === 'At Risk' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
-  const detail = risk.assumedAssessments === null
-    ? 'Five or more below-passing (75%) assessments would still keep the grade better than 2.50.'
-    : risk.assumedAssessments === 0
-      ? 'The current grade is already 2.50 or worse.'
-      : `${risk.assumedAssessments} more below-passing (75%) assessment${risk.assumedAssessments === 1 ? '' : 's'} would bring the grade to 2.50 or worse.`;
-  return <span title={`${detail} (${risk.period} grade; informational only)`} className={`inline-flex rounded-full px-2 py-1 text-[10px] font-bold ${tone}`}>{risk.level}</span>;
-}
-
 interface RetentionRemedialRow {
   record: FacultyRetentionRecord;
   progression: RemedialProgressionView;
@@ -82,26 +68,13 @@ const isFiniteNumber = (value: number | null | undefined): value is number => (
   typeof value === 'number' && Number.isFinite(value)
 );
 
-const isMidtermAtRisk = (record: FacultyRetentionRecord): boolean => {
-  if (record.midtermComplete !== true || !isFiniteNumber(record.midtermPercentage)) {
-    return false;
-  }
-  // Once the final course grade is complete, student is removed from Midterm Risk
-  if (isFiniteNumber(record.gwa)) {
-    return false;
-  }
-  const gwa = percentageToGWAExact(record.midtermPercentage);
-  return gwa >= 2.5; // 2.5 midterm grade is already at risk
-};
+// Server-authoritative rule: complete Midterm, no final grade or remedial record, grade 2.5 or worse.
+const isMidtermAtRisk = (record: FacultyRetentionRecord): boolean => record.midtermAtRisk === true;
 
 const hasPersistedIdentifiers = (record: FacultyRetentionRecord): boolean => (
   isPersistedText(record.enrollmentId)
   && isPersistedText(record.studentId)
   && isPersistedText(record.classId)
-);
-
-const canOverrideRecord = (record: FacultyRetentionRecord): boolean => (
-  hasPersistedIdentifiers(record) && record.state !== 'archived'
 );
 
 const textOrUnavailable = (value: string | null | undefined, label: string): string => (
@@ -276,8 +249,6 @@ const attemptStatusLabel = (status: RemedialDisplayStatus): string => {
 const retentionStateLabel = (state: FacultyRetentionState): string => {
   switch (state) {
     case 'active': return 'Active';
-    case 'warning': return 'Warning';
-    case 'critical': return 'Critical';
     case 'remedial': return 'Remedial';
     case 'cleared': return 'Cleared';
     case 'archived': return 'Archived';
@@ -287,8 +258,6 @@ const retentionStateLabel = (state: FacultyRetentionState): string => {
 
 const statusBadgeClasses = (state: FacultyRetentionState): string => {
   switch (state) {
-    case 'critical': return 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/60';
-    case 'warning': return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200/60';
     case 'remedial': return 'bg-accent-50 text-accent-700 dark:bg-accent-950/40 dark:text-accent-300 border border-accent-200/60';
     case 'active': return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60';
     case 'cleared': return 'bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300 border border-teal-200/60';
@@ -325,11 +294,6 @@ export const RetentionMonitoring: React.FC = () => {
   const [remedialScore, setRemedialScore] = useState('');
   const [resolveOutcome, setResolveOutcome] = useState<'pass' | 'fail'>('pass');
   const [reattemptDate, setReattemptDate] = useState('');
-
-  const [isOverrideOpen, setIsOverrideOpen] = useState(false);
-  const [selectedOverrideEnrollmentId, setSelectedOverrideEnrollmentId] = useState<string | null>(null);
-  const [overrideStatus, setOverrideStatus] = useState<'active' | 'warning' | 'critical' | 'remedial'>('warning');
-  const [overrideRemarks, setOverrideRemarks] = useState('');
 
   const [selectedPolicyRecord, setSelectedPolicyRecord] = useState<FacultyRetentionRecord | null>(null);
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
@@ -463,13 +427,14 @@ export const RetentionMonitoring: React.FC = () => {
       record => record.midtermComplete === true
         && isFiniteNumber(record.midtermPercentage)
         && !isFiniteNumber(record.gwa)
+        && readRemedialProgression(record).stage === 'none'
     );
     if (!showAtRiskOnly) return computedRecords;
     return computedRecords.filter(isMidtermAtRisk);
   }, [filteredRecords, showAtRiskOnly]);
 
   const currentAttentionStudents = useMemo(() => new Set(usableRecords.filter(record => record.schoolYear === currentSchoolYear
-    && ['warning', 'critical', 'remedial'].includes(record.state)).map(record => record.studentId)).size, [usableRecords, currentSchoolYear]);
+    && record.state === 'remedial').map(record => record.studentId)).size, [usableRecords, currentSchoolYear]);
   const visibleStudentCount = useMemo(() => new Set(filteredRecords.map(record => record.studentId)).size, [filteredRecords]);
 
   const remedialRows = useMemo<RetentionRemedialRow[]>(() => {
@@ -489,11 +454,6 @@ export const RetentionMonitoring: React.FC = () => {
   const selectedResolveRecord = useMemo(
     () => usableRecords.find(record => record.enrollmentId === selectedResolveEnrollmentId) ?? null,
     [selectedResolveEnrollmentId, usableRecords],
-  );
-
-  const selectedOverrideRecord = useMemo(
-    () => usableRecords.find(record => record.enrollmentId === selectedOverrideEnrollmentId) ?? null,
-    [selectedOverrideEnrollmentId, usableRecords],
   );
 
   const selectedScheduleProgression = selectedScheduleRecord
@@ -580,25 +540,6 @@ export const RetentionMonitoring: React.FC = () => {
     setResolveNotes(row.progression.attempts.find(attempt => attempt.attemptNumber === attemptNumber)?.notes ?? '');
   };
 
-  const openOverride = (record: FacultyRetentionRecord) => {
-    if (isPastYearRecord(record)) {
-      showFeedback('Past school-year classes are view-only.', 'info');
-      return;
-    }
-    if (!canOverrideRecord(record)) {
-      if (record.state === 'archived') {
-        showFeedback('Status override is unavailable for archived enrollments.', 'info');
-        return;
-      }
-      showFeedback('Status override is unavailable because persisted identifiers are missing.', 'info');
-      return;
-    }
-    setSelectedOverrideEnrollmentId(record.enrollmentId);
-    setOverrideStatus(record.state === 'archived' ? 'warning' : record.state === 'cleared' ? 'active' : record.state);
-    setOverrideRemarks('');
-    setIsOverrideOpen(true);
-  };
-
   const resetScheduleForm = () => {
     setIsScheduleOpen(false);
     setSelectedScheduleEnrollmentId('');
@@ -614,12 +555,6 @@ export const RetentionMonitoring: React.FC = () => {
     setResolveOutcome('pass');
     setReattemptDate('');
     setResolveNotes('');
-  };
-
-  const resetOverrideForm = () => {
-    setIsOverrideOpen(false);
-    setSelectedOverrideEnrollmentId(null);
-    setOverrideRemarks('');
   };
 
   const handleScheduleSubmit = async (event: React.FormEvent) => {
@@ -767,48 +702,6 @@ export const RetentionMonitoring: React.FC = () => {
     }
   };
 
-  const handleOverrideSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (selectedOverrideRecord && isPastYearRecord(selectedOverrideRecord)) {
-      showFeedback('Past school-year classes are view-only.', 'info');
-      return;
-    }
-    if (!selectedOverrideRecord || !canOverrideRecord(selectedOverrideRecord)) {
-      if (selectedOverrideRecord?.state === 'archived') {
-        showFeedback('Status override is unavailable for archived enrollments.', 'info');
-        return;
-      }
-      showFeedback('Status override is unavailable because the persisted identifiers are missing.', 'info');
-      return;
-    }
-    if (overrideRemarks.trim().length < 8) {
-      showFeedback('Enter at least eight characters explaining the override.', 'error');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      await updateFacultyRetentionStatusApi({
-        studentId: selectedOverrideRecord.studentId,
-        classId: selectedOverrideRecord.classId,
-        status: overrideStatus,
-        reason: overrideRemarks.trim(),
-      });
-      const refreshed = await refreshRetention();
-      resetOverrideForm();
-      setNotification({
-        type: refreshed ? 'success' : 'info',
-        message: refreshed
-          ? 'Retention status persisted successfully.'
-          : 'Retention status persisted, but the authoritative list could not be refreshed.',
-      });
-    } catch (requestError) {
-      showFeedback(requestError instanceof Error ? requestError.message : 'Unable to persist the retention status.', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const renderStatusBadge = (state: FacultyRetentionState) => (
     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${statusBadgeClasses(state)}`}>
       {retentionStateLabel(state)}
@@ -900,7 +793,7 @@ export const RetentionMonitoring: React.FC = () => {
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <span>Midterm Risk</span>
+            <span>Midterm Watchlist</span>
             {atRiskMidtermCount > 0 && (
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === 'midterm' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
@@ -968,7 +861,7 @@ export const RetentionMonitoring: React.FC = () => {
         <p className="font-bold">Showing {visibleStudentCount} student{visibleStudentCount === 1 ? '' : 's'} across {filteredRecords.length} course enrollment{filteredRecords.length === 1 ? '' : 's'} · {selectedSchoolYear === 'all' ? 'All school years' : `S.Y. ${selectedSchoolYear}`}</p>
         <p className="mt-1">{currentAttentionStudents} student{currentAttentionStudents === 1 ? ' needs' : 's need'} attention in the current school year ({currentSchoolYear || 'unavailable'}). Course enrollments and pending exams are counted separately in the tabs.</p>
         {currentAttentionStudents > 0 && <button type="button" onClick={() => { setSelectedSchoolYear(currentSchoolYear); setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); setActiveTab('watchlist'); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">View current-year students needing attention</button>}
-        {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Watchlist. Midterm Watchlist shows grade completeness and informational risk separately.</p>}
+        {activeTab === 'midterm' && <p className="mt-1">Current retention alerts appear in Retention Watchlist. Midterm Watchlist shows students whose fully graded midterm is 2.5 or worse.</p>}
         {(selectedClassId !== 'all' || selectedSubjectCode !== 'all' || searchQuery.trim() !== '') && <button type="button" onClick={() => { setSelectedClassId('all'); setSelectedSubjectCode('all'); setSearchQuery(''); }} className="mt-2 font-bold text-emerald-700 dark:text-emerald-400">Clear course, section and search filters</button>}
       </div>}
 
@@ -977,10 +870,10 @@ export const RetentionMonitoring: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                Midterm Standing & Risk Evaluation
+                Midterm Watchlist
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Review students with computed midterm standing at risk of retention (midterm grade 2.5 onwards). Students with completed final course grades are resolved in Retention Watchlist.
+                Students whose midterm is fully graded and whose weighted midterm grade is 2.5 or worse (84% or below on the BUCDM table). Students with a final course grade move to Retention Watchlist.
               </p>
             </div>
 
@@ -1033,7 +926,7 @@ export const RetentionMonitoring: React.FC = () => {
                           <div className="font-mono">
                             <span className="font-bold">{record.midtermPercentage.toFixed(2)}%</span>
                             <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
-                              (Final Midterm Grade: <GradeValue percentage={record.midtermPercentage}>{percentageToGWA(record.midtermPercentage).toFixed(2)}</GradeValue>)
+                              (Final Midterm Grade: <GradeValue percentage={record.midtermPercentage} period="Midterm">{percentageToGWA(record.midtermPercentage, 'Midterm').toFixed(1)}</GradeValue>)
                             </span>
                           </div>
                         ) : (
@@ -1041,15 +934,9 @@ export const RetentionMonitoring: React.FC = () => {
                         )}
                       </td>
                       <td className="p-3">
-                        <RiskBadge
-                          risk={
-                            record.risk ?? {
-                              level: isFiniteNumber(record.midtermPercentage) && percentageToGWAExact(record.midtermPercentage) >= 3.0 ? 'High' : 'At Risk',
-                              assumedAssessments: 0,
-                              period: 'Midterm',
-                            }
-                          }
-                        />
+                        {isMidtermAtRisk(record) && (
+                          <span className="inline-flex rounded-full px-2 py-1 text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300">At Risk</span>
+                        )}
                       </td>
                       <td className="p-3">
                         <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60">
@@ -1066,7 +953,7 @@ export const RetentionMonitoring: React.FC = () => {
             <div className="py-8 text-center text-xs text-slate-400 space-y-1">
               {showAtRiskOnly ? (
                 <>
-                  <p className="font-semibold text-slate-600 dark:text-slate-300">No students are currently flagged at risk for midterm (no computed grades worse than 2.5).</p>
+                  <p className="font-semibold text-slate-600 dark:text-slate-300">No students are currently on the Midterm Watchlist (no fully graded midterm of 2.5 or worse).</p>
                   <button
                     type="button"
                     onClick={() => setShowAtRiskOnly(false)}
@@ -1087,22 +974,21 @@ export const RetentionMonitoring: React.FC = () => {
       {activeTab === 'watchlist' && (
         <Card className="p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-400">Final grades and saved retention decisions. Select a status to view policy progression.</p></div>
+            <div><h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">Retention Watchlist ({watchlistRecords.length})</h2><p className="text-xs text-slate-400">Final grades and computed retention status. Select a status to view policy progression.</p></div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4">Risk</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
+              <thead><tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]"><th className="py-3 px-4">Student</th><th className="py-3 px-4">Student Number</th><th className="py-3 px-4">Subject</th><th className="py-3 px-4">Class</th><th className="py-3 px-4 text-center">Course Grade</th><th className="py-3 px-4">State</th><th className="py-3 px-4 text-right">Actions</th></tr></thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {watchlistRecords.length === 0 ? <tr><td colSpan={8} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No persisted retention records match the selected filters.'}</td></tr> : watchlistRecords.map(record => (
+                {watchlistRecords.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-slate-400">{isLoading ? 'Loading authoritative retention records...' : 'No persisted retention records match the selected filters.'}</td></tr> : watchlistRecords.map(record => (
                   <tr key={record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(record.studentName, 'Student name unavailable')}</td>
                     <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">{textOrUnavailable(record.studentNumber, 'Student number unavailable')}</td>
                     <td className="py-3.5 px-4 font-mono">{textOrUnavailable(record.subjectCode, 'Subject code unavailable')}</td>
                     <td className="py-3.5 px-4">{textOrUnavailable(record.className, `Class name unavailable (${record.classId})`)}</td>
-                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage}>{record.gwa.toFixed(2)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
-                    <td className="py-3.5 px-4"><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button>{record.manualOverride && <span className="ml-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400" title="Set by Faculty. Kept until the student's course grade changes.">Manual</span>}</td>
-                    <td className="py-3.5 px-4"><RiskBadge risk={record.risk} /></td>
-                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button><button type="button" onClick={() => openOverride(record)} disabled={!canOverrideRecord(record) || isPastYearRecord(record)} title={isPastYearRecord(record) ? 'Past school-year classes are view-only.' : !canOverrideRecord(record) ? (record.state === 'archived' ? 'Status override unavailable for archived enrollments.' : 'Status override unavailable: persisted identifiers are missing.') : 'Override retention status'} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 text-[11px] font-bold"><Pencil className="w-3.5 h-3.5" /></button></div></td>
+                    <td className="py-3.5 px-4 text-center font-mono">{isFiniteNumber(record.gwa) ? <GradeValue percentage={record.percentage}>{record.gwa.toFixed(1)}</GradeValue> : 'Grade unavailable'}<span className="block text-[10px] text-slate-400">{isFiniteNumber(record.percentage) ? `${record.percentage.toFixed(2)}%` : 'Percentage unavailable'}</span></td>
+                    <td className="py-3.5 px-4"><button type="button" onClick={() => openPolicyProgression(record)} className="inline-flex items-center gap-1.5 rounded-full transition-colors hover:ring-2 hover:ring-emerald-300" title="View retention policy progression"><span>{renderStatusBadge(record.state)}</span><ChevronRight className="h-3 w-3 text-slate-400" /></button></td>
+                    <td className="py-3.5 px-4 text-right"><div className="flex items-center justify-end gap-1.5"><button type="button" onClick={() => openSchedule(record)} disabled={!canScheduleRecord(record)} title={!canScheduleRecord(record) ? (record.state === 'archived' ? 'Scheduling unavailable for archived enrollments.' : 'Scheduling unavailable: persisted subject data is missing.') : 'Schedule remedial exam'} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-all shadow-xs"><Plus className="w-3 h-3" /><span>Remedial</span></button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -1124,7 +1010,7 @@ export const RetentionMonitoring: React.FC = () => {
                   <tr key={row.record.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{textOrUnavailable(row.record.studentName, 'Student name unavailable')}<span className="block text-[10px] text-slate-400 font-mono">{textOrUnavailable(row.record.studentNumber, 'Student number unavailable')}</span></td>
                     <td className="py-3.5 px-4"><span className="font-mono font-bold text-[10px]">{textOrUnavailable(row.record.subjectCode, 'Subject code unavailable')}</span><span className="block text-[10px] text-slate-400">{textOrUnavailable(row.record.className, `Class name unavailable (${row.record.classId})`)}</span></td>
-                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage}>{row.record.gwa.toFixed(2)}</GradeValue> : <span className="text-[10px] font-medium text-slate-400">Grade unavailable</span>}</td>
+                    <td className="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(row.record.gwa) ? <GradeValue percentage={row.record.percentage}>{row.record.gwa.toFixed(1)}</GradeValue> : <span className="text-[10px] font-medium text-slate-400">Grade unavailable</span>}</td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
                       {(() => {
                         const activeAttemptNumber = row.progression.attempts.length === 2
@@ -1218,7 +1104,7 @@ export const RetentionMonitoring: React.FC = () => {
                         )}
                         {typeof row.progression.costRecoveryGrade === 'number' && (
                           <span className="text-[10px] text-slate-500 font-mono">
-                            Cost recovery: {row.progression.costRecoveryGrade.toFixed(2)}
+                            Cost recovery: {row.progression.costRecoveryGrade.toFixed(1)}
                           </span>
                         )}
                         {row.progression.legacyUnclassified && (
@@ -1442,17 +1328,6 @@ export const RetentionMonitoring: React.FC = () => {
         </Modal>
       )}
 
-      {isOverrideOpen && selectedOverrideRecord && (
-        <Modal isOpen={isOverrideOpen} onClose={resetOverrideForm} title="Override Retention Status">
-          <form onSubmit={handleOverrideSubmit} className="space-y-4 text-xs">
-            <p className="text-slate-600 dark:text-slate-300">{textOrUnavailable(selectedOverrideRecord.studentName, 'Student name unavailable')} · {textOrUnavailable(selectedOverrideRecord.subjectCode, 'Subject code unavailable')}</p>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Select New Status</label><select value={overrideStatus} onChange={(event) => setOverrideStatus(event.target.value as 'active' | 'warning' | 'critical' | 'remedial')} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"><option value="active">Active / Cleared</option><option value="warning">Retention Warning</option><option value="critical">Critical Watchlist</option><option value="remedial">Remedial Assigned</option></select><p className="mt-1 text-[11px] text-slate-400">The status you set is kept until the student's course grade changes; a changed grade recomputes it automatically.</p></div>
-            <div><label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Reason for Override</label><textarea rows={3} required value={overrideRemarks} onChange={(event) => setOverrideRemarks(event.target.value)} placeholder="Enter at least eight characters..." className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium" /></div>
-            <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={resetOverrideForm} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button><button type="submit" disabled={isSubmitting} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-600/20">{isSubmitting ? 'Saving...' : 'Save Override'}</button></div>
-          </form>
-        </Modal>
-      )}
-
       {isPolicyOpen && selectedPolicyRecord && (
         <Modal
           isOpen={isPolicyOpen}
@@ -1472,7 +1347,7 @@ export const RetentionMonitoring: React.FC = () => {
                 {renderStatusBadge(selectedPolicyRecord.state)}
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Final Grade</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? <GradeValue percentage={selectedPolicyRecord.percentage}>{selectedPolicyRecord.gwa.toFixed(2)}</GradeValue> : 'Unavailable'}</span></div>
+                <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Final Grade</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.gwa) ? <GradeValue percentage={selectedPolicyRecord.percentage}>{selectedPolicyRecord.gwa.toFixed(1)}</GradeValue> : 'Unavailable'}</span></div>
                 <div className="rounded-xl bg-white px-3 py-2 dark:bg-slate-950"><span className="block text-slate-400">Recorded score</span><span className="font-bold text-slate-800 dark:text-slate-100">{isFiniteNumber(selectedPolicyRecord.percentage) ? `${selectedPolicyRecord.percentage.toFixed(2)}%` : 'Unavailable'}</span></div>
               </div>
             </div>

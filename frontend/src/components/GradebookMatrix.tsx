@@ -270,9 +270,9 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
     return comps.reduce((sum, c) => sum + componentColSpan(c), 0) + 2;
   };
 
-  const periodEquivalentGrade = (percentage: number | null | undefined): string => {
+  const periodEquivalentGrade = (percentage: number | null | undefined, period: 'Midterm' | 'Final' = 'Final'): string => {
     if (percentage === null || percentage === undefined || !Number.isFinite(percentage)) return '—';
-    return format(percentageToGWA(percentage), 2);
+    return format(percentageToGWA(percentage, period), 1);
   };
 
   const visiblePeriods = PERIODS.filter(p => periodFilter === 'all' || p.key === periodFilter);
@@ -682,8 +682,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                             <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${period.totalLabel}: ${format(pct)}%`}>
                               {format(pct)}
                             </td>
-                            <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Final Midterm Grade' : 'Final Grade'} (1.00–5.00): ${periodEquivalentGrade(pct)}`}>
-                              <GradeValue percentage={pct}>{periodEquivalentGrade(pct)}</GradeValue>
+                            <td className={`${totalCell} ${cellBg} font-extrabold`} title={`${isMidterm ? 'Final Midterm Grade' : 'Final Grade'} (1.0–5.0): ${periodEquivalentGrade(pct, isMidterm ? 'Midterm' : 'Final')}`}>
+                              <GradeValue percentage={pct} period={isMidterm ? 'Midterm' : 'Final'}>{periodEquivalentGrade(pct, isMidterm ? 'Midterm' : 'Final')}</GradeValue>
                             </td>
                           </>
                         );

@@ -439,7 +439,7 @@ test.describe('Faculty Module E2E Tests', () => {
           status: 'ok', currentSchoolYear: '2026-2027', retentionThreshold: 2.5,
           retention: [{
             enrollmentId: '901', studentId: '42', studentNumber: '2023-0042', studentName: 'Remedial Candidate',
-            classId: '77', className: 'CLIN401-A', subjectCode: 'CLIN401', percentage: 70, gwa: 2.75,
+            classId: '77', className: 'CLIN401-A', subjectCode: 'CLIN401', percentage: 70, gwa: 2.8,
             state: 'remedial', remedial: null, schoolYear: '2026-2027', remedialEligible: true,
             remedialProgression: { stage: 'none', attempts: [], passedAttempt: null, legacyUnclassified: false },
           }],
@@ -495,7 +495,7 @@ test.describe('Faculty Module E2E Tests', () => {
   });
 
   test('retention identifies current-year students separately from enrollments and exposes filtered alerts', async ({ page }) => {
-    const common = { studentNumber: '2026-0042', studentName: 'Current Candidate', studentId: '42', percentage: 70, gwa: 2.75, state: 'warning', schoolYear: '2026-2027', remedialEligible: true };
+    const common = { studentNumber: '2026-0042', studentName: 'Current Candidate', studentId: '42', percentage: 70, gwa: 2.8, state: 'remedial', schoolYear: '2026-2027', remedialEligible: true };
     await page.route('**/api/faculty/dashboard/kpis**', route => {
       const year = new URL(route.request().url()).searchParams.get('schoolYear');
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', kpis: { retentionAlerts: year === 'current' ? 1 : 2, remedialCount: 0 } }) });
@@ -2524,7 +2524,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
                   code: 'CLIN401',
                   name: 'Clinical Dentistry I',
                   units: 3,
-                  grade: 1.75,
+                  grade: 1.8,
                   classId: '1',
                   enrollmentId: '1',
                   isClinical: true,
@@ -2548,7 +2548,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
                 status: 'incomplete_period',
                 enrollmentId: 1,
                 previouslyPersisted: true,
-                previousGwa: 1.75,
+                previousGwa: 1.8,
                 previousPercentage: 88.5,
                 reasons: ['unresolved_attendance'],
                 periods: {
@@ -2586,7 +2586,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       expect(recomputeRequested).toBe(true);
 
       // Table should now display historical prior grade and INCOMPLETE status badge (NOT PASS)
-      await expect(page.locator('.no-print').getByText(/Prior: 1.75 \(Historical\)/i)).toBeVisible();
+      await expect(page.locator('.no-print').getByText(/Prior: 1.8 \(Historical\)/i)).toBeVisible();
       await expect(page.locator('.no-print tbody').getByText('INCOMPLETE', { exact: true })).toBeVisible();
       await expect(page.locator('.no-print tbody').getByText('PASS')).toHaveCount(0);
     });
@@ -2637,7 +2637,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
                   code: 'CLIN401',
                   name: 'Clinical Dentistry I',
                   units: 3,
-                  grade: 1.75,
+                  grade: 1.8,
                   classId: '1',
                   enrollmentId: '1',
                   isClinical: true,
@@ -2664,9 +2664,9 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(interactiveRow.locator('td').nth(1)).toContainText('Pending');
       await expect(interactiveRow.locator('td').nth(2)).toContainText('Pending');
 
-      // Overall GWA must show '—', NOT the legacy 1.75!
+      // Overall GWA must show '—', NOT the legacy 1.8!
       await expect(interactiveRow.locator('td').nth(3)).toContainText('—');
-      await expect(interactiveRow.locator('td').nth(3)).not.toContainText('1.75');
+      await expect(interactiveRow.locator('td').nth(3)).not.toContainText('1.8');
 
       // Status badge must be PENDING, NOT PASS!
       await expect(interactiveRow.locator('td').nth(4)).toContainText('PENDING');
@@ -2677,7 +2677,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(printRow.locator('td').nth(2)).toContainText('Pending');
       await expect(printRow.locator('td').nth(3)).toContainText('Pending');
       await expect(printRow.locator('td').nth(4)).toContainText('—');
-      await expect(printRow.locator('td').nth(4)).not.toContainText('1.75');
+      await expect(printRow.locator('td').nth(4)).not.toContainText('1.8');
       await expect(printRow.locator('td').nth(5)).toContainText('PENDING');
     });
 
@@ -2721,7 +2721,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
                   code: 'CLIN401',
                   name: 'Clinical Dentistry I',
                   units: 3,
-                  grade: 2.25,
+                  grade: 2.3,
                   classId: '1',
                   enrollmentId: '2',
                   isClinical: true,
@@ -2775,7 +2775,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       // INCOMPLETE badge is shown in remarks (column 4)
       await expect(row.locator('td').nth(4)).toContainText('INCOMPLETE');
-      // Overall GWA (column 3) must show '—', and must NOT fall back to legacy 2.25 or 'Prior: 2.25 (Historical)'
+      // Overall GWA (column 3) must show '—', and must NOT fall back to legacy 2.3 or 'Prior: 2.3 (Historical)'
       await expect(row.locator('td').nth(3)).toContainText('—');
       await expect(page.locator('.no-print').getByText(/Prior:/i)).toHaveCount(0);
       await expect(page.locator('.no-print').getByText(/Historical/i)).toHaveCount(0);
@@ -3831,7 +3831,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         const midterm = period('Midterm', 87, 81, 91);
         const final = period('Final', 89, 93, 83);
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', results: [{
-          status: 'computed', enrollmentId: '801', studentId: '701', percentage: 88.4, gwa: 1.65, retentionState: 'active',
+          status: 'computed', enrollmentId: '801', studentId: '701', percentage: 88.4, gwa: 2.1, retentionState: 'active',
           periods: { midterm, final },
           breakdown: { calculationMode: 'authoritative_periods', termRatio: { midterm: 30, final: 70 }, periods: { midterm, final }, retentionThreshold: 2.5 },
         }] }) });
@@ -3849,7 +3849,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(row).toContainText('91.00%');
       await expect(row).toContainText('93.00%');
       await expect(row).toContainText('83.00%');
-      await expect(row).toContainText('1.65');
+      await expect(row).toContainText('2.1');
       for (const label of ['Midterm Lecture %', 'Midterm Laboratory %', 'Finals Lecture %', 'Finals Laboratory %']) {
         await expect(page.locator('.no-print table').getByRole('columnheader', { name: label, exact: true })).toHaveCount(1);
       }
@@ -3859,7 +3859,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const download = await downloadPromise;
       const csv = await readFile((await download.path())!, 'utf8');
       expect(csv).toContain('Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %');
-      expect(csv).toContain('"DENT-007","Alice Reyes","81.00%","91.00%","87.00%","93.00%","83.00%","89.00%","1.65","PASS"');
+      expect(csv).toContain('"DENT-007","Alice Reyes","81.00%","91.00%","87.00%","93.00%","83.00%","89.00%","2.1","PASS"');
     });
 
     test('legacy combined period grading requires explicit forward conversion and preserves category IDs', async ({ page }) => {
@@ -3967,24 +3967,24 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const savedGroupResult = {
         calculationMode: 'authoritative_periods', termRatio: { midterm: 30, final: 70 },
         periods: { midterm: groupedPeriod('Midterm', 87, 81, 91), final: groupedPeriod('Final', 89, 93, 83) },
-        percentage: 88.4, gwa: 1.65, retentionState: 'active',
+        percentage: 88.4, gwa: 2.1, retentionState: 'active',
       };
       const olderCombinedResult = {
         calculationMode: 'authoritative_periods', termRatio: { midterm: 40, final: 60 },
         periods: { midterm: oldPeriod('Midterm', 72), final: oldPeriod('Final', 84) },
-        percentage: 79.2, gwa: 2.15, retentionState: 'active',
+        percentage: 79.2, gwa: 2.8, retentionState: 'active',
       };
       await page.route('**/api/faculty/reports/summary', async route => {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', reports: {
           currentSchoolYear: '2026-2027', students: [
             { id: '701', studentId: 'DENT-007', name: 'Alice Reyes', status: 'active', classId: '1', schoolYear: '2026-2027', enrolledSubjects: [
-              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 1.65, components: savedGroupResult },
+              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 2.1, components: savedGroupResult },
             ] },
             { id: '702', studentId: 'DENT-008', name: 'Bea Santos', status: 'active', classId: '1', schoolYear: '2026-2027', enrolledSubjects: [
-              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 2.15, components: olderCombinedResult },
+              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 2.8, components: olderCombinedResult },
             ] },
             { id: '703', studentId: 'DENT-009', name: 'Caleb Reyes', status: 'active', classId: '1', schoolYear: '2026-2027', enrolledSubjects: [
-              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 2.45, components: {
+              { classId: '1', schoolYear: '2026-2027', code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, grade: 2.5, components: {
                 calculationMode: 'authoritative_categories', categories: [{ categoryId: 17, name: 'Quizzes', contribution: 23.5 }],
               } },
             ] },
@@ -4022,25 +4022,25 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(oldRow).toContainText('Unavailable (recompute required)');
       await expect(oldRow).toContainText('72.0%');
       await expect(oldRow).toContainText('84.0%');
-      await expect(oldRow).toContainText('2.15');
+      await expect(oldRow).toContainText('2.8');
       const legacyOverallRow = page.locator('.no-print tbody tr').filter({ hasText: 'Caleb Reyes' });
-      await expect(legacyOverallRow).toContainText('Prior: 2.45 (Historical)');
+      await expect(legacyOverallRow).toContainText('Prior: 2.5 (Historical)');
       await expect(legacyOverallRow).toContainText('PENDING');
 
       const printTable = page.locator('.print-only table').first();
       await expect(printTable.getByRole('columnheader', { name: 'Midterm Lecture %', exact: true })).toBeAttached();
       await expect(printTable.getByRole('columnheader', { name: 'Finals Laboratory %', exact: true })).toBeAttached();
       await expect(printTable.getByRole('row').filter({ hasText: 'Bea Santos' })).toContainText('Unavailable (recompute required)');
-      await expect(printTable.getByRole('row').filter({ hasText: 'Caleb Reyes' })).toContainText('Prior: 2.45 (Historical)');
+      await expect(printTable.getByRole('row').filter({ hasText: 'Caleb Reyes' })).toContainText('Prior: 2.5 (Historical)');
 
       const downloadPromise = page.waitForEvent('download');
       await page.getByRole('button', { name: 'Export CSV' }).click();
       const download = await downloadPromise;
       const csv = await readFile((await download.path())!, 'utf8');
       expect(csv).toContain('Student Number,Student Name,Course Code,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Grade,Remarks');
-      expect(csv).toContain('"DENT-007","Alice Reyes","CLIN401","81.0%","91.0%","87.0","93.0%","83.0%","89.0","1.65"');
-      expect(csv).toContain('"DENT-008","Bea Santos","CLIN401","Unavailable (recompute required)","Unavailable (recompute required)","72.0","Unavailable (recompute required)","Unavailable (recompute required)","84.0","2.15"');
-      expect(csv).toContain('"DENT-009","Caleb Reyes","CLIN401","Pending","Pending","N/A","Pending","Pending","N/A","Prior: 2.45 (Historical)","PENDING"');
+      expect(csv).toContain('"DENT-007","Alice Reyes","CLIN401","81.0%","91.0%","87.0","93.0%","83.0%","89.0","2.1"');
+      expect(csv).toContain('"DENT-008","Bea Santos","CLIN401","Unavailable (recompute required)","Unavailable (recompute required)","72.0","Unavailable (recompute required)","Unavailable (recompute required)","84.0","2.8"');
+      expect(csv).toContain('"DENT-009","Caleb Reyes","CLIN401","Pending","Pending","N/A","Pending","Pending","N/A","Prior: 2.5 (Historical)","PENDING"');
     });
   });
 });

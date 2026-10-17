@@ -39,7 +39,7 @@ const KNOWN_API_PATHS = new Set([
   '/api/secretary/profile', '/api/secretary/settings',
   '/api/faculty/dashboard/kpis', '/api/faculty/students', '/api/faculty/assessments', '/api/faculty/assessments/delete',
   '/api/faculty/scores', '/api/faculty/grades/compute', '/api/faculty/attendance', '/api/faculty/attendance/session',
-  '/api/faculty/attendance/override', '/api/faculty/retention', '/api/faculty/retention/remedial', '/api/faculty/retention/status',
+  '/api/faculty/attendance/override', '/api/faculty/retention', '/api/faculty/retention/remedial',
   '/api/faculty/profile', '/api/faculty/settings', '/api/faculty/send-email', '/api/faculty/email-logs', '/api/faculty/reports/summary',
   '/api/faculty/classes', '/api/faculty/courses', '/api/faculty/classes/available-students', '/api/faculty/classes/enroll',
   '/api/faculty/classes/unenroll', '/api/faculty/grading-config',

@@ -39,7 +39,7 @@ $rows = [
         'cs_name' => 'CLINIC-4A',
         'enrollment_id' => 101,
         'final_gwa' => 2.0,
-        'retention_state' => 'warning',
+        'retention_state' => 'active',
         'clinic_hours_completed' => 12,
         'course_code' => 'CLIN401',
         'course_name' => 'Clinical Dentistry I',
@@ -49,7 +49,7 @@ $rows = [
         'cs_name' => 'CLINIC-4B',
         'enrollment_id' => 102,
         'final_gwa' => 3.0,
-        'retention_state' => 'critical',
+        'retention_state' => 'remedial',
         'clinic_hours_completed' => 18,
         'course_code' => 'CLIN402',
         'course_name' => 'Clinical Dentistry II',
@@ -81,7 +81,7 @@ assert_faculty_students($ana['enrolledSubjects'][1]['classId'] === '12', 'Subjec
 assert_faculty_students($ana['enrolledSubjects'][1]['enrollmentId'] === '102', 'Subject association carries enrollment ID');
 assert_faculty_students(abs($ana['overallGWA'] - 2.5) < 0.00001, 'Only non-null enrollment grades are averaged');
 assert_faculty_students($ana['clinicHoursCompleted'] === 30, 'Clinic hours are summed across enrollments');
-assert_faculty_students($ana['status'] === 'critical', 'Aggregate status uses critical-first priority');
+assert_faculty_students($ana['status'] === 'remedial', 'Aggregate status uses remedial-first priority');
 assert_faculty_students($students[1]['overallGWA'] === null, 'All-null enrollment grades remain null');
 $thresholdStudents = faculty_map_student_rows($rows, 2.75);
 assert_faculty_students($thresholdStudents[0]['retentionThreshold'] === 2.75, 'Faculty student payload carries the canonical configured retention threshold');

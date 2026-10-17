@@ -56,9 +56,9 @@ const groupedClass = (overrides: Record<string, unknown> = {}) => ({
   schoolYear: '2026-2027',
   yearLevel: 1,
   dateEnrolled: '2026-09-01',
-  grade: 1.75,
+  grade: 1.8,
   percentage: 85.4,
-  gradeComponents: gradeComponents(period('Midterm', 84, 80, 90), period('Final', 86, 90, 80), 85.4, 1.75),
+  gradeComponents: gradeComponents(period('Midterm', 84, 80, 90), period('Final', 86, 90, 80), 85.4, 1.8),
   gradingComponentMode: 'lecture_laboratory',
   retentionState: 'active',
   remedial: null,
@@ -98,13 +98,13 @@ test('Student class ledger reads saved grouped components and labels old combine
     });
     const oldCombined = groupedClass({
       enrollmentId: '803', classId: '3', className: 'OLD-COMBINED-1A', courseCode: 'OLD-COMBINED',
-      courseName: 'Previously Combined Course', grade: 2.25, percentage: 81.5,
+      courseName: 'Previously Combined Course', grade: 2.3, percentage: 81.5,
       gradeComponents: {
         calculationMode: 'authoritative_periods', termRatio: { midterm: 40, final: 60 },
         periods: {
           midterm: { period: 'Midterm', status: 'computed', percentage: 80, categories: [], incomplete: [] },
           final: { period: 'Final', status: 'computed', percentage: 82.5, categories: [], incomplete: [] },
-        }, percentage: 81.5, gwa: 2.25, retentionState: 'active',
+        }, percentage: 81.5, gwa: 2.3, retentionState: 'active',
       },
     });
     const combinedAfterConversion = groupedClass({

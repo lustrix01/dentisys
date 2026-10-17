@@ -1,17 +1,5 @@
 import type { Assessment, AttendanceStatus, GradeComponents, EnrolledSubject } from '../types';
 
-const GWA_BENCHMARKS: Array<{ pct: number; grade: number }> = [
-  { pct: 97, grade: 1.0 },
-  { pct: 94, grade: 1.25 },
-  { pct: 91, grade: 1.5 },
-  { pct: 88, grade: 1.75 },
-  { pct: 85, grade: 2.0 },
-  { pct: 82, grade: 2.25 },
-  { pct: 80, grade: 2.5 },
-  { pct: 78, grade: 2.75 },
-  { pct: 75, grade: 3.0 },
-];
-
 export const effectiveAssessmentPercentage = (
   rawScore: number,
   maxScore: number,
@@ -34,31 +22,25 @@ export const effectiveAssessmentPercentage = (
 };
 
 /**
- * Converts a raw percentage score to the Philippine academic scale (1.00 to 5.00)
- * using linear interpolation across benchmarks.
- * 1.00 is excellent, 3.00 is passing, 5.00 is failing.
+ * BUCDM conversion (spec 2026-10-17), same as the server: truncate to a whole
+ * percent, then map to a one-decimal grade (1.0 best). Below 75%: Midterm
+ * 3.1..4.0 (65% and below = 4.0); Final and the overall course grade = 5.0.
  */
-export const percentageToGWAExact = (pct: number): number => {
+export const percentageToGWAExact = (pct: number, period: 'Midterm' | 'Final' = 'Final'): number => {
   if (!Number.isFinite(pct)) return 5.0;
-  if (pct >= 97) return 1.0;
-  if (pct < 75) return 5.0;
-
-  for (let i = 0; i < GWA_BENCHMARKS.length - 1; i++) {
-    const high = GWA_BENCHMARKS[i];
-    const low = GWA_BENCHMARKS[i + 1];
-    if (pct >= low.pct && pct <= high.pct) {
-      const fraction = (pct - low.pct) / (high.pct - low.pct);
-      return low.grade - fraction * (low.grade - high.grade);
-    }
-  }
-
-  return 3.0;
+  const t = Math.floor(pct + 1e-9); // epsilon guards float drift (84.0 -> 83.9999999)
+  let tenths: number;
+  if (t >= 99) tenths = 10;
+  else if (t >= 84) tenths = 109 - t;
+  else if (t >= 76) tenths = 26 + Math.floor((83 - t) / 2);
+  else if (t === 75) tenths = 30;
+  else if (period === 'Midterm') tenths = Math.min(40, 31 + (74 - t));
+  else tenths = 50;
+  return tenths / 10;
 };
 
-// Matches the server's faculty_percentage_to_gwa(): the epsilon keeps half-grade
-// values stable when interpolation drifts below the midpoint (87.34% -> 1.81).
-export const percentageToGWA = (pct: number): number =>
-  Math.round((percentageToGWAExact(pct) + 1e-12) * 100) / 100;
+export const percentageToGWA = (pct: number, period: 'Midterm' | 'Final' = 'Final'): number =>
+  percentageToGWAExact(pct, period);
 
 /**
  * Gets a textual description for a given GWA grade.

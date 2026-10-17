@@ -692,12 +692,6 @@ return [
         'has_params' => false,
     ],
     [
-        'method' => 'POST',
-        'path' => '/api/faculty/retention/status',
-        'handler' => 'handle_faculty_retention_status_update',
-        'has_params' => false,
-    ],
-    [
         'method' => 'GET',
         'path' => '/api/faculty/profile',
         'handler' => 'handle_faculty_profile_get',

@@ -143,15 +143,19 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
         $enrollmentId = (int) $row['enrollment_id'];
         $meetings = class_meetings_read($pdo, $row);
         $midterm = faculty_watchlist_midterm($pdo, $row);
-        $risk = academic_school_year_is_current($pdo, (string) $row['school_year'])
-            ? faculty_risk_projection($pdo, $row) : null;
         $midtermEvaluation = [
             'complete' => (bool) $midterm['complete'],
             'percentage' => $midterm['percentage'] !== null ? round((float) $midterm['percentage'], 2) : null,
             'grade' => $midterm['complete'] && $midterm['percentage'] !== null
-                ? faculty_percentage_to_gwa((float) $midterm['percentage']) : null,
-            'isAtRisk' => in_array($risk['level'] ?? null, ['High', 'At Risk'], true),
-            'risk' => $risk,
+                ? faculty_percentage_to_gwa((float) $midterm['percentage'], 'Midterm') : null,
+            'gradedCount' => (int) ($midterm['gradedCount'] ?? 0),
+            'totalCount' => (int) ($midterm['totalCount'] ?? 0),
+            'isAtRisk' => academic_school_year_is_current($pdo, (string) $row['school_year'])
+                && faculty_midterm_at_risk(
+                    $midterm,
+                    $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
+                    $progressions[$enrollmentId] ?? []
+                ),
         ];
         if (isset($midterm['components'])) {
             $midtermEvaluation['components'] = $midterm['components'];
@@ -284,7 +288,7 @@ function handle_student_retention_get(): void
         $currentClasses = array_values(array_filter($classes, static fn(array $row): bool => $row['isCurrent']));
         $atRisk = array_values(array_filter(
             $currentClasses,
-            static fn(array $row): bool => in_array($row['retentionState'], ['warning', 'critical', 'remedial'], true)
+            static fn(array $row): bool => $row['retentionState'] === 'remedial'
         ));
         $midtermAtRisk = array_values(array_filter($currentClasses, static fn(array $row): bool => $row['midtermEvaluation']['isAtRisk']));
         json_response([
@@ -357,7 +361,7 @@ function handle_student_dashboard_get(): void
                 'clinicalHoursCompleted' => $clinicalHours,
                 'retentionAlerts' => count(array_filter(
                     $classes,
-                    static fn(array $row): bool => in_array($row['retentionState'], ['warning', 'critical', 'remedial'], true)
+                    static fn(array $row): bool => $row['retentionState'] === 'remedial'
                 )),
             ],
             'classes' => $classes,

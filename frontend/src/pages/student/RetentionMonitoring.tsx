@@ -132,7 +132,7 @@ const GradePill: React.FC<{ grade: number | null; percentage?: number | null }> 
       <span className={`font-mono font-bold text-sm ${
         isSafe ? 'text-emerald-600 dark:text-emerald-400' : isLimit ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
       }`}>
-        <GradeValue percentage={percentage}>{grade.toFixed(2)}</GradeValue>
+        <GradeValue percentage={percentage}>{grade.toFixed(1)}</GradeValue>
       </span>
       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
         isSafe
@@ -218,12 +218,12 @@ export const RetentionMonitoring: React.FC = () => {
     return authRecords.filter(r => {
       const prog = readRemedialProgression(r);
       const state = (r.retentionState || '').toLowerCase();
-      const isDeficient = ['warning', 'critical', 'remedial'].includes(state);
+      const isDeficient = state === 'remedial';
       return prog.stage !== 'none' || isDeficient;
     });
   }, [authRecords]);
 
-  // Manual retention warnings do not assign an exam. Only the server's
+  // Retention is computed only. Only the server's
   // classified progression can establish active remedial work.
   const remedialReviewRecords = deficientRecords.filter(record =>
     ['none', 'legacy_unclassified'].includes(readRemedialProgression(record).stage));
@@ -233,12 +233,18 @@ export const RetentionMonitoring: React.FC = () => {
     !remedialReviewRecords.includes(record) && !activeRemedialRecords.includes(record));
   const remedialRecordCount = activeRemedialRecords.length + remedialHistoryRecords.length;
 
-  // Midterm Risk Records
+  // Midterm Advisory Records (server rule: complete midterm, no final grade or remedial record, 2.5 or worse)
   const midtermRiskRecords = useMemo(() => {
     return currentRecords.filter(r =>
       Boolean(r.midtermEvaluation?.isAtRisk)
     );
   }, [currentRecords]);
+
+  // Current courses still waiting for midterm scores (no final grade or remedial record yet).
+  const midtermWaitingRecords = useMemo(() => currentRecords.filter(r =>
+    r.midtermEvaluation && !r.midtermEvaluation.complete && r.midtermEvaluation.totalCount > 0
+    && r.grade === null && readRemedialProgression(r).stage === 'none'
+  ), [currentRecords]);
 
   // Group past records by school year & semester
   const pastSemesters = useMemo(() => {
@@ -285,7 +291,7 @@ export const RetentionMonitoring: React.FC = () => {
               <thead><tr><th className="p-2">Course</th><th className="p-2">Sample Grade</th><th className="p-2">Sample Standing</th></tr></thead>
               <tbody>{sampleSubjects.length === 0 && <tr><td colSpan={3} className="p-2">No sample courses available.</td></tr>}{sampleSubjects.map(subject => <tr key={subject.code}>
                 <td className="p-2">{subject.code} · {subject.name}</td>
-                <td className="p-2 font-mono">{subject.grade.toFixed(2)}</td>
+                <td className="p-2 font-mono">{subject.grade.toFixed(1)}</td>
                 <td className="p-2">{threshold === null ? 'Unavailable' : subject.isClinical && subject.grade >= threshold ? 'Sample retention review' : 'No sample retention review'}</td>
               </tr>)}</tbody>
             </table>
@@ -405,7 +411,7 @@ export const RetentionMonitoring: React.FC = () => {
           }`}
         >
           <AlertTriangle className="w-3.5 h-3.5" />
-          <span>Midterm Risk</span>
+          <span>Midterm Advisory</span>
           {midtermAtRiskCount > 0 && (
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
               activeTab === 'midterm' ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-200'
@@ -462,13 +468,9 @@ export const RetentionMonitoring: React.FC = () => {
                   currentRecords.map(cls => {
                     const isPending = cls.grade === null;
                     const retentionState = (cls.retentionState || '').toLowerCase();
-                    const isAtRisk = ['warning', 'critical', 'remedial'].includes(retentionState);
+                    const isAtRisk = retentionState === 'remedial';
                     const prog = readRemedialProgression(cls);
                     const hasRemedial = prog.stage !== 'none';
-                    const manualReviewLabel = prog.stage === 'none'
-                      ? retentionState === 'warning' ? 'Warning · Review required'
-                        : retentionState === 'critical' ? 'Critical · Review required' : null
-                      : null;
 
                     return (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
@@ -516,7 +518,7 @@ export const RetentionMonitoring: React.FC = () => {
                                   ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
                                   : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                             }`}>
-                              {manualReviewLabel ?? (isPending ? 'In Progress' : isAtRisk ? 'Deficient' : 'Cleared')}
+                              {(isPending ? 'In Progress' : isAtRisk ? 'Deficient' : 'Cleared')}
                             </span>
                             {hasRemedial && (
                               <button
@@ -552,7 +554,7 @@ export const RetentionMonitoring: React.FC = () => {
             {remedialReviewRecords.length > 0 && <h3 className="md:col-span-2 font-bold text-sm">Retention Review / Unassigned</h3>}
             {remedialReviewRecords.map(cls => <Card key={cls.enrollmentId} className="p-4 border border-slate-200 dark:border-slate-800 space-y-2">
               <h4 className="text-xs font-bold"><span className="font-mono text-blue-600 mr-2">{cls.courseCode}</span>{cls.courseName}</h4>
-              <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(2)}</GradeValue>}</p>
+              <p className="text-xs">Original Course Grade: {cls.grade === null ? 'Pending' : <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue>}</p>
               <p className="text-xs">Retention: {cls.retentionState || 'State unavailable'}</p>
               <p className="text-[10px] text-slate-500">{cls.semester} · {cls.schoolYear}</p>
               <p className="text-xs font-semibold">{readRemedialProgression(cls).stage === 'none' ? 'No remedial attempt assigned.' : 'Remedial progression needs Faculty review.'}</p>
@@ -580,7 +582,7 @@ export const RetentionMonitoring: React.FC = () => {
                       <p className="text-[10px] text-slate-400">Instructor: {cls.instructorName || 'Faculty'}</p>
                     </div>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                      Grade: {cls.grade !== null ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(2)}</GradeValue> : '—'}
+                      Grade: {cls.grade !== null ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue> : '—'}
                     </span>
                   </div>
 
@@ -649,10 +651,14 @@ export const RetentionMonitoring: React.FC = () => {
         )
       )}
 
-      {/* --- TAB 3: MIDTERM RISK (NO REMEDIAL EXAM, JUST REMINDER) --- */}
+      {/* --- TAB 3: MIDTERM ADVISORY (NO REMEDIAL EXAM, JUST REMINDER) --- */}
       {activeTab === 'midterm' && (
         <div className="space-y-3">
-          {currentRecords.some(record => !record.midtermEvaluation?.risk) && <p role="status" className="text-xs text-slate-500">Advisory Pending/Unavailable for courses without sufficient assessment data.</p>}
+          {midtermWaitingRecords.map(record => (
+            <p key={record.enrollmentId} role="status" className="text-xs text-blue-700 dark:text-blue-300">
+              Waiting for all midterm scores in {record.courseCode} ({record.midtermEvaluation?.gradedCount ?? 0} of {record.midtermEvaluation?.totalCount ?? 0} graded).
+            </p>
+          ))}
           <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 text-amber-900 dark:text-amber-200 text-xs">
             <strong>Advisory Reminder:</strong> Remedial exams are not held at midterm. This is an early notification to consult your instructors before final exams.
           </div>
@@ -673,7 +679,7 @@ export const RetentionMonitoring: React.FC = () => {
                     <tr>
                       <td colSpan={4} className="py-8 text-center text-slate-400">
                         <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
-                        {currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : currentRecords.some(record => !record.midtermEvaluation?.risk) ? 'Assessment data is pending or unavailable.' : 'No courses flagged at risk for midterm.'}
+                        {currentRecords.length === 0 ? 'No current courses available for a midterm advisory.' : 'No courses are on the Midterm Advisory.'}
                       </td>
                     </tr>
                   ) : (
@@ -694,10 +700,10 @@ export const RetentionMonitoring: React.FC = () => {
                           {typeof cls.midtermEvaluation?.percentage === 'number' ? `${cls.midtermEvaluation.percentage.toFixed(1)}%` : 'Pending'}
                         </td>
                         <td className="py-3.5 px-4 text-center font-mono font-extrabold text-amber-600 dark:text-amber-400">
-                          {typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage}>{cls.midtermEvaluation.grade.toFixed(2)}</GradeValue> : 'Pending'}
+                          {typeof cls.midtermEvaluation?.grade === 'number' ? <GradeValue percentage={cls.midtermEvaluation.percentage} period="Midterm">{cls.midtermEvaluation.grade.toFixed(1)}</GradeValue> : 'Pending'}
                         </td>
                         <td className="py-3.5 px-4 text-slate-500">
-                          <span className="block font-bold">{cls.midtermEvaluation?.risk?.level ?? 'Advisory'} · {cls.midtermEvaluation?.risk?.period ?? 'Midterm'} projection</span>
+                          <span className="block font-bold">At Risk · Midterm</span>
                           Review lessons and consult instructor before finals.
                         </td>
                       </tr>

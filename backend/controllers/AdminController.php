@@ -113,8 +113,7 @@ function handle_admin_dashboard_kpis(): void
                 s.status AS student_status,
                 AVG(COALESCE(egb.final_gwa, e.final_gwa)) AS final_gwa,
                 MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . "
-                    WHEN 'critical' THEN 4 WHEN 'remedial' THEN 3
-                    WHEN 'warning' THEN 2 WHEN 'active' THEN 1 WHEN 'cleared' THEN 1 ELSE 0 END) AS risk_score
+                    WHEN 'remedial' THEN 2 ELSE 1 END) AS risk_score
             FROM students s
             LEFT JOIN enrollments e ON s.student_id = e.student_id
             LEFT JOIN class_sections cs_scope ON cs_scope.cs_id = e.cs_id
@@ -165,9 +164,8 @@ function handle_admin_dashboard_kpis(): void
         $totalStudents = count($students);
 
         $goodStanding = 0;
-        $warningCount = 0;
-        $criticalCount = 0;
         $remedialCount = 0;
+        $atRiskStudents = [];
 
         $gwa1_15 = 0;
         $gwa15_2 = 0;
@@ -177,15 +175,9 @@ function handle_admin_dashboard_kpis(): void
 
         foreach ($students as $s) {
             $riskScore = (int) ($s['risk_score'] ?? 0);
-            $st = $riskScore >= 4 ? 'critical' : ($riskScore === 3 ? 'remedial' : ($riskScore === 2 ? 'warning' : 'active'));
-            if ($st === 'active' || $st === 'good standing') {
-                $goodStanding++;
-            } elseif ($st === 'warning') {
-                $warningCount++;
-            } elseif ($st === 'critical') {
-                $criticalCount++;
-            } elseif ($st === 'remedial') {
+            if ($riskScore >= 2) {
                 $remedialCount++;
+                $atRiskStudents[(int) $s['student_id']] = true;
             } else {
                 $goodStanding++;
             }
@@ -206,9 +198,26 @@ function handle_admin_dashboard_kpis(): void
             }
         }
 
-        // Remedial is the state the grade computation assigns, so it must be
-        // part of the at-risk total (Total = Good Standing + At-Risk).
-        $atRisk = $warningCount + $criticalCount + $remedialCount;
+        // At-Risk Count = Remedial students plus students with a Midterm At Risk
+        // course in the current school year (spec 2026-10-17), counted once each.
+        if ($schoolYear === null || strcasecmp((string) $schoolYear, (string) $currentSchoolYear) === 0) {
+            $midtermStmt = $pdo->prepare("
+                SELECT e.enrollment_id, e.student_id, e.cs_id, COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa, e.remedial_state_json
+                FROM enrollments e
+                JOIN class_sections cs ON cs.cs_id = e.cs_id
+                LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+                WHERE LOWER(e.status) = 'active' AND UPPER(cs.school_year) = UPPER(:current_year)
+            ");
+            $midtermStmt->execute([':current_year' => (string) $currentSchoolYear]);
+            $midtermRows = $midtermStmt->fetchAll(PDO::FETCH_ASSOC);
+            $midtermIds = faculty_midterm_at_risk_ids($pdo, $midtermRows);
+            foreach ($midtermRows as $row) {
+                if (isset($midtermIds[(int) $row['enrollment_id']])) {
+                    $atRiskStudents[(int) $row['student_id']] = true;
+                }
+            }
+        }
+        $atRisk = count($atRiskStudents);
 
         $attCount = count($attendance);
         $presentCount = 0;
@@ -273,8 +282,6 @@ function handle_admin_dashboard_kpis(): void
             ],
             'statusCounts' => [
                 'active' => $goodStanding,
-                'warning' => $warningCount,
-                'critical' => $criticalCount,
                 'remedial' => $remedialCount,
             ],
             'classAttendance' => $classAttendance,
@@ -855,7 +862,7 @@ function handle_admin_reports_summary(): void
 
         $grouped = [];
         $gwaTotals = [];
-        $stateRank = ['critical' => 5, 'remedial' => 4, 'warning' => 3, 'cleared' => 2, 'active' => 1];
+        $stateRank = ['remedial' => 3, 'cleared' => 2, 'active' => 1];
         foreach ($students as $s) {
             $id = (string) $s['student_id'];
             if (!isset($grouped[$id])) {

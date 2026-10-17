@@ -142,13 +142,13 @@ test('Faculty grade views use the inclusive authoritative retention boundary', (
     assert.match(expression, /percentageToGWAExact\(evalResult\.overallPercentage\) >= settings\.retentionThreshold/);
     const failsRetention = new Function('subj', 'evalResult', 'percentageToGWAExact', 'settings', `return (${expression});`);
     for (const [percentage, retentionState, expected] of [
-      [80.01, 'active', false],
-      [80, 'remedial', true],
-      [79.99, 'active', false],
+      [85, 'active', false],
+      [84, 'remedial', true],
+      [84.99, 'remedial', true],
       [81, 'remedial', true],
-      [80.01, undefined, false],
-      [80, undefined, true],
-      [79.99, undefined, true],
+      [85, undefined, false],
+      [84, undefined, true],
+      [84.99, undefined, true],
       [null, undefined, false],
       [Number.NaN, undefined, false],
     ] as const) {
@@ -349,7 +349,7 @@ test('Evaluation Extraction: handles complete period computed results', () => {
     enrollmentId: '101',
     studentId: '201',
     percentage: 89.5,
-    gwa: 1.75,
+    gwa: 1.8,
     retentionState: 'active',
     periods: {
       midterm: {
@@ -398,13 +398,13 @@ test('Evaluation Extraction: handles complete period computed results', () => {
   assert.equal(evaluation.isPeriodMode, true);
   assert.equal(evaluation.midtermPercentage, 88.75);
   assert.equal(evaluation.finalPercentage, 90.0);
-  assert.equal(evaluation.overallGwa, 1.75);
+  assert.equal(evaluation.overallGwa, 1.8);
   assert.equal(evaluation.statusText, 'PASS');
   assert.equal(evaluation.retentionState, 'active');
-  const boundaryResult = { ...computedResult, percentage: 80.01, gwa: 2.5, retentionState: 'active' };
+  const boundaryResult = { ...computedResult, percentage: 85, gwa: 2.4, retentionState: 'active' };
   const boundaryEvaluation = extractPeriodEvaluation(null, boundaryResult);
-  assert.equal(boundaryEvaluation.overallGwa, 2.5);
-  assert.equal(boundaryEvaluation.overallPercentage, 80.01);
+  assert.equal(boundaryEvaluation.overallGwa, 2.4);
+  assert.equal(boundaryEvaluation.overallPercentage, 85);
   assert.equal(boundaryEvaluation.retentionState, 'active');
 
 });
@@ -416,7 +416,7 @@ test('Evaluation Extraction: handles incomplete period with zero-weight without 
     enrollmentId: '102',
     studentId: '202',
     percentage: 90.0,
-    gwa: 1.75,
+    gwa: 1.8,
     retentionState: 'active',
     periods: {
       midterm: {
@@ -466,7 +466,7 @@ test('Evaluation Extraction: handles incomplete period with zero-weight without 
   assert.equal(evaluation.midtermPercentage, null);
   assert.deepEqual(evaluation.midtermReasons, ['Missing Date Range']);
   assert.equal(evaluation.finalPercentage, 90.0);
-  assert.equal(evaluation.overallGwa, 1.75);
+  assert.equal(evaluation.overallGwa, 1.8);
   assert.equal(evaluation.statusText, 'PASS');
 });
 
@@ -532,12 +532,12 @@ test('Evaluation Extraction: preserves prior persisted grade when recomputation 
 });
 
 test('Evaluation Extraction: uncomputed period mode shows pending state and hides legacy grade', () => {
-  // Legacy enrolled subject with grade 1.75
+  // Legacy enrolled subject with grade 1.8
   const legacySubj = {
     code: 'CLIN401',
     name: 'Clinical Dentistry I',
     units: 3,
-    grade: 1.75,
+    grade: 1.8,
     isClinical: true,
     hasRemedial: false,
     components: {
@@ -566,7 +566,7 @@ test('Evaluation Extraction: a saved overall-category grade remains historical w
     code: 'CLIN401',
     name: 'Clinical Dentistry I',
     units: 3,
-    grade: 1.75,
+    grade: 1.8,
     components: {
       calculationMode: 'authoritative_categories',
       categories: [{ categoryId: 10, name: 'Quizzes', contribution: 22.5 }],
@@ -578,7 +578,7 @@ test('Evaluation Extraction: a saved overall-category grade remains historical w
   assert.equal(evaluation.midtermStatus, 'pending');
   assert.equal(evaluation.finalStatus, 'pending');
   assert.equal(evaluation.overallGwa, null);
-  assert.equal(evaluation.historicalGwa, 1.75);
+  assert.equal(evaluation.historicalGwa, 1.8);
   assert.equal(evaluation.statusText, 'PENDING');
 });
 
@@ -670,7 +670,7 @@ test('CSV Generation: exports distinct period percentages without copying overal
           code: 'CLIN401',
           name: 'Clinical Dentistry I',
           units: 3,
-          grade: 1.75,
+          grade: 1.8,
           isClinical: true,
           hasRemedial: false,
           components: {
@@ -688,7 +688,7 @@ test('CSV Generation: exports distinct period percentages without copying overal
         },
       ],
       clinicHoursCompleted: 50,
-      overallGWA: 1.75,
+      overallGWA: 1.8,
       remedialExams: [],
       classSections: [],
     },
@@ -732,8 +732,8 @@ test('CSV Generation: exports distinct period percentages without copying overal
   const lines = csv.trim().split('\n');
 
   assert.equal(lines[0], 'Student Number,Student Name,Midterm %,Final %,Overall GWA,Status');
-  // Student 1: distinct Midterm 88.75%, Final 90.00%, Overall GWA 1.75
-  assert.equal(lines[1], '"DENT-001","Alice Reyes","88.75%","90.00%","1.75","PASS"');
+  // Student 1: distinct Midterm 88.75%, Final 90.00%, Overall GWA 1.8
+  assert.equal(lines[1], '"DENT-001","Alice Reyes","88.75%","90.00%","1.8","PASS"');
   // Student 2: Midterm Incomplete (Missing Date Range), Final 90.00%, Overall GWA Incomplete
   assert.equal(lines[2], '"DENT-002","Bob Santos","Incomplete (Missing Date Range)","90.00%","Incomplete","INCOMPLETE"');
 });
@@ -845,8 +845,8 @@ test('CSV Generation: incomplete recomputation with prior GWA marks status INCOM
 
   const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
   const lines = csv.trim().split('\n');
-  // Student 3 has previouslyPersisted: true -> Prior: 2.00 (Historical)
-  assert.equal(lines[1], '"DENT-003","Clara Santos","Incomplete (Unresolved Attendance)","85.00%","Prior: 2.00 (Historical)","INCOMPLETE"');
+  // Student 3 has previouslyPersisted: true -> Prior: 2.0 (Historical)
+  assert.equal(lines[1], '"DENT-003","Clara Santos","Incomplete (Unresolved Attendance)","85.00%","Prior: 2.0 (Historical)","INCOMPLETE"');
   // Student 4 has previouslyPersisted: false -> Incomplete (no fallback to subj.grade 2.50)
   assert.equal(lines[2], '"DENT-004","Danilo Cruz","Incomplete (Unresolved Attendance)","85.00%","Incomplete","INCOMPLETE"');
 });
@@ -865,7 +865,7 @@ test('CSV Generation: uncomputed period mode outputs Pending and PENDING', () =>
           code: 'CLIN401',
           name: 'Clinical Dentistry I',
           units: 3,
-          grade: 1.75, // Legacy grade from earlier semester
+          grade: 1.8, // Legacy grade from earlier semester
           isClinical: true,
           hasRemedial: false,
           components: {
@@ -877,7 +877,7 @@ test('CSV Generation: uncomputed period mode outputs Pending and PENDING', () =>
         },
       ],
       clinicHoursCompleted: 50,
-      overallGWA: 1.75,
+      overallGWA: 1.8,
       remedialExams: [],
       classSections: [],
     },
@@ -903,7 +903,7 @@ test('CSV Generation: legacy mode exports accurately labeled overall columns wit
           code: 'ANAT101',
           name: 'General Anatomy',
           units: 3,
-          grade: 1.50,
+          grade: 1.5,
           isClinical: false,
           hasRemedial: false,
           components: {
@@ -915,7 +915,7 @@ test('CSV Generation: legacy mode exports accurately labeled overall columns wit
         },
       ],
       clinicHoursCompleted: 0,
-      overallGWA: 1.50,
+      overallGWA: 1.5,
       remedialExams: [],
       classSections: [],
     },
@@ -924,7 +924,7 @@ test('CSV Generation: legacy mode exports accurately labeled overall columns wit
   const csv = generateGradeSummaryCSV(dummyStudents, 'ANAT101', false);
   const lines = csv.trim().split('\n');
   assert.equal(lines[0], 'Student Number,Student Name,Quizzes,Practicum,Exams,Attendance,Overall GWA,Remarks');
-  assert.equal(lines[1], '"DENT-004","David Lim","85.0%","90.0%","88.0%","95.0%","1.50","PASS"');
+  assert.equal(lines[1], '"DENT-004","David Lim","85.0%","90.0%","88.0%","95.0%","1.5","PASS"');
 });
 
 test('Lecture/Laboratory evaluation exposes all four period components and grouped CSV headers', () => {
@@ -949,7 +949,7 @@ test('Lecture/Laboratory evaluation exposes all four period components and group
     enrollmentId: '801',
     studentId: '701',
     percentage: 88.4,
-    gwa: 1.65,
+    gwa: 1.7,
     retentionState: 'active',
     periods: {
       midterm: period('Midterm', 87, 81, 91),
@@ -974,10 +974,10 @@ test('Lecture/Laboratory evaluation exposes all four period components and group
     status: 'active' as const,
     enrolledSubjects: [{
       code: 'CLIN401', name: 'Clinical Dentistry I', units: 3, enrollmentId: '801',
-      grade: 1.65, isClinical: false, hasRemedial: false,
+      grade: 1.7, isClinical: false, hasRemedial: false,
     }],
     clinicHoursCompleted: 0,
-    overallGWA: 1.65,
+    overallGWA: 1.7,
     remedialExams: [],
     classSections: [],
   };
@@ -991,7 +991,7 @@ test('Lecture/Laboratory evaluation exposes all four period components and group
   const csv = generateGradeSummaryCSV([student] as any, 'CLIN401', true, new Map([['801', groupedResult]]), 'lecture_laboratory');
   const lines = csv.trim().split('\n');
   assert.equal(lines[0], 'Student Number,Student Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status');
-  assert.equal(lines[1], "\"'=DENT-007\",\"Alice Reyes\",\"81.00%\",\"91.00%\",\"87.00%\",\"93.00%\",\"83.00%\",\"89.00%\",\"1.65\",\"PASS\"");
+  assert.equal(lines[1], "\"'=DENT-007\",\"Alice Reyes\",\"81.00%\",\"91.00%\",\"87.00%\",\"93.00%\",\"83.00%\",\"89.00%\",\"1.7\",\"PASS\"");
 
   const groupedResultWithoutComponents: FacultyPeriodModeComputedResult = {
     ...groupedResult,
@@ -1010,7 +1010,7 @@ test('Lecture/Laboratory evaluation exposes all four period components and group
   const missingComponentRow = missingComponentCsv.trim().split('\n')[1];
   assert.equal(
     missingComponentRow,
-    '"\'=DENT-007","Alice Reyes","Unavailable (recompute required)","Unavailable (recompute required)","87.00%","Unavailable (recompute required)","Unavailable (recompute required)","89.00%","1.65","PASS"'
+    '"\'=DENT-007","Alice Reyes","Unavailable (recompute required)","Unavailable (recompute required)","87.00%","Unavailable (recompute required)","Unavailable (recompute required)","89.00%","1.7","PASS"'
   );
 });
 
@@ -1085,7 +1085,7 @@ test('Lecture/Laboratory CSV quotes embedded text and neutralizes formula-leadin
   const csv = generateGradeSummaryCSV([student] as any, 'CLIN401', true, new Map([['802', incompleteResult]]), 'lecture_laboratory');
   assert.equal(csv, [
     'Student Number,Student Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status',
-    '"\'@DENT-008","\'=Dana, ""Quoted""\nStudent","Incomplete (missing ""lab"", score\nplease)","Incomplete","Incomplete (Missing Assessment Score)","93.00%","83.00%","95.00%","Prior: 2.00 (Historical)","INCOMPLETE"',
+    '"\'@DENT-008","\'=Dana, ""Quoted""\nStudent","Incomplete (missing ""lab"", score\nplease)","Incomplete","Incomplete (Missing Assessment Score)","93.00%","83.00%","95.00%","Prior: 2.0 (Historical)","INCOMPLETE"',
   ].join('\n'));
 });
 

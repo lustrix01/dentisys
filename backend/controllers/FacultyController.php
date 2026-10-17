@@ -231,10 +231,8 @@ function handle_faculty_dashboard_kpis(): void
             SELECT
                 s.student_id,
                 CASE MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . "
-                        WHEN 'critical' THEN 4 WHEN 'remedial' THEN 3
-                        WHEN 'warning' THEN 2 ELSE 1 END)
-                    WHEN 4 THEN 'critical' WHEN 3 THEN 'remedial'
-                    WHEN 2 THEN 'warning' ELSE 'active' END AS retention_state
+                        WHEN 'remedial' THEN 2 ELSE 1 END)
+                    WHEN 2 THEN 'remedial' ELSE 'active' END AS retention_state
             FROM students s
             JOIN enrollments e ON s.student_id = e.student_id
             JOIN class_sections cs ON e.cs_id = cs.cs_id
@@ -273,15 +271,29 @@ function handle_faculty_dashboard_kpis(): void
 
         $totalStudents = count($students);
         $goodStanding = 0;
-        $atRisk = 0;
         $remedial = 0;
+
+        // Students with a Midterm At Risk course (current school year only).
+        $midtermStmt = $pdo->prepare("
+            SELECT e.enrollment_id, e.student_id, e.cs_id, COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa, e.remedial_state_json
+            FROM enrollments e
+            JOIN class_sections cs ON cs.cs_id = e.cs_id
+            LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+            WHERE cs.instructor_user_id = :faculty_id AND LOWER(e.status) = 'active'
+              AND UPPER(cs.school_year) = UPPER(:current_year) {$yearFilter}
+        ");
+        $midtermStmt->execute([':faculty_id' => $authCtx['user_id'], ':current_year' => (string) $currentSchoolYear] + $yearParams);
+        $midtermRows = $midtermStmt->fetchAll(PDO::FETCH_ASSOC);
+        $midtermIds = faculty_midterm_at_risk_ids($pdo, $midtermRows);
+        $atRisk = count(array_unique(array_map(
+            static fn(array $row): int => (int) $row['student_id'],
+            array_filter($midtermRows, static fn(array $row): bool => isset($midtermIds[(int) $row['enrollment_id']]))
+        )));
 
         foreach ($students as $s) {
             $st = strtolower((string) ($s['retention_state'] ?? 'active'));
             if ($st === 'active' || $st === 'good standing') {
                 $goodStanding++;
-            } elseif ($st === 'warning' || $st === 'critical') {
-                $atRisk++;
             } elseif ($st === 'remedial') {
                 $remedial++;
             } else {
@@ -367,7 +379,7 @@ function faculty_student_name_edit_locked(array $row): bool
 function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null): array
 {
     $byStudent = [];
-    $statusPriority = ['active' => 0, 'cleared' => 1, 'warning' => 2, 'remedial' => 3, 'critical' => 4];
+    $statusPriority = ['active' => 0, 'cleared' => 1, 'remedial' => 2];
     foreach ($rows as $row) {
         $id = (string) $row['student_id'];
         if (!isset($byStudent[$id])) {
@@ -2904,43 +2916,27 @@ function handle_faculty_grading_config_save(): void
     }
 }
 
-function faculty_percentage_to_gwa_exact(float $percentage): float
+/**
+ * BUCDM conversion (spec 2026-10-17): truncate to a whole percent, then map to a
+ * one-decimal grade. Below 75: Midterm 3.1..4.0 (65 and below = 4.0); Final and
+ * the overall course grade = 5.0. Built from integer tenths to avoid float noise.
+ */
+function faculty_percentage_to_gwa_exact(float $percentage, string $period = 'Final'): float
 {
     if (!is_finite($percentage)) return 5.0;
-    if ($percentage >= 97.0) return 1.0;
-    if ($percentage < 75.0) return 5.0;
-
-    $benchmarks = [
-        ['pct' => 97.0, 'grade' => 1.0],
-        ['pct' => 94.0, 'grade' => 1.25],
-        ['pct' => 91.0, 'grade' => 1.5],
-        ['pct' => 88.0, 'grade' => 1.75],
-        ['pct' => 85.0, 'grade' => 2.0],
-        ['pct' => 82.0, 'grade' => 2.25],
-        ['pct' => 80.0, 'grade' => 2.5],
-        ['pct' => 78.0, 'grade' => 2.75],
-        ['pct' => 75.0, 'grade' => 3.0],
-    ];
-
-    $count = count($benchmarks);
-    for ($i = 0; $i < $count - 1; $i++) {
-        $high = $benchmarks[$i];
-        $low = $benchmarks[$i + 1];
-        if ($percentage >= $low['pct'] && $percentage <= $high['pct']) {
-            $fraction = ($percentage - $low['pct']) / ($high['pct'] - $low['pct']);
-            $grade = $low['grade'] - $fraction * ($low['grade'] - $high['grade']);
-            return $grade;
-        }
-    }
-
-    return 3.0;
+    $t = (int) floor($percentage + 1e-9); // epsilon guards float drift (84.0 -> 83.9999999)
+    if ($t >= 99) $tenths = 10;
+    elseif ($t >= 84) $tenths = 109 - $t;
+    elseif ($t >= 76) $tenths = 26 + intdiv(83 - $t, 2);
+    elseif ($t === 75) $tenths = 30;
+    elseif ($period === 'Midterm') $tenths = min(40, 31 + (74 - $t));
+    else $tenths = 50;
+    return $tenths / 10;
 }
 
-function faculty_percentage_to_gwa(float $percentage): float
+function faculty_percentage_to_gwa(float $percentage, string $period = 'Final'): float
 {
-    // Keep decimal half-grade values stable when interpolation drifts below
-    // the midpoint in binary floating-point (for example, 87.34% -> 1.805).
-    return round(faculty_percentage_to_gwa_exact($percentage) + 1e-12, 2);
+    return round(faculty_percentage_to_gwa_exact($percentage, $period), 2);
 }
 
 /**
@@ -4016,10 +4012,8 @@ function handle_faculty_scores_save(): void
 }
 
 /**
- * Persist a computed course grade. A Faculty retention override is kept
- * while the recomputed grade equals the grade at override time; any grade
- * change (better or worse) clears it and the computed state applies.
- * (Right-hand sides of an UPDATE read the old row.)
+ * Persist a computed course grade. Retention is always the computed state
+ * (no manual override; any old override columns are cleared).
  */
 function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, string $retention, array $breakdown, int $enrollmentId): void
 {
@@ -4038,16 +4032,8 @@ function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, st
     $stmt = $pdo->prepare(
         "UPDATE enrollments
          SET final_percentage = :percentage, final_gwa = :gwa,
-             retention_state = CASE
-                 WHEN retention_override_state IS NOT NULL
-                  AND retention_override_gwa IS NOT DISTINCT FROM ROUND(CAST(:gwa_keep AS NUMERIC), 2)
-                 THEN retention_override_state ELSE :retention END,
-             retention_override_state = CASE
-                 WHEN retention_override_gwa IS NOT DISTINCT FROM ROUND(CAST(:gwa_keep2 AS NUMERIC), 2)
-                 THEN retention_override_state ELSE NULL END,
-             retention_override_gwa = CASE
-                 WHEN retention_override_gwa IS NOT DISTINCT FROM ROUND(CAST(:gwa_keep3 AS NUMERIC), 2)
-                 THEN retention_override_gwa ELSE NULL END,
+             retention_state = :retention,
+             retention_override_state = NULL, retention_override_gwa = NULL, retention_override_at = NULL,
              grade_components_json = :components
          WHERE enrollment_id = :enrollment_id
          RETURNING retention_state"
@@ -4055,9 +4041,6 @@ function faculty_save_computed_grade(PDO $pdo, float $percentage, float $gwa, st
     $stmt->execute([
         ':percentage' => $percentage,
         ':gwa' => $gwa,
-        ':gwa_keep' => $gwa,
-        ':gwa_keep2' => $gwa,
-        ':gwa_keep3' => $gwa,
         ':retention' => $retention,
         ':components' => json_encode($breakdown, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ':enrollment_id' => $enrollmentId,
@@ -4083,7 +4066,7 @@ function faculty_notify_grade_retention_change(PDO $pdo, array $before, string $
     }
     $course = (string) $before['course_code'];
     $section = (string) $before['cs_name'];
-    $grade = number_format($gwa, 2, '.', '');
+    $grade = number_format($gwa, 1, '.', '');
     if ($current === 'remedial') {
         $title = "Remedial required in {$course}";
         $body = "Your computed grade in {$course} ({$section}) is {$grade}, which requires a remedial exam. Your Faculty will schedule it; see Retention for details.";
@@ -5784,154 +5767,6 @@ function handle_faculty_watchlist_unlock(): void
 }
 
 /**
- * UI-003 risk projection, pure part. $categories: one entry per period
- * category, ['kind' => 'assessment', 'weight', 'earned', 'possible'] or
- * ['kind' => 'attendance', 'weight', 'percentage' (null = unknown, left out)].
- * $n assumed assessments of $size points scored 75% are spread across the
- * assessment categories by weight (Owner decision, 2026-09-30). Returns the
- * weighted period percentage, or null when nothing can be computed.
- */
-function faculty_risk_period_percentage(array $categories, float $size, int $n): ?float
-{
-    $assessmentWeight = 0.0;
-    foreach ($categories as $category) {
-        if ($category['kind'] === 'assessment') {
-            $assessmentWeight += (float) $category['weight'];
-        }
-    }
-    $weighted = 0.0;
-    $includedWeight = 0.0;
-    foreach ($categories as $category) {
-        $weight = (float) $category['weight'];
-        if ($category['kind'] === 'attendance') {
-            if ($category['percentage'] === null) {
-                continue;
-            }
-            $ratio = (float) $category['percentage'] / 100;
-        } else {
-            $extra = $assessmentWeight > 0 ? $n * $size * ($weight / $assessmentWeight) : 0.0;
-            $possible = (float) $category['possible'] + $extra;
-            if ($possible <= 0) {
-                continue;
-            }
-            $ratio = ((float) $category['earned'] + 0.75 * $extra) / $possible;
-        }
-        $weighted += $weight * $ratio;
-        $includedWeight += $weight;
-    }
-    return $includedWeight > 0 ? $weighted / $includedWeight * 100 : null;
-}
-
-/**
- * UI-003 risk level from a grade projection: how many assumed 75%
- * assessments until the grade is 2.50 or worse (80% or below).
- * High = already there or 1-2, At Risk = 3-4, Low = 5 or more.
- */
-function faculty_risk_level(callable $percentageAfter): ?array
-{
-    for ($n = 0; $n <= 4; $n++) {
-        $percentage = $percentageAfter($n);
-        if ($percentage === null) {
-            return null;
-        }
-        if (faculty_percentage_to_gwa_exact($percentage) >= RETENTION_GWA_TRIGGER) {
-            return ['level' => $n <= 2 ? 'High' : 'At Risk', 'assumedAssessments' => $n];
-        }
-    }
-    return ['level' => 'Low', 'assumedAssessments' => null];
-}
-
-/**
- * Categories and completed assessments of one period for the risk projection.
- * Returns [categories, completedSizes] or null without a period configuration.
- */
-function faculty_risk_period_inputs(PDO $pdo, array $enrollment, array $grading, string $period, array &$readCache): ?array
-{
-    $rows = $grading['periodMemberships'][$period] ?? [];
-    if ($rows === []) {
-        return null;
-    }
-    $enrollmentId = (int) $enrollment['enrollment_id'];
-    if (isset($readCache['assessments'][$enrollmentId][$period])) {
-        // Watchlist completeness needs every assessment; risk uses only scored work.
-        $assessmentRows = array_values(array_filter(
-            $readCache['assessments'][$enrollmentId][$period],
-            static fn(array $assessment): bool => $assessment['_has_score']
-        ));
-    } else {
-        $assessments = $pdo->prepare(
-            "SELECT a.assessment_id, a.grading_category_id, a.max_score, a.transmutation_enabled,
-                a.transmutation_minimum_percentage, a.transmutation_maximum_percentage, sc.score,
-                " . faculty_linked_attendance_sql('CAST(:enrollment_id AS INTEGER)') . " AS linked_attendance_status
-           FROM assessments a
-           JOIN assessment_scores sc ON sc.assessment_id = a.assessment_id AND sc.student_id = :student_id
-          WHERE a.cs_id = :cs_id AND a.grading_period = :period AND a.status <> 'Archived'"
-        );
-        $assessments->execute([
-            ':enrollment_id' => $enrollment['enrollment_id'],
-            ':student_id' => $enrollment['student_id'],
-            ':cs_id' => $enrollment['cs_id'],
-            ':period' => $period,
-        ]);
-        $assessmentRows = $assessments->fetchAll(PDO::FETCH_ASSOC);
-    }
-    $earned = [];
-    $possible = [];
-    $sizes = [];
-    foreach ($assessmentRows as $assessment) {
-        $effective = faculty_effective_assessment_percentage(
-            (float) $assessment['score'],
-            (float) $assessment['max_score'],
-            filter_var($assessment['transmutation_enabled'], FILTER_VALIDATE_BOOLEAN),
-            (float) $assessment['transmutation_minimum_percentage'],
-            (float) $assessment['transmutation_maximum_percentage'],
-            $assessment['linked_attendance_status'] !== null ? (string) $assessment['linked_attendance_status'] : null
-        );
-        if ($effective === null) {
-            continue; // not completed yet
-        }
-        $categoryId = (int) $assessment['grading_category_id'];
-        $earned[$categoryId] = ($earned[$categoryId] ?? 0.0) + $effective / 100 * (float) $assessment['max_score'];
-        $possible[$categoryId] = ($possible[$categoryId] ?? 0.0) + (float) $assessment['max_score'];
-        $sizes[] = (float) $assessment['max_score'];
-    }
-    $key = strtolower($period);
-    $categories = [];
-    foreach ($rows as $row) {
-        if ((string) $row['source_kind'] === 'attendance') {
-            $attendance = $readCache['attendance'][$enrollmentId][$period] ??= faculty_period_attendance_summary(
-                $pdo, (int) $enrollment['cs_id'], (int) $enrollment['enrollment_id'],
-                $grading[$key . '_start_date'] ?? null, $grading[$key . '_end_date'] ?? null,
-                $readCache['attendanceRows'][$enrollmentId] ?? null
-            );
-            $categoryWeight = (float) $row['weight'];
-            $component = (string) ($row['component'] ?? 'Combined');
-            if (($grading['component_mode'] ?? 'combined') === 'lecture_laboratory') {
-                $componentWeight = $component === 'Lecture'
-                    ? (float) $grading['component_lecture_weight']
-                    : (float) $grading['component_laboratory_weight'];
-                $categoryWeight = $categoryWeight * $componentWeight / 100;
-            }
-            $categories[] = ['kind' => 'attendance', 'weight' => $categoryWeight, 'component' => $component,
-                'percentage' => $attendance['status'] === 'computed' ? (float) $attendance['percentage'] : null];
-            continue;
-        }
-        $categoryId = (int) $row['category_id'];
-        $categoryWeight = (float) $row['weight'];
-        $component = (string) ($row['component'] ?? 'Combined');
-        if (($grading['component_mode'] ?? 'combined') === 'lecture_laboratory') {
-            $componentWeight = $component === 'Lecture'
-                ? (float) $grading['component_lecture_weight']
-                : (float) $grading['component_laboratory_weight'];
-            $categoryWeight = $categoryWeight * $componentWeight / 100;
-        }
-        $categories[] = ['kind' => 'assessment', 'weight' => $categoryWeight, 'component' => $component,
-            'earned' => $earned[$categoryId] ?? 0.0, 'possible' => $possible[$categoryId] ?? 0.0];
-    }
-    return [$categories, $sizes];
-}
-
-/**
  * Reuse class grading inputs only within the caller's current retention read.
  */
 function faculty_retention_read_config(PDO $pdo, int $classId, array &$readCache): ?array
@@ -5966,50 +5801,6 @@ function faculty_retention_read_config(PDO $pdo, int $classId, array &$readCache
         $grading['periodMemberships'][$membership['grading_period']][] = $membership;
     }
     return $readCache['configs'][$classId] = $grading;
-}
-
-/**
- * UI-003 risk for one enrollment in the current grading period: Midterm, or
- * the running overall grade once Final-period work is scored. Informational
- * only; it never changes a retention state.
- */
-function faculty_risk_projection(PDO $pdo, array $enrollment, ?array &$readCache = null): ?array
-{
-    $readCache ??= [];
-    $grading = faculty_retention_read_config($pdo, (int) $enrollment['cs_id'], $readCache);
-    if ($grading === null) {
-        return null;
-    }
-    $midterm = faculty_risk_period_inputs($pdo, $enrollment, $grading, 'Midterm', $readCache);
-    $final = faculty_risk_period_inputs($pdo, $enrollment, $grading, 'Final', $readCache);
-    if ($midterm === null) {
-        return null;
-    }
-    [$midtermCategories, $midtermSizes] = $midterm;
-    if ($final !== null && $final[1] !== []) {
-        // After Midterm: the running overall grade, with assumed work in Finals.
-        [$finalCategories, $finalSizes] = $final;
-        $size = array_sum($finalSizes) / count($finalSizes);
-        $midtermNow = faculty_risk_period_percentage($midtermCategories, 0.0, 0);
-        $midWeight = (float) $grading['term_midterm_weight'];
-        $finWeight = (float) $grading['term_final_weight'];
-        $risk = faculty_risk_level(static function (int $n) use ($finalCategories, $size, $midtermNow, $midWeight, $finWeight): ?float {
-            $finalPercentage = faculty_risk_period_percentage($finalCategories, $size, $n);
-            if ($finalPercentage === null) {
-                return null;
-            }
-            return $midtermNow === null || $midWeight + $finWeight <= 0
-                ? $finalPercentage
-                : ($midtermNow * $midWeight + $finalPercentage * $finWeight) / ($midWeight + $finWeight);
-        });
-        return $risk === null ? null : $risk + ['period' => 'Overall'];
-    }
-    if ($midtermSizes === []) {
-        return null;
-    }
-    $size = array_sum($midtermSizes) / count($midtermSizes);
-    $risk = faculty_risk_level(static fn(int $n): ?float => faculty_risk_period_percentage($midtermCategories, $size, $n));
-    return $risk === null ? null : $risk + ['period' => 'Midterm'];
 }
 
 /** Batch read inputs for the enrollment list already authorized by the retention handler. */
@@ -6121,11 +5912,55 @@ function faculty_watchlist_midterm(PDO $pdo, array $enrollment, ?array &$readCac
         ],
         'attendanceDateRanges' => ['midterm' => ['startDate' => $grading['midterm_start_date'], 'endDate' => $grading['midterm_end_date']]],
     ], 'Midterm', $memberships, $attendance);
-    $summary = ['complete' => $result['status'] === 'computed', 'percentage' => $result['percentage']];
+    $summary = [
+        'complete' => $result['status'] === 'computed', 'percentage' => $result['percentage'],
+        'gradedCount' => count(array_filter($rows, static fn(array $assessment): bool => $assessment['_has_score'])),
+        'totalCount' => count($rows),
+    ];
     if (($grading['component_mode'] ?? 'combined') === 'lecture_laboratory') {
         $summary['components'] = $result['breakdown']['components'] ?? [];
     }
     return $summary;
+}
+
+/**
+ * Midterm At Risk (spec 2026-10-17): every Midterm assessment graded, no final
+ * course grade, no remedial record, and a Midterm grade of 2.5 or worse.
+ * $midterm is faculty_watchlist_midterm(); $progression the remedial progression.
+ */
+function faculty_midterm_at_risk(array $midterm, ?float $finalGwa, array $progression): bool
+{
+    return $midterm['complete'] === true
+        && $midterm['percentage'] !== null
+        && $finalGwa === null
+        && ($progression['stage'] ?? 'none') === 'none'
+        && faculty_percentage_to_gwa_exact((float) $midterm['percentage'], 'Midterm') >= RETENTION_GWA_TRIGGER;
+}
+
+/**
+ * Enrollment ids that are Midterm At Risk. $rows need enrollment_id, student_id,
+ * cs_id, final_gwa and remedial_state_json; reads are batched through one cache.
+ *
+ * @return array<int, true>
+ */
+function faculty_midterm_at_risk_ids(PDO $pdo, array $rows): array
+{
+    $rows = array_values(array_filter($rows, static fn(array $row): bool => $row['final_gwa'] === null));
+    $legacy = [];
+    foreach ($rows as $row) {
+        $legacy[(int) $row['enrollment_id']] = remedial_state_json_is_legacy($row['remedial_state_json']);
+    }
+    $progressions = remedial_attempts_load($pdo, array_keys($legacy), $legacy);
+    $readCache = [];
+    faculty_retention_preload($pdo, $rows, $readCache);
+    $ids = [];
+    foreach ($rows as $row) {
+        $id = (int) $row['enrollment_id'];
+        if (faculty_midterm_at_risk(faculty_watchlist_midterm($pdo, $row, $readCache), null, $progressions[$id] ?? [])) {
+            $ids[$id] = true;
+        }
+    }
+    return $ids;
 }
 
 function handle_faculty_retention_get(): void
@@ -6140,7 +5975,7 @@ function handle_faculty_retention_get(): void
                     COALESCE(egb.final_percentage, e.final_percentage) AS final_percentage,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                     COALESCE(egb.retention_state, e.retention_state) AS retention_state,
-                    e.remedial_state_json, s.student_number, e.retention_override_state,
+                    e.remedial_state_json, s.student_number,
                     COALESCE(pi.first_name, s.first_name) AS first_name,
                     COALESCE(pi.middle_name, s.middle_name) AS middle_name,
                     COALESCE(pi.last_name, s.last_name) AS last_name,
@@ -6156,8 +5991,7 @@ function handle_faculty_retention_get(): void
              WHERE cs.instructor_user_id = ?
                AND LOWER(e.status) = 'active'
              ORDER BY CASE COALESCE(egb.retention_state, e.retention_state)
-                          WHEN 'critical' THEN 1 WHEN 'remedial' THEN 2
-                          WHEN 'warning' THEN 3 WHEN 'active' THEN 4 ELSE 5 END,
+                          WHEN 'remedial' THEN 1 WHEN 'active' THEN 2 ELSE 3 END,
                       COALESCE(pi.last_name, s.last_name),
                       COALESCE(pi.first_name, s.first_name)"
         );
@@ -6201,8 +6035,6 @@ function handle_faculty_retention_get(): void
                 'gwa' => $row['final_gwa'] !== null ? (float) $row['final_gwa'] : null,
                 'state' => retention_effective_state((string) $row['retention_state'], $progressions[$enrollmentId] ?? []),
                 'storedState' => $row['retention_state'],
-                // A Faculty override stays until the course grade changes.
-                'manualOverride' => $row['retention_override_state'] !== null,
                 'remedial' => remedial_state_json_legacy_payload($row['remedial_state_json']),
                 'remedialProgression' => $progressions[$enrollmentId] ?? remedial_attempts_empty_progression(),
                 'watchlistUnlocked' => $row['unlocked_at'] !== null,
@@ -6210,8 +6042,7 @@ function handle_faculty_retention_get(): void
                 'schoolYear' => $row['school_year'],
                 'midtermComplete' => $midterm['complete'],
                 'midtermPercentage' => $midterm['percentage'],
-                // UI-003: informational risk for current-year classes only.
-                'risk' => $isCurrentYear ? faculty_risk_projection($pdo, $row, $readCache) : null,
+                'midtermAtRisk' => $isCurrentYear && faculty_midterm_at_risk($midterm, $gwa, $progressions[$enrollmentId] ?? []),
                 'remedialEligible' => $remedialEligible,
             ];
             if (isset($midterm['components'])) {
@@ -6748,131 +6579,6 @@ function handle_faculty_retention_remedial_save(): void
     }
 }
 
-function handle_faculty_retention_status_update(): void
-{
-    $pdo = null;
-    try {
-        $config = app_config();
-        $pdo = create_pdo($config);
-        $authCtx = faculty_verify_auth($pdo, $config);
-        $body = request_body();
-        if (!$body['has_body']) {
-            safe_error_response('Request body required.', 400);
-            return;
-        }
-        $data = $body['data'];
-        $studentId = (int) ($data['studentId'] ?? 0);
-        $classId = (int) ($data['classId'] ?? 0);
-        $state = (string) ($data['status'] ?? '');
-        $reason = trim((string) ($data['reason'] ?? ''));
-        if ($studentId <= 0 || $classId <= 0 || !in_array($state, ['active', 'warning', 'critical', 'remedial'], true) || mb_strlen($reason) < 8) {
-            safe_error_response('Student, class, valid retention state, and an eight-character reason are required.', 422);
-            return;
-        }
-        $pdo->beginTransaction();
-        $targetStmt = $pdo->prepare(
-            "SELECT e.enrollment_id, e.retention_state, e.status AS enrollment_status, cs.school_year
-               FROM enrollments e
-               JOIN class_sections cs ON cs.cs_id = e.cs_id
-              WHERE e.student_id = ? AND e.cs_id = ? AND cs.instructor_user_id = ?
-              FOR UPDATE OF e"
-        );
-        $targetStmt->execute([$studentId, $classId, $authCtx['user_id']]);
-        $overrideTarget = $targetStmt->fetch(PDO::FETCH_ASSOC);
-        if (!is_array($overrideTarget)) {
-            $pdo->rollBack();
-            safe_error_response('Enrollment not found in an assigned class.', 404);
-            return;
-        }
-        if (strtolower((string) $overrideTarget['enrollment_status']) !== 'active') {
-            $pdo->rollBack();
-            safe_error_response('Retention status can only be changed for an active enrollment.', 409);
-            return;
-        }
-        if (!academic_school_year_is_current($pdo, (string) $overrideTarget['school_year'])) {
-            $pdo->rollBack();
-            safe_error_response('Historical class sections are view-only and cannot be edited.', 409);
-            return;
-        }
-        // The override reason is kept in the audit trail. It must not be written
-        // into remedial_state_json: that column is legacy remedial evidence, and
-        // any value there blocks canonical remedial scheduling.
-        // Kept across recomputation until the course grade changes.
-        $stmt = $pdo->prepare(
-            'UPDATE enrollments
-                SET retention_state = ?, retention_override_state = ?,
-                    retention_override_gwa = final_gwa, retention_override_at = CURRENT_TIMESTAMP(6)
-              WHERE enrollment_id = ?'
-        );
-        $stmt->execute([$state, $state, (int) $overrideTarget['enrollment_id']]);
-        $now = gmdate('Y-m-d\TH:i:s\Z');
-        $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
-        $auditCtx = audit_begin_operation($pdo);
-        audit_finish_operation($pdo, $auditCtx, [
-            'module_code' => 'faculty_retention',
-            'action_code' => 'retention_status_override',
-            'event_status' => 'Success',
-            'actor_user_id' => $authCtx['user_id'],
-            'actor_username' => $authCtx['login_email'],
-            'actor_role' => $authCtx['role'],
-            'actor_display_name' => $authCtx['display_name'],
-            'session_id' => $authCtx['session_id'],
-            'scope_cs_id' => $classId,
-            'target_type' => 'enrollment',
-            'target_id' => (string) $overrideTarget['enrollment_id'],
-            'description' => 'Faculty overrode a retention status.',
-            'reason' => $reason,
-            'http_method' => request_method(),
-            'endpoint' => request_path(),
-            'request_id' => request_id(),
-            'ip_address' => request_ip(),
-            'user_agent' => request_user_agent(),
-        ], $macKey, ['retention_state' => $overrideTarget['retention_state']], ['retention_state' => $state]);
-        $recipient = $pdo->prepare(
-            "SELECT e.enrollment_id, s.student_account_user_id, c.course_code
-               FROM enrollments e
-               JOIN students s ON s.student_id = e.student_id
-               JOIN class_sections cs ON cs.cs_id = e.cs_id
-               JOIN courses c ON c.course_id = cs.course_id
-              WHERE e.student_id = ? AND e.cs_id = ?
-                AND cs.instructor_user_id = ?
-                AND LOWER(e.status) = 'active'"
-        );
-        $recipient->execute([$studentId, $classId, $authCtx['user_id']]);
-        $target = $recipient->fetch(PDO::FETCH_ASSOC);
-        $notification = null;
-        if (is_array($target) && $target['student_account_user_id'] !== null) {
-            $notification = notification_create_idempotent(
-                $pdo,
-                (int) $target['student_account_user_id'],
-                'retention_status',
-                'Retention status updated for ' . (string) $target['course_code'],
-                'A Faculty member updated your retention status to ' . $state . '.',
-                'enrollment',
-                (string) $target['enrollment_id'],
-                'retention:' . (string) $target['enrollment_id'] . ':' . $state
-            );
-        }
-        $pdo->commit();
-        json_response([
-            'status' => 'ok',
-            'message' => 'Retention state persisted successfully.',
-            'retention' => [
-                'studentId' => (string) $studentId,
-                'classId' => (string) $classId,
-                'state' => $state,
-                'reason' => $reason,
-                'updatedAt' => $now,
-            ],
-            'notification' => $notification !== null ? ['created' => $notification['created']] : null,
-        ], 200);
-    } catch (\Throwable $e) {
-        if ($pdo instanceof PDO && $pdo->inTransaction()) { $pdo->rollBack(); }
-        error_log('Faculty retention status update error: ' . sanitize_for_log($e));
-        safe_error_response('Internal server error.', 500);
-    }
-}
-
 function handle_faculty_profile_get(): void
 {
     try {
@@ -7191,7 +6897,7 @@ function handle_faculty_reports_summary(): void
         $grouped = [];
         // Standing across this Faculty member's courses: the most serious
         // retention state, and a unit-weighted GWA (overall and per school year).
-        $stateRank = ['critical' => 5, 'remedial' => 4, 'warning' => 3, 'cleared' => 2, 'active' => 1];
+        $stateRank = ['remedial' => 3, 'cleared' => 2, 'active' => 1];
         $gwaTotals = [];
         foreach ($students as $s) {
             $id = (string) $s['student_id'];
@@ -7255,7 +6961,7 @@ function handle_faculty_reports_summary(): void
         }
         $mappedStudents = array_values($grouped);
         $graded = array_values(array_filter(array_column($mappedStudents, 'overallGWA'), static fn($value) => $value !== null));
-        $atRisk = count(array_filter($mappedStudents, static fn(array $student): bool => in_array($student['status'], ['warning', 'critical', 'remedial'], true)));
+        $atRisk = count(array_filter($mappedStudents, static fn(array $student): bool => $student['status'] === 'remedial'));
 
         $currentSchoolYear = academic_current_school_year($pdo);
         json_response([

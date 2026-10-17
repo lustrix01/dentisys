@@ -426,9 +426,9 @@ export function generateGradeSummaryCSV(
 
         const gwaVal =
           evalResult.overallGwa !== null
-            ? evalResult.overallGwa.toFixed(2)
+            ? evalResult.overallGwa.toFixed(1)
             : evalResult.historicalGwa !== null
-            ? `Prior: ${evalResult.historicalGwa.toFixed(2)} (Historical)`
+            ? `Prior: ${evalResult.historicalGwa.toFixed(1)} (Historical)`
             : evalResult.statusText === 'PENDING'
             ? 'Pending'
             : 'Incomplete';
@@ -476,7 +476,7 @@ export function generateGradeSummaryCSV(
       const practicum = subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—';
       const exams = subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—';
       const attendance = subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—';
-      const gradeVal = subj && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade.toFixed(2) : '—';
+      const gradeVal = subj && typeof subj.grade === 'number' && subj.grade > 0 ? subj.grade.toFixed(1) : '—';
       const statusText = subj && typeof subj.grade === 'number' && subj.grade > 0
         ? (subj.grade === 5.0 ? 'FAILED' : 'PASS')
         : 'UNCOMPUTED';

@@ -466,8 +466,8 @@ test('fresh grouped offering saves in the editor, recomputes from live scores, a
   for (const displayedResult of ['80.00%', '90.00%', '84.00%', '86.00%']) {
     await expect(facultyRow).toContainText(displayedResult);
   }
-  // 85.40% interpolates to 1.97 (spec.md UI-003, Owner decision 2026-10-09).
-  await expect(facultyRow.getByRole('cell', { name: '1.97', exact: true })).toBeVisible();
+  // 85.40% truncates to 85% = 2.4 on the BUCDM table (spec.md, Owner amendment 2026-10-17).
+  await expect(facultyRow.getByRole('cell', { name: '2.4', exact: true })).toBeVisible();
   await expect(main.getByText(/All 1 student grade\(s\) recomputed and persisted successfully\./)).toBeVisible();
 
   await page.goto('about:blank');

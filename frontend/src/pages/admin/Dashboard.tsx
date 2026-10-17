@@ -42,9 +42,7 @@ export const Dashboard: React.FC = () => {
     .map((bucket: { range: string; count: number }) => ({ range: bucket.range, count: Number(bucket.count) || 0 }));
   const standing = [
     { label: 'Good standing', count: Number(apiData?.statusCounts?.active) || 0, color: '#10b981' },
-    { label: 'Warning', count: Number(apiData?.statusCounts?.warning) || 0, color: '#f59e0b' },
     { label: 'Remedial', count: Number(apiData?.statusCounts?.remedial) || 0, color: '#f97316' },
-    { label: 'Critical', count: Number(apiData?.statusCounts?.critical) || 0, color: '#e11d48' },
   ];
   const classAttendance: Array<{ name: string; rate: number }> = apiData?.classAttendance ?? [];
   const recentAuditEvents: Array<{ id: string; occurredAt: string | null; actorName: string | null; actorEmail: string | null; action: string; description: string; status: string }> =

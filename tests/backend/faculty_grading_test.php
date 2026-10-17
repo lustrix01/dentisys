@@ -63,33 +63,59 @@ assert_faculty_grading(
 );
 
 foreach ([
-    [97.0, 1.00],
-    [94.0, 1.25],
-    [87.34, 1.81],
-    [81.0, 2.38],
-    [80.00, 2.50],
-    [80.01, 2.50],
-    [79.99, 2.50],
-    [74.99, 5.00],
-    [NAN, 5.00],
-] as [$percentage, $expectedGwa]) {
+    [100.0, 1.0, 1.0],
+    [99.5, 1.0, 1.0],
+    [99.0, 1.0, 1.0],
+    [98.9, 1.1, 1.1],
+    [97.0, 1.2, 1.2],
+    [96.0, 1.3, 1.3],
+    [95.0, 1.4, 1.4],
+    [94.0, 1.5, 1.5],
+    [93.0, 1.6, 1.6],
+    [92.0, 1.7, 1.7],
+    [91.0, 1.8, 1.8],
+    [90.0, 1.9, 1.9],
+    [89.0, 2.0, 2.0],
+    [88.0, 2.1, 2.1],
+    [87.0, 2.2, 2.2],
+    [86.0, 2.3, 2.3],
+    [85.0, 2.4, 2.4],
+    [84.99, 2.5, 2.5],
+    [84.9, 2.5, 2.5],
+    [84.0, 2.5, 2.5],
+    [83.5, 2.6, 2.6],
+    [82.0, 2.6, 2.6],
+    [81.0, 2.7, 2.7],
+    [80.0, 2.7, 2.7],
+    [79.0, 2.8, 2.8],
+    [78.0, 2.8, 2.8],
+    [77.0, 2.9, 2.9],
+    [76.0, 2.9, 2.9],
+    [75.0, 3.0, 3.0],
+    [74.9, 3.1, 5.0],
+    [74.0, 3.1, 5.0],
+    [73.0, 3.2, 5.0],
+    [70.0, 3.5, 5.0],
+    [66.0, 3.9, 5.0],
+    [65.9, 4.0, 5.0],
+    [65.0, 4.0, 5.0],
+    [10.0, 4.0, 5.0],
+    [0.0, 4.0, 5.0],
+    [NAN, 5.0, 5.0],
+] as [$percentage, $midterm, $final]) {
     assert_faculty_grading(
-        faculty_percentage_to_gwa($percentage) === $expectedGwa,
-        "Percentage {$percentage} converts to displayed GWA {$expectedGwa}"
+        faculty_percentage_to_gwa($percentage, 'Midterm') === $midterm && faculty_percentage_to_gwa($percentage) === $final,
+        "BUCDM: {$percentage}% -> Midterm {$midterm}, Final/course {$final}"
     );
 }
 assert_faculty_grading(
-    abs(faculty_percentage_to_gwa_exact(80.01) - 2.49875) < 1e-9
-        && faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(80.01), 2.50) === 'active',
-    '80.01% displays as 2.50 but remains active using the exact interpolated grade'
+    faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(84.99), 2.50) === 'remedial'
+        && faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(84.0), 2.50) === 'remedial',
+    '84.99% and 84.00% (2.5) reach the remediation trigger'
 );
 assert_faculty_grading(
-    faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(80.00), 2.50) === 'remedial',
-    'Exactly 80.00% reaches the 2.50 remediation trigger'
-);
-assert_faculty_grading(
-    faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(79.99), 2.50) === 'remedial',
-    '79.99% reaches the remediation trigger using the exact interpolated grade'
+    faculty_course_grade_retention_state(faculty_percentage_to_gwa_exact(85.0), 2.50) === 'active',
+    'Exactly 85.00% (2.4) is active'
 );
 
 $periodDefaults = faculty_grading_default_period_template();

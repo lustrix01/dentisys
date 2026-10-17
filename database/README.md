@@ -54,3 +54,7 @@ among active classes and recording its term/class provenance. This includes
 legacy references without provenance. A past end date leaves the material intact
 until the expiry run; today remains valid through today. Copying February 29
 uses February 28 in the next non-leap year. Copied dates are a starting point for Dean review.
+
+## Computed retention only
+
+Migration `048_computed_retention_only.sql` reverts every manual override and every stored `warning`/`critical` retention state to the computed state (`remedial` when the final grade is 2.50 or worse, else `active`; `archived` is untouched, `cleared` is derived on read). The override columns remain, set to NULL; `audit_logs` is not changed.

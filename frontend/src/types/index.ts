@@ -68,8 +68,8 @@ export interface RetentionLog {
   id: string;
   studentId: string;
   date: string;
-  previousStatus: 'active' | 'warning' | 'critical' | 'remedial';
-  newStatus: 'active' | 'warning' | 'critical' | 'remedial';
+  previousStatus: 'active' | 'remedial';
+  newStatus: 'active' | 'remedial';
   remarks: string;
   changedBy: string;
 }
@@ -88,7 +88,7 @@ export interface Student {
   className?: string;
   classSections?: Array<{ classId: string; className: string; enrollmentId: string }>;
   yearLevel: 1 | 2 | 3 | 4; // 1st to 4th Year (Clinicians)
-  status: 'active' | 'warning' | 'critical' | 'remedial';
+  status: 'active' | 'remedial';
   enrolledSubjects: EnrolledSubject[];
   overallGWA: number;
   clinicHoursCompleted: number; // For clinicians (3rd & 4th years)
@@ -395,7 +395,9 @@ export interface MidtermEvaluation {
   percentage: number | null;
   grade: number | null;
   isAtRisk: boolean;
-  risk?: { level: 'High' | 'At Risk' | 'Low'; period: 'Midterm' | 'Overall'; assumedAssessments?: number | null } | null;
+  /** Midterm assessments graded / total for this Student, for the "waiting" note. */
+  gradedCount: number;
+  totalCount: number;
 }
 
 export type RemedialProgressionStage =

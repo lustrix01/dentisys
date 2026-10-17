@@ -285,6 +285,7 @@ $expectedMigrations = [
     '045_lecture_laboratory_grading.sql',
     '046_academic_terms.sql',
     '047_email_outbox_action.sql',
+    '048_computed_retention_only.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -2818,14 +2819,16 @@ try {
 expect_same(200, $studentRetentionStatus, 'Student retention remains readable with live midterm computation');
 $currentAcademicRows = array_values(array_filter($studentRetentionBody['retention']['records'], static fn(array $row): bool => $row['isCurrent'] === true));
 expect_same(academic_current_school_year($pdo), $studentRetentionBody['retention']['currentSchoolYear'] ?? null, 'Student retention exposes the configured current year');
-expect_same(count(array_filter($currentAcademicRows, static fn(array $row): bool => in_array($row['retentionState'], ['warning', 'critical', 'remedial'], true))), $studentRetentionBody['retention']['atRiskCount'], 'Student final warning count excludes historical courses');
+expect_same(count(array_filter($currentAcademicRows, static fn(array $row): bool => $row['retentionState'] === 'remedial')), $studentRetentionBody['retention']['atRiskCount'], 'Student final remedial count excludes historical courses');
 expect_same(count(array_filter($currentAcademicRows, static fn(array $row): bool => !empty($row['midtermEvaluation']['isAtRisk']))), $studentRetentionBody['retention']['midtermAtRiskCount'], 'Student advisory count uses current courses only');
 foreach ($studentRetentionBody['retention']['records'] as $academicRow) {
-    $expectedRisk = $academicRow['isCurrent'] ? faculty_risk_projection($pdo, [
-        'enrollment_id' => (int) $academicRow['enrollmentId'], 'cs_id' => (int) $academicRow['classId'], 'student_id' => 26,
-    ]) : null;
-    expect_same($expectedRisk, $academicRow['midtermEvaluation']['risk'] ?? null, 'Student advisory agrees with the existing Faculty projection');
-    expect_same(in_array($expectedRisk['level'] ?? null, ['High', 'At Risk'], true), $academicRow['midtermEvaluation']['isAtRisk'], 'Student advisory uses High/At Risk only, with unavailable risk unresolved');
+    $academicMidterm = $academicRow['midtermEvaluation'];
+    expect_same(false, array_key_exists('risk', $academicMidterm), 'Student midterm evaluation has no risk levels');
+    expect_same(true, $academicMidterm['gradedCount'] <= $academicMidterm['totalCount'], 'Student midterm counts graded assessments within the total');
+    if ($academicMidterm['isAtRisk']) {
+        expect_same(true, $academicRow['isCurrent'] && $academicRow['grade'] === null && $academicMidterm['complete'] === true && $academicMidterm['grade'] >= 2.5, 'Student advisory flags only complete current Midterms without a final grade at 2.5 or worse');
+        expect_same('none', $academicRow['remedialProgression']['stage'], 'Student advisory ends once a remedial record exists');
+    }
 }
 
 [$studentDashboardStatus, $studentDashboardBody] = integration_http_get_json('/api/student/dashboard', $studentCredentials['access_token']);
@@ -3026,46 +3029,12 @@ expect_same(200, $studentNotificationReadStatus, 'Recipient can mark its notific
 $studentNotificationReadStmt = $pdo->prepare('SELECT read_at FROM notifications WHERE notification_id = ?');
 $studentNotificationReadStmt->execute([(int) $studentNotificationId]);
 expect_true($studentNotificationReadStmt->fetchColumn() !== null, 'Notification mark-read persists the recipient read state');
-$retentionOverrideJsonStmt = $pdo->prepare('SELECT remedial_state_json::text FROM enrollments WHERE enrollment_id = ?');
-$retentionOverrideJsonStmt->execute([(int) $studentNotificationTarget['enrollment_id']]);
-$retentionOverrideJsonBefore = $retentionOverrideJsonStmt->fetchColumn();
-$studentRetentionNotificationPayload = [
-    'studentId' => '26',
-    'classId' => (string) $studentClassId,
-    'status' => 'critical',
-    'reason' => 'Integration retention status update',
-];
-[$studentRetentionNotificationFirstStatus, $studentRetentionNotificationFirstBody] = integration_http_json('/api/faculty/retention/status', $seedFacultyAccessToken, $studentRetentionNotificationPayload);
-expect_same(200, $studentRetentionNotificationFirstStatus, 'Faculty retention status update returns HTTP 200');
-expect_same(true, $studentRetentionNotificationFirstBody['notification']['created'] ?? null, 'Retention status update creates one Student notification');
-[$studentRetentionNotificationRepeatStatus, $studentRetentionNotificationRepeatBody] = integration_http_json('/api/faculty/retention/status', $seedFacultyAccessToken, $studentRetentionNotificationPayload);
-expect_same(200, $studentRetentionNotificationRepeatStatus, 'Repeated retention status update remains successful');
-expect_same(false, $studentRetentionNotificationRepeatBody['notification']['created'] ?? null, 'Repeated retention status update is deduplicated');
-$studentRetentionNotificationCountStmt = $pdo->prepare(
-    'SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ? AND deduplication_key = ?'
-);
-$studentRetentionNotificationCountStmt->execute([(int) $studentNotificationTarget['student_account_user_id'], 'retention:' . $studentNotificationTarget['enrollment_id'] . ':critical']);
-expect_same(1, (int) $studentRetentionNotificationCountStmt->fetchColumn(), 'Retention status notification deduplication stores one row');
-$retentionOverrideJsonStmt->execute([(int) $studentNotificationTarget['enrollment_id']]);
-expect_same($retentionOverrideJsonBefore, $retentionOverrideJsonStmt->fetchColumn(), 'Retention status override does not write legacy remedial JSON (it would block remedial scheduling)');
-$retentionOverrideAuditStmt = $pdo->prepare(
-    "SELECT reason FROM audit_events
-      WHERE action_code = 'retention_status_override' AND target_id = ?
-      ORDER BY sequence_number DESC LIMIT 1"
-);
-$retentionOverrideAuditStmt->execute([(string) $studentNotificationTarget['enrollment_id']]);
-expect_same('Integration retention status update', $retentionOverrideAuditStmt->fetchColumn(), 'Retention status override reason is kept in the audit trail');
-[$studentRetentionNotificationListStatus, $studentRetentionNotificationListBody] = integration_http_get_json('/api/notifications?unreadOnly=true&limit=100', $studentCredentials['access_token']);
-expect_same(200, $studentRetentionNotificationListStatus, 'Student notification list includes retention status updates');
-$studentRetentionNotificationRow = array_values(array_filter(
-    $studentRetentionNotificationListBody['notifications'] ?? [],
-    static fn(array $row): bool => ($row['entityId'] ?? null) === (string) $studentNotificationTarget['enrollment_id']
-        && ($row['type'] ?? null) === 'retention_status'
-))[0] ?? null;
-expect_true(is_array($studentRetentionNotificationRow), 'Student notification list returns the retention status notification');
-
-// A Faculty override survives grade recomputation while the course grade is
-// unchanged, and yields to the computed state once the grade changes.
+// Retention is computed only: the manual override route is gone, and recomputing
+// a grade always writes the computed state and clears any old override columns.
+[$retentionOverrideRouteStatus] = integration_http_json('/api/faculty/retention/status', $seedFacultyAccessToken, [
+    'studentId' => '26', 'classId' => (string) $studentClassId, 'status' => 'remedial', 'reason' => 'Integration retention status update',
+]);
+expect_same(404, $retentionOverrideRouteStatus, 'The Faculty retention override route no longer exists');
 $overrideEnrollmentId = (int) $studentNotificationTarget['enrollment_id'];
 $overrideStateStmt = $pdo->prepare(
     'SELECT retention_state, retention_override_state, retention_override_gwa::text AS override_gwa,
@@ -3074,20 +3043,39 @@ $overrideStateStmt = $pdo->prepare(
 );
 $overrideStateStmt->execute([$overrideEnrollmentId]);
 $overrideOriginal = $overrideStateStmt->fetch(PDO::FETCH_ASSOC);
-expect_same('critical', $overrideOriginal['retention_override_state'] ?? null, 'Retention override is recorded as a manual override');
-// Recompute with the same grade as at override time: the override is kept.
-$pdo->prepare('UPDATE enrollments SET retention_override_gwa = 2.10 WHERE enrollment_id = ?')->execute([$overrideEnrollmentId]);
+$pdo->prepare("UPDATE enrollments SET retention_state = 'critical', retention_override_state = 'critical', retention_override_gwa = 2.10, retention_override_at = CURRENT_TIMESTAMP WHERE enrollment_id = ?")->execute([$overrideEnrollmentId]);
 faculty_save_computed_grade($pdo, 80.0, 2.1, 'active', ['calculationMode' => 'integration'], $overrideEnrollmentId);
 $overrideStateStmt->execute([$overrideEnrollmentId]);
 $overrideAfterSame = $overrideStateStmt->fetch(PDO::FETCH_ASSOC);
-expect_same('critical', $overrideAfterSame['retention_state'] ?? null, 'Recompute with an unchanged grade keeps the Faculty override');
-expect_same('critical', $overrideAfterSame['retention_override_state'] ?? null, 'The override stays recorded while the grade is unchanged');
-// The grade changes (better or worse): the computed state replaces the override.
-faculty_save_computed_grade($pdo, 90.0, 1.5, 'active', ['calculationMode' => 'integration'], $overrideEnrollmentId);
-$overrideStateStmt->execute([$overrideEnrollmentId]);
-$overrideAfterChange = $overrideStateStmt->fetch(PDO::FETCH_ASSOC);
-expect_same('active', $overrideAfterChange['retention_state'] ?? null, 'After the grade changes, the computed retention state applies');
-expect_true(is_array($overrideAfterChange) && $overrideAfterChange['retention_override_state'] === null, 'A changed course grade clears the Faculty override');
+expect_same('active', $overrideAfterSame['retention_state'] ?? null, 'Recompute with an unchanged grade writes the computed retention state');
+expect_same(null, $overrideAfterSame['retention_override_state'], 'Recompute clears any old override state');
+expect_same(null, $overrideAfterSame['override_gwa'], 'Recompute clears any old override grade');
+
+// Migration 048 reverts overrides and stored warning/critical rows to the computed
+// state, never touching archived rows (rolled back so later checks are unaffected).
+$pdo->beginTransaction();
+try {
+    $pdo->prepare("UPDATE enrollments SET final_gwa = 2.60, final_percentage = 79.20, retention_state = 'warning', retention_override_state = 'warning', retention_override_gwa = 2.60 WHERE enrollment_id = ?")->execute([$overrideEnrollmentId]);
+    $pdo->exec((string) file_get_contents(__DIR__ . '/../../database/migrations/048_computed_retention_only.sql'));
+    $overrideStateStmt->execute([$overrideEnrollmentId]);
+    $migratedRow = $overrideStateStmt->fetch(PDO::FETCH_ASSOC);
+    expect_same('remedial', $migratedRow['retention_state'] ?? null, 'Migration 048 reverts a warning override on a 2.60 grade to remedial');
+    expect_same(null, $migratedRow['retention_override_state'], 'Migration 048 clears the override state');
+    $pdo->prepare("UPDATE enrollments SET final_gwa = 1.50, final_percentage = 91.00, retention_state = 'critical' WHERE enrollment_id = ?")->execute([$overrideEnrollmentId]);
+    $pdo->exec((string) file_get_contents(__DIR__ . '/../../database/migrations/048_computed_retention_only.sql'));
+    $overrideStateStmt->execute([$overrideEnrollmentId]);
+    expect_same('active', $overrideStateStmt->fetch(PDO::FETCH_ASSOC)['retention_state'] ?? null, 'Migration 048 reverts a stored critical state on a 1.50 grade to active');
+    $pdo->prepare("UPDATE enrollments SET final_gwa = 2.50, final_percentage = 80.01, retention_state = 'warning' WHERE enrollment_id = ?")->execute([$overrideEnrollmentId]);
+    $pdo->exec((string) file_get_contents(__DIR__ . '/../../database/migrations/048_computed_retention_only.sql'));
+    $overrideStateStmt->execute([$overrideEnrollmentId]);
+    expect_same('active', $overrideStateStmt->fetch(PDO::FETCH_ASSOC)['retention_state'] ?? null, 'Migration 048 uses the stored percentage, so a 2.50 rounded from 80.01% stays active');
+    $pdo->prepare("UPDATE enrollments SET retention_state = 'archived' WHERE enrollment_id = ?")->execute([$overrideEnrollmentId]);
+    $pdo->exec((string) file_get_contents(__DIR__ . '/../../database/migrations/048_computed_retention_only.sql'));
+    $overrideStateStmt->execute([$overrideEnrollmentId]);
+    expect_same('archived', $overrideStateStmt->fetch(PDO::FETCH_ASSOC)['retention_state'] ?? null, 'Migration 048 leaves archived rows alone');
+} finally {
+    $pdo->rollBack();
+}
 // Restore the demo enrollment for later checks.
 $pdo->prepare(
     'UPDATE enrollments SET final_percentage = ?, final_gwa = ?, retention_state = ?, grade_components_json = ?::jsonb,
@@ -3304,7 +3292,7 @@ foreach ($facultyReportBody['reports']['students'] ?? [] as $facultyReportRow) {
     }
 }
 expect_true(is_array($facultyReportStudent), 'Faculty report lists a student with current and past-year enrollments');
-expect_true(in_array($facultyReportStudent['status'] ?? null, ['remedial', 'critical'], true), 'Faculty report standing uses the most serious retention state, not the first row');
+expect_true(($facultyReportStudent['status'] ?? null) === 'remedial', 'Faculty report standing uses the most serious retention state, not the first row');
 expect_same(2.66, (float) ($facultyReportStudent['gwaBySchoolYear']['2025-2026'] ?? 0), 'Faculty report gives the past school year its own GWA');
 $facultyReportGwaStmt = $pdo->prepare(
     "SELECT ROUND(SUM(COALESCE(egb.final_gwa, e.final_gwa) * CASE WHEN c.units > 0 THEN c.units ELSE 1 END)
@@ -3427,11 +3415,10 @@ expect_same($remedialOriginalGrade, $remedialOriginalStmt->fetch(PDO::FETCH_ASSO
 
 [$remedialFacultyGetStatus, $remedialFacultyGetBody] = integration_http_get_json('/api/faculty/retention', $seedFacultyAccessToken);
 expect_same(200, $remedialFacultyGetStatus, 'Faculty retention reload returns HTTP 200 after canonical remedial writes');
-// UI-003: every retention row carries a risk entry (null when not computable).
+// Risk has no levels (2026-10-17): rows carry only the Midterm At Risk flag, no risk projection or manual override.
 $riskRows = $remedialFacultyGetBody['retention'] ?? [];
-expect_true($riskRows !== [] && array_reduce($riskRows, static fn(bool $ok, array $row): bool => $ok && array_key_exists('risk', $row), true), 'Every retention row includes the risk projection field');
-$riskLevels = array_filter(array_map(static fn(array $row): ?string => $row['risk']['level'] ?? null, $riskRows));
-expect_true(array_diff($riskLevels, ['High', 'At Risk', 'Low']) === [], 'Risk levels are High, At Risk or Low');
+expect_true($riskRows !== [] && array_reduce($riskRows, static fn(bool $ok, array $row): bool => $ok && !array_key_exists('risk', $row) && !array_key_exists('manualOverride', $row), true), 'No retention row carries a risk level or manual override');
+expect_true(array_reduce($riskRows, static fn(bool $ok, array $row): bool => $ok && is_bool($row['midtermAtRisk'] ?? null), true), 'Every retention row carries a boolean Midterm At Risk flag');
 $remedialReloadRow = array_values(array_filter(
     $remedialFacultyGetBody['retention'] ?? [],
     static fn(array $row): bool => (string) ($row['enrollmentId'] ?? '') === (string) $invitedEnrollmentId,
@@ -6419,7 +6406,6 @@ expect_same(
 );
 expect_same(77.5, $periodInitialWatchlistCached['components']['lecture']['percentage'] ?? null, 'Shared retention read uses the saved Lecture category math');
 expect_same(90.0, $periodInitialWatchlistCached['components']['laboratory']['percentage'] ?? null, 'Shared retention read uses the saved Laboratory attendance math');
-expect_same(faculty_risk_projection($pdo, $periodReadRowA), faculty_risk_projection($pdo, $periodReadRowA, $periodReadCache), 'Risk reusing watchlist inputs preserves linked transmutation and separate Final math');
 $periodIncompleteWatchlistCached = faculty_watchlist_midterm($pdo, $periodReadRowB, $periodReadCache);
 $periodIncompleteWatchlistUncached = faculty_watchlist_midterm($pdo, $periodReadRowB);
 expect_same($periodIncompleteWatchlistUncached, $periodIncompleteWatchlistCached, 'Grouped Midterm incompleteness matches with or without batch caching');
@@ -6431,7 +6417,6 @@ expect_same(
 expect_same('computed', $periodIncompleteWatchlistCached['components']['lecture']['status'] ?? null, 'The ended GRD-001 linked session resolves the Lecture component');
 expect_same(40.0, $periodIncompleteWatchlistCached['components']['lecture']['percentage'] ?? null, 'The ended linked session contributes zero while the regular Quiz remains scored');
 expect_same('incomplete', $periodIncompleteWatchlistCached['components']['laboratory']['status'] ?? null, 'The unresolved attendance leaves the Laboratory component incomplete');
-expect_same(faculty_risk_projection($pdo, $periodReadRowB), faculty_risk_projection($pdo, $periodReadRowB, $periodReadCache), 'Cached risk preserves unresolved attendance for the next enrollment');
 $periodMidtermAttendanceCategories = array_values(array_filter(
     $periodInitialComplete['periods']['midterm']['categories'] ?? [],
     static fn(array $category): bool => ($category['sourceKind'] ?? null) === 'attendance'

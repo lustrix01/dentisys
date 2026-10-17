@@ -651,7 +651,7 @@ export function getAdminDashboardKpisApi(schoolYear?: string): Promise<SchoolYea
     attendanceRate: number;
   };
   gwaBuckets: Array<{ range: string; count: number; color: string }>;
-  statusCounts: { active: number; warning: number; critical: number; remedial: number };
+  statusCounts: { active: number; remedial: number };
   classAttendance: Array<{ name: string; rate: number }>;
   recentAuditEvents?: Array<{
     id: string;
@@ -874,7 +874,7 @@ export function getFacultyDashboardKpisApi(schoolYear?: string): Promise<SchoolY
   return request('GET', `/faculty/dashboard/kpis${schoolYearQuery(schoolYear)}`);
 }
 
-export type FacultyRetentionState = 'active' | 'warning' | 'critical' | 'remedial' | 'cleared' | 'archived';
+export type FacultyRetentionState = 'active' | 'remedial' | 'cleared' | 'archived';
 export type FacultyRemedialProgressionStage =
   | 'none'
   | 'attempt_1_pending'
@@ -910,8 +910,8 @@ export interface FacultyRemedialProgression {
 export interface FacultyRetentionRecord {
   midtermComplete?: boolean;
   midtermPercentage?: number | null;
-  /** UI-003 risk (informational): assumed 75% assessments until the grade is 2.50 or worse. */
-  risk?: { level: 'High' | 'At Risk' | 'Low'; assumedAssessments: number | null; period: 'Midterm' | 'Overall' } | null;
+  /** Server rule: complete Midterm, no final grade or remedial record, Midterm grade 2.5 or worse. */
+  midtermAtRisk?: boolean;
   watchlistUnlocked?: boolean;
   unlockedAt?: string | null;
   schoolYear?: string;
@@ -929,8 +929,6 @@ export interface FacultyRetentionRecord {
   remedialProgression?: FacultyRemedialProgression;
   /** Server-computed: grade at/above the trigger, current school year, not legacy. */
   remedialEligible?: boolean;
-  /** Status was set by Faculty and is kept until the course grade changes. */
-  manualOverride?: boolean;
 }
 
 export function getFacultyRetentionApi(): Promise<{
@@ -1233,15 +1231,6 @@ export function endFacultyAttendanceSessionApi(data: {
   sessionId: string | number;
 }): Promise<{ status: string; session: Record<string, unknown> }> {
   return request('POST', '/faculty/attendance/session/end', data);
-}
-
-export function updateFacultyRetentionStatusApi(data: {
-  studentId: string;
-  classId: string;
-  status: 'active' | 'warning' | 'critical' | 'remedial';
-  reason: string;
-}): Promise<{ status: string; message: string; retention: Record<string, string> }> {
-  return request('POST', '/faculty/retention/status', data);
 }
 
 /** Record the cost recovery program result after both remedial attempts failed. */

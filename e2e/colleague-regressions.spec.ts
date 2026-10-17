@@ -184,7 +184,7 @@ test('future and unclassified enrollments remain visible outside current and pas
 test('completed cost recovery is labelled passed rather than required', async ({ page }) => {
   await studentIdentity(page);
   await page.route('**/api/student/retention', route => route.fulfill({ json: { status: 'ok', retention: {
-    currentSchoolYear: '2026-2027', records: [{ ...course, grade: 2.75, remedialProgression: { stage: 'cost_recovery_passed', attempts: [], passedAttempt: null } }], atRiskCount: 0, hasPendingGrades: false,
+    currentSchoolYear: '2026-2027', records: [{ ...course, grade: 2.8, remedialProgression: { stage: 'cost_recovery_passed', attempts: [], passedAttempt: null } }], atRiskCount: 0, hasPendingGrades: false,
   } } }));
   await page.goto('/student/retention');
   await page.getByRole('button', { name: /Remedial Exams/ }).click();
@@ -269,20 +269,21 @@ test('Secretary revoked sessions are hidden by default, revealed on request and 
 });
 
 
-test('Student projection advisory can be available while missing grades stay pending', async ({ page }) => {
+test('Student Midterm Advisory flags only fully graded 2.5-or-worse midterms and says when scores are still missing', async ({ page }) => {
   await studentIdentity(page);
   await page.route('**/api/student/retention', route => route.fulfill({ json: { status: 'ok', retention: {
     currentSchoolYear: '2026-2027', records: [
-      { ...course, midtermEvaluation: { complete: false, percentage: null, grade: null, isAtRisk: true, risk: { level: 'High', period: 'Midterm', assumedAssessments: 2 } } },
-      { ...course, enrollmentId: '42', courseCode: 'NO-DATA', midtermEvaluation: { complete: false, percentage: null, grade: null, isAtRisk: false, risk: null } },
+      { ...course, midtermEvaluation: { complete: true, percentage: 80, grade: 2.7, isAtRisk: true, gradedCount: 3, totalCount: 3 } },
+      { ...course, enrollmentId: '42', courseCode: 'NO-DATA', midtermEvaluation: { complete: false, percentage: null, grade: null, isAtRisk: false, gradedCount: 1, totalCount: 3 } },
     ], atRiskCount: 0, midtermAtRiskCount: 1, hasPendingGrades: true,
   } } }));
   await page.goto('/student/retention');
-  await page.getByRole('button', { name: /Midterm/ }).click();
+  await page.getByRole('button', { name: /Midterm Advisory/ }).click();
   const row = page.getByRole('row').filter({ hasText: 'DENT401' });
-  await expect(row).toContainText('High · Midterm projection');
-  await expect(row.getByText('Pending', { exact: true })).toHaveCount(2);
-  await expect(page.getByText('Advisory Pending/Unavailable for courses without sufficient assessment data.', { exact: true })).toBeVisible();
+  await expect(row).toContainText('At Risk · Midterm');
+  await expect(row).not.toContainText('projection');
+  await expect(page.getByRole('row').filter({ hasText: 'NO-DATA' })).toHaveCount(0);
+  await expect(page.getByText('Waiting for all midterm scores in NO-DATA (1 of 3 graded).', { exact: true })).toBeVisible();
   await expect(page.getByText('Remedial exams are not held at midterm.', { exact: false })).toBeVisible();
 });
 
@@ -389,11 +390,11 @@ for (const boundary of [
 
 test('Student academic details remain available in Classes and Dashboard', async ({ page }) => {
   await studentIdentity(page);
-  const gradedCourse = { ...course, grade: 2.75, percentage: 80.5, clinicHoursCompleted: 14, retentionState: 'warning' };
+  const gradedCourse = { ...course, grade: 2.8, percentage: 80.5, clinicHoursCompleted: 14, retentionState: 'remedial' };
   await page.route('**/api/student/classes', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', classes: [gradedCourse] } }));
-  await page.route('**/api/student/dashboard**', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', student: { name: 'Real Student', studentNumber: 'REAL-26' }, summary: { classCount: 1, gwa: 2.75, attendanceRate: null, clinicalHoursCompleted: 14, retentionAlerts: 1 }, classes: [gradedCourse] } }));
+  await page.route('**/api/student/dashboard**', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', student: { name: 'Real Student', studentNumber: 'REAL-26' }, summary: { classCount: 1, gwa: 2.8, attendanceRate: null, clinicalHoursCompleted: 14, retentionAlerts: 1 }, classes: [gradedCourse] } }));
   await page.goto('/student/classes');
-  await expect(page.getByText('Course Grade:', { exact: false })).toContainText('2.75');
+  await expect(page.getByText('Course Grade:', { exact: false })).toContainText('2.8');
   await expect(page.getByText('Clinical Hours Completed:', { exact: false })).toContainText('14 hrs');
   await expect(page.getByRole('main')).toContainText('Retention Standing Warning');
   await page.goto('/student/dashboard');
@@ -407,11 +408,11 @@ test('Remedial work is separated from completed and historical courses', async (
   const pending = { stage: 'attempt_1_pending', attempts: [{ attemptNumber: 1, scheduledDate: '2026-10-05', outcome: 'pending', percentage: null }], passedAttempt: null };
   const completed = { stage: 'passed', attempts: [{ attemptNumber: 1, scheduledDate: '2026-09-30', outcome: 'passed', percentage: 65 }], passedAttempt: 1 };
   await page.route('**/api/student/retention', route => route.fulfill({ json: { status: 'ok', retention: {
-    currentSchoolYear: '2026-2027', records: [{ ...course, grade: 2.75, retentionState: 'remedial', remedialProgression: pending }, { ...course, enrollmentId: '42', courseCode: 'DONE', retentionState: 'cleared', remedialProgression: completed }, { ...course, enrollmentId: '43', courseCode: 'PAST', isCurrent: false, isPast: true, schoolYear: '2025-2026', remedialProgression: pending }], atRiskCount: 1, hasPendingGrades: true,
+    currentSchoolYear: '2026-2027', records: [{ ...course, grade: 2.8, retentionState: 'remedial', remedialProgression: pending }, { ...course, enrollmentId: '42', courseCode: 'DONE', retentionState: 'cleared', remedialProgression: completed }, { ...course, enrollmentId: '43', courseCode: 'PAST', isCurrent: false, isPast: true, schoolYear: '2025-2026', remedialProgression: pending }], atRiskCount: 1, hasPendingGrades: true,
   } } }));
   await page.goto('/student/retention');
   const assignedRow = page.getByRole('row').filter({ hasText: 'DENT401' });
-  await expect(assignedRow.getByRole('cell').nth(2)).toContainText('2.75');
+  await expect(assignedRow.getByRole('cell').nth(2)).toContainText('2.8');
   await expect(assignedRow.getByRole('cell').nth(3)).toContainText('Deficient');
   await expect(assignedRow.getByRole('button', { name: 'View Exam', exact: true })).toBeVisible();
   await page.getByRole('button', { name: /Remedial Exams/ }).click();
@@ -423,52 +424,33 @@ test('Remedial work is separated from completed and historical courses', async (
   await expect(page.getByText('Exam date: 2026-09-30', { exact: true })).toBeVisible();
 });
 
-for (const fixture of [
-  { state: 'warning', grade: null },
-  { state: 'critical', grade: null },
-  { state: 'warning', grade: 2.4 },
-  { state: 'critical', grade: 2.4 },
-]) {
-  test(`Manual ${fixture.state} with ${fixture.grade === null ? 'pending' : 'passing'} grade does not assign remediation`, async ({ page }) => {
-    await studentIdentity(page);
-    await page.route('**/api/student/retention', route => route.fulfill({ json: { status: 'ok', retention: {
-      currentSchoolYear: '2026-2027', records: [{ ...course, grade: fixture.grade, retentionState: fixture.state,
-        remedialProgression: { stage: 'none', attempts: [], passedAttempt: null } }],
-      atRiskCount: 1, hasPendingGrades: fixture.grade === null,
-    } } }));
-    await page.goto('/student/retention');
-    const row = page.getByRole('row').filter({ hasText: 'DENT401' });
-    await expect(row.getByRole('cell').nth(2)).toContainText(fixture.grade === null ? 'Pending' : '2.40');
-    await expect(row.getByRole('cell').nth(3)).toHaveText(`${fixture.state === 'warning' ? 'Warning' : 'Critical'} · Review required`);
-    await expect(row.getByRole('button', { name: 'View Exam', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Remedial Exams', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Retention Review / Unassigned', exact: true })).toBeVisible();
-    await expect(page.getByText('No remedial attempt assigned.', { exact: true })).toBeVisible();
-    await expect(page.getByText(`Original Course Grade: ${fixture.grade === null ? 'Pending' : '2.40'}`, { exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Active Remediation', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Completed / Historical Remediation', exact: true })).toHaveCount(0);
-    await expect(page.getByText('Schedule to be announced by faculty', { exact: true })).toHaveCount(0);
-    await expect(page.getByText('Attempt 1', { exact: true })).toHaveCount(0);
-  });
-}
-
-test('Faculty Midterm Risk applies the client rule (midterm GWA >= 2.5) and drops students once a final grade exists', async ({ page }) => {
-  const base = { studentId: '42', classId: '77', className: 'DENT-A', subjectCode: 'DENT401', schoolYear: '2026-2027', state: 'active', gwa: null, percentage: null, midtermComplete: true };
+test('Faculty Midterm Watchlist uses the server flag and drops courses once a final grade or remedial record exists', async ({ page }) => {
+  const base = { studentId: '42', classId: '77', className: 'DENT-A', subjectCode: 'DENT401', schoolYear: '2026-2027', state: 'active', gwa: null, percentage: null, midtermComplete: true, midtermAtRisk: false };
   await page.route('**/api/faculty/retention', route => route.fulfill({ json: { status: 'ok', currentSchoolYear: '2026-2027', retention: [
-    { ...base, enrollmentId: '991', studentNumber: 'LOW-42', studentName: 'Failing Midterm', midtermPercentage: 60, risk: null },
-    // The server projection is ignored: a strong midterm is not at risk even when the server says High.
-    { ...base, enrollmentId: '992', studentId: '43', studentNumber: 'HIGH-43', studentName: 'Strong Midterm', midtermPercentage: 92, risk: { level: 'High', period: 'Overall' } },
-    { ...base, enrollmentId: '993', studentId: '44', studentNumber: 'DONE-44', studentName: 'Final Graded', midtermPercentage: 60, gwa: 2.0, risk: null },
+    { ...base, enrollmentId: '991', studentNumber: 'LOW-42', studentName: 'Failing Midterm', midtermPercentage: 60, midtermAtRisk: true },
+    { ...base, enrollmentId: '992', studentId: '43', studentNumber: 'HIGH-43', studentName: 'Strong Midterm', midtermPercentage: 92 },
+    { ...base, enrollmentId: '993', studentId: '44', studentNumber: 'DONE-44', studentName: 'Final Graded', midtermPercentage: 60, gwa: 2.0 },
+    { ...base, enrollmentId: '994', studentId: '45', studentNumber: 'REM-45', studentName: 'Remedial Started', midtermPercentage: 60,
+      remedialProgression: { stage: 'attempt_1_pending', attempts: [], passedAttempt: null } },
   ] } }));
   await page.goto('/retention');
-  await page.getByRole('button', { name: /Midterm Risk/ }).click();
+  await page.getByRole('button', { name: /Midterm Watchlist/ }).click();
+  await expect(page.getByRole('heading', { name: 'Midterm Watchlist', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /Show At-Risk Only/ })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('row').filter({ hasText: 'Failing Midterm' })).toBeVisible();
+  const failing = page.getByRole('row').filter({ hasText: 'Failing Midterm' });
+  await expect(failing).toBeVisible();
+  await expect(failing).toContainText('At Risk');
   await expect(page.getByRole('row').filter({ hasText: 'Strong Midterm' })).toHaveCount(0);
   await expect(page.getByRole('row').filter({ hasText: 'Final Graded' })).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: 'Remedial Started' })).toHaveCount(0);
   await page.getByRole('button', { name: /Show At-Risk Only/ }).click();
-  await expect(page.getByRole('row').filter({ hasText: 'Strong Midterm' })).toBeVisible();
+  const strong = page.getByRole('row').filter({ hasText: 'Strong Midterm' });
+  await expect(strong).toBeVisible();
+  await expect(strong).not.toContainText('At Risk');
   await expect(page.getByRole('row').filter({ hasText: 'Final Graded' })).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: 'Remedial Started' })).toHaveCount(0);
+  await page.getByRole('button', { name: /^Watchlist\s*\d*$/ }).click();
+  await expect(page.getByRole('columnheader', { name: 'Risk', exact: true })).toHaveCount(0);
 });
 
 

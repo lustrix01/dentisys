@@ -213,7 +213,7 @@ export const RealStudentDashboard: React.FC = () => {
             Overall GWA
           </span>
           <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words xl:break-normal">
-            {typeof summary.gwa === 'number' ? summary.gwa.toFixed(2) : '—'}
+            {typeof summary.gwa === 'number' ? summary.gwa.toFixed(1) : '—'}
           </span>
         </Card>
 
@@ -303,7 +303,7 @@ export const RealStudentDashboard: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {classes.map((cls) => {
-                    const isAtRisk = ['warning', 'critical', 'remedial'].includes(cls.retentionState?.toLowerCase());
+                    const isAtRisk = cls.retentionState?.toLowerCase() === 'remedial';
                     return (
                       <tr key={cls.enrollmentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                         <td className="py-3 px-4">
@@ -320,7 +320,7 @@ export const RealStudentDashboard: React.FC = () => {
                         <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{cls.className}</td>
                         <td className="py-3 px-4 text-center font-bold">{cls.units}</td>
                         <td className="py-3 px-4 text-center font-mono font-bold">
-                          {cls.grade !== null ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(2)}</GradeValue> : (
+                          {cls.grade !== null ? <GradeValue percentage={cls.percentage}>{cls.grade.toFixed(1)}</GradeValue> : (
                             <span className="text-slate-400 font-normal">Pending</span>
                           )}
                         </td>

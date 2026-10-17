@@ -157,7 +157,7 @@ export const Reports: React.FC = () => {
   };
 
   const retentionIsAtRisk = (record: FacultyRetentionRecord | null) =>
-    record !== null && ['warning', 'critical', 'remedial'].includes(record.state);
+    record !== null && record.state === 'remedial';
 
   const retentionUnavailable = retentionLoading || retentionLoadError;
 
@@ -392,9 +392,9 @@ export const Reports: React.FC = () => {
   );
   const formatCourseGrade = (evaluation: ReturnType<typeof courseEvaluation>) =>
     evaluation.overallGwa !== null
-      ? evaluation.overallGwa.toFixed(2)
+      ? evaluation.overallGwa.toFixed(1)
       : evaluation.historicalGwa !== null
-        ? `Prior: ${evaluation.historicalGwa.toFixed(2)} (Historical)`
+        ? `Prior: ${evaluation.historicalGwa.toFixed(1)} (Historical)`
         : 'Pending';
   const formatComponentResult = (
     component: PeriodComponentEvaluation | undefined,
@@ -534,15 +534,15 @@ export const Reports: React.FC = () => {
       }).join('\n');
       fileName = `${selectedSubjectCode || 'Course'}_Academic_Report.csv`;
     } else if (type === 'retention') {
-      headers = 'Student Number,Student Name,Standing GWA,Warning Count,Risk Level,Remedial Status\n';
+      headers = 'Student Number,Student Name,Standing GWA,At-Risk Courses,Risk Level,Remedial Status\n';
       rows = facultyStudents.map((student: any) => {
-        const warningCount = retentionUnavailable ? null : (student.enrolledSubjects || []).filter((sub: any) =>
+        const atRiskCourses = retentionUnavailable ? null : (student.enrolledSubjects || []).filter((sub: any) =>
           assignedSubjects.includes(sub.code)
           && retentionIsAtRisk(retentionForStudentSubject(student, sub))
         ).length;
-        const riskLevel = retentionUnavailable ? 'UNAVAILABLE' : warningCount && warningCount > 0 ? 'HIGH' : 'LOW';
+        const riskLevel = retentionUnavailable ? 'UNAVAILABLE' : atRiskCourses && atRiskCourses > 0 ? 'At Risk' : '';
         const gwa = standingGwa(student);
-        return [student.studentId, student.name, gwa !== null ? gwa.toFixed(2) : 'N/A', warningCount ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)].map(csvCell).join(',');
+        return [student.studentId, student.name, gwa !== null ? gwa.toFixed(1) : 'N/A', atRiskCourses ?? 'UNAVAILABLE', riskLevel, remedialStatusFor(student)].map(csvCell).join(',');
       }).join('\n');
       fileName = `Retention_Report.csv`;
     } else {
@@ -592,8 +592,8 @@ export const Reports: React.FC = () => {
 
   // Recharts Stats: Retention Distribution
   const pieData = useMemo(() => {
-    const counts: Record<string, number> = { active: 0, cleared: 0, warning: 0, critical: 0, remedial: 0 };
-    const rank: Record<string, number> = { active: 0, cleared: 1, warning: 2, remedial: 3, critical: 4 };
+    const counts: Record<string, number> = { active: 0, cleared: 0, remedial: 0 };
+    const rank: Record<string, number> = { active: 0, cleared: 1, remedial: 2 };
     const studentStates = new Map<string, string>();
     retentionRecords
       .filter(record => (!selectedClassId || String(record.classId) === selectedClassId)
@@ -609,8 +609,6 @@ export const Reports: React.FC = () => {
     return [
       { name: 'Active Standing', value: counts.active || 0, color: '#10B981' },
       { name: 'Cleared (Remedial Passed)', value: counts.cleared || 0, color: '#14B8A6' },
-      { name: 'Warning Status', value: counts.warning || 0, color: '#F59E0B' },
-      { name: 'Critical Watch', value: counts.critical || 0, color: '#EF4444' },
       { name: 'Remedial Programs', value: counts.remedial || 0, color: '#8B5CF6' },
     ].filter(item => item.value > 0);
   }, [retentionRecords, selectedClassId, selectedSchoolYear]);
@@ -953,7 +951,7 @@ export const Reports: React.FC = () => {
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
                   <th className="px-5 py-3 text-center">Standing GWA</th>
-                  <th className="px-5 py-3 text-center">Warning Counts</th>
+                  <th className="px-5 py-3 text-center">At-Risk Courses</th>
                   <th className="px-5 py-3 text-center">Risk Level</th>
                   <th className="px-5 py-3">Remedial Program Status</th>
                 </tr>
@@ -975,14 +973,14 @@ export const Reports: React.FC = () => {
                         <span className="text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
                       </td>
                       <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
-                        {gwa !== null ? gwa.toFixed(2) : '—'}
+                        {gwa !== null ? gwa.toFixed(1) : '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-center font-semibold text-rose-500">{retentionUnavailable ? 'Unavailable' : `${warnings.length} Warnings`}</td>
+                      <td className="px-5 py-3.5 text-center font-semibold text-rose-500">{retentionUnavailable ? 'Unavailable' : warnings.length}</td>
                       <td className="px-5 py-3.5 text-center">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                          retentionUnavailable ? 'bg-slate-100 text-slate-600' : isAtRisk ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                          retentionUnavailable ? 'bg-slate-100 text-slate-600' : isAtRisk ? 'bg-rose-100 text-rose-700' : ''
                         }`}>
-                          {retentionUnavailable ? 'UNAVAILABLE' : isAtRisk ? 'HIGH RISK' : 'LOW RISK'}
+                          {retentionUnavailable ? 'UNAVAILABLE' : isAtRisk ? 'At Risk' : ''}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-slate-550 dark:text-slate-400">
@@ -1120,7 +1118,7 @@ export const Reports: React.FC = () => {
                 <Layers className="w-4 h-4 text-clinical-550" />
                 Retention Watch Standings
               </h4>
-              <p className="text-[10px] text-slate-400 mb-4">Proportion of student academic standing warnings</p>
+              <p className="text-[10px] text-slate-400 mb-4">Proportion of students by computed retention status</p>
             </div>
             <div className="h-56 flex items-center justify-center">
               {retentionUnavailable ? (
@@ -1128,7 +1126,7 @@ export const Reports: React.FC = () => {
                   {retentionLoading ? 'Loading authoritative retention data…' : 'Retention distribution unavailable.'}
                 </p>
               ) : pieData.length === 0 ? (
-                <p className="text-xs text-slate-400 font-semibold">No warning distribution data available.</p>
+                <p className="text-xs text-slate-400 font-semibold">No retention distribution data available.</p>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1330,7 +1328,7 @@ export const Reports: React.FC = () => {
             ))}
             {reportTab === 'retention' && facultyStudents.map((student: any) => {
               const gwa = standingGwa(student);
-              const gwaText = gwa !== null ? gwa.toFixed(2) : '—';
+              const gwaText = gwa !== null ? gwa.toFixed(1) : '—';
               const status = retentionUnavailable ? 'Unavailable' : student.status;
               const remedial = remedialStatusFor(student);
               return (

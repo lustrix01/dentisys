@@ -397,7 +397,7 @@ expect_same('missing_assessment_score', $groupedMissingResult['periods']['final'
 $groupedPersistedA = $groupedReadGrade($groupedStudentA['enrollmentId']);
 expect_same('85.40', (string) ($groupedPersistedA['final_percentage'] ?? ''), 'Explicit grouped recomputation persists the 85.40 overall result');
 
-// Grouped retention and informational risk reads must use the same current
+// Grouped retention reads must use the same current
 // assessment snapshot when read directly or through the batch cache.
 $groupedRiskRows = [
     ['enrollment_id' => $groupedStudentA['enrollmentId'], 'student_id' => $groupedStudentA['studentId'], 'cs_id' => $groupedOffering['classId']],
@@ -408,9 +408,9 @@ $groupedRiskCache = [];
 faculty_retention_preload($pdo, $groupedRiskRows, $groupedRiskCache);
 foreach ($groupedRiskRows as $groupedRiskRow) {
     expect_same(
-        faculty_risk_projection($pdo, $groupedRiskRow),
-        faculty_risk_projection($pdo, $groupedRiskRow, $groupedRiskCache),
-        'Grouped risk projection is unchanged by cached inputs for enrollment ' . $groupedRiskRow['enrollment_id']
+        faculty_watchlist_midterm($pdo, $groupedRiskRow),
+        faculty_watchlist_midterm($pdo, $groupedRiskRow, $groupedRiskCache),
+        'Grouped watchlist is unchanged by cached inputs for enrollment ' . $groupedRiskRow['enrollment_id']
     );
 }
 $groupedWatchlist = faculty_watchlist_midterm($pdo, $groupedRiskRows[0], $groupedRiskCache);
@@ -418,13 +418,8 @@ expect_same(true, $groupedWatchlist['complete'] ?? null, 'Grouped watchlist reco
 expect_same(84.0, (float) ($groupedWatchlist['percentage'] ?? -1), 'Grouped watchlist uses the same 60/40 Midterm result');
 expect_same(80.0, (float) ($groupedWatchlist['components']['lecture']['percentage'] ?? -1), 'Grouped watchlist keeps Lecture separate');
 expect_same(90.0, (float) ($groupedWatchlist['components']['laboratory']['percentage'] ?? -1), 'Grouped watchlist keeps Laboratory separate');
-$groupedRiskConfiguration = faculty_retention_read_config($pdo, $groupedOffering['classId'], $groupedRiskCache);
-$groupedRiskMidterm = faculty_risk_period_inputs($pdo, $groupedRiskRows[0], $groupedRiskConfiguration, 'Midterm', $groupedRiskCache);
-expect_same(
-    84.0,
-    round(faculty_risk_period_percentage($groupedRiskMidterm[0], array_sum($groupedRiskMidterm[1]) / count($groupedRiskMidterm[1]), 0) ?? -1, 2),
-    'Grouped risk applies saved component contributions to the complete Midterm category data'
-);
+expect_same(true, faculty_midterm_at_risk($groupedWatchlist, null, ['stage' => 'none']), 'A complete grouped Midterm at 84% is At Risk');
+expect_same(false, faculty_midterm_at_risk($groupedWatchlist, 2.0, ['stage' => 'none']), 'A final course grade ends the grouped Midterm flag');
 
 // Past-year grouped configuration writes remain server-blocked.
 $groupedYearParts = explode('-', $groupedCurrentYear);

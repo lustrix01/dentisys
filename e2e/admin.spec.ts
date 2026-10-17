@@ -3,9 +3,9 @@ import type { Page } from '@playwright/test';
 
 const deanReportStudents = [
   {
-    id: '101', studentId: '2023-0101', name: 'Alex Example', yearLevel: 4, status: 'warning',
-    overallGWA: 2.25, faceEnrolled: false, classId: '21', className: 'CLINIC, "4A"\nSpecial',
-    clinicHoursCompleted: 18, enrolledSubjects: [{ code: 'CLIN401', name: 'Oral Surgery', grade: 2.25, isClinical: true }],
+    id: '101', studentId: '2023-0101', name: 'Alex Example', yearLevel: 4, status: 'remedial',
+    overallGWA: 2.3, faceEnrolled: false, classId: '21', className: 'CLINIC, "4A"\nSpecial',
+    clinicHoursCompleted: 18, enrolledSubjects: [{ code: 'CLIN401', name: 'Oral Surgery', grade: 2.3, isClinical: true }],
     remedialExams: [{ status: 'pending' }],
   },
   {
@@ -31,7 +31,7 @@ const deanReportFormulaStudents = [
   ...student,
   yearLevel: 4,
   status: 'active',
-  overallGWA: 2.75,
+  overallGWA: 2.8,
   faceEnrolled: false,
   clinicHoursCompleted: 0,
   enrolledSubjects: [],
@@ -208,8 +208,8 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const alexSummaryRow = studentTable.getByRole('row').filter({ hasText: '2023-0101' });
     await expect(alexSummaryRow.getByRole('cell').nth(0)).toHaveText('2023-0101');
     await expect(alexSummaryRow.getByRole('cell').nth(2)).toHaveText('CLINIC, "4A" Special');
-    await expect(alexSummaryRow.getByRole('cell').nth(4)).toHaveText('2.25');
-    await expect(alexSummaryRow.getByRole('cell').nth(5)).toContainText('warning');
+    await expect(alexSummaryRow.getByRole('cell').nth(4)).toHaveText('2.3');
+    await expect(alexSummaryRow.getByRole('cell').nth(5)).toContainText('remedial');
     await expect(studentTable).toContainText('Alex Example');
     await expect(studentTable).not.toContainText('Missing Class Name');
     await page.getByRole('button', { name: /Back/ }).click();
@@ -233,8 +233,8 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     const retentionTable = page.locator('table:not(.print-only table)');
     const alexRetentionRow = retentionTable.getByRole('row').filter({ hasText: 'Alex Example' });
     await expect(alexRetentionRow.getByRole('cell').nth(1)).toHaveText('CLINIC, "4A" Special');
-    await expect(alexRetentionRow.getByRole('cell').nth(2)).toHaveText('2.25');
-    await expect(alexRetentionRow.getByRole('cell').nth(3)).toContainText('warning');
+    await expect(alexRetentionRow.getByRole('cell').nth(2)).toHaveText('2.3');
+    await expect(alexRetentionRow.getByRole('cell').nth(3)).toContainText('remedial');
     await expect(alexRetentionRow.getByRole('cell').nth(4)).toHaveText('18h');
     await expect(alexRetentionRow.getByRole('cell').nth(5)).toContainText('1 Pending');
     await page.getByRole('button', { name: /Back/ }).click();
@@ -276,7 +276,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Export CSV' }).click();
     const summaryCsv = await captureDeanReportCsv(page);
     expect(summaryCsv.replace(/^\uFEFF/, '')).toMatch(/^Student Number,Student Name,Class,/);
-    expect(summaryCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","4","2.25","warning","No"');
+    expect(summaryCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","4","2.3","remedial","No"');
     expect(summaryCsv).toContain('"2023-0102","Missing Class Name","—","3","N/A","active","No"');
     const escapedFormulaClassFields = [
       '"2023-0103","Equals Formula","\'=1+1"',
@@ -292,7 +292,7 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Export CSV' }).click();
     const retentionCsv = await captureDeanReportCsv(page);
     expect(retentionCsv.replace(/^\uFEFF/, '')).toMatch(/^Student Number,Student Name,Class,Grade,/);
-    expect(retentionCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","2.25","warning","1"');
+    expect(retentionCsv).toContain('"2023-0101","Alex Example","CLINIC, ""4A""\nSpecial","2.3","remedial","1"');
     expect(retentionCsv).toContain('"2023-0102","Missing Class Name","—","N/A","active","0"');
     for (const classField of escapedFormulaClassFields) expect(retentionCsv).toContain(classField);
   });
@@ -321,9 +321,9 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           status: 'ok', currentSchoolYear: '2026-2027', schoolYearFilter: '2026-2027', availableSchoolYears: ['2026-2027'],
-          kpis: { totalStudents: 10, totalFaculty: 3, goodStanding: 7, atRisk: 3, remedialCount: 1, attendanceRate: 91 },
+          kpis: { totalStudents: 10, totalFaculty: 3, goodStanding: 9, atRisk: 2, remedialCount: 1, attendanceRate: 91 },
           gwaBuckets: [{ range: '1.0–1.5', count: 2, color: '#000' }, { range: '3.0+', count: 1, color: '#000' }],
-          statusCounts: { active: 7, warning: 1, critical: 1, remedial: 1 },
+          statusCounts: { active: 9, remedial: 1 },
           classAttendance: [{ name: 'CLINIC-4A', rate: 92 }],
           recentAuditEvents: [
             { id: '1', occurredAt: '2026-09-30T01:00:00Z', actorName: 'Dr. Roberto Santos', actorEmail: 'faculty@bicol-u.edu.ph', actorRole: 'faculty', module: 'grading', action: 'grades_recomputed', description: 'Recomputed grades: 30 computed, 0 not computed.', status: 'Success' },
@@ -344,8 +344,8 @@ test.describe('Admin (Dean) Module E2E Tests', () => {
   test('Dean report print sheet lists every filtered row and uses student numbers and class names', async ({ page }) => {
     const many = Array.from({ length: 14 }, (_, i) => ({
       id: String(300 + i), studentId: `2023-03${String(i).padStart(2, '0')}`, name: `Bulk Student ${i}`, yearLevel: 2, status: 'active',
-      overallGWA: 1.75, faceEnrolled: true, classId: '21', className: 'CLINIC-4A', clinicHoursCompleted: 2,
-      enrolledSubjects: [{ code: 'CLIN401', name: 'Oral Surgery', grade: 1.75, isClinical: false, components: { quizzes: 90 } }], remedialExams: [],
+      overallGWA: 1.8, faceEnrolled: true, classId: '21', className: 'CLINIC-4A', clinicHoursCompleted: 2,
+      enrolledSubjects: [{ code: 'CLIN401', name: 'Oral Surgery', grade: 1.8, isClinical: false, components: { quizzes: 90 } }], remedialExams: [],
     }));
     await mockDeanReportSummary(page, [...many, ...deanReportStudents]);
     await page.goto('/admin/reports');

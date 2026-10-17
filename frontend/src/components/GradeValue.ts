@@ -8,6 +8,8 @@ type Props = {
   /** Rendered text, exactly as the page showed it before. */
   children?: React.ReactNode;
   className?: string;
+  /** Midterm period grades use the 3.1-4.0 band below 75%; default is Final / course grade. */
+  period?: 'Midterm' | 'Final';
 };
 
 const BUBBLE =
@@ -20,7 +22,7 @@ const BUBBLE =
  * text; the visible bubble is an aria-hidden copy portalled to <body> with fixed coordinates so scroll
  * containers and overflow:hidden cards cannot clip it.
  */
-export default function GradeValue({ percentage, children, className }: Props) {
+export default function GradeValue({ percentage, children, className, period = 'Final' }: Props) {
   const id = useId();
   const triggerRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLSpanElement>(null);
@@ -46,7 +48,7 @@ export default function GradeValue({ percentage, children, className }: Props) {
   }, [shown]);
 
   if (typeof percentage !== 'number' || !Number.isFinite(percentage)) return React.createElement(React.Fragment, null, children);
-  const tip = `Exact: ${(Math.round((percentageToGWAExact(percentage) + 1e-12) * 10000) / 10000).toFixed(4)} (${percentage.toFixed(2)}%)`;
+  const tip = `Exact: ${percentageToGWAExact(percentage, period).toFixed(1)} (${percentage.toFixed(2)}%)`;
   return React.createElement(
     'span',
     {

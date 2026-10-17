@@ -165,7 +165,7 @@ export const Dashboard: React.FC = () => {
                 <ul className="list-disc list-inside text-slate-600 dark:text-slate-400 space-y-0.5 font-medium text-[11px]">
                   {failingSubjects.map(s => (
                     <li key={s.code}>
-                      Grade in <strong className="font-mono">{s.code}</strong> is <strong>{s.grade.toFixed(2)}</strong> (Threshold: {retentionThreshold.toFixed(2)})
+                      Grade in <strong className="font-mono">{s.code}</strong> is <strong>{s.grade.toFixed(1)}</strong> (Threshold: {retentionThreshold.toFixed(1)})
                     </li>
                   ))}
                   {isLowAttendance && (

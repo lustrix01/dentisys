@@ -2975,8 +2975,6 @@ export const GradeComputation: React.FC = () => {
 
   // Helper styles
   const getBadgeColor = (status: string) => {
-    if (status === 'critical') return 'bg-rose-50 text-rose-600 dark:bg-rose-950/20';
-    if (status === 'warning') return 'bg-amber-50 text-amber-600 dark:bg-amber-950/20';
     if (status === 'remedial') return 'bg-accent-50 text-accent-600 dark:bg-accent-950/20';
     return 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20';
   };
@@ -5135,10 +5133,10 @@ export const GradeComputation: React.FC = () => {
                           </td>
                           <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
                             {evalResult.overallGwa !== null ? (
-                              <GradeValue percentage={evalResult.overallPercentage}>{evalResult.overallGwa.toFixed(2)}</GradeValue>
+                              <GradeValue percentage={evalResult.overallPercentage}>{evalResult.overallGwa.toFixed(1)}</GradeValue>
                             ) : evalResult.historicalGwa !== null ? (
                               <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium" title="Prior persisted grade; current recomputation is incomplete">
-                                Prior: {evalResult.historicalGwa.toFixed(2)} (Historical)
+                                Prior: {evalResult.historicalGwa.toFixed(1)} (Historical)
                               </span>
                             ) : (
                               '—'
@@ -5182,7 +5180,7 @@ export const GradeComputation: React.FC = () => {
                         <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
                         <td className="px-5 py-3 text-center font-mono text-slate-700 dark:text-slate-350">{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
                         <td className="px-5 py-3 text-center font-extrabold text-sm text-slate-850 dark:text-slate-100">
-                          {hasGrade ? <GradeValue percentage={evalResult.overallPercentage}>{subj.grade.toFixed(2)}</GradeValue> : '—'}
+                          {hasGrade ? <GradeValue percentage={evalResult.overallPercentage}>{subj.grade.toFixed(1)}</GradeValue> : '—'}
                         </td>
                         <td className="px-5 py-3">
                           <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase ${!hasGrade
@@ -5498,9 +5496,9 @@ export const GradeComputation: React.FC = () => {
                       ? `Incomplete (${evalResult.finalReasons[0]})`
                       : '—';
                 const gwaStr = evalResult.overallGwa !== null
-                  ? evalResult.overallGwa.toFixed(2)
+                  ? evalResult.overallGwa.toFixed(1)
                   : evalResult.historicalGwa !== null
-                    ? `Prior: ${evalResult.historicalGwa.toFixed(2)} (Historical)`
+                    ? `Prior: ${evalResult.historicalGwa.toFixed(1)} (Historical)`
                     : '—';
                 const remarksStr = isFailed
                   ? 'FAILED'
@@ -5554,7 +5552,7 @@ export const GradeComputation: React.FC = () => {
                   <td>{subj && typeof subj.components?.practicum === 'number' ? `${subj.components.practicum.toFixed(1)}%` : '—'}</td>
                   <td>{subj && typeof subj.components?.exams === 'number' ? `${subj.components.exams.toFixed(1)}%` : '—'}</td>
                   <td>{subj && typeof subj.components?.attendance === 'number' ? `${subj.components.attendance.toFixed(1)}%` : '—'}</td>
-                  <td className="grade">{hasGrade ? subj.grade.toFixed(2) : '—'}</td>
+                  <td className="grade">{hasGrade ? subj.grade.toFixed(1) : '—'}</td>
                   <td className={`l ${printCellClass(remarksStr)}`}>{remarksStr}</td>
                 </tr>
               );

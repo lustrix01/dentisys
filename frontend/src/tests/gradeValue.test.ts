@@ -5,9 +5,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import GradeValue from '../components/GradeValue.ts';
 
 test('GradeValue keeps the rounded text and exposes the exact grade as an accessible tooltip', () => {
-  const html = renderToStaticMarkup(React.createElement(GradeValue, { percentage: 80.01, className: 'font-mono' }, '2.50'));
-  assert.match(html, />2\.50<span/);
-  assert.match(html, /Exact: 2\.4988 \(80\.01%\)/);
+  const html = renderToStaticMarkup(React.createElement(GradeValue, { percentage: 84.99, className: 'font-mono' }, '2.5'));
+  assert.match(html, />2\.5<span/);
+  assert.match(html, /Exact: 2\.5 \(84\.99%\)/);
   assert.match(html, /tabindex="0"/i);
   const describedBy = html.match(/aria-describedby="([^"]+)"/)?.[1];
   assert.ok(describedBy);
