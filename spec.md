@@ -787,6 +787,8 @@ After the BIO-002 institutional privacy/consent review and the remaining technic
 
 Owner decision (2026-10-09): For the DEL-001 VPS demonstration deployment only, real biometrics MAY be enabled before the BIO-002 review by explicit server configuration (`BIOMETRIC_SIDECAR_ENABLED=true`), so the DentiSys team can test it. It then behaves as in local development. Only DentiSys team members enroll (BIO-002 note). Without that setting, production-like environments keep real biometrics disabled.
 
+Owner decision (2026-10-17): The production deployment is used only by the DentiSys team until BIO-002 is complete. Real biometrics stay off by default there and MAY be enabled manually with `BIOMETRIC_SIDECAR_ENABLED=true`; only team members enroll.
+
 ## BIO-009 — Audit, information minimization, and accepted limits
 
 **Status: APPROVED**
