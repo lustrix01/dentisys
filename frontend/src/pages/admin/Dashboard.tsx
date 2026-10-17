@@ -228,7 +228,7 @@ export const Dashboard: React.FC = () => {
             {recentAuditEvents.length === 0 ? (
               <p className="mt-3 text-xs text-slate-400">No audit events recorded yet.</p>
             ) : (
-              <div className="mt-3"><AuditCompactList entries={recentAuditEvents} /></div>
+              <AuditCompactList entries={recentAuditEvents} />
             )}
           </section>
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Download, FileText, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, UserX } from 'lucide-react';
+import { AlertCircle, Download, FileText, Filter, RefreshCw, Search, ShieldAlert, ShieldCheck, ShieldOff, SlidersHorizontal, UserX } from 'lucide-react';
 import type { AuditEntry, AuditListResponse, AuditQuery, AuditStatus, DatePreset } from '../services/auditService';
 import {
   auditCsv, auditCsvRows, auditDateRange, auditWho, currentTerm, formatManilaWhen, groupByDay,
@@ -16,9 +16,9 @@ type Props = { role: Role; title: string; subtitle: string; allLogs?: boolean; a
 type Term = { startDate: string | null; endDate: string | null };
 
 const themes = {
-  accent: { button: 'bg-accent-600 hover:bg-accent-700', icon: 'text-accent-500' },
-  clinical: { button: 'bg-clinical-600 hover:bg-clinical-700', icon: 'text-clinical-500' },
-  blue: { button: 'bg-blue-600 hover:bg-blue-700', icon: 'text-blue-500' },
+  accent: { button: 'bg-accent-600 hover:bg-accent-700', icon: 'text-accent-500', surface: 'border-accent-200/60 bg-accent-50/50 dark:border-accent-900/30 dark:bg-accent-950/15' },
+  clinical: { button: 'bg-clinical-600 hover:bg-clinical-700', icon: 'text-clinical-500', surface: 'border-clinical-200/60 bg-clinical-50/50 dark:border-clinical-900/30 dark:bg-clinical-950/15' },
+  blue: { button: 'bg-blue-600 hover:bg-blue-700', icon: 'text-blue-500', surface: 'border-blue-200/60 bg-blue-50/50 dark:border-blue-900/30 dark:bg-blue-950/15' },
 };
 const statusClass: Record<AuditStatus, string> = {
   Success: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400',
@@ -27,27 +27,35 @@ const statusClass: Record<AuditStatus, string> = {
 };
 const EXPORT_PAGE_CAP = 40; // 40 pages x 50 rows; larger exports say so
 const CHANGES_PREVIEW = 10;
-const control = 'w-full xl:w-auto min-h-[44px] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500';
-const tapButton = 'inline-flex items-center justify-center gap-1.5 min-h-[44px] px-3.5 rounded-xl text-xs font-bold';
+// Old look at xl (>= 1280 px); taller touch targets below it.
+const control = 'min-h-[44px] xl:min-h-0 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500';
+const tapButton = 'flex items-center gap-1.5 min-h-[44px] xl:min-h-0 px-3.5 py-2.5 rounded-xl text-xs font-bold';
+const pagerButton = 'min-h-[44px] xl:min-h-0 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 font-bold disabled:opacity-40';
 const ROLE_OPTIONS: Array<[string, string]> = [['', 'All roles'], ['admin', 'Dean'], ['faculty', 'Faculty'], ['secretary', 'Secretary'], ['student', 'Student'], ['system', 'System']];
 
 const StatusBadge: React.FC<{ status: AuditStatus }> = ({ status }) => (
   <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase ${statusClass[status]}`}>{status}</span>
 );
 
-/** Same wording as the Audit Trail, compact: used by the dashboards. */
-export const AuditCompactList: React.FC<{ entries: AuditEntry[] }> = ({ entries }) => (
-  <ul className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+/** Same wording as the Audit Trail, in the dashboards' own markup. */
+export const AuditCompactList: React.FC<{ entries: AuditEntry[]; variant?: 'list' | 'cards' }> = ({ entries, variant = 'list' }) => variant === 'cards' ? (
+  <>
     {entries.map(entry => (
-      <li key={entry.id} className="py-2.5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
-        <div className="min-w-0 break-words">
-          <p className="text-slate-700 dark:text-slate-200"><span className="font-semibold">{auditWho(entry)}</span> — {entry.what}</p>
-          <p className="text-slate-400">{entry.record}{entry.change && entry.change !== '—' ? ` · ${entry.change}` : ''}</p>
-        </div>
-        <div className="flex items-center gap-2 text-slate-400 sm:justify-end shrink-0">
-          <StatusBadge status={entry.status} />
-          <span>{formatManilaWhen(entry.occurredAt)}</span>
-        </div>
+      <div key={entry.id} className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+        <p className="text-slate-700 dark:text-slate-300 text-xs font-medium break-words">{entry.what} — {entry.record}{entry.change && entry.change !== '—' ? ` · ${entry.change}` : ''}</p>
+        <span className="text-[10px] text-slate-400 block mt-1">{formatManilaWhen(entry.occurredAt)}</span>
+      </div>
+    ))}
+  </>
+) : (
+  <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+    {entries.map(entry => (
+      <li key={entry.id} className="py-2.5 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+        <span className="text-slate-700 dark:text-slate-200 break-words">
+          <span className="font-semibold">{auditWho(entry)}</span>
+          {' — '}{entry.what} · {entry.record}{entry.change && entry.change !== '—' ? ` · ${entry.change}` : ''}
+        </span>
+        <span className="text-slate-400 whitespace-nowrap">{entry.status} · {formatManilaWhen(entry.occurredAt)}</span>
       </li>
     ))}
   </ul>
@@ -65,9 +73,9 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({
       {changes.length > CHANGES_PREVIEW && (
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search changes..." aria-label="Search changes" className={control} />
       )}
-      <div className="overflow-x-auto rounded-lg border border-slate-100 dark:border-slate-800">
+      <div className="overflow-x-auto rounded-lg bg-slate-50 dark:bg-slate-900">
         <table className="w-full min-w-[420px] text-left text-[11px]">
-          <thead className="bg-slate-50 dark:bg-slate-900 text-[9px] uppercase tracking-wider font-bold text-slate-400">
+          <thead className="text-[9px] uppercase tracking-wider font-bold text-slate-400">
             <tr><th className="px-3 py-2">Field</th><th className="px-3 py-2">Before</th><th className="px-3 py-2">After</th></tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -75,7 +83,7 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({
               <tr key={i} className="align-top">
                 <td className="px-3 py-2 font-semibold break-words">{c.field}</td>
                 <td className="px-3 py-2 break-words text-slate-500">{c.before}</td>
-                <td className="px-3 py-2 break-words">{c.after}</td>
+                <td className="px-3 py-2 break-words text-slate-700 dark:text-slate-300">{c.after}</td>
               </tr>
             ))}
             {shown.length === 0 && <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400">No changes match.</td></tr>}
@@ -83,7 +91,7 @@ const ChangesTable: React.FC<{ changes: AuditEntry['details']['changes'] }> = ({
         </table>
       </div>
       {!needle && matching.length > CHANGES_PREVIEW && (
-        <button type="button" onClick={() => setShowAll(v => !v)} className="min-h-[44px] text-[11px] font-bold text-blue-600 dark:text-blue-400">
+        <button type="button" onClick={() => setShowAll(v => !v)} className="min-h-[44px] xl:min-h-0 text-[11px] font-bold text-blue-600 dark:text-blue-400">
           {showAll ? 'Show fewer' : `Show all ${matching.length}`}
         </button>
       )}
@@ -246,23 +254,13 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto min-w-0">
-      <div className="flex flex-col gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
         <div>
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{title}</h1>
           <p className="text-xs text-slate-400 mt-1">{subtitle}</p>
-          {role === 'admin' && <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Class work (grades, attendance, retention) is not shown here; it stays recorded.</p>}
+          {role === 'admin' && <p className="text-xs text-slate-400 mt-1">Class work (grades, attendance, retention) is not shown here; it stays recorded.</p>}
         </div>
-        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          {total > 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-xs lg:mr-auto">
-              <span className="text-slate-400">{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}</span>
-              <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading}
-                className="min-h-[44px] px-3 rounded-lg border border-slate-200 dark:border-slate-800 font-bold disabled:opacity-40">Previous</button>
-              <span className="font-bold text-slate-700 dark:text-slate-200">Page {page} of {totalPages}</span>
-              <button type="button" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading}
-                className="min-h-[44px] px-3 rounded-lg border border-slate-200 dark:border-slate-800 font-bold disabled:opacity-40">Next</button>
-            </div>
-          )}
+        <div className="flex gap-2 no-print">
           <button onClick={exportCsv} disabled={working} className={`${tapButton} border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-50`}>
             <Download className="w-4 h-4" />
             Export CSV
@@ -286,12 +284,12 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
       )}
 
       {error && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between gap-3 no-print">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between no-print">
+          <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span className="break-words">{error}</span>
           </div>
-          <button onClick={fetchLogs} className="flex items-center gap-1 min-h-[44px] font-bold underline hover:opacity-80 shrink-0">
+          <button onClick={fetchLogs} className="flex items-center gap-1 min-h-[44px] xl:min-h-0 font-bold underline hover:opacity-80">
             <RefreshCw className="w-3.5 h-3.5" />
             Retry
           </button>
@@ -299,17 +297,18 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
       )}
 
       {cards.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 no-print">
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 no-print">
           {cards.map(({ label, count, icon: Icon, tone, apply }) => (
-            <button key={label} type="button" onClick={apply} aria-label={`${label}: ${count}. Show these rows`}
-              className={`text-left min-h-[44px] p-4 flex items-center justify-between gap-3 rounded-2xl border ${tone === 'rose'
+            <button key={label} type="button" onClick={apply} aria-label={`${label}: ${count}. Show these rows`} className="text-left">
+              <Card className={`p-4 flex items-center justify-between gap-3 xl:gap-0 border hover:shadow-md ${tone === 'rose'
                 ? 'border-rose-200/60 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/15'
                 : 'border-amber-200/60 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/15'}`}>
-              <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">{label}</p>
-                <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{count}</p>
-              </div>
-              <div className={`p-2.5 shrink-0 rounded-xl bg-white/70 dark:bg-slate-900/60 ${tone === 'rose' ? 'text-rose-500' : 'text-amber-500'}`}><Icon className="w-5 h-5" /></div>
+                <div className="min-w-0 xl:min-w-[auto]">
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 break-words xl:break-normal">{label}</p>
+                  <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{count}</p>
+                </div>
+                <div className={`p-2.5 shrink-0 xl:shrink rounded-xl bg-white/70 dark:bg-slate-900/60 ${tone === 'rose' ? 'text-rose-500' : 'text-amber-500'}`}><Icon className="w-5 h-5" /></div>
+              </Card>
             </button>
           ))}
         </div>
@@ -317,11 +316,12 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
 
       <Card className="no-print">
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:flex-wrap gap-3 xl:items-center">
-            <div className="relative sm:col-span-2 xl:col-span-1">
+          <div className="flex flex-wrap gap-3 items-center">
+            <Filter className={`w-4 h-4 ${theme.icon}`} />
+            <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input type="search" value={qInput} onChange={e => setQInput(e.target.value)} maxLength={100} aria-label="Search" placeholder="Search who, what, record, student"
-                className={`${control} pl-8 xl:w-64`} />
+                className={`${control} pl-8 w-48`} />
             </div>
             <select aria-label="Area" value={area} onChange={e => change(() => setArea(e.target.value))} className={control}>
               <option value="">All areas</option>
@@ -356,14 +356,17 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
               </select>
             )}
             <button type="button" aria-pressed={signins} onClick={() => change(() => setSignins(v => !v))}
-              className={`${control} font-bold ${signins ? 'bg-blue-50 border-blue-400 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : ''}`}>
+              className={`flex items-center gap-1.5 px-3 py-2 min-h-[44px] xl:min-h-0 rounded-xl border text-xs font-bold ${signins ? 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300' : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'}`}>
               Sign-ins
             </button>
-            <select aria-label="Sort" value={sort} onChange={e => change(() => setSort(e.target.value as 'newest' | 'oldest'))} className={control}>
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-            </select>
-            <button type="button" onClick={clearFilters} disabled={!filtersActive} className={`${control} font-bold disabled:opacity-40`}>Clear filters</button>
+            <button type="button" onClick={() => change(() => setSort(sort === 'newest' ? 'oldest' : 'newest'))} className={`flex items-center gap-1.5 min-h-[44px] xl:min-h-0 px-3 py-2 rounded-xl border text-xs font-bold ${theme.surface}`}>
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              {sort === 'newest' ? 'Newest first' : 'Oldest first'}
+            </button>
+            {filtersActive && (
+              <button type="button" onClick={clearFilters} className="flex items-center gap-1 min-h-[44px] xl:min-h-0 text-xs font-bold underline hover:opacity-80">Clear filters</button>
+            )}
+            <span className="ml-auto text-[10px] text-slate-400 font-semibold">{total} logs</span>
           </div>
         </CardContent>
       </Card>
@@ -375,7 +378,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
             Activity records
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0 overflow-x-auto max-w-full max-h-[70vh] overflow-y-auto">
+        <CardContent className="p-0 overflow-x-auto max-h-[500px] overflow-y-auto">
           {loading ? (
             <div className="py-12 text-center">
               <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
@@ -385,43 +388,43 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
             <table className="w-full min-w-[900px] text-left text-xs">
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-20 shadow-sm">
                 <tr className="text-[9px] uppercase tracking-wider font-bold text-slate-400">
-                  <th className="px-4 py-3 sticky left-0 z-30 bg-slate-50 dark:bg-slate-900 w-36 min-w-[9rem]">When</th>
-                  <th className="px-4 py-3">Who</th>
-                  <th className="px-4 py-3">What</th>
-                  <th className="px-4 py-3">Record</th>
-                  <th className="px-4 py-3">Change</th>
-                  <th className="px-4 py-3 text-right">Status</th>
+                  <th className="px-5 py-3 sticky left-0 z-30 bg-slate-50 dark:bg-slate-900 w-36 min-w-[9rem]">When</th>
+                  <th className="px-5 py-3">Who</th>
+                  <th className="px-5 py-3">What</th>
+                  <th className="px-5 py-3">Record</th>
+                  <th className="px-5 py-3">Change</th>
+                  <th className="px-5 py-3 text-right">Status</th>
                 </tr>
               </thead>
               {groups.map(group => (
                 <tbody key={group.key} className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  <tr className="bg-slate-50/80 dark:bg-slate-900/60">
-                    <th colSpan={6} scope="colgroup" className="px-4 py-1.5 text-left text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      <span className="sticky left-4">{group.label}</span>
+                  <tr className="bg-slate-50 dark:bg-slate-900">
+                    <th colSpan={6} scope="colgroup" className="px-5 py-1.5 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                      <span className="sticky left-5">{group.label}</span>
                     </th>
                   </tr>
                   {group.entries.map(entry => (
                     <React.Fragment key={entry.id}>
                       <tr className="align-top hover:bg-slate-50/60 dark:hover:bg-slate-900/30">
-                        <td className="px-4 py-3 sticky left-0 z-10 bg-white dark:bg-slate-950 w-36 min-w-[9rem] text-slate-500">{formatManilaWhen(entry.occurredAt)}</td>
-                        <td className="px-4 py-3 break-words min-w-[9rem]">
+                        <td className="px-5 py-3 sticky left-0 z-10 bg-white dark:bg-slate-950 w-36 min-w-[9rem] text-slate-500">{formatManilaWhen(entry.occurredAt)}</td>
+                        <td className="px-5 py-3 break-words min-w-[9rem]">
                           <p className="font-bold text-slate-800 dark:text-slate-200">{entry.who ? entry.who.name : entry.whoText ?? '—'}</p>
                           {entry.who && <p className="text-[10px] text-slate-400">{entry.who.roleLabel}</p>}
                         </td>
-                        <td className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 break-words min-w-[8rem]">{entry.what}</td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 break-words min-w-[10rem]">{entry.record}</td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 break-words min-w-[8rem]">
+                        <td className="px-5 py-3 font-semibold text-slate-700 dark:text-slate-300 break-words min-w-[8rem]">{entry.what}</td>
+                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400 break-words min-w-[10rem]">{entry.record}</td>
+                        <td className="px-5 py-3 text-slate-600 dark:text-slate-400 break-words min-w-[8rem]">
                           {entry.change}
                           {entry.batch && (
                             <button type="button" onClick={() => toggle(entry.id)} aria-expanded={expanded.has(entry.id)}
-                              className={`ml-2 min-h-[44px] px-2 font-bold ${theme.icon}`}>
+                              className={`ml-2 min-h-[44px] xl:min-h-0 px-2 text-[10px] font-bold ${theme.icon}`}>
                               {entry.batch.count} {expanded.has(entry.id) ? '▾' : '▸'}
                             </button>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <td className="px-5 py-3 text-right whitespace-nowrap">
                           <StatusBadge status={entry.status} />
-                          <button type="button" onClick={() => setSelected(entry)} className={`ml-2 min-h-[44px] min-w-[44px] text-[10px] font-bold ${theme.icon}`}>
+                          <button type="button" onClick={() => setSelected(entry)} className={`ml-2 min-h-[44px] min-w-[44px] xl:min-h-0 xl:min-w-0 text-[10px] font-bold ${theme.icon}`}>
                             Details
                           </button>
                         </td>
@@ -429,11 +432,11 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
                       {entry.batch && expanded.has(entry.id) && (
                         <tr className="bg-slate-50/60 dark:bg-slate-900/30">
                           <td className="sticky left-0 bg-slate-50 dark:bg-slate-900" />
-                          <td colSpan={5} className="px-4 py-2">
+                          <td colSpan={5} className="px-5 py-2">
                             <ul className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
                               {entry.batch.members.map((m, i) => (
                                 <li key={i} className="py-1.5 flex flex-wrap gap-x-4 break-words">
-                                  <span className="font-medium text-slate-700 dark:text-slate-300">{m.record}</span>
+                                  <span className="text-slate-600 dark:text-slate-400">{m.record}</span>
                                   <span className="text-slate-500">{m.change}</span>
                                 </li>
                               ))}
@@ -458,6 +461,19 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
           )}
         </CardContent>
       </Card>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between text-xs no-print">
+          <span className="text-slate-400">
+            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+          </span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1 || loading} className={pagerButton}>Previous</button>
+            <span className="font-bold text-slate-700 dark:text-slate-200">Page {page} of {totalPages}</span>
+            <button type="button" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages || loading} className={pagerButton}>Next</button>
+          </div>
+        </div>
+      )}
 
       {(() => { const sheetRows = printRows ?? auditCsvRows(entries); return (
         <div className="print-only hidden bg-white text-slate-900 font-sans ps">
@@ -513,7 +529,7 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
             </div>
             {selected.details.technical && (
               <details className="sm:col-span-2 min-w-0">
-                <summary className="min-h-[44px] flex items-center cursor-pointer text-[11px] font-bold text-slate-500">Technical details</summary>
+                <summary className="min-h-[44px] xl:min-h-0 flex items-center cursor-pointer text-[11px] font-bold text-slate-500">Technical details</summary>
                 <div className="space-y-2">
                   <Field label="Action code">{selected.details.technical.actionCode}</Field>
                   <Field label="Module">{selected.details.technical.module}</Field>

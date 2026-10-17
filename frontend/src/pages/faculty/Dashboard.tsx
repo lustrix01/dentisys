@@ -604,7 +604,7 @@ export const Dashboard: React.FC = () => {
               ) : recentActivity.length === 0 ? (
                 <p className="p-2.5 text-slate-500 dark:text-slate-400">No recent activity recorded.</p>
               ) : (
-                <AuditCompactList entries={recentActivity} />
+                <AuditCompactList entries={recentActivity} variant="cards" />
               )}
             </div>
           </div>
