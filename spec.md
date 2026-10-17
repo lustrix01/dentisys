@@ -388,9 +388,29 @@ Password reset remains supported because password authentication remains support
 
 **Status: CURRENT**
 
-Existing authentication rate limiting and audit behavior MUST be preserved when additional authentication paths are added.
+Existing authentication rate limiting MUST be preserved when additional authentication paths are added. Every authentication path MUST write the sign-in and security audit events defined in SEC-005.
 
 New authentication paths SHOULD use the same security boundaries where applicable rather than creating parallel security systems.
+
+## SEC-005 — Audit logging
+
+**Status: CURRENT**
+
+Owner decision (2026-10-17): The audit trail answers, for any recorded action, who did what to which record, when, from where, and what it was before. It serves disputes about grades and attendance, security incidents, accountability for authority, and proof of integrity. It is not usage analytics, debugging output or a click history; an event that serves none of these uses is not written. The approved event list, labels and visibility per event are in `docs/contracts/audit-logging.md` section 5; changing that list requires Owner approval like this section.
+
+Writing. Audit rows already stored are never changed or deleted. Each row is written in the same transaction as its change; if it cannot be written, the change is cancelled. An update that changes nothing writes no row. A change records before and after values of the fields that changed, and a deletion keeps the deleted values. Rows keep the HMAC chain seal, the append-only guard and redaction: passwords, tokens, 2FA secrets, recovery codes, biometric material, precise Student GPS coordinates and similarity scores are never stored. Each row stores the actor's name, email and role at the time, the IP address and the browser. Descriptions use readable names; internal IDs stay in the target fields. Refused access is not logged. Rows are kept indefinitely until a retention period is approved.
+
+Not written: refresh-token rotation, the Google "link required" step, and the start of authenticator setup. Refresh-token reuse, every sign-in, link and 2FA outcome remain audited. Written in addition: wrong authenticator or recovery codes at sign-in, and recovery-code regeneration, never storing the codes.
+
+Grading. A score save writes one row listing each changed score and remark with old and new values, cleared scores with their old value, and each period or final grade that moved as a result; the automatic recompute after a save writes no row of its own, and if it fails the scores and their row still save. The Recompute button writes one row listing changed grades, and none when no grade changed. Deleting an assessment keeps every deleted score in its row.
+
+Batches. When one click or one system job changes many records (roster import, invite all, Secretary invitations, mark all Present, end-of-term biometric deletion), each record gets its own sealed row and all of them share one batch ID; every screen shows the batch as one expandable row.
+
+Visibility. Faculty and Secretaries see only rows their own account did (My Activity). Students have no audit screen. The Dean sees an overview: people and accounts, roles, settings and terms, security events (failed sign-ins, 2FA and password changes, token reuse), biometric consent and deletions, and everything the Dean's own account did. The Dean does not see class work (scores, assessments, grade weights, recomputes, attendance records and sessions, Excused requests, retention entries) or other people's successful sign-ins; those rows stay recorded, and an investigation reads them from the database through the system administrator at the Dean's request. Sign-in, sign-out and 2FA rows of the viewer's own account are behind a Sign-ins filter, off by default. These rules apply to rows already stored as well; old rows get readable labels and are not grouped. Class Attendance Activity is a class-records screen and is unchanged.
+
+Display. Every audit screen shows When (Asia/Manila), Who, What, Record, Change and a status badge, grouped under day headers. The details panel, the same for every role on rows they may see, shows when, who, what, record, from where, status, reason and a Field / Before / After table. Filtering, sorting and paging run on the server over all rows the viewer may see, 50 per page, with search (including inside batches), area, date presets and range, status, role (Dean), class (Faculty), the Sign-ins filter and Clear filters. The Dean view shows attention cards for failed sign-ins, security alerts and 2FA turned off. Export and print follow the same columns, filters and visibility. Below 1280 px the UI-001 responsive rule applies: same columns, the table scrolls inside its own box with When pinned.
+
+Integrity. A read-only chain check runs in the PostgreSQL gate and after each demo deploy and reports the first broken row; a break found on the first run against an existing database is recorded as the starting point.
 
 ---
 
@@ -793,7 +813,7 @@ Owner decision (2026-10-17): The production deployment is used only by the Denti
 
 **Status: APPROVED**
 
-Meaningful audit events MUST cover consent granted and revoked; enrollment started, succeeded, and failed; re-enrollment; verification success and failure; biometric revocation/deletion; attendance-session creation, timing/configuration changes, closure, and revocation; attendance creation; repeated attendance attempts where relevant; Secretary manual attendance; Faculty correction; Secretary Excused requests; Faculty approval or rejection; and relevant provider or configuration changes. An attendance-session revocation audit event MUST identify the actor and timestamp and MAY include the explanatory reason.
+Meaningful audit events MUST cover consent granted and revoked; enrollment started, succeeded, and failed; re-enrollment; verification failure (a successful verification is evidenced by the attendance-creation event); biometric revocation/deletion; attendance-session creation, timing/configuration changes, closure, and revocation; attendance creation; repeated attendance attempts where relevant; Secretary manual attendance; Faculty correction; Secretary Excused requests; Faculty approval or rejection; and relevant provider or configuration changes. An attendance-session revocation audit event MUST identify the actor and timestamp and MAY include the explanatory reason. Visibility, batching and display of these events follow SEC-005; the Dean sees consent changes and biometric deletions, not enrollment attempts or failed verifications.
 
 Audit data MUST NOT contain face images, camera frames, templates, embeddings, provider secrets, credentials, precise Student GPS coordinates, or persistent similarity/confidence scores. An authenticated 1:1 verification failure MAY be associated with the claimed Student account. Biometric match results MUST NOT be persisted in browser storage or other persistent client-side storage.
 
@@ -1062,7 +1082,7 @@ Owner-approved amendment (2026-10-17): Computed retention only. Retention status
 
 Owner-approved amendment (2026-10-17): The midterm tab ends with the term. Per course, once a final course grade or any remedial record exists, the course leaves the Midterm Watchlist and Midterm Advisory; it appears on the Retention Watchlist only if it is Remedial. Other courses still in their Midterm are unaffected. Student and Faculty dashboard midterm counts use the same rule as the midterm tabs.
 
-Owner decision (2026-10-12): In Single Activity View, an Auto-save toggle controls automatic saving. When it is on, a new or changed score saves when Faculty leave the field; when it is off, only the Save button saves. Full Matrix View always auto-saves the same way. Clearing a saved score is applied only by a manual Save (Save Scores Sheet or Save All Matrix Scores); until then the field is highlighted in amber and the Save button shows "(N to clear)". A save requested while another save is running runs right after it, and a manual Save stays manual. The browser warns before Faculty leave the page with unsaved or failed scores.
+Owner decision (2026-10-12): In Single Activity View, an Auto-save toggle controls automatic saving. Owner decision (2026-10-17): When it is on, scores save after 10 seconds without typing, and also when Faculty switch assessment or view, leave the page, or press Save; when it is off, only the Save button saves. Full Matrix View always auto-saves the same way. Clearing a saved score is applied only by a manual Save (Save Scores Sheet or Save All Matrix Scores); until then the field is highlighted in amber and the Save button shows "(N to clear)". A save requested while another save is running runs right after it, and a manual Save stays manual. The browser warns before Faculty leave the page with unsaved or failed scores, including during the 10-second wait.
 
 Owner decision (2026-10-12): The Single Activity View Auto-save setting is remembered in this browser across page reloads; it starts on until Faculty change it.
 
