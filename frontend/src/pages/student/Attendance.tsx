@@ -264,6 +264,7 @@ export const Attendance: React.FC = () => {
   const [failureNotice, setFailureNotice] = useState<string | null>(null);
   const [cameraLoading, setCameraLoading] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraErrorIsChallenge, setCameraErrorIsChallenge] = useState(false);
   const [cameraDevices, setCameraDevices] = useState<CameraDevice[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState('');
 
@@ -521,9 +522,11 @@ export const Attendance: React.FC = () => {
     if (!currentSelectedSession) return;
     setCameraLoading(true);
     setCameraError(null);
+    setCameraErrorIsChallenge(false);
     setFailureNotice(null);
     stopCamera();
     const abortController = new AbortController();
+    let cameraOpened = false;
 
     try {
       cameraAbortRef.current = abortController;
@@ -542,6 +545,7 @@ export const Attendance: React.FC = () => {
         return;
       }
       streamRef.current = stream;
+      cameraOpened = true;
       const devices = await listCameraDevices();
       setCameraDevices(devices);
       const activeDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId || '';
@@ -561,7 +565,13 @@ export const Attendance: React.FC = () => {
     } catch (err) {
       if (cameraAbortRef.current === abortController && !abortController.signal.aborted) {
         stopCamera();
-        setCameraError(describeCameraError(err));
+        if (cameraOpened) {
+          setCameraErrorIsChallenge(true);
+          setCameraError(err instanceof Error && err.message ? err.message : 'The liveness check could not be started. Choose Retry.');
+        } else {
+          setCameraErrorIsChallenge(false);
+          setCameraError(describeCameraError(err));
+        }
         setCameraLoading(false);
       }
     } finally {
@@ -1472,13 +1482,13 @@ export const Attendance: React.FC = () => {
                     <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3">
                       <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <strong className="block font-bold">Camera Access Required</strong>
+                        <strong className="block font-bold">{cameraErrorIsChallenge ? 'Liveness Check Unavailable' : 'Camera Access Required'}</strong>
                         <p className="mt-0.5 leading-relaxed">{cameraError}</p>
                         <button
                           onClick={() => { void startCameraAndChallenge(selectedCameraIdRef.current || undefined); }}
                           className="mt-2.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg font-bold text-[11px] hover:bg-amber-700 cursor-pointer"
                         >
-                          Retry Camera Access
+                          {cameraErrorIsChallenge ? 'Retry' : 'Retry Camera Access'}
                         </button>
                       </div>
                     </div>
