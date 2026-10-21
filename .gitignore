@@ -52,3 +52,6 @@ frontend/certs/
 # Local working folders (not shared)
 /Claude outputs/
 /_maintenance/
+
+# Dev-only device audit output and saved sign-ins
+/audit-output/
