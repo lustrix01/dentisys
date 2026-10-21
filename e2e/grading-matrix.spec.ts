@@ -284,3 +284,32 @@ test('Pin switches which student columns are pinned below xl and is hidden on de
   await expect(idCell).toHaveText('2023-5510');
   await expect(nameCell).toHaveText('Owhie Santillan Lumbang');
 });
+
+test('single-list config shows an Assessments group, no Lecture weight and no Component filter', async ({ page }) => {
+  await mockMatrixClass(page, {});
+  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  const table = page.locator('table').filter({ hasText: 'Student Info' });
+  await expect(table.getByRole('columnheader', { name: 'Assessments' })).toBeVisible();
+  await expect(table.getByRole('columnheader', { name: /Lecture/i })).toHaveCount(0);
+  await expect(page.getByText('Component:')).toHaveCount(0);
+});
+
+test('lecture/laboratory config still shows weighted component headers and the Component filter', async ({ page }) => {
+  await mockMatrixClass(page, {}, { setup: async () => {
+    await page.route('**/api/faculty/grading-config?*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', configuration: {
+      id: 'cfg-7', course: { id: 7, code: 'CLIN401', name: 'Clinical Dentistry I' }, semester: '1ST', schoolYear: '2026-2027', version: 1,
+      schemaMode: 'periods', componentMode: 'lecture_laboratory', componentWeights: { lecture: 60, laboratory: 40 },
+      termRatio: { midterm: 40, final: 60 }, categories: [],
+      midtermCategories: [
+        { id: 71, name: 'Learning Outputs', weight: '100', sortOrder: 1, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Lecture' },
+        { id: 72, name: 'Lab Work', weight: '100', sortOrder: 2, gradingPeriod: 'Midterm', sourceKind: 'assessment', component: 'Laboratory' },
+      ],
+      finalCategories: [],
+    } }) }));
+  } });
+  await page.getByRole('button', { name: 'Full Matrix View' }).click();
+  const table = page.locator('table').filter({ hasText: 'Student Info' });
+  await expect(table.getByRole('columnheader', { name: 'Lecture (60%)' })).toBeVisible();
+  await expect(table.getByRole('columnheader', { name: 'Laboratory (40%)' })).toBeVisible();
+  await expect(page.getByText('Component:')).toBeVisible();
+});

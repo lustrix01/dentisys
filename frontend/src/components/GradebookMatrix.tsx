@@ -144,12 +144,14 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
             .sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? '') || a.title.localeCompare(b.title)),
       });
 
-      const lectureCats = allCategories.filter(c => (c.component ?? 'Lecture').toLowerCase() === 'lecture');
-      const labCats = allCategories.filter(c => {
+      // Single-list configs have no Lecture/Laboratory split: leave every group empty so they fall into 'all'.
+      const split = config.componentMode === 'lecture_laboratory';
+      const lectureCats = !split ? [] : allCategories.filter(c => (c.component ?? 'Lecture').toLowerCase() === 'lecture');
+      const labCats = !split ? [] : allCategories.filter(c => {
         const comp = (c.component ?? '').toLowerCase();
         return comp === 'laboratory' || comp === 'lab';
       });
-      const otherCats = allCategories.filter(c => {
+      const otherCats = !split ? [] : allCategories.filter(c => {
         const comp = (c.component ?? '').toLowerCase();
         return comp !== 'lecture' && comp !== 'laboratory' && comp !== 'lab' && comp !== '';
       });
@@ -261,7 +263,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
   const getVisibleComponents = (periodKey: PeriodKey) => {
     const comps = periodData[periodKey] ?? [];
-    if (componentFilter === 'all') return comps;
+    if (componentFilter === 'all' || config?.componentMode !== 'lecture_laboratory') return comps;
     return comps.filter(c => c.componentKey === componentFilter);
   };
 
@@ -443,6 +445,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               </div>
 
               {/* Component Filter */}
+              {config?.componentMode === 'lecture_laboratory' && (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Component:</span>
                 <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-850 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
@@ -481,6 +484,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                   </button>
                 </div>
               </div>
+              )}
             </>
           )}
         </div>
