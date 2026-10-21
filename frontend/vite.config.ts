@@ -20,7 +20,8 @@ export default defineConfig({
   server: {
     https: lanHttps,
     watch: {
-      usePolling: true,
+      // Only the dev container's Windows bind mount lacks file-change events.
+      usePolling: process.env.VITE_USE_POLLING === 'true',
     },
     proxy: {
       '/api': {

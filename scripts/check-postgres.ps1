@@ -68,9 +68,45 @@ function Assert-MigrationLedgerMatchesActiveFiles {
     }
 }
 
+# Fresh database/biometric volumes every run, but keep the slow-to-populate
+# node_modules volume (guarded against stale dependencies before `up`).
+function Reset-IntegrationStack {
+    Invoke-Compose @('down', '--remove-orphans')
+    $keep = "${project}_frontend_test_node_modules"
+    $volumes = @(& docker volume ls -q --filter "label=com.docker.compose.project=$project" | Where-Object { $_ -and $_ -ne $keep })
+    if ($volumes.Count -gt 0) {
+        & docker volume rm @volumes | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Could not remove integration volumes.' }
+    }
+}
+
 try {
-    Invoke-Compose @('down', '-v', '--remove-orphans')
-    Invoke-Compose @('up', '--build', '-d')
+    Reset-IntegrationStack
+    Invoke-Compose @('build')
+
+    $nodeVolume = "${project}_frontend_test_node_modules"
+    # `volume ls` instead of `inspect`: a missing volume must not write stderr under ErrorActionPreference=Stop.
+    if (@(& docker volume ls -q --filter "name=^${nodeVolume}$").Count -gt 0) {
+        $frontendImage = if ($env:FRONTEND_IMAGE) { $env:FRONTEND_IMAGE } else { 'dentisys-frontend:local' }
+        $guardPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            & docker run --rm -v "${nodeVolume}:/vol:ro" --entrypoint cmp $frontendImage -s /app/node_modules/.package-lock.json /vol/.package-lock.json *> $null
+            $same = ($LASTEXITCODE -eq 0)
+        } finally {
+            $ErrorActionPreference = $guardPreference
+        }
+        if ($same) {
+            Write-Host "node_modules volume reused ($nodeVolume)."
+        } else {
+            & docker volume rm $nodeVolume | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not remove stale $nodeVolume." }
+            Write-Host "node_modules volume rebuilt: dependencies changed or volume unreadable ($nodeVolume)."
+        }
+    } else {
+        Write-Host "node_modules volume created fresh ($nodeVolume)."
+    }
+    Invoke-Compose @('up', '-d')
 
     $healthy = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
@@ -269,7 +305,7 @@ FROM (
 }
 finally {
     if (-not $KeepStack) {
-        try { Invoke-Compose @('down', '-v', '--remove-orphans') } catch { Write-Warning $_ }
+        try { Reset-IntegrationStack } catch { Write-Warning $_ }
     } else {
         Write-Host "Integration stack kept under Compose project '$project'."
     }

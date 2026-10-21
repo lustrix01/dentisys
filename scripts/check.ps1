@@ -78,7 +78,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Frontend unit tests failed.' }
 & docker compose run --rm --no-deps `
     -v "${root}\tests:/var/www/html/tests:ro" `
     -v "${root}\docs:/var/www/html/docs:ro" `
-    web sh -lc 'find /var/www/html/backend /var/www/html/tests/backend -name "*.php" -print0 | xargs -0 -n1 php -l'
+    web sh -lc 'find /var/www/html/backend /var/www/html/tests/backend -type d -name vendor -prune -o -name "*.php" -print0 | xargs -0 -n1 -P4 php -l'
 if ($LASTEXITCODE -ne 0) { throw 'PHP syntax validation failed.' }
 
 & docker compose run --rm --no-deps `
