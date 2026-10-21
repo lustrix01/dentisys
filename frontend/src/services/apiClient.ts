@@ -1308,6 +1308,7 @@ export function getSecretaryDashboardKpisApi(schoolYear?: string): Promise<Schoo
     overriddenCount: number;
   };
   recentActivity: AuditEntry[];
+  assignedClasses?: Array<{ classId: string; className: string; classroomName: string | null; schoolYear?: string }>;
   assignedClass: {
     classId: string;
     className: string;

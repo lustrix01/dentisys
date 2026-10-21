@@ -147,7 +147,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
   const config = useRuntimeConfig();
   const studentPrototypeEnabled = isStudentPrototypeAllowed(user, config, 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+  const [savedSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     // Owner decision: upright tablets (768-1023px) start collapsed unless the user has chosen before.
     const tabletDefault = typeof window !== 'undefined' && window.innerWidth >= 768 && window.innerWidth < 1024;
     try {
@@ -157,6 +157,16 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       return tabletDefault;
     }
   });
+
+  // Below 768px the drawer always shows full labels; the saved fold only applies from 768px up.
+  const [isPhone, setIsPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = () => setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const isSidebarCollapsed = savedSidebarCollapsed && !isPhone;
 
   const handleToggleCollapse = () => {
     setIsSidebarCollapsed(prev => {

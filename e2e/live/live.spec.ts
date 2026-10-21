@@ -383,7 +383,7 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible({ timeout: 15000 });
 
   // Verify assigned class is shown (CLINIC-4B)
-  await expect(page.locator('form').getByText('CLINIC-4B', { exact: true })).toBeVisible();
+  await expect(page.locator('form span', { hasText: /^CLINIC-4B$/ })).toBeVisible();
 
   // Verify localStorage has no active session key
   const localSessionBefore = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));

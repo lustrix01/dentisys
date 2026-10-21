@@ -16,6 +16,7 @@ import {
   Loader2,
   X,
   Ban,
+  ChevronDown,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
@@ -44,6 +45,13 @@ export const StartSession: React.FC = () => {
     className: string;
     classroomName: string;
   } | null>(null);
+  // The Secretary's sections in the current school year (REG-006: may be several).
+  const [sections, setSections] = useState<Array<{ classId: string; className: string; classroomName: string }>>([]);
+  const [otherLiveName, setOtherLiveName] = useState<string | null>(null);
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
+  const selectedCsIdRef = useRef(0);
+  selectedCsIdRef.current = parseInt(assignedClass?.classId ?? '0', 10) || 0;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,35 +117,67 @@ export const StartSession: React.FC = () => {
   const calculatedRemainingMins = calculatedMinutes % 60;
   const formattedDurationLabel = `${calculatedHours > 0 ? `${calculatedHours} hr${calculatedHours > 1 ? 's' : ''}` : ''} ${calculatedRemainingMins > 0 ? `${calculatedRemainingMins} min${calculatedRemainingMins > 1 ? 's' : ''}` : ''} (${calculatedMinutes} mins total)`.trim();
 
+  // Active session of the chosen section, plus the name of another own section that is live.
+  const readActive = async (csId: number, list: Array<{ classId: string; className: string }>) => {
+    const active = (await getSecretaryActiveAttendanceSessionApi(csId)).activeSession;
+    const others = await Promise.all(list.filter(sec => Number(sec.classId) !== csId).map(async sec => (
+      (await getSecretaryActiveAttendanceSessionApi(Number(sec.classId)).catch(() => null))?.activeSession?.status === 'active' ? sec.className : null
+    )));
+    return { active, otherName: others.find(name => name !== null) ?? null };
+  };
+
+  const handleSectionChange = async (classId: string) => {
+    const next = sectionsRef.current.find(sec => sec.classId === classId);
+    if (!next) return;
+    setAssignedClass(next);
+    setCustomRoom(next.classroomName || '');
+    setFormNotice(null);
+    const generation = ++sessionReadGeneration.current;
+    try {
+      const { active, otherName } = await readActive(Number(next.classId), sectionsRef.current);
+      if (generation !== sessionReadGeneration.current) return;
+      const records = active?.status === 'active' ? (await getSecretaryAttendanceApi({ sessionId: active.sessionId })).records ?? [] : [];
+      if (generation !== sessionReadGeneration.current) return;
+      setLiveAttendanceRecords(records);
+      setActiveSession(active);
+      setOtherLiveName(otherName);
+    } catch { /* Keep the last successful server state. */ }
+  };
+
   // Load authoritative session and assignment from backend
   const loadInitialData = async () => {
     const generation = ++sessionReadGeneration.current;
     setLoading(true);
     setError(null);
     try {
-      const [activeResult, kpisResult, attResult] = await Promise.all([
-        getSecretaryActiveAttendanceSessionApi(),
-        getSecretaryDashboardKpisApi(),
+      // Current school year only: a past-year section can never start a session.
+      const [kpisResult, attResult] = await Promise.all([
+        getSecretaryDashboardKpisApi('current'),
         getSecretaryAttendanceApi().catch(() => ({ records: [], sessions: [] })),
       ]);
+      const fromServer = kpisResult?.assignedClasses?.length ? kpisResult.assignedClasses : kpisResult?.assignedClass?.classId ? [kpisResult.assignedClass] : [];
+      const list = fromServer.map(sec => ({ classId: sec.classId, className: sec.className, classroomName: sec.classroomName ?? '' }));
+      const wantedId = String(selectedCsIdRef.current || kpisResult?.assignedClass?.classId || '');
+      const chosen = list.find(sec => sec.classId === wantedId) ?? list[0] ?? null;
+      const activeResult = chosen ? await readActive(Number(chosen.classId), list) : { active: null, otherName: null };
 
       if (generation !== sessionReadGeneration.current) return;
-      if (kpisResult?.assignedClass) {
-        setAssignedClass(kpisResult.assignedClass);
-        if (kpisResult.assignedClass.classroomName && !customRoom) {
-          setCustomRoom(kpisResult.assignedClass.classroomName);
-        }
+      setSections(list);
+      setAssignedClass(chosen ?? kpisResult?.assignedClass ?? null);
+      if (chosen?.classroomName && !customRoom) {
+        setCustomRoom(chosen.classroomName);
       }
+      setOtherLiveName(activeResult.otherName);
 
-      if (activeResult.activeSession?.status === 'active') {
-        const attendance = await getSecretaryAttendanceApi({ sessionId: activeResult.activeSession.sessionId });
+      if (activeResult.active?.status === 'active') {
+        const attendance = await getSecretaryAttendanceApi({ sessionId: activeResult.active.sessionId });
         if (generation !== sessionReadGeneration.current) return;
         setLiveAttendanceRecords(attendance.records ?? []);
       } else setLiveAttendanceRecords([]);
       setQueuedSessions((attResult.sessions ?? []).filter(session => session.status === 'scheduled'));
 
-      if (activeResult?.activeSession && (activeResult.activeSession.status === 'active' || activeResult.activeSession.status === 'revoked')) {
-        setActiveSession(activeResult.activeSession);
+      if (activeResult.active && (activeResult.active.status === 'active' || activeResult.active.status === 'revoked')) {
+        setActiveSession(activeResult.active);
       } else {
         setActiveSession(null);
       }
@@ -157,11 +197,14 @@ export const StartSession: React.FC = () => {
     const timer = setInterval(() => {
       if (sessionMutationPending.current) return;
       const generation = ++sessionReadGeneration.current;
-      void Promise.all([getSecretaryActiveAttendanceSessionApi(), getSecretaryAttendanceApi()]).then(async ([active, attendance]) => {
-        const records = active.activeSession?.status === 'active' ? await getSecretaryAttendanceApi({ sessionId: active.activeSession.sessionId }) : { records: [] };
+      const csId = selectedCsIdRef.current;
+      if (!csId) return;
+      void Promise.all([readActive(csId, sectionsRef.current), getSecretaryAttendanceApi()]).then(async ([{ active, otherName }, attendance]) => {
+        const records = active?.status === 'active' ? await getSecretaryAttendanceApi({ sessionId: active.sessionId }) : { records: [] };
         if (generation !== sessionReadGeneration.current) return;
         setLiveAttendanceRecords(records.records ?? []);
-        setActiveSession(active.activeSession);
+        setOtherLiveName(otherName);
+        setActiveSession(active);
         setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
       }).catch(() => { /* Keep the last successful server state. */ });
     }, 30000);
@@ -466,7 +509,8 @@ export const StartSession: React.FC = () => {
   }
 
   // Live session student metrics (preserves student attendance counts)
-  const sessionRecords = activeSession 
+  const shownQueued = queuedSessions.filter(session => !assignedClass?.classId || session.classId === assignedClass.classId);
+  const sessionRecords = activeSession
     ? liveAttendanceRecords.filter(r => r.attendanceSessionId === activeSession.sessionId
       || (r.attendanceSessionId == null && r.date === activeSession.sessionDate))
     : [];
@@ -775,9 +819,9 @@ export const StartSession: React.FC = () => {
         </div>
       )}
 
-      {queuedSessions.length > 0 && <Card className="space-y-3 p-5">
+      {shownQueued.length > 0 && <Card className="space-y-3 p-5">
         <h2 className="text-sm font-bold">Scheduled sessions (Asia/Manila)</h2>
-        {queuedSessions.map(session => <div key={session.sessionId} className="flex items-center justify-between gap-3 text-xs">
+        {shownQueued.map(session => <div key={session.sessionId} className="flex items-center justify-between gap-3 text-xs">
           <span>{session.date} · {session.openingTime ?? ''}–{session.classEndTime ?? ''} · {session.subjectCode} · {session.sessionCode}</span>
           <button type="button" onClick={() => { setQueuedRevokeId(session.sessionId); setRevokeReason(''); setShowRevokeModal(true); }} className="rounded-lg border border-rose-200 px-3 py-2 font-bold text-rose-700">Revoke scheduled session</button>
         </div>)}
@@ -865,10 +909,26 @@ export const StartSession: React.FC = () => {
                   <span>Assigned Dentistry Class Section</span>
                 </label>
                 {assignedClass?.classId ? (
-                  <div className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
-                    <span>{assignedClass.className}</span>
-                    <span className="text-xs font-semibold text-slate-400">Section #{assignedClass.classId}</span>
-                  </div>
+                  <>
+                    <div className="relative w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between focus-within:ring-2 focus-within:ring-blue-500">
+                      <span>{assignedClass.className}</span>
+                      <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                        Section #{assignedClass.classId}
+                        {sections.length > 1 && <ChevronDown className="w-4 h-4 text-slate-400" />}
+                      </span>
+                      {sections.length > 1 && (
+                        <select
+                          aria-label="Assigned Dentistry Class Section"
+                          value={assignedClass.classId}
+                          onChange={e => void handleSectionChange(e.target.value)}
+                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                        >
+                          {sections.map(sec => <option key={sec.classId} value={sec.classId}>{sec.className}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    {otherLiveName && <p className="text-xs text-slate-400 dark:text-slate-500">{otherLiveName} has a live session.</p>}
+                  </>
                 ) : (
                   <div className="w-full px-4 py-3 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 text-sm font-semibold text-amber-700 dark:text-amber-300">
                     No class section is assigned to your Secretary account.
