@@ -38,6 +38,10 @@ foreach ([[$faculty, 'handle_faculty_dashboard_kpis'], [$secretary, 'handle_secr
 
 $override = $fn($secretary, 'handle_secretary_attendance_override');
 $check(str_contains($override, 'Choose the attendance record to correct.'), 'L11 override requires a record or session');
+$check(str_contains($override, 'This Excused status was approved by Faculty. Only Faculty can change it.')
+    && str_contains($override, "WHERE record_id = ? AND status = 'approved'")
+    && strpos($override, 'approved by Faculty') < strpos($override, 'UPDATE attendance_records'), 'Secretary cannot change a Faculty-approved Excused record (409 before the update)');
+$check(str_contains($secretary, "xr.record_id = r.record_id AND xr.status = 'approved'") && str_contains($secretary, "'excusedApprovedByFaculty' =>"), 'Secretary attendance list flags Faculty-approved Excused records');
 
 $check(str_contains($fn($faculty, 'handle_faculty_class_enroll_students'), 'ON CONFLICT (student_id, cs_id) DO NOTHING'), 'L12 duplicate enroll is not a 500');
 

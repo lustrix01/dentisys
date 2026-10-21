@@ -188,7 +188,7 @@ These current first-year students have no login yet. Faculty can send them an in
 - 120 students in four cohorts (admitted 2023–2026), two blocks of 15 per cohort.
 - 420 enrollments, 168 assessments, 2040 scores, 418 attendance sessions, 6270 attendance records.
 - Past enrollments have final grades computed like the server: Quiz, Laboratory, the period exam and Attendance weighted by the course ratios, attendance split at the term midpoint, and a 40 / 60 Midterm / Final ratio. Run `backend/bin/bootstrap-grade-weights.php` (or `start-dev.ps1`) after seeding to create the matching grade weights.
-- 25 past enrollments are flagged for remedial, with 32 recorded remedial attempts (passed, failed, and upcoming) and 3 cost recovery results (2 passed, 1 failed); other double failures still require cost recovery.
+- 24 past enrollments are flagged for remedial, with 31 recorded remedial attempts (passed, failed, and upcoming) and 3 cost recovery results (2 passed, 1 failed); other double failures still require cost recovery.
 - Current-year enrollments have quiz and laboratory scores only, so their grades show *Pending evaluation*.
 - Current-term check-ins are stored as biometric attendance history, but **no face (biometric) profiles are seeded**: every student or secretary must complete Face Registration before a new biometric check-in. Notifications and audit events are not seeded.
 

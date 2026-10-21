@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/Card';
 import { recordAudit } from '../../services/auditService';
-import { formatGrade, percentageToGWAExact } from '../../utils/gradeHelper';
+import { formatGrade } from '../../utils/gradeHelper';
 
 type ReportTab = 'students' | 'retention' | 'attendance';
 
@@ -39,13 +39,9 @@ export const DeanReports: React.FC = () => {
   const { user } = useAuth();
   const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const [retentionThreshold, setRetentionThreshold] = useState(2.5);
-  // Flags by grade, comparing the exact grade so rounding never creates a flag (spec 2026-10-09).
-  const failsRetention = (sub: any): boolean => {
-    if (sub.grade === null || sub.grade === undefined) return false;
-    return typeof sub.percentage === 'number'
-      ? percentageToGWAExact(sub.percentage) >= retentionThreshold
-      : Number(sub.grade) >= retentionThreshold;
-  };
+  // Flags by comparing the recorded grade to the threshold (Owner ruling 2026-10-22).
+  const failsRetention = (sub: any): boolean =>
+    sub.grade !== null && sub.grade !== undefined && Number(sub.grade) >= retentionThreshold;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dbStudents, setDbStudents] = useState<any[]>([]);

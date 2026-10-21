@@ -1151,6 +1151,8 @@ export const AttendanceList: React.FC = () => {
                         <td className="py-3 px-4 sm:py-4 sm:px-6 text-right">
                           {revokedSessionOpen ? (
                             <span className="text-xs font-bold text-slate-400">View-only</span>
+                          ) : record.excusedApprovedByFaculty ? (
+                            <span className="text-xs font-bold text-slate-400">Approved by Faculty</span>
                           ) : (
                           <button
                             type="button"

@@ -348,9 +348,8 @@ $groupedVersionRead = $pdo->prepare('SELECT version FROM grading_configs WHERE c
 $groupedVersionRead->execute([$groupedConfigId]);
 expect_same('1', (string) $groupedVersionRead->fetchColumn(), 'A stale grouped save leaves the configuration version unchanged');
 
-// Saving a revised grouped configuration preserves the last computed grade.
-// This also confirms that a complete result is applied only by the explicit
-// compute route below.
+// Saving a revised grouped configuration recomputes the stored grade in the
+// same save (Owner ruling 2026-10-22), replacing a stale saved grade.
 $pdo->prepare(
     'UPDATE enrollments
         SET final_percentage = 61.23, final_gwa = 3.40,
@@ -368,7 +367,10 @@ $groupedUpdatePayload['version'] = $groupedConfigVersion;
 expect_same(200, $groupedUpdateStatus, 'An authorized Faculty can save the current grouped version');
 $groupedConfigVersion = (int) ($groupedUpdateBody['configuration']['version'] ?? 0);
 expect_same(2, $groupedConfigVersion, 'A successful grouped save advances its version exactly once');
-expect_same($groupedSavedGradeBefore, $groupedReadGrade($groupedStudentA['enrollmentId']), 'Grouped configuration save preserves the previously saved grade JSON and scalar values');
+$groupedSavedGradeAfter = $groupedReadGrade($groupedStudentA['enrollmentId']);
+expect_true($groupedSavedGradeBefore !== $groupedSavedGradeAfter, 'Grouped configuration save replaces a stale saved grade');
+expect_same('85.40', (string) ($groupedSavedGradeAfter['final_percentage'] ?? ''), 'Grouped configuration save stores the recomputed percentage');
+expect_same('2.40', (string) ($groupedSavedGradeAfter['final_gwa'] ?? ''), 'Grouped configuration save stores the recomputed grade');
 
 [$groupedComputeStatus, $groupedComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
     'classId' => (string) $groupedOffering['classId'],
@@ -651,7 +653,9 @@ expect_same([
     $conversionAssessments['finalQuiz'] => 'Final',
     $conversionAssessments['finalExam'] => 'Final',
 ], $convertedAssessmentPeriods, 'Explicit mappings assign each previously NULL legacy assessment to the selected period');
-expect_same($conversionSavedGrade, $groupedReadGrade($conversionStudent['enrollmentId']), 'Saving grouped conversion leaves the previously recorded overall grade untouched');
+// Owner ruling 2026-10-22: a successful setup save recomputes the stored grade.
+$conversionGradeAfterSave = $groupedReadGrade($conversionStudent['enrollmentId']);
+expect_same('85.40', (string) ($conversionGradeAfterSave['final_percentage'] ?? ''), 'Saving grouped conversion recomputes the recorded overall grade');
 
 // The approved contract rejects every combined period save, including a
 // previously grouped offering. Rejections must preserve the saved grouped
@@ -686,7 +690,7 @@ expect_same(422, $conversionNoModeStatus, 'A period save without componentMode i
 expect_same('GRADING_COMPONENT_MODE_REQUIRED', $conversionNoModeBody['code'] ?? null, 'Omitted component mode returns the mandatory component-mode error');
 expect_same($conversionGroupedMembershipsBeforeReject, $groupedMembershipRows($conversionConfigId), 'Rejected combined saves preserve all grouped category memberships and weights');
 expect_same($conversionGroupedAssessmentsBeforeReject, $groupedReadAssessmentSnapshot($conversionAssessmentIds), 'Rejected combined saves preserve every assessment mapping and raw score');
-expect_same($conversionSavedGrade, $groupedReadGrade($conversionStudent['enrollmentId']), 'Rejected combined saves preserve the previously recorded grade');
+expect_same($conversionGradeAfterSave, $groupedReadGrade($conversionStudent['enrollmentId']), 'Rejected combined saves preserve the previously recorded grade');
 $conversionConfigVersionStmt = $pdo->prepare('SELECT version FROM grading_configs WHERE config_id = ?');
 $conversionConfigVersionStmt->execute([$conversionConfigId]);
 expect_same($conversionVersion, (int) $conversionConfigVersionStmt->fetchColumn(), 'Rejected combined saves do not advance the grouped configuration version');

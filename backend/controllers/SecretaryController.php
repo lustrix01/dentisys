@@ -1852,7 +1852,9 @@ function handle_secretary_attendance_get(): void
                     COALESCE(pi.middle_name, s.middle_name) AS middle_name,
                     COALESCE(pi.last_name, s.last_name) AS last_name,
                     COALESCE(pi.name_suffix, s.name_suffix) AS name_suffix,
-                    cs.cs_id, cs.cs_name, c.course_code
+                    cs.cs_id, cs.cs_name, c.course_code,
+                    (LOWER(r.status) = 'excused' AND EXISTS (SELECT 1 FROM attendance_excused_requests xr
+                        WHERE xr.record_id = r.record_id AND xr.status = 'approved')) AS excused_approved_by_faculty
              FROM attendance_records r
              JOIN enrollments e ON r.enrollment_id = e.enrollment_id
              JOIN students s ON e.student_id = s.student_id
@@ -1903,6 +1905,7 @@ function handle_secretary_attendance_get(): void
                 'status' => strtolower($r['status']),
                 'overrideReason' => $r['override_reason'] ?? null,
                 'overrideAt' => attendance_session_timestamp($r['override_at'] ?? null),
+                'excusedApprovedByFaculty' => (bool) $r['excused_approved_by_faculty'],
             ];
         }, $records);
 
@@ -2157,6 +2160,15 @@ function handle_secretary_attendance_override(): void
                 $pdo->rollBack();
                 safe_error_response('Past school-year classes are view-only.', 409);
                 return;
+            }
+            if (strtolower((string) $targetRecord['status']) === 'excused') {
+                $approved = $pdo->prepare("SELECT 1 FROM attendance_excused_requests WHERE record_id = ? AND status = 'approved' LIMIT 1");
+                $approved->execute([$targetRecordId]);
+                if ($approved->fetchColumn() !== false) {
+                    $pdo->rollBack();
+                    safe_error_response('This Excused status was approved by Faculty. Only Faculty can change it.', 409);
+                    return;
+                }
             }
 
             // A correction keeps the original verification_method; the change

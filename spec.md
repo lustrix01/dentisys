@@ -322,6 +322,8 @@ Owner decision (2026-09-29): A Class Secretary is a Student who has been appoint
 
 Owner decision (2026-10-18): A Student may be appointed Class Secretary of more than one current-year section, including sections of different Faculty. Each section still has at most one Secretary (active and pending together). Removing or ending one appointment leaves the others; the account returns to plain Student access only when no current appointment remains.
 
+Owner-approved amendment (2026-10-22): Unenrolling a Student from a section also removes them as that section's Class Secretary. Their appointments in other sections are unaffected; if none remain, the Secretary appointment ends as when Faculty remove it.
+
 Google authentication MUST NOT bypass the invitation/activation requirement.
 
 ## REG-007 — Student identity
@@ -891,6 +893,8 @@ At the configured Late cutoff, biometric capture closes. Students cannot submit 
 
 A later authorized correction may change Absent to Excused or another authorized status. A Student may pursue that correction through the existing authorized Faculty/Secretary correction and Excused workflows; this amendment does not create a new Student-facing in-system dispute workflow. Biometric closure, session revocation, and final attendance resolution are separate events.
 
+Owner decision (2026-10-22): A scheduled session that nobody opened still ends at its class end time and resolves every Student without a record to Absent.
+
 ## ATT-004 — Unresolved attendance and grading
 
 **Status: APPROVED**
@@ -900,6 +904,8 @@ A later authorized correction may change Absent to Excused or another authorized
 While attendance is unresolved, attendance-dependent grading and transmutation remain pending. GRD-001 MUST consume a resolved attendance status and MUST NOT infer Absent or zero merely because an attendance record is missing or unresolved.
 
 Once attendance resolves, the existing approved GRD-001 behavior applies. Later authorized corrections MUST affect subsequent effective-grade computation without changing the stored raw score. One attendance session may link to multiple assessments where existing class, date, and session-code rules allow it. GRD-001’s formula and unrelated grading rules remain unchanged.
+
+Owner-approved amendment (2026-10-22): In the attendance part of a grade, Late counts the same as Present (100); Excused is also 100 and Absent 0.
 
 ## ATT-005 — Duplicate prevention and attendance provenance
 
@@ -922,6 +928,8 @@ Successful automated biometric attendance requires no Faculty approval. Faculty 
 Secretary retains authorized ordinary manual attendance functionality. When a Student contacts the Secretary about an excuse, the Secretary may submit an Excused request in DentiSys; only Faculty may approve or reject that request. Secretary MUST NOT finalize Excused through a generic manual override. A rejection leaves the current attendance status unchanged. When a Student contacts Faculty directly, Faculty may apply an authorized correction directly.
 
 For attendance rates, Excused counts as attended.
+
+Owner-approved amendment (2026-10-22): A Secretary cannot change an attendance record whose Excused status comes from a Faculty-approved Excused request; the Secretary attendance list shows "Approved by Faculty" instead of the override action, and only Faculty can change it. In attendance rates, Late counts as attended, the same as Present.
 
 Students contact Secretary or Faculty outside DentiSys. Current scope has no Student-facing in-system excuse or dispute submission, no supporting-document upload requirement, and no specified dispute deadline. Manual correction audit MUST preserve the old status, new status, actor, timestamp, reason where applicable, and the original biometric outcome.
 
@@ -1075,6 +1083,8 @@ Owner decision (2026-10-09, provisional pending BUCDM confirmation): A percentag
 Owner-approved amendment (2026-10-12): Calculations keep exact values through every step: category, period, course percentage and grade. Only the final course percentage and grade are rounded to two decimals for storage and display. Wherever a grade is shown, hovering, focusing or tapping it shows the exact grade and percentage.
 
 Owner-approved amendment (2026-10-17): BUCDM grade conversion. This replaces the provisional 2026-10-09 conversion. A percentage is first truncated to a whole percent (84.9% → 84%). Then: 99–100 = 1.0, 98 = 1.1, 97 = 1.2, 96 = 1.3, 95 = 1.4, 94 = 1.5, 93 = 1.6, 92 = 1.7, 91 = 1.8, 90 = 1.9, 89 = 2.0, 88 = 2.1, 87 = 2.2, 86 = 2.3, 85 = 2.4, 84 = 2.5, 82–83 = 2.6, 80–81 = 2.7, 78–79 = 2.8, 76–77 = 2.9, 75 = 3.0 (passing). Below 75%, a Midterm grade is 3.1 at 74%, worsening 0.1 per percent to 4.0 at 65% and below; a Final or overall course grade below 75% is 5.0. Server and client use the same conversion. The 2.50 remediation trigger is unchanged and now means 84% or below. In the 2026-09-29 risk levels, "80% or below" becomes "84% or below". Final grades saved in closed school years stay as recorded; current-term grades use this conversion when next computed or saved.
+
+Owner-approved amendment (2026-10-22): Grade rounding follows University policy. The course percentage is rounded to two decimals first, and that rounded value is truncated to a whole percent for the conversion (74.995% → 75.00% → 75% → 3.0). A stored course grade is recomputed automatically, in the same save, when Faculty delete an assessment, save the grading setup of that class, or re-enroll a previously unenrolled Student; a re-enrolled Student keeps their earlier scores and remedial history and their grade and retention status are recomputed from them. Past school-year classes are not recomputed. The Dean report flags a failing retention by the recorded course grade, not by re-converting the percentage with the current table.
 
 Owner-approved amendment (2026-10-17): Midterm Watchlist and Advisory. Faculty see "Midterm Watchlist" and Students see "Midterm Advisory". Both flag a student only when every Midterm assessment is graded, no final course grade exists, and the Midterm grade, using the professor's Midterm category weights and lecture/laboratory split, is 2.5 or worse. The projected risk level no longer flags a student before the Midterm is complete; it stays as the badge on a flagged student. This supersedes the 2026-10-03 advisory rule.
 

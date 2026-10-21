@@ -6326,7 +6326,7 @@ $periodAttendanceStmt = $pdo->prepare(
 );
 $periodAttendanceRows = [
     [$periodEnrollmentA, '2027-08-15', 'PERIOD-M-START', 'present'], // inclusive Midterm start
-    [$periodEnrollmentA, '2027-09-30', 'PERIOD-M-END', 'late'], // inclusive Midterm end
+    [$periodEnrollmentA, '2027-09-30', 'PERIOD-M-END', 'late'], // inclusive Midterm end; Late counts 100 (Laboratory = (100+100)/2 = 100)
     [$periodEnrollmentA, '2027-10-01', 'PERIOD-GAP', 'absent'], // allowed gap, ignored
     [$periodEnrollmentA, '2027-08-14', 'PERIOD-OUT-BEFORE', 'absent'], // outside before
     [$periodEnrollmentA, '2027-10-15', 'PERIOD-F-START', 'present'], // inclusive Final start
@@ -6381,10 +6381,10 @@ expect_same(200, $periodInitialComputeStatus, 'Period grading recomputation acce
 $periodInitialComplete = integration_find_enrollment_result($periodInitialComputeBody, $periodEnrollmentA);
 $periodInitialIncomplete = integration_find_enrollment_result($periodInitialComputeBody, $periodEnrollmentB);
 expect_same('computed', $periodInitialComplete['status'] ?? null, 'Enrollment with period sessions receives a complete result');
-expect_same(83.75, integration_period_percentage($periodInitialComplete ?? [], 'Midterm'), 'Midterm category/attendance math uses inclusive boundaries, GRD-001 transmutation, and no double attendance');
-expect_same(83.75, integration_period_percentage($periodInitialComplete ?? [], 'Midterm'), 'Revoked attendance sessions do not contribute to period attendance');
-expect_same(90.0, integration_period_percentage($periodInitialComplete ?? [], 'Final'), 'Final category/attendance math is independent of Midterm math');
-expect_same(87.5, (float) ($periodInitialComplete['percentage'] ?? -1), 'Overall term ratio combines distinct Midterm and Final results');
+expect_same(88.75, integration_period_percentage($periodInitialComplete ?? [], 'Midterm'), 'Midterm category/attendance math uses inclusive boundaries, GRD-001 transmutation, and no double attendance');
+expect_same(88.75, integration_period_percentage($periodInitialComplete ?? [], 'Midterm'), 'Revoked attendance sessions do not contribute to period attendance');
+expect_same(95.0, integration_period_percentage($periodInitialComplete ?? [], 'Final'), 'Final category/attendance math is independent of Midterm math');
+expect_same(92.5, (float) ($periodInitialComplete['percentage'] ?? -1), 'Overall term ratio combines distinct Midterm and Final results');
 $periodReadRowA = ['enrollment_id' => $periodEnrollmentA, 'student_id' => $periodStudentA, 'cs_id' => $periodClassId];
 $periodReadRowB = ['enrollment_id' => $periodEnrollmentB, 'student_id' => $periodStudentB, 'cs_id' => $periodClassId];
 $periodReadCache = [];
@@ -6402,12 +6402,12 @@ $periodInitialWatchlistCached = faculty_watchlist_midterm($pdo, $periodReadRowA,
 $periodInitialWatchlistUncached = faculty_watchlist_midterm($pdo, $periodReadRowA);
 expect_same($periodInitialWatchlistUncached, $periodInitialWatchlistCached, 'Shared retention read inputs preserve the exact grouped Midterm result with or without batch caching');
 expect_same(
-    ['complete' => true, 'percentage' => 83.75],
+    ['complete' => true, 'percentage' => 88.75],
     array_intersect_key($periodInitialWatchlistCached, ['complete' => true, 'percentage' => true]),
     'Shared retention read inputs preserve exact complete Midterm status and math'
 );
 expect_same(77.5, $periodInitialWatchlistCached['components']['lecture']['percentage'] ?? null, 'Shared retention read uses the saved Lecture category math');
-expect_same(90.0, $periodInitialWatchlistCached['components']['laboratory']['percentage'] ?? null, 'Shared retention read uses the saved Laboratory attendance math');
+expect_same(100.0, $periodInitialWatchlistCached['components']['laboratory']['percentage'] ?? null, 'Shared retention read uses the saved Laboratory attendance math');
 $periodIncompleteWatchlistCached = faculty_watchlist_midterm($pdo, $periodReadRowB, $periodReadCache);
 $periodIncompleteWatchlistUncached = faculty_watchlist_midterm($pdo, $periodReadRowB);
 expect_same($periodIncompleteWatchlistUncached, $periodIncompleteWatchlistCached, 'Grouped Midterm incompleteness matches with or without batch caching');
@@ -6490,12 +6490,12 @@ expect_true(
 $periodPersistedBeforeCorrectionStmt = $pdo->prepare('SELECT final_percentage, grade_components_json FROM enrollments WHERE enrollment_id = ?');
 $periodPersistedBeforeCorrectionStmt->execute([$periodEnrollmentA]);
 $periodPersistedBeforeCorrection = $periodPersistedBeforeCorrectionStmt->fetch(PDO::FETCH_ASSOC);
-expect_same('87.50', (string) ($periodPersistedBeforeCorrection['final_percentage'] ?? ''), 'Explicit recomputation persists the overall period result');
+expect_same('92.50', (string) ($periodPersistedBeforeCorrection['final_percentage'] ?? ''), 'Explicit recomputation persists the overall period result');
 
-// Correct one attendance record. Persistence must remain unchanged until the
+// Late counts 100 like Present, so the correction goes Late -> Absent (Laboratory (100+0)/2 = 50). Correct one attendance record. Persistence must remain unchanged until the
 // explicit compute endpoint is called again.
 $pdo->prepare('UPDATE attendance_records SET status = ? WHERE enrollment_id = ? AND session_code = ?')
-    ->execute(['present', $periodEnrollmentA, 'PERIOD-M-END']);
+    ->execute(['absent', $periodEnrollmentA, 'PERIOD-M-END']);
 $periodPersistedBeforeCorrectionStmt->execute([$periodEnrollmentA]);
 $periodPersistedAfterAttendanceEdit = $periodPersistedBeforeCorrectionStmt->fetch(PDO::FETCH_ASSOC);
 expect_same((string) $periodPersistedBeforeCorrection['final_percentage'], (string) ($periodPersistedAfterAttendanceEdit['final_percentage'] ?? ''), 'Attendance corrections do not rewrite persisted grades before explicit recomputation');
@@ -6505,12 +6505,12 @@ $periodCorrectedWatchlistCached = faculty_watchlist_midterm($pdo, $periodReadRow
 $periodCorrectedWatchlistUncached = faculty_watchlist_midterm($pdo, $periodReadRowA);
 expect_same($periodCorrectedWatchlistUncached, $periodCorrectedWatchlistCached, 'A fresh grouped retention read matches with or without batch caching after attendance correction');
 expect_same(
-    ['complete' => true, 'percentage' => 88.75],
+    ['complete' => true, 'percentage' => 63.75],
     array_intersect_key($periodCorrectedWatchlistCached, ['complete' => true, 'percentage' => true]),
     'A fresh retention read observes an attendance correction without carrying the previous read cache'
 );
 expect_same(77.5, $periodCorrectedWatchlistCached['components']['lecture']['percentage'] ?? null, 'Attendance correction leaves Lecture math unchanged');
-expect_same(100.0, $periodCorrectedWatchlistCached['components']['laboratory']['percentage'] ?? null, 'Attendance correction updates Laboratory math');
+expect_same(50.0, $periodCorrectedWatchlistCached['components']['laboratory']['percentage'] ?? null, 'Attendance correction updates Laboratory math');
 $pdo->beginTransaction();
 try {
     $pdo->prepare('UPDATE assessment_scores SET score = 0 WHERE assessment_id = ? AND student_id = ?')->execute([$periodRegularAssessmentId, $periodStudentA]);
@@ -6518,15 +6518,15 @@ try {
     faculty_retention_preload($pdo, [$periodReadRowA], $periodFreshReadCache);
     $freshScoreRead = faculty_watchlist_midterm($pdo, $periodReadRowA, $periodFreshReadCache);
     $freshScoreReadUncached = faculty_watchlist_midterm($pdo, $periodReadRowA);
-    // Quiz and attendance each weigh 50%: ((75 + 0) / 200) * 50 + 100 * .5.
+    // Quiz and attendance each weigh 50%: ((75 + 0) / 200) * 50 + 50 * .5 (Laboratory 50 after the Late -> Absent correction).
     expect_same($freshScoreReadUncached, $freshScoreRead, 'A fresh grouped zero-score read matches with or without batch caching');
     expect_same(
-        ['complete' => true, 'percentage' => 68.75],
+        ['complete' => true, 'percentage' => 43.75],
         array_intersect_key($freshScoreRead, ['complete' => true, 'percentage' => true]),
         'A new retention read observes a saved zero score instead of the old assessment inputs'
     );
     expect_same(37.5, $freshScoreRead['components']['lecture']['percentage'] ?? null, 'An entered zero updates the Lecture component rather than becoming a missing score');
-    expect_same(100.0, $freshScoreRead['components']['laboratory']['percentage'] ?? null, 'The Laboratory component remains complete after the Lecture zero');
+    expect_same(50.0, $freshScoreRead['components']['laboratory']['percentage'] ?? null, 'The Laboratory component remains complete after the Lecture zero');
 } finally {
     $pdo->rollBack();
 }
@@ -6536,8 +6536,8 @@ try {
 ]);
 expect_same(200, $periodCorrectedComputeStatus, 'Explicit recomputation applies corrected attendance');
 $periodCorrectedComplete = integration_find_enrollment_result($periodCorrectedComputeBody, $periodEnrollmentA);
-expect_same(88.75, integration_period_percentage($periodCorrectedComplete ?? [], 'Midterm'), 'Corrected Midterm attendance changes only the affected period');
-expect_same(89.5, (float) ($periodCorrectedComplete['percentage'] ?? -1), 'Corrected period result updates the overall term ratio');
+expect_same(63.75, integration_period_percentage($periodCorrectedComplete ?? [], 'Midterm'), 'Corrected Midterm attendance changes only the affected period');
+expect_same(82.5, (float) ($periodCorrectedComplete['percentage'] ?? -1), 'Corrected period result updates the overall term ratio');
 
 // Change dates to a valid gap with no usable sessions. Saving the new dates
 // must preserve the recorded grade until explicit recomputation.
@@ -6553,7 +6553,7 @@ expect_same(200, $periodNoSessionSaveStatus, 'Valid disjoint ranges with an allo
 $periodConfigVersion = (int) ($periodNoSessionSaveBody['configuration']['version'] ?? 0);
 $periodPersistedBeforeNoSessionStmt = $pdo->prepare('SELECT final_percentage FROM enrollments WHERE enrollment_id = ?');
 $periodPersistedBeforeNoSessionStmt->execute([$periodEnrollmentA]);
-expect_same('89.50', (string) $periodPersistedBeforeNoSessionStmt->fetchColumn(), 'Changing saved dates preserves the prior recorded overall result');
+expect_same('82.50', (string) $periodPersistedBeforeNoSessionStmt->fetchColumn(), 'Changing saved dates preserves the prior recorded overall result');
 [$periodNoSessionComputeStatus, $periodNoSessionComputeBody] = integration_http_json('/api/faculty/grades/compute', $facultyAccessToken, [
     'classId' => (string) $periodClassId,
 ]);
@@ -6574,8 +6574,8 @@ $periodConfigVersion = (int) ($periodRestoreBody['configuration']['version'] ?? 
 ]);
 expect_same(200, $periodFinalComputeStatus, 'Final explicit recomputation restores complete period results');
 $periodFinalComplete = integration_find_enrollment_result($periodFinalComputeBody, $periodEnrollmentA);
-expect_same(88.75, integration_period_percentage($periodFinalComplete ?? [], 'Midterm'), 'Stable attendance-source category survives rename and date-range restore');
-expect_same(89.5, (float) ($periodFinalComplete['percentage'] ?? -1), 'GRD-001 exact-linked transmutation remains independent of period date attribution');
+expect_same(63.75, integration_period_percentage($periodFinalComplete ?? [], 'Midterm'), 'Stable attendance-source category survives rename and date-range restore');
+expect_same(82.5, (float) ($periodFinalComplete['percentage'] ?? -1), 'GRD-001 exact-linked transmutation remains independent of period date attribution');
 
 $periodBreakdownJson = json_encode($periodFinalComplete, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 expect_true(str_contains((string) $periodBreakdownJson, 'Participation'), 'Period response identifies the renamed attendance source by stable category');
@@ -6620,10 +6620,10 @@ $periodZeroWeightResult = integration_find_enrollment_result($periodZeroWeightCo
 expect_same('computed', $periodZeroWeightResult['status'] ?? null, 'Missing zero-weight Midterm does not block the positive-weight Final');
 expect_same('incomplete', $periodZeroWeightResult['periods']['midterm']['status'] ?? null, 'Zero-weight Midterm remains transparently incomplete');
 expect_same('computed', $periodZeroWeightResult['periods']['final']['status'] ?? null, 'Positive-weight Final remains complete');
-expect_same(90.0, (float) ($periodZeroWeightResult['percentage'] ?? -1), 'Overall result uses the positive-weight Final at 100 percent');
+expect_same(95.0, (float) ($periodZeroWeightResult['percentage'] ?? -1), 'Overall result uses the positive-weight Final at 100 percent');
 $periodZeroWeightPersistedStmt = $pdo->prepare('SELECT final_percentage FROM enrollments WHERE enrollment_id = ?');
 $periodZeroWeightPersistedStmt->execute([$periodEnrollmentA]);
-expect_same('90.00', (string) $periodZeroWeightPersistedStmt->fetchColumn(), 'Zero-weight period computation persists the positive-weight overall grade');
+expect_same('95.00', (string) $periodZeroWeightPersistedStmt->fetchColumn(), 'Zero-weight period computation persists the positive-weight overall grade');
 
 $pdo->beginTransaction();
 $periodAssessmentPlaceholders = implode(',', array_fill(0, count($periodAssessmentIds), '?'));

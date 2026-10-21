@@ -334,7 +334,7 @@ def attendance_date_ranges(sec):
 
 TERM_RATIO = {'midterm': 40, 'final': 60}
 RETENTION_TRIGGER = 2.5
-ATTENDANCE_POINTS = {'present': 100.0, 'excused': 100.0, 'late': 80.0, 'absent': 0.0}
+ATTENDANCE_POINTS = {'present': 100.0, 'excused': 100.0, 'late': 100.0, 'absent': 0.0}
 
 
 def grade_breakdown(sec, course, scored, attendance):

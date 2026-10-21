@@ -1362,6 +1362,7 @@ export function getSecretaryAttendanceApi(params?: {
     status: string;
     overrideReason?: string | null;
     overrideAt?: string | null;
+    excusedApprovedByFaculty?: boolean;
     yearLevel?: number | null;
     verificationMethod?: string | null;
     timeRecorded?: string | null;

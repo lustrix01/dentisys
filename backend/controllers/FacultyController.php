@@ -2078,7 +2078,7 @@ function handle_faculty_grading_config_get(): void
  *
  * @return array{created: bool, configuration: array}
  */
-function faculty_grading_save_configuration(PDO $pdo, array $config, array $authCtx, array $data, array $context): array
+function faculty_grading_save_configuration(PDO $pdo, array $config, array $authCtx, array $data, array $context, bool $recomputeGrades = false): array
 {
         $offering = faculty_grading_require_offering(
             $pdo,
@@ -2838,6 +2838,15 @@ function faculty_grading_save_configuration(PDO $pdo, array $config, array $auth
             'ip_address' => $context['ip_address'],
             'user_agent' => $context['user_agent'],
         ], $macKey, $auditBeforeState, $auditAfterState);
+        if ($recomputeGrades) {
+            // Saved grades follow the new weights; a not-yet-computable setup is skipped, not an error.
+            $sections = $pdo->prepare(
+                "SELECT cs_id FROM class_sections
+                  WHERE instructor_user_id = ? AND course_id = ? AND UPPER(semester) = ? AND UPPER(school_year) = ?"
+            );
+            $sections->execute([$offering['facultyUserId'], $offering['courseId'], $offering['semester'], $offering['schoolYear']]);
+            faculty_recompute_after_change($pdo, $config, $authCtx, $sections->fetchAll(PDO::FETCH_COLUMN));
+        }
         $pdo->commit();
 
         return ['created' => $isCreate, 'configuration' => $afterState];
@@ -2872,7 +2881,7 @@ function handle_faculty_grading_config_save(): void
                 'SCHOOL_YEAR_READ_ONLY'
             );
         }
-        $saved = faculty_grading_save_configuration($pdo, $config, $authCtx, $body['data'], $context);
+        $saved = faculty_grading_save_configuration($pdo, $config, $authCtx, $body['data'], $context, true);
 
         json_response([
             'status' => 'ok',
@@ -3087,7 +3096,7 @@ function faculty_period_attendance_summary(
         $pointsForStatus = [
             'present' => 100.0,
             'excused' => 100.0,
-            'late' => 80.0,
+            'late' => 100.0,
             'absent' => 0.0,
         ];
         if ($attendanceStatus === null || !array_key_exists($attendanceStatus, $pointsForStatus)) {
@@ -3920,6 +3929,7 @@ function handle_faculty_assessment_delete(): void
                 'scores' => $deletedScores,
             ]]
         );
+        faculty_recompute_after_change($pdo, $config, $authCtx, [(int) $ownedAssessment['cs_id']]);
         $pdo->commit();
         json_response([
             'status' => 'ok',
@@ -4379,8 +4389,7 @@ function faculty_recompute_class_grades(PDO $pdo, int $facultyId, int $csId, str
             LEFT JOIN (
                 SELECT enrollment_id,
                        AVG(CASE
-                           WHEN status IN ('present', 'excused') THEN 100
-                           WHEN status = 'late' THEN 80
+                           WHEN status IN ('present', 'late', 'excused') THEN 100
                            WHEN status = 'absent' THEN 0
                            ELSE NULL
                        END) AS attendance_percentage
@@ -4635,6 +4644,43 @@ function faculty_recompute_class_grades(PDO $pdo, int $facultyId, int $csId, str
         ];
     }
     return ['results' => $results, 'gradeChanges' => $gradeChanges];
+}
+
+/**
+ * Keep stored grades in step after a change that moves them (assessment delete,
+ * grade-weight save, revived enrollment). Runs in the caller's transaction; a
+ * SAVEPOINT means a setup that cannot be computed yet never blocks the change.
+ */
+function faculty_recompute_after_change(PDO $pdo, array $config, array $authCtx, array $csIds): void
+{
+    if ($csIds === []) {
+        return;
+    }
+    try {
+        $pdo->exec('SAVEPOINT grade_recompute_after_change');
+        $currentSchoolYear = academic_current_school_year($pdo);
+        $retentionThreshold = remedial_attempts_course_grade_threshold($pdo);
+        foreach (array_unique(array_map('intval', $csIds)) as $csId) {
+            $computed = faculty_recompute_class_grades($pdo, (int) $authCtx['user_id'], $csId, $currentSchoolYear, $retentionThreshold);
+            if ($computed['gradeChanges'] === []) {
+                continue;
+            }
+            $results = $computed['results'];
+            $computedCount = count(array_filter($results, static fn(array $result): bool => ($result['status'] ?? '') === 'computed'));
+            $gradeChanges = faculty_audit_label_changes($pdo, $computed['gradeChanges']);
+            audit_record_action(
+                $pdo, $config, $authCtx, 'grading', 'grades_recomputed', 'class_section', (string) $csId,
+                sprintf('Recomputed grades in %s: %d grade(s) changed.', faculty_audit_class_label($pdo, $csId), count($gradeChanges)),
+                ['scope_cs_id' => $csId, 'after' => [
+                    'computed' => $computedCount, 'total' => count($results), 'gradeChanges' => $gradeChanges,
+                ]]
+            );
+        }
+        $pdo->exec('RELEASE SAVEPOINT grade_recompute_after_change');
+    } catch (\Throwable $e) {
+        $pdo->exec('ROLLBACK TO SAVEPOINT grade_recompute_after_change');
+        error_log('Faculty recompute after change skipped: ' . sanitize_for_log($e));
+    }
 }
 
 function handle_faculty_grades_compute(): void
@@ -8040,6 +8086,7 @@ function handle_faculty_class_enroll_students(): void
             );
 
             $enrolledCount = 0;
+            $revived = false;
             $studentExists = $pdo->prepare("SELECT 1 FROM students WHERE student_id = ? AND LOWER(status) = 'active'");
             $classDetailsStmt = $pdo->prepare('
                 SELECT cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name
@@ -8079,6 +8126,7 @@ function handle_faculty_class_enroll_students(): void
                         if ($reviveStmt->rowCount() > 0) {
                             $enrolledCount++;
                             $didEnroll = true;
+                            $revived = true;
                         }
                     } else {
                         $insertStmt->execute([$stId, $csId]);
@@ -8108,6 +8156,11 @@ function handle_faculty_class_enroll_students(): void
                         }
                     }
                 }
+            }
+
+            // A revived enrollment keeps its scores; its stored grade is recomputed from them.
+            if ($revived) {
+                faculty_recompute_after_change($pdo, $config, $authCtx, [$csId]);
             }
 
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
@@ -8203,6 +8256,30 @@ function handle_faculty_class_unenroll_student(): void
                 $pdo->rollBack();
                 safe_error_response('Student is not enrolled in this class.', 404);
                 return;
+            }
+
+            // REG-006: leaving the section ends this Student's Class Secretary appointment for it only.
+            $secretaryStmt = $pdo->prepare(
+                "SELECT cs.cs_name, s.student_number, COALESCE(s.student_account_user_id, s.user_id) AS secretary_user_id
+                   FROM students s
+                   JOIN class_sections cs ON cs.secretary_user_id = COALESCE(s.student_account_user_id, s.user_id)
+                  WHERE s.student_id = ? AND cs.cs_id = ?
+                  FOR UPDATE OF cs"
+            );
+            $secretaryStmt->execute([$studentId, $csId]);
+            $secretaryRow = $secretaryStmt->fetch(PDO::FETCH_ASSOC);
+            if ($secretaryRow !== false) {
+                $accountUserId = (int) $secretaryRow['secretary_user_id'];
+                $pdo->prepare('UPDATE class_sections SET secretary_user_id = NULL WHERE cs_id = ?')->execute([$csId]);
+                if (!secretary_has_current_appointment($pdo, $accountUserId)) {
+                    secretary_end_appointment_role($pdo, $config, $authCtx, "Removed the Class Secretary appointment of student {$secretaryRow['student_number']} for {$secretaryRow['cs_name']}.", $accountUserId);
+                }
+                notification_create_idempotent(
+                    $pdo, $accountUserId, 'secretary_appointment', 'Class Secretary appointment removed',
+                    "Your Class Secretary appointment for {$secretaryRow['cs_name']} was removed. Your Student access is unchanged.",
+                    'class_section', (string) $csId,
+                    'secretary-removed:' . $csId . ':' . $accountUserId . ':' . attendance_session_now_utc()->format('YmdHisu')
+                );
             }
 
             $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');

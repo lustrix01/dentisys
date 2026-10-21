@@ -863,9 +863,7 @@ export const GradeComputation: React.FC = () => {
   const openEditAssessmentModal = async (ass: Assessment) => {
     setEditingAssessment(ass);
     setAssTitle(ass.title);
-    const targetClassId = availableClasses.some(classItem => classItem.id === ass.classId)
-      ? ass.classId
-      : selectedClassId;
+    const targetClassId = ass.classId;
     setAssClassId(targetClassId);
     setAssPeriod(ass.gradingPeriod);
     setAssMaxScore(ass.maxScore);
@@ -3854,6 +3852,7 @@ export const GradeComputation: React.FC = () => {
                       </td>
                       <td className="px-5 py-3.5 text-center">
                         <div className="flex items-center justify-center space-x-2">
+                          {availableClasses.some(c => c.id === ass.classId) && (
                           <button
                             onClick={() => openEditAssessmentModal(ass)}
                             className="p-1 text-slate-455 hover:text-clinical-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900"
@@ -3861,6 +3860,7 @@ export const GradeComputation: React.FC = () => {
                           >
                             <Edit className="w-3.8 h-3.8" />
                           </button>
+                          )}
                           <button
                             onClick={async () => {
                               if (await requestConfirmation(`Archive ${ass.title}?`, 'Archive assessment')) {
