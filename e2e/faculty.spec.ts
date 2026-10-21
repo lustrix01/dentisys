@@ -60,7 +60,9 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
     await expect(page.getByText('No open term. Ask the Dean to add the terms for 2026-2027.')).toBeVisible();
     await expect(page.getByLabel('Academic term *')).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Save Class Section' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save Class Section' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Save Class Section' }).click();
+    await expect(page.getByText('Choose an academic term.').first()).toBeVisible();
   });
 
   test('faculty dashboard renders properly', async ({ page }) => {
@@ -214,6 +216,27 @@ test.describe('Faculty Module E2E Tests', () => {
     expect(createCalled).toBe(false);
   });
 
+  test('Save Class Section on a blank form explains what is missing and sends nothing', async ({ page }) => {
+    let createCalls = 0;
+    await page.route('**/api/faculty/classes', async route => {
+      if (route.request().method() === 'POST') { createCalls++; await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', csId: 92 }) }); }
+      else await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', academicTerms: [{ id: 1, schoolYear: '2026-2027', semester: '1ST', startDate: '2026-08-01', endDate: '2026-12-31', classCount: 0 }], classes: [] }) });
+    });
+    await page.click('a[href="/classes"]');
+    await page.getByRole('button', { name: 'Create Class', exact: true }).first().click();
+    await page.getByLabel('Academic term *').selectOption('');
+    await expect(page.getByText('Enter a course code.')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Save Class Section' }).click();
+    await expect(page.getByText(/details need attention before saving:/)).toBeVisible();
+    await expect(page.getByText('Enter a course code.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Choose an academic term.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Choose a lecture room.', { exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder('e.g. DENT 301')).toHaveAttribute('aria-invalid', 'true');
+    await page.getByPlaceholder('e.g. DENT 301').fill('NEW602');
+    await expect(page.getByText('Enter a course code.', { exact: true })).toHaveCount(0);
+    expect(createCalls).toBe(0);
+  });
+
   test('Create Class records lecture and laboratory units with a separate schedule for each', async ({ page }) => {
     let created: Record<string, unknown> | null = null;
     await page.route('**/api/faculty/classes', async route => {
@@ -276,6 +299,30 @@ test.describe('Faculty Module E2E Tests', () => {
     await page.getByRole('button', { name: 'Save Changes' }).click();
     await expect.poll(() => updates.length).toBe(1);
     expect(updates[0]).toMatchObject({ csId: 91, lectureUnits: null, labUnits: 3, lecRoom: '' });
+  });
+
+  test('Edit Class keeps the stored class name unless the course code or block changes', async ({ page }) => {
+    const cls = { id: '92', csId: 92, csName: 'CLINIC-4B', courseId: 9, courseCode: 'CLIN401', courseName: 'Clinical Dentistry', units: 3, lectureUnits: 3, labUnits: 0, courseUnitsEditable: true, hasGrades: false, schoolYear: '2026-2027', isCurrentSchoolYear: true, isHistorical: false, semester: '1ST', yearLevel: 4, block: 'B', schedule: null, lecRoom: '', labRoom: '', enrolledCount: 0, instructorName: 'Prof. Jane Doe', status: 'Active' };
+    const updates: Array<Record<string, unknown>> = [];
+    await page.route('**/api/faculty/classes', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', currentSchoolYear: '2026-2027', classes: [cls] }) }));
+    await page.route('**/api/faculty/classes/update', async route => {
+      updates.push(route.request().postDataJSON());
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', message: 'Class section updated successfully.', csId: 92 }) });
+    });
+    await page.route('**/api/faculty/courses', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', courses: [] }) }));
+    await page.route('**/api/faculty/students', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
+
+    await page.click('a[href="/classes"]');
+    await page.getByTitle('Edit Class Section Details').first().click();
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(() => updates.length).toBe(1);
+    expect(updates[0]).not.toHaveProperty('csName');
+
+    await page.getByTitle('Edit Class Section Details').first().click();
+    await page.getByPlaceholder('Section 4-A').fill('C');
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(() => updates.length).toBe(2);
+    expect(updates[1]).toMatchObject({ csName: 'CLIN401-C', block: 'C' });
   });
 
   test('class editing preserves legacy text on metadata changes and keeps two Monday meetings separate', async ({ page }) => {

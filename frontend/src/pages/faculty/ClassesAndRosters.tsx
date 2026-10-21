@@ -217,6 +217,7 @@ export const ClassesAndRosters: React.FC = () => {
     },
   ]);
   const [isSubmittingClass, setIsSubmittingClass] = useState(false);
+  const [createAttempted, setCreateAttempted] = useState(false);
 
   // Form States: Edit Class Section
   const [editingClass, setEditingClass] = useState<FacultyClassItem | null>(null);
@@ -711,7 +712,10 @@ export const ClassesAndRosters: React.FC = () => {
         // once scores or grades exist.
         courseCode: codeChanged ? editCourseCode.trim() : undefined,
         courseName: editCourseName.trim() || undefined,
-        csName: `${editCourseCode.trim()}-${editBlock.trim()}`,
+        // The stored name is kept unless the course code or block changed.
+        csName: codeChanged || editBlock.trim() !== (editingClass.block || '').trim()
+          ? `${editCourseCode.trim()}-${editBlock.trim()}`
+          : undefined,
         block: editBlock.trim(),
         yearLevel: editYearLevel,
         semester: semesterChanged ? editSemester : undefined,
@@ -831,18 +835,53 @@ export const ClassesAndRosters: React.FC = () => {
     setNewLectureUnits('3');
     setNewLabUnits('1');
     setSessionSlots([defaultSlotFor('Lecture')]);
+    setCreateAttempted(false);
     setIsCreateClassOpen(true);
+  };
+
+  // Field problems for the Create Class form (shown inline once Save was pressed).
+  const createClassProblems = useMemo(() => {
+    const out: { key: string; label: string; message: string }[] = [];
+    const add = (key: string, label: string, message: string) => out.push({ key, label, message });
+    const unitsMsg = 'Enter units between 0.5 and 20.';
+    if (!newCourseCode.trim()) add('code', 'Course Code', 'Enter a course code.');
+    if (!newCourseName.trim()) add('title', 'Course Title', 'Enter the course title.');
+    if (newComponents !== 'lab' && parseUnitsInput(newLectureUnits) === null) add('lecUnits', 'Lecture Units', unitsMsg);
+    if (newComponents !== 'lecture' && parseUnitsInput(newLabUnits) === null) add('labUnits', 'Laboratory Units', unitsMsg);
+    if (!newBlock.trim()) add('block', 'Section / Block', 'Enter the section or block.');
+    if (!newTermId || !academicTerms.some(term => String(term.id) === newTermId)) add('term', 'Academic term', 'Choose an academic term.');
+    sessionSlots.forEach(slot => {
+      const kind = slot.type.toLowerCase();
+      if (!slot.room.trim()) add(`room-${slot.id}`, `${slot.type} room`, `Choose a ${kind} room.`);
+      if (slot.days.length === 0) add(`days-${slot.id}`, `${slot.type} days`, `Pick at least one ${kind} day.`);
+    });
+    return out;
+  }, [newCourseCode, newCourseName, newComponents, newLectureUnits, newLabUnits, newBlock, newTermId, academicTerms, sessionSlots]);
+  const shownProblems = createAttempted ? createClassProblems : [];
+  const problemMsg = (key: string) => shownProblems.find(p => p.key === key)?.message;
+  const invalidCls = 'border-rose-300 dark:border-rose-700 bg-rose-50/60 dark:bg-rose-950/30';
+  const fieldCls = (key: string, base: string) => (problemMsg(key) ? invalidCls : base);
+  const fieldErr = (key: string) => {
+    const msg = problemMsg(key);
+    return msg ? <p id={`err-${key}`} className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400">{msg}</p> : null;
+  };
+  const fieldAria = (key: string) => (problemMsg(key) ? { 'aria-invalid': true as const, 'aria-describedby': `err-${key}` } : {});
+  const focusCreateField = (key: string) => {
+    const el = document.getElementById(`create-${key}`);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el?.focus({ preventScroll: true });
   };
 
   // Handler: Create Class via authoritative API with strict conflict prevention
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (scheduleConflict) {
-      showFeedback(scheduleConflict, 'error');
+    if (createClassProblems.length > 0) {
+      setCreateAttempted(true);
+      focusCreateField(createClassProblems[0].key);
       return;
     }
-    if (!newTermId || !academicTerms.some(term => String(term.id) === newTermId)) {
-      showFeedback('Choose a Dean-defined academic term before creating a class.', 'error');
+    if (scheduleConflict) {
+      showFeedback(scheduleConflict, 'error');
       return;
     }
     if (!newSchoolYear) {
@@ -859,24 +898,10 @@ export const ClassesAndRosters: React.FC = () => {
     }
 
     const csName = `${newCourseCode.trim()}-${newBlock.trim()}`;
-    if (!csName || !newCourseCode.trim()) {
-      showFeedback('Please provide a course code and section block.', 'error');
-      return;
-    }
-
     const includesLecture = newComponents !== 'lab';
     const includesLab = newComponents !== 'lecture';
     const lectureUnits = includesLecture ? parseUnitsInput(newLectureUnits) : null;
     const labUnits = includesLab ? parseUnitsInput(newLabUnits) : null;
-    if ((includesLecture && lectureUnits === null) || (includesLab && labUnits === null)) {
-      showFeedback('Enter the units for each selected component (lecture and/or laboratory).', 'error');
-      return;
-    }
-    const missingSchedule = sessionSlots.find(slot => !slot.room || slot.days.length === 0);
-    if (missingSchedule) {
-      showFeedback(`Choose a room and at least one day for the ${missingSchedule.type.toLowerCase()} schedule.`, 'error');
-      return;
-    }
 
     const { lecRoom, labRoom, meetings } = formatSessionsForSubmission(sessionSlots);
 
@@ -899,6 +924,7 @@ export const ClassesAndRosters: React.FC = () => {
 
       showFeedback(res.message || `Class section ${csName} created successfully for current S.Y. ${newSchoolYear}!`, 'success');
       setIsCreateClassOpen(false);
+      setCreateAttempted(false);
       setSelectedClassFilterId('all');
       if (selectedSchoolYear !== 'all' && selectedSchoolYear !== newSchoolYear) {
         setSelectedSchoolYear(newSchoolYear);
@@ -1802,7 +1828,7 @@ export const ClassesAndRosters: React.FC = () => {
       {/* Modal: Create Class Manually via Authoritative API */}
       {isCreateClassOpen && (
         <Modal isOpen={isCreateClassOpen} onClose={() => setIsCreateClassOpen(false)} title="Create New Class Section">
-          <form onSubmit={handleCreateClass} className="space-y-4 text-xs">
+          <form onSubmit={handleCreateClass} noValidate className="space-y-4 text-xs">
             {/* Academic School Year (Strictly current year only) */}
             <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -1820,10 +1846,12 @@ export const ClassesAndRosters: React.FC = () => {
             {/* Course Code & Title */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code *</label>
+                <label htmlFor="create-code" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Course Code *</label>
                 <input
+                  id="create-code"
                   type="text"
                   required
+                  {...fieldAria('code')}
                   list="course-catalog-codes"
                   value={newCourseCode}
                   onChange={(e) => {
@@ -1845,8 +1873,9 @@ export const ClassesAndRosters: React.FC = () => {
                     }
                   }}
                   placeholder="e.g. DENT 301"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium ${fieldCls('code', 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900')}`}
                 />
+                {fieldErr('code')}
                 <datalist id="course-catalog-codes">
                   {courses.map(c => (
                     <option key={c.id} value={c.courseCode}>{c.name} ({c.units} Units, Year {c.yearLevel})</option>
@@ -1855,17 +1884,20 @@ export const ClassesAndRosters: React.FC = () => {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                <label htmlFor="create-title" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
                   {selectedCatalogCourse ? 'Course Title for Your Class *' : 'Course Title *'}
                 </label>
                 <input
+                  id="create-title"
                   type="text"
                   required
+                  {...fieldAria('title')}
                   value={newCourseName}
                   onChange={(e) => setNewCourseName(e.target.value)}
                   placeholder="e.g. Restorative Dentistry I"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium ${fieldCls('title', 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900')}`}
                 />
+                {fieldErr('title')}
                 <p className="mt-1 text-[10px] text-slate-400">
                   {selectedCatalogCourse
                     ? `Catalog name: ${selectedCatalogCourse.name}. A different title here shows only for your class.`
@@ -1911,12 +1943,15 @@ export const ClassesAndRosters: React.FC = () => {
                       min={0.5}
                       max={20}
                       step={0.5}
+                      id="create-lecUnits"
                       required
+                      {...fieldAria('lecUnits')}
                       readOnly={catalogUnitsLocked}
                       value={newLectureUnits}
                       onChange={(e) => setNewLectureUnits(e.target.value)}
-                      className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+                      className={`mt-1 w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium ${fieldCls('lecUnits', 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800')}`}
                     />
+                    {fieldErr('lecUnits')}
                   </label>
                 )}
                 {newComponents !== 'lecture' && (
@@ -1927,12 +1962,15 @@ export const ClassesAndRosters: React.FC = () => {
                       min={0.5}
                       max={20}
                       step={0.5}
+                      id="create-labUnits"
                       required
+                      {...fieldAria('labUnits')}
                       readOnly={catalogUnitsLocked}
                       value={newLabUnits}
                       onChange={(e) => setNewLabUnits(e.target.value)}
-                      className="mt-1 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium"
+                      className={`mt-1 w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium ${fieldCls('labUnits', 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800')}`}
                     />
+                    {fieldErr('labUnits')}
                   </label>
                 )}
               </div>
@@ -1946,15 +1984,18 @@ export const ClassesAndRosters: React.FC = () => {
             {/* Section / Block, Year Level & Semester */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block *</label>
+                <label htmlFor="create-block" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Section / Block *</label>
                 <input
+                  id="create-block"
                   type="text"
                   required
+                  {...fieldAria('block')}
                   value={newBlock}
                   onChange={(e) => setNewBlock(e.target.value)}
                   placeholder="e.g. 4B or Section 3-A"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium ${fieldCls('block', 'border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900')}`}
                 />
+                {fieldErr('block')}
               </div>
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Year Level *</label>
@@ -1972,15 +2013,17 @@ export const ClassesAndRosters: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label htmlFor="new-academic-term" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Academic term *</label>
-                <select id="new-academic-term" required disabled={academicTerms.length === 0}
+                <label htmlFor="create-term" className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Academic term *</label>
+                <select id="create-term" required disabled={academicTerms.length === 0}
+                  {...fieldAria('term')}
                   value={newTermId}
                   onChange={(e) => setNewTermId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-medium cursor-pointer"
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-slate-800 dark:text-slate-100 font-medium cursor-pointer ${fieldCls('term', 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800')}`}
                 >
                   <option value="">Choose a term</option>
                   {academicTerms.map(term => <option key={term.id} value={String(term.id)}>{term.semester} {term.schoolYear} ({term.startDate} – {term.endDate})</option>)}
                 </select>
+                {fieldErr('term')}
               </div>
             </div>
 
@@ -2003,21 +2046,25 @@ export const ClassesAndRosters: React.FC = () => {
                   </div>
 
                   {/* Choose Room Venue with RoomSelector */}
-                  <RoomSelector
-                    key={`${slot.id}-${slot.type}-room`}
-                    id={`room-select-${slot.id}`}
-                    label={`${slot.type} Room Venue *`}
-                    value={slot.room}
-                    onChange={(r) => handleUpdateSlot(slot.id, { room: r })}
-                    placeholder={`Choose ${slot.type} Room`}
-                  />
+                  <div className={problemMsg(`room-${slot.id}`) ? `p-1.5 rounded-xl border ${invalidCls}` : undefined}>
+                    <RoomSelector
+                      key={`${slot.id}-${slot.type}-room`}
+                      id={`create-room-${slot.id}`}
+                      label={`${slot.type} Room Venue *`}
+                      value={slot.room}
+                      onChange={(r) => handleUpdateSlot(slot.id, { room: r })}
+                      placeholder={`Choose ${slot.type} Room`}
+                    />
+                    {fieldErr(`room-${slot.id}`)}
+                  </div>
 
                   {/* Days Selection */}
                   <div>
                     <span className="font-semibold text-slate-600 dark:text-slate-400 block mb-1.5 text-[11px]">
                       {slot.type} Day(s) *
                     </span>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div id={`create-days-${slot.id}`} tabIndex={-1} {...fieldAria(`days-${slot.id}`)}
+                      className={`flex flex-wrap gap-1.5 ${problemMsg(`days-${slot.id}`) ? 'p-1.5 rounded-xl ring-1 ring-rose-300 dark:ring-rose-700 bg-rose-50/60 dark:bg-rose-950/30' : ''}`}>
                       {SCHEDULE_DAYS.map(day => {
                         const isDaySelected = slot.days.includes(day);
                         return (
@@ -2041,6 +2088,7 @@ export const ClassesAndRosters: React.FC = () => {
                         );
                       })}
                     </div>
+                    {fieldErr(`days-${slot.id}`)}
                     <div className="flex items-center gap-2 mt-1.5 text-[10px]">
                       <span className="text-slate-400 font-semibold">Presets:</span>
                       {SCHEDULE_PRESETS.map(preset => (
@@ -2082,11 +2130,23 @@ export const ClassesAndRosters: React.FC = () => {
               ))}
             </div>
 
-            {/* Conflict Error Banner */}
-            {scheduleConflict && (
+            {/* Conflict Error Banner (its missing room/day text is already shown inline after Save) */}
+            {scheduleConflict && !shownProblems.some(p => p.key.startsWith('room-') || p.key.startsWith('days-')) && (
               <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-fade-in">
                 <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                 <span>{scheduleConflict}</span>
+              </div>
+            )}
+
+            {shownProblems.length > 0 && (
+              <div role="alert" className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs font-semibold flex items-start gap-2.5 animate-fade-in">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div>
+                  <p>{shownProblems.length === 1 ? '1 detail needs' : `${shownProblems.length} details need`} attention before saving:</p>
+                  <ul className="mt-1 list-disc pl-4 font-medium">
+                    {shownProblems.map(p => <li key={p.key}>{p.label}: {p.message}</li>)}
+                  </ul>
+                </div>
               </div>
             )}
 
@@ -2101,16 +2161,7 @@ export const ClassesAndRosters: React.FC = () => {
               </button>
               <button
                 type="submit"
-                disabled={
-                  isSubmittingClass ||
-                  !newTermId ||
-                  !newSchoolYear ||
-                  !!scheduleConflict ||
-                  !newCourseCode.trim() ||
-                  !newCourseName.trim() ||
-                  !newBlock.trim() ||
-                  sessionSlots.some(s => !s.room.trim() || s.days.length === 0)
-                }
+                disabled={isSubmittingClass}
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold shadow-md shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
               >
                 {isSubmittingClass ? 'Saving...' : 'Save Class Section'}
