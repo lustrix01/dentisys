@@ -104,7 +104,7 @@ function auth_runtime_login(PDO $pdo, array $config, array $body, array $context
         throw new InactiveAccountException($user['status']);
     }
 
-    if ($user['role'] === 'student') {
+    if (in_array($user['role'], ['student', 'secretary'], true)) {
         auth_assert_student_eligible($pdo, $config, (int) $user['user_id']);
     }
 

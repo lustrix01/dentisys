@@ -314,6 +314,7 @@ function handle_student_dashboard_get(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = student_academic_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $profile = student_academic_profile($pdo, (int) $authCtx['student_id']);
         $classes = student_academic_class_rows($pdo, (int) $authCtx['student_id']);
         $currentSchoolYear = academic_current_school_year($pdo);

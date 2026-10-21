@@ -2525,7 +2525,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const printTable = page.locator('.print-only table');
       await expect(printTable.locator('th', { hasText: 'Midterm %' })).toBeAttached();
       await expect(printTable.locator('th', { hasText: 'Final %' })).toBeAttached();
-      await expect(printTable.locator('th', { hasText: 'Overall GWA' })).toBeAttached();
+      await expect(printTable.locator('th', { hasText: 'Final Grade' })).toBeAttached();
 
       // Verify no hardcoded 80.0% exists in the printable table
       await expect(printTable.getByText('80.0%')).toHaveCount(0);
@@ -2711,7 +2711,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await expect(interactiveRow.locator('td').nth(1)).toContainText('Pending');
       await expect(interactiveRow.locator('td').nth(2)).toContainText('Pending');
 
-      // Overall GWA must show '—', NOT the legacy 1.8!
+      // Overall Grade must show '—', NOT the legacy 1.8!
       await expect(interactiveRow.locator('td').nth(3)).toContainText('—');
       await expect(interactiveRow.locator('td').nth(3)).not.toContainText('1.8');
 
@@ -2822,7 +2822,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
       // INCOMPLETE badge is shown in remarks (column 4)
       await expect(row.locator('td').nth(4)).toContainText('INCOMPLETE');
-      // Overall GWA (column 3) must show '—', and must NOT fall back to legacy 2.3 or 'Prior: 2.3 (Historical)'
+      // Overall Grade (column 3) must show '—', and must NOT fall back to legacy 2.3 or 'Prior: 2.3 (Historical)'
       await expect(row.locator('td').nth(3)).toContainText('—');
       await expect(page.locator('.no-print').getByText(/Prior:/i)).toHaveCount(0);
       await expect(page.locator('.no-print').getByText(/Historical/i)).toHaveCount(0);

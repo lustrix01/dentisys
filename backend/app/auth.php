@@ -295,7 +295,7 @@ function auth_verify_access_token(
     }
 
     $student = null;
-    if ($user['role'] === 'student') {
+    if (in_array($user['role'], ['student', 'secretary'], true)) {
         $student = auth_assert_student_eligible($pdo, $config, (int) $user['user_id']);
     }
 

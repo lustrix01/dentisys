@@ -228,6 +228,7 @@ function mapError(status: number, backendMessage: string, responseData?: unknown
   }
   if (status === 400) return 'Please check your input and try again.';
   if (status === 422) return backendMessage || 'Please correct the highlighted fields.';
+  if (status === 404) return backendMessage || 'The requested record was not found.';
   if (status === 409) return backendMessage || 'This request conflicts with the current account state.';
   if (status === 401) return 'Authentication failed. Please log in again.';
   if (status === 403) return 'Access denied. Contact the administrator.';

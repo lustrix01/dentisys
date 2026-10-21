@@ -211,7 +211,7 @@ export const RealStudentDashboard: React.FC = () => {
 
         <Card className="p-4 flex flex-col justify-between min-w-0 xl:block xl:min-w-[auto] bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
           <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block break-words xl:break-normal">
-            Overall GWA
+            Overall Grade
           </span>
           <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words xl:break-normal">
             {typeof summary.gwa === 'number' ? summary.gwa.toFixed(2) : '—'}

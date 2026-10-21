@@ -184,6 +184,7 @@ function handle_faculty_dashboard_kpis(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = faculty_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
         $currentSchoolYear = academic_current_school_year($pdo);
         $schoolYear = academic_resolve_school_year_filter($pdo, $_GET['schoolYear'] ?? null);
         $yearFilter = $schoolYear === null ? '' : 'AND UPPER(cs.school_year) = UPPER(:school_year)';
@@ -3537,7 +3538,7 @@ function handle_faculty_assessments_save(): void
             $existing = null;
             if ($assessmentId > 0) {
                 $existingStmt = $pdo->prepare(
-                    "SELECT a.grading_category_id, a.transmutation_enabled, a.transmutation_minimum_percentage,
+                    "SELECT a.cs_id, a.grading_category_id, a.transmutation_enabled, a.transmutation_minimum_percentage,
                             a.transmutation_maximum_percentage, a.attendance_session_date,
                             a.attendance_session_code, a.title, a.type, a.grading_period, a.max_score,
                             a.weight, a.due_date, a.instructions, a.status
@@ -3551,6 +3552,26 @@ function handle_faculty_assessments_save(): void
                     $pdo->rollBack();
                     safe_error_response('Assessment not found.', 404);
                     return;
+                }
+                if (academic_class_section_is_past($pdo, (int) $existing['cs_id'])) {
+                    $pdo->rollBack();
+                    safe_error_response('Past school-year classes are view-only.', 409);
+                    return;
+                }
+                if ((int) $existing['cs_id'] !== $csId) {
+                    $pdo->rollBack();
+                    safe_error_response('An assessment cannot be moved to another class.', 422);
+                    return;
+                }
+                if ($maxScore < (float) $existing['max_score']) {
+                    $highestStmt = $pdo->prepare('SELECT MAX(score) FROM assessment_scores WHERE assessment_id = ?');
+                    $highestStmt->execute([$assessmentId]);
+                    $highest = $highestStmt->fetchColumn();
+                    if ($highest !== false && $highest !== null && (float) $highest > $maxScore) {
+                        $pdo->rollBack();
+                        safe_error_response('Maximum score cannot be lower than a score already saved for this assessment (highest saved score: ' . rtrim(rtrim(number_format((float) $highest, 2, '.', ''), '0'), '.') . ').', 422);
+                        return;
+                    }
                 }
             }
             $offering = faculty_grading_offering_for_class($pdo, (int) $authCtx['user_id'], $csId);
@@ -8009,6 +8030,7 @@ function handle_faculty_class_enroll_students(): void
             $insertStmt = $pdo->prepare(
                 "INSERT INTO enrollments (student_id, cs_id, status, date_enrolled, retention_state, created_at)
                  VALUES (?, ?, 'Active', CURRENT_DATE, 'active', CURRENT_TIMESTAMP(6))
+                 ON CONFLICT (student_id, cs_id) DO NOTHING
                  RETURNING enrollment_id"
             );
             $reviveStmt = $pdo->prepare(

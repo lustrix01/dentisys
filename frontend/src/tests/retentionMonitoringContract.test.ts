@@ -132,11 +132,15 @@ test('Reports and dashboards show computed retention only, with At Risk and no l
   const reports = fs.readFileSync(path.join(currentDirectory, '../pages/faculty/Reports.tsx'), 'utf8');
   const adminDashboard = fs.readFileSync(path.join(currentDirectory, '../pages/admin/Dashboard.tsx'), 'utf8');
   assert.match(reports, /record !== null && record\.state === 'remedial'/);
-  assert.match(reports, /Standing GWA,At-Risk Courses,Risk Level,Remedial Status/);
+  assert.match(reports, /Standing Grade,At-Risk Courses,Risk Level,Remedial Status/);
   assert.match(reports, /atRiskCourses && atRiskCourses > 0 \? 'At Risk' : ''/);
   assert.match(reports, />At-Risk Courses<\/th>/);
   assert.match(reports, /Proportion of students by computed retention status/);
   assert.match(reports, /No retention distribution data available\./);
   assert.doesNotMatch(reports, /HIGH RISK|LOW RISK|Warning Count|Warning Status|Critical Watch|Warnings`/);
   assert.doesNotMatch(adminDashboard, /statusCounts\?\.(warning|critical)/);
+});
+
+test('API error mapping: a 404 shows the backend message instead of the generic text', () => {
+  assert.match(apiClient, /if \(status === 404\) return backendMessage \|\| 'The requested record was not found\.';/);
 });

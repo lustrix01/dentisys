@@ -398,7 +398,7 @@ test('Student academic details remain available in Classes and Dashboard', async
   await expect(page.getByText('Clinical Hours Completed:', { exact: false })).toContainText('14 hrs');
   await expect(page.getByRole('main')).toContainText('Retention Standing Warning');
   await page.goto('/student/dashboard');
-  await expect(page.getByText('Overall GWA', { exact: true })).toBeVisible();
+  await expect(page.getByText('Overall Grade', { exact: true })).toBeVisible();
   await expect(page.getByRole('columnheader', { name: 'Score %', exact: true })).toBeVisible();
   await expect(page.getByRole('row').filter({ hasText: 'DENT401' })).toContainText('80.5%');
 });

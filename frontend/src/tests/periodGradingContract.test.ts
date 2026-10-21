@@ -731,10 +731,10 @@ test('CSV Generation: exports distinct period percentages without copying overal
   const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
   const lines = csv.trim().split('\n');
 
-  assert.equal(lines[0], 'Student Number,Student Name,Midterm %,Final %,Overall GWA,Status');
-  // Student 1: distinct Midterm 88.75%, Final 90.00%, Overall GWA 1.8
+  assert.equal(lines[0], 'Student Number,Student Name,Midterm %,Final %,Overall Grade,Status');
+  // Student 1: distinct Midterm 88.75%, Final 90.00%, Overall Grade 1.8
   assert.equal(lines[1], '"DENT-001","Alice Reyes","88.75%","90.00%","1.8","PASS"');
-  // Student 2: Midterm Incomplete (Missing Date Range), Final 90.00%, Overall GWA Incomplete
+  // Student 2: Midterm Incomplete (Missing Date Range), Final 90.00%, Overall Grade Incomplete
   assert.equal(lines[2], '"DENT-002","Bob Santos","Incomplete (Missing Date Range)","90.00%","Incomplete","INCOMPLETE"');
 });
 
@@ -885,7 +885,7 @@ test('CSV Generation: uncomputed period mode outputs Pending and PENDING', () =>
 
   const csv = generateGradeSummaryCSV(dummyStudents, 'CLIN401', true);
   const lines = csv.trim().split('\n');
-  assert.equal(lines[0], 'Student Number,Student Name,Midterm %,Final %,Overall GWA,Status');
+  assert.equal(lines[0], 'Student Number,Student Name,Midterm %,Final %,Overall Grade,Status');
   assert.equal(lines[1], '"DENT-005","Elena Ramos","Pending","Pending","Pending","PENDING"');
 });
 
@@ -923,7 +923,7 @@ test('CSV Generation: legacy mode exports accurately labeled overall columns wit
 
   const csv = generateGradeSummaryCSV(dummyStudents, 'ANAT101', false);
   const lines = csv.trim().split('\n');
-  assert.equal(lines[0], 'Student Number,Student Name,Quizzes,Practicum,Exams,Attendance,Overall GWA,Remarks');
+  assert.equal(lines[0], 'Student Number,Student Name,Quizzes,Practicum,Exams,Attendance,Overall Grade,Remarks');
   assert.equal(lines[1], '"DENT-004","David Lim","85.0%","90.0%","88.0%","95.0%","1.5","PASS"');
 });
 
@@ -990,7 +990,7 @@ test('Lecture/Laboratory evaluation exposes all four period components and group
 
   const csv = generateGradeSummaryCSV([student] as any, 'CLIN401', true, new Map([['801', groupedResult]]), 'lecture_laboratory');
   const lines = csv.trim().split('\n');
-  assert.equal(lines[0], 'Student Number,Student Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status');
+  assert.equal(lines[0], 'Student Number,Student Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall Grade,Status');
   assert.equal(lines[1], "\"'=DENT-007\",\"Alice Reyes\",\"81.00%\",\"91.00%\",\"87.00%\",\"93.00%\",\"83.00%\",\"89.00%\",\"1.7\",\"PASS\"");
 
   const groupedResultWithoutComponents: FacultyPeriodModeComputedResult = {
@@ -1084,7 +1084,7 @@ test('Lecture/Laboratory CSV quotes embedded text and neutralizes formula-leadin
 
   const csv = generateGradeSummaryCSV([student] as any, 'CLIN401', true, new Map([['802', incompleteResult]]), 'lecture_laboratory');
   assert.equal(csv, [
-    'Student Number,Student Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall GWA,Status',
+    'Student Number,Student Name,Midterm Lecture %,Midterm Laboratory %,Midterm %,Finals Lecture %,Finals Laboratory %,Finals %,Overall Grade,Status',
     '"\'@DENT-008","\'=Dana, ""Quoted""\nStudent","Incomplete (missing ""lab"", score\nplease)","Incomplete","Incomplete (Missing Assessment Score)","93.00%","83.00%","95.00%","Prior: 2.0 (Historical)","INCOMPLETE"',
   ].join('\n'));
 });

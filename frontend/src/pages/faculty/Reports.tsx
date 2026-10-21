@@ -534,7 +534,7 @@ export const Reports: React.FC = () => {
       }).join('\n');
       fileName = `${selectedSubjectCode || 'Course'}_Academic_Report.csv`;
     } else if (type === 'retention') {
-      headers = 'Student Number,Student Name,Standing GWA,At-Risk Courses,Risk Level,Remedial Status\n';
+      headers = 'Student Number,Student Name,Standing Grade,At-Risk Courses,Risk Level,Remedial Status\n';
       rows = facultyStudents.map((student: any) => {
         const atRiskCourses = retentionUnavailable ? null : (student.enrolledSubjects || []).filter((sub: any) =>
           assignedSubjects.includes(sub.code)
@@ -950,7 +950,7 @@ export const Reports: React.FC = () => {
               <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm">
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase text-slate-400 tracking-wider">
                   <th className="px-5 py-3">Student details</th>
-                  <th className="px-5 py-3 text-center">Standing GWA</th>
+                  <th className="px-5 py-3 text-center">Standing Grade</th>
                   <th className="px-5 py-3 text-center">At-Risk Courses</th>
                   <th className="px-5 py-3 text-center">Risk Level</th>
                   <th className="px-5 py-3">Remedial Program Status</th>
@@ -1296,7 +1296,7 @@ export const Reports: React.FC = () => {
               <tr>
                 <th className="l">Student No.</th>
                 <th className="l">Student Name</th>
-                <th>Standing GWA</th>
+                <th>Standing Grade</th>
                 <th>Standing Status</th>
                 <th className="l">Remedials Status</th>
               </tr>

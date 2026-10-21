@@ -227,7 +227,7 @@ test.describe('Assessment transmutation UI coverage', () => {
     expect(postedSettings).not.toHaveProperty('weights');
     await expect(page.getByText('Course component ratios')).toHaveCount(0);
     await expect(page.getByText('Retention trigger grade')).toHaveCount(0);
-    await expect(page.getByTestId('grading-policy-card')).toContainText('Retention trigger: GWA 2.5.');
+    await expect(page.getByTestId('grading-policy-card')).toContainText('Retention trigger: Grade 2.5.');
   });
 
   test('faculty assessment modal uses defaults and allows transmutation without an attendance link', async ({ page }) => {

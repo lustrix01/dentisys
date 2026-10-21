@@ -157,7 +157,7 @@ export const Settings: React.FC = () => {
             <CardContent className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
               <div data-testid="grading-policy-card" className="space-y-3">
               <p>
-                <strong className="text-slate-700 dark:text-slate-200">Retention trigger: GWA 2.5.</strong>{" "}
+                <strong className="text-slate-700 dark:text-slate-200">Retention trigger: Grade 2.5.</strong>{" "}
                 A final course grade of 2.5 or worse (1.0 is highest, 5.0 is failing) places the
                 Student under retention monitoring and makes the course eligible for a remedial
                 attempt. This is fixed college policy and applies to every course.

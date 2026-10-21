@@ -3037,7 +3037,7 @@ export const GradeComputation: React.FC = () => {
             Grade Management Portal
           </h1>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            Perform assessment tracking, grading components editing, GWA calculations, and CSV score sheet imports
+            Perform assessment tracking, grading components editing, grade calculations, and CSV score sheet imports
           </p>
         </div>
       </div>
@@ -4936,7 +4936,7 @@ export const GradeComputation: React.FC = () => {
                 Confirm Grade Recomputation
               </div>
               <p className="text-[11px] leading-relaxed">
-                This will recalculate student period evaluations and General Weighted Averages (GWA) for all enrolled students in class <strong>{selectedClassId}</strong> using the authoritative grading configuration.
+                This will recalculate student period evaluations and final grades for all enrolled students in class <strong>{selectedClassId}</strong> using the authoritative grading configuration.
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-150 dark:border-slate-800">
@@ -4977,7 +4977,7 @@ export const GradeComputation: React.FC = () => {
                   {selectedSubjectCode || 'Course'} · {selectedClassId || 'Section'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 mt-0.5">General Weighted Averages (GWA) and periodic evaluations based on current component scores</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Final grades and periodic evaluations based on current component scores</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
@@ -5636,7 +5636,7 @@ export const GradeComputation: React.FC = () => {
                     <th className="l" rowSpan={2}>Student Name</th>
                     <th className="band" scope="colgroup" colSpan={3}>Midterm</th>
                     <th className="band" scope="colgroup" colSpan={3}>Finals</th>
-                    <th rowSpan={2}>Final Grade (Overall GWA)</th>
+                    <th rowSpan={2}>Final Grade</th>
                     <th className="l" rowSpan={2}>Remarks</th>
                   </tr>
                   <tr>
@@ -5654,7 +5654,7 @@ export const GradeComputation: React.FC = () => {
                   <th className="l">Student Name</th>
                   <th>Midterm %</th>
                   <th>Final %</th>
-                  <th>Final Grade (Overall GWA)</th>
+                  <th>Final Grade</th>
                   <th className="l">Remarks</th>
                 </tr>
               )
@@ -5666,7 +5666,7 @@ export const GradeComputation: React.FC = () => {
                 <th>Practicum</th>
                 <th>Exams</th>
                 <th>Attendance</th>
-                <th>Final Grade (Overall GWA)</th>
+                <th>Final Grade</th>
                 <th className="l">Remarks</th>
               </tr>
             )}

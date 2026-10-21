@@ -90,6 +90,13 @@ export const FaceRegistration: React.FC = () => {
   const [profile, setProfile] = useState<StudentBiometricProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authStep, setAuthStep] = useState<1 | 2 | 3>(1);
+  const step3Ref = useRef<HTMLDivElement>(null);
+  const [scrollToStep3, setScrollToStep3] = useState(false);
+  useEffect(() => {
+    if (!scrollToStep3 || !step3Ref.current) return;
+    step3Ref.current.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    setScrollToStep3(false);
+  }, [scrollToStep3]);
 
   // Step 1: Consent
   const [hasAgreed, setHasAgreed] = useState(false);
@@ -378,7 +385,7 @@ export const FaceRegistration: React.FC = () => {
           expiresAt: result.expiresAt || null,
           usableSampleCount: result.usableSampleCount,
         } : null);
-        setAuthStep(3);
+        setAuthStep(3); setScrollToStep3(true);
       } else {
         setAuthError(result.message || 'Verification could not accept sufficient usable frames. Please adjust lighting and try again, or seek manual attendance check-in from your Secretary or Instructor.');
         setPendingPayload(null);
@@ -569,7 +576,7 @@ export const FaceRegistration: React.FC = () => {
           expiresAt: result.expiresAt || prev.expiresAt,
           usableSampleCount: result.usableSampleCount,
         } : prev);
-        setAuthStep(3);
+        setAuthStep(3); setScrollToStep3(true);
         stopCamera();
         return true;
       }
@@ -690,6 +697,16 @@ export const FaceRegistration: React.FC = () => {
     || capturePhase !== 'idle'
     || (isAuthoritative && (cameraLoading || Boolean(cameraError) || !livenessChallenge));
 
+  const errorBanner = authError && (
+    <div role="alert" className="text-left p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3 animate-fade-in">
+      <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+      <div>
+        <strong className="block font-bold">Registration Message</strong>
+        <p className="mt-0.5 leading-relaxed">{authError}</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
 
@@ -713,17 +730,6 @@ export const FaceRegistration: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Error Banner */}
-      {authError && (
-        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3 animate-fade-in">
-          <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <strong className="block font-bold">Registration Message</strong>
-            <p className="mt-0.5 leading-relaxed">{authError}</p>
-          </div>
-        </div>
-      )}
 
       {/* Expired Status Banner */}
       {isAuthoritative && profile?.enrollmentStatus === 'expired' && currentStep === 1 && (
@@ -830,6 +836,8 @@ export const FaceRegistration: React.FC = () => {
               I have read, understood, and voluntarily agree to the <strong className="text-blue-700 dark:text-blue-300">Facial Recognition and Data Privacy Disclosure</strong>. I consent to enrolling my protected facial reference for automated session attendance check-in.
             </label>
           </div>
+
+          {errorBanner}
 
           <div className="flex justify-end pt-2">
             <button
@@ -1042,6 +1050,8 @@ export const FaceRegistration: React.FC = () => {
                   Ensure good lighting, look directly into the camera, and follow the paced liveness instructions.
                 </p>
 
+                {errorBanner}
+
                 <div className="flex items-center justify-center gap-3">
                   {isAuthoritative && capturePhase !== 'idle' && (
                     <button
@@ -1088,7 +1098,7 @@ export const FaceRegistration: React.FC = () => {
 
       {/* STEP 3: SUCCESSFUL REGISTRATION NOTIFICATION & AUDIT */}
       {currentStep === 3 && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
+        <div ref={step3Ref} className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
           <div className="flex items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 flex items-center justify-center flex-shrink-0">
               <CheckCircle2 className="w-7 h-7" />
@@ -1133,6 +1143,8 @@ export const FaceRegistration: React.FC = () => {
               <span className="text-[10px] text-slate-400">Expires seasonally</span>
             </div>
           </div>
+
+          {errorBanner}
 
           <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="space-y-0.5 text-center sm:text-left">

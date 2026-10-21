@@ -882,6 +882,7 @@ function handle_secretary_dashboard_kpis(): void
         $config = app_config();
         $pdo = create_pdo($config);
         $authCtx = secretary_verify_auth($pdo, $config);
+        attendance_sessions_end_overdue($pdo, $config, attendance_session_request_context());
 
         $csStmt = $pdo->prepare(
             "SELECT cs.cs_id, cs.cs_name, cs.lab_room, cs.lec_room,
@@ -2003,6 +2004,9 @@ function handle_secretary_attendance_override(): void
         if ($sessionId < 0) {
             throw new ValidationException([['field' => 'sessionId', 'message' => 'Session id must be positive when supplied.']]);
         }
+        if ($recordId <= 0 && $sessionId <= 0) {
+            throw new ValidationException([['field' => 'recordId', 'message' => 'Choose the attendance record to correct.']]);
+        }
         $status = validate_enum($data, 'status', ['present', 'late', 'absent', 'excused']);
         if ($status === 'excused') {
             // ATT-006: only Faculty finalize Excused; the Secretary submits a request.
@@ -2381,8 +2385,8 @@ function handle_secretary_profile_get(): void
 
         $user = account_identity_fetch($pdo, (int) $authCtx['user_id']);
 
-        $csStmt = $pdo->prepare("SELECT cs_name, lab_room, lec_room FROM class_sections WHERE secretary_user_id = ? ORDER BY cs_id LIMIT 1");
-        $csStmt->execute([$authCtx['user_id']]);
+        $csStmt = $pdo->prepare("SELECT cs_name, lab_room, lec_room FROM class_sections WHERE secretary_user_id = ? ORDER BY (LOWER(status) = 'active' AND UPPER(school_year) = UPPER(?)) DESC, cs_id LIMIT 1");
+        $csStmt->execute([$authCtx['user_id'], academic_current_school_year($pdo)]);
         $csRow = $csStmt->fetch(PDO::FETCH_ASSOC);
 
         json_response([
@@ -2455,8 +2459,8 @@ function handle_secretary_settings_get(): void
         $stmt = $pdo->prepare("SELECT theme FROM user_accounts WHERE user_id = ?");
         $stmt->execute([$authCtx['user_id']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        $classStmt = $pdo->prepare("SELECT cs_name FROM class_sections WHERE secretary_user_id = ? ORDER BY cs_id LIMIT 1");
-        $classStmt->execute([$authCtx['user_id']]);
+        $classStmt = $pdo->prepare("SELECT cs_name FROM class_sections WHERE secretary_user_id = ? ORDER BY (LOWER(status) = 'active' AND UPPER(school_year) = UPPER(?)) DESC, cs_id LIMIT 1");
+        $classStmt->execute([$authCtx['user_id'], academic_current_school_year($pdo)]);
         $assignedClassName = $classStmt->fetchColumn();
 
         json_response([

@@ -327,6 +327,10 @@ export const EmailManagement: React.FC = () => {
       if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
     } catch (error) {
       setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Unable to remove the appointment.' });
+      try {
+        const refreshed = await getFacultyStudentsApi();
+        if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
+      } catch { /* keep the original error notice */ }
     } finally {
       setIsSending(false);
     }

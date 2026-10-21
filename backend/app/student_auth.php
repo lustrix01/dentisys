@@ -96,7 +96,7 @@ function auth_assert_student_eligible(PDO $pdo, array $config, int $userId, bool
     }
 
     $row = $rows[0];
-    if ($row['role'] !== 'student') {
+    if (!in_array($row['role'], ['student', 'secretary'], true)) { // a Class Secretary is still a Student
         $deny($pdo, $config, $userId, 'role_mismatch');
     }
     if ($row['status'] !== 'Active') {
