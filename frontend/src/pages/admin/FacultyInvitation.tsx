@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { showFeedback } from '../../components/FeedbackCenter';
 import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
 import type { EmailAction } from '../../components/email/emailHistory';
 import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
@@ -53,7 +54,12 @@ export const FacultyInvitation: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  // Also raise the corner notice: the banner is off-screen when the page is scrolled.
+  const [notice, setNoticeState] = useState('');
+  const setNotice = (m: string) => {
+    setNoticeState(m);
+    if (m) showFeedback(m, 'success');
+  };
 
   // Creation state
   const [prefix, setPrefix] = useState('');
@@ -158,7 +164,9 @@ export const FacultyInvitation: React.FC = () => {
       setEmail('');
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to issue Faculty invitation.');
+      const message = err instanceof Error ? err.message : 'Unable to issue Faculty invitation.';
+      setError(message);
+      showFeedback(message, 'error');
     } finally {
       setSending(false);
     }
@@ -241,7 +249,9 @@ export const FacultyInvitation: React.FC = () => {
       setRevokingInvitation(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to revoke Faculty invitation.');
+      const message = err instanceof Error ? err.message : 'Unable to revoke Faculty invitation.';
+      setError(message);
+      showFeedback(message, 'error');
     } finally {
       setRevoking(false);
     }
@@ -258,7 +268,9 @@ export const FacultyInvitation: React.FC = () => {
         : `Invitation reissued for ${invitation.email}, but email delivery failed.`);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to reissue Faculty invitation.');
+      const message = err instanceof Error ? err.message : 'Unable to reissue Faculty invitation.';
+      setError(message);
+      showFeedback(message, 'error');
     } finally {
       setSending(false);
     }

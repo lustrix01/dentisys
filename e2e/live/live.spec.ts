@@ -555,7 +555,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
   expect(initialOverrideData.recordId).toBeTruthy();
 
   // Toast appears and row status updates to Present
-  await expect(page.getByText(new RegExp(`Attendance updated for ${studentFullName}`, 'i'))).toBeVisible();
+  await expect(page.getByRole('main').getByText(new RegExp(`Attendance updated for ${studentFullName}`, 'i'))).toBeVisible();
   await expect(studentRow.getByTestId('attendance-status').getByText('Present', { exact: true })).toBeVisible();
 
   // Verify localStorage does not store this student's attendance override
@@ -605,7 +605,7 @@ test('faculty authoritative attendance monitoring workflow on live PostgreSQL st
 
   // Modal closes, toast appears, row status updates to Late
   await expect(page.getByRole('heading', { name: 'Manual Attendance Override' })).toHaveCount(0);
-  await expect(page.getByText(new RegExp(`Attendance corrected for ${studentFullName}`, 'i'))).toBeVisible();
+  await expect(page.getByRole('main').getByText(new RegExp(`Attendance corrected for ${studentFullName}`, 'i'))).toBeVisible();
   await expect(studentRowAfterReload.getByTestId('attendance-status').getByText('Late', { exact: true })).toBeVisible();
 
   // 9. Refresh browser again to confirm correction persists in PostgreSQL

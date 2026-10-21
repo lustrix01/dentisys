@@ -174,7 +174,7 @@ test.describe('Auth Module E2E Tests', () => {
     await page.getByLabel('Last name *').fill('Invalid');
     await page.getByLabel('Institutional email').fill('invalid.faculty@bicol-u.edu.ph');
     await page.getByRole('button', { name: 'Send invite' }).click();
-    await expect(page.getByRole('alert')).toContainText(/This Faculty email cannot be invited/i);
+    await expect(page.getByRole('main').getByRole('alert')).toContainText(/This Faculty email cannot be invited/i);
     await page.getByLabel('First name *').fill('Test');
     await page.getByLabel('Last name *').fill('Faculty');
     await page.getByLabel('Institutional email').fill('test.faculty@bicol-u.edu.ph');
@@ -185,7 +185,7 @@ test.describe('Auth Module E2E Tests', () => {
     await expect(page.getByText('Invitation emails you sent. View-only.')).toBeVisible();
     await expect(page.getByRole('table').filter({ hasText: 'Date Sent' }).getByText('Faculty Invitation', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Reissue' }).click();
-    await expect(page.getByText(/Invitation sent to test.faculty@bicol-u.edu.ph/)).toBeVisible();
+    await expect(page.getByRole('main').getByText(/Invitation sent to test.faculty@bicol-u.edu.ph/)).toBeVisible();
     expect(reissuePayload).toEqual({ id: '17' });
     const statusFilter = page.getByLabel('Filter Faculty invitations by status');
     await statusFilter.selectOption('Accepted');
@@ -220,7 +220,7 @@ test.describe('Auth Module E2E Tests', () => {
     await page.getByRole('button', { name: /Enrolled Student Roster/i }).click();
     await page.getByRole('button', { name: 'Actions for Test Student' }).click();
     await page.getByRole('button', { name: 'Send Invite', exact: true }).click();
-    await expect(page.getByText('Student invitation issued and sent.')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Student invitation issued and sent.')).toBeVisible();
     expect(submittedPayload).toEqual({ studentId: '42', classId: '77' });
   });
 

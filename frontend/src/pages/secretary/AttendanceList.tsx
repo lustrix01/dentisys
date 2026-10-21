@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
+import { showFeedback } from '../../components/FeedbackCenter';
 import { Modal } from '../../components/Modal';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
 import {
@@ -175,7 +176,12 @@ export const AttendanceList: React.FC = () => {
   const [overrideStatus, setOverrideStatus] = useState<'present' | 'late' | 'absent' | 'excused'>('present');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [feedback, setFeedbackState] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // Also raise the corner notice: the banner is off-screen when the page is scrolled.
+  const setFeedback = (f: { type: 'success' | 'error'; text: string } | null) => {
+    setFeedbackState(f);
+    if (f) showFeedback(f.text, f.type);
+  };
 
   // Dedicated Session Management Modal (Current Session & Upcoming Sessions tabs)
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);

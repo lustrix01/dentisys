@@ -166,7 +166,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await appPage.locator('tbody input[type="checkbox"]').nth(1).check();
       await appPage.getByRole('button', { name: /Send Invitations \(2\)/i }).click();
 
-      await expect(appPage.getByText('Student invitations: 1 issued, 1 email deliveries failed, 1 failed or skipped.')).toBeVisible();
+      await expect(appPage.getByRole('main').getByText('Student invitations: 1 issued, 1 email deliveries failed, 1 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation Issued · Delivery Failed')).toBeVisible();
       await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
       const historyTable = appPage.getByRole('table').filter({ hasText: 'Date Sent' });
@@ -377,7 +377,7 @@ test.describe('Faculty Module E2E Tests', () => {
     await expect(page.getByText('Active Student')).toBeVisible();
     await page.getByRole('button', { name: 'Actions for Active Student' }).click();
     await page.getByRole('button', { name: 'Send Invite', exact: true }).click();
-    await expect(page.getByText('This Student identity is already linked to an active account.')).toBeVisible();
+    await expect(page.getByRole('main').getByText('This Student identity is already linked to an active account.')).toBeVisible();
     await expect(page.getByText('An unexpected error occurred. Please try again.')).toHaveCount(0);
   });
 
@@ -411,7 +411,7 @@ test.describe('Faculty Module E2E Tests', () => {
       await expect(appPage.getByText('Canonical Student')).toBeVisible();
       await appPage.locator('tbody input[type="checkbox"]').first().check();
       await appPage.getByRole('button', { name: /Send Invitations \(1\)/i }).click();
-      await expect(appPage.getByText('Student invitations: 1 issued, 0 failed or skipped.')).toBeVisible();
+      await expect(appPage.getByRole('main').getByText('Student invitations: 1 issued, 0 failed or skipped.')).toBeVisible();
       await expect(appPage.getByText('Invitation Sent')).toBeVisible();
       await appPage.getByRole('button', { name: /Email History Log \(1\)/i }).click();
       await expect(appPage.getByRole('table').getByText('Student Invitation', { exact: true })).toBeVisible();
@@ -980,7 +980,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText(/Students without an attendance record will be marked Absent/)).toBeVisible();
     await page.getByRole('button', { name: 'Confirm End Session' }).click();
     await expect.poll(() => endPayload).toEqual({ sessionId: '900' });
-    await expect(page.getByText(/Attendance session ended/)).toBeVisible();
+    await expect(page.getByRole('main').getByText(/Attendance session ended/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'End Session' })).toHaveCount(0);
   });
 
@@ -1158,7 +1158,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       await page.clock.runFor(100);
       expect(reads).toBe(readsBefore);
       releaseWrite();
-      await expect(page.getByText(operation === 'bulk' ? 'Marked 1 student as present.' : operation === 'correction' ? 'Attendance corrected for Bob White (absent).' : 'Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
+      await expect(page.getByRole('main').getByText(operation === 'bulk' ? 'Marked 1 student as present.' : operation === 'correction' ? 'Attendance corrected for Bob White (absent).' : 'Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
     });
   }
 
@@ -1195,7 +1195,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await expect(page.locator('input[type="date"]')).toBeDisabled();
         if (newerRead === 'same session') await expect(page.getByRole('combobox', { name: 'Attendance session', exact: true })).toBeDisabled();
         releaseWrite();
-        await expect(page.getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
+        await expect(page.getByRole('main').getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
         await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
         await expect(page.locator('input[type="date"]')).toBeEnabled();
         expect(reads).toBe(1);
@@ -1203,7 +1203,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       }
       await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeDisabled();
       releaseWrite();
-      await expect(page.getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
+      await expect(page.getByRole('main').getByText('Attendance updated for Alice Green (present).', { exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeEnabled();
       await expect(alice.getByTestId('attendance-status')).toHaveText(/Present$/);
       expect(reads).toBe(1);
@@ -1249,7 +1249,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
         await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
         await page.getByRole('button', { name: 'Revoke', exact: true }).click();
         await page.getByRole('button', { name: 'Confirm Revoke Session', exact: true }).click();
-        await expect(page.getByText(/Attendance session revoked\. Already-recorded/)).toBeVisible();
+        await expect(page.getByRole('main').getByText(/Attendance session revoked\. Already-recorded/)).toBeVisible();
         expect(reads).toBe(1);
         await page.keyboard.press('Escape');
       }
@@ -1257,7 +1257,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const row = page.locator('tbody tr').filter({ hasText: roster[index].studentName });
       await expect(row.getByTestId('attendance-status')).toHaveText(/Present$/);
     }
-    await expect(page.getByText('Marked 3 students as present.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByText('Marked 3 students as present.', { exact: true })).toBeVisible();
     await expect(refresh).toBeEnabled();
     for (const student of roster) {
       await expect(page.locator('tbody tr').filter({ hasText: student.studentName }).getByTestId('attendance-status')).toHaveText(/Present$/);
@@ -1345,7 +1345,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'present', exact: true }).click();
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
 
-    await expect(page.getByText(/Attendance updated for Alice Green \(present\)/i)).toBeVisible();
+    await expect(page.getByRole('main').getByText(/Attendance updated for Alice Green \(present\)/i)).toBeVisible();
     expect(overridePayload).not.toBeNull();
     expect(overridePayload?.csId).toBe(1);
     expect(overridePayload?.enrollmentId).toBe(10);
@@ -1417,7 +1417,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.fill('textarea', 'Student was absent due to illness');
     await page.getByRole('button', { name: 'Save Override' }).click();
 
-    await expect(page.getByText(/Attendance corrected for Bob White \(absent\)/i)).toBeVisible();
+    await expect(page.getByRole('main').getByText(/Attendance corrected for Bob White \(absent\)/i)).toBeVisible();
     expect(overridePayload).not.toBeNull();
     expect(overridePayload?.recordId).toBe('50');
     expect(overridePayload?.status).toBe('absent');
@@ -1449,7 +1449,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByText('Attendance corrected for Bob White (absent).', { exact: true })).toHaveCount(0);
     expect(payloads).toEqual([{ recordId: '50', status: 'absent', reason: 'Verified absence with the Student' }]);
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
-    await expect(page.getByText('Attendance corrected for Bob White (absent).', { exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByText('Attendance corrected for Bob White (absent).', { exact: true })).toBeVisible();
     await expect(row.getByTestId('attendance-status')).toHaveText(/Absent$/);
     await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toHaveCount(0);
     expect(payloads).toEqual([payloads[0], payloads[0]]);
@@ -1485,7 +1485,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await page.locator('form').getByRole('button', { name: 'late', exact: true }).click();
     await page.locator('textarea').fill('  Verified arrival for the afternoon session  ');
     await page.getByRole('button', { name: 'Save Override', exact: true }).click();
-    await expect(page.getByText('Attendance updated for Alice Green (late).', { exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByText('Attendance updated for Alice Green (late).', { exact: true })).toBeVisible();
     expect(payloads).toEqual([{ csId: 1, enrollmentId: 10, sessionDate: '2026-09-20', sessionId: 42,
       status: 'late', reason: 'Verified arrival for the afternoon session' }]);
     await expect(row.getByTestId('attendance-status')).toHaveText(/Late$/);
@@ -1544,7 +1544,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
 
     await page.getByRole('button', { name: 'Mark all unrecorded as Present' }).click();
     await page.getByRole('button', { name: 'Mark Present', exact: true }).click();
-    await expect(page.getByText('Marked 1 student as present.')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Marked 1 student as present.')).toBeVisible();
     expect(payloads).toHaveLength(1);
     expect(payloads[0]?.enrollmentId).toBe(10);
     expect(payloads[0]?.status).toBe('present');
@@ -1580,7 +1580,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
     await expect(page.getByRole('alert')).toContainText('created by Faculty Jane Doe');
     expect(payloads).toEqual([{ sessionId: '700', room: 'Changed room' }]);
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
-    await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
     expect(payloads[1]).toEqual(payloads[0]);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByLabel('Room or session location')).toHaveValue('Changed room');
@@ -1627,7 +1627,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const payloads = await openEdit(page, baseSession);
       await page.getByLabel('Room or session location').fill('Lab 6');
       await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
-      await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+      await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', room: 'Lab 6' }]);
     });
 
@@ -1654,7 +1654,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
       await page.getByRole('checkbox', { name: /Geofence/ }).uncheck();
       await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
-      await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+      await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', geofenceEnabled: false }]);
     });
 
@@ -1662,7 +1662,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const payloads = await openEdit(page, { ...baseSession, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
       await page.getByRole('checkbox', { name: /Geofence/ }).check();
       await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
-      await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+      await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', geofenceEnabled: true, geofenceRadiusMeters: 250, geofenceLatitude: 13.15, geofenceLongitude: 123.75 }]);
     });
 
@@ -1670,7 +1670,7 @@ test.describe('Authoritative Faculty Attendance Monitoring Workflow', () => {
       const payloads = await openEdit(page, { ...baseSession, geofenceEnabled: true, geofenceLatitude: 13.15, geofenceLongitude: 123.75 });
       await page.getByLabel('Allowed radius (meters)').fill('300');
       await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
-      await expect(page.getByText('Attendance session updated successfully.')).toBeVisible();
+      await expect(page.getByRole('main').getByText('Attendance session updated successfully.')).toBeVisible();
       expect(payloads).toEqual([{ sessionId: '710', geofenceRadiusMeters: 300 }]);
     });
 

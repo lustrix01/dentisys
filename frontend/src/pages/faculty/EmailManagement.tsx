@@ -16,6 +16,7 @@ import {
   UserPlus
 } from 'lucide-react';
 import { Card } from '../../components/Card';
+import { showFeedback } from '../../components/FeedbackCenter';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { EmailHistoryTable } from '../../components/email/EmailHistoryTable';
@@ -128,6 +129,11 @@ export const EmailManagement: React.FC = () => {
   const [secretaryDevLinks, setSecretaryDevLinks] = useState<Record<string, string>>({});
   
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // Also raise the corner notice: the banner is off-screen when the page is scrolled.
+  const notify = (n: { type: 'success' | 'error'; message: string }) => {
+    setNotice(n);
+    showFeedback(n.message, n.type);
+  };
   const [isSending, setIsSending] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
@@ -218,7 +224,7 @@ export const EmailManagement: React.FC = () => {
   // Send Email Action (Student Invites & Secretary Invites)
   const handleSendEmails = async () => {
     if (!selected.length) {
-      setNotice({ type: 'error', message: 'Please select at least one student recipient.' });
+      notify({ type: 'error', message: 'Please select at least one student recipient.' });
       return;
     }
 
@@ -236,7 +242,7 @@ export const EmailManagement: React.FC = () => {
         if (!student) continue;
         const classId = /^\d+$/.test(student.id) && /^\d+$/.test(rowClassId ?? '') ? rowClassId : null;
         if (!classId) {
-          setNotice({ type: 'error', message: `No class section found for ${student.name}.` });
+          notify({ type: 'error', message: `No class section found for ${student.name}.` });
           continue;
         }
 
@@ -258,7 +264,7 @@ export const EmailManagement: React.FC = () => {
           }
         } else {
           refusals.push(`${student.name}: ${res.message}`);
-          setNotice({ type: 'error', message: res.message });
+          notify({ type: 'error', message: res.message });
         }
       }
 
@@ -268,7 +274,7 @@ export const EmailManagement: React.FC = () => {
       setIsSending(false);
       if (count > 0) {
         // Keep any refusal visible next to the rows that were appointed.
-        setNotice({
+        notify({
           type: refusals.length ? 'error' : 'success',
           message: `Class Secretary appointment processed for ${count} student${count === 1 ? '' : 's'}: students with an account are appointed now; others receive an invitation that activates their Student account.`
             + (refusals.length ? ` Not appointed: ${refusals.join(' ')}` : ''),
@@ -305,7 +311,7 @@ export const EmailManagement: React.FC = () => {
       setSelected([]);
       await fetchEmailLogs();
       setIsSending(false);
-      setNotice({
+      notify({
         type: failedCount === 0 && deliveryFailedCount === 0 ? 'success' : 'error',
         message: (deliveryFailedCount > 0
           ? `Student invitations: ${successCount} issued, ${deliveryFailedCount} email deliveries failed, ${failedCount} failed or skipped.`
@@ -322,11 +328,11 @@ export const EmailManagement: React.FC = () => {
     setNotice(null);
     try {
       const response = await removeSecretaryAppointmentApi(student.id, classId);
-      setNotice({ type: 'success', message: response.message });
+      notify({ type: 'success', message: response.message });
       const refreshed = await getFacultyStudentsApi();
       if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
     } catch (error) {
-      setNotice({ type: 'error', message: error instanceof Error ? error.message : 'Unable to remove the appointment.' });
+      notify({ type: 'error', message: error instanceof Error ? error.message : 'Unable to remove the appointment.' });
       try {
         const refreshed = await getFacultyStudentsApi();
         if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
@@ -339,17 +345,17 @@ export const EmailManagement: React.FC = () => {
   const handleRevoke = async (id: string, studentId: string) => {
     const res = await revokeSecretaryInvitation(id, studentId);
     if (res.success) {
-      setNotice({ type: 'success', message: 'Class Secretary invitation revoked.' });
+      notify({ type: 'success', message: 'Class Secretary invitation revoked.' });
       await loadSecretaryInvitations();
       await fetchEmailLogs();
     } else {
-      setNotice({ type: 'error', message: res.message });
+      notify({ type: 'error', message: res.message });
     }
   };
 
   const handleCopyLink = (link: string) => {
     navigator.clipboard.writeText(link);
-    setNotice({ type: 'success', message: 'Secretary invitation link copied to clipboard.' });
+    notify({ type: 'success', message: 'Secretary invitation link copied to clipboard.' });
   };
 
   return (

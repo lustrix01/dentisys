@@ -315,7 +315,12 @@ export const ClassesAndRosters: React.FC = () => {
 
 
   // Notification Banner
-  const [notification, setNotification] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
+  const [notification, setNotificationState] = useState<{ type: 'success' | 'info'; message: string } | null>(null);
+  // Also raise the corner notice: the banner is off-screen when the page is scrolled.
+  const setNotification = (n: { type: 'success' | 'info'; message: string } | null) => {
+    setNotificationState(n);
+    if (n) showFeedback(n.message, n.type);
+  };
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Fetch authoritative data from PostgreSQL APIs

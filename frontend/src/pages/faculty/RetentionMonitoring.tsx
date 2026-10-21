@@ -270,7 +270,12 @@ export const RetentionMonitoring: React.FC = () => {
   const [retentionRecords, setRetentionRecords] = useState<FacultyRetentionRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [notification, setNotification] = useState<Notification | null>(null);
+  const [notification, setNotificationState] = useState<Notification | null>(null);
+  // Also raise the corner notice: the banner is off-screen when the page is scrolled.
+  const setNotification = (n: Notification | null) => {
+    setNotificationState(n);
+    if (n) showFeedback(n.message, n.type);
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [selectedClassId, setSelectedClassId] = useState('all');

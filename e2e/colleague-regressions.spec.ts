@@ -320,7 +320,7 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
   await expect.poll(() => writing).toBe(true);
   await expect(page.getByRole('button', { name: 'Refresh attendance worksheet', exact: true })).toBeDisabled();
   release?.();
-  await expect(page.getByText('Service is temporarily unavailable. Please try again later.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('Service is temporarily unavailable. Please try again later.', { exact: true })).toBeVisible();
   await expect(page.locator('textarea')).toHaveValue('New verified correction reason');
   await expect(page.getByRole('button', { name: 'Confirm override' })).toBeEnabled();
   const row = page.getByRole('row').filter({ hasText: 'Correction Student' });
@@ -329,7 +329,7 @@ test('Secretary correction uses a fresh reason, preserves failures for retry, an
   const expected = { studentId: '42', recordId: '501', sessionId: 900, date: '2026-10-03', status: 'late', reason: 'New verified correction reason' };
   expect(payloads).toEqual([expected]);
   await page.getByRole('button', { name: 'Confirm override' }).click();
-  await expect(page.getByText('Attendance override applied successfully.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('Attendance override applied successfully.', { exact: true })).toBeVisible();
   await expect(row).toContainText('late');
   await expect(page.getByRole('heading', { name: 'Manual Attendance Override', exact: true })).toHaveCount(0);
   expect(payloads).toEqual([expected, expected]);
@@ -375,12 +375,12 @@ for (const boundary of [
     await reason.fill(text);
     await submit.click();
     if (boundary.action === 'excused') {
-      await expect(page.getByText('Excused request sent to Faculty for approval.', { exact: true })).toBeVisible();
+      await expect(page.getByRole('main').getByText('Excused request sent to Faculty for approval.', { exact: true })).toBeVisible();
       expect(requests).toEqual([{ studentId: '42', recordId: '501', sessionId: 900, reason: text }]);
       expect(overrides).toEqual([]);
       await expect(row).toContainText('absent');
     } else {
-      await expect(page.getByText('Attendance override applied successfully.', { exact: true })).toBeVisible();
+      await expect(page.getByRole('main').getByText('Attendance override applied successfully.', { exact: true })).toBeVisible();
       expect(overrides).toEqual([{ studentId: '42', recordId: '501', sessionId: 900, date: '2026-10-03', status: 'present', reason: text }]);
       expect(requests).toEqual([]);
       await expect(row).toContainText('present');

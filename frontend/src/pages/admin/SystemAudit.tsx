@@ -20,6 +20,7 @@ type ReportTab = 'students' | 'retention' | 'attendance';
 
 import { getAdminReportsSummaryApi, getAdminSettingsApi, revokeStudentBiometricApi } from '../../services/apiClient';
 import { Modal } from '../../components/Modal';
+import { showFeedback } from '../../components/FeedbackCenter';
 import { SchoolYearFilter } from '../../components/SchoolYearFilter';
 import GradeValue from '../../components/GradeValue';
 import { flushSync } from 'react-dom';
@@ -422,6 +423,7 @@ export const DeanReports: React.FC = () => {
             try {
               const response = await revokeStudentBiometricApi(revokeTarget.id, reason);
               setRevokeNotice(`${revokeTarget.name}: ${response.message}`);
+              showFeedback(`${revokeTarget.name}: ${response.message}`, 'success');
               setRevokeTarget(null);
               fetchReportData();
             } catch (err) {

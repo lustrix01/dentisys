@@ -1062,17 +1062,7 @@ export const Attendance: React.FC = () => {
         )
       )}
 
-      {/* General Error or Failure Notice */}
-      {failureNotice && (
-        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3 animate-fade-in">
-          <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <strong className="block font-bold">Biometric Attendance Notice</strong>
-            <p className="leading-relaxed">{failureNotice}</p>
-          </div>
-        </div>
-      )}
-
+      {/* General Error */}
       {authError && (
         <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-3 animate-fade-in">
           <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
@@ -1521,6 +1511,16 @@ export const Attendance: React.FC = () => {
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Look directly into the camera, follow the paced liveness actions, and complete verification.
                     </p>
+
+                    {failureNotice && (
+                      <div role="alert" className="text-left p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3 animate-fade-in">
+                        <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <strong className="block font-bold">Biometric Attendance Notice</strong>
+                          <p className="leading-relaxed">{failureNotice}</p>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-center gap-3">
                       {capturePhase !== 'idle' && (

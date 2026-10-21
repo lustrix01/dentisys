@@ -84,6 +84,8 @@ export const StartSession: React.FC = () => {
     type: 'success' | 'info' | 'warning';
     message: string;
   } | null>(null);
+  // Result of the Start form submit, shown above its submit button.
+  const [formNotice, setFormNotice] = useState<{ type: 'success' | 'info' | 'warning'; message: string } | null>(null);
 
   // Elapsed time tracker for active session
   const [elapsedText, setElapsedText] = useState('00:00:00');
@@ -247,8 +249,9 @@ export const StartSession: React.FC = () => {
   const handleStartSession = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    setFormNotice(null);
     if (!assignedClass?.classId || parseInt(assignedClass.classId, 10) <= 0) {
-      setNotification({
+      setFormNotice({
         type: 'warning',
         message: 'No assigned class section found for your Secretary account.',
       });
@@ -256,7 +259,7 @@ export const StartSession: React.FC = () => {
     }
 
     if (requireGeo && !gpsLocation) {
-      setNotification({
+      setFormNotice({
         type: 'warning',
         message: 'Geofencing is enabled, but GPS coordinates have not been acquired. Please acquire device location before starting the session.',
       });
@@ -264,7 +267,7 @@ export const StartSession: React.FC = () => {
     }
 
     if (openingTimeStr >= presentCutoffStr) {
-      setNotification({
+      setFormNotice({
         type: 'warning',
         message: 'Invalid timing: Opening time must be strictly before Present cutoff (Asia/Manila).',
       });
@@ -272,7 +275,7 @@ export const StartSession: React.FC = () => {
     }
 
     if (presentCutoffStr >= lateCutoffStr) {
-      setNotification({
+      setFormNotice({
         type: 'warning',
         message: 'Invalid timing: Present cutoff must be strictly before Late cutoff (Asia/Manila).',
       });
@@ -280,18 +283,19 @@ export const StartSession: React.FC = () => {
     }
 
     if (!classEndTimeStr || classEndTimeStr < lateCutoffStr) {
-      setNotification({
+      setFormNotice({
         type: 'warning',
         message: 'Invalid timing: Class end time must be at or after the Late cutoff (Asia/Manila).',
       });
       return;
     }
 
-    if (!sessionDate || sessionDate < manilaToday()) { setNotification({ type: 'warning', message: 'Choose today or a future date (Asia/Manila).' }); return; }
+    if (!sessionDate || sessionDate < manilaToday()) { setFormNotice({ type: 'warning', message: 'Choose today or a future date (Asia/Manila).' }); return; }
     setSubmitting(true);
     sessionMutationPending.current = true;
     ++sessionReadGeneration.current;
     setNotification(null);
+    setFormNotice(null);
 
     try {
       const payload: StartSecretaryAttendanceSessionPayload = {
@@ -323,13 +327,14 @@ export const StartSession: React.FC = () => {
       }
       const attendance = await getSecretaryAttendanceApi();
       setQueuedSessions((attendance.sessions ?? []).filter(session => session.status === 'scheduled'));
-      setNotification({
+      // An active session replaces this form, so only scheduled results stay beside the Start button.
+      (res.session.status === 'scheduled' ? setFormNotice : setNotification)({
         type: 'success',
         message: res.session.status === 'scheduled' ? `Session scheduled for ${sessionDate} at ${openingTimeStr} (Asia/Manila). Session code: ${res.session.sessionCode}` : `Class session for ${res.session.courseCode || res.session.className} is now ACTIVE! Session code: ${res.session.sessionCode}`,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to start session.';
-      setNotification({
+      setFormNotice({
         type: 'warning',
         message: msg,
       });
@@ -1038,6 +1043,21 @@ export const StartSession: React.FC = () => {
                   </div>
                 </label>
               </div>
+
+              {formNotice && (
+                <div role="alert" className={`text-left p-4 rounded-2xl border flex items-start gap-2.5 text-xs font-semibold animate-fade-in ${
+                  formNotice.type === 'success'
+                    ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/20'
+                }`}>
+                  {formNotice.type === 'warning' ? (
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                  )}
+                  <span>{formNotice.message}</span>
+                </div>
+              )}
 
               {/* Submit Start Button */}
               <button

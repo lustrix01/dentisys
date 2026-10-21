@@ -242,9 +242,8 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
     const compKey = comp.componentKey as 'lecture' | 'laboratory';
     if (pb.components && pb.components[compKey]) {
       const compEval = pb.components[compKey];
-      if (typeof compEval?.percentage === 'number') {
-        return format(compEval.percentage, 2);
-      }
+      // Server marked this component incomplete: show no value instead of summing partial contributions.
+      return typeof compEval?.percentage === 'number' ? format(compEval.percentage, 2) : '—';
     }
 
     const categoryIds = new Set(comp.categories.map(c => String(c.category.id ?? '')));
@@ -667,7 +666,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
                                     ? 'bg-blue-50/60 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300'
                                     : ''
                               }`}
-                              title={`${comp.label} earned percentage: ${componentPercentage(student.id, period.key, comp)}%`}
+                              title={componentPercentage(student.id, period.key, comp) === '—' ? `${comp.label}: not complete yet` : `${comp.label} earned percentage: ${componentPercentage(student.id, period.key, comp)}%`}
                             >
                               {componentPercentage(student.id, period.key, comp)}
                             </td>

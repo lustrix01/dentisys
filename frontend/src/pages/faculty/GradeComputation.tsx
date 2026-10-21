@@ -1608,6 +1608,7 @@ export const GradeComputation: React.FC = () => {
   const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [conflictError, setConflictError] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [firstSaveAssignmentError, setFirstSaveAssignmentError] = useState<FacultyGradingCategoryAssignmentRequiredItem[] | null>(null);
   // Categories Faculty pick by hand for existing assessments that could not be linked by name.
   const [assessmentAssignments, setAssessmentAssignments] = useState<Record<number, string>>({});
@@ -1689,6 +1690,7 @@ export const GradeComputation: React.FC = () => {
   const loadGradingConfig = async (offering: FacultyOffering) => {
     setConfigLoading(true);
     setConfigError(null);
+    setSaveError(null);
     setConflictError(false);
     setFirstSaveAssignmentError(null);
     setConversionMappingError(null);
@@ -2502,6 +2504,7 @@ export const GradeComputation: React.FC = () => {
 
     setConfigSaving(true);
     setConfigError(null);
+    setSaveError(null);
     setConflictError(false);
     const pendingAssignments = getPendingAssessmentAssignments();
     setFirstSaveAssignmentError(null);
@@ -2682,18 +2685,18 @@ export const GradeComputation: React.FC = () => {
             showFeedback('Version conflict: another session updated these grade weights. Please reload the latest configuration.', 'error');
           } else if (err.code === 'GRADING_PERIOD_CONVERSION_REQUIRED') {
             const msg = err.message || 'Converting from overall grading requires explicit confirmation.';
-            setConfigError(msg);
+            setSaveError(msg);
             showFeedback(msg, 'error');
           } else if (err.code === 'GRADING_SCHEMA_MODE_CONFLICT') {
             const msg = err.message || 'An existing period configuration cannot be changed back to overall categories.';
-            setConfigError(msg);
+            setSaveError(msg);
             showFeedback(msg, 'error');
           } else if (err.code === 'GRADING_CATEGORY_IN_USE') {
             const msg = err.message || 'A grading category referenced by an assessment cannot be deleted.';
-            setConfigError(msg);
+            setSaveError(msg);
             showFeedback(msg, 'error');
           } else {
-            setConfigError(err.message);
+            setSaveError(err.message);
             showFeedback(err.message, 'error');
           }
         } else if (err.status === 422 && err.code === 'GRADING_CATEGORY_ASSIGNMENT_REQUIRED') {
@@ -2709,12 +2712,12 @@ export const GradeComputation: React.FC = () => {
           setConversionMappingError(refs);
           showFeedback(err.message || 'Existing assessments require matching period category assignments.', 'error');
         } else {
-          setConfigError(err.message);
+          setSaveError(err.message);
           showFeedback(err.message, 'error');
         }
       } else {
         const msg = err instanceof Error ? err.message : 'Failed to save grade configuration.';
-        setConfigError(msg);
+        setSaveError(msg);
         showFeedback(msg, 'error');
       }
     } finally {
@@ -3025,6 +3028,39 @@ export const GradeComputation: React.FC = () => {
     ? activePeriodCategories.filter(row => !row.component)
     : [];
   const activeComponentCategoryCalc = calculateCategoryWeightSummary(activePeriodVisibleCategories);
+
+  // Save result shown directly above each Save Grade Weights button.
+  const saveResultBanner = (
+    <>
+      {conflictError && (
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+            <div>
+              <div className="font-bold">Version Conflict Detected</div>
+              <div className="text-[11px] mt-0.5">
+                Another session or user modified this grading configuration. Your local changes cannot overwrite the newer version.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleReload}
+            className="shrink-0 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Reload Latest
+          </button>
+        </div>
+      )}
+      {saveError && !conflictError && (
+        <div role="alert" className="text-left p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+          <span>{saveError}</span>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
@@ -3933,29 +3969,6 @@ export const GradeComputation: React.FC = () => {
           </CardHeader>
           <CardContent className="p-6 sm:p-7 space-y-6">
 
-            {/* Conflict Alert (409) */}
-            {conflictError && (
-              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
-                  <div>
-                    <div className="font-bold">Version Conflict Detected</div>
-                    <div className="text-[11px] mt-0.5">
-                      Another session or user modified this grading configuration. Your local changes cannot overwrite the newer version.
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleReload}
-                  className="shrink-0 px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Reload Latest
-                </button>
-              </div>
-            )}
-
             {/* First-Save Unmapped Assessment Alert (422) */}
             {assessmentMappingItems.length > 0 && (
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 space-y-3 text-xs">
@@ -4177,6 +4190,7 @@ export const GradeComputation: React.FC = () => {
                     )}
                   </div>
 
+                  {saveResultBanner}
                   <div className="pt-4 border-t border-slate-150 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <div className="text-xs">
@@ -4729,6 +4743,7 @@ export const GradeComputation: React.FC = () => {
                     </div>
                   </details>
 
+                  {saveResultBanner}
                   {/* Bottom Summary & Save Bar */}
                   <div className="pt-5 border-t border-slate-200/90 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">

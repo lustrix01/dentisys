@@ -123,7 +123,8 @@ test('Gradebook matrix component values and weight labels use only saved server 
   assert.equal(percentage({ components: { laboratory: { percentage: 92.5 } } }, 'laboratory'), '92.50');
   // Legacy grids without a server component total sum the contributions of this component's categories only.
   assert.equal(percentage({ categories: [{ categoryId: 1, contribution: 85 }] }), '85.00');
-  assert.equal(percentage({ components: { lecture: { percentage: null } }, categories: [{ categoryId: 1, contribution: 50 }, { categoryId: 2, contribution: 30.5 }, { categoryId: 3, contribution: 99 }] }, 'lecture', [1, 2]), '80.50');
+  assert.equal(percentage({ components: { lecture: { percentage: null } }, categories: [{ categoryId: 1, contribution: 50 }, { categoryId: 2, contribution: 30.5 }, { categoryId: 3, contribution: 99 }] }, 'lecture', [1, 2]), '—', 'incomplete server component is not backfilled from contributions');
+  assert.equal(percentage({ categories: [{ categoryId: 1, contribution: 50 }, { categoryId: 2, contribution: 30.5 }, { categoryId: 3, contribution: 99 }] }, 'lecture', [1, 2]), '80.50');
   assert.equal(percentage({ categories: [{ categoryId: 9, contribution: 85 }] }), '—', 'categories outside the component are ignored');
   assert.equal(percentage({ categories: [{ categoryId: 1 }] }), '—', 'no contribution means no value');
 });

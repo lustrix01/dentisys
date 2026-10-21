@@ -19,6 +19,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { Card } from '../../components/Card';
+import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
 import { FacultyExcusedRequestsPanel } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
@@ -192,7 +193,12 @@ export const AttendanceMonitoring: React.FC = () => {
 
   // Row mutation states
   const [savingStudentId, setSavingStudentId] = useState<string | null>(null);
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [notification, setNotificationState] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  // Also raise the corner notice: the banner is off-screen when the page is scrolled.
+  const setNotification = (n: { type: 'success' | 'error'; message: string } | null) => {
+    setNotificationState(n);
+    if (n) showFeedback(n.message, n.type);
+  };
 
   // Roster Filter / Search
   const [searchQuery, setSearchQuery] = useState<string>('');

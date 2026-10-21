@@ -98,7 +98,7 @@ test.describe('Class Secretary Module E2E Tests', () => {
     await page.locator('textarea').fill('Medical certificate given to the Secretary');
     await page.getByRole('button', { name: 'Send request' }).click();
     await expect.poll(() => requestPayload).toEqual({ studentId: '42', recordId: '501', sessionId: 900, reason: 'Medical certificate given to the Secretary' });
-    await expect(page.getByText('Excused request sent to Faculty for approval.')).toBeVisible();
+    await expect(page.getByRole('main').getByText('Excused request sent to Faculty for approval.')).toBeVisible();
     expect(overrideCalled).toBe(false);
     await expect(page.getByRole('row').filter({ hasText: 'Request Student' })).toContainText('absent');
   });
