@@ -320,6 +320,8 @@ Only an Admin may invite a Faculty member. The Admin invitation itself is the Fa
 
 Owner decision (2026-09-29): A Class Secretary is a Student who has been appointed to one class section. Faculty appoint a Student of their own current-year section. Each section has at most one Secretary, counting active and pending appointments together. The appointment uses the Student's existing DentiSys account. If the Student has no account yet, one invitation both activates the Student account (the Student sets a password) and records the appointment. Faculty may remove the appointment; the account then returns to plain Student access. An appointment ends automatically when its section is archived or its school year ends.
 
+Owner decision (2026-10-18): A Student may be appointed Class Secretary of more than one current-year section, including sections of different Faculty. Each section still has at most one Secretary (active and pending together). Removing or ending one appointment leaves the others; the account returns to plain Student access only when no current appointment remains.
+
 Google authentication MUST NOT bypass the invitation/activation requirement.
 
 ## REG-007 — Student identity

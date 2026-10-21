@@ -152,6 +152,17 @@ function handle_secretary_invite(): void
             safe_error_response('This canonical Student identity already has an account or cannot be safely linked.', 409);
             return;
         }
+        $pendingInvite = $pdo->prepare(
+            "SELECT 1 FROM security_tokens
+              WHERE purpose = 'secretary_invitation' AND related_student_id = ?
+                AND used_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP(6)
+              LIMIT 1"
+        );
+        $pendingInvite->execute([(int) $assignment['student_id']]);
+        if ($pendingInvite->fetchColumn() !== false) {
+            safe_error_response('This Student already has a pending Secretary invitation. Appoint them here after they accept it.', 409);
+            return;
+        }
         $studentName = $persistedName;
         $email = $persistedEmail;
         $className = (string) $assignment['cs_name'];
@@ -752,11 +763,6 @@ function secretary_appoint_existing_account(PDO $pdo, array $config, array $auth
             safe_error_response('The Student account is not active; the Student must activate it first.', 409);
             return;
         }
-        if (secretary_has_current_appointment($pdo, $accountUserId)) {
-            $pdo->rollBack();
-            safe_error_response('This Student is already the Class Secretary of another section.', 409);
-            return;
-        }
         $section = $pdo->prepare('UPDATE class_sections SET secretary_user_id = ? WHERE cs_id = ? AND secretary_user_id IS NULL');
         $section->execute([$accountUserId, (int) $assignment['cs_id']]);
         if ($section->rowCount() !== 1) {
@@ -806,17 +812,26 @@ function handle_faculty_secretary_remove(): void
         if ($studentId === false) {
             throw new ValidationException([['field' => 'studentId', 'message' => 'A valid student is required.']]);
         }
+        $csId = null;
+        if (isset($data['csId'])) {
+            $csId = filter_var($data['csId'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($csId === false) {
+                throw new ValidationException([['field' => 'csId', 'message' => 'A valid class section is required.']]);
+            }
+        }
         $pdo->beginTransaction();
         try {
+            // REG-006: s.user_id is cleared while the role is student, so match the account column too.
             $stmt = $pdo->prepare(
-                "SELECT cs.cs_id, cs.cs_name, s.student_number, s.user_id AS secretary_user_id
+                "SELECT cs.cs_id, cs.cs_name, s.student_number, COALESCE(s.student_account_user_id, s.user_id) AS secretary_user_id
                    FROM students s
-                   JOIN class_sections cs ON cs.secretary_user_id = s.user_id
+                   JOIN class_sections cs ON cs.secretary_user_id = COALESCE(s.student_account_user_id, s.user_id)
                   WHERE s.student_id = ? AND cs.instructor_user_id = ? AND LOWER(cs.status) = 'active'
+                    AND (?::int IS NULL OR cs.cs_id = ?::int)
                   ORDER BY cs.cs_id DESC LIMIT 1
                   FOR UPDATE OF cs"
             );
-            $stmt->execute([(int) $studentId, $authCtx['user_id']]);
+            $stmt->execute([(int) $studentId, $authCtx['user_id'], $csId, $csId]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             if ($row === false) {
                 $pdo->rollBack();

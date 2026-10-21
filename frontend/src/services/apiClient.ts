@@ -595,8 +595,8 @@ export function inviteSecretaryApi(data: { student_name: string; student_number?
 }
 
 /** REG-006: remove a Class Secretary appointment; the account returns to Student access. */
-export function removeSecretaryAppointmentApi(studentId: string): Promise<{ status: string; message: string }> {
-  return request('POST', '/faculty/secretary-appointments/remove', { studentId });
+export function removeSecretaryAppointmentApi(studentId: string, csId?: string): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/secretary-appointments/remove', { studentId, csId });
 }
 
 export function listSecretaryInvitationsApi(): Promise<{ status: string; invitations: Array<Record<string, unknown>> }> {
@@ -920,7 +920,7 @@ export function getFacultyStudentsApi(): Promise<Array<{
   consentStatus: string;
   accountStatus?: 'none' | 'pending' | 'active' | 'secretary' | 'disabled';
   accountActivated?: boolean;
-  classSections: Array<{ classId: string; className: string; enrollmentId: string }>;
+  classSections: Array<{ classId: string; className: string; enrollmentId: string; isSecretary?: boolean }>;
   overallGWA?: number;
   retentionThreshold?: number;
   clinicHoursCompleted?: number;

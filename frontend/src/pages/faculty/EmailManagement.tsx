@@ -185,6 +185,15 @@ export const EmailManagement: React.FC = () => {
     });
   }, [safeStudents, selectedClassId, selectedSchoolYear, search, classSchoolYearMap]);
 
+  // REG-006: Secretary tab lists one row per (student, section) so a Student can hold several appointments.
+  const secretaryRows = useMemo(() => filteredStudents.flatMap((student) =>
+    (student.classSections ?? [])
+      .filter((sec) =>
+        (selectedClassId === 'all' || sec.classId === selectedClassId || sec.className === selectedClassId || sec.className?.includes(selectedClassId)) &&
+        (selectedSchoolYear === 'all' || classSchoolYearMap.get(String(sec.classId)) === selectedSchoolYear || classSchoolYearMap.get(sec.className || '') === selectedSchoolYear))
+      .map((section) => ({ key: `${student.id}|${section.classId}`, student, section }))
+  ), [filteredStudents, selectedClassId, selectedSchoolYear, classSchoolYearMap]);
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -220,10 +229,12 @@ export const EmailManagement: React.FC = () => {
     if (tab === 'secretary') {
       // Send Secretary Invitations for selected students
       let count = 0;
-      for (const studentId of selected) {
+      const refusals: string[] = [];
+      for (const key of selected) {
+        const [studentId, rowClassId] = key.split('|');
         const student = safeStudents.find((s) => s.id === studentId || s.studentId === studentId);
         if (!student) continue;
-        const classId = invitationClassId(student);
+        const classId = /^\d+$/.test(student.id) && /^\d+$/.test(rowClassId ?? '') ? rowClassId : null;
         if (!classId) {
           setNotice({ type: 'error', message: `No class section found for ${student.name}.` });
           continue;
@@ -246,6 +257,7 @@ export const EmailManagement: React.FC = () => {
             setSecretaryDevLinks(prev => ({ ...prev, [issued.id]: issued.devLink as string }));
           }
         } else {
+          refusals.push(`${student.name}: ${res.message}`);
           setNotice({ type: 'error', message: res.message });
         }
       }
@@ -255,9 +267,11 @@ export const EmailManagement: React.FC = () => {
       setSelected([]);
       setIsSending(false);
       if (count > 0) {
+        // Keep any refusal visible next to the rows that were appointed.
         setNotice({
-          type: 'success',
-          message: `Class Secretary appointment processed for ${count} student${count === 1 ? '' : 's'}: students with an account are appointed now; others receive an invitation that activates their Student account.`,
+          type: refusals.length ? 'error' : 'success',
+          message: `Class Secretary appointment processed for ${count} student${count === 1 ? '' : 's'}: students with an account are appointed now; others receive an invitation that activates their Student account.`
+            + (refusals.length ? ` Not appointed: ${refusals.join(' ')}` : ''),
         });
         const refreshed = await getFacultyStudentsApi();
         if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
@@ -302,12 +316,12 @@ export const EmailManagement: React.FC = () => {
   };
 
 
-  const handleRemoveSecretary = async (student: Student) => {
-    if (!window.confirm(`Remove ${student.name} as Class Secretary? Their Student access stays the same.`)) return;
+  const handleRemoveSecretary = async (student: Student, classId: string, className: string) => {
+    if (!window.confirm(`Remove ${student.name} as Class Secretary of ${className}? Their Student access stays the same.`)) return;
     setIsSending(true);
     setNotice(null);
     try {
-      const response = await removeSecretaryAppointmentApi(student.id);
+      const response = await removeSecretaryAppointmentApi(student.id, classId);
       setNotice({ type: 'success', message: response.message });
       const refreshed = await getFacultyStudentsApi();
       if (Array.isArray(refreshed)) setDbStudents(refreshed as unknown as Student[]);
@@ -644,15 +658,15 @@ export const EmailManagement: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                {filteredStudents.map(student => {
-                  const isChecked = selected.includes(student.id);
+                {secretaryRows.map(({ key, student, section }) => {
+                  const isChecked = selected.includes(key);
                   return (
-                    <tr key={student.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <tr key={key} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5 px-4">
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => toggleSelect(student.id)}
+                          onChange={() => toggleSelect(key)}
                           className="w-4 h-4 accent-emerald-600 cursor-pointer"
                         />
                       </td>
@@ -664,19 +678,19 @@ export const EmailManagement: React.FC = () => {
 
                       <td className="py-3.5 px-4">
                         <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-[11px] text-slate-700 dark:text-slate-300">
-                          {student.classSections?.[0]?.className || '—'}
+                          {section.className || '—'}
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4 text-center">
-                        {student.accountStatus === 'secretary' ? (
+                        {section.isSecretary ? (
                           <span className="inline-flex items-center gap-2">
                             <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">Class Secretary</span>
-                            <button type="button" disabled={isSending} onClick={() => void handleRemoveSecretary(student)} className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[10px] hover:bg-rose-100 disabled:opacity-50 cursor-pointer">Remove</button>
+                            <button type="button" disabled={isSending} onClick={() => void handleRemoveSecretary(student, section.classId, section.className)} className="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 font-bold text-[10px] hover:bg-rose-100 disabled:opacity-50 cursor-pointer">Remove</button>
                           </span>
                         ) : (
                           <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                            {student.accountStatus === 'active' ? 'Student (has account)' : 'Student (no account yet)'}
+                            {student.accountStatus === 'active' || student.accountStatus === 'secretary' ? 'Student (has account)' : 'Student (no account yet)'}
                           </span>
                         )}
                       </td>

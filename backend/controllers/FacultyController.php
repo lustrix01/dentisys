@@ -402,6 +402,8 @@ function faculty_map_student_rows(array $rows, ?float $retentionThreshold = null
             'classId' => (string) $row['cs_id'],
             'className' => $row['cs_name'],
             'enrollmentId' => (string) $row['enrollment_id'],
+            'isSecretary' => ($row['secretary_user_id'] ?? null) !== null
+                && (int) $row['secretary_user_id'] === (int) ($row['student_account_user_id'] ?? $row['linked_secretary_user_id'] ?? 0),
         ];
         $entry['enrolledSubjects'][] = [
             'code' => $row['course_code'],
@@ -449,7 +451,7 @@ function handle_faculty_students(): void
                 s.birthdate, b.consent_status, b.face_enrolled,
                 s.student_account_user_id, s.user_id AS linked_secretary_user_id,
                 ua.status AS account_status,
-                cs.cs_id, cs.cs_name, e.enrollment_id,
+                cs.cs_id, cs.cs_name, cs.secretary_user_id, e.enrollment_id,
                 COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
                 e.grade_components_json,
                 " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . " AS retention_state,

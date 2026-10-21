@@ -86,7 +86,7 @@ export interface Student {
   email: string;
   classId?: string;
   className?: string;
-  classSections?: Array<{ classId: string; className: string; enrollmentId: string }>;
+  classSections?: Array<{ classId: string; className: string; enrollmentId: string; isSecretary?: boolean }>;
   yearLevel: 1 | 2 | 3 | 4; // 1st to 4th Year (Clinicians)
   status: 'active' | 'remedial';
   enrolledSubjects: EnrolledSubject[];
