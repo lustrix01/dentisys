@@ -83,7 +83,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Highlighted Primary CTA Button */}
         <button
-          onClick={() => navigate('/secretary/start-session')}
+          onClick={() => navigate('/secretary/attendance?startSession=1')}
           className="flex items-center justify-center gap-2.5 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
         >
           <Play className="w-4 h-4 fill-white" />
@@ -214,7 +214,7 @@ export const Dashboard: React.FC = () => {
                 </p>
                 <button
                   type="button"
-                  onClick={() => navigate('/secretary/start-session')}
+                  onClick={() => navigate('/secretary/attendance?startSession=1')}
                   className="mt-2 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                 >
                   Open live session →

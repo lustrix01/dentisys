@@ -30,12 +30,13 @@ test('Layout drawer ignores the saved fold below 768px', () => {
   assert.match(layout, /localStorage\.setItem\('dentisys_sidebar_collapsed', String\(next\)\)/);
 });
 
-test('Start Session starts the chosen current-year section', () => {
-  const startSession = fs.readFileSync(path.join(currentDirectory, '../pages/secretary/StartSession.tsx'), 'utf8');
+test('Start Session pop-up starts the chosen current-year section', () => {
+  const startSession = fs.readFileSync(path.join(currentDirectory, '../pages/secretary/AttendanceList.tsx'), 'utf8');
+  const modal = fs.readFileSync(path.join(currentDirectory, '../components/StartSessionModal.tsx'), 'utf8');
   assert.match(startSession, /getSecretaryDashboardKpisApi\('current'\)/);
-  assert.match(startSession, /csId: parseInt\(assignedClass\.classId, 10\)/);
-  assert.match(startSession, /aria-label="Assigned Dentistry Class Section"/);
-  assert.match(startSession, /setCustomRoom\(next\.classroomName/);
-  assert.match(startSession, /getSecretaryActiveAttendanceSessionApi\(csId\)/);
+  assert.match(startSession, /const csId = parseInt\(startCsId, 10\)/);
+  assert.match(modal, /aria-label="Selected class"/);
+  assert.match(startSession, /initialRoom=\{startSections\.find/);
+  assert.match(startSession, /getSecretaryActiveAttendanceSessionApi\(Number\(sec\.classId\)\)/);
   assert.match(startSession, /has a live session\./);
 });

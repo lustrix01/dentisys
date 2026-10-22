@@ -1,3 +1,4 @@
+import type { Page, Route } from '@playwright/test';
 import { test, expect, openSecretaryWorksheet } from './fixtures';
 
 test.describe('Class Secretary Module E2E Tests', () => {
@@ -331,6 +332,15 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       });
     });
 
+    // Page data the Attendance Monitoring page loads; tests override these where they need sessions.
+    await page.route('**/api/secretary/profile', route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ status: 'ok', profile: { assignedClassName: 'CLINIC-4B', classroomName: 'Dental Clinic Lab 2' } }),
+    }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions: [] }),
+    }));
+
     await page.goto('/login');
     await page.fill('input[inputmode="email"]', 'secretary@bicol-u.edu.ph');
     await page.fill('input[type="password"]', 'Password123!');
@@ -338,7 +348,19 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('initial state: active lookup returns null -> Start Session state shown', async ({ page }) => {
+  // The Start Session pop-up is shared with Faculty and lives in the Attendance Monitoring worksheet.
+  const openStartPopup = async (page: Page) => {
+    await page.goto('/secretary/attendance?view=worksheet');
+    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
+  };
+  const startForm = (page: Page) => page.locator('form').filter({ hasText: 'Selected class' });
+  const openSessionsModal = async (page: Page) => {
+    await page.getByRole('button', { name: 'View / Manage Sessions' }).click();
+  };
+  const sessionsReply = (sessions: unknown[]) => (route: Route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions }) });
+
+  test('initial state: active lookup returns null -> Start Session pop-up shown', async ({ page }) => {
     await page.route('**/api/secretary/attendance/session/active*', async (route) => {
       await route.fulfill({
         status: 200,
@@ -347,12 +369,12 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       });
     });
 
-    await page.goto('/secretary/start-session');
-    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
-    await expect(page.getByText('Session Configuration')).toBeVisible();
-    await expect(page.getByText('CLINIC-4B')).toBeVisible();
-    await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
-    await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
+    await openStartPopup(page);
+    const form = startForm(page);
+    await expect(form.getByText('CLINIC-4B')).toBeVisible();
+    await expect(form.getByPlaceholder('e.g. Dental Clinic Room 101')).toHaveValue('Dental Clinic Lab 2');
+    await expect(form.getByRole('button', { name: 'Start Session', exact: true })).toBeVisible();
+    await expect(page.getByText('Live Session')).toHaveCount(0);
   });
 
   test('Secretary queues a future session and sees cross-role booking conflicts', async ({ page }) => {
@@ -360,7 +382,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
     let queued = false;
     const scheduled = { ...mockActiveSession, sessionId: '101', sessionDate: '2099-10-02', status: 'scheduled', openingTime: '08:00', classEndTime: '13:00' };
     await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: null }) }));
-    await page.route('**/api/secretary/attendance', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions: queued ? [scheduled] : [] }) }));
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => sessionsReply(queued ? [scheduled] : [])(route));
     await page.route('**/api/secretary/attendance/session', async route => {
       payload = route.request().postDataJSON();
       if (queued) await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'error', message: 'A schedule already exists on 2099-10-02 from 08:00 to 13:00 (Asia/Manila), created by Faculty Jane Doe.' }) });
@@ -369,114 +391,58 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
         await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: scheduled }) });
       }
     });
-    await page.goto('/secretary/start-session');
-    const date = page.getByLabel('Session date (Asia/Manila)');
+    await openStartPopup(page);
+    const form = startForm(page);
+    const date = form.getByLabel('Session date (Asia/Manila)');
     expect(await date.getAttribute('min')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await date.fill('2099-10-02');
-    await expect(page.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked(); // ATT-002: off by default
-    await page.getByRole('checkbox', { name: /Geolocation|Geofence/ }).uncheck();
-    await page.getByRole('button', { name: 'Schedule Class Session', exact: true }).click();
+    await expect(form.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked(); // ATT-002: off by default
+    await form.getByRole('checkbox', { name: /Geolocation|Geofence/ }).uncheck();
+    await form.getByRole('button', { name: 'Schedule Session', exact: true }).click();
     await expect.poll(() => payload?.sessionDate).toBe('2099-10-02');
-    await expect(page.getByRole('heading', { name: 'Scheduled sessions (Asia/Manila)' })).toBeVisible();
-    await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Schedule Class Session', exact: true }).click();
-    await expect(page.getByText(/created by Faculty Jane Doe/)).toBeVisible();
+    await expect(page.getByText('Session scheduled for 2099-10-02 at 08:00 (Asia/Manila). Session code: CS8-20260921-ABC123').first()).toBeVisible();
+    await openSessionsModal(page);
+    await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
+    await expect(page.getByText('(CS8-20260921-ABC123)')).toBeVisible();
+    await expect(page.getByText('Live Session')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await startForm(page).getByRole('button', { name: 'Schedule Session', exact: true }).click();
+    await expect(startForm(page).getByRole('alert')).toContainText('created by Faculty Jane Doe');
   });
 
-  test('Secretary live counters refresh for the active session without counting another same-day session', async ({ page }) => {
-    await page.clock.install();
-    let activeId = '42';
-    const scopedReads: string[] = [];
-    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: { ...mockActiveSession, sessionId: activeId } }) }));
-    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, async route => {
-      const sessionId = new URL(route.request().url()).searchParams.get('sessionId');
-      if (sessionId) scopedReads.push(sessionId);
-      // Deliberately include an extra same-day record to prove ID-based counting.
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [], records: [
-        { id: '1', date: mockActiveSession.sessionDate, attendanceSessionId: sessionId ?? '42', status: sessionId === '43' ? 'not_recorded' : 'present' },
-        { id: '2', date: mockActiveSession.sessionDate, attendanceSessionId: '99', status: 'present' },
-        { id: '3', date: mockActiveSession.sessionDate, attendanceSessionId: null, status: 'late' },
-      ] }) });
-    });
-    await page.goto('/secretary/start-session');
-    await expect(page.getByText('2 / 2 (100%)', { exact: true })).toBeVisible();
-    activeId = '43';
-    await page.clock.fastForward(31000);
-    await expect(page.getByText('1 / 2 (50%)', { exact: true })).toBeVisible();
-    expect(scopedReads).toContain('42');
-    expect(scopedReads).toContain('43');
-  });
-
-  test('a delayed Secretary poll cannot restore a successfully ended session', async ({ page }) => {
-    await page.clock.install();
-    let ended = false;
-    let scopedReads = 0;
-    let pollWaiting = false;
-    let releasePoll: () => void = () => {};
-    const pollGate = new Promise<void>(resolve => { releasePoll = resolve; });
-    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: ended ? null : mockActiveSession }) }));
-    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, async route => {
-      if (new URL(route.request().url()).searchParams.has('sessionId') && ++scopedReads === 2) {
-        pollWaiting = true;
-        await pollGate;
-      }
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions: [] }) });
-    });
-    await page.route('**/api/secretary/attendance/session/end', async route => {
-      ended = true;
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...mockActiveSession, status: 'ended' } }) });
-    });
-    await page.goto('/secretary/start-session');
-    await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
-    await page.clock.fastForward(31000);
-    await expect.poll(() => pollWaiting).toBe(true);
-    await page.getByRole('button', { name: /End Session/i }).click();
-    await page.getByRole('button', { name: /Confirm End Session/i }).click();
-    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
-    const pollResponse = page.waitForResponse(response => response.url().includes('/api/secretary/attendance?sessionId=42'));
-    releasePoll();
-    await pollResponse;
-    await page.clock.runFor(100);
-    await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
-    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
+  test('initial state: active lookup returns session -> live session shown and Start Session stays available', async ({ page }) => {
+    await page.route('**/api/secretary/attendance', sessionsReply([mockActiveSession]));
+    await page.goto('/secretary/attendance?view=worksheet');
+    await expect(page.getByText('Live Session')).toBeVisible();
+    await openSessionsModal(page);
+    await expect(page.getByText('CS8-20260921-ABC123').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'End Session', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
   });
 
   test('cancelling a queued revocation does not change the active-session revoke target', async ({ page }) => {
     let revokedId: string | null = null;
-    const queued = { ...mockActiveSession, sessionId: '101', status: 'scheduled', date: '2099-10-02', openingTime: '08:00', classEndTime: '13:00' };
-    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: mockActiveSession }) }));
-    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', records: [], sessions: [queued] }) }));
+    const queued = { ...mockActiveSession, sessionId: '101', status: 'scheduled', sessionDate: '2099-10-02', date: '2099-10-02', openingTime: '08:00', classEndTime: '13:00' };
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, sessionsReply([mockActiveSession, queued]));
     await page.route('**/api/secretary/attendance/session/revoke', async route => {
       revokedId = route.request().postDataJSON().sessionId;
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...mockActiveSession, status: 'revoked' } }) });
     });
-    await page.goto('/secretary/start-session');
-    await page.getByRole('button', { name: 'Revoke scheduled session', exact: true }).click();
+    await page.goto('/secretary/attendance?view=worksheet');
+    await openSessionsModal(page);
+    await page.getByRole('button', { name: 'Upcoming Sessions' }).click();
+    await page.getByRole('button', { name: 'Revoke', exact: true }).click();
     await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Current Session' }).click();
     await page.getByRole('button', { name: 'Revoke Session', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm Revoke Session', exact: true }).click();
     await expect.poll(() => revokedId).toBe('42');
   });
 
-  test('initial state: active lookup returns session -> active-session state shown', async ({ page }) => {
-    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ status: 'ok', activeSession: mockActiveSession }),
-      });
-    });
-
-    await page.goto('/secretary/start-session');
-    await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
-    await expect(page.getByText('Active Attendance Register Open')).toBeVisible();
-    await expect(page.getByText('CLIN402 — CLINIC-4B')).toBeVisible();
-    await expect(page.getByText('CS8-20260921-ABC123')).toBeVisible();
-    await expect(page.getByRole('button', { name: /End Session/i })).toBeVisible();
-    await expect(page.getByText('Session Configuration')).toBeVisible();
-  });
-
-  test('start: submitting invokes backend start API, renders authoritative session, and does not write to localStorage', async ({ page }) => {
+  test('start: submitting invokes backend start API, shows the session code, and does not write to localStorage', async ({ page }) => {
     let startApiPayload = null as Record<string, unknown> | null;
 
     await page.route('**/api/secretary/attendance/session/active*', async (route) => {
@@ -507,15 +473,17 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       }
     });
 
-    await page.goto('/secretary/start-session');
-    await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible();
+    await openStartPopup(page);
+    const form = startForm(page);
+    await expect(form.getByRole('button', { name: 'Start Session', exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: /Start Class Session Now/i }).click();
+    await form.getByRole('button', { name: 'Start Session', exact: true }).click();
 
-    await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
-    await expect(page.getByText('Code: CS8-20260921-XYZ999', { exact: true })).toBeVisible();
+    await expect(page.getByText('Attendance session started. The class roll call is now live. Session code: CS8-20260921-XYZ999').first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toHaveCount(0);
     expect(startApiPayload).not.toBeNull();
     expect((startApiPayload as Record<string, unknown>)?.csId).toBe(8);
+    expect((startApiPayload as Record<string, unknown>)?.room).toBe('Dental Clinic Lab 2');
     expect((startApiPayload as Record<string, unknown>)?.geofenceEnabled).toBe(false);
     expect((startApiPayload as Record<string, unknown>)?.geofenceLatitude).toBeUndefined();
     expect((startApiPayload as Record<string, unknown>)?.geofenceLongitude).toBeUndefined();
@@ -543,51 +511,43 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...mockActiveSession, sessionId: '101' } }) });
     });
 
-    await page.goto('/secretary/start-session');
-    await page.getByText('Enforce GPS Geofence Verification').click();
+    await openStartPopup(page);
+    const form = startForm(page);
+    await form.getByRole('checkbox', { name: /Geofence/ }).check();
     await page.getByRole('button', { name: 'Pick on map' }).click();
     const map = page.getByRole('application', { name: 'Session location map' });
     await expect(map).toBeVisible();
     await expect(page.getByText('OpenStreetMap')).toBeVisible();
     await map.click({ position: { x: 60, y: 60 } });
-    await expect(page.getByText(/Map location \(/)).toBeVisible();
-    await page.getByRole('button', { name: /Start Class Session Now/i }).click();
+    await expect(page.getByText(/Location acquired: /)).toBeVisible();
+    await form.getByRole('button', { name: 'Start Session', exact: true }).click();
     await expect.poll(() => startApiPayload).not.toBeNull();
     const payload = startApiPayload as unknown as Record<string, number | boolean>;
     expect(payload.geofenceEnabled).toBe(true);
     expect(typeof payload.geofenceLatitude).toBe('number');
     expect(typeof payload.geofenceLongitude).toBe('number');
+    expect(payload.latitude).toBe(payload.geofenceLatitude);
+    expect(payload.longitude).toBe(payload.geofenceLongitude);
     // The click was up and left of the default centre, so both coordinates moved.
     expect(payload.geofenceLatitude).toBeGreaterThan(13.1436);
     expect(payload.geofenceLongitude).toBeLessThan(123.7438);
   });
 
-  test('refresh/recovery semantics: component reconstructs state from active lookup rather than browser persistence', async ({ page }) => {
-    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          status: 'ok',
-          activeSession: {
-            ...mockActiveSession,
-            sessionId: '101',
-            sessionCode: 'CS8-RELOAD-101',
-          },
-        }),
-      });
-    });
+  test('refresh/recovery semantics: page reconstructs the live session from the server rather than browser persistence', async ({ page }) => {
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, sessionsReply([{ ...mockActiveSession, sessionId: '101', sessionCode: 'CS8-RELOAD-101' }]));
 
-    await page.goto('/secretary/start-session');
-    await expect(page.getByText('CS8-RELOAD-101')).toBeVisible();
+    await page.goto('/secretary/attendance?view=worksheet');
+    await openSessionsModal(page);
+    await expect(page.getByText('CS8-RELOAD-101').first()).toBeVisible();
 
     // Ensure localStorage is empty
     await page.evaluate(() => localStorage.clear());
 
     // Reload browser page
     await page.reload();
+    await openSessionsModal(page);
 
-    await expect(page.getByText('CS8-RELOAD-101')).toBeVisible();
+    await expect(page.getByText('CS8-RELOAD-101').first()).toBeVisible();
     const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
     expect(storedItem).toBeNull();
   });
@@ -598,13 +558,7 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
 
     let currentSession: typeof mockActiveSession | null = { ...mockActiveSession };
 
-    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ status: 'ok', activeSession: currentSession }),
-      });
-    });
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, route => sessionsReply(currentSession ? [currentSession] : [])(route));
 
     await page.route('**/api/secretary/attendance/session/end', async (route) => {
       endApiCalled = true;
@@ -624,23 +578,90 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       });
     });
 
-    await page.goto('/secretary/start-session');
-    await expect(page.getByText('LIVE SESSION ACTIVE')).toBeVisible();
+    await page.goto('/secretary/attendance?view=worksheet');
+    await expect(page.getByText('Live Session')).toBeVisible();
 
     // Open confirmation modal
-    await page.getByRole('button', { name: /End Session/i }).click();
-    await expect(page.getByText('Are you sure you want to end the active attendance session')).toBeVisible();
+    await openSessionsModal(page);
+    await page.getByRole('button', { name: 'End Session', exact: true }).click();
+    await expect(page.getByText('Are you sure you want to end active attendance session')).toBeVisible();
 
     // Confirm end session
     await page.getByRole('button', { name: /Confirm End Session/i }).click();
 
-    expect(endApiCalled).toBe(true);
+    await expect.poll(() => endApiCalled).toBe(true);
     expect((endPayload as Record<string, unknown>)?.sessionId).toBe('42');
 
-    // Form should return to inactive state
-    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
-    await expect(page.getByText('Session Configuration')).toBeVisible();
-    await expect(page.getByText(/Attendance register closed/i)).toBeVisible();
+    // Page returns to inactive state
+    await expect(page.getByText('Session CS8-20260921-ABC123 ended successfully.').first()).toBeVisible();
+    await expect(page.getByText('Live Session')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Start Session', exact: true })).toBeVisible();
+  });
+
+  const todayManila = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+  const rollCallRecord = (id: string, sessionId: string, status: string) => ({
+    id, attendanceSessionId: sessionId, studentId: id, studentNumber: `2024-00${id}`, studentName: `Student ${id}`, yearLevel: 4,
+    date: todayManila(), timeRecorded: null, verificationMethod: 'biometric', subjectCode: 'CLIN402', classId: '8',
+    className: 'CLINIC-4B', status, overrideReason: null, overrideAt: null,
+  });
+
+  test('Secretary live counters refresh for the active session without counting another same-day session', async ({ page }) => {
+    await page.clock.install();
+    const liveSession = { ...mockActiveSession, subjectCode: 'CLIN402', sessionDate: todayManila(), date: todayManila() };
+    let secondCheckedIn = false;
+    const scopedReads: string[] = [];
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, async route => {
+      const sessionId = new URL(route.request().url()).searchParams.get('sessionId');
+      if (sessionId) scopedReads.push(sessionId);
+      // The unscoped list deliberately carries another same-day session's record to prove counts come from the open session only.
+      const records = sessionId
+        ? [rollCallRecord('1', '42', 'present'), rollCallRecord('2', '42', secondCheckedIn ? 'present' : 'not_recorded')]
+        : [rollCallRecord('3', '99', 'present')];
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', sessions: [liveSession], records }) });
+    });
+    await page.goto('/secretary/attendance?view=worksheet&sessionId=42');
+    await expect(page.locator('option', { hasText: 'Present (1)' })).toHaveCount(1);
+    secondCheckedIn = true;
+    await page.clock.fastForward(31000);
+    await expect(page.locator('option', { hasText: 'Present (2)' })).toHaveCount(1);
+    await expect(page.locator('option', { hasText: 'All statuses (2)' })).toHaveCount(1);
+    expect(scopedReads.filter(id => id === '42').length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('a delayed Secretary poll cannot restore a successfully ended session', async ({ page }) => {
+    await page.clock.install();
+    let ended = false;
+    let gateArmed = false;
+    let pollWaiting = false;
+    let releasePoll: () => void = () => {};
+    const pollGate = new Promise<void>(resolve => { releasePoll = resolve; });
+    const liveSession = { ...mockActiveSession, subjectCode: 'CLIN402', sessionDate: todayManila(), date: todayManila() };
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, async route => {
+      const scoped = new URL(route.request().url()).searchParams.has('sessionId');
+      const body = JSON.stringify({ status: 'ok', records: [], sessions: ended ? [] : [liveSession] });
+      if (!scoped && gateArmed && !pollWaiting) {
+        pollWaiting = true;
+        await pollGate; // the poll's answer still shows the session as active
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body });
+    });
+    await page.route('**/api/secretary/attendance/session/end', async route => {
+      ended = true;
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...liveSession, status: 'ended' } }) });
+    });
+    await page.goto('/secretary/attendance?view=worksheet');
+    await expect(page.getByText('Live Session')).toBeVisible();
+    gateArmed = true;
+    await page.clock.fastForward(31000);
+    await expect.poll(() => pollWaiting).toBe(true);
+    await openSessionsModal(page);
+    await page.getByRole('button', { name: 'End Session', exact: true }).click();
+    await page.getByRole('button', { name: /Confirm End Session/i }).click();
+    await expect(page.getByText('Session CS8-20260921-ABC123 ended successfully.').first()).toBeVisible();
+    await expect(page.getByText('Live Session')).toHaveCount(0);
+    releasePoll();
+    await page.clock.runFor(100);
+    await expect(page.getByText('Live Session')).toHaveCount(0);
   });
 
   test('errors: 409 conflict does not create local session', async ({ page }) => {
@@ -663,19 +684,18 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       });
     });
 
-    await page.goto('/secretary/start-session');
-    await page.getByRole('button', { name: /Start Class Session Now/i }).click();
+    await openStartPopup(page);
+    await startForm(page).getByRole('button', { name: 'Start Session', exact: true }).click();
 
-    await expect(page.getByText('An active attendance session already exists for this class section.')).toBeVisible();
-    await expect(page.getByText('NO ACTIVE SESSION')).toBeVisible();
-    await expect(page.getByText('LIVE SESSION ACTIVE')).toHaveCount(0);
+    await expect(startForm(page).getByRole('alert')).toContainText('An active attendance session already exists for this class section.');
+    await expect(page.getByText('Live Session')).toHaveCount(0);
 
     const storedItem = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
     expect(storedItem).toBeNull();
   });
 
   test('errors: lookup failure is not interpreted as no session', async ({ page }) => {
-    await page.route('**/api/secretary/attendance/session/active*', async (route) => {
+    await page.route(/\/api\/secretary\/attendance(?:\?.*)?$/, async (route) => {
       await route.fulfill({
         status: 500,
         contentType: 'application/json',
@@ -683,10 +703,54 @@ test.describe('Authoritative Secretary Attendance Session Workflow', () => {
       });
     });
 
-    await page.goto('/secretary/start-session');
-    await expect(page.getByText('Unable to load attendance session')).toBeVisible();
+    await page.goto('/secretary/attendance');
     await expect(page.getByText('A server error occurred. Please try again later.')).toBeVisible();
-    await expect(page.getByText('Session Configuration')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
+  });
+
+  test('Start Session pop-up: a Secretary with 2+ sections picks the section and its csId is sent', async ({ page }) => {
+    let startApiPayload = null as Record<string, unknown> | null;
+    await page.route('**/api/secretary/dashboard/kpis**', route => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'ok',
+        kpis: { assignedStudents: 24, attendanceRate: 95, todayRecords: 0, overriddenCount: 0 },
+        recentActivity: [],
+        assignedClass: { classId: '8', className: 'CLINIC-4B', classroomName: 'Dental Clinic Lab 2' },
+        assignedClasses: [
+          { classId: '8', className: 'CLINIC-4B', classroomName: 'Dental Clinic Lab 2' },
+          { classId: '9', className: 'CLINIC-4C', classroomName: 'Dental Clinic Lab 3' },
+        ],
+      }),
+    }));
+    await page.route('**/api/secretary/attendance/session/active*', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ok', activeSession: null }) }));
+    await page.route('**/api/secretary/attendance/session', async (route) => {
+      if (route.request().method() !== 'POST') { await route.continue(); return; }
+      startApiPayload = route.request().postDataJSON();
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'ok', session: { ...mockActiveSession, sessionId: '102', csId: 9 } }) });
+    });
+
+    await openStartPopup(page);
+    const form = startForm(page);
+    const picker = form.getByRole('button', { name: 'Selected class' });
+    await expect(picker).toBeVisible();
+    await expect(picker).toHaveClass(/w-full/);
+    await expect(picker.locator('svg')).toHaveCount(1);
+    await expect(form.getByText('CLINIC-4B').first()).toBeVisible();
+    await picker.click();
+    await form.getByRole('option', { name: 'CLINIC-4C' }).click();
+    await expect(form.getByPlaceholder('e.g. Dental Clinic Room 101')).toHaveValue('Dental Clinic Lab 3');
+    await form.getByRole('button', { name: 'Start Session', exact: true }).click();
+    await expect.poll(() => startApiPayload).not.toBeNull();
+    expect((startApiPayload as Record<string, unknown>).csId).toBe(9);
+    expect((startApiPayload as Record<string, unknown>).room).toBe('Dental Clinic Lab 3');
+  });
+
+  test('the old /secretary/start-session address opens the Start Session pop-up on Attendance Monitoring', async ({ page }) => {
+    await page.goto('/secretary/start-session');
+    await expect(page).toHaveURL(/\/secretary\/attendance$/);
+    await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
   });
 });

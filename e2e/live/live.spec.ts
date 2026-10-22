@@ -371,19 +371,20 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   // 1. Authenticate as secretary
   await login(page, secretaryEmail, secretaryPassword);
 
-  // 2. Navigate directly to /secretary/start-session
-  await page.goto('/secretary/start-session');
+  // 2. Open Attendance Monitoring (the old /secretary/start-session address now redirects here)
+  await page.goto('/secretary/attendance?view=worksheet');
+  const startSessionButton = page.getByRole('button', { name: 'Start Session', exact: true });
+  const sessionsModalButton = page.getByRole('button', { name: 'View / Manage Sessions' });
 
-  // Wait for initial active session resolution to finish loading
-  await expect(page.getByText('Resolving active attendance session status...')).toHaveCount(0, { timeout: 15000 });
+  // 4. Verify initial state: Start Session is offered, no live session badge
+  await expect(startSessionButton).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Live Session')).toHaveCount(0);
 
-  // 4. Verify initial state: form is present, no active session banner
-  await expect(page.getByRole('heading', { name: /Start Class Session & Attendance Control/i })).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible({ timeout: 15000 });
-
-  // Verify assigned class is shown (CLINIC-4B)
-  await expect(page.locator('form span', { hasText: /^CLINIC-4B$/ })).toBeVisible();
+  // Open the Start Attendance Session pop-up and verify the assigned class is shown (CLINIC-4B)
+  await startSessionButton.click();
+  const form = page.locator('form').filter({ hasText: 'Selected class' });
+  await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
+  await expect(form.getByText('CLINIC-4B')).toBeVisible();
 
   // Verify localStorage has no active session key
   const localSessionBefore = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
@@ -394,22 +395,14 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
     response => response.url().includes('/api/secretary/attendance/session') && response.request().method() === 'POST'
   );
   // ATT-002: geofence is off by default, so no toggle is needed for a session without a location.
-  await expect(page.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked();
+  await expect(form.getByRole('checkbox', { name: /Geolocation|Geofence/ })).not.toBeChecked();
   const sessionWindow = manilaSessionWindow();
-  // The timing labels are not programmatically associated with their inputs; the input is the label's next sibling.
-  const timeInputAfter = (label: string) => page.getByText(label, { exact: true }).locator('xpath=following-sibling::input');
-  const openingTimeInput = timeInputAfter('Opening Time');
-  const presentCutoffInput = timeInputAfter('Present Cutoff');
-  const lateCutoffInput = timeInputAfter('Late Cutoff');
-  await expect(openingTimeInput).toHaveCount(1);
-  await expect(presentCutoffInput).toHaveCount(1);
-  await expect(lateCutoffInput).toHaveCount(1);
-  await openingTimeInput.fill(sessionWindow.openingTime);
-  await presentCutoffInput.fill(sessionWindow.presentCutoff);
-  await lateCutoffInput.fill(sessionWindow.lateCutoff);
+  await form.getByLabel('Opening').fill(sessionWindow.openingTime);
+  await form.getByLabel('Present cutoff').fill(sessionWindow.presentCutoff);
+  await form.getByLabel('Late cutoff').fill(sessionWindow.lateCutoff);
   // Open the session in the past while keeping its same-day end time ahead.
-  await page.getByLabel('Class End Time').fill('23:59');
-  await page.getByRole('button', { name: /Start Class Session Now/i }).click();
+  await form.getByLabel('Class End Time').fill('23:59');
+  await form.getByRole('button', { name: 'Start Session', exact: true }).click();
 
   const startResponse = await startPromise;
   expect(startResponse.status()).toBe(201);
@@ -421,46 +414,54 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   const authoritativeSessionCode = startPayload.session.sessionCode;
 
   // 6. Verify UI transitions to active state
-  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
+  await expect(page.getByText(`Session code: ${authoritativeSessionCode}`).first()).toBeVisible();
+  await expect(page.getByText('Live Session')).toBeVisible();
+  await sessionsModalButton.click();
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /End Session/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'End Session', exact: true })).toBeVisible();
 
   // Verify localStorage was NOT used as authoritative storage
   const localSessionAfterStart = await page.evaluate(() => localStorage.getItem('dentisys_active_class_session'));
   expect(localSessionAfterStart).toBeNull();
 
   // 7. Test refresh/recovery semantics: reload browser
-  const reloadLookupPromise = page.waitForResponse(
-    response => response.url().includes('/api/secretary/attendance/session/active') && response.request().method() === 'GET'
+  const reloadListPromise = page.waitForResponse(
+    response => /\/api\/secretary\/attendance(\?.*)?$/.test(response.url()) && response.request().method() === 'GET'
   );
   await page.reload();
-  const reloadResponse = await reloadLookupPromise;
+  const reloadResponse = await reloadListPromise;
   expect(reloadResponse.status()).toBe(200);
   const reloadPayload = await reloadResponse.json();
-  expect(reloadPayload.activeSession).toBeTruthy();
-  expect(String(reloadPayload.activeSession.sessionId)).toBe(authoritativeSessionId);
+  const restoredSession = (reloadPayload.sessions ?? []).find((session: { sessionId: string | number }) => String(session.sessionId) === authoritativeSessionId);
+  expect(restoredSession).toBeTruthy();
 
-  // Active session card restored after reload
-  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
+  // Active session restored after reload
+  await expect(page.getByText('Live Session')).toBeVisible();
+  await sessionsModalButton.click();
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /End Session/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'End Session', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   // 8. Test navigation away and back
   await page.click('a[href="/"]');
   await expect(page).toHaveURL('/');
   await page.getByRole('link', { name: 'Attendance Monitoring', exact: true }).click();
   await page.goto('/secretary/start-session');
-  await expect(page).toHaveURL('/secretary/start-session');
+  await expect(page).toHaveURL('/secretary/attendance');
+  await expect(page.getByRole('heading', { name: 'Start Attendance Session' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.goto('/secretary/attendance?view=worksheet');
 
-  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toBeVisible();
+  await expect(page.getByText('Live Session')).toBeVisible();
+  await sessionsModalButton.click();
   await expect(page.getByText(authoritativeSessionCode).first()).toBeVisible();
 
   // 9. End active session
-  await page.getByRole('button', { name: /End Session/i }).click();
+  await page.getByRole('button', { name: 'End Session', exact: true }).click();
 
   // Confirm modal is shown
   await expect(page.getByText(/End Attendance Session/i).first()).toBeVisible();
-  await expect(page.getByText(/Are you sure you want to end the active attendance session/i)).toBeVisible();
+  await expect(page.getByText(/Are you sure you want to end active attendance session/i)).toBeVisible();
 
   const endPromise = page.waitForResponse(
     response => response.url().includes('/api/secretary/attendance/session/end') && response.request().method() === 'POST'
@@ -474,13 +475,13 @@ test('secretary authoritative session lifecycle on live PostgreSQL stack', async
   expect(endPayload.session.status).toBe('ended');
 
   // 10. Verify UI returns to inactive state
-  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Live Session')).toHaveCount(0);
+  await expect(startSessionButton).toBeVisible({ timeout: 15000 });
 
   // 11. Refresh browser again to confirm inactive state persists
   await page.reload();
-  await expect(page.getByText(/LIVE SESSION ACTIVE/i)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Start Class Session Now/i })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText('Live Session')).toHaveCount(0);
+  await expect(startSessionButton).toBeVisible({ timeout: 15000 });
 
   console.log('LIVE BROWSER VALIDATION PASSED FOR SESSION ID:', authoritativeSessionId);
 });

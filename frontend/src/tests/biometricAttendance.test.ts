@@ -435,7 +435,7 @@ test('Session Timing: Asia/Manila cutoffs and strict ordering validation (openin
 });
 
 test('Secretary Session Start: biometric-required sessions must submit openingTime, presentCutoff, and lateCutoff together', () => {
-  // Simulating the payload builder logic used in StartSession.tsx handleStart
+  // Simulating the payload builder logic used in secretary/AttendanceList.tsx handleStartSession
   const buildSecretarySessionPayload = (params: {
     csId: number;
     room?: string;

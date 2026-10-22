@@ -24,7 +24,6 @@ import { FacultyInvitation } from './pages/admin/FacultyInvitation';
 
 // Class Secretary Page Imports
 import { Dashboard as SecretaryDashboard } from './pages/secretary/Dashboard';
-import { StartSession as SecretaryStartSession } from './pages/secretary/StartSession';
 import { AttendanceList as SecretaryAttendanceList } from './pages/secretary/AttendanceList';
 import { AuditTrail as SecretaryAuditTrail } from './pages/secretary/AuditTrail';
 import { AuditTrail as FacultyAuditTrail } from './pages/faculty/AuditTrail';
@@ -256,7 +255,7 @@ function App() {
                 </Route>
 
                 <Route element={<ProtectedRoute allowedRoles={['secretary']} />}>
-                  <Route path="/secretary/start-session" element={<SecretaryStartSession />} />
+                  <Route path="/secretary/start-session" element={<Navigate to="/secretary/attendance?startSession=1" replace />} />
                   <Route path="/secretary/attendance" element={<SecretaryAttendanceList />} />
                   <Route path="/secretary/override" element={<SecretaryOverrideRoute />} />
                   <Route path="/secretary/audit-trail" element={<SecretaryAuditTrail />} />

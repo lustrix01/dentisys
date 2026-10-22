@@ -479,8 +479,6 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       crumbs.push({ name: 'Reports & Analytics', path: '/admin/reports' });
     } else if (path === '/admin/audit-trail') {
       crumbs.push({ name: 'Audit Trail', path: '/admin/audit-trail' });
-    } else if (path === '/secretary/start-session') {
-      crumbs.push({ name: 'Start Class Session', path: '/secretary/start-session' });
     } else if (path === '/secretary/attendance') {
       crumbs.push({ name: 'Attendance Monitoring', path: '/secretary/attendance' });
     } else if (path === '/secretary/audit-trail') {

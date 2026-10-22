@@ -23,6 +23,7 @@ import { showFeedback } from '../../components/FeedbackCenter';
 import { LocationPicker } from '../../components/LocationPicker';
 import { FacultyExcusedRequestsPanel } from '../../components/FacultyExcusedRequestsPanel';
 import { Modal } from '../../components/Modal';
+import { StartSessionModal, type StartSessionValues } from '../../components/StartSessionModal';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
 import {
   REVOKED_SESSION_VIEW_ONLY_NOTE, countRevokedSessions, matchesRollCallFilters, revokedHiddenText, visibleSessions,
@@ -143,7 +144,6 @@ export const AttendanceMonitoring: React.FC = () => {
   // Hierarchy Selection States
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState('');
-  const [sessionDate, setSessionDate] = useState(() => manilaDateToday());
   const [selectedCsId, setSelectedCsId] = useState<string>(() => {
     try {
       return localStorage.getItem('faculty_attendance_selected_cs_id') || '';
@@ -229,22 +229,10 @@ export const AttendanceMonitoring: React.FC = () => {
   // Session creation is presented here as part of the Attendance Monitoring workspace.
   // The submit path remains the authoritative Faculty session API.
   const [isStartSessionOpen, setIsStartSessionOpen] = useState(false);
-  const [sessionRoom, setSessionRoom] = useState('');
-  const [openingTime, setOpeningTime] = useState('08:00');
-  const [presentCutoff, setPresentCutoff] = useState('09:00');
-  const [lateCutoff, setLateCutoff] = useState('12:00');
-  const [classEndTime, setClassEndTime] = useState('13:00');
   const [isEndModalOpen, setIsEndModalOpen] = useState(false);
   const [endError, setEndError] = useState<string | null>(null);
   const [submittingEnd, setSubmittingEnd] = useState(false);
-  const [biometricRequired, setBiometricRequired] = useState(true);
-  const [geofenceEnabled, setGeofenceEnabled] = useState(false);
-  const [geofenceRadius, setGeofenceRadius] = useState(100);
   const [submittingSession, setSubmittingSession] = useState(false);
-  const [sessionError, setSessionError] = useState<string | null>(null);
-  const [sessionLocation, setSessionLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [locatingSession, setLocatingSession] = useState(false);
-  const [showSessionMap, setShowSessionMap] = useState(false);
   // Session revocation target (either worksheet session or an upcoming session card)
   const [sessionTargetToRevoke, setSessionTargetToRevoke] = useState<{ sessionId: string; sessionCode?: string; room?: string | null } | null>(null);
 
@@ -793,68 +781,31 @@ export const AttendanceMonitoring: React.FC = () => {
     }
   };
 
-  const handleAcquireSessionLocation = () => {
-    if (!navigator.geolocation) {
-      setSessionError('Location is not available in this browser. Disable geofencing or use a supported device.');
-      return;
-    }
-    setLocatingSession(true);
-    setSessionError(null);
-    navigator.geolocation.getCurrentPosition(
-      position => {
-        setSessionLocation({
-          latitude: Number(position.coords.latitude.toFixed(6)),
-          longitude: Number(position.coords.longitude.toFixed(6)),
-        });
-        setLocatingSession(false);
-      },
-      error => {
-        setSessionError(`Unable to acquire the session location: ${error.message}`);
-        setLocatingSession(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-    );
+  const startSessionPrecheck = () => {
+    if (loadingWorksheet) return 'Wait for the selected worksheet to finish loading.';
+    if (!Number.parseInt(selectedCsId, 10)) return 'Select a class section before starting an attendance session.';
+    return null;
   };
 
-  const handleStartSession = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (loadingWorksheet) { setSessionError('Wait for the selected worksheet to finish loading.'); return; }
+  const handleStartSession = async (values: StartSessionValues) => {
     const csId = Number.parseInt(selectedCsId, 10);
-    if (!csId) {
-      setSessionError('Select a class section before starting an attendance session.');
-      return;
-    }
-    if (!sessionDate || sessionDate < manilaDateToday()) { setSessionError('Choose today or a future date (Asia/Manila).'); return; }
-    if (openingTime >= presentCutoff || presentCutoff >= lateCutoff) {
-      setSessionError('Set the times in order: opening, Present cutoff, then Late cutoff.');
-      return;
-    }
-    if (!classEndTime || classEndTime < lateCutoff) {
-      setSessionError('Set a class end time at or after the Late cutoff.');
-      return;
-    }
-    if (geofenceEnabled && !sessionLocation) {
-      setSessionError('Acquire the session location before starting a geofenced session.');
-      return;
-    }
-
+    const { sessionDate, openingTime, location } = values;
     setSubmittingSession(true);
     const writeScope = beginWorksheetMutation();
-    setSessionError(null);
     try {
       const response = await createFacultyAttendanceSessionApi({
         csId,
         sessionDate,
-        room: sessionRoom.trim() || undefined,
+        room: values.room || undefined,
         openingTime,
-        presentCutoff,
-        lateCutoff,
-        classEndTime,
-        biometricRequired,
-        geofenceEnabled,
-        geofenceRadiusMeters: geofenceEnabled ? geofenceRadius : undefined,
-        geofenceLatitude: geofenceEnabled ? sessionLocation?.latitude : undefined,
-        geofenceLongitude: geofenceEnabled ? sessionLocation?.longitude : undefined,
+        presentCutoff: values.presentCutoff,
+        lateCutoff: values.lateCutoff,
+        classEndTime: values.classEndTime,
+        biometricRequired: values.biometricRequired,
+        geofenceEnabled: values.geofenceEnabled,
+        geofenceRadiusMeters: values.geofenceEnabled ? values.geofenceRadiusMeters : undefined,
+        geofenceLatitude: values.geofenceEnabled ? location?.latitude : undefined,
+        geofenceLongitude: values.geofenceEnabled ? location?.longitude : undefined,
       });
       setIsStartSessionOpen(false);
       setNotification({ type: 'success', message: response.session.status === 'scheduled' ? `Attendance session scheduled for ${sessionDate} at ${openingTime} (Asia/Manila).` : 'Attendance session started. The class roll call is now live.' });
@@ -863,8 +814,6 @@ export const AttendanceMonitoring: React.FC = () => {
         setSelectedSessionId(response.session.sessionId);
         await loadWorksheet(csId, sessionDate, response.session.sessionId);
       }
-    } catch (err) {
-      setSessionError(err instanceof Error ? err.message : 'Unable to start the attendance session.');
     } finally {
       setSubmittingSession(false);
       finishWorksheetMutation(writeScope);
@@ -1195,7 +1144,6 @@ export const AttendanceMonitoring: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setSessionError(null);
                     setIsStartSessionOpen(true);
                   }}
                   disabled={selectedClassIsPast || loadingWorksheet || attendanceWritePending}
@@ -1720,85 +1668,14 @@ export const AttendanceMonitoring: React.FC = () => {
       )}
 
       {/* Session entry is intentionally kept inside Attendance Monitoring per UI-005. */}
-      {isStartSessionOpen && (
-        <Modal
-          isOpen={isStartSessionOpen}
-          onClose={() => {
-            if (!submittingSession) {
-              setIsStartSessionOpen(false);
-              setSessionError(null);
-            }
-          }}
-          title="Start Attendance Session"
-        >
-          <form onSubmit={handleStartSession} className="space-y-4 text-xs">
-            {sessionError && (
-              <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-300">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{sessionError}</span>
-              </div>
-            )}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/50">
-              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Selected class</p>
-              <p className="mt-1 font-bold text-slate-800 dark:text-slate-100">
-                {assignedCourses.find(course => course.id === selectedCourseId)?.code || 'Course'} · {availableSections.find(section => String(section.csId) === selectedCsId)?.csName || 'Class section'}
-              </p>
-              <p className="mt-0.5 text-[11px] text-slate-500">Session date: {sessionDate} · Asia/Manila</p>
-            </div>
-
-            <label className="block font-bold text-slate-700 dark:text-slate-300">Session date (Asia/Manila)
-              <input type="date" required min={manilaDateToday()} value={sessionDate} onChange={event => setSessionDate(event.target.value)} className="mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900" />
-            </label>
-            <label className="block">
-              <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Room or session location</span>
-              <input value={sessionRoom} onChange={(event) => setSessionRoom(event.target.value)} placeholder="e.g. Dental Clinic Room 101" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-800 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-            </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Opening</span><input type="time" value={openingTime} onChange={(event) => setOpeningTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-              <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Present cutoff</span><input type="time" value={presentCutoff} onChange={(event) => setPresentCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-              <label className="block"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Late cutoff</span><input type="time" value={lateCutoff} onChange={(event) => setLateCutoff(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /></label>
-            </div>
-            <label className="block">
-              <span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Class end time</span>
-              <input type="time" required aria-label="Class end time" value={classEndTime} onChange={(event) => setClassEndTime(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" />
-              <small className="mt-1 block text-slate-400">The session ends automatically at this time; students without a record are marked Absent.</small>
-            </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-                <input type="checkbox" checked={biometricRequired} onChange={(event) => setBiometricRequired(event.target.checked)} className="accent-emerald-600" />
-                <span><strong className="block text-slate-700 dark:text-slate-200">Face biometric</strong><small className="text-slate-400">Require verified attendance</small></span>
-              </label>
-              <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-                <input type="checkbox" checked={geofenceEnabled} onChange={(event) => setGeofenceEnabled(event.target.checked)} className="accent-emerald-600" />
-                <span><strong className="block text-slate-700 dark:text-slate-200">Geofence</strong><small className="text-slate-400">Use a configured room radius</small></span>
-              </label>
-            </div>
-
-            {geofenceEnabled && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/70 dark:bg-emerald-950/20">
-                <div className="flex items-center justify-between gap-3">
-                  <label className="block flex-1"><span className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Allowed radius (meters)</span><input type="number" min={50} max={2000} value={geofenceRadius} onChange={(event) => setGeofenceRadius(Number(event.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" /><small className="mt-1 block text-[10px] text-slate-500 dark:text-slate-400">{RADIUS_HINT}</small></label>
-                  <button type="button" onClick={handleAcquireSessionLocation} disabled={locatingSession} className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-[11px] font-bold text-white disabled:opacity-50"><Navigation className="w-3.5 h-3.5" />{locatingSession ? 'Locating…' : 'Use device location'}</button>
-                  <button type="button" onClick={() => setShowSessionMap(shown => !shown)} className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-emerald-600 px-3 py-2.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-300"><MapPin className="w-3.5 h-3.5" />{showSessionMap ? 'Hide map' : 'Pick on map'}</button>
-                </div>
-                {showSessionMap && (
-                  <div className="mt-3">
-                    <LocationPicker value={sessionLocation} radiusMeters={geofenceRadius} onChange={setSessionLocation} />
-                  </div>
-                )}
-                <p className="mt-2 text-[10px] text-slate-500 dark:text-slate-400">{sessionLocation ? `Location acquired: ${sessionLocation.latitude}, ${sessionLocation.longitude}` : 'The server stores the configured session location and radius; Student coordinates remain temporary.'}</p>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-              <button type="button" onClick={() => setIsStartSessionOpen(false)} disabled={submittingSession} className="rounded-xl bg-slate-100 px-4 py-2 font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200 disabled:opacity-50">Cancel</button>
-              <button type="submit" disabled={submittingSession} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white shadow-md shadow-emerald-600/20 disabled:opacity-50"><Play className="w-3.5 h-3.5 fill-white" />{submittingSession ? 'Saving…' : sessionDate > manilaDateToday() ? 'Schedule Session' : 'Start Session'}</button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      <StartSessionModal
+        isOpen={isStartSessionOpen}
+        onClose={() => setIsStartSessionOpen(false)}
+        accent="emerald"
+        summary={<>{assignedCourses.find(course => course.id === selectedCourseId)?.code || 'Course'} · {availableSections.find(section => String(section.csId) === selectedCsId)?.csName || 'Class section'}</>}
+        precheck={startSessionPrecheck}
+        onSubmit={handleStartSession}
+      />
 
       {/* Bulk mark confirmation */}
       {isBulkConfirmOpen && worksheet && (
@@ -2600,7 +2477,6 @@ export const AttendanceMonitoring: React.FC = () => {
         <button
           type="button"
           onClick={() => {
-            setSessionError(null);
             setIsStartSessionOpen(true);
           }}
           aria-label="New attendance session"

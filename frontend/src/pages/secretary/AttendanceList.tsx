@@ -20,10 +20,13 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/Card';
 import { showFeedback } from '../../components/FeedbackCenter';
 import { Modal } from '../../components/Modal';
+import { StartSessionModal, type StartSessionValues } from '../../components/StartSessionModal';
+import { useRuntimeConfig } from '../../context/RuntimeConfigContext';
+import { DEVELOPMENT_LOCATION_FIXTURES } from '../../services/developmentProviders';
 import { RevokedSessionsSwitch } from '../../components/RevokedSessionsSwitch';
 import {
   REVOKED_SESSION_VIEW_ONLY_NOTE, countRevokedSessions, matchesRollCallFilters, revokedHiddenText, visibleSessions,
@@ -33,6 +36,8 @@ import {
   getSecretaryAttendanceApi,
   getSecretaryProfileApi,
   getSecretaryDashboardKpisApi,
+  getSecretaryActiveAttendanceSessionApi,
+  startSecretaryAttendanceSessionApi,
   overrideSecretaryAttendanceApi,
   createSecretaryExcusedRequestApi,
   endSecretaryAttendanceSessionApi,
@@ -143,6 +148,8 @@ const formatStartsIn = (startMs: number, nowMs: number, sessionDate?: string, op
 
 export const AttendanceList: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const config = useRuntimeConfig();
+  const simulationEnabled = config.providers.location.active === 'development-mock' && config.features.browser_attendance_prototype;
 
   // Navigation mode: 'classes' (Grid) or 'worksheet' (Detailed roll call worksheet)
   const [viewMode, setViewMode] = useState<'classes' | 'worksheet'>(() => {
@@ -209,11 +216,89 @@ export const AttendanceList: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const load = async () => {
+  // Start Session pop-up: current-school-year sections only (REG-006); a past-year section can never start a session.
+  const [isStartOpen, setIsStartOpen] = useState(false);
+  const [startSections, setStartSections] = useState<Array<{ classId: string; className: string; classroomName: string }>>([]);
+  const [startCsId, setStartCsId] = useState('');
+  const [otherLiveName, setOtherLiveName] = useState<string | null>(null);
+  const startCsIdRef = useRef('');
+  startCsIdRef.current = startCsId;
+  const startLocation = useMemo(() => (simulationEnabled
+    ? { latitude: DEVELOPMENT_LOCATION_FIXTURES.inside.latitude ?? 13.1436, longitude: DEVELOPMENT_LOCATION_FIXTURES.inside.longitude ?? 123.7438 }
+    : null), [simulationEnabled]);
+
+  const readOtherLive = async (csId: string, list: Array<{ classId: string; className: string }>) => {
+    const others = await Promise.all(list.filter(sec => sec.classId !== csId).map(async sec => (
+      (await getSecretaryActiveAttendanceSessionApi(Number(sec.classId)).catch(() => null))?.activeSession?.status === 'active' ? sec.className : null
+    )));
+    return others.find(name => name !== null) ?? null;
+  };
+
+  const openStartSession = async () => {
+    setIsStartOpen(true);
+    try {
+      const kpis = await getSecretaryDashboardKpisApi('current');
+      const fromServer = kpis?.assignedClasses?.length ? kpis.assignedClasses : kpis?.assignedClass?.classId ? [kpis.assignedClass] : [];
+      const list = fromServer.map(sec => ({ classId: sec.classId, className: sec.className, classroomName: sec.classroomName ?? '' }));
+      const chosen = list.find(sec => sec.classId === (startCsIdRef.current || String(kpis?.assignedClass?.classId ?? ''))) ?? list[0] ?? null;
+      setStartSections(list);
+      setStartCsId(chosen?.classId ?? '');
+      setOtherLiveName(chosen ? await readOtherLive(chosen.classId, list) : null);
+    } catch { /* The pop-up reports a missing section when it is submitted. */ }
+  };
+
+  const selectStartSection = async (classId: string) => {
+    setStartCsId(classId);
+    setOtherLiveName(await readOtherLive(classId, startSections).catch(() => null));
+  };
+
+  const handleStartSession = async (values: StartSessionValues) => {
+    const csId = parseInt(startCsId, 10);
+    const { location } = values;
+    const res = await startSecretaryAttendanceSessionApi({
+      csId,
+      sessionDate: values.sessionDate,
+      room: values.room || undefined,
+      biometricRequired: values.biometricRequired,
+      geofenceEnabled: values.geofenceEnabled,
+      geofenceRadiusMeters: values.geofenceEnabled ? values.geofenceRadiusMeters : undefined,
+      openingTime: values.openingTime,
+      presentCutoff: values.presentCutoff,
+      lateCutoff: values.lateCutoff,
+      classEndTime: values.classEndTime,
+      ...(values.geofenceEnabled && location
+        ? { geofenceLatitude: location.latitude, geofenceLongitude: location.longitude, latitude: location.latitude, longitude: location.longitude }
+        : {}),
+    });
+    setIsStartOpen(false);
+    setFeedback({
+      type: 'success',
+      text: res.session.status === 'scheduled'
+        ? `Session scheduled for ${values.sessionDate} at ${values.openingTime} (Asia/Manila). Session code: ${res.session.sessionCode}`
+        : `Attendance session started. The class roll call is now live. Session code: ${res.session.sessionCode}`,
+    });
+    setRefreshVersion(version => version + 1);
+    void load();
+  };
+
+  useEffect(() => {
+    if (searchParams.get('startSession') !== '1') return;
+    void openStartSession();
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('startSession');
+      return next;
+    }, { replace: true });
+  }, [searchParams]);
+
+  // quiet = background refresh: no spinner, keeps the last good data on failure, and a later load/End/Revoke/override makes it stale.
+  const load = async (quiet = false) => {
     if (saving.current) return;
-    const requestId = ++loadRequest.current;
-    setLoading(true);
-    setError('');
+    const requestId = quiet ? loadRequest.current : ++loadRequest.current;
+    if (!quiet) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const [attendance, profile, dashboard] = await Promise.all([
         getSecretaryAttendanceApi(),
@@ -226,12 +311,12 @@ export const AttendanceList: React.FC = () => {
       setClassName(profile.profile.assignedClassName || dashboard?.assignedClass?.className || '');
       setClassroomName(profile.profile.classroomName || dashboard?.assignedClass?.classroomName || '');
     } catch (requestError) {
-      if (loadRequest.current !== requestId) return;
+      if (loadRequest.current !== requestId || quiet) return;
       setRecords([]);
       setSessions([]);
       setError(requestError instanceof Error ? requestError.message : 'Unable to load attendance.');
     } finally {
-      if (loadRequest.current === requestId) setLoading(false);
+      if (!quiet && loadRequest.current === requestId) setLoading(false);
     }
   };
 
@@ -333,6 +418,8 @@ export const AttendanceList: React.FC = () => {
 
   const handleEndSession = async () => {
     if (!sessionTargetToEnd) return;
+    ++loadRequest.current;
+    ++sessionRequest.current;
     setSubmittingEnd(true);
     setEndError(null);
     try {
@@ -353,6 +440,8 @@ export const AttendanceList: React.FC = () => {
   const handleRevokeSession = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sessionTargetToRevoke) return;
+    ++loadRequest.current;
+    ++sessionRequest.current;
     setSubmittingRevoke(true);
     setRevokeError(null);
     try {
@@ -378,6 +467,24 @@ export const AttendanceList: React.FC = () => {
     void load();
     return () => { ++loadRequest.current; };
   }, []);
+
+  // Live refresh (as Faculty): while an active or scheduled session exists, reload every 30 s unless a write is in flight.
+  const writeInFlight = useRef(false);
+  writeInFlight.current = submitting || submittingEnd || submittingRevoke;
+  const hasOpenSession = sessions.some(s => s.status === 'active' || s.status === 'scheduled');
+  useEffect(() => {
+    if (!hasOpenSession) return;
+    const timer = setInterval(() => {
+      if (saving.current || writeInFlight.current) return;
+      void load(true);
+      if (!sessionId) return;
+      const requestId = sessionRequest.current;
+      getSecretaryAttendanceApi({ sessionId })
+        .then(response => { if (sessionRequest.current === requestId) setSessionRecords(response.records); })
+        .catch(() => { /* Keep the last successful roster. */ });
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [hasOpenSession, sessionId]);
 
   useEffect(() => {
     const requestId = ++sessionRequest.current;
@@ -793,13 +900,14 @@ export const AttendanceList: React.FC = () => {
                 </button>
 
                 {/* Start Session CTA */}
-                <Link
-                  to="/secretary/start-session"
+                <button
+                  type="button"
+                  onClick={() => void openStartSession()}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Start Session</span>
-                </Link>
+                </button>
 
                 {/* Refresh button */}
                 <button
@@ -1337,14 +1445,14 @@ export const AttendanceList: React.FC = () => {
                       When a scheduled session arrives at its opening time, it will automatically appear here.
                     </p>
                     <div className="pt-2">
-                      <Link
-                        to="/secretary/start-session"
-                        onClick={() => setIsSessionModalOpen(false)}
+                      <button
+                        type="button"
+                        onClick={() => { setIsSessionModalOpen(false); void openStartSession(); }}
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-600/20 hover:bg-blue-700 cursor-pointer"
                       >
                         <Play className="w-3.5 h-3.5 fill-white" />
                         <span>Start Session Now</span>
-                      </Link>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1695,6 +1803,21 @@ export const AttendanceList: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      <StartSessionModal
+        isOpen={isStartOpen}
+        onClose={() => setIsStartOpen(false)}
+        accent="blue"
+        summary={startSections.find(sec => sec.classId === startCsId)?.className || 'Class section'}
+        precheck={() => (parseInt(startCsId, 10) > 0 ? null : 'No assigned class section found for your Secretary account.')}
+        onSubmit={handleStartSession}
+        sections={startSections.map(sec => ({ id: sec.classId, name: sec.className }))}
+        selectedSectionId={startCsId}
+        onSelectSection={id => void selectStartSection(id)}
+        initialRoom={startSections.find(sec => sec.classId === startCsId)?.classroomName ?? ''}
+        initialLocation={startLocation}
+        note={otherLiveName ? <p className="text-xs text-slate-400 dark:text-slate-500">{otherLiveName} has a live session.</p> : null}
+      />
     </div>
   );
 };
