@@ -119,6 +119,15 @@ Owner decisions (2026-10-15, demo approved: [Email History Demo](https://claude.
 
 Testing must never email real or real-looking addresses (spam risk): automated tests use mocks or Mailpit only, and manual checks need `EMAIL_PROVIDER=mailpit`, or `custom` with an `EMAIL_TEST_ALLOWLIST` of Owner-controlled addresses.
 
+## 5.9 Class archiving follow-ups (CLS-003)
+
+**Status: Not started.** Small gaps left after class archiving shipped (2026-10-22); the Owner will decide each one.
+
+- **Email Management:** Faculty can still email Students of a Cancelled or Created-by-mistake class.
+- **Dean school-year dropdown:** can list a school year whose only classes are hidden (Cancelled or Created by mistake).
+- **Grading setup:** the grading-configuration save and the grading snapshot work per course offering (course and school year), not per class, so they still include assessments of a Cancelled or Created-by-mistake class of the same offering.
+- **Wording:** four client-side messages in Classes & Rosters (add student, edit class, remove student, edit roster student) still say "Past school-year classes are view-only." for archived classes. Archived cards disable those buttons and the server answers "Archived classes are view-only.", so this is wording only.
+
 ---
 
 # 6. Student
