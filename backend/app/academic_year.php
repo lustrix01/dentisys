@@ -40,8 +40,29 @@ function academic_school_year_is_past(PDO $pdo, string $schoolYear): bool
     return strcmp(trim($schoolYear), academic_current_school_year($pdo)) < 0;
 }
 
+/** CLS-003: an archived class section (any reason) is view-only like a past-year one. */
+function academic_class_section_is_archived(PDO $pdo, int $csId): bool
+{
+    $stmt = $pdo->prepare('SELECT 1 FROM class_sections WHERE cs_id = ? AND archive_reason IS NOT NULL');
+    $stmt->execute([$csId]);
+
+    return $stmt->fetchColumn() !== false;
+}
+
+/** Refusal text: "Archived" for a current-year archived class, otherwise the past-year text. */
+function academic_view_only_message(PDO $pdo, int $csId, string $pastMessage = 'Past school-year classes are view-only.'): string
+{
+    $stmt = $pdo->prepare('SELECT school_year, archive_reason FROM class_sections WHERE cs_id = ?');
+    $stmt->execute([$csId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return $row && $row['archive_reason'] !== null && !academic_school_year_is_past($pdo, (string) $row['school_year'])
+        ? 'Archived classes are view-only.'
+        : $pastMessage;
+}
+
 /**
- * Past school-year class sections are view-only; mutations must check this.
+ * Past school-year and archived (CLS-003) class sections are view-only; mutations must check this.
  */
 function academic_class_section_is_past(PDO $pdo, int $csId): bool
 {
@@ -49,7 +70,8 @@ function academic_class_section_is_past(PDO $pdo, int $csId): bool
     $stmt->execute([$csId]);
     $schoolYear = $stmt->fetchColumn();
 
-    return is_string($schoolYear) && academic_school_year_is_past($pdo, $schoolYear);
+    return (is_string($schoolYear) && academic_school_year_is_past($pdo, $schoolYear))
+        || academic_class_section_is_archived($pdo, $csId);
 }
 
 function academic_require_current_school_year(PDO $pdo, string $schoolYear, string $field = 'schoolYear'): void
@@ -142,6 +164,7 @@ function academic_student_term_dates(PDO $pdo, int $studentId, ?array $terms = n
     $stmt = $pdo->prepare("SELECT cs.cs_id, cs.school_year, cs.semester, cs.term_start_date, cs.term_end_date
         FROM enrollments e JOIN class_sections cs ON cs.cs_id = e.cs_id
         WHERE e.student_id = ? AND LOWER(e.status) = 'active' AND LOWER(cs.status) = 'active'
+        AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
         ORDER BY cs.school_year DESC, cs.semester, cs.cs_id");
     $stmt->execute([$studentId]);
     $terms ??= academic_terms_read($pdo);

@@ -27,7 +27,10 @@ import {
   Pencil,
   AlertCircle,
   MoreVertical,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
+import { isViewOnlyClass, archiveGroup, type ArchiveReason } from '../../utils/classArchiving';
 import { Student } from '../../types';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
@@ -42,6 +45,8 @@ import {
   getAvailableStudentsForClassApi,
   enrollStudentsInClassApi,
   unenrollStudentFromClassApi,
+  archiveClassApi,
+  restoreClassApi,
   updateFacultyStudentApi,
   createStudentInvitation,
   createStudentApi,
@@ -154,11 +159,17 @@ export const ClassesAndRosters: React.FC = () => {
   const [isSendingInvitations, setIsSendingInvitations] = useState(false);
 
   // Active view tab: 'classes' or 'roster'
-  const [activeTab, setActiveTab] = useState<'classes' | 'roster'>('classes');
+  const [activeTab, setActiveTab] = useState<'classes' | 'archived' | 'roster'>('classes');
 
   // Search query, School Year filter, and Class Section filter
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSchoolYear, setSelectedSchoolYear] = useState<string>('all');
+  const [archivedSchoolYear, setArchivedSchoolYear] = useState<string>('all');
+  const [archiveTarget, setArchiveTarget] = useState<FacultyClassItem | null>(null);
+  const [archiveReasonChoice, setArchiveReasonChoice] = useState<ArchiveReason | ''>('');
+  const [archiveRemedialOnly, setArchiveRemedialOnly] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<FacultyClassItem | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
   const [selectedClassFilterId, setSelectedClassFilterId] = useState<string>('all');
   const syInitializedRef = useRef(false);
 
@@ -380,13 +391,8 @@ export const ClassesAndRosters: React.FC = () => {
   }, [classes, newSchoolYear]);
 
   // The server supplies eligibility; do not infer an academic year from the clock.
-  const isHistoricalClass = useCallback((classItem: FacultyClassItem | null | undefined) => {
-    const record = classItem as (FacultyClassItem & {
-      isHistorical?: boolean;
-      isCurrentSchoolYear?: boolean;
-    }) | null | undefined;
-    return record?.isHistorical === true || record?.isCurrentSchoolYear === false;
-  }, []);
+  // CLS-003: archived classes are view-only exactly like past school-year classes.
+  const isHistoricalClass = useCallback((classItem: FacultyClassItem | null | undefined) => isViewOnlyClass(classItem), []);
 
   const isStudentEditable = useCallback((student: Student) => {
     const sections = student.classSections ?? [];
@@ -409,9 +415,13 @@ export const ClassesAndRosters: React.FC = () => {
 
   // Available class sections for the class section filter dropdown (constrained by school year if chosen)
   const availableClassFilterOptions = useMemo(() => {
+    if (activeTab === 'classes') return classes.filter(c => !isViewOnlyClass(c));
+    if (activeTab === 'archived') {
+      return classes.filter(c => isViewOnlyClass(c) && (archivedSchoolYear === 'all' || c.schoolYear === archivedSchoolYear));
+    }
     if (selectedSchoolYear === 'all') return classes;
     return classes.filter(c => c.schoolYear === selectedSchoolYear);
-  }, [classes, selectedSchoolYear]);
+  }, [classes, selectedSchoolYear, archivedSchoolYear, activeTab]);
 
   // Keep selectedClassFilterId valid when school year changes
   useEffect(() => {
@@ -429,6 +439,7 @@ export const ClassesAndRosters: React.FC = () => {
   const filteredClasses = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return classes.filter(cls => {
+      if (isViewOnlyClass(cls)) return false;
       const matchesSearch =
         !query ||
         cls.courseCode.toLowerCase().includes(query) ||
@@ -438,15 +449,85 @@ export const ClassesAndRosters: React.FC = () => {
         (cls.lecRoom && cls.lecRoom.toLowerCase().includes(query)) ||
         (cls.labRoom && cls.labRoom.toLowerCase().includes(query));
 
-      const matchesSchoolYear = selectedSchoolYear === 'all' || cls.schoolYear === selectedSchoolYear;
-
       const matchesClass = selectedClassFilterId === 'all' ||
         String(cls.id) === String(selectedClassFilterId) ||
         String(cls.csId) === String(selectedClassFilterId);
 
-      return matchesSearch && matchesSchoolYear && matchesClass;
+      return matchesSearch && matchesClass;
     });
-  }, [classes, searchQuery, selectedSchoolYear, selectedClassFilterId]);
+  }, [classes, searchQuery, selectedClassFilterId]);
+
+  // CLS-003: Archived Classes tab, split into Completed and Cancelled / Created by mistake.
+  const archivedGroups = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const list = classes.filter(cls => {
+      if (!isViewOnlyClass(cls)) return false;
+      const matchesSearch = !query ||
+        cls.courseCode.toLowerCase().includes(query) ||
+        cls.courseName.toLowerCase().includes(query) ||
+        cls.block.toLowerCase().includes(query) ||
+        cls.csName.toLowerCase().includes(query) ||
+        (cls.lecRoom && cls.lecRoom.toLowerCase().includes(query)) ||
+        (cls.labRoom && cls.labRoom.toLowerCase().includes(query));
+      const matchesYear = archivedSchoolYear === 'all' || cls.schoolYear === archivedSchoolYear;
+      const matchesClass = selectedClassFilterId === 'all' ||
+        String(cls.id) === String(selectedClassFilterId) ||
+        String(cls.csId) === String(selectedClassFilterId);
+      return matchesSearch && matchesYear && matchesClass;
+    });
+    return {
+      total: list.length,
+      completed: list.filter(c => archiveGroup(c) === 'completed'),
+      removed: list.filter(c => archiveGroup(c) === 'removed'),
+    };
+  }, [classes, searchQuery, archivedSchoolYear, selectedClassFilterId]);
+
+  const openArchiveDialog = (cls: FacultyClassItem) => {
+    setArchiveTarget(cls);
+    setArchiveReasonChoice('');
+    setArchiveRemedialOnly(false);
+  };
+
+  const handleArchiveSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!archiveTarget || !archiveReasonChoice) return;
+    setArchiveBusy(true);
+    try {
+      const res = await archiveClassApi({ csId: archiveTarget.csId, reason: archiveReasonChoice });
+      showFeedback(res.message, 'success');
+      setArchiveTarget(null);
+      setActiveTab('archived');
+      setArchivedSchoolYear('all');
+      await fetchData();
+    } catch (err: any) {
+      const message = err?.message || 'Failed to archive class section.';
+      // The class data does not say who has a pending remedial, so the server's 409 switches the dialog to Finished only.
+      if (/pending remedial/i.test(message)) {
+        setArchiveRemedialOnly(true);
+        setArchiveReasonChoice('finished');
+      }
+      showFeedback(message, 'error');
+    } finally {
+      setArchiveBusy(false);
+    }
+  };
+
+  const handleRestoreSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!restoreTarget) return;
+    setArchiveBusy(true);
+    try {
+      const res = await restoreClassApi({ csId: restoreTarget.csId });
+      showFeedback(res.message, 'success');
+      setRestoreTarget(null);
+      setActiveTab('classes');
+      await fetchData();
+    } catch (err: any) {
+      showFeedback(err?.message || 'Failed to restore class section.', 'error');
+    } finally {
+      setArchiveBusy(false);
+    }
+  };
 
   // Filtered student roster by Search, Class Filter, and School Year Filter
   const filteredStudents = useMemo(() => {
@@ -1176,6 +1257,128 @@ export const ClassesAndRosters: React.FC = () => {
     }
   };
 
+  // One class card, shared by Assigned Classes and Archived Classes.
+  const renderClassCard = (cls: FacultyClassItem) => {
+    const historicalClass = isHistoricalClass(cls);
+                const archivedClass = historicalClass;
+                const reason = cls.archiveReason ?? (historicalClass ? 'finished' : null);
+                const canRestore = Boolean(cls.archiveReason) && !cls.isHistorical && cls.isCurrentSchoolYear !== false;
+                const archivedDate = cls.archivedAt ? new Date(cls.archivedAt.replace(' ', 'T')) : null;
+                const archivedDateLabel = archivedDate && !Number.isNaN(archivedDate.getTime()) ? archivedDate.toLocaleDateString() : (cls.archivedAt ?? '');
+                const reasonLabel = reason === 'cancelled' ? 'Cancelled' : reason === 'mistake' ? 'Created by mistake' : 'Finished';
+                return (
+                <Card key={cls.id} className={`p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4 ${historicalClass ? 'border-slate-300/80 dark:border-slate-700' : ''}`}>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
+                        {cls.courseCode} &bull; Year {cls.yearLevel}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {archivedClass && (reason === 'cancelled' || reason === 'mistake'
+                          ? <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900 text-[9px] font-extrabold uppercase tracking-wider">{reasonLabel}</span>
+                          : <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[9px] font-extrabold uppercase tracking-wider">Completed</span>)}
+                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mr-1">
+                          {cls.csName || cls.block}
+                        </span>
+                        <button
+                          onClick={() => handleOpenEditClass(cls)}
+                          disabled={historicalClass}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                          title={archivedClass ? 'Archived classes are view-only.' : historicalClass ? 'Past school-year classes are view-only.' : 'Edit Class Section Details'}
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                        {!historicalClass && (
+                          <button
+                            onClick={() => openArchiveDialog(cls)}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Archive this class section"
+                          >
+                            <Archive className="w-3 h-3" />
+                            <span>Archive</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
+                      {cls.courseName}
+                    </h3>
+
+                      <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
+                          <span>{semesterLabel(cls.semester)} &bull; {cls.schoolYear || '2025-2026'}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0 mt-0.5" />
+                          <div className="space-y-0.5">
+                            {cls.lecRoom && (
+                              <div>
+                                <span className="font-bold text-slate-700 dark:text-slate-200">Lec:</span> {cls.lecRoom}
+                              </div>
+                            )}
+                            {cls.labRoom && (
+                              <div>
+                                <span className="font-bold text-slate-700 dark:text-slate-200">{'Lab:'}</span> {cls.labRoom}
+                              </div>
+                            )}
+                            {!cls.lecRoom && !cls.labRoom && <div>Venue / Schedule TBA</div>}
+                          </div>
+                        </div>
+                      </div>
+                      {archivedClass && (
+                        <div className="text-[11px] font-semibold text-slate-400">
+                          {cls.archiveReason
+                            ? `Archived ${archivedDateLabel} · ${reasonLabel}`
+                            : `Archived automatically when S.Y. ${cls.schoolYear} ended`}
+                        </div>
+                      )}
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                      <Users className="w-4 h-4 text-slate-400" />
+                      <span>{cls.enrolledCount} Students</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {canRestore ? (
+                        <button
+                          onClick={() => setRestoreTarget(cls)}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer"
+                          title="Restore this class section"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Restore</span>
+                        </button>
+                      ) : (
+                      <button
+                        onClick={() => handleOpenAddStudent(cls)}
+                        disabled={historicalClass}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        title={archivedClass ? 'Archived classes are view-only.' : historicalClass ? 'Past school-year classes are view-only.' : 'Add student to class roster'}
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Add Student</span>
+                      </button>
+                      )}
+
+                      <button
+                        onClick={() => handleOpenClassRoster(cls)}
+                        className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/40 hover:bg-accent-100 dark:hover:bg-accent-900/50 transition-colors cursor-pointer"
+                        title="View Class Roster"
+                      >
+                        <span>View Roster</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+                );
+  };
+
   return (
     <div className="space-y-6">
 
@@ -1254,6 +1457,21 @@ export const ClassesAndRosters: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('archived')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'archived'
+                ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <Archive className="w-4 h-4 text-emerald-600" />
+            Archived Classes
+            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+              {archivedGroups.total}
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('roster')}
             className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               activeTab === 'roster'
@@ -1290,13 +1508,14 @@ export const ClassesAndRosters: React.FC = () => {
               </div>
             </div>
 
-            {/* School Year Selector Filter Pill */}
+            {/* School Year Selector Filter Pill (Archived Classes and Roster tabs only) */}
+            {activeTab !== 'classes' && (
             <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-3.5 py-2 shadow-xs flex-1 hover:border-emerald-500 transition-colors">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <CalendarDays className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <select
-                  value={selectedSchoolYear}
-                  onChange={(e) => setSelectedSchoolYear(e.target.value)}
+                  value={activeTab === 'archived' ? archivedSchoolYear : selectedSchoolYear}
+                  onChange={(e) => (activeTab === 'archived' ? setArchivedSchoolYear : setSelectedSchoolYear)(e.target.value)}
                   className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-full truncate pr-1"
                 >
                   <option value="all">All School Years</option>
@@ -1306,6 +1525,7 @@ export const ClassesAndRosters: React.FC = () => {
                 </select>
               </div>
             </div>
+            )}
           </div>
 
           {/* Search Input Pill */}
@@ -1313,7 +1533,7 @@ export const ClassesAndRosters: React.FC = () => {
             <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder={activeTab === 'classes' ? "Search code, title..." : "Search student ID, name..."}
+              placeholder={activeTab !== 'roster' ? "Search code, title..." : "Search student ID, name..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-8 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
@@ -1354,90 +1574,116 @@ export const ClassesAndRosters: React.FC = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
-              {filteredClasses.map((cls) => {
-                const historicalClass = isHistoricalClass(cls);
-                return (
-                <Card key={cls.id} className={`p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4 ${historicalClass ? 'border-slate-300/80 dark:border-slate-700' : ''}`}>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="px-2.5 py-1 rounded-lg bg-accent-50 dark:bg-accent-950/40 text-accent-700 dark:text-accent-300 text-[10px] font-extrabold uppercase tracking-wider">
-                        {cls.courseCode} &bull; Year {cls.yearLevel}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        {historicalClass && <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 text-[9px] font-extrabold uppercase tracking-wider">View only</span>}
-                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mr-1">
-                          {cls.csName || cls.block}
-                        </span>
-                        <button
-                          onClick={() => handleOpenEditClass(cls)}
-                          disabled={historicalClass}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                          title={historicalClass ? 'Past school-year classes are view-only.' : 'Edit Class Section Details'}
-                        >
-                          <Pencil className="w-3 h-3" />
-                          <span>Edit</span>
-                        </button>
-                      </div>
-                    </div>
+              {filteredClasses.map(renderClassCard)}
+            </div>
+          )}
+        </>
+      )}
 
-                    <h3 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
-                      {cls.courseName}
-                    </h3>
+      {archiveTarget && (
+        <Modal isOpen={Boolean(archiveTarget)} onClose={() => setArchiveTarget(null)} title="Archive Class Section">
+          <form onSubmit={handleArchiveSubmit} className="space-y-4 text-xs">
+            <p className="text-slate-600 dark:text-slate-300">{archiveTarget.courseCode} ({archiveTarget.block}) · {archiveTarget.courseName} · {archiveTarget.enrolledCount} Students</p>
+            <p className="text-slate-500 dark:text-slate-400">Choose why you are archiving this class.</p>
+            {archiveRemedialOnly && (
+              <div className="rounded-xl px-3 py-2.5 bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900 font-semibold">
+                A Student in this class has a pending remedial, so it can only be archived as Finished.
+              </div>
+            )}
+            {([
+              { key: 'finished', label: 'Finished', text: 'The class is done. Students keep seeing it and their grades under past classes. Remedial and cost recovery results can still be recorded.' },
+              { key: 'cancelled', label: 'Cancelled', text: `The class will not continue. It is hidden from Students and the Class Secretary. The ${archiveTarget.enrolledCount} enrolled Students are notified.` },
+              { key: 'mistake', label: 'Created by mistake', text: 'The class should not exist. It is hidden from Students and the Class Secretary. No one is notified.' },
+            ] as const).map(option => {
+              const off = archiveRemedialOnly && option.key !== 'finished';
+              return (
+                <label
+                  key={option.key}
+                  className={`flex gap-2.5 items-start p-3 rounded-xl border cursor-pointer ${archiveReasonChoice === option.key ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' : 'border-slate-200 dark:border-slate-700'} ${off ? 'opacity-45 cursor-not-allowed' : ''}`}
+                >
+                  <input
+                    type="radio"
+                    name="archive-reason"
+                    value={option.key}
+                    checked={archiveReasonChoice === option.key}
+                    disabled={off}
+                    onChange={() => setArchiveReasonChoice(option.key)}
+                    className="mt-0.5 accent-emerald-600"
+                  />
+                  <span>
+                    <span className="block font-bold text-slate-700 dark:text-slate-200">{option.label}</span>
+                    <span className="text-slate-500 dark:text-slate-400">{option.text}</span>
+                  </span>
+                </label>
+              );
+            })}
+            <div>
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Also happens</div>
+              <ul className="list-disc pl-4 text-slate-600 dark:text-slate-300 space-y-1">
+                {(archiveTarget.scheduledSessionCount ?? 0) > 0 && (
+                  <li>{archiveTarget.scheduledSessionCount} scheduled attendance {archiveTarget.scheduledSessionCount === 1 ? 'session is' : 'sessions are'} revoked.</li>
+                )}
+                {archiveTarget.secretaryName && (
+                  <li>{archiveTarget.secretaryName}&apos;s Class Secretary appointment for {archiveTarget.csName || archiveTarget.block} ends.</li>
+                )}
+                <li>The class becomes view-only. Nothing is deleted.</li>
+              </ul>
+            </div>
+            <div className="pt-2 flex justify-end gap-2">
+              <button type="button" onClick={() => setArchiveTarget(null)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button>
+              <button type="submit" disabled={!archiveReasonChoice || archiveBusy} className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 text-white font-bold">{archiveBusy ? 'Saving…' : 'Archive Class'}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
-                      <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-3.5 h-3.5 text-accent-500 flex-shrink-0" />
-                          <span>{semesterLabel(cls.semester)} &bull; {cls.schoolYear || '2025-2026'}</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-accent-500 flex-shrink-0 mt-0.5" />
-                          <div className="space-y-0.5">
-                            {cls.lecRoom && (
-                              <div>
-                                <span className="font-bold text-slate-700 dark:text-slate-200">Lec:</span> {cls.lecRoom}
-                              </div>
-                            )}
-                            {cls.labRoom && (
-                              <div>
-                                <span className="font-bold text-slate-700 dark:text-slate-200">{'Lab:'}</span> {cls.labRoom}
-                              </div>
-                            )}
-                            {!cls.lecRoom && !cls.labRoom && <div>Venue / Schedule TBA</div>}
-                          </div>
-                        </div>
-                      </div>
+      {restoreTarget && (
+        <Modal isOpen={Boolean(restoreTarget)} onClose={() => setRestoreTarget(null)} title="Restore Class Section">
+          <form onSubmit={handleRestoreSubmit} className="space-y-4 text-xs">
+            <p className="text-slate-600 dark:text-slate-300">{restoreTarget.courseCode} ({restoreTarget.block}) returns to Assigned Classes and can be edited again.</p>
+            <ul className="list-disc pl-4 text-slate-600 dark:text-slate-300 space-y-1">
+              <li>Revoked attendance sessions and the Class Secretary appointment do not come back. Appoint a Secretary again if needed.</li>
+              {restoreTarget.archiveReason === 'cancelled' && <li>The {restoreTarget.enrolledCount} enrolled Students are notified that the class is back.</li>}
+            </ul>
+            <div className="pt-2 flex justify-end gap-2">
+              <button type="button" onClick={() => setRestoreTarget(null)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">Cancel</button>
+              <button type="submit" disabled={archiveBusy} className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold">{archiveBusy ? 'Saving…' : 'Restore Class'}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* TAB: ARCHIVED CLASSES */}
+      {activeTab === 'archived' && (
+        <>
+          {loading ? (
+            <div className="py-16 text-center text-slate-400 text-xs font-semibold">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3 text-emerald-600" />
+              Loading archived classes from server...
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {([
+                { key: 'completed', title: 'Completed', note: 'Students still see these classes and their grades. Remedial and cost recovery results can still be recorded.', list: archivedGroups.completed, empty: 'No Completed Classes Found' },
+                { key: 'removed', title: 'Cancelled or created by mistake', note: 'Hidden from Students and the Class Secretary. Shown only here and in the audit log.', list: archivedGroups.removed, empty: 'No Cancelled or Mistaken Classes Found' },
+              ] as const).map(group => (
+                <div key={group.key} className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{group.title}</h3>
+                    <p className="text-xs text-slate-400">{group.note}</p>
                   </div>
-
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                      <Users className="w-4 h-4 text-slate-400" />
-                      <span>{cls.enrolledCount} Students</span>
+                  {group.list.length === 0 ? (
+                    <Card className="p-8 text-center space-y-3">
+                      <Archive className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
+                      <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">{group.empty}</h3>
+                    </Card>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
+                      {group.list.map(renderClassCard)}
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleOpenAddStudent(cls)}
-                        disabled={historicalClass}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                        title={historicalClass ? 'Past school-year classes are view-only.' : 'Add student to class roster'}
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Add Student</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleOpenClassRoster(cls)}
-                        className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-lg text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-950/40 hover:bg-accent-100 dark:hover:bg-accent-900/50 transition-colors cursor-pointer"
-                        title="View Class Roster"
-                      >
-                        <span>View Roster</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-                );
-              })}
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </>

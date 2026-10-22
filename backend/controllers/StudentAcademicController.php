@@ -107,7 +107,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
                 COALESCE(egb.retention_state, e.retention_state) AS retention_state,
                 e.remedial_state_json, e.clinic_hours_completed,
                 cs.cs_name, cs.semester, cs.school_year, cs.year_level AS class_year_level,
-                cs.lec_room, cs.lab_room, cs.block, cs.meetings_recorded,
+                cs.lec_room, cs.lab_room, cs.block, cs.meetings_recorded, cs.archive_reason,
                 u.display_name AS instructor_name,
                 c.course_id, c.course_code, COALESCE(cs.course_title, c.name) AS course_name, c.units, c.is_clinical,
                 gc.component_mode AS grading_component_mode
@@ -124,6 +124,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
           WHERE e.student_id = ?
             AND LOWER(e.status) = \'active\'
             AND LOWER(cs.status) = \'active\'
+            AND (cs.archive_reason IS NULL OR cs.archive_reason = \'finished\')
           ORDER BY cs.school_year DESC, cs.semester, c.course_code, e.enrollment_id'
     );
     $stmt->execute([$studentId]);
@@ -193,6 +194,7 @@ function student_academic_class_rows(PDO $pdo, int $studentId): array
             'clinicHoursCompleted' => (int) $row['clinic_hours_completed'],
             'isCurrent' => academic_school_year_is_current($pdo, (string) $row['school_year']),
             'isPast' => academic_school_year_is_past($pdo, (string) $row['school_year']),
+            'archiveReason' => $row['archive_reason'] === 'finished' ? 'finished' : null,
         ];
         if (($row['grading_component_mode'] ?? 'combined') === 'lecture_laboratory') {
             $classRow['gradingComponentMode'] = 'lecture_laboratory';
@@ -339,6 +341,7 @@ function handle_student_dashboard_get(): void
                JOIN enrollments e ON e.enrollment_id = r.enrollment_id
                JOIN class_sections cs ON cs.cs_id = e.cs_id
               WHERE e.student_id = ? AND LOWER(e.status) = \'active\'
+                AND (cs.archive_reason IS NULL OR cs.archive_reason = \'finished\')
                 AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = \'revoked\')
                 AND (CAST(? AS TEXT) IS NULL OR UPPER(cs.school_year) = UPPER(CAST(? AS TEXT)))'
         );

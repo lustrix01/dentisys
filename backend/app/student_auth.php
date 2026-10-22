@@ -131,9 +131,10 @@ function require_owned_enrollment(PDO $pdo, array $config, array $authContext, i
 {
     $identity = require_student_identity($pdo, $config, $authContext);
     $stmt = $pdo->prepare(
-        "SELECT enrollment_id, student_id, cs_id, status
-           FROM enrollments
-          WHERE enrollment_id = ? AND student_id = ? AND status = 'Active'"
+        "SELECT e.enrollment_id, e.student_id, e.cs_id, e.status
+           FROM enrollments e JOIN class_sections cs ON cs.cs_id = e.cs_id
+          WHERE e.enrollment_id = ? AND e.student_id = ? AND e.status = 'Active'
+            AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')"
     );
     $stmt->execute([$enrollmentId, $identity['student_id']]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -242,6 +243,7 @@ function student_auth_active_class_enrollment(PDO $pdo, int $studentId, int $cla
           JOIN class_sections cs ON cs.cs_id = e.cs_id
           WHERE e.student_id = ? AND e.cs_id = ? AND e.status = 'Active'
             AND lower(cs.status) = 'active'
+            AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
           LIMIT 1{$suffix}"
     );
     $stmt->execute([$studentId, $classId]);

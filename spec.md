@@ -1126,6 +1126,24 @@ Owner-approved amendment (2026-10-12): Attendance Monitoring shows an Assigned C
 
 Faculty may create classes only for the current school year. Past-school-year classes are view-only: Faculty cannot edit them, add students, or perform other mutations through those historical class surfaces. This narrows CLS-001's editing permission to eligible current-year classes. Obtain the current year from authoritative configuration, not the browser clock. The Owner selected 2026-2027 as the current school year on 2026-09-24. Any historical correction exception requires a separately approved rule. Class creation additionally requires a Dean-defined term (ACA-002).
 
+## CLS-003 - Class archiving
+
+Owner decision (2026-10-22): Faculty may archive a current-school-year class section they teach. No other role may archive or restore a class section for now.
+
+Archiving requires one reason: Finished, Cancelled, or Created by mistake. Past-school-year class sections are archived automatically as Completed when the school year ends; Faculty cannot archive, restore, or change the reason of a past-school-year class section. A class archived as Finished is also shown as Completed.
+
+Completed class sections remain visible to their Students with grades, attendance, and remedial history, under past or archived classes. Cancelled and Created-by-mistake class sections are hidden from Students and Class Secretaries and are excluded from attendance, retention monitoring, and Dean reports.
+
+Every archived class section is view-only under the same rules as historical classes (CLS-002). Archiving never deletes or changes enrollments, scores, grades, attendance, remedial records, or audit history.
+
+Archiving is refused while an attendance session for the class section is open. A class section with a pending remedial may be archived only as Finished.
+
+Faculty may restore a class section they archived during the current school year. Restoring returns it to an active, editable class section. Archiving and restoring are recorded in the audit log with the actor, the class section, and the reason.
+
+Faculty Classes & Rosters separates Active and Archived class sections. The Archived view shows Completed class sections apart from Cancelled and Created-by-mistake ones.
+
+Owner decisions (2026-10-22, CLS-003 contract): Remedial and cost recovery results remain recordable for a class section archived as Finished. Archiving revokes the class section's scheduled attendance sessions and ends its Class Secretary appointment; restoring brings back neither. Enrolled Students are notified when a class section is archived as Cancelled and when such a class section is restored. Finished may be chosen at any time in the current school year. Cancelled and Created-by-mistake class sections appear to Faculty only in the Archived view and the audit log.
+
 ## ID-002 - Structured names and 3NF
 
 Extend ID-001 to applicable person and invitation records: persist Prefix, First Name, Middle Name, Last Name, and Suffix separately. Prefix, Middle Name, and Suffix may be absent. Compose display names from those fields rather than maintaining another independently editable identity. Preserve canonical links across accounts, Students, Secretaries, Faculty, and invitations.

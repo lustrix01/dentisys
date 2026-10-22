@@ -393,7 +393,7 @@ function attendance_session_update(PDO $pdo, array $config, array $authCtx, arra
             throw new AttendanceSessionException('You can edit only sessions you created.', 403, 'ATTENDANCE_SESSION_EDIT_FORBIDDEN');
         }
         if (academic_class_section_is_past($pdo, $csId)) {
-            throw new AttendanceSessionException('Past school-year classes are view-only.', 409, 'CONFLICT');
+            throw new AttendanceSessionException(academic_view_only_message($pdo, $csId), 409, 'CONFLICT');
         }
         $values = attendance_session_update_values(attendance_session_merge_stored_request($data, $session, $role), $config, $role);
         $conflict = attendance_session_booking_conflict($pdo, $csId, $values['session_date'], $values['opening_time'], $values['class_end_time'], $sessionId);
@@ -467,6 +467,7 @@ function attendance_session_fetch_for_student(
                LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
               WHERE s.session_id = :session_id
                 AND e.status = 'Active'
+                AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
               LIMIT 1";
     if ($forUpdate) {
         $sql .= ' FOR UPDATE OF s, e';

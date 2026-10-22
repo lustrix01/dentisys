@@ -776,4 +776,16 @@ return [
         'handler' => 'handle_faculty_class_unenroll_student',
         'has_params' => false,
     ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/classes/archive',
+        'handler' => 'handle_faculty_class_archive',
+        'has_params' => false,
+    ],
+    [
+        'method' => 'POST',
+        'path' => '/api/faculty/classes/restore',
+        'handler' => 'handle_faculty_class_restore',
+        'has_params' => false,
+    ],
 ];

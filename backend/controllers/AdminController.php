@@ -95,7 +95,7 @@ function handle_admin_dashboard_kpis(): void
                 MAX(CASE " . retention_effective_state_sql('e', 'COALESCE(egb.retention_state, e.retention_state)') . "
                     WHEN 'remedial' THEN 2 ELSE 1 END) AS risk_score
             FROM students s
-            LEFT JOIN enrollments e ON s.student_id = e.student_id
+            LEFT JOIN enrollments e ON s.student_id = e.student_id AND e.cs_id NOT IN (SELECT hx.cs_id FROM class_sections hx WHERE hx.archive_reason IN ('cancelled', 'mistake'))
             LEFT JOIN class_sections cs_scope ON cs_scope.cs_id = e.cs_id
             LEFT JOIN person_identities pi ON pi.person_id = s.person_id
             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
@@ -117,7 +117,7 @@ function handle_admin_dashboard_kpis(): void
                     COUNT(DISTINCT e.student_id) AS student_count
              FROM user_accounts u
              LEFT JOIN person_identities pi ON pi.person_id = u.person_id
-             LEFT JOIN class_sections cs ON cs.instructor_user_id = u.user_id {$facultyYearJoin}
+             LEFT JOIN class_sections cs ON cs.instructor_user_id = u.user_id AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished') {$facultyYearJoin}
              LEFT JOIN courses c ON c.course_id = cs.course_id
              LEFT JOIN enrollments e ON e.cs_id = cs.cs_id
              WHERE u.role = 'faculty'
@@ -136,6 +136,7 @@ function handle_admin_dashboard_kpis(): void
             LEFT JOIN enrollments e ON ar.enrollment_id = e.enrollment_id
             LEFT JOIN class_sections cs ON e.cs_id = cs.cs_id
             WHERE NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = ar.attendance_session_id AND rs.status = 'revoked')
+            AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
             {$attendanceYearAnd}
         ");
         $attStmt->execute($yearParams);
@@ -184,6 +185,7 @@ function handle_admin_dashboard_kpis(): void
                 JOIN class_sections cs ON cs.cs_id = e.cs_id
                 LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
                 WHERE LOWER(e.status) = 'active' AND UPPER(cs.school_year) = UPPER(:current_year)
+                  AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
             ");
             $midtermStmt->execute([':current_year' => (string) $currentSchoolYear]);
             $midtermRows = $midtermStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -710,7 +712,7 @@ function handle_admin_reports_summary(): void
                     cs.cs_id, cs.cs_name, c.course_code, c.name AS course_name, c.units, c.is_clinical
              FROM students s
              LEFT JOIN person_identities pi ON pi.person_id = s.person_id
-             LEFT JOIN enrollments e ON e.student_id = s.student_id
+             LEFT JOIN enrollments e ON e.student_id = s.student_id AND e.cs_id NOT IN (SELECT hx.cs_id FROM class_sections hx WHERE hx.archive_reason IN ('cancelled', 'mistake'))
              LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
              LEFT JOIN enrollment_remedial_states ers ON ers.enrollment_id = e.enrollment_id
              LEFT JOIN class_sections cs ON cs.cs_id = e.cs_id
@@ -734,6 +736,7 @@ function handle_admin_reports_summary(): void
              JOIN courses c ON c.course_id = cs.course_id
              {$yearWhere} " . ($schoolYear === null ? 'WHERE' : 'AND') . "
                  NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
+                 AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
              ORDER BY session_date DESC LIMIT 500"
         );
         $attStmt->execute($yearParams);

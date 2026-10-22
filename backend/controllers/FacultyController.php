@@ -84,6 +84,7 @@ function faculty_attendance_activity_rows(PDO $pdo, int $userId, int $limit = 10
               JOIN enrollments e ON e.enrollment_id = r.enrollment_id
               JOIN class_sections cs ON cs.cs_id = e.cs_id
              WHERE cs.instructor_user_id = :faculty_id
+               AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
             UNION ALL
             -- A manual record as first entered: a later correction keeps its
             -- original status as previous_status and overwrites the reason.
@@ -103,6 +104,7 @@ function faculty_attendance_activity_rows(PDO $pdo, int $userId, int $limit = 10
               JOIN enrollments e ON e.enrollment_id = r.enrollment_id
               JOIN class_sections cs ON cs.cs_id = e.cs_id
              WHERE cs.instructor_user_id = :faculty_id2
+               AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                AND r.verification_method IN ('manual_secretary', 'manual_faculty')
          ) activity
          ORDER BY occurred_at DESC, id DESC
@@ -208,6 +210,7 @@ function handle_faculty_dashboard_kpis(): void
             JOIN class_sections cs ON e.cs_id = cs.cs_id
             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
             WHERE cs.instructor_user_id = :faculty_id
+              AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
               AND LOWER(e.status) = 'active'
               {$yearFilter}
             GROUP BY s.student_id
@@ -231,6 +234,7 @@ function handle_faculty_dashboard_kpis(): void
                 AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = ar.attendance_session_id AND rs.status = 'revoked')
             WHERE cs.instructor_user_id = :faculty_id
               AND (LOWER(cs.status) = 'active' OR cs.status IS NULL)
+              AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
               {$yearFilter}
             GROUP BY cs.cs_id, cs.cs_name, c.course_code, c.name
             ORDER BY cs.cs_id
@@ -250,6 +254,7 @@ function handle_faculty_dashboard_kpis(): void
             JOIN class_sections cs ON cs.cs_id = e.cs_id
             LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
             WHERE cs.instructor_user_id = :faculty_id AND LOWER(e.status) = 'active'
+              AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
               AND UPPER(cs.school_year) = UPPER(:current_year) {$yearFilter}
         ");
         $midtermStmt->execute([':faculty_id' => $authCtx['user_id'], ':current_year' => (string) $currentSchoolYear] + $yearParams);
@@ -467,6 +472,7 @@ function handle_faculty_students(): void
             LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
             LEFT JOIN user_accounts ua ON ua.user_id = s.student_account_user_id
              WHERE cs.instructor_user_id = :faculty_id
+               AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                AND LOWER(e.status) = 'active'
         ");
         $stmt->execute([':faculty_id' => $authCtx['user_id']]);
@@ -597,8 +603,8 @@ function handle_faculty_student_create(): void
         $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
         $classYearStmt->execute([$csId]);
         $classSchoolYear = $classYearStmt->fetchColumn();
-        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear)) {
-            safe_error_response('Historical class sections are view-only and cannot add Students.', 409);
+        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear) || academic_class_section_is_archived($pdo, $csId)) {
+            safe_error_response(academic_view_only_message($pdo, $csId, 'Historical class sections are view-only and cannot add Students.'), 409);
             return;
         }
 
@@ -1609,6 +1615,7 @@ function faculty_grading_require_offering(PDO $pdo, int $facultyId, mixed $cours
             AND UPPER(cs.semester) = ?
             AND UPPER(cs.school_year) = ?
             AND cs.status = 'Active'
+            AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
           ORDER BY cs.cs_id
           LIMIT 1"
     );
@@ -3453,6 +3460,7 @@ function handle_faculty_assessments_get(): void
                     ON gcp.category_id = a.grading_category_id
                    AND gcp.grading_period = a.grading_period
              WHERE cs.instructor_user_id = ?
+               AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
              ORDER BY a.created_at DESC, a.assessment_id DESC"
         );
         $stmt->execute([$authCtx['user_id']]);
@@ -3530,7 +3538,7 @@ function handle_faculty_assessments_save(): void
             }
             if (academic_class_section_is_past($pdo, $csId)) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, $csId), 409);
                 return;
             }
             $title = trim((string) ($item['title'] ?? ''));
@@ -3564,7 +3572,7 @@ function handle_faculty_assessments_save(): void
                 }
                 if (academic_class_section_is_past($pdo, (int) $existing['cs_id'])) {
                     $pdo->rollBack();
-                    safe_error_response('Past school-year classes are view-only.', 409);
+                    safe_error_response(academic_view_only_message($pdo, (int) $existing['cs_id']), 409);
                     return;
                 }
                 if ((int) $existing['cs_id'] !== $csId) {
@@ -3893,7 +3901,7 @@ function handle_faculty_assessment_delete(): void
         }
         if (academic_class_section_is_past($pdo, (int) $ownedAssessment['cs_id'])) {
             $pdo->rollBack();
-            safe_error_response('Past school-year classes are view-only.', 409);
+            safe_error_response(academic_view_only_message($pdo, (int) $ownedAssessment['cs_id']), 409);
             return;
         }
         $details = $pdo->prepare(
@@ -4024,7 +4032,7 @@ function handle_faculty_scores_save(): void
             }
             if (academic_class_section_is_past($pdo, (int) $row['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, (int) $row['cs_id']), 409);
                 return;
             }
             if (!is_array($scores) || $scores === []) {
@@ -4707,7 +4715,7 @@ function handle_faculty_grades_compute(): void
             return;
         }
         if ($csId > 0 && academic_class_section_is_past($pdo, $csId)) {
-            safe_error_response('Past school-year classes are view-only.', 409);
+            safe_error_response(academic_view_only_message($pdo, $csId), 409);
             return;
         }
         // Without a classId, past school-year classes are never recomputed.
@@ -4887,6 +4895,7 @@ function handle_faculty_attendance_get(): void
                  JOIN class_sections cs ON cs.cs_id = e.cs_id
                  JOIN courses c ON c.course_id = cs.course_id
                  WHERE cs.instructor_user_id = ?
+                   AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                    AND NOT EXISTS (SELECT 1 FROM attendance_sessions rs WHERE rs.session_id = r.attendance_session_id AND rs.status = 'revoked')
                  ORDER BY r.session_date DESC, r.record_id DESC"
             );
@@ -4931,7 +4940,7 @@ function handle_faculty_attendance_get(): void
                     c.course_code, c.name AS course_name, c.units
              FROM class_sections cs
              JOIN courses c ON c.course_id = cs.course_id
-             WHERE cs.cs_id = ? AND cs.instructor_user_id = ?"
+             WHERE cs.cs_id = ? AND cs.instructor_user_id = ? AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')"
         );
         $classStmt->execute([$csId, $authCtx['user_id']]);
         $class = $classStmt->fetch(PDO::FETCH_ASSOC);
@@ -5105,7 +5114,7 @@ function handle_faculty_attendance_session_create(): void
         }
         $csId = (int) $class['cs_id'];
         if (academic_class_section_is_past($pdo, $csId)) {
-            safe_error_response('Past school-year classes are view-only.', 409);
+            safe_error_response(academic_view_only_message($pdo, $csId), 409);
             return;
         }
         [$openingTime, $presentCutoff, $lateCutoff] = attendance_session_timing_from_request($data);
@@ -5270,7 +5279,7 @@ function handle_faculty_attendance_session_revoke(): void
             }
             if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, (int) $session['cs_id']), 409);
                 return;
             }
             if (!in_array(strtolower((string) $session['status']), ['active', 'scheduled'], true)) {
@@ -5346,7 +5355,7 @@ function handle_faculty_attendance_session_end(): void
             }
             if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, (int) $session['cs_id']), 409);
                 return;
             }
             if (strtolower((string) $session['status']) !== 'active') {
@@ -5452,7 +5461,7 @@ function handle_faculty_excused_request_decide(): void
             }
             if (academic_class_section_is_past($pdo, (int) $request['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, (int) $request['cs_id']), 409);
                 return;
             }
             $recordId = null;
@@ -5765,7 +5774,7 @@ function handle_faculty_attendance_override(): void
 
         if (academic_class_section_is_past($pdo, (int) $csId)) {
             $pdo->rollBack();
-            faculty_attendance_error_response('Past school-year classes are view-only.', 409, 'SCHOOL_YEAR_READ_ONLY');
+            faculty_attendance_error_response(academic_view_only_message($pdo, (int) $csId), 409, 'SCHOOL_YEAR_READ_ONLY');
             return;
         }
 
@@ -6014,9 +6023,9 @@ function handle_faculty_watchlist_unlock(): void
             safe_error_response('Class not found in your assigned classes.', 404);
             return;
         }
-        if (!academic_school_year_is_current($pdo, (string) $row['school_year'])) {
+        if (!academic_school_year_is_current($pdo, (string) $row['school_year']) || academic_class_section_is_archived($pdo, (int) $row['cs_id'])) {
             $pdo->rollBack();
-            safe_error_response('Past school-year classes are view-only.', 409);
+            safe_error_response(academic_view_only_message($pdo, (int) $row['cs_id']), 409);
             return;
         }
         $insert = $pdo->prepare('INSERT INTO class_watchlist_unlocks (cs_id, unlocked_by) VALUES (?, ?) ON CONFLICT (cs_id) DO NOTHING');
@@ -6271,6 +6280,7 @@ function handle_faculty_retention_get(): void
              LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
              LEFT JOIN class_watchlist_unlocks wu ON wu.cs_id = cs.cs_id
              WHERE cs.instructor_user_id = ?
+               AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                AND LOWER(e.status) = 'active'
              ORDER BY CASE COALESCE(egb.retention_state, e.retention_state)
                           WHEN 'remedial' THEN 1 WHEN 'active' THEN 2 ELSE 3 END,
@@ -6459,7 +6469,7 @@ function handle_faculty_retention_cost_recovery_save(): void
         $pdo->beginTransaction();
         $targetStmt = $pdo->prepare(
             "SELECT e.enrollment_id, e.status AS enrollment_status, e.remedial_state_json,
-                    cs.cs_id, cs.instructor_user_id, cs.status AS class_status, cs.school_year,
+                    cs.cs_id, cs.instructor_user_id, cs.status AS class_status, cs.school_year, cs.archive_reason,
                     s.student_account_user_id, c.course_code
                FROM enrollments e
                JOIN class_sections cs ON cs.cs_id = e.cs_id
@@ -6479,7 +6489,8 @@ function handle_faculty_retention_cost_recovery_save(): void
         }
         // Cost recovery often happens in a later school year, so (unlike
         // remedial attempts) a past-year enrollment may record its result.
-        if (strtolower((string) $target['enrollment_status']) !== 'active') {
+        if (strtolower((string) $target['enrollment_status']) !== 'active'
+            || in_array($target['archive_reason'], ['cancelled', 'mistake'], true)) {
             $pdo->rollBack();
             remedial_attempts_error_response(remedial_attempts_error(
                 'Inactive enrollments cannot record cost recovery.',
@@ -6639,7 +6650,7 @@ function handle_faculty_retention_remedial_save(): void
             "SELECT e.enrollment_id, e.student_id, e.cs_id, e.status AS enrollment_status,
                     e.remedial_state_json,
                     COALESCE(egb.final_gwa, e.final_gwa) AS final_gwa,
-                    cs.instructor_user_id, cs.status AS class_status, cs.school_year,
+                    cs.instructor_user_id, cs.status AS class_status, cs.school_year, cs.archive_reason,
                     s.status AS student_status, s.student_account_user_id,
                     c.course_code
                FROM enrollments e
@@ -6669,6 +6680,7 @@ function handle_faculty_retention_remedial_save(): void
         if (strtolower((string) $target['enrollment_status']) !== 'active'
             || strtolower((string) $target['class_status']) !== 'active'
             || in_array(strtolower((string) $target['student_status']), ['archived', 'disabled'], true)
+            || in_array($target['archive_reason'], ['cancelled', 'mistake'], true) // CLS-003: Finished stays recordable
         ) {
             $pdo->rollBack();
             remedial_attempts_error_response(remedial_attempts_error(
@@ -7170,6 +7182,7 @@ function handle_faculty_reports_summary(): void
              LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
              LEFT JOIN biometric_profiles b ON s.student_id = b.student_id
              WHERE cs.instructor_user_id = ?
+               AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                AND LOWER(e.status) = 'active'
              ORDER BY s.student_number ASC, cs.cs_id ASC"
         );
@@ -7291,6 +7304,8 @@ function handle_faculty_classes_get(): void
                 cs.block,
                 cs.status,
                 cs.created_at,
+                cs.archive_reason,
+                cs.archived_at,
                 cs.meetings_recorded,
                 c.course_code,
                 COALESCE(cs.course_title, c.name) AS course_name,
@@ -7301,12 +7316,15 @@ function handle_faculty_classes_get(): void
                 c.lab_units,
                 c.created_by_user_id AS course_created_by,
                 u.display_name AS instructor_name,
+                sec.display_name AS secretary_name,
+                (SELECT COUNT(*) FROM attendance_sessions sx WHERE sx.cs_id = cs.cs_id AND sx.status = 'scheduled') AS scheduled_session_count,
                 (SELECT COUNT(*) FROM enrollments e WHERE e.cs_id = cs.cs_id) AS enrolled_count,
                 (EXISTS (SELECT 1 FROM assessment_scores sc JOIN assessments a ON a.assessment_id = sc.assessment_id WHERE a.cs_id = cs.cs_id)
                  OR EXISTS (SELECT 1 FROM enrollments eg WHERE eg.cs_id = cs.cs_id AND (eg.final_gwa IS NOT NULL OR eg.final_percentage IS NOT NULL))) AS has_grades
             FROM class_sections cs
             LEFT JOIN courses c ON cs.course_id = c.course_id
             LEFT JOIN user_accounts u ON cs.instructor_user_id = u.user_id
+            LEFT JOIN user_accounts sec ON sec.user_id = cs.secretary_user_id
             WHERE cs.instructor_user_id = :faculty_id
             ORDER BY cs.created_at DESC
         ");
@@ -7335,6 +7353,11 @@ function handle_faculty_classes_get(): void
                 'schoolYear' => $cls['school_year'],
                 'isCurrentSchoolYear' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) === 0,
                 'isHistorical' => strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
+                'archiveReason' => $cls['archive_reason'],
+                'archivedAt' => $cls['archived_at'],
+                'isArchived' => $cls['archive_reason'] !== null || strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0,
+                'scheduledSessionCount' => $cls['archive_reason'] !== null || strcasecmp((string) $cls['school_year'], $currentSchoolYear) !== 0 ? 0 : (int) $cls['scheduled_session_count'],
+                'secretaryName' => $cls['secretary_name'],
                 'semester' => $cls['semester'],
                 'yearLevel' => (int) ($cls['year_level'] ?? 1),
                 'block' => $cls['block'] ?? 'A',
@@ -7785,9 +7808,9 @@ function handle_faculty_class_update(): void
                 safe_error_response('Class section not found or not assigned to this faculty member.', 403);
                 return;
             }
-            if (!academic_school_year_is_current($pdo, (string) $before['school_year'])) {
+            if (!academic_school_year_is_current($pdo, (string) $before['school_year']) || academic_class_section_is_archived($pdo, $csId)) {
                 $pdo->rollBack();
-                safe_error_response('Historical class sections are view-only and cannot be edited.', 409);
+                safe_error_response(academic_view_only_message($pdo, $csId, 'Historical class sections are view-only and cannot be edited.'), 409);
                 return;
             }
 
@@ -8060,8 +8083,8 @@ function handle_faculty_class_enroll_students(): void
         $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
         $classYearStmt->execute([$csId]);
         $classSchoolYear = $classYearStmt->fetchColumn();
-        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear)) {
-            safe_error_response('Historical class sections are view-only and cannot add Students.', 409);
+        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear) || academic_class_section_is_archived($pdo, $csId)) {
+            safe_error_response(academic_view_only_message($pdo, $csId, 'Historical class sections are view-only and cannot add Students.'), 409);
             return;
         }
 
@@ -8239,8 +8262,8 @@ function handle_faculty_class_unenroll_student(): void
         $classYearStmt = $pdo->prepare('SELECT school_year FROM class_sections WHERE cs_id = ?');
         $classYearStmt->execute([$csId]);
         $classSchoolYear = $classYearStmt->fetchColumn();
-        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear)) {
-            safe_error_response('Historical class sections are view-only and cannot remove Students.', 409);
+        if (!is_string($classSchoolYear) || !academic_school_year_is_current($pdo, $classSchoolYear) || academic_class_section_is_archived($pdo, $csId)) {
+            safe_error_response(academic_view_only_message($pdo, $csId, 'Historical class sections are view-only and cannot remove Students.'), 409);
             return;
         }
 
@@ -8320,4 +8343,250 @@ function handle_faculty_class_unenroll_student(): void
         error_log('Faculty class unenroll error: ' . sanitize_for_log($e));
         safe_error_response('Internal server error.', 500);
     }
+}
+
+/** CLS-003: Active enrollments of a class that still need a remedial or cost recovery result. */
+function faculty_class_has_pending_remedial(PDO $pdo, int $csId): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT e.enrollment_id, e.remedial_state_json,
+                COALESCE(egb.retention_state, e.retention_state) AS retention_state
+           FROM enrollments e
+           LEFT JOIN enrollment_grade_breakdowns egb ON egb.enrollment_id = e.enrollment_id
+          WHERE e.cs_id = ? AND LOWER(e.status) = 'active'"
+    );
+    $stmt->execute([$csId]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $legacy = [];
+    foreach ($rows as $row) {
+        $legacy[(int) $row['enrollment_id']] = remedial_state_json_is_legacy($row['remedial_state_json']);
+    }
+    $progressions = remedial_attempts_load($pdo, array_keys($legacy), $legacy);
+    foreach ($rows as $row) {
+        $progression = $progressions[(int) $row['enrollment_id']] ?? remedial_attempts_empty_progression();
+        $stage = (string) ($progression['stage'] ?? 'none');
+        if (in_array($stage, ['attempt_1_pending', 'attempt_2_available', 'attempt_2_pending', 'cost_recovery_required'], true)) {
+            return true;
+        }
+        if ($stage !== 'cost_recovery_failed' && retention_effective_state((string) $row['retention_state'], $progression) === 'remedial') {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** CLS-003: user ids of the Active-enrolled Students (and Student-linked Secretaries) of a class. */
+function faculty_class_student_user_ids(PDO $pdo, int $csId): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT DISTINCT u.user_id
+           FROM enrollments e
+           JOIN students s ON s.student_id = e.student_id
+           JOIN user_accounts u ON ((s.student_account_user_id = u.user_id AND u.role IN ('student', 'secretary'))
+                                 OR (s.user_id = u.user_id AND u.role = 'secretary'))
+          WHERE e.cs_id = ? AND LOWER(e.status) = 'active' AND LOWER(u.status) = 'active'"
+    );
+    $stmt->execute([$csId]);
+    return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+}
+
+function faculty_class_archive_audit(PDO $pdo, array $config, array $authCtx, array $context, string $action, int $csId, string $description, ?array $before, ?array $after): void
+{
+    $macKey = config_key_bytes_at_least($config['audit']['mac_key_b64'], 32, 'AUDIT_MAC_KEY');
+    $auditCtx = audit_begin_operation($pdo);
+    audit_finish_operation($pdo, $auditCtx, [
+        'module_code' => 'class_management',
+        'action_code' => $action,
+        'event_status' => 'Success',
+        'actor_user_id' => $authCtx['user_id'],
+        'actor_username' => $authCtx['login_email'],
+        'actor_role' => $authCtx['role'],
+        'actor_display_name' => $authCtx['display_name'],
+        'session_id' => $authCtx['session_id'],
+        'scope_cs_id' => $csId,
+        'target_type' => 'class_section',
+        'target_id' => (string) $csId,
+        'description' => $description,
+        'reason' => null,
+        'http_method' => $context['http_method'],
+        'endpoint' => $context['endpoint'],
+        'request_id' => $context['request_id'],
+        'ip_address' => $context['ip_address'],
+        'user_agent' => $context['user_agent'],
+    ], $macKey, $before, $after);
+}
+
+/**
+ * CLS-003 archive (action 'archive') and restore (action 'restore') share the
+ * request checks; only the owning Faculty member may use them on a current-year class.
+ */
+function faculty_class_archive_change(string $action): void
+{
+    $context = [
+        'request_id' => request_id(),
+        'ip_address' => request_ip(),
+        'user_agent' => request_user_agent(),
+        'http_method' => request_method(),
+        'endpoint' => request_path(),
+    ];
+    $labels = ['finished' => 'Finished', 'cancelled' => 'Cancelled', 'mistake' => 'Created by mistake'];
+
+    try {
+        $config = app_config();
+        $pdo = create_pdo($config);
+        $authCtx = faculty_verify_auth($pdo, $config);
+
+        $body = request_body();
+        if (!$body['has_body']) {
+            safe_error_response('Request body required.', 400);
+            return;
+        }
+        $data = $body['data'];
+        $csId = (int) ($data['csId'] ?? 0);
+        $reason = $action === 'archive' ? (is_string($data['reason'] ?? null) ? trim($data['reason']) : '') : null;
+        if ($csId <= 0 || ($action === 'archive' && $reason === '')) {
+            safe_error_response($action === 'archive' ? 'csId and reason are required.' : 'csId is required.', 400);
+            return;
+        }
+        if ($action === 'archive' && !isset($labels[$reason])) {
+            safe_error_response('Choose Finished, Cancelled, or Created by mistake.', 400);
+            return;
+        }
+        if (faculty_owned_class_id($pdo, (int) $authCtx['user_id'], (string) $csId) <= 0) {
+            safe_error_response('Class is not assigned to this faculty member.', 403);
+            return;
+        }
+
+        $pdo->beginTransaction();
+        try {
+            $classStmt = $pdo->prepare(
+                "SELECT cs.cs_name, cs.school_year, cs.archive_reason, c.course_code
+                   FROM class_sections cs LEFT JOIN courses c ON c.course_id = cs.course_id
+                  WHERE cs.cs_id = ? FOR UPDATE OF cs"
+            );
+            $classStmt->execute([$csId]);
+            $class = $classStmt->fetch(PDO::FETCH_ASSOC);
+            $label = ($class['course_code'] ?? 'Class') . ' (' . $class['cs_name'] . ')';
+            if (!academic_school_year_is_current($pdo, (string) $class['school_year'])) {
+                $pdo->rollBack();
+                safe_error_response('Past school-year classes are archived automatically.', 409);
+                return;
+            }
+            $now = attendance_session_now_utc();
+            $nowSql = $now->format('Y-m-d H:i:s.u');
+
+            if ($action === 'archive') {
+                if ($class['archive_reason'] !== null) {
+                    $pdo->rollBack();
+                    safe_error_response('This class is already archived.', 409);
+                    return;
+                }
+                $openStmt = $pdo->prepare("SELECT 1 FROM attendance_sessions WHERE cs_id = ? AND status = 'active' LIMIT 1");
+                $openStmt->execute([$csId]);
+                if ($openStmt->fetchColumn() !== false) {
+                    $pdo->rollBack();
+                    safe_error_response('End the open attendance session before archiving.', 409);
+                    return;
+                }
+                if ($reason !== 'finished' && faculty_class_has_pending_remedial($pdo, $csId)) {
+                    $pdo->rollBack();
+                    safe_error_response('A class with a pending remedial can only be archived as Finished.', 409);
+                    return;
+                }
+                $pdo->prepare('UPDATE class_sections SET archive_reason = ?, archived_at = ? WHERE cs_id = ?')
+                    ->execute([$reason, $nowSql, $csId]);
+
+                // Scheduled sessions are revoked the way the session revoke endpoint does it.
+                $scheduledStmt = $pdo->prepare("SELECT session_id, session_date FROM attendance_sessions WHERE cs_id = ? AND status = 'scheduled' FOR UPDATE");
+                $scheduledStmt->execute([$csId]);
+                $revoke = $pdo->prepare(
+                    "UPDATE attendance_sessions
+                        SET status = 'revoked', revoked_at = ?, revoked_by_user_id = ?, revocation_reason = ?, updated_at = ?
+                      WHERE session_id = ? AND status = 'scheduled'"
+                );
+                foreach ($scheduledStmt->fetchAll(PDO::FETCH_ASSOC) as $session) {
+                    $revoke->execute([$nowSql, $authCtx['user_id'], 'Class archived', $nowSql, $session['session_id']]);
+                    attendance_session_record_audit(
+                        $pdo, $config, $authCtx, $context, 'attendance_session_revoked', (int) $session['session_id'], $csId,
+                        "Revoked attendance session for {$class['cs_name']} on {$session['session_date']} because the class was archived.", 'Class archived',
+                        ['session_id' => (int) $session['session_id'], 'status' => 'scheduled'],
+                        ['session_id' => (int) $session['session_id'], 'status' => 'revoked', 'revoked_at' => $nowSql]
+                    );
+                }
+
+                // REG-006: an archived class ends its Class Secretary appointment.
+                $secretaryStmt = $pdo->prepare(
+                    "SELECT s.student_number, cs.secretary_user_id
+                       FROM class_sections cs
+                       LEFT JOIN students s ON COALESCE(s.student_account_user_id, s.user_id) = cs.secretary_user_id
+                      WHERE cs.cs_id = ? AND cs.secretary_user_id IS NOT NULL"
+                );
+                $secretaryStmt->execute([$csId]);
+                $secretaryRow = $secretaryStmt->fetch(PDO::FETCH_ASSOC);
+                if ($secretaryRow !== false) {
+                    $accountUserId = (int) $secretaryRow['secretary_user_id'];
+                    $pdo->prepare('UPDATE class_sections SET secretary_user_id = NULL WHERE cs_id = ?')->execute([$csId]);
+                    if (!secretary_has_current_appointment($pdo, $accountUserId)) {
+                        secretary_end_appointment_role($pdo, $config, $authCtx, "Removed the Class Secretary appointment of student {$secretaryRow['student_number']} for {$class['cs_name']} because the class was archived.", $accountUserId);
+                    }
+                    notification_create_idempotent(
+                        $pdo, $accountUserId, 'secretary_appointment', 'Class Secretary appointment removed',
+                        "Your Class Secretary appointment for {$class['cs_name']} was removed because the class was archived. Your Student access is unchanged.",
+                        'class_section', (string) $csId,
+                        'secretary-removed:' . $csId . ':' . $accountUserId . ':' . $now->format('YmdHisu')
+                    );
+                }
+            } else {
+                if ($class['archive_reason'] === null) {
+                    $pdo->rollBack();
+                    safe_error_response('This class is not archived.', 409);
+                    return;
+                }
+                $pdo->prepare('UPDATE class_sections SET archive_reason = NULL, archived_at = NULL WHERE cs_id = ?')->execute([$csId]);
+            }
+
+            if ($action === 'archive' ? $reason === 'cancelled' : $class['archive_reason'] === 'cancelled') {
+                $cancelled = $action === 'archive';
+                foreach (faculty_class_student_user_ids($pdo, $csId) as $userId) {
+                    notification_create_idempotent(
+                        $pdo, $userId, 'class_enrollment',
+                        $cancelled ? 'Class cancelled' : 'Class restored',
+                        $cancelled ? "{$label} was cancelled. It no longer appears in your classes." : "{$label} is back in your classes.",
+                        'class_section', (string) $csId,
+                        ($cancelled ? 'class-cancelled:' : 'class-restored:') . $csId . ':' . $userId . ':' . $now->format('YmdHisu')
+                    );
+                }
+            }
+
+            faculty_class_archive_audit(
+                $pdo, $config, $authCtx, $context, $action === 'archive' ? 'class_archive' : 'class_restore', $csId,
+                $action === 'archive'
+                    ? "Archived {$label} as {$labels[$reason]}."
+                    : "Restored {$label} (was archived as " . $labels[(string) $class['archive_reason']] . ').',
+                ['archive_reason' => $class['archive_reason']],
+                ['archive_reason' => $reason]
+            );
+            $pdo->commit();
+        } catch (\Throwable $e) {
+            if ($pdo->inTransaction()) { $pdo->rollBack(); }
+            throw $e;
+        }
+
+        json_response($action === 'archive'
+            ? ['status' => 'ok', 'message' => "{$label} archived as {$labels[$reason]}.", 'archiveReason' => $reason, 'archivedAt' => $nowSql]
+            : ['status' => 'ok', 'message' => "{$label} restored."], 200);
+    } catch (\Throwable $e) {
+        error_log('Faculty class ' . $action . ' error: ' . sanitize_for_log($e));
+        safe_error_response('Internal server error.', 500);
+    }
+}
+
+function handle_faculty_class_archive(): void
+{
+    faculty_class_archive_change('archive');
+}
+
+function handle_faculty_class_restore(): void
+{
+    faculty_class_archive_change('restore');
 }

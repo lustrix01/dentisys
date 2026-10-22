@@ -378,6 +378,9 @@ export interface StudentAcademicClass {
   meetingsRecorded?: boolean;
   isCurrent?: boolean;
   isPast?: boolean;
+  archiveReason?: 'finished' | 'cancelled' | 'mistake' | null;
+  archivedAt?: string | null;
+  isArchived?: boolean;
   midtermEvaluation?: MidtermEvaluation;
   dateEnrolled: string | null;
   grade: number | null;

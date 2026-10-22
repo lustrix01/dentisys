@@ -564,6 +564,7 @@ function handle_student_attendance_active_sessions(): void
                LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
                LEFT JOIN attendance_records r ON r.attendance_session_id = s.session_id AND r.enrollment_id = e.enrollment_id
               WHERE s.status = 'active'
+                AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
               ORDER BY s.session_date DESC, s.started_at DESC"
         );
         $stmt->execute([$identity['student_id']]);
@@ -622,6 +623,7 @@ function handle_student_attendance_upcoming_sessions(): void
                LEFT JOIN user_accounts u ON u.user_id = cs.instructor_user_id
                LEFT JOIN attendance_records r ON r.attendance_session_id = s.session_id AND r.enrollment_id = e.enrollment_id
               WHERE s.status IN ('scheduled', 'active') AND s.session_date >= ?" . $rangeSql . "
+                AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
               ORDER BY s.session_date, s.opening_time, s.session_id"
         );
         $stmt->execute($params);
@@ -924,6 +926,7 @@ function handle_student_attendance_logs(): void
                JOIN courses c ON c.course_id = cs.course_id
                LEFT JOIN attendance_sessions s ON s.session_id = r.attendance_session_id
               WHERE e.student_id = ?
+                AND (cs.archive_reason IS NULL OR cs.archive_reason = 'finished')
                 AND (s.session_id IS NULL OR s.status <> 'revoked')
               ORDER BY r.session_date DESC, r.record_id DESC"
         );

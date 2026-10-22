@@ -287,6 +287,7 @@ $expectedMigrations = [
     '047_email_outbox_action.sql',
     '048_computed_retention_only.sql',
     '049_audit_chain_baseline.sql',
+    '050_class_archiving.sql',
 ];
 $appliedMigrations = $pdo->query('SELECT version FROM _schema_migrations ORDER BY version')->fetchAll(PDO::FETCH_COLUMN);
 expect_same($expectedMigrations, $appliedMigrations, 'PostgreSQL migrations are applied in the expected order');
@@ -4035,6 +4036,98 @@ $pdo->prepare("UPDATE enrollments SET status = 'Archived' WHERE student_id = ? A
 expect_same(200, $noticeAgainStatus, 'Repeated reactivation remains supported');
 $rosterNoticeCount->execute([$rosterNoticeUserId, (string) $noticeSecondClassId]);
 expect_same(1, (int) $rosterNoticeCount->fetchColumn(), 'Repeated reactivation preserves notification idempotency');
+
+// CLS-003 class archiving: refusals, visibility, notifications and restore.
+$archiveFixture = strtoupper(bin2hex(random_bytes(3)));
+$archiveIds = [];
+foreach (['F', 'C', 'M', 'P'] as $archiveTag) {
+    [$archiveCreateStatus] = integration_http_json('/api/faculty/classes', $generatedFacultyAccessToken, [
+        'csName' => 'ARCH-' . $archiveFixture . '-' . $archiveTag,
+        'courseCode' => $componentCode,
+        'semester' => '1st Semester',
+        'schoolYear' => $componentYear,
+        'yearLevel' => 6,
+        'block' => $archiveTag,
+    ]);
+    expect_same(201, $archiveCreateStatus, 'Archive fixture class ' . $archiveTag . ' is created');
+    $archiveLookup = $pdo->prepare('SELECT cs_id FROM class_sections WHERE cs_name = ? AND instructor_user_id = ?');
+    $archiveLookup->execute(['ARCH-' . $archiveFixture . '-' . $archiveTag, $userId]);
+    $archiveIds[$archiveTag] = (int) $archiveLookup->fetchColumn();
+    $pdo->prepare("INSERT INTO enrollments (student_id, cs_id, status, retention_state, date_enrolled) VALUES (?, ?, 'Active', 'active', CURRENT_DATE)")
+        ->execute([$rosterStudentId, $archiveIds[$archiveTag]]);
+}
+$archiveClass = static fn(int $csId, string $reason): array => integration_http_json('/api/faculty/classes/archive', $generatedFacultyAccessToken, ['csId' => $csId, 'reason' => $reason]);
+$archiveStudentVisible = static fn(int $csId): bool => count(array_filter(
+    student_academic_class_rows($pdo, $rosterStudentId),
+    static fn(array $row): bool => (int) $row['classId'] === $csId
+)) === 1;
+$archiveNoticeCount = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ? AND entity_id = ? AND title = ?');
+
+[$archiveBadStatus, $archiveBadBody] = $archiveClass($archiveIds['C'], 'bogus');
+expect_same([400, 'Choose Finished, Cancelled, or Created by mistake.'], [$archiveBadStatus, $archiveBadBody['message'] ?? null], 'Archive rejects an unknown reason');
+
+$pdo->prepare("INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, status) VALUES (?, ?, ?, CURRENT_DATE, ?, 'active')")
+    ->execute([$archiveIds['C'], $userId, $userId, 'ARCH-OPEN-' . $archiveFixture]);
+[$archiveOpenStatus, $archiveOpenBody] = $archiveClass($archiveIds['C'], 'finished');
+expect_same([409, 'End the open attendance session before archiving.'], [$archiveOpenStatus, $archiveOpenBody['message'] ?? null], 'Archive is refused while an attendance session is open');
+$pdo->prepare("UPDATE attendance_sessions SET status = 'ended', ended_at = CURRENT_TIMESTAMP(6) WHERE cs_id = ?")->execute([$archiveIds['C']]);
+$pdo->prepare("INSERT INTO attendance_sessions (cs_id, secretary_user_id, owner_user_id, session_date, session_code, status) VALUES (?, ?, ?, CURRENT_DATE + 7, ?, 'scheduled')")
+    ->execute([$archiveIds['C'], $userId, $userId, 'ARCH-SCHED-' . $archiveFixture]);
+
+$pdo->prepare("UPDATE enrollments SET retention_state = 'remedial' WHERE student_id = ? AND cs_id = ?")->execute([$rosterStudentId, $archiveIds['C']]);
+[$archivePendingStatus, $archivePendingBody] = $archiveClass($archiveIds['C'], 'cancelled');
+expect_same([409, 'A class with a pending remedial can only be archived as Finished.'], [$archivePendingStatus, $archivePendingBody['message'] ?? null], 'A pending remedial refuses Cancelled');
+$pdo->prepare("UPDATE enrollments SET retention_state = 'active' WHERE student_id = ? AND cs_id = ?")->execute([$rosterStudentId, $archiveIds['C']]);
+
+$pdo->prepare('UPDATE class_sections SET secretary_user_id = ? WHERE cs_id = ?')->execute([$rosterNoticeUserId, $archiveIds['C']]);
+[, $archivePreListBody] = integration_http_get_json('/api/faculty/classes', $generatedFacultyAccessToken);
+$archivePreListed = array_values(array_filter($archivePreListBody['classes'] ?? [], static fn(array $row): bool => (int) $row['csId'] === $archiveIds['C']))[0] ?? [];
+expect_same([1, 'Roster Notice Fixture'], [$archivePreListed['scheduledSessionCount'] ?? null, $archivePreListed['secretaryName'] ?? null], 'Faculty class list returns the scheduled session count and Secretary name');
+$pdo->prepare('UPDATE class_sections SET secretary_user_id = NULL WHERE cs_id = ?')->execute([$archiveIds['C']]);
+[$archiveCancelStatus, $archiveCancelBody] = $archiveClass($archiveIds['C'], 'cancelled');
+expect_same(200, $archiveCancelStatus, 'Faculty can archive a class as Cancelled');
+expect_same('cancelled', $archiveCancelBody['archiveReason'] ?? null, 'Archive returns the reason');
+expect_same(false, $archiveStudentVisible($archiveIds['C']), 'A cancelled class is hidden from the Student');
+$archiveNoticeCount->execute([$rosterNoticeUserId, (string) $archiveIds['C'], 'Class cancelled']);
+expect_same(1, (int) $archiveNoticeCount->fetchColumn(), 'Cancelling notifies the enrolled Student');
+$archiveSessionStmt = $pdo->prepare('SELECT status FROM attendance_sessions WHERE session_code = ?');
+$archiveSessionStmt->execute(['ARCH-SCHED-' . $archiveFixture]);
+expect_same('revoked', $archiveSessionStmt->fetchColumn(), 'Archiving revokes scheduled sessions');
+[$archiveAgainStatus, $archiveAgainBody] = $archiveClass($archiveIds['C'], 'finished');
+expect_same([409, 'This class is already archived.'], [$archiveAgainStatus, $archiveAgainBody['message'] ?? null], 'An archived class cannot be archived again');
+[$archiveEnrollStatus, $archiveEnrollBody] = integration_http_json('/api/faculty/classes/enroll', $generatedFacultyAccessToken, ['csId' => (string) $archiveIds['C'], 'studentIds' => [(string) $rosterStudentId]]);
+expect_same([409, 'Archived classes are view-only.'], [$archiveEnrollStatus, $archiveEnrollBody['message'] ?? null], 'An archived class refuses add-student with the archived wording');
+[$archiveUnenrollStatus] = integration_http_json('/api/faculty/classes/unenroll', $generatedFacultyAccessToken, ['csId' => (string) $archiveIds['C'], 'studentId' => (string) $rosterStudentId]);
+expect_same(409, $archiveUnenrollStatus, 'An archived class refuses remove-student');
+[$archiveListStatus, $archiveListBody] = integration_http_get_json('/api/faculty/classes', $generatedFacultyAccessToken);
+$archiveListed = array_values(array_filter($archiveListBody['classes'] ?? [], static fn(array $row): bool => (int) $row['csId'] === $archiveIds['C']))[0] ?? [];
+expect_same(['cancelled', true, 0], [$archiveListed['archiveReason'] ?? null, $archiveListed['isArchived'] ?? null, $archiveListed['scheduledSessionCount'] ?? null], 'Faculty class list marks the archived class with no scheduled sessions');
+
+[$archiveRestoreStatus] = integration_http_json('/api/faculty/classes/restore', $generatedFacultyAccessToken, ['csId' => $archiveIds['C']]);
+expect_same(200, $archiveRestoreStatus, 'Faculty can restore an archived class');
+expect_same(true, $archiveStudentVisible($archiveIds['C']), 'A restored class is visible to the Student again');
+$archiveNoticeCount->execute([$rosterNoticeUserId, (string) $archiveIds['C'], 'Class restored']);
+expect_same(1, (int) $archiveNoticeCount->fetchColumn(), 'Restoring a cancelled class notifies the Student');
+[$archiveNotArchivedStatus, $archiveNotArchivedBody] = integration_http_json('/api/faculty/classes/restore', $generatedFacultyAccessToken, ['csId' => $archiveIds['C']]);
+expect_same([409, 'This class is not archived.'], [$archiveNotArchivedStatus, $archiveNotArchivedBody['message'] ?? null], 'Restore needs an archived class');
+
+[$archiveFinishStatus] = $archiveClass($archiveIds['F'], 'finished');
+expect_same(200, $archiveFinishStatus, 'Faculty can archive a class as Finished');
+expect_same(true, $archiveStudentVisible($archiveIds['F']), 'A finished class stays visible to the Student');
+$finishedStudentRow = array_values(array_filter(student_academic_class_rows($pdo, $rosterStudentId), static fn(array $row): bool => (int) $row['classId'] === $archiveIds['F']))[0] ?? [];
+expect_same('finished', $finishedStudentRow['archiveReason'] ?? null, 'Student class rows expose archiveReason for a finished class');
+[$archiveMistakeStatus] = $archiveClass($archiveIds['M'], 'mistake');
+expect_same(200, $archiveMistakeStatus, 'Faculty can archive a class as Created by mistake');
+expect_same(false, $archiveStudentVisible($archiveIds['M']), 'A created-by-mistake class is hidden from the Student');
+$archiveNoticeCount->execute([$rosterNoticeUserId, (string) $archiveIds['M'], 'Class cancelled']);
+expect_same(0, (int) $archiveNoticeCount->fetchColumn(), 'Created by mistake does not notify Students');
+
+$pdo->prepare("UPDATE class_sections SET school_year = '2020-2021' WHERE cs_id = ?")->execute([$archiveIds['P']]);
+[$archivePastStatus, $archivePastBody] = $archiveClass($archiveIds['P'], 'finished');
+expect_same([409, 'Past school-year classes are archived automatically.'], [$archivePastStatus, $archivePastBody['message'] ?? null], 'A past-year class cannot be archived');
+[$archivePastRestoreStatus] = integration_http_json('/api/faculty/classes/restore', $generatedFacultyAccessToken, ['csId' => $archiveIds['P']]);
+expect_same(409, $archivePastRestoreStatus, 'A past-year class cannot be restored');
+$pdo->prepare('UPDATE class_sections SET school_year = ? WHERE cs_id = ?')->execute([$componentYear, $archiveIds['P']]);
 $rosterArchivedStmt->execute([$rosterEnrollmentId]);
 $rosterRestored = $rosterArchivedStmt->fetch(PDO::FETCH_ASSOC);
 expect_same('Active', $rosterRestored['status'] ?? null, 'Roster re-enrollment revives the same enrollment row');

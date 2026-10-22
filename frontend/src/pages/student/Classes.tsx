@@ -164,9 +164,9 @@ export const Classes: React.FC = () => {
       const isPast = cls.isPast ?? (cls.schoolYear && currentSchoolYear ? cls.schoolYear < currentSchoolYear : false);
       const isCurrent = cls.isCurrent ?? (currentSchoolYear !== null && cls.schoolYear === currentSchoolYear);
 
-      if (isCurrent && !isPast) {
+      if (isCurrent && !isPast && cls.archiveReason !== 'finished') {
         current.push(cls);
-      } else if (isPast) {
+      } else if (isPast || cls.archiveReason === 'finished') {
         archived.push(cls);
       } else {
         other.push(cls);
@@ -495,6 +495,9 @@ export const Classes: React.FC = () => {
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200 dark:border-slate-700">
                             Archived
                           </span>
+                          {cls.archiveReason === 'finished' && (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 text-[9px] font-extrabold uppercase tracking-wider">Completed</span>
+                          )}
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                             {cls.units} Units
                           </span>

@@ -86,6 +86,8 @@ function audit_catalogue(): array
         'secretary_appointment_ended' => ['Secretary appointment ended', $P, true, false],
         'class_create' => ['Class created', $P, true, false],
         'class_update' => ['Class changed', $P, true, false],
+        'class_archive' => ['Class archived', $P, true, false],
+        'class_restore' => ['Class restored', $P, true, false],
         // 5.3 Settings and terms
         'system_settings_updated' => ['System settings changed', $T, true, false],
         'academic_term_created' => ['Term added', $T, true, false],

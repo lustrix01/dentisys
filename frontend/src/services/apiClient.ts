@@ -1602,6 +1602,11 @@ export interface FacultyClassItem {
   meetings?: ClassMeeting[];
   isHistorical?: boolean;
   isCurrentSchoolYear?: boolean;
+  archiveReason?: 'finished' | 'cancelled' | 'mistake' | null;
+  archivedAt?: string | null;
+  isArchived?: boolean;
+  scheduledSessionCount?: number;
+  secretaryName?: string | null;
   id: string;
   csId: number;
   csName: string;
@@ -1711,6 +1716,17 @@ export function unenrollStudentFromClassApi(data: {
   studentId: number;
 }): Promise<{ status: string; message: string }> {
   return request('POST', '/faculty/classes/unenroll', data);
+}
+
+export function archiveClassApi(data: {
+  csId: number;
+  reason: 'finished' | 'cancelled' | 'mistake';
+}): Promise<{ status: string; message: string; archiveReason: string; archivedAt: string }> {
+  return request('POST', '/faculty/classes/archive', data);
+}
+
+export function restoreClassApi(data: { csId: number }): Promise<{ status: string; message: string }> {
+  return request('POST', '/faculty/classes/restore', data);
 }
 
 // ---------------------------------------------------------------------------

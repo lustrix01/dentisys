@@ -122,7 +122,7 @@ function handle_secretary_invite(): void
             return;
         }
         if (academic_class_section_is_past($pdo, (int) $assignment['cs_id'])) {
-            safe_error_response('Past school-year classes are view-only.', 409);
+            safe_error_response(academic_view_only_message($pdo, (int) $assignment['cs_id']), 409);
             return;
         }
         // REG-006: at most one Secretary per section, counting pending invitations.
@@ -840,7 +840,7 @@ function handle_faculty_secretary_remove(): void
             }
             if (academic_class_section_is_past($pdo, (int) $row['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, (int) $row['cs_id']), 409);
                 return;
             }
             $accountUserId = (int) $row['secretary_user_id'];
@@ -1356,7 +1356,7 @@ function handle_secretary_attendance_session_start(): void
             }
             if (academic_class_section_is_past($pdo, $csId)) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, $csId), 409);
                 return;
             }
 
@@ -1561,7 +1561,7 @@ function handle_secretary_attendance_session_end(): void
             }
             if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, (int) $session['cs_id']), 409);
                 return;
             }
             if (strtolower((string) $session['status']) !== 'active') {
@@ -1708,7 +1708,7 @@ function handle_secretary_attendance_session_revoke(): void
             }
             if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, (int) $session['cs_id']), 409);
                 return;
             }
             if (!in_array(strtolower((string) $session['status']), ['active', 'scheduled'], true)) {
@@ -2064,7 +2064,7 @@ function handle_secretary_attendance_override(): void
                 }
                 if (academic_class_section_is_past($pdo, (int) $session['cs_id'])) {
                     $pdo->rollBack();
-                    safe_error_response('Past school-year classes are view-only.', 409);
+                    safe_error_response(academic_view_only_message($pdo, (int) $session['cs_id']), 409);
                     return;
                 }
                 $enrollmentStmt = $pdo->prepare(
@@ -2158,7 +2158,7 @@ function handle_secretary_attendance_override(): void
             }
             if (academic_class_section_is_past($pdo, $targetCsId)) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, $targetCsId), 409);
                 return;
             }
             if (strtolower((string) $targetRecord['status']) === 'excused') {
@@ -2324,7 +2324,7 @@ function handle_secretary_excused_request_create(): void
             }
             if (academic_class_section_is_past($pdo, (int) $target['cs_id'])) {
                 $pdo->rollBack();
-                safe_error_response('Past school-year classes are view-only.', 409);
+                safe_error_response(academic_view_only_message($pdo, (int) $target['cs_id']), 409);
                 return;
             }
             if (strtolower((string) ($target['status'] ?? '')) === 'excused') {
