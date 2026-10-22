@@ -218,7 +218,7 @@ export const AttendanceList: React.FC = () => {
 
   // Start Session pop-up: current-school-year sections only (REG-006); a past-year section can never start a session.
   const [isStartOpen, setIsStartOpen] = useState(false);
-  const [startSections, setStartSections] = useState<Array<{ classId: string; className: string; classroomName: string }>>([]);
+  const [startSections, setStartSections] = useState<Array<{ classId: string; className: string; classroomName: string; courseCode?: string }>>([]);
   const [startCsId, setStartCsId] = useState('');
   const [otherLiveName, setOtherLiveName] = useState<string | null>(null);
   const startCsIdRef = useRef('');
@@ -239,7 +239,7 @@ export const AttendanceList: React.FC = () => {
     try {
       const kpis = await getSecretaryDashboardKpisApi('current');
       const fromServer = kpis?.assignedClasses?.length ? kpis.assignedClasses : kpis?.assignedClass?.classId ? [kpis.assignedClass] : [];
-      const list = fromServer.map(sec => ({ classId: sec.classId, className: sec.className, classroomName: sec.classroomName ?? '' }));
+      const list = fromServer.map(sec => ({ classId: sec.classId, className: sec.className, classroomName: sec.classroomName ?? '', courseCode: 'courseCode' in sec ? sec.courseCode : undefined }));
       const chosen = list.find(sec => sec.classId === (startCsIdRef.current || String(kpis?.assignedClass?.classId ?? ''))) ?? list[0] ?? null;
       setStartSections(list);
       setStartCsId(chosen?.classId ?? '');
@@ -1808,7 +1808,7 @@ export const AttendanceList: React.FC = () => {
         isOpen={isStartOpen}
         onClose={() => setIsStartOpen(false)}
         accent="blue"
-        summary={startSections.find(sec => sec.classId === startCsId)?.className || 'Class section'}
+        summary={(() => { const sec = startSections.find(s => s.classId === startCsId); return sec ? [sec.courseCode, sec.className].filter(Boolean).join(' · ') : 'Class section'; })()}
         precheck={() => (parseInt(startCsId, 10) > 0 ? null : 'No assigned class section found for your Secretary account.')}
         onSubmit={handleStartSession}
         sections={startSections.map(sec => ({ id: sec.classId, name: sec.className }))}
