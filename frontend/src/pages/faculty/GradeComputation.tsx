@@ -81,6 +81,7 @@ import {
   isPeriodComputeResult
 } from '../../utils/periodGradingHelper';
 import { formatGrade, percentageToGWAExact, matchesActivityFilters, saveStatusBadge } from '../../utils/gradeHelper';
+import { buildImportGroups, hasSelectable, importTemplateFileName, isLectureLab, isPeriodConfig, keepSelection, type ImportPeriod } from '../../utils/importDestination';
 import type {
   PeriodDraftState,
   PeriodCategoryDraftRow,
@@ -415,7 +416,7 @@ export const GradeComputation: React.FC = () => {
 
   // When switching to assessments tab, sync offering with selectedClassId if valid
   useEffect(() => {
-    if (activeSubTab === 'assessments' && facultyOfferings.length > 0) {
+    if ((activeSubTab === 'assessments' || activeSubTab === 'import') && facultyOfferings.length > 0) {
       const matchByClass = facultyOfferings.find(o => o.sections.some(s => s.id === selectedClassId));
       if (matchByClass && matchByClass.key !== selectedAssessmentOfferingKey) {
         setSelectedAssessmentOfferingKey(matchByClass.key);
@@ -456,7 +457,7 @@ export const GradeComputation: React.FC = () => {
 
   // Re-fetch config when assessment tab is active or selected offering changes
   useEffect(() => {
-    if (activeSubTab === 'assessments' && currentAssessmentOffering) {
+    if ((activeSubTab === 'assessments' || activeSubTab === 'import') && currentAssessmentOffering) {
       loadAssessmentOfferingConfig(currentAssessmentOffering);
     }
   }, [activeSubTab, currentAssessmentOffering?.key]);
@@ -2908,7 +2909,20 @@ export const GradeComputation: React.FC = () => {
   // ----------------------------------------------------
   // 5. IMPORT GRADE SHEETS TAB STATE
   // ----------------------------------------------------
-  const [importPeriod, setImportPeriod] = useState<'Midterm' | 'Final' | 'Overall'>('Midterm');
+  const [importPeriod, setImportPeriod] = useState<ImportPeriod>('Midterm');
+  // Selected destination as "<component>|<name>" (see utils/importDestination); '' = nothing selected.
+  const [importSelection, setImportSelection] = useState('');
+  const importPeriodMode = isPeriodConfig(assessmentConfig);
+  const importGroups = useMemo(() => buildImportGroups(assessmentConfig, importPeriod), [assessmentConfig, importPeriod]);
+  const importHasOptions = hasSelectable(importGroups);
+
+  // Changing class/section or course clears the destination; the period choice is kept.
+  useEffect(() => { setImportSelection(''); }, [selectedClassId, selectedSubjectCode]);
+
+  const handleImportPeriod = (period: ImportPeriod) => {
+    setImportPeriod(period);
+    setImportSelection(prev => keepSelection(buildImportGroups(assessmentConfig, period), prev));
+  };
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [csvPreviewData, setCsvPreviewData] = useState<{ id: string; name: string; score: number; valid: boolean; error?: string }[]>([]);
@@ -2932,7 +2946,7 @@ export const GradeComputation: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `${selectedSubjectCode || 'Course'}_${importPeriod}_Score_Template.csv`);
+    link.setAttribute('download', importTemplateFileName(selectedSubjectCode || 'Course', importPeriodMode ? importPeriod : null, importSelection, isLectureLab(assessmentConfig)));
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -5296,15 +5310,71 @@ export const GradeComputation: React.FC = () => {
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
                       1. Grading Component Destination
                     </label>
+                    {importPeriodMode && (
+                      <div role="group" aria-label="Grading period" className="flex gap-1 p-1 mb-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                        {(['Midterm', 'Final'] as const).map(p => (
+                          <button
+                            key={p}
+                            type="button"
+                            aria-pressed={importPeriod === p}
+                            onClick={() => handleImportPeriod(p)}
+                            className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              importPeriod === p
+                                ? 'bg-clinical-600 text-white shadow-md shadow-clinical-500/10'
+                                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <select
-                      value={importPeriod}
-                      onChange={(e) => setImportPeriod(e.target.value as any)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-205 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
+                      value={importSelection}
+                      onChange={(e) => setImportSelection(e.target.value)}
+                      disabled={assessmentConfigStatus !== 'configured' || !importHasOptions}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-205 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <option value="Midterm">Midterm Examination Score</option>
-                      <option value="Final">Final Examination / Quizzes</option>
-                      <option value="Overall">Clinical Practicums / Laboratories</option>
+                      <option value="">
+                        {assessmentConfigStatus === 'loading' ? 'Loading components…'
+                          : assessmentConfigStatus === 'error' ? 'Components unavailable'
+                          : assessmentConfigStatus === 'unconfigured' ? 'Grade weights required'
+                          : !importHasOptions ? `No components set for ${importPeriod}`
+                          : 'Select a component'}
+                      </option>
+                      {assessmentConfigStatus === 'configured' && importGroups.map(g => {
+                        const opts = g.options.map(o => (
+                          <option key={o.value} value={o.value} disabled={o.disabled}>{o.label}</option>
+                        ));
+                        return g.label ? <optgroup key={g.label} label={g.label}>{opts}</optgroup> : opts;
+                      })}
                     </select>
+                    {assessmentConfigStatus === 'error' && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 text-[11px] text-rose-600 dark:text-rose-400 flex flex-wrap items-center justify-between gap-2">
+                        <span className="min-w-0 break-words">{assessmentConfigError}</span>
+                        <button
+                          type="button"
+                          onClick={() => currentAssessmentOffering && loadAssessmentOfferingConfig(currentAssessmentOffering)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                          title="Retry loading configuration"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Retry Config
+                        </button>
+                      </div>
+                    )}
+                    {assessmentConfigStatus === 'unconfigured' && (
+                      <div className="mt-2 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 text-[11px] text-amber-700 dark:text-amber-400 space-y-2">
+                        <p>Grade weights required. Save this course's Grade Weights first.</p>
+                        <button
+                          type="button"
+                          onClick={() => setActiveSubTab('components')}
+                          className="px-3 py-1 rounded-lg text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-clinical-600 dark:text-clinical-400 hover:border-clinical-400 cursor-pointer"
+                        >
+                          Open Grade Weights Editor
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 pt-1">
