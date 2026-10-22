@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { LocationPicker } from '../../components/LocationPicker';
 import { 
   Play, 
@@ -680,9 +681,9 @@ export const StartSession: React.FC = () => {
       ) : null}
 
       {/* End Session Confirmation Modal */}
-      {showEndModal && activeSession && (
+      {showEndModal && activeSession && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-extrabold text-base">
                 <Square className="w-5 h-5 fill-rose-600 dark:fill-rose-400" />
@@ -732,12 +733,12 @@ export const StartSession: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Revoke Session Confirmation Modal */}
-      {showRevokeModal && (activeSession || queuedRevokeId) && (
+      {showRevokeModal && (activeSession || queuedRevokeId) && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-extrabold text-base">
                 <Ban className="w-5 h-5 text-rose-600 dark:text-rose-400" />
@@ -817,7 +818,7 @@ export const StartSession: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {shownQueued.length > 0 && <Card className="space-y-3 p-5">
         <h2 className="text-sm font-bold">Scheduled sessions (Asia/Manila)</h2>

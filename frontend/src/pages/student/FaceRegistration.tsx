@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Camera,
@@ -1198,9 +1199,9 @@ export const FaceRegistration: React.FC = () => {
       )}
 
       {/* REVOCATION CONFIRMATION MODAL */}
-      {showRevokeModal && (
+      {showRevokeModal && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200 dark:border-slate-800 space-y-5 shadow-2xl">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200 dark:border-slate-800 space-y-5 shadow-2xl max-h-[90dvh] overflow-y-auto">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center">
                 <Trash2 className="w-5 h-5" />
@@ -1243,7 +1244,7 @@ export const FaceRegistration: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
     </div>
   );

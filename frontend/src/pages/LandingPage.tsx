@@ -151,7 +151,7 @@ export function LandingPage() {
       {/* 4. Clean FAQ Modal (No Glassmorphism) */}
       {isFaqModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 select-text">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative text-left space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative text-left space-y-4 max-h-[90dvh] overflow-y-auto">
             
             {/* Close Button */}
             <button
