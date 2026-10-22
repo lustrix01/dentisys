@@ -128,6 +128,21 @@ Testing must never email real or real-looking addresses (spam risk): automated t
 - **Grading setup:** the grading-configuration save and the grading snapshot work per course offering (course and school year), not per class, so they still include assessments of a Cancelled or Created-by-mistake class of the same offering.
 - **Wording:** four client-side messages in Classes & Rosters (add student, edit class, remove student, edit roster student) still say "Past school-year classes are view-only." for archived classes. Archived cards disable those buttons and the server answers "Archived classes are view-only.", so this is wording only.
 
+## 5.10 Import Grade Sheets follow-ups
+
+**Status: Not started.** Found while aligning the destination with the saved Grade Weights (2026-10-22); the Owner will decide each one.
+
+- **Class badge:** the card header badge shows the internal class number ("DENT101 · 33") instead of the section name.
+- **Dark mode:** the destination box and the upload box use `dark:bg-slate-850`, which is not a defined colour, so both render light grey in dark mode.
+- **Lecture/Laboratory check:** the grouped destination list is covered by unit tests only; the seed has no Lecture/Laboratory configuration to check it on screen.
+
+## 5.11 Client requests waiting on information
+
+**Status: Unclear.** Blocked until the client answers.
+
+- **Cost recovery remedials:** deferred by the Owner until the client explains how cost recovery is graded (today a remedial is one 1.00–5.00 grade and a failed final).
+- **Remove-student error:** not reproduced; the client was asked for the exact message shown.
+
 ---
 
 # 6. Student
