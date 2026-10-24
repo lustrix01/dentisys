@@ -382,7 +382,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
 
           <div className="flex items-center gap-1.5 xl:hidden">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pin:</span>
-            <div role="group" aria-label="Pin student columns" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-850 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
+            <div role="group" aria-label="Pin student columns" className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
               {([['Full Name', false], ['ID Number + Full Name', true]] as const).map(([label, both]) => (
                 <button
                   key={label}
@@ -406,7 +406,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               {/* Period Filter */}
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Period:</span>
-                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-850 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-750">
+                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-750">
                   <button
                     type="button"
                     onClick={() => setPeriodFilter('all')}
@@ -447,7 +447,7 @@ export const GradebookMatrix: React.FC<GradebookMatrixProps> = ({
               {config?.componentMode === 'lecture_laboratory' && (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Component:</span>
-                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-850 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
+                <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-755">
                   <button
                     type="button"
                     onClick={() => setComponentFilter('all')}

@@ -406,7 +406,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
                   className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                     isUnread
                       ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-900/40 hover:bg-blue-50 dark:hover:bg-blue-950/30'
-                      : 'bg-slate-50/50 dark:bg-slate-850/40 border-slate-100 dark:border-slate-800 hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
+                      : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800 hover:bg-slate-100/50 dark:hover:bg-slate-800/50'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -516,7 +516,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] aspect-square rounded-full bg-clinical-200/25 dark:bg-clinical-950/20 blur-[120px] pointer-events-none z-0 print:hidden" />
 
       {/* Mobile Header */}
-      <header className="print:hidden md:hidden flex items-center justify-between px-6 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-40 relative z-10">
+      <header className="print:hidden md:hidden flex items-center justify-between px-6 max-[359px]:px-3 py-4 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 sticky top-0 z-40 relative z-10">
         <div className="flex items-center space-x-2">
           <img src="/bu-cdm-logo.png" alt="BU CDM Logo" className="w-9 h-9 rounded-full object-cover" />
           <span className="font-heading font-bold text-xl tracking-tight bg-gradient-to-r from-clinical-600 to-accent-600 dark:from-clinical-400 dark:to-accent-400 bg-clip-text text-transparent">
@@ -524,7 +524,7 @@ const AppBackedLayout: React.FC<LayoutProps> = ({ children }) => {
           </span>
         </div>
 
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-2.5 max-[359px]:space-x-0">
           {/* Mobile Notification Bell */}
           <div className="relative max-md:static">
             <button

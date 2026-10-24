@@ -800,13 +800,13 @@ export const AttendanceList: React.FC = () => {
                       </div>
 
                       {/* Card Bottom Row: Students Count & Actions */}
-                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap xl:flex-nowrap items-center justify-between gap-2">
+                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
                           <Users className="w-4 h-4 text-slate-400" />
                           <span>{c.enrolledCount} Students</span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap xl:flex-nowrap">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                           {/* View Session button */}
                           <button
                             type="button"
@@ -815,7 +815,7 @@ export const AttendanceList: React.FC = () => {
                               setSessionModalTab(c.hasLiveSession ? 'current' : 'upcoming');
                               setIsSessionModalOpen(true);
                             }}
-                            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50 transition-all cursor-pointer whitespace-nowrap"
+                            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50 transition-all cursor-pointer whitespace-nowrap"
                           >
                             <Clock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-300" />
                             <span>View Session</span>
@@ -829,7 +829,7 @@ export const AttendanceList: React.FC = () => {
                               setSelectedSubject(c.subjectCode || 'all');
                               setViewMode('worksheet');
                             }}
-                            className="inline-flex items-center justify-center text-xs font-bold px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-600/20 transition-all cursor-pointer whitespace-nowrap"
+                            className="inline-flex items-center justify-center text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-600/20 transition-all cursor-pointer whitespace-nowrap"
                           >
                             <span>View Attendance</span>
                           </button>

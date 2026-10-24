@@ -793,7 +793,7 @@ export const Reports: React.FC = () => {
         <Card className="p-0 overflow-hidden no-print">
           <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
             <div>
-              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Class Course Grade Reports</h3>
+              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Class Course Grade Reports</h3>
               <p className="text-[10px] text-slate-400 mt-0.5">
                 {selectedClass ? `${selectedClass.courseCode} · ${selectedClass.csName}` : 'Overview of final academic standing'}
               </p>
@@ -852,7 +852,7 @@ export const Reports: React.FC = () => {
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                         <td className="px-5 py-3.5">
-                          <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
+                          <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
                           <span className="text-[10px] text-slate-400 font-mono">{student.studentId}</span>
                         </td>
                         {isLectureLaboratoryMode && <td className="px-5 py-3.5 text-center font-mono">{formatComponentResult(evaluation.midtermComponents?.lecture, evaluation.midtermStatus)}</td>}
@@ -921,7 +921,7 @@ export const Reports: React.FC = () => {
       {reportTab === 'retention' && (
         <Card className="p-0 overflow-hidden no-print">
           <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
-            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Retention Status Reports</h3>
+            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Retention Status Reports</h3>
             <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <button
                 type="button"
@@ -969,7 +969,7 @@ export const Reports: React.FC = () => {
                   return (
                     <tr key={student.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                       <td className="px-5 py-3.5">
-                        <div className="font-bold text-slate-800 dark:text-slate-205">{student.name}</div>
+                        <div className="font-bold text-slate-800 dark:text-slate-200">{student.name}</div>
                         <span className="text-[10px] text-slate-404">{student.studentId} • Year {student.yearLevel}</span>
                       </td>
                       <td className="px-5 py-3.5 text-center font-bold text-slate-800 dark:text-slate-100">
@@ -1006,9 +1006,9 @@ export const Reports: React.FC = () => {
       ---------------------------------------------------- */}
       {reportTab === 'attendance' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex max-[359px]:flex-wrap max-[359px]:gap-2 justify-between items-center">
             <div>
-              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-202">Authoritative Attendance Register</h3>
+              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Authoritative Attendance Register</h3>
               <p className="text-[11px] text-slate-400 mt-1">{selectedClass?.courseCode || 'Class unavailable'} · {attendanceDate}</p>
             </div>
             <div className="flex items-center gap-2">
@@ -1083,7 +1083,7 @@ export const Reports: React.FC = () => {
                       <tr key={record.enrollmentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/10">
                         <td className="px-5 py-3 font-mono">{record.date}</td>
                         <td className="px-5 py-3">
-                          <div className="font-bold text-slate-800 dark:text-slate-202">{record.studentName || 'Student name unavailable'}</div>
+                          <div className="font-bold text-slate-800 dark:text-slate-200">{record.studentName || 'Student name unavailable'}</div>
                           <span className="text-[10px] text-slate-400 font-mono">{record.studentNumber || 'Student number unavailable'}</span>
                         </td>
                         <td className="px-5 py-3 font-bold font-mono text-clinical-650">{selectedClass?.courseCode || 'Course unavailable'}</td>
@@ -1160,7 +1160,7 @@ export const Reports: React.FC = () => {
           {/* Bar Chart */}
           <Card className="p-5 flex flex-col justify-between">
             <div>
-              <h4 className="text-xs font-bold text-slate-850 dark:text-slate-205 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <h4 className="text-xs font-bold text-slate-850 dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
                 <FileCheck className="w-4 h-4 text-accent-505" />
                 Grade Distribution
               </h4>
@@ -1182,7 +1182,7 @@ export const Reports: React.FC = () => {
           {/* Assessment Performance Chart */}
           <Card className="p-5 flex flex-col justify-between md:col-span-2">
             <div>
-              <h4 className="text-xs font-bold text-slate-855 dark:text-slate-205 uppercase tracking-wider mb-2 flex items-center gap-1">
+              <h4 className="text-xs font-bold text-slate-855 dark:text-slate-200 uppercase tracking-wider mb-2 flex items-center gap-1">
                 <FileText className="w-4 h-4 text-clinical-550" />
                 Assessment Average Success Rates
               </h4>

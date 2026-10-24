@@ -3630,7 +3630,7 @@ export const GradeComputation: React.FC = () => {
       ---------------------------------------------------- */}
       {activeSubTab === 'assessments' && (
         <Card className="p-0 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 flex max-sm:flex-wrap max-sm:gap-2 justify-between items-center">
             <div>
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Active Course Assessments</h3>
               <p className="text-[10px] text-slate-400 mt-0.5">
@@ -3655,7 +3655,7 @@ export const GradeComputation: React.FC = () => {
               <button
                 onClick={openNewAssessmentModal}
                 disabled={availableClasses.length === 0 && (!currentAssessmentOffering || currentAssessmentOffering.sections.length === 0)}
-                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs transition-colors shadow-sm disabled:opacity-50"
+                className="flex items-center gap-1 whitespace-nowrap px-3 py-2 rounded-xl bg-clinical-600 hover:bg-clinical-700 text-white font-bold text-xs transition-colors shadow-sm disabled:opacity-50"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add Assessment
@@ -4315,13 +4315,13 @@ export const GradeComputation: React.FC = () => {
                         tabIndex={0}
                         onClick={() => setActivePeriodEditorTab('Midterm')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Midterm'); }}
-                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-wrap items-center justify-between gap-3 ${
                           activePeriodEditorTab === 'Midterm'
                             ? 'border-clinical-600 bg-clinical-50/60 dark:bg-clinical-950/40 shadow-sm ring-2 ring-clinical-500/20'
                             : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 max-[359px]:gap-2">
                           <span className={`w-3 h-3 rounded-full shrink-0 ${activePeriodEditorTab === 'Midterm' ? 'bg-clinical-600 ring-4 ring-clinical-200 dark:ring-clinical-900' : 'bg-slate-300 dark:bg-slate-700'}`} />
                           <div>
                             <div className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
@@ -4361,13 +4361,13 @@ export const GradeComputation: React.FC = () => {
                         tabIndex={0}
                         onClick={() => setActivePeriodEditorTab('Final')}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActivePeriodEditorTab('Final'); }}
-                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        className={`p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-wrap items-center justify-between gap-3 ${
                           activePeriodEditorTab === 'Final'
                             ? 'border-clinical-600 bg-clinical-50/60 dark:bg-clinical-950/40 shadow-sm ring-2 ring-clinical-500/20'
                             : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 max-[359px]:gap-2">
                           <span className={`w-3 h-3 rounded-full shrink-0 ${activePeriodEditorTab === 'Final' ? 'bg-clinical-600 ring-4 ring-clinical-200 dark:ring-clinical-900' : 'bg-slate-300 dark:bg-slate-700'}`} />
                           <div>
                             <div className="font-extrabold text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
@@ -4543,17 +4543,17 @@ export const GradeComputation: React.FC = () => {
                   {/* LEVEL 3: CATEGORIES LIST FOR ACTIVE PERIOD & COMPONENT */}
                   <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-2xs">
                     {/* Header Toolbar */}
-                    <div className="p-3.5 sm:p-4 bg-slate-50/70 dark:bg-slate-850/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
+                    <div className="p-3.5 sm:p-4 bg-slate-50/70 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 max-[359px]:flex-wrap">
                         <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
                           3. {activePeriodEditorTab === 'Midterm' ? 'Midterm' : 'Finals'} • {activeComponentEditorTab} Categories ({activePeriodVisibleCategories.length})
                         </span>
                         <span className="text-[11px] text-slate-400">• Must total 100%</span>
                       </div>
 
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2.5 max-[359px]:flex-wrap">
                         {/* Status badge */}
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${
+                        <span className={`whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-extrabold border ${
                           activeComponentCategoryCalc.isExact100
                             ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                             : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
@@ -4566,7 +4566,7 @@ export const GradeComputation: React.FC = () => {
                           type="button"
                           onClick={() => handleAddPeriodCategory(activePeriodEditorTab)}
                           disabled={isLegacyCombinedPeriodConfig}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Add Category</span>
@@ -4628,7 +4628,7 @@ export const GradeComputation: React.FC = () => {
                                   placeholder="Category name (e.g. Quizzes, Practical Exam)"
                                   disabled={isLegacyCombinedPeriodConfig}
                                   onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'name', e.target.value)}
-                                  className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
+                                  className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
                                 />
                                 {row.sourceKind === 'attendance' && (
                                   <span className="shrink-0 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800" title="Authoritative attendance data from recorded sessions">
@@ -4651,7 +4651,7 @@ export const GradeComputation: React.FC = () => {
                                   placeholder="0"
                                   disabled={isLegacyCombinedPeriodConfig}
                                   onChange={(e) => handleUpdatePeriodCategoryField(activePeriodEditorTab, row.compositeKey, 'weight', e.target.value)}
-                                  className="w-full pl-2 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
+                                  className="w-full pl-2 pr-6 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold text-right focus:outline-none focus:ring-2 focus:ring-clinical-500 shadow-2xs"
                                 />
                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">%</span>
                               </div>
@@ -5304,7 +5304,7 @@ export const GradeComputation: React.FC = () => {
             {/* Top Grid: Destination & Upload Dropzone */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch">
               {/* Left Column: Component Destination & Template Guide */}
-              <div className="space-y-4 flex flex-col justify-between p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-850/50 border border-slate-150 dark:border-slate-800">
+              <div className="space-y-4 flex flex-col justify-between p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-150 dark:border-slate-800">
                 <div className="space-y-3">
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
@@ -5413,7 +5413,7 @@ export const GradeComputation: React.FC = () => {
                   className={`flex-1 flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-dashed transition-all text-center ${
                     csvFile
                       ? 'border-emerald-400 bg-emerald-50/20 dark:bg-emerald-950/20'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-clinical-500 dark:hover:border-clinical-400 bg-slate-50/40 dark:bg-slate-850/30'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-clinical-500 dark:hover:border-clinical-400 bg-slate-50/40 dark:bg-slate-800/30'
                   }`}
                 >
                   <input
@@ -5513,7 +5513,7 @@ export const GradeComputation: React.FC = () => {
 
                 <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden max-h-64 overflow-y-auto">
                   <table className="min-w-full divide-y divide-slate-150 dark:divide-slate-800 text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-850 sticky top-0 z-10">
+                    <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
                       <tr className="text-left font-bold text-[10px] uppercase text-slate-400 tracking-wider">
                         <th className="px-4 py-2.5">Student ID</th>
                         <th className="px-4 py-2.5">Student Name</th>
@@ -5979,7 +5979,7 @@ export const GradeComputation: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsTransmutationSectionOpen(prev => !prev)}
-              className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-100/50 dark:hover:bg-slate-850/50 transition-colors"
+              className="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors"
             >
               <div className="flex items-center gap-2.5">
                 <div className={`w-2 h-2 rounded-full ${assTransmutationEnabled ? 'bg-clinical-500 ring-2 ring-clinical-500/20' : 'bg-slate-300 dark:bg-slate-700'}`} />

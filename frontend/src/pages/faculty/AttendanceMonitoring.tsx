@@ -1046,13 +1046,13 @@ export const AttendanceMonitoring: React.FC = () => {
                   </div>
 
                   {/* Card Bottom Row: Students Count & Actions */}
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap xl:flex-nowrap items-center justify-between gap-2">
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
                       <Users className="w-4 h-4 text-slate-400" />
                       <span>{c.enrolledCount} Students</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap xl:flex-nowrap">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1060,7 +1060,7 @@ export const AttendanceMonitoring: React.FC = () => {
                           handleOpenClassSessionModal(c);
                         }}
                         disabled={isPastClass}
-                        className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                        className="inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/50 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                         title={isPastClass ? 'Past school-year classes are view-only.' : 'View and Manage Sessions'}
                       >
                         <Clock className="w-3.5 h-3.5 text-emerald-600" />
@@ -1073,7 +1073,7 @@ export const AttendanceMonitoring: React.FC = () => {
                           e.stopPropagation();
                           handleSelectClass(c);
                         }}
-                        className="inline-flex items-center justify-center text-xs font-bold px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50 transition-all cursor-pointer shadow-xs whitespace-nowrap"
+                        className="inline-flex items-center justify-center text-xs font-bold px-3 xl:max-[1439px]:px-2 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/70 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/50 transition-all cursor-pointer shadow-xs whitespace-nowrap"
                       >
                         <span>View Attendance</span>
                       </button>

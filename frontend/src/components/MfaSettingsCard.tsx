@@ -131,9 +131,9 @@ export const MfaSettingsCard: React.FC<{
         {success && <div className="flex gap-2 rounded-xl bg-emerald-50 p-3 text-xs font-semibold text-emerald-700"><CheckCircle2 className="h-4 w-4" />{success}</div>}
 
         <div className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex max-[374px]:flex-wrap items-center justify-between gap-4 max-[389px]:gap-3">
             <div><p className="flex items-center gap-2 text-sm font-bold"><Smartphone className="h-4 w-4" />Authenticator app</p><p className="mt-1 text-xs text-slate-500">Google Authenticator compatible · {recoveryCount} recovery codes</p></div>
-            {statusAvailable && !authenticatorEnabled && <button type="button" disabled={working} onClick={() => void beginAuthenticator()} className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">Set up</button>}
+            {statusAvailable && !authenticatorEnabled && <button type="button" disabled={working} onClick={() => void beginAuthenticator()} className="shrink-0 whitespace-nowrap rounded-xl bg-indigo-600 px-4 max-[389px]:px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Set up</button>}
           </div>
           {authenticatorEnabled && (
             <div className="flex flex-wrap items-end gap-2">

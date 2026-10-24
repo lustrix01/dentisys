@@ -1147,8 +1147,8 @@ export const FaceRegistration: React.FC = () => {
 
           {errorBanner}
 
-          <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="space-y-0.5 text-center sm:text-left">
+          <div className="p-4 rounded-2xl bg-blue-50/50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/50 flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-4">
+            <div className="space-y-0.5 text-center sm:text-left sm:flex-1 sm:basis-64">
               <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
                 Ready for Daily Session Check-In
               </h4>
@@ -1157,7 +1157,7 @@ export const FaceRegistration: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-3 max-sm:flex-wrap max-sm:justify-center">
+            <div className="flex items-center gap-3 flex-wrap max-sm:justify-center">
               {isAuthoritative ? (
                 <>
                   <button
