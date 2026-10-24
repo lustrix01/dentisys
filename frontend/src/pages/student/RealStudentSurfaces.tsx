@@ -182,7 +182,7 @@ export const RealStudentDashboard: React.FC = () => {
           </div>
           <button
             onClick={() => navigate('/student/attendance')}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
           >
             <Camera className="w-4 h-4" />
             <span>Daily Check-In</span>
@@ -278,7 +278,7 @@ export const RealStudentDashboard: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate('/student/classes')}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+              className="whitespace-nowrap text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400"
             >
               View Full Grades →
             </button>

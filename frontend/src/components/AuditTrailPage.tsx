@@ -254,13 +254,13 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
 
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
+        <div className="sm:flex-1 sm:basis-64">
           <h1 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">{title}</h1>
           <p className="text-xs text-slate-400 mt-1">{subtitle}</p>
           {role === 'admin' && <p className="text-xs text-slate-400 mt-1">Class work (grades, attendance, retention) is not shown here; it stays recorded.</p>}
         </div>
-        <div className="flex gap-2 no-print">
+        <div className="flex gap-2 whitespace-nowrap no-print">
           <button onClick={exportCsv} disabled={working} className={`${tapButton} border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-50`}>
             <Download className="w-4 h-4" />
             Export CSV

@@ -1383,8 +1383,8 @@ export const ClassesAndRosters: React.FC = () => {
     <div className="space-y-6">
 
       {/* 1. Clean Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800 pb-5">
+        <div className="sm:flex-1 sm:basis-64">
           <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             My Classes & Student Rosters
           </h1>
@@ -1401,7 +1401,7 @@ export const ClassesAndRosters: React.FC = () => {
           <button
             onClick={handleOpenCreateClassModal}
             disabled={!newSchoolYear}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create Class</span>
@@ -1409,7 +1409,7 @@ export const ClassesAndRosters: React.FC = () => {
 
           <button
             onClick={() => setIsImportRosterOpen(true)}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
+            className="flex-1 sm:flex-initial whitespace-nowrap flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
           >
             <Upload className="w-4 h-4" />
             <span>Import Roster (Provisional)</span>

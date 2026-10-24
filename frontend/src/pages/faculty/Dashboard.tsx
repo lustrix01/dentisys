@@ -511,7 +511,7 @@ export const Dashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/retention')}
-                  className="text-[10px] font-semibold text-clinical-600 hover:text-clinical-700 dark:text-clinical-400 hover:underline"
+                  className="whitespace-nowrap text-[10px] font-semibold text-clinical-600 hover:text-clinical-700 dark:text-clinical-400 hover:underline"
                 >
                   View All &rarr;
                 </button>

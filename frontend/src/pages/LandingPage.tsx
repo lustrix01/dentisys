@@ -42,16 +42,16 @@ export function LandingPage() {
 
       {/* 1. Header Navigation Bar */}
       <header className="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-xs px-6 sm:px-12 py-3.5 flex-shrink-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="max-w-7xl mx-auto flex items-center justify-between max-[359px]:gap-2">
 
           {/* Logo & Brand Title */}
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => navigate('/')}>
+          <div className="flex items-center space-x-3 min-w-0 cursor-pointer" onClick={() => navigate('/')}>
             <img
               src="/bu-cdm-logo.png"
               alt="BU CDM Seal"
               className="w-10 h-10 rounded-full object-cover shadow-sm flex-shrink-0"
             />
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="font-heading font-extrabold text-base sm:text-lg text-slate-800 dark:text-slate-100 tracking-tight">
                   BUCDM
@@ -69,7 +69,7 @@ export function LandingPage() {
           {/* Top Right Portal Login Button */}
           <button
             onClick={() => navigate('/login')}
-            className="rounded-xl bg-accent-600 hover:bg-accent-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm px-5 py-2.5 flex items-center gap-2 shadow-md shadow-accent-600/20 transition-all cursor-pointer"
+            className="whitespace-nowrap rounded-xl bg-accent-600 hover:bg-accent-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm px-5 max-[359px]:px-3 py-2.5 flex items-center gap-2 shadow-md shadow-accent-600/20 transition-all cursor-pointer"
           >
             <LogIn className="w-4 h-4" />
             <span>Portal Login</span>
@@ -193,7 +193,7 @@ export function LandingPage() {
                   setIsFaqModalOpen(false);
                   navigate('/login');
                 }}
-                className="py-2.5 px-5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
+                className="whitespace-nowrap py-2.5 px-5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
               >
                 <span>Proceed to Portal Login</span>
                 <ArrowRight className="w-4 h-4" />

@@ -4235,7 +4235,7 @@ export const GradeComputation: React.FC = () => {
                     <button
                       type="submit"
                       disabled={configSaving || !weightCalculation.isExact100 || categoryRows.length === 0}
-                      className="flex items-center gap-1.5 px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
+                      className="flex items-center gap-1.5 whitespace-nowrap px-5 py-2.5 rounded-2xl bg-clinical-500 hover:bg-clinical-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs shadow-md transition-all"
                     >
                       <Save className="w-4 h-4" />
                       <span>{configSaving ? 'Saving...' : 'Save Grade Weights'}</span>
@@ -4289,10 +4289,10 @@ export const GradeComputation: React.FC = () => {
                         type="button"
                         onClick={handleStartLectureLaboratoryConversion}
                         disabled={configSaving}
-                        className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white font-bold text-xs cursor-pointer shadow-xs"
+                        className="shrink-0 inline-flex items-center gap-1.5 whitespace-nowrap max-[419px]:whitespace-normal px-3.5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white font-bold text-xs cursor-pointer shadow-xs"
                       >
-                        <Zap className="w-3.5 h-3.5" />
-                        <span>Convert to Lecture/Laboratory</span>
+                        <Zap className="w-3.5 h-3.5 shrink-0" />
+                        <span>Convert to Lecture/<wbr />Laboratory</span>
                       </button>
                     </div>
                   )}
@@ -4776,7 +4776,7 @@ export const GradeComputation: React.FC = () => {
                       <button
                         type="submit"
                         disabled={configSaving || periodValidationError !== null || isLegacyCombinedPeriodConfig}
-                        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                        className="inline-flex items-center gap-2 whitespace-nowrap px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                       >
                         <Save className="w-4 h-4" />
                         <span>{configSaving ? 'Saving...' : loadedConfig ? 'Save Grade Weights' : 'Save Initial Schema'}</span>
@@ -5552,12 +5552,12 @@ export const GradeComputation: React.FC = () => {
               </div>
             )}
 
-            <div className="flex items-center justify-between pt-4 border-t border-slate-150 dark:border-slate-800">
+            <div className="flex max-[369px]:flex-wrap items-center justify-between gap-2 pt-4 border-t border-slate-150 dark:border-slate-800">
               <button
                 type="button"
                 onClick={handleClearCsv}
                 disabled={!csvFile && csvPreviewData.length === 0}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                className="px-4 max-[359px]:px-2 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
               >
                 Reset
               </button>
@@ -5566,7 +5566,7 @@ export const GradeComputation: React.FC = () => {
                 type="button"
                 disabled
                 title="Importing grade sheets is a preview capability. Apply individual scores in the Student Scores Entry tab."
-                className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 font-bold text-xs cursor-not-allowed"
+                className="flex items-center gap-1.5 whitespace-nowrap max-[359px]:px-2 max-[359px]:gap-1 px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-500 font-bold text-xs cursor-not-allowed"
               >
                 <Save className="w-3.5 h-3.5" />
                 <span>Import Preview Verified</span>

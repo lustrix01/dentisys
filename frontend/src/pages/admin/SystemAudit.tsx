@@ -355,8 +355,8 @@ export const DeanReports: React.FC = () => {
   return (
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto px-1 sm:px-2 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4 no-print">
+        <div className="sm:flex-1 sm:basis-64">
           <h1 className="text-xl sm:text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100">
             Reports & Analytics
           </h1>
@@ -364,7 +364,7 @@ export const DeanReports: React.FC = () => {
             Generate institutional academic, retention, and attendance reports.
           </p>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto no-print">
+        <div className="flex items-center gap-2 whitespace-nowrap w-full sm:w-auto no-print">
           <button
             onClick={handleExportCSV}
             className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white font-bold text-xs transition-all shadow-md cursor-pointer"

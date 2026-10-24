@@ -223,7 +223,7 @@ export const Dashboard: React.FC = () => {
           <section aria-label="Latest audit events" className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Latest audit events</h3>
-              <button type="button" onClick={() => navigate('/admin/audit-trail')} className="text-xs font-bold text-accent-600 hover:underline cursor-pointer">View audit trail</button>
+              <button type="button" onClick={() => navigate('/admin/audit-trail')} className="text-xs font-bold whitespace-nowrap text-accent-600 hover:underline cursor-pointer">View audit trail</button>
             </div>
             {recentAuditEvents.length === 0 ? (
               <p className="mt-3 text-xs text-slate-400">No audit events recorded yet.</p>

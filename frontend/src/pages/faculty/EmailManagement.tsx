@@ -500,8 +500,8 @@ export const EmailManagement: React.FC = () => {
       ---------------------------------------------------- */}
       {tab === 'student_invites' && (
         <Card className="p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+            <div className="sm:flex-1 sm:basis-64">
               <h2 className="text-base font-bold font-heading text-slate-800 dark:text-slate-100">
                 Student Class Roster Invitations ({filteredStudents.length})
               </h2>
@@ -510,7 +510,7 @@ export const EmailManagement: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -518,7 +518,7 @@ export const EmailManagement: React.FC = () => {
                   setPreviewStudentId(selected[0] || filteredStudents[0]?.id || '');
                   setPreview(true);
                 }}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer"
+                className="whitespace-nowrap px-4 max-sm:px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer"
               >
                 Preview Email
               </button>
@@ -527,7 +527,7 @@ export const EmailManagement: React.FC = () => {
                 type="button"
                 disabled={isSending || selected.length === 0}
                 onClick={handleSendEmails}
-                className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
+                className="inline-flex whitespace-nowrap items-center gap-2 px-5 max-sm:px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer disabled:opacity-50"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>{isSending ? 'Sending Emails...' : `Send Invitations (${selected.length})`}</span>

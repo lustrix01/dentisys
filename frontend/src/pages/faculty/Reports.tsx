@@ -791,18 +791,18 @@ export const Reports: React.FC = () => {
       ---------------------------------------------------- */}
       {reportTab === 'academic' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
-            <div>
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
+            <div className="flex-1 basis-40">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Class Course Grade Reports</h3>
               <p className="text-[10px] text-slate-400 mt-0.5">
                 {selectedClass ? `${selectedClass.courseCode} · ${selectedClass.csName}` : 'Overview of final academic standing'}
               </p>
             </div>
-            <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+            <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <button
                 type="button"
                 onClick={() => handleExportCSV('academic')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
                 title="Export academic ledger as CSV spreadsheet"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -812,7 +812,7 @@ export const Reports: React.FC = () => {
               <button
                 type="button"
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
                 title="Export or print academic report as PDF document"
               >
                 <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
@@ -920,13 +920,13 @@ export const Reports: React.FC = () => {
       ---------------------------------------------------- */}
       {reportTab === 'retention' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex justify-between items-center">
-            <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Retention Status Reports</h3>
-            <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
+            <h3 className="flex-1 basis-40 font-bold text-sm text-slate-800 dark:text-slate-200">Retention Status Reports</h3>
+            <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <button
                 type="button"
                 onClick={() => handleExportCSV('retention')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors cursor-pointer"
                 title="Export retention report as CSV spreadsheet"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -936,7 +936,7 @@ export const Reports: React.FC = () => {
               <button
                 type="button"
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors cursor-pointer"
                 title="Export or print retention report as PDF document"
               >
                 <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
@@ -1006,8 +1006,8 @@ export const Reports: React.FC = () => {
       ---------------------------------------------------- */}
       {reportTab === 'attendance' && (
         <Card className="p-0 overflow-hidden no-print">
-          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex max-[359px]:flex-wrap max-[359px]:gap-2 justify-between items-center">
-            <div>
+          <div className="px-5 py-4 border-b border-slate-150 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10 flex flex-wrap gap-2 justify-between items-center">
+            <div className="flex-1 basis-40">
               <h3 className="font-bold text-sm text-slate-800 dark:text-slate-200">Authoritative Attendance Register</h3>
               <p className="text-[11px] text-slate-400 mt-1">{selectedClass?.courseCode || 'Class unavailable'} · {attendanceDate}</p>
             </div>
@@ -1032,12 +1032,12 @@ export const Reports: React.FC = () => {
                   })}
                 </select>
               )}
-              <div className="flex items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+              <div className="flex shrink-0 items-center bg-white dark:bg-slate-900 p-0.5 rounded-xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => handleExportCSV('attendance')}
                   disabled={attendanceRecords.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors disabled:opacity-40 cursor-pointer"
+                  className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors disabled:opacity-40 cursor-pointer"
                   title="Export attendance register as CSV spreadsheet"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
@@ -1048,7 +1048,7 @@ export const Reports: React.FC = () => {
                   type="button"
                   onClick={handlePrint}
                   disabled={attendanceRecords.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors disabled:opacity-40 cursor-pointer"
+                  className="flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300 transition-colors disabled:opacity-40 cursor-pointer"
                   title="Export or print attendance register as PDF document"
                 >
                   <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />

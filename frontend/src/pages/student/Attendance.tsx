@@ -1013,7 +1013,7 @@ export const Attendance: React.FC = () => {
 
           <button
             onClick={() => navigate('/student/attendance-logs')}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 whitespace-nowrap px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors cursor-pointer"
           >
             <History className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
             <span>Attendance Logs</span>
@@ -1314,14 +1314,14 @@ export const Attendance: React.FC = () => {
 
               {/* Active Sessions List or Dropdown */}
               <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
                     <Building className="w-4 h-4 text-blue-600" />
                     Select Active Class Session
                   </h3>
                   <button
                     onClick={() => { void loadAuthoritativeData(); }}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     <span>Refresh Sessions</span>

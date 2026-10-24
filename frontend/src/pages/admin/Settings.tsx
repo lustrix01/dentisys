@@ -227,7 +227,7 @@ export const Settings: React.FC = () => {
             </div>
             <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-xs font-bold shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 whitespace-nowrap px-5 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-xs font-bold shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
                 {saved ? "Settings saved" : "Save system settings"}

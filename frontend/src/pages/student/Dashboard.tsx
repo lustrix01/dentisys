@@ -129,7 +129,7 @@ export const Dashboard: React.FC = () => {
 
           <button
             onClick={() => navigate('/student/attendance')}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
+            className="flex items-center justify-center gap-2 whitespace-nowrap px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-extrabold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer flex-shrink-0"
           >
             <Camera className="w-4 h-4" />
             <span>Daily Check-In</span>
