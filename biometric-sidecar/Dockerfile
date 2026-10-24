@@ -6,8 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip uninstall -y opencv-contrib-python \
+# One layer so the removed packages never ship. jax/jaxlib/scipy are mediapipe
+# extras the Tasks API (FaceLandmarker) does not import (~520 MB).
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip uninstall -y opencv-contrib-python jax jaxlib scipy ml_dtypes opt_einsum \
     && pip install --no-cache-dir --force-reinstall --no-deps opencv-contrib-python-headless==4.11.0.86
 
 COPY app.py ./
