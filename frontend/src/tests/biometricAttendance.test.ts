@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   isRealStudent,
   isSecretaryWithStudentContext,
@@ -664,4 +665,10 @@ test('Retry Preservation Semantics: preserves challenge and idempotency key on t
 
   assert.equal(canRetryUpload, false);
   assert.equal(pendingPayload, null);
+});
+
+test('Attendance: a rejected or paused check-in shows its notice after returning to the idle stage', () => {
+  const source = fs.readFileSync(new URL('../pages/student/Attendance.tsx', import.meta.url), 'utf8');
+  assert.match(source, /setFailureNotice\(`\$\{msg\} Your attendance was not recorded[\s\S]{0,120}setCheckInStage\('idle'\)/);
+  assert.match(source, /\{checkInStage === 'idle' && failureNotice && \(\s*<div role="alert"[\s\S]{0,600}\{failureNotice\}/);
 });

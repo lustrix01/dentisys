@@ -1157,7 +1157,7 @@ export const FaceRegistration: React.FC = () => {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 max-sm:flex-wrap max-sm:justify-center">
               {isAuthoritative ? (
                 <>
                   <button

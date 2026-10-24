@@ -1618,6 +1618,17 @@ export const Attendance: React.FC = () => {
                 </div>
               )}
 
+              {/* A rejected or paused check-in returns here, so its notice must stay visible. */}
+              {checkInStage === 'idle' && failureNotice && (
+                <div role="alert" className="text-left p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-3 animate-fade-in">
+                  <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <strong className="block font-bold">Biometric Attendance Notice</strong>
+                    <p className="leading-relaxed">{failureNotice}</p>
+                  </div>
+                </div>
+              )}
+
               {/* IDLE: ACTION BUTTON */}
               {checkInStage === 'idle' && currentSelectedSession && (
                 <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
