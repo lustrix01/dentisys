@@ -229,324 +229,345 @@ export function SsoLogin() {
   };
 
   return (
-    <div className="h-screen max-h-screen w-screen overflow-hidden flex flex-col justify-between bg-slate-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-100 relative select-none">
+    <div className="min-h-screen min-h-[100dvh] w-full md:h-screen md:overflow-hidden flex flex-col md:flex-row bg-white font-sans text-slate-800 select-none">
 
-      {/* Grid Pattern Overlay */}
-      <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-75 pointer-events-none -z-10" />
-
-      {/* 1. Header Navigation Bar (Full Width) */}
-      <header className="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-xs px-6 sm:px-12 py-3.5 flex-shrink-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => navigate('/')}>
+      {/* LEFT PANE: Full-Height Clean White Authentication Panel */}
+      <div className="w-full md:w-1/2 lg:w-5/12 min-h-[100dvh] md:min-h-0 md:h-full bg-white flex flex-col justify-between p-5 sm:p-8 lg:p-12 overflow-y-auto">
+        
+        {/* Top: Logo & Back Link - Connected directly to Landing Page */}
+        <div className="flex items-center justify-between gap-3">
+          <div
+            className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group min-w-0"
+            onClick={() => navigate('/')}
+          >
             <img
               src="/bu-cdm-logo.png"
               alt="BU CDM Seal"
-              className="w-10 h-10 rounded-full object-cover shadow-sm flex-shrink-0"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover shadow-sm group-hover:scale-105 transition-transform flex-shrink-0"
             />
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-heading font-extrabold text-base sm:text-lg text-slate-800 dark:text-slate-100 tracking-tight">
+                <span className="font-heading font-extrabold text-sm sm:text-base lg:text-lg text-slate-900 tracking-tight">
                   BUCDM
                 </span>
-                <span className="font-heading font-extrabold text-base sm:text-lg text-accent-600 dark:text-accent-400 tracking-tight">
-                  DENTISYS
+                <span className="font-heading font-extrabold text-sm sm:text-base lg:text-lg text-purple-600 tracking-tight">
+                  DentiSYS
                 </span>
               </div>
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 font-heading tracking-wide">
+              <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 font-heading tracking-wide truncate">
                 Bicol University College of Dental Medicine
               </span>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={() => navigate('/')}
-            className="rounded-xl bg-accent-600 hover:bg-accent-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm px-5 py-2.5 flex items-center gap-2 shadow-md shadow-accent-600/20 transition-all cursor-pointer"
+            className="text-xs font-semibold text-slate-500 hover:text-slate-900 flex items-center gap-1 sm:gap-1.5 transition-colors cursor-pointer px-2.5 py-1.5 rounded-lg hover:bg-slate-100 flex-shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Home</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to site</span>
           </button>
         </div>
-      </header>
 
-      {/* 2. Main Login Card Container */}
-      <main className="flex-1 flex items-center justify-center px-4 py-4 min-h-0 overflow-y-auto">
-        <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-[32px] shadow-xl shadow-slate-200/60 dark:shadow-none border border-slate-200/60 dark:border-slate-800/80 overflow-hidden grid grid-cols-1 md:grid-cols-12 min-h-[500px] my-auto relative z-10">
+        {/* Center: Main Form Block */}
+        <div className="max-w-md w-full mx-auto my-auto py-6 space-y-6">
 
-          {/* Left Side: Lavender/Purple Branding Sidebar */}
-          <div className="md:col-span-5 bg-[#EAE5F8] dark:bg-accent-950/20 p-8 flex flex-col justify-center items-center text-center relative overflow-hidden">
-            <div className="absolute inset-0 bg-grid-slate-100/50 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] -z-10" />
-            <div className="absolute -left-10 -bottom-10 w-44 h-44 bg-accent-200/30 dark:bg-accent-900/10 rounded-full blur-2xl -z-10" />
+          {/* Heading with Clean, Natural Typography */}
+          <div className="space-y-1">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 font-heading">
+              Login
+            </h1>
+            <p className="text-sm text-slate-500">
+              Enter your account details to continue
+            </p>
+          </div>
 
-            <div className="flex flex-col items-center">
-              {/* Tooth Logo */}
-              <div className="relative group mb-3">
-                <div className="absolute inset-0 bg-accent-300/20 rounded-full blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <div className="relative w-24 h-24 flex items-center justify-center">
-                  {!useFallbackSvg ? (
-                    <img
-                      src="/tooth-logo.png"
-                      alt="DentiSys Logo"
-                      className="max-w-full max-h-full object-contain hover:scale-105 transition-transform duration-300"
-                      onError={() => setUseFallbackSvg(true)}
-                    />
-                  ) : (
-                    <svg
-                      viewBox="0 0 100 100"
-                      className="w-20 h-20 text-accent-600 dark:text-accent-400 drop-shadow-sm hover:scale-105 transition-transform duration-300"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M 30,40 C 25,25 40,20 50,28 C 60,20 75,25 70,40 C 68,60 72,75 66,85 C 63,90 56,90 54,82 C 52,74 51,64 50,64 C 49,64 48,74 46,82 C 44,90 37,90 34,85 C 28,75 32,60 30,40 Z" />
-                    </svg>
-                  )}
-                </div>
-              </div>
+          {/* Status & Banner Alerts */}
+          {activated && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-semibold text-emerald-800">
+              Account activated. Sign in with your new password.
+            </div>
+          )}
 
-              <h1 className="text-3xl font-extrabold font-heading text-accent-800 dark:text-accent-300 tracking-tight mt-3">
-                DentiSYS
-              </h1>
-              <p className="text-xs font-semibold text-accent-600/80 dark:text-accent-400/80 uppercase tracking-widest text-center mt-2.5 max-w-[200px] leading-relaxed">
-                BU Dental Medicine Information System
+          {invitationRequired && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs font-semibold text-blue-800">
+              DentiSys accounts are created through invitations. Open the invitation link sent to your university email.
+            </div>
+          )}
+
+          {mockIdentityEnabled && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-800 flex items-center justify-between gap-2">
+              <span>Mock Student sign-in enabled</span>
+              <button
+                type="button"
+                onClick={handleDevelopmentMockSignIn}
+                disabled={isLoading}
+                className="underline hover:text-amber-950 font-bold cursor-pointer"
+              >
+                Quick Sign-In
+              </button>
+            </div>
+          )}
+
+          {linkChallengeToken && (
+            <form onSubmit={handleGoogleLink} className="rounded-xl border border-purple-200 bg-purple-50 p-4">
+              <p className="text-xs font-semibold text-purple-900">
+                Confirm your DentiSys password to link this Google account.
               </p>
+              <input
+                type="password"
+                required
+                value={linkPassword}
+                onChange={(event) => setLinkPassword(event.target.value)}
+                placeholder="DentiSys password"
+                className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:border-purple-600"
+              />
+              <button type="submit" disabled={isLoading} className="mt-3 w-full rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50 hover:bg-purple-700 transition-all cursor-pointer">
+                Confirm and link Google
+              </button>
+            </form>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-medium text-rose-700 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 flex-shrink-0" />
+              <span>{error}</span>
             </div>
+          )}
 
-            <div className="mt-6 flex items-center gap-1.5 text-[10px] font-bold text-accent-600/60 dark:text-accent-500/60 uppercase tracking-wider md:absolute md:bottom-6 md:mt-0">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Secure Access Portal</span>
-            </div>
-          </div>
-
-          {/* Right Side: Form Pane */}
-          <div className="md:col-span-7 p-6 sm:p-8 md:p-10 flex flex-col justify-center bg-white dark:bg-slate-900 transition-colors">
-            <div className="max-w-md w-full mx-auto">
-              {/* Header */}
-              <div className="mb-5">
-                <h2 className="text-2xl font-extrabold font-heading text-slate-800 dark:text-slate-100 tracking-tight">
-                  Login to Your Account
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Sign in with your institutional email and password
-                </p>
-              </div>
-
-                {activated && (
-                  <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-800">
-                    Account activated. Sign in with your new password.
-                  </div>
-                )}
-
-                {invitationRequired && (
-                  <div className="mb-4 rounded-xl border border-blue-300 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-800">
-                    DentiSys accounts are created through invitations. Open the invitation link sent to your institutional email to set up your account.
-                  </div>
-                )}
-
-                {mockIdentityEnabled && (
-                  <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
-                    Development mock Student sign-in is enabled. Authentication is issued by the development backend.
-                  </div>
-                )}
-
-                {linkChallengeToken && (
-                  <form onSubmit={handleGoogleLink} className="mb-4 rounded-xl border border-accent-200 bg-accent-50 p-4 dark:border-accent-900/40 dark:bg-accent-950/20">
-                    <p className="text-xs font-semibold text-accent-800 dark:text-accent-200">
-                      Confirm your DentiSys password to link this Google account.
-                    </p>
-                    <input
-                      type="password"
-                      required
-                      value={linkPassword}
-                      onChange={(event) => setLinkPassword(event.target.value)}
-                      placeholder="DentiSys password"
-                      className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs outline-none dark:border-slate-700 dark:bg-slate-900"
-                    />
-                    <button type="submit" disabled={isLoading} className="mt-3 w-full rounded-xl bg-accent-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
-                      Confirm and link Google
-                    </button>
-                  </form>
-                )}
-
-                {/* Error Message */}
-              {error && (
-                <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-xl text-xs font-medium text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse flex-shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {mockIdentityEnabled && (
-                <button
-                  onClick={handleDevelopmentMockSignIn}
-                  disabled={isLoading}
-                  type="button"
-                  className="w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 border border-slate-200 dark:border-slate-700 shadow-xs flex items-center justify-center gap-3 transition-all cursor-pointer active:scale-[0.99]"
-                >
-                  Development mock Student sign-in
-                </button>
-              )}
-
-              {!linkChallengeToken && (
-                <div className="mb-4 flex min-h-12 flex-col items-center justify-center gap-2" aria-live="polite">
-                  {googleEnabled ? (
-                    <>
-                      <div
-                        ref={googleButtonRef}
-                        className={googleLoadState === 'ready' ? 'flex justify-center' : 'hidden'}
-                        aria-label="Sign in with Google"
-                      />
-                      {googleLoadState === 'loading' && (
-                        <div role="status" className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                          Loading Google Sign-In…
-                        </div>
-                      )}
-                      {googleLoadState === 'error' && (
-                        <div role="alert" className="text-center text-xs font-semibold text-rose-600 dark:text-rose-400">
-                          Google Sign-In could not be loaded. Use email and password instead.
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        disabled
-                        className="w-full rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
-                      >
-                        Continue with Google
-                      </button>
-                      <p className="text-center text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                        Google Sign-In is not configured in this environment.
-                      </p>
-                    </>
+          {/* 1. TOP: Credentials Form */}
+          <form className="space-y-4" onSubmit={handleLogin}>
+            {/* Username / Email */}
+            <div>
+              <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Username
+              </label>
+              <div className="relative rounded-xl">
+                <div className="flex">
+                  <input
+                    type="text"
+                    id="login-email"
+                    autoComplete="username"
+                    inputMode="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={email.includes('@') ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username'}
+                    className={`min-w-0 flex-1 px-3.5 py-2.5 bg-slate-50 border border-slate-200 ${email.includes('@') ? 'rounded-xl' : 'rounded-l-xl'} focus:bg-white focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 placeholder-slate-400`}
+                  />
+                  {!email.includes('@') && (
+                    <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-semibold text-purple-700">
+                      @{DEFAULT_EMAIL_DOMAIN}
+                    </span>
                   )}
                 </div>
-              )}
+              </div>
+            </div>
 
-              {/* Divider */}
-              <div className="my-4 flex items-center gap-3">
-                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Or Sign In with Email
+            {/* Password */}
+            <div>
+              <label htmlFor="login-password" className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Password
+              </label>
+              <div className="relative rounded-xl">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="login-password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-purple-600/10 focus:border-purple-600 transition-all text-sm outline-none text-slate-900 placeholder-slate-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Login Button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-purple-600 hover:bg-purple-700 active:scale-[0.99] transition-all shadow-md shadow-purple-600/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                'Login'
+              )}
+            </button>
+          </form>
+
+          {/* 2. NEXT: Google Sign In */}
+          {!linkChallengeToken && (
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-xs text-slate-400">
+                  or
                 </span>
-                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+                <div className="flex-1 h-px bg-slate-200" />
               </div>
 
-              {/* Form */}
-              <form className="space-y-3.5" onSubmit={handleLogin}>
-                <div>
-                  <label htmlFor="login-email" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                    Bicol University Email Address
-                  </label>
-                  <div className="relative rounded-xl shadow-xs group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-accent-500 transition-colors">
-                      <Mail className="h-4 w-4" />
-                    </div>
-                    <div className="flex">
-                      <input
-                        type="text"
-                        id="login-email"
-                        autoComplete="username"
-                        inputMode="email"
-                        required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder={email.includes('@') ? `username@${DEFAULT_EMAIL_DOMAIN}` : 'username'}
-                        className={`min-w-0 flex-1 pl-10 pr-4 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 ${email.includes('@') ? 'rounded-xl' : 'rounded-l-xl'} focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs sm:text-sm outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400`}
-                      />
-                      {!email.includes('@') && (
-                        <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-xs font-bold text-accent-700 dark:border-slate-700 dark:bg-slate-800 dark:text-accent-300">
-                          @{DEFAULT_EMAIL_DOMAIN}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="login-password" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                    Password
-                  </label>
-                  <div className="relative rounded-xl shadow-xs group">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-accent-500 transition-colors">
-                      <Lock className="h-4 w-4" />
-                    </div>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      id="login-password"
-                      autoComplete="current-password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-accent-500 focus:border-accent-500 transition-all text-xs sm:text-sm outline-none text-slate-900 dark:text-slate-100 placeholder-slate-400"
+              <div className="flex min-h-11 flex-col items-center justify-center" aria-live="polite">
+                {googleEnabled ? (
+                  <>
+                    <div
+                      ref={googleButtonRef}
+                      className={googleLoadState === 'ready' ? 'w-full flex justify-center' : 'hidden'}
+                      aria-label="Sign in with Google"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-1">
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white bg-accent-600 hover:bg-accent-700 active:scale-[0.99] transition-all shadow-md shadow-accent-600/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isLoading ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      'Log In'
+                    {googleLoadState === 'loading' && (
+                      <div role="status" className="text-xs text-slate-500">
+                        Loading Google Sign-In…
+                      </div>
                     )}
-                  </button>
-                </div>
-
-                {/* Forgot Password → built-in reset flow */}
-                <div className="mt-4 text-center">
-                  <Link
-                    to="/forgot-password"
-                    className="text-xs text-accent-600 dark:text-accent-400 hover:underline font-bold transition-all"
+                    {googleLoadState === 'error' && (
+                      <div role="alert" className="text-center text-xs text-rose-600">
+                        Google Sign-In could not be loaded. Use credentials above.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold text-slate-500 flex items-center justify-center gap-2"
                   >
-                    Forgot password?
-                  </Link>
-                </div>
-              </form>
-
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                    </svg>
+                    <span>Sign in with Google</span>
+                  </button>
+                )}
+              </div>
             </div>
+          )}
+
+          {/* 3. NEXT: Forgot Password */}
+          <div className="pt-1 text-center">
+            <Link
+              to="/forgot-password"
+              className="text-xs font-semibold text-purple-600 hover:text-purple-700 hover:underline transition-colors"
+            >
+              Forgot Password?
+            </Link>
           </div>
 
         </div>
-      </main>
 
-      {/* 3. Dark Footer Bar (Full Width) */}
-      <footer className="bg-slate-900 text-slate-400 py-3 px-6 sm:px-12 border-t border-slate-800 flex-shrink-0">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-center sm:text-left">
-          <div className="text-slate-300 font-medium">
-            © 2026 Bicol University College of Dental Medicine. All rights reserved.
-          </div>
-          <div className="hidden sm:flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 text-slate-400">
-            <div className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" />
-              <span>Legazpi City</span>
-            </div>
-            <a href="mailto:bu-cdm@bicol-u.edu.ph" className="flex items-center gap-1.5 hover:text-white transition-colors">
-              <Mail className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" />
-              <span>bu-cdm@bicol-u.edu.ph</span>
-            </a>
-            <div className="flex items-center gap-1.5">
-              <Phone className="w-3.5 h-3.5 text-accent-400 flex-shrink-0" />
-              <span>(052) 480-0100</span>
-            </div>
-          </div>
+        {/* Bottom institutional mark */}
+        <div className="text-center text-xs text-slate-400">
+          <span>© 2026 Bicol University College of Dental Medicine</span>
         </div>
-      </footer>
+
+      </div>
+
+      {/* RIGHT PANE: Full-Height Vibrant Purple Hero Section */}
+      <div className="hidden md:flex md:w-1/2 lg:w-7/12 h-full bg-[#8B5CF6] p-8 sm:p-12 lg:p-16 flex-col justify-between relative overflow-hidden text-white select-none">
+        
+        {/* Soft Organic Background Accents */}
+        <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-900/30 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] h-[480px] bg-purple-400/20 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top Header Text (Professional Single Line, Academic Account) */}
+        <div className="relative z-10 space-y-2">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-extrabold tracking-tight text-white whitespace-nowrap font-heading">
+            Bicol University College of Dental Medicine
+          </h2>
+          <p className="text-sm sm:text-base text-purple-100/90 font-normal">
+            Login to access your academic account
+          </p>
+        </div>
+
+        {/* Center: Restored Vector Graphic (Clinic Checklist, Scope, & Students) */}
+        <div className="relative z-10 flex items-center justify-center my-auto py-8">
+          <svg
+            viewBox="0 0 500 420"
+            className="w-full max-w-[440px] h-auto drop-shadow-xl"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            {/* Background Soft Circle Shapes */}
+            <path
+              d="M440 220C440 310 360 380 260 380C160 380 90 320 90 220C90 120 170 60 270 60C370 60 440 130 440 220Z"
+              fill="white"
+              fillOpacity="0.12"
+            />
+
+            {/* Checklist / Record Sheet Card */}
+            <rect x="180" y="140" width="160" height="200" rx="14" fill="white" stroke="#1E1B4B" strokeWidth="3" />
+            <rect x="200" y="165" width="80" height="8" rx="4" fill="#8B5CF6" />
+            <rect x="200" y="185" width="120" height="6" rx="3" fill="#E2E8F0" />
+            <rect x="200" y="200" width="105" height="6" rx="3" fill="#E2E8F0" />
+            <rect x="200" y="215" width="90" height="6" rx="3" fill="#E2E8F0" />
+
+            {/* Magnifying Glass / Inspection Scope */}
+            <circle cx="210" cy="270" r="32" fill="white" stroke="#1E1B4B" strokeWidth="4" />
+            <path d="M234 294 L255 315" stroke="#1E1B4B" strokeWidth="5" strokeLinecap="round" />
+            {/* Tooth Icon in scope */}
+            <path
+              d="M202 262 C198 254 206 250 210 254 C214 250 222 254 218 262 C217 272 220 280 216 284 C214 286 211 285 210 280 C209 285 206 286 204 284 C200 280 203 272 202 262 Z"
+              fill="#8B5CF6"
+            />
+
+            {/* Left Student: Standing with phone/device */}
+            <g id="left-student">
+              <circle cx="150" cy="180" r="14" fill="#1E1B4B" />
+              <circle cx="151" cy="183" r="12" fill="#FEF08A" />
+              <path d="M140 178 C140 168 158 168 162 178 C160 182 145 184 140 178 Z" fill="#1E1B4B" />
+
+              <path d="M140 196 L162 196 L168 260 L136 260 Z" fill="white" stroke="#1E1B4B" strokeWidth="3" strokeLinejoin="round" />
+              <path d="M151 196 L151 224" stroke="#8B5CF6" strokeWidth="3" strokeLinecap="round" />
+
+              <path d="M142 205 L125 228 L142 232" fill="none" stroke="#1E1B4B" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <rect x="138" y="222" width="10" height="16" rx="2" fill="#1E1B4B" />
+
+              <path d="M142 260 L135 340 L125 340" fill="none" stroke="#1E1B4B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M162 260 L172 336 L184 336" fill="none" stroke="#1E1B4B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+
+            {/* Right Student: Sitting on top with Laptop */}
+            <g id="right-student">
+              <circle cx="340" cy="115" r="13" fill="#1E1B4B" />
+              <circle cx="339" cy="118" r="11" fill="#FEF08A" />
+              <path d="M330 114 C330 104 348 104 352 114 C348 118 335 120 330 114 Z" fill="#1E1B4B" />
+
+              <path d="M328 130 C328 130 354 130 358 165 C345 170 330 170 322 165 Z" fill="white" stroke="#1E1B4B" strokeWidth="3" strokeLinejoin="round" />
+
+              <rect x="350" y="148" width="28" height="18" rx="2" transform="rotate(-15 350 148)" fill="#1E1B4B" />
+              <line x1="346" y1="165" x2="378" y2="165" stroke="#1E1B4B" strokeWidth="3" strokeLinecap="round" />
+
+              <path d="M324 165 L315 185 L352 185 L360 230 L372 230" fill="none" stroke="#1E1B4B" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+
+            {/* Plant in corner */}
+            <path d="M380 340 C380 290 415 270 415 270 C415 270 425 310 405 340 Z" fill="#22C55E" />
+            <path d="M395 340 C395 305 435 295 435 295 C435 295 438 325 418 340 Z" fill="#16A34A" />
+            <rect x="375" y="340" width="55" height="24" rx="4" fill="#1E1B4B" />
+          </svg>
+        </div>
+
+        {/* Bottom Subtitle / Info */}
+        <div className="relative z-10 flex items-center justify-between text-xs text-purple-100/80 pt-4 border-t border-white/15">
+          <span>DentiSYS Academic System</span>
+          <span>Bicol University</span>
+        </div>
+
+      </div>
 
     </div>
   );
