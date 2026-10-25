@@ -121,33 +121,33 @@ export const Dashboard: React.FC = () => {
 
             {/* Consolidated Secretary Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 text-left">
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Assigned Section</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+              <div className="p-3.5 lg:max-2xl:px-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Assigned Section</span>
+                <span className="text-lg max-[359px]:text-sm lg:max-2xl:text-sm font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {assignedClassName}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Enrolled Students</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Enrolled Students</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {assignedStudentsCount}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
-                <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5 break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
+                <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5 whitespace-nowrap">
                   {typeof attendanceRateVal === 'number' ? `${attendanceRateVal}%` : '—'}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Today Records</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Today Records</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {todayRecordsVal}
                 </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 col-span-2 sm:col-span-1 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Total Overrides</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Overrides</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {overriddenVal}
                 </span>
               </div>

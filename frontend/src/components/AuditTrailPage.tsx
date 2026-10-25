@@ -300,14 +300,14 @@ export const AuditTrailPage: React.FC<Props> = ({ role, title, subtitle, accent 
         <div className="grid grid-cols-2 xl:grid-cols-3 gap-4 no-print">
           {cards.map(({ label, count, icon: Icon, tone, apply }) => (
             <button key={label} type="button" onClick={apply} aria-label={`${label}: ${count}. Show these rows`} className="text-left">
-              <Card className={`p-4 flex items-center justify-between gap-3 xl:gap-0 border hover:shadow-md ${tone === 'rose'
+              <Card className={`p-4 max-sm:p-3 flex items-center justify-between gap-3 max-sm:gap-2 xl:gap-0 border hover:shadow-md ${tone === 'rose'
                 ? 'border-rose-200/60 bg-rose-50/50 dark:border-rose-900/30 dark:bg-rose-950/15'
                 : 'border-amber-200/60 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/15'}`}>
                 <div className="min-w-0 xl:min-w-[auto]">
-                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 break-words xl:break-normal">{label}</p>
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400">{label.replace(/-/g, '‑')}</p>
                   <p className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{count}</p>
                 </div>
-                <div className={`p-2.5 shrink-0 xl:shrink rounded-xl bg-white/70 dark:bg-slate-900/60 ${tone === 'rose' ? 'text-rose-500' : 'text-amber-500'}`}><Icon className="w-5 h-5" /></div>
+                <div className={`p-2.5 max-sm:p-1.5 shrink-0 xl:shrink rounded-xl bg-white/70 dark:bg-slate-900/60 ${tone === 'rose' ? 'text-rose-500' : 'text-amber-500'}`}><Icon className="w-5 h-5 max-sm:w-4 max-sm:h-4" /></div>
               </Card>
             </button>
           ))}

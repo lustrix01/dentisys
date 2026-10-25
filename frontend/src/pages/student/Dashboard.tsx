@@ -234,29 +234,29 @@ export const Dashboard: React.FC = () => {
             {/* 4 Metric Boxes */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3 text-left">
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
-                <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5 break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
+                <span className="text-lg font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5 whitespace-nowrap">
                   {overallAttendanceRate !== null ? `${overallAttendanceRate}%` : '—'}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Today Sessions</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Today Sessions</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {todaySessions.filter(s => s.timeInStatus === 'done').length} / {todaySessions.length} <span className="text-[10px] font-normal text-slate-400">done</span>
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Face Biometrics</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Face Biometrics</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {isFaceRegistered ? 'Active ✓' : 'Pending'}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Enrolled Subjects</span>
-                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 break-words xl:break-normal">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Enrolled Subjects</span>
+                <span className="text-lg font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5 whitespace-nowrap">
                   {enrolledSubjects.length}
                 </span>
               </div>

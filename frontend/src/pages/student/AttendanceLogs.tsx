@@ -185,29 +185,29 @@ export const AttendanceLogs: React.FC = () => {
       {/* Summary metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-left">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Total Recorded Sessions</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 break-words xl:break-normal">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Recorded Sessions</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-slate-800 dark:text-slate-100 block mt-1 whitespace-nowrap">
             {totalCount}
           </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Attendance Rate</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 break-words xl:break-normal">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Attendance Rate</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-blue-600 dark:text-blue-400 block mt-1 whitespace-nowrap">
             {attendanceRate !== null ? `${attendanceRate}%` : '—'}
           </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">On-Time Check-Ins</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 break-words xl:break-normal">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">On{'‑'}Time Check{'‑'}Ins</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 block mt-1 whitespace-nowrap">
             {presentCount}
           </span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between gap-1 min-w-0 xl:block xl:gap-0 xl:min-w-[auto]">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block break-words xl:break-normal">Late Entries</span>
-          <span className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1 break-words xl:break-normal">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Late Entries</span>
+          <span className="text-xl sm:text-2xl font-extrabold text-amber-600 dark:text-amber-400 block mt-1 whitespace-nowrap">
             {lateCount}
           </span>
           {excusedCount > 0 && <span className="text-[10px] text-slate-400 block mt-0.5">{excusedCount} excused</span>}
